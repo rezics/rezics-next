@@ -8,7 +8,7 @@ import {
   importAccessErasureRecoveryAttachment,
   type AccessErasureRecoveryExpectation,
 } from '../src/modules/access/erasure-recovery.ts';
-import { scanAccessOutbox, scanAccessTables } from '../src/modules/work/access-recovery-coverage.ts';
+import { accessRecoveryCatalog, scanAccessOutbox, scanAccessTables } from '../src/modules/work/access-recovery-coverage.ts';
 import { ownerCatalog } from '../src/modules/work/pg-recovery-frontier.ts';
 import { isRestoreTransientFailure } from '../src/modules/work/restore-lineage.ts';
 
@@ -52,13 +52,14 @@ function heldClient() {
 }
 
 async function expectation(client: PoolClient, input: string): Promise<AccessErasureRecoveryExpectation> {
-  const catalog = await ownerCatalog(client);
+  const catalog = accessRecoveryCatalog(await ownerCatalog(client));
   const state = (await scanAccessTables(client)).state;
+  const legacyBaseState = (await scanAccessTables(client, 'access-state-v5')).state;
   const outbox = await scanAccessOutbox(client);
   return {
     profile: ACCESS_ERASURE_RECOVERY_PROFILE,
     version: ACCESS_ERASURE_RECOVERY_VERSION,
-    catalogDigest: catalog.digest,
+    catalogVersion: 2, legacyBaseState, catalogDigest: catalog.digest,
     baseFenceGeneration: '0',
     sourceFenceGeneration: '0',
     baseState: state,

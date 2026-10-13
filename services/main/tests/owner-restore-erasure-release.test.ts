@@ -25,6 +25,10 @@ import * as pgCoverage from '../src/modules/work/pg-recovery-frontier.ts';
 import * as restoreLineage from '../src/modules/work/restore-lineage.ts';
 import * as restoreBinding from '../src/modules/owner/restore-release-binding.ts';
 import * as erasureReconciliation from '../src/modules/erasure/reconcile.ts';
+import * as accessErasureRecovery from '../src/modules/access/erasure-recovery.ts';
+import * as coreJournalCoverage from '../src/modules/erasure/core-journal-coverage.ts';
+import * as ownerFrontier from '../src/modules/work/pg-recovery-frontier.ts';
+import { createHash } from 'node:crypto';
 import { OwnerOperations, OwnerOperationUnavailable } from '../src/modules/owner/operations.ts';
 import { readExactModelGeneration } from '../src/modules/semantic/model-custody.ts';
 import { PROFILES } from '../src/modules/semantic/schema.ts';
@@ -140,7 +144,9 @@ class SingleConnectionOwner {
       return { rows: this.checkpoint ? [this.checkpoint] : [], rowCount: this.checkpoint ? 1 : 0 };
     } else if (sql.includes('current_database() AS database')) {
       return { rows: [{ database: this.name, instance: '1' }], rowCount: 1 };
-    } else if (!sql.startsWith('SET ') && !sql.startsWith('SELECT ')) {
+    } else if (!sql.startsWith('SET ') && !sql.startsWith('SELECT ')
+      && !sql.startsWith('SAVEPOINT ') && !sql.startsWith('ROLLBACK TO SAVEPOINT ')
+      && !sql.startsWith('RELEASE SAVEPOINT ')) {
       throw new Error(`Unexpected ${this.name} SQL: ${sql}`);
     }
     return { rows: [], rowCount: 0 };
@@ -376,13 +382,21 @@ function fixture(options: { actualCapturedRelay?: boolean } = {}) {
     if (state.failAt === check) throw state.failError ?? new RestoreLineageConflict(`fixture rejected ${check}`);
   };
   const spies = [
+    spyOn(accessCoverage, 'resetAccessRecoveryState').mockImplementation(async (client, floors) => {
+      expect(client).toBe(access.client);
+      expect(floors).toEqual(coverage.accessLeaseEpochs ?? { derivedGeneration: '0', discoveryRefresh: '0' });
+      expect(access.active).toBe(true);
+      expect(access.transactionOpen).toBe(true);
+      expect(access.open).toBe(false);
+    }),
     spyOn(accessCoverage, 'scanAccessOutbox').mockImplementation(async client => {
       expect(client).toBe(access.client);
       await validate('access-outbox', client);
       return { count: coverage.accessOutboxCount, digest: coverage.accessOutboxDigest };
     }),
-    spyOn(accessCoverage, 'scanAccessState').mockImplementation(async client => {
+    spyOn(accessCoverage, 'scanAccessState').mockImplementation(async (client, profile) => {
       expect(client).toBe(access.client);
+      expect(profile).toBe(coverage.accessStateProfile ?? 'access-state-v5');
       await validate('access-state', client);
       return { count: coverage.accessStateCount, digest: coverage.accessStateDigest };
     }),
@@ -530,7 +544,8 @@ function expectBothHeld(run: ReturnType<typeof fixture>) {
  * existing release fixture supplies the independently held owner transactions.
  * Only the composed erasure callback is a seam; error handling and same-key
  * settlement run through OwnerOperations and the real release helper. */
-function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, completion = false) {
+function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, completion = false,
+  retained?: RecoveryCoverage) {
   const row = { id: '', request_digest: '', kind: 'restore', scope: 'product',
     state: 'running', hold_reason: null as string | null };
   let disposition: string | null = null;
@@ -618,8 +633,11 @@ function outerRestore(run: ReturnType<typeof fixture>, borrowedOwners = false, c
       accountPool: run.evidence.accountPool, accessPool: run.access.pool,
       contentPool: run.evidence.contentPool!, hmacKey, objectStore: run.evidence.objectStore!,
       restoredRelayPool: run.capturedRelay.pool,
+      ...(retained ? { nativeAccessAttachment: async function* () { yield 'native-custody'; } } : {}),
       ...(completion ? { erasures: {
-        authority: { sealedCoverage: run.evidence.sealedCoverage, hmacKey },
+        authority: { sealedCoverage: retained
+          ? JSON.stringify(sealRecoveryPayload(retained, hmacKey, 'graph-recovery-coverage'))
+          : run.evidence.sealedCoverage, hmacKey },
         signingKey: hmacKey, maintenance: run.fuseki,
         originalSource: 'retained-native-event' as const,
       } } : {}),
@@ -1829,7 +1847,7 @@ const expectedRelease = {
   effective: { dataEpoch: priorDataEpoch, graphSequence: '900',
     main: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: priorDataEpoch, sequence: '4' } },
 };
-const openAccess = async (clients: Parameters<ReleaseErasures>[0]) => {
+const openAccess = async (clients: Pick<Parameters<ReleaseErasures>[0], 'accessClient' | 'fenceGeneration'>) => {
   const opened = await clients.accessClient.query(`UPDATE access.recovery_fence
     SET open = true, generation = generation + 1 WHERE id = true AND open = false AND generation = $1`,
   [clients.fenceGeneration]);
@@ -2059,3 +2077,216 @@ test('the Access fence moving between the qualification commit and the fresh rel
     expect(run.fuseki.commands).toHaveLength(0);
   } finally { run.stop(); }
 });
+
+
+for (const profile of [undefined, 'access-state-v5', 'access-authority-v6'] as const) {
+  test(`restore release verifies signed Access coverage with profile ${profile ?? 'legacy absent discriminator'}`, async () => {
+    const run = fixture();
+    try {
+      run.coverage.accessStateProfile = profile;
+      if (profile === 'access-authority-v6') run.coverage.accessLeaseEpochs = { derivedGeneration: '3', discoveryRefresh: '3' };
+      run.seal();
+      await run.release();
+      expect(run.access.open).toBe(true);
+      expect(run.fuseki.held).toBe(false);
+    } finally { run.stop(); }
+  });
+}
+
+
+test('ordinary release resets against the authenticated retained lease floor even when authority rows are unchanged', async () => {
+  const run = fixture();
+  const floor = { derivedGeneration: '3', discoveryRefresh: '3' };
+  run.coverage.accessStateProfile = 'access-authority-v6';
+  run.coverage.accessLeaseEpochs = { derivedGeneration: '1', discoveryRefresh: '1' };
+  run.coverage.accessFenceGeneration = '5';
+  run.coverage.erasureJournal = { version: 1, epoch: null, count: '0',
+    digest: hash(JSON.stringify(['relay-erasure-journal-core-v1', null])) };
+  run.seal();
+  const current = { ...run.coverage, accessLeaseEpochs: floor };
+  run.evidence.retainedAuthorityCoverage = JSON.stringify(sealRecoveryPayload(current, hmacKey, 'graph-recovery-coverage'));
+  const authority = spyOn(erasureAuthority, 'assertRetainedAuthorityCapture').mockImplementation(async (client, consumer, evidence) => {
+    expect(client).toBe(run.relay.client);
+    expect(consumer).toBe(run.coverage.relay.consumer);
+    expect(evidence.sealedCoverage).toBe(run.evidence.retainedAuthorityCoverage!);
+    run.trace.push('validated:current-coverage-head');
+    return current;
+  });
+  const reset = spyOn(accessCoverage, 'resetAccessRecoveryState').mockImplementation(async (client, epochs) => {
+    expect(client).toBe(run.access.client);
+    expect(epochs).toEqual(floor);
+    expect(run.access.transactionOpen).toBe(true);
+    expect(run.access.open).toBe(false);
+  });
+  try {
+    await run.release();
+    expect(reset).toHaveBeenCalledTimes(1);
+    expect(run.access.open).toBe(true);
+  } finally { reset.mockRestore(); authority.mockRestore(); run.stop(); }
+});
+
+/** Exercise the callback supplied by OwnerOperations, including its profile and reset decisions. */
+function retainedCaller(run: ReturnType<typeof fixture>, current: RecoveryCoverage) {
+  const owner = outerRestore(run, false, true, current);
+  const spies = [
+    spyOn(restoreBinding, 'readBindings').mockResolvedValue({ qualification: 'qualified', release: null }),
+    spyOn(restoreBinding, 'requireQualification').mockResolvedValue(undefined),
+    spyOn(restoreBinding, 'recordRelease').mockResolvedValue(undefined),
+    spyOn(restoreLineage, 'assertRestoreAuthorityBaseline').mockResolvedValue(current),
+    spyOn(erasureAuthority, 'assertRetainedAuthorityCoverage').mockImplementation(async (_relay, _pool, _consumer, authority, client) => {
+      expect(client).toBe(run.access.client);
+      expect(authority.sealedCoverage).toBe(JSON.stringify(sealRecoveryPayload(current, hmacKey, 'graph-recovery-coverage')));
+    }),
+  ];
+  owner.releaseSpy.mockImplementation(async (_graph, _access, _relay, _lineage, evidence, relayClient) => {
+    const accessClient = await run.access.pool.connect();
+    try {
+      await relayClient!.query('BEGIN');
+      await accessClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const clients = { relayClient: relayClient!, accessClient, fenceGeneration: '5',
+        graphRelease: await restoreLineage.readRestoredGraphReleaseExpectation(run.fuseki, lineage, run.coverage),
+        commitQualification: async () => { throw new Error('resume must retain its durable qualification'); } };
+      expect(evidence.qualification?.resume).toBe(true);
+      await evidence.qualification!.authenticateResume!(clients);
+      await evidence.releaseErasures!(clients, async () => { run.fuseki.held = false; });
+      await accessClient.query('COMMIT');
+      await relayClient!.query('COMMIT');
+    } catch (error) {
+      await accessClient.query('ROLLBACK');
+      await relayClient!.query('ROLLBACK');
+      throw error;
+    } finally { accessClient.release(); }
+  });
+  return { ...owner, stop: () => { for (const spy of spies) spy.mockRestore(); owner.stop(); } };
+}
+
+for (const baseProfile of [undefined, 'access-state-v5', 'access-authority-v6'] as const) {
+  for (const currentProfile of [undefined, 'access-state-v5', 'access-authority-v6'] as const) {
+    for (const live of ['base', 'current', 'changed', 'changed-outbox'] as const) {
+      test(`OwnerOperations qualified resume ${baseProfile ?? 'absent'} -> ${currentProfile ?? 'absent'}: ${live}`, async () => {
+        const run = fixture();
+        run.coverage.accessStateProfile = baseProfile;
+        run.coverage.accessLeaseEpochs = { derivedGeneration: '9', discoveryRefresh: '2' };
+        run.seal();
+        const journal = { version: 1 as const, epoch: null, count: '0', digest };
+        const current: RecoveryCoverage = { ...run.coverage, accessStateProfile: currentProfile,
+          accessStateDigest: 'b'.repeat(64), accessLeaseEpochs: { derivedGeneration: '3', discoveryRefresh: '8' },
+          nativeAccessErasure: { baseCoverageDigest: digest, baseErasureJournal: journal, sourceErasureJournal: journal,
+            summary: { plaintextDigest: digest, baseFenceGeneration: '5' } } as RecoveryCoverage['nativeAccessErasure'] };
+        const owner = retainedCaller(run, current);
+        const profiles: accessCoverage.AccessRecoveryProfile[] = [];
+        const verifier = { verifyAdmissions: async () => {}, assertComplete: () => {} };
+        const importSpy = spyOn(accessErasureRecovery, 'importAccessErasureRecoveryAttachment')
+          .mockResolvedValue({ imported: '1', alreadyPresent: '0' });
+        const basisSpy = spyOn(restoreBinding, 'captureReleaseBasis').mockImplementation(async (_pool, client, cut, reset) => {
+          expect(client).toBe(run.access.client);
+          expect(cut).toEqual(current);
+          expect(reset).toEqual({ dataEpoch: lineage.dataEpoch, floors: { derivedGeneration: '9', discoveryRefresh: '8' } });
+          return {} as restoreBinding.ReleaseBasis;
+        });
+        const extraSpies = [importSpy, basisSpy,
+          spyOn(coreJournalCoverage, 'createPublicRevisionJournalDeltaVerifier').mockResolvedValue(verifier),
+          spyOn(accessCoverage, 'accessStateCoverage').mockImplementation(async (_pool, client, profile) => {
+            expect(client).toBe(run.access.client);
+            profiles.push(profile!);
+            const cut = live === 'base' ? run.coverage : current;
+            return { count: '1', digest: live === 'changed' || profile !== (cut.accessStateProfile ?? 'access-state-v5')
+              ? 'c'.repeat(64) : cut.accessStateDigest };
+          }),
+          spyOn(accessCoverage, 'accessOutboxCoverage').mockResolvedValue({ count: '1',
+            digest: live === 'changed-outbox' ? 'c'.repeat(64) : digest }),
+          spyOn(restoreBinding, 'proveReleaseTransition').mockResolvedValue({} as restoreBinding.ReleaseTransition),
+          spyOn(erasureReconciliation, 'releaseErasureRestoreHold').mockImplementation(async (_relay, _owners, _id, _generation, _authority, options) => {
+            await options!.beforeAccessRelease!();
+            await openAccess({ ...options!.clients!, fenceGeneration: _generation });
+          }),
+        ];
+        try {
+          const refused = live === 'changed' || live === 'changed-outbox';
+          expect(await owner.attempt()).toMatchObject({ state: refused ? 'held' : 'reconciled' });
+          expect(profiles).toEqual(live === 'base' ? [baseProfile ?? 'access-state-v5']
+            : [baseProfile ?? 'access-state-v5', currentProfile ?? 'access-state-v5']);
+          expect(importSpy).toHaveBeenCalledTimes(live === 'base' ? 1 : 0);
+          expect(basisSpy).toHaveBeenCalledTimes(refused ? 0 : 1);
+          expect(run.access.open).toBe(!refused);
+          if (refused) {
+            expect(owner.row.hold_reason).toContain('qualified Access differs from both authenticated cuts');
+            expect(run.fuseki.held).toBe(true);
+          }
+        } finally { for (const spy of extraSpies) spy.mockRestore(); owner.stop(); run.stop(); }
+      });
+    }
+  }
+}
+
+for (const profile of [undefined, 'access-state-v5', 'access-authority-v6'] as const) {
+  test(`OwnerOperations release proves ${profile ?? 'absent'} reset bytes through the real release binding`, async () => {
+    const run = fixture();
+    run.coverage.accessStateProfile = profile;
+    run.coverage.accessLeaseEpochs = { derivedGeneration: '9', discoveryRefresh: '2' };
+    const current = { ...run.coverage, accessLeaseEpochs: { derivedGeneration: '3', discoveryRefresh: '8' } };
+    let reset = false;
+    let opened = false;
+    const changes = ['access.discovery_source_change', 'access.also_enjoyed_source_change'];
+    const records = (name: string) => opened ? [{ id: '1', ...(name === changes[0]
+      ? { context_key: '', statement: '' } : { privacy: true }) }] : [];
+    const rows = (name: string): ownerFrontier.RowCoverage => {
+      const values = records(name);
+      const hash = createHash('sha256');
+      for (const row of values) hash.update(JSON.stringify([[row.id], JSON.stringify(row)]) + '\n');
+      return { count: String(values.length), digest: hash.digest('hex') };
+    };
+    const tables = (selected: accessCoverage.AccessRecoveryProfile): accessCoverage.AccessStateTables => {
+      const covered: Record<string, ownerFrontier.RowCoverage> = { 'access.permission_grant': { count: '1', digest } };
+      if (selected === 'access-state-v5') {
+        covered['access.realm_directory_position'] = { count: '1', digest: (reset ? 'b' : 'c').repeat(64) };
+        for (const name of changes) covered[name] = rows(name);
+      }
+      return { catalogDigest: digest, excluded: {}, tables: covered, state: ownerFrontier.foldRowCoverage(selected,
+        { digest, excluded: {}, tables: Object.keys(covered).map(name => ({ name }) as ownerFrontier.OwnerTable) }, covered) };
+    };
+    const before = tables(profile ?? 'access-state-v5').state;
+    run.coverage.accessStateCount = current.accessStateCount = before.count;
+    run.coverage.accessStateDigest = current.accessStateDigest = before.digest;
+    run.seal();
+    const owner = retainedCaller(run, current);
+    const releaseSpy = spyOn(restoreBinding, 'recordRelease').mockResolvedValue(undefined);
+    const resetSpy = spyOn(accessCoverage, 'resetAccessRecoveryState').mockImplementation(async (client, floors, epoch) => {
+      expect(client).toBe(run.access.client);
+      expect(floors).toEqual({ derivedGeneration: '9', discoveryRefresh: '8' });
+      expect(epoch).toBe(lineage.dataEpoch);
+      reset = true;
+    });
+    const extraSpies = [releaseSpy, resetSpy,
+      spyOn(accessCoverage, 'accessStateTables').mockImplementation(async (_pool, client, selected) => {
+        expect(client).toBe(run.access.client);
+        return tables(selected!);
+      }),
+      spyOn(accessCoverage, 'accessOutboxCoverage').mockResolvedValue({ count: '1', digest }),
+      spyOn(ownerFrontier, 'scanOwnerTable').mockImplementation(async (client, table, visit) => {
+        expect(client).toBe(run.access.client);
+        for (const row of records(table.name)) await visit!([row.id], JSON.stringify(row));
+        return rows(table.name);
+      }),
+      spyOn(erasureReconciliation, 'releaseErasureRestoreHold').mockImplementation(async (_relay, _owners, _id, _generation, _authority, options) => {
+        await options!.beforeAccessRelease!();
+        await accessCoverage.resetAccessRecoveryState(run.access.client,
+          { derivedGeneration: '9', discoveryRefresh: '8' }, lineage.dataEpoch);
+        await openAccess({ ...options!.clients!, fenceGeneration: _generation });
+        opened = true;
+      }),
+    ];
+    run.access.queryGate = async sql => {
+      if (sql === 'ROLLBACK TO SAVEPOINT access_release_reset_preview') reset = false;
+    };
+    try {
+      expect(await owner.attempt()).toMatchObject({ state: 'reconciled' });
+      expect(resetSpy).toHaveBeenCalledTimes(profile === 'access-authority-v6' ? 1 : 2);
+      expect(releaseSpy).toHaveBeenCalledTimes(1);
+      expect(releaseSpy.mock.calls[0]![8]).toMatchObject({ pre: { state: before },
+        post: { state: tables(profile ?? 'access-state-v5').state },
+        identities: { [changes[0]!]: '1', [changes[1]!]: '1' } });
+      expect(run.access.open).toBe(true);
+    } finally { for (const spy of extraSpies) spy.mockRestore(); owner.stop(); run.stop(); }
+  });
+}

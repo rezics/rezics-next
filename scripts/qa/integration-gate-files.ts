@@ -93,4 +93,5 @@ export const integrationGateFiles = [
   'services/main/tests/governance-graph-disclosure.integration.test.ts',
   'services/main/tests/disclosure-composition-public-reads.test.ts',
   'services/main/tests/erasure-media-composition.test.ts',
+  'services/main/tests/access-erasure-recovery-catalog.integration.test.ts',
 ] as const;

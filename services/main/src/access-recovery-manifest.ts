@@ -4,12 +4,15 @@ import { assertPgRecoveryFrontier, capturePgRecoveryFrontier,
   type PgRecoveryFrontier, type RowCoverage } from './modules/work/pg-recovery-frontier.ts';
 import { accessOutboxCoverage, accessStateTables } from
   './modules/work/access-recovery-coverage.ts';
+import type { AccessRecoveryProfile } from './modules/work/access-recovery-coverage.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from
   '../../account/src/recovery-envelope.ts';
 
 /** Version 5 derives the Access table set from the catalog; `state` folds `tables`. */
 export interface AccessRecoveryManifest {
   version: 5;
+  /** Absent in original version-5 manifests, which cover every native row. */
+  accessStateProfile?: AccessRecoveryProfile;
   pg: PgRecoveryFrontier;
   outbox: RowCoverage;
   state: RowCoverage;
@@ -32,7 +35,7 @@ try {
     const pg = await capturePgRecoveryFrontier(pool);
     const outbox = await accessOutboxCoverage(pool);
     const { state, catalogDigest, tables, excluded } = await accessStateTables(pool);
-    const manifest: AccessRecoveryManifest = { version: 5, pg, outbox, state,
+    const manifest: AccessRecoveryManifest = { version: 5, accessStateProfile: 'access-authority-v6', pg, outbox, state,
       catalogDigest, tables, excluded };
     console.log(JSON.stringify(sealRecoveryPayload(manifest, key, 'access-recovery-manifest')));
   } else {
@@ -44,7 +47,7 @@ try {
     }
     await assertPgRecoveryFrontier(pool, manifest.pg);
     const outbox = await accessOutboxCoverage(pool);
-    const actual = await accessStateTables(pool);
+    const actual = await accessStateTables(pool, undefined, manifest.accessStateProfile ?? 'access-state-v5');
     const differing = [...new Set([...Object.keys(manifest.tables ?? {}), ...Object.keys(actual.tables)])]
       .filter(name => JSON.stringify(manifest.tables?.[name]) !== JSON.stringify(actual.tables[name]))
       .sort();

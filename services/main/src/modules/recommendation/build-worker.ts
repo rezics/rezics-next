@@ -35,7 +35,7 @@ export class RankingBuildWorker {
       const candidate = (await this.access.query<{ id: string }>(`SELECT g.id::text FROM access.derived_generation g
         JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE g.family = 'ranking' AND g.state = 'building' AND g.lease_expires_at <= clock_timestamp()
-          AND i.data_epoch=$1 ORDER BY g.lease_expires_at, g.id LIMIT 1`, [this.rankings.dataEpoch])).rows[0];
+          AND coalesce(i.recovery_data_epoch, i.data_epoch)=$1 ORDER BY g.lease_expires_at, g.id LIMIT 1`, [this.rankings.dataEpoch])).rows[0];
       if (!candidate) return;
       try { this.held = { generation: candidate.id, epoch: await this.rankings.claim(candidate.id) }; }
       catch (error) { if (error instanceof RecommendationStale) { this.logDeferred(error); recordWorkerOutcome({ outcome: 'deferred' }); return; } throw error; }

@@ -2,9 +2,11 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { PoolClient, QueryResult } from 'pg';
 import { contentErasureDigest, erasureReceiptIri } from '../erasure/request.ts';
 import { ERASURE_JOURNAL_EPOCH } from '../erasure/journal.ts';
-import { scanAccessOutbox, scanAccessTables } from '../work/access-recovery-coverage.ts';
+import { accessAuthorityValues, accessRecoveryCatalog, accessRecoveryRule,
+  resetAccessRecoveryState, scanAccessOutbox, scanAccessTables } from '../work/access-recovery-coverage.ts';
 import { canonicalRowText, ownerCatalog, type OwnerTable, type RowCoverage } from '../work/pg-recovery-frontier.ts';
 
+export const ACCESS_ERASURE_RECOVERY_CATALOG_VERSION = 2 as const;
 export const ACCESS_ERASURE_RECOVERY_VERSION = 1 as const;
 export const ACCESS_ERASURE_RECOVERY_PAGE = 1000;
 export const ACCESS_ERASURE_RECOVERY_PROFILE = 'rezics-access-erasure-recovery-v1' as const;
@@ -29,6 +31,9 @@ export interface AccessErasureRecoveryHeader {
   kind: 'header';
   profile: typeof ACCESS_ERASURE_RECOVERY_PROFILE;
   version: typeof ACCESS_ERASURE_RECOVERY_VERSION;
+  /** Absent means the original raw-catalog, access-state-v5 attachment. */
+  catalogVersion?: 1 | 2;
+  legacyBaseState?: RowCoverage;
   catalogDigest: string;
   baseFenceGeneration: string;
   sourceFenceGeneration: string;
@@ -50,6 +55,10 @@ export interface AccessErasureRecoveryFooter {
   kind: 'end';
   profile: typeof ACCESS_ERASURE_RECOVERY_PROFILE;
   version: typeof ACCESS_ERASURE_RECOVERY_VERSION;
+  /** Absent means the original raw-catalog, access-state-v5 attachment. */
+  catalogVersion?: 1 | 2;
+  legacyBaseState?: RowCoverage;
+  catalogDigest: string;
   rowCount: string;
   rowDigest: string;
 }
@@ -57,6 +66,9 @@ export interface AccessErasureRecoveryFooter {
 export interface AccessErasureRecoverySummary {
   profile: typeof ACCESS_ERASURE_RECOVERY_PROFILE;
   version: typeof ACCESS_ERASURE_RECOVERY_VERSION;
+  /** Absent means the original raw-catalog, access-state-v5 attachment. */
+  catalogVersion?: 1 | 2;
+  legacyBaseState?: RowCoverage;
   catalogDigest: string;
   baseFenceGeneration: string;
   sourceFenceGeneration: string;
@@ -101,6 +113,7 @@ export function assertPublicRevisionErasureRequestDigest(admission: NativeAccess
 interface NativeRow {
   key: Record<string, string>;
   values: Record<string, unknown>;
+  building?: boolean;
 }
 
 interface NativeColumn { name: string; type: 'json' | 'jsonb' | 'text'; generated: boolean }
@@ -109,6 +122,15 @@ interface FenceRow { open: boolean; generation: string }
 
 const ident = (value: string): string => `"${value.replaceAll('"', '""')}"`;
 const relation = (table: OwnerTable): string => `${ident(table.schema)}.${ident(table.table)}`;
+
+async function nativeAccessCatalog(client: PoolClient, version: 1 | 2 = 2) {
+  try { const catalog = await ownerCatalog(client);
+    return version === 1 ? catalog : accessRecoveryCatalog(catalog); }
+  catch (error) {
+    throw new AccessErasureRecoveryConflict(error instanceof Error ? error.message
+      : 'Access native catalog is unavailable', { cause: error });
+  }
+}
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(',')}]`;
@@ -194,20 +216,26 @@ async function* nativeRows(client: PoolClient, table: OwnerTable,
       : `CASE WHEN t.${ident(column.name)} IS NULL THEN jsonb_build_object('$rezicsNativeJson','sql-null')
          ELSE jsonb_build_object('$rezicsNativeJson','value','$value',t.${ident(column.name)}::text) END`,
   ]).join(', ')})`;
-  const select = `SELECT ${keyObject}::text AS key, ${valuesObject}::text AS values FROM ${tableRef} t`;
+  const rule = accessRecoveryRule(table);
+  const building = rule.generationColumn
+    ? `, EXISTS (SELECT 1 FROM access.derived_generation g WHERE g.id = t.${ident(rule.generationColumn)} AND g.state = 'building') AS building` : '';
+  const authoritative = rule.authorityWhere ? `, (${rule.authorityWhere}) AS authoritative` : '';
+  const select = `SELECT ${keyObject}::text AS key, ${valuesObject}::text AS values${building}${authoritative} FROM ${tableRef} t`;
   const keyTerms = table.key.map((column, index) => `t.${ident(column)}`);
   const order = `ORDER BY ${keyTerms.join(', ')} LIMIT ${ACCESS_ERASURE_RECOVERY_PAGE}`;
   const resume = `${select} WHERE (${keyTerms.join(', ')}) > (${table.keyTypes
     .map((type, index) => `$${index + 1}::${type}`).join(', ')}) ${order}`;
   let after: string[] | null = null;
   for (;;) {
-    const result = await client.query<{ key: string; values: string }>(
+    const result = await client.query<{ key: string; values: string; building?: boolean; authoritative?: boolean }>(
       after ? resume : `${select} ${order}`, after ?? []);
     for (const row of result.rows) {
       const key = JSON.parse(row.key) as Record<string, string>;
       const values = JSON.parse(row.values) as Record<string, unknown>;
-      yield { key, values };
       after = table.key.map(column => key[column]!);
+      if ((!rule.generationPayload || row.building !== true) && (!rule.authorityWhere || row.authoritative !== false)) {
+        yield { key, values, building: row.building };
+      }
     }
     if (result.rows.length < ACCESS_ERASURE_RECOVERY_PAGE) return;
   }
@@ -372,10 +400,11 @@ export async function exportAccessErasureRecoveryAttachment(
   await canonicalRowText(sourceClient);
   const baseFence = await readFence(baseClient);
   const sourceFence = await readFence(sourceClient);
-  const baseCatalog = await ownerCatalog(baseClient);
-  const sourceCatalog = await ownerCatalog(sourceClient);
+  const baseCatalog = await nativeAccessCatalog(baseClient);
+  const sourceCatalog = await nativeAccessCatalog(sourceClient);
   const baseCoverage = await scanAccessTables(baseClient);
   const sourceCoverage = await scanAccessTables(sourceClient);
+  const legacyBaseState = (await scanAccessTables(baseClient, 'access-state-v5')).state;
   const baseOutbox = await scanAccessOutbox(baseClient);
   const sourceOutbox = await scanAccessOutbox(sourceClient);
   if (baseCatalog.digest !== sourceCatalog.digest) {
@@ -384,7 +413,7 @@ export async function exportAccessErasureRecoveryAttachment(
   const fenceMove = strictDeltaGeneration(baseFence.generation, sourceFence.generation);
   const header: AccessErasureRecoveryHeader = {
     kind: 'header', profile: ACCESS_ERASURE_RECOVERY_PROFILE,
-    version: ACCESS_ERASURE_RECOVERY_VERSION, catalogDigest: sourceCatalog.digest,
+    version: ACCESS_ERASURE_RECOVERY_VERSION, catalogVersion: ACCESS_ERASURE_RECOVERY_CATALOG_VERSION, legacyBaseState, catalogDigest: sourceCatalog.digest,
     baseFenceGeneration: baseFence.generation, sourceFenceGeneration: sourceFence.generation,
     baseState: baseCoverage.state, sourceState: sourceCoverage.state,
     baseOutbox, sourceOutbox,
@@ -415,6 +444,11 @@ export async function exportAccessErasureRecoveryAttachment(
   });
   for (const table of orderedTables) {
     if (table.name === 'access.recovery_fence') continue;
+    const rule = accessRecoveryRule(table);
+    const compareBase = rule.class === 'authority' || rule.generationPayload === true;
+    // Folding may change/prune old invalidations. New erasure invalidations
+    // still travel with the native admission closure and their exact defaults.
+    if (!compareBase && !SOURCE_INVALIDATIONS.has(table.name)) continue;
     const before = allTables.get(table.name)!;
     const [baseColumns, sourceColumns] = await Promise.all([
       columnsFor(baseClient, before), columnsFor(sourceClient, table),
@@ -482,13 +516,21 @@ export async function exportAccessErasureRecoveryAttachment(
         continue;
       }
       if (source.done) {
+        if (!compareBase) { base = await baseRows.next(); continue; }
         throw new AccessErasureRecoveryConflict(`base Access row was removed: ${table.name}`);
       }
       const baseKey = stableJson(base.value!.key);
       const sourceKey = stableJson(source.value!.key);
       if (baseKey === sourceKey) {
-        if (stableJson(base.value!.values) !== stableJson(source.value!.values)) {
+        if (compareBase && stableJson(accessAuthorityValues(table, base.value!.values, base.value!.building))
+          !== stableJson(accessAuthorityValues(table, source.value!.values, source.value!.building))) {
           throw new AccessErasureRecoveryConflict(`base Access row changed: ${table.name}`);
+        }
+        if (table.name === 'access.derived_generation' && source.value!.values.state === 'building') {
+          // Plaintext custody authenticates this operational high-water mark.
+          // It is not an authority row and does not change the admission count.
+          await output(JSON.stringify({ kind: 'lease-fence', generation: source.value!.key.id,
+            epoch: source.value!.values.lease_epoch }));
         }
         base = await baseRows.next();
         source = await sourceRows.next();
@@ -501,6 +543,7 @@ export async function exportAccessErasureRecoveryAttachment(
              AS before`, [...before.key.map(column => base.value!.key[column]),
             ...before.key.map(column => source.value!.key[column])]);
         if (isBaseFirst.rows[0]?.before === true) {
+          if (!compareBase) { base = await baseRows.next(); continue; }
           throw new AccessErasureRecoveryConflict(`base Access row was removed: ${table.name}`);
         }
         const added = source.value!;
@@ -562,11 +605,13 @@ export async function exportAccessErasureRecoveryAttachment(
   }
   const footer: AccessErasureRecoveryFooter = {
     kind: 'end', profile: ACCESS_ERASURE_RECOVERY_PROFILE,
-    version: ACCESS_ERASURE_RECOVERY_VERSION, rowCount: rowCount.toString(), rowDigest: rowHash.digest('hex'),
+    version: ACCESS_ERASURE_RECOVERY_VERSION, catalogVersion: ACCESS_ERASURE_RECOVERY_CATALOG_VERSION, legacyBaseState, catalogDigest: sourceCatalog.digest,
+    rowCount: rowCount.toString(), rowDigest: rowHash.digest('hex'),
   };
   await output(JSON.stringify(footer));
   const plaintextDigest = bytes.digest('hex');
   return { profile: ACCESS_ERASURE_RECOVERY_PROFILE, version: ACCESS_ERASURE_RECOVERY_VERSION,
+    catalogVersion: ACCESS_ERASURE_RECOVERY_CATALOG_VERSION, legacyBaseState,
     catalogDigest: sourceCatalog.digest, baseFenceGeneration: baseFence.generation,
     sourceFenceGeneration: sourceFence.generation, baseState: baseCoverage.state,
     sourceState: sourceCoverage.state, baseOutbox, sourceOutbox, rowCount: rowCount.toString(),
@@ -579,6 +624,9 @@ function sameCoverage(actual: RowCoverage, expected: RowCoverage): boolean {
 
 function validateExpectation(expected: AccessErasureRecoveryExpectation): void {
   if (expected?.profile !== ACCESS_ERASURE_RECOVERY_PROFILE || expected.version !== ACCESS_ERASURE_RECOVERY_VERSION
+    || expected.catalogVersion !== undefined && expected.catalogVersion !== 1 && expected.catalogVersion !== 2
+    || expected.catalogVersion === 2 && (!expected.legacyBaseState
+      || !/^[0-9]+$/.test(expected.legacyBaseState.count) || !/^[0-9a-f]{64}$/.test(expected.legacyBaseState.digest))
     || !/^[0-9a-f]{64}$/.test(expected.catalogDigest ?? '')
     || !/^(0|[1-9][0-9]*)$/.test(expected.baseFenceGeneration ?? '')
     || !/^(0|[1-9][0-9]*)$/.test(expected.sourceFenceGeneration ?? '')
@@ -625,10 +673,14 @@ export async function importAccessErasureRecoveryAttachment(
     throw new AccessErasureRecoveryConflict('held Access base fence differs from native attachment');
   }
   await canonicalRowText(client);
-  const catalog = await ownerCatalog(client);
-  const state = await scanAccessTables(client);
+  const catalogVersion = expected.catalogVersion ?? 1;
+  const profile = catalogVersion === 1 ? 'access-state-v5' : 'access-authority-v6';
+  const catalog = await nativeAccessCatalog(client, catalogVersion);
+  const state = await scanAccessTables(client, profile);
+  const legacyBaseState = catalogVersion === 2 ? (await scanAccessTables(client, 'access-state-v5')).state : undefined;
   const outbox = await scanAccessOutbox(client);
   if (catalog.digest !== expected.catalogDigest
+    || stableJson(legacyBaseState) !== stableJson(expected.legacyBaseState)
     || !sameCoverage(state.state, expected.baseState) || !sameCoverage(outbox, expected.baseOutbox)) {
     throw new AccessErasureRecoveryConflict('held Access rows or schema differ from native attachment base');
   }
@@ -765,7 +817,9 @@ export async function importAccessErasureRecoveryAttachment(
     }
     if (!headerSeen) {
       if (!isObject(value) || value.kind !== 'header' || value.profile !== expected.profile
-        || value.version !== expected.version || value.catalogDigest !== expected.catalogDigest
+        || value.version !== expected.version || (value.catalogVersion ?? 1) !== catalogVersion
+        || stableJson(value.legacyBaseState) !== stableJson(expected.legacyBaseState)
+        || value.catalogDigest !== expected.catalogDigest
         || value.baseFenceGeneration !== expected.baseFenceGeneration
         || value.sourceFenceGeneration !== expected.sourceFenceGeneration
         || stableJson(value.baseState) !== stableJson(expected.baseState)
@@ -782,12 +836,34 @@ export async function importAccessErasureRecoveryAttachment(
       if (footer) throw new AccessErasureRecoveryConflict('native Access attachment has duplicate footer');
       footer = value as unknown as AccessErasureRecoveryFooter;
       if (footer.profile !== expected.profile || footer.version !== expected.version
+        || (footer.catalogVersion ?? 1) !== catalogVersion
+        || stableJson(footer.legacyBaseState) !== stableJson(expected.legacyBaseState)
+        || (catalogVersion === 2 || footer.catalogDigest !== undefined) && footer.catalogDigest !== expected.catalogDigest
         || footer.rowCount !== expected.rowCount || footer.rowDigest !== expected.rowDigest) {
         throw new AccessErasureRecoveryConflict('native Access attachment footer differs from signed reference');
       }
       if (pendingTable) await applyPage(pendingTable, pending);
       pending = [];
       pendingTable = undefined;
+      return;
+    }
+    if (!footer && catalogVersion === 2 && value.kind === 'lease-fence') {
+      const scheduler = value.table === 'access.discovery_refresh';
+      if (value.table !== undefined && !scheduler
+        || typeof value.generation !== 'string' || !(scheduler ? /^[0-9a-f]{64}$/ : /^[0-9a-f-]{36}$/).test(value.generation)
+        || typeof value.epoch !== 'string' || !/^(0|[1-9][0-9]*)$/.test(value.epoch)) {
+        throw new AccessErasureRecoveryConflict('native Access lease fence is invalid');
+      }
+      const basis = scheduler && isObject(value.basis) && value.basis.$rezicsNativeJson === 'value'
+        && typeof value.basis.$value === 'string' ? value.basis.$value : undefined;
+      if (scheduler && basis === undefined) throw new AccessErasureRecoveryConflict('native Access scheduler basis is invalid');
+      // Older attachments supplied scheduler fences. Validate their wire data
+      // above, but keep the restored scheduler exactly as in the backup.
+      if (scheduler) return;
+      const fenced = await client.query(`UPDATE access.derived_generation
+        SET lease_epoch = greatest(lease_epoch, $2::bigint)
+        WHERE id = $1 AND state = 'building'`, [value.generation, value.epoch]);
+      if (fenced.rowCount !== 1) throw new AccessErasureRecoveryConflict('native Access lease fence has no base generation');
       return;
     }
     if (footer || value.kind !== 'row' || typeof value.table !== 'string' || !IMPORTABLE.has(value.table)
@@ -894,13 +970,16 @@ export async function importAccessErasureRecoveryAttachment(
     && BigInt(expected.sourceFenceGeneration) !== BigInt(expected.baseFenceGeneration) + 2n) {
     throw new AccessErasureRecoveryConflict('native Access source fence generation is invalid');
   }
-  const actualState = await scanAccessTables(client);
+  const actualState = await scanAccessTables(client, profile);
   const actualOutbox = await scanAccessOutbox(client);
   const finalFence = await readFence(client);
   if (!sameCoverage(actualState.state, expected.sourceState) || !sameCoverage(actualOutbox, expected.sourceOutbox)
     || finalFence.generation !== expected.baseFenceGeneration) {
     throw new AccessErasureRecoveryConflict('restored Access does not equal the signed current capture');
   }
+  // The original profile signs every raw row. Preserve those bytes until the
+  // release owner derives the explicitly authorized reset transition.
+  if (catalogVersion === 2) await resetAccessRecoveryState(client);
   await client.query('RELEASE SAVEPOINT access_erasure_recovery_guard');
   return { imported: imported.toString(), alreadyPresent: alreadyPresent.toString() };
   } catch (error) {

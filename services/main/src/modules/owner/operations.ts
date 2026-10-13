@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { importAccessErasureRecoveryAttachment } from '../access/erasure-recovery.ts';
 import { createPublicRevisionJournalDeltaVerifier } from '../erasure/core-journal-coverage.ts';
-import { accessOutboxCoverage, accessStateCoverage } from '../work/access-recovery-coverage.ts';
+import { accessOutboxCoverage, accessStateCoverage, restoredAccessLeaseEpochs } from '../work/access-recovery-coverage.ts';
 import type { Pool, PoolClient } from 'pg';
 import { Pool as PgPool } from 'pg';
 import { openRecoveryPayload } from '../../../../account/src/recovery-envelope.ts';
@@ -529,17 +529,20 @@ export class OwnerOperations {
           if (!record) throw new RestoreLineageConflict('durable erasure qualification is unavailable');
           await requireQualification(clients.relayClient, erasures.authority.hmacKey, outerId,
             record, clients.fenceGeneration, graphRelease, restored.ownerRestore);
-          const state = await accessStateCoverage(resources.accessPool, clients.accessClient);
           const outbox = await accessOutboxCoverage(resources.accessPool, clients.accessClient);
-          const equals = (cut: RecoveryCoverage) => state.count === cut.accessStateCount
-            && state.digest === cut.accessStateDigest && outbox.count === cut.accessOutboxCount
-            && outbox.digest === cut.accessOutboxDigest;
-          if (!equals(coverage) && !equals(current)) {
+          const equals = async (cut: RecoveryCoverage) => {
+            const state = await accessStateCoverage(resources.accessPool, clients.accessClient,
+              cut.accessStateProfile ?? 'access-state-v5');
+            return state.count === cut.accessStateCount && state.digest === cut.accessStateDigest
+              && outbox.count === cut.accessOutboxCount && outbox.digest === cut.accessOutboxDigest;
+          };
+          const baseMatches = await equals(coverage);
+          if (!baseMatches && !await equals(current)) {
             throw new RestoreLineageConflict('qualified Access differs from both authenticated cuts');
           }
           // Relay qualification can commit before the Access import transaction.
           // Only an exact C0 rollback is reapplied; arbitrary subsets stay held.
-          importNeeded = equals(coverage);
+          importNeeded = baseMatches;
         }
         if (importNeeded) {
           if (!resources.nativeAccessAttachment) throw new RestoreLineageConflict('private native Access custody is unavailable');
@@ -586,7 +589,10 @@ export class OwnerOperations {
       await assertRetainedAuthorityCoverage(clients.relayClient, resources.accessPool,
         current.relay.consumer, erasures.authority, clients.accessClient);
       // The signed pre-release Access coverage, pinned on the locked client before the CAS.
-      const basis = await captureReleaseBasis(resources.accessPool, clients.accessClient, current);
+      const basis = await captureReleaseBasis(resources.accessPool, clients.accessClient, current, {
+        dataEpoch: graphRelease.lineage.dataEpoch,
+        floors: restoredAccessLeaseEpochs(coverage.accessLeaseEpochs, current.accessLeaseEpochs),
+      });
       await releaseErasureRestoreHold(this.relay, restored, record.id, clients.fenceGeneration,
         erasures.authority, { clients: { relayClient: clients.relayClient, accessClient: clients.accessClient,
           graphRelease }, beforeAccessRelease: releaseGraph });

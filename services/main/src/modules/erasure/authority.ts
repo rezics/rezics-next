@@ -125,8 +125,8 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
     }
   }
   const [outbox, state] = accessClient
-    ? [await accessOutboxCoverage(access, accessClient), await accessStateCoverage(access, accessClient)]
-    : await Promise.all([accessOutboxCoverage(access), accessStateCoverage(access)]);
+    ? [await accessOutboxCoverage(access, accessClient), await accessStateCoverage(access, accessClient, coverage.accessStateProfile ?? 'access-state-v5')]
+    : await Promise.all([accessOutboxCoverage(access), accessStateCoverage(access, undefined, coverage.accessStateProfile ?? 'access-state-v5')]);
   if (outbox.count !== expected.outboxCount || outbox.digest !== expected.outboxDigest
     || state.count !== expected.stateCount || state.digest !== expected.stateDigest) {
     throw new ErasureAuthorityCoverageConflict(release?.binding

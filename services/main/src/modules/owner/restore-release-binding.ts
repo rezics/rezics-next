@@ -5,7 +5,10 @@ import { restoreRequestDigestFromAuthorityDigest, type OwnerRestoreEvidence } fr
 import {
   accessOutboxCoverage,
   accessStateTables,
+  resetAccessRecoveryState,
+  type AccessLeaseEpochs,
   type AccessStateTables,
+  type AccessRecoveryProfile,
 } from '../work/access-recovery-coverage.ts';
 import {
   foldRowCoverage,
@@ -38,8 +41,6 @@ const INVALIDATIONS = [
   'access.also_enjoyed_source_change',
 ] as const;
 type Invalidation = (typeof INVALIDATIONS)[number];
-/** Must equal the label `scanAccessTables` folds with; a difference refuses the release. */
-const ACCESS_STATE_LABEL = 'access-state-v5';
 
 function sha(value: unknown): string {
   return createHash('sha256').update(JSON.stringify(value)).digest('hex');
@@ -173,9 +174,11 @@ const record = (key: readonly string[], body: string): string => JSON.stringify(
 
 /** The Access coverage the CAS starts from, with the running row hashes of the invalidation tables. */
 export interface ReleaseBasis {
+  profile: AccessRecoveryProfile;
   tables: AccessStateTables;
   outbox: RowCoverage;
-  invalidations: Record<Invalidation, { hash: Hash; count: bigint; maximum: bigint }>;
+  invalidations: Record<Invalidation, { hash: Hash; count: bigint; maximum: bigint; coverage: RowCoverage }>;
+  resetTables?: AccessStateTables;
 }
 
 /**
@@ -188,9 +191,11 @@ export async function captureReleaseBasis(
   accessPool: Pool,
   accessClient: PoolClient,
   coverage: RecoveryCoverage,
+  reset?: { dataEpoch: string; floors: AccessLeaseEpochs },
 ): Promise<ReleaseBasis> {
   const signed = signedAccess(coverage);
-  const tables = await accessStateTables(accessPool, accessClient);
+  const profile = coverage.accessStateProfile ?? 'access-state-v5';
+  const tables = await accessStateTables(accessPool, accessClient, profile);
   const outbox = await accessOutboxCoverage(accessPool, accessClient);
   if (!sameCoverage(tables.state, signed.state) || !sameCoverage(outbox, signed.outbox)) {
     throw new RestoreLineageConflict('Access differs from the signed pre-release authority');
@@ -205,12 +210,32 @@ export async function captureReleaseBasis(
       count++;
       maximum = BigInt(key[0]!);
     });
-    if (!tables.tables[name] || !sameCoverage(scanned, tables.tables[name]!)) {
+    if (profile === 'access-state-v5' && (!tables.tables[name] || !sameCoverage(scanned, tables.tables[name]!))) {
       throw new RestoreLineageConflict(`Access invalidation table ${name} is not covered`);
     }
-    invalidations[name] = { hash, count, maximum };
+    invalidations[name] = { hash, count, maximum, coverage: scanned };
   }
-  return { tables, outbox, invalidations };
+  let resetTables: AccessStateTables | undefined;
+  if (profile === 'access-state-v5' && reset) {
+    // Legacy signatures include operational bytes. Derive the release state by
+    // the same owner's reversible reset, while independently proving that its
+    // authority projection and outbox do not change.
+    const authority = await accessStateTables(accessPool, accessClient, 'access-authority-v6');
+    await accessClient.query('SAVEPOINT access_release_reset_preview');
+    try {
+      await resetAccessRecoveryState(accessClient, reset.floors, reset.dataEpoch);
+      const after = await accessStateTables(accessPool, accessClient, 'access-authority-v6');
+      const afterOutbox = await accessOutboxCoverage(accessPool, accessClient);
+      if (!sameCoverage(authority.state, after.state) || !sameCoverage(outbox, afterOutbox)) {
+        throw new RestoreLineageConflict('Access reset changed durable authority');
+      }
+      resetTables = await accessStateTables(accessPool, accessClient, profile);
+    } finally {
+      await accessClient.query('ROLLBACK TO SAVEPOINT access_release_reset_preview');
+      await accessClient.query('RELEASE SAVEPOINT access_release_reset_preview');
+    }
+  }
+  return { profile, tables, outbox, invalidations, ...(resetTables ? { resetTables } : {}) };
 }
 
 export interface ReleaseTransition {
@@ -241,15 +266,16 @@ export async function proveReleaseTransition(
       'Access is not open at the generation after the captured fence',
     );
   }
-  const post = await accessStateTables(accessPool, accessClient);
+  const post = await accessStateTables(accessPool, accessClient, basis.profile);
   const outbox = await accessOutboxCoverage(accessPool, accessClient);
   const unexpected = (what: string) =>
     new RestoreLineageConflict(`Access changed beyond the captured-generation release (${what})`);
   if (post.catalogDigest !== basis.tables.catalogDigest) throw unexpected('catalog');
   if (!sameCoverage(outbox, basis.outbox)) throw unexpected('outbox');
   const expected: Record<string, RowCoverage> = {};
+  const resetTables = basis.resetTables ?? basis.tables;
   const identities = {} as ReleaseTransition['identities'];
-  for (const [name, coverage] of Object.entries(basis.tables.tables)) {
+  for (const [name, coverage] of Object.entries(resetTables.tables)) {
     if (!(INVALIDATIONS as readonly string[]).includes(name)) {
       if (!sameCoverage(post.tables[name] ?? { count: '', digest: '' }, coverage))
         throw unexpected(name);
@@ -264,7 +290,7 @@ export async function proveReleaseTransition(
     const retained = createHash('sha256');
     let retainedCount = 0n;
     const added: string[] = [];
-    await scanOwnerTable(accessClient, invalidationTable(name), (key, body) => {
+    const scanned = await scanOwnerTable(accessClient, invalidationTable(name), (key, body) => {
       if (BigInt(key[0]!) <= before.maximum) {
         retained.update(record(key, body));
         retainedCount++;
@@ -282,17 +308,21 @@ export async function proveReleaseTransition(
     // The pre rows are exactly the same rows, and the CAS added exactly one.
     if (
       retainedCount !== before.count ||
-      retained.digest('hex') !== basis.tables.tables[name]!.digest ||
+      retained.digest('hex') !== before.coverage.digest ||
       added.length !== 1
     )
       throw unexpected(name);
     identities[name] = added[0]!;
-    expected[name] = { count: (before.count + 1n).toString(), digest: derived.digest('hex') };
-    if (!post.tables[name] || !sameCoverage(post.tables[name]!, expected[name]!))
+    const after = { count: (before.count + 1n).toString(), digest: derived.digest('hex') };
+    if (!sameCoverage(scanned, after))
       throw unexpected(name);
+    if (basis.profile === 'access-state-v5') {
+      expected[name] = after;
+      if (!post.tables[name] || !sameCoverage(post.tables[name]!, after)) throw unexpected(name);
+    }
   }
   const derivedState = foldRowCoverage(
-    ACCESS_STATE_LABEL,
+    basis.profile,
     {
       tables: Object.keys(basis.tables.tables).map((name) => ({ name }) as OwnerTable),
       excluded: {},

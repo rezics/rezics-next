@@ -195,6 +195,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
             access + '1241_realm_directory_incremental_copy.sql',
           ]
         : []),
+      // Offline recovery invalidates the cursor while the owner fence is held.
+      ...(relation === 'access.realm_directory_position'
+        ? [main + 'modules/work/access-recovery-coverage.ts', main + 'modules/access/fixture-erasure-recovery.ts'] : []),
+      // Held recovery restores scheduler eligibility without a retained live lease.
+      ...(relation === 'access.discovery_refresh_catalog'
+        ? [main + 'modules/work/access-recovery-coverage.ts'] : []),
     ],
   })),
   {

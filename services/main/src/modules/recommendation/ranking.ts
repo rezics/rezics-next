@@ -155,12 +155,12 @@ export class RankingGenerations {
     catch (cause) { throw new RecommendationUnavailable('zero-score source snapshot is unavailable', { cause }); }
   }
 
-  private async mainStreamCoverage(): Promise<RelayHandoffPosition> {
+  private async mainStreamCoverage(dataEpoch = this.options.dataEpoch): Promise<RelayHandoffPosition> {
     try {
       const row = (await this.options.relay.query<{ sequence: string }>(`SELECT coalesce(max(sequence), 0)::text AS sequence
         FROM relay.delivered_batch WHERE stream_scope = $1 AND data_epoch = $2`,
-      [MAIN_RELAY_STREAM_SCOPE, this.options.dataEpoch])).rows[0];
-      return mainRelayPosition(MAIN_RELAY_STREAM_SCOPE, this.options.dataEpoch, row?.sequence ?? '0', this.options.dataEpoch);
+      [MAIN_RELAY_STREAM_SCOPE, dataEpoch])).rows[0];
+      return mainRelayPosition(MAIN_RELAY_STREAM_SCOPE, dataEpoch, row?.sequence ?? '0', dataEpoch);
     } catch (cause) { throw new RecommendationUnavailable('relay retention is unavailable', { cause }); }
   }
 
@@ -173,8 +173,8 @@ export class RankingGenerations {
 
   private async describe(client: PoolClient, generation: string): Promise<GenerationView> {
     const row = (await client.query<{ state: string; population: RankingPopulation['kind']; lease_epoch: string;
-      data_epoch: string; checkpoint: string; complete: boolean; failure_reason: string | null;
-      revision: string | null }>(`SELECT g.state, r.population, g.lease_epoch::text, i.data_epoch,
+      data_epoch: string; recovery_data_epoch: string | null; checkpoint: string; complete: boolean; failure_reason: string | null;
+      revision: string | null }>(`SELECT g.state, r.population, g.lease_epoch::text, i.data_epoch, i.recovery_data_epoch,
         i.checkpoint_sequence::text AS checkpoint, i.snapshot_complete AS complete, g.failure_reason,
         h.revision::text AS revision
       FROM access.derived_generation g
@@ -265,10 +265,10 @@ export class RankingGenerations {
     const scope = scopeKey(PUBLIC_DISCOVERY_RANKING, null, this.options.dataEpoch);
     const row = await inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
-      return (await client.query<{ generation: string; data_epoch: string; manifest_data_epoch: string | null;
+      return (await client.query<{ generation: string; data_epoch: string; recovery_data_epoch: string | null; manifest_data_epoch: string | null;
         checkpoint: string;
         stream_scope: string | null; zero_snapshot: string | null; erasure_epoch: string }>(`SELECT g.id::text AS generation,
-          i.data_epoch,i.checkpoint_sequence::text AS checkpoint,
+          i.data_epoch, i.recovery_data_epoch,i.checkpoint_sequence::text AS checkpoint,
           g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
           g.input_manifest->'source'->>'streamScope' AS stream_scope,
           g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
@@ -280,10 +280,10 @@ export class RankingGenerations {
     if (!row) return null;
     // Validate the signal cursor in its relay domain, but report the graph
     // candidate snapshot in the graph diagnostic domain.
-    mainRelayPosition(row.stream_scope, row.data_epoch, row.checkpoint, this.options.dataEpoch, row.manifest_data_epoch);
+    mainRelayPosition(row.stream_scope, row.data_epoch, row.checkpoint, this.sourceEpoch(row), row.manifest_data_epoch);
     await this.assertContributorsCurrent(row.generation, row.erasure_epoch);
     if (row.zero_snapshot === null) return null;
-    return { generation: row.generation, dataEpoch: row.data_epoch, sequence: row.zero_snapshot };
+    return { generation: row.generation, dataEpoch: row.recovery_data_epoch ?? row.data_epoch, sequence: row.recovery_data_epoch ? '0' : row.zero_snapshot };
   }
 
   /** The scope's indexed recent window covers the single automatic pending
@@ -310,9 +310,9 @@ export class RankingGenerations {
     const state = await inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       const head = (await client.query<{ generation: string; revision: string; checkpoint: string;
-        data_epoch: string; manifest_data_epoch: string | null; stream_scope: string | null;
+        data_epoch: string; recovery_data_epoch: string | null; manifest_data_epoch: string | null; stream_scope: string | null;
         zero_snapshot: string | null; erasure_epoch: string }>(`SELECT h.active_generation::text AS generation,
-          h.revision::text,i.checkpoint_sequence::text AS checkpoint,i.data_epoch,
+          h.revision::text,i.checkpoint_sequence::text AS checkpoint,i.data_epoch, i.recovery_data_epoch,
           g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
           g.input_manifest->'source'->>'streamScope' AS stream_scope,
           g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot,
@@ -321,9 +321,9 @@ export class RankingGenerations {
         JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
         WHERE h.family='ranking' AND h.scope_key=$1`, [scope])).rows[0] ?? null;
       const pending = (await client.query<{ id: string; state: string; checkpoint: string;
-        data_epoch: string; manifest_data_epoch: string | null; stream_scope: string | null;
+        data_epoch: string; recovery_data_epoch: string | null; manifest_data_epoch: string | null; stream_scope: string | null;
         zero_snapshot: string | null }>(`SELECT g.id::text,g.state,
-          i.checkpoint_sequence::text AS checkpoint,i.data_epoch,
+          i.checkpoint_sequence::text AS checkpoint,i.data_epoch, i.recovery_data_epoch,
           g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
           g.input_manifest->'source'->>'streamScope' AS stream_scope,
           g.input_manifest->'source'->>'zeroSnapshot' AS zero_snapshot
@@ -339,9 +339,9 @@ export class RankingGenerations {
       // A manual build can finish after a newer public head. Never replace that
       // head with an older candidate population or an older signal checkpoint.
       const pendingCheckpoint = mainRelayPosition(state.pending.stream_scope, state.pending.data_epoch,
-        state.pending.checkpoint, this.options.dataEpoch, state.pending.manifest_data_epoch);
+        state.pending.checkpoint, this.sourceEpoch(state.pending), state.pending.manifest_data_epoch);
       const headCheckpoint = state.head && mainRelayPosition(state.head.stream_scope, state.head.data_epoch,
-        state.head.checkpoint, this.options.dataEpoch, state.head.manifest_data_epoch);
+        state.head.checkpoint, this.sourceEpoch(state.head), state.head.manifest_data_epoch);
       if (state.head && (compareMainRelayPositions(pendingCheckpoint, headCheckpoint!) < 0
         || state.head.zero_snapshot !== null && (state.pending.zero_snapshot === null
           || BigInt(state.pending.zero_snapshot) < BigInt(state.head.zero_snapshot)))) {
@@ -363,7 +363,7 @@ export class RankingGenerations {
     const relay = await this.mainStreamCoverage(), erasure = await this.erasureHead();
     const candidates = await this.candidateSnapshot();
     const headCheckpoint = state.head && mainRelayPosition(state.head.stream_scope, state.head.data_epoch,
-      state.head.checkpoint, this.options.dataEpoch, state.head.manifest_data_epoch);
+      state.head.checkpoint, this.sourceEpoch(state.head), state.head.manifest_data_epoch);
     if (state.head && compareMainRelayPositions(headCheckpoint!, relay) >= 0
       && state.head.erasure_epoch === erasure && state.head.zero_snapshot === candidates) return 'current';
     await this.registerBuild(automaticPublicRanking, PUBLIC_DISCOVERY_RANKING, DISCOVERY_RANKING_REFRESH_COST.partitions,
@@ -380,13 +380,21 @@ export class RankingGenerations {
     });
   }
 
-  private async requireCurrentEpoch(client: PoolClient, generation: string): Promise<void> {
-    const source = (await client.query<{ data_epoch: string }>(`SELECT data_epoch
-      FROM access.derived_generation_input WHERE generation_id = $1 AND source = 'main-graph'`,
-    [generation])).rows[0];
-    if (source?.data_epoch !== this.options.dataEpoch) {
+  /** A restored owner resumes the original retained stream; its graph epoch
+   * is an owner admission mapping, never a replacement for source evidence. */
+  private sourceEpoch(input: { data_epoch: string; recovery_data_epoch: string | null }): string {
+    if ((input.recovery_data_epoch ?? input.data_epoch) !== this.options.dataEpoch) {
       throw new RecommendationStale('generation belongs to another source epoch');
     }
+    return input.data_epoch;
+  }
+
+  private async requireCurrentEpoch(client: PoolClient, generation: string): Promise<void> {
+    const source = (await client.query<{ data_epoch: string; recovery_data_epoch: string | null }>(
+      `SELECT data_epoch, recovery_data_epoch FROM access.derived_generation_input
+       WHERE generation_id = $1 AND source = 'main-graph'`, [generation])).rows[0];
+    if (!source) throw new RecommendationStale('generation belongs to another source epoch');
+    this.sourceEpoch(source);
   }
 
   async fail(generation: string, leaseEpoch: string, reason: string): Promise<void> {
@@ -400,9 +408,9 @@ export class RankingGenerations {
   /** Apply one bounded, coalesced batch of contiguous relay batches under the caller's lease. */
   async runBatch(generation: string, leaseEpoch: string): Promise<BatchResult> {
     const basis = (await this.options.access.query<{ population: RankingPopulation['kind']; realm: string | null;
-      principal_id: string | null; partition_count: number; data_epoch: string;
+      principal_id: string | null; partition_count: number; data_epoch: string; recovery_data_epoch: string | null;
       manifest_data_epoch: string | null; checkpoint: string;
-      stream_scope: string | null; target: string; zero_snapshot: string | null }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch,
+      stream_scope: string | null; target: string; zero_snapshot: string | null }>(`SELECT r.population, r.realm, r.principal_id::text, r.partition_count, i.data_epoch, i.recovery_data_epoch,
         i.checkpoint_sequence::text AS checkpoint,
         g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
         g.input_manifest->'source'->>'snapshotTarget' AS target,
@@ -414,19 +422,20 @@ export class RankingGenerations {
       throw new RecommendationUnavailable('Access owner is unavailable', { cause });
     })).rows[0];
     if (!basis) throw new RecommendationStale('generation is not building');
-    if (basis.data_epoch !== this.options.dataEpoch) {
-      throw new RecommendationStale('generation belongs to another source epoch');
-    }
+    const sourceEpoch = this.sourceEpoch(basis);
+    // Source receipts and retained batches keep their original epoch. Recovery
+    // only maps the graph snapshot to the backup cut at sequence zero.
+    if (basis.recovery_data_epoch) basis.zero_snapshot = '0';
     const checkpoint = mainRelayPosition(basis.stream_scope, basis.data_epoch, basis.checkpoint,
-      this.options.dataEpoch, basis.manifest_data_epoch);
+      this.sourceEpoch(basis), basis.manifest_data_epoch);
     const target = mainRelayPosition(basis.stream_scope, basis.data_epoch, basis.target,
-      this.options.dataEpoch, basis.manifest_data_epoch);
+      this.sourceEpoch(basis), basis.manifest_data_epoch);
     const relay = this.options.relay;
     let batches: { sequence: string; event_count: number }[];
     let events: { event_id: string; sequence: string; envelope: { type?: string; data?: {
       ordinal?: number; receipt?: Record<string, unknown> } } }[] = [];
     try {
-      const coverage = await this.mainStreamCoverage();
+      const coverage = await this.mainStreamCoverage(sourceEpoch);
       if (compareMainRelayPositions(checkpoint, coverage) > 0) {
         throw new RecommendationStale('ranking checkpoint is ahead of Main stream coverage');
       }
@@ -438,7 +447,7 @@ export class RankingGenerations {
       const contiguous = [];
       for (const batch of batches) {
         const batchPosition = mainRelayPosition(checkpoint.streamScope, checkpoint.dataEpoch,
-          batch.sequence, this.options.dataEpoch);
+          batch.sequence, sourceEpoch);
         const expectedPosition = { ...checkpoint, sequence: expected.toString() };
         if (compareMainRelayPositions(batchPosition, expectedPosition) !== 0) break;
         contiguous.push(batch);
@@ -649,20 +658,20 @@ export class RankingGenerations {
 
   /** Ready only after catch-up to the current relay head and a partition-total validation. */
   async finish(generation: string, leaseEpoch: string): Promise<GenerationView> {
-    const head = await this.mainStreamCoverage();
     return inAccess(this.options.access, async client => {
       await requireRecoveryOpen(client);
       await fenceLease(client, generation, leaseEpoch, this.leaseMs);
-      const input = (await client.query<{ checkpoint: string; complete: boolean; data_epoch: string;
+      const input = (await client.query<{ checkpoint: string; complete: boolean; data_epoch: string; recovery_data_epoch: string | null;
         manifest_data_epoch: string | null;
         stream_scope: string | null }>(`SELECT i.checkpoint_sequence::text AS checkpoint, i.snapshot_complete AS complete,
-          i.data_epoch, g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
+          i.data_epoch, i.recovery_data_epoch, g.input_manifest->'source'->>'dataEpoch' AS manifest_data_epoch,
           g.input_manifest->'source'->>'streamScope' AS stream_scope
         FROM access.derived_generation_input i JOIN access.derived_generation g ON g.id = i.generation_id
         WHERE i.generation_id = $1 AND i.source = 'main-graph'`,
       [generation])).rows[0]!;
       const checkpoint = mainRelayPosition(input.stream_scope, input.data_epoch, input.checkpoint,
-        this.options.dataEpoch, input.manifest_data_epoch);
+        this.sourceEpoch(input), input.manifest_data_epoch);
+      const head = await this.mainStreamCoverage(this.sourceEpoch(input));
       if (!input.complete || compareMainRelayPositions(checkpoint, head) < 0) {
         throw new RecommendationNotReady('generation has not caught up with the relay');
       }

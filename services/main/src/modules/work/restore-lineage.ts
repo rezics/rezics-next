@@ -13,7 +13,7 @@ import { knownSearchPosition } from '../search/snapshot-state.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { accessOutboxCoverage, accessStateCoverage,
-  scanAccessOutbox, scanAccessState } from './access-recovery-coverage.ts';
+  accessLeaseEpochCoverage, resetAccessRecoveryState, restoredAccessLeaseEpochs, scanAccessOutbox, scanAccessState, type AccessLeaseEpochs } from './access-recovery-coverage.ts';
 import { exportAccessErasureRecoveryAttachment,
   type AccessErasureRecoverySummary } from '../access/erasure-recovery.ts';
 import { assertErasureJournalCoreCoverage, createPublicRevisionJournalDeltaVerifier,
@@ -244,6 +244,9 @@ export interface RecoveryCoverage {
   account: AccountRecoveryCoverage;
   accessOutboxCount: string;
   accessOutboxDigest: string;
+  /** Missing on captures signed before authority/projection separation. */
+  accessLeaseEpochs?: AccessLeaseEpochs;
+  accessStateProfile?: 'access-state-v5' | 'access-authority-v6';
   accessStateCount: string;
   accessStateDigest: string;
   /** Optional on old signed captures; current captures always include both fields. */
@@ -477,7 +480,7 @@ async function captureNativeAccessErasureReference(
     const [baseFence, sourceFence] = await Promise.all([
       readClosedAccessFence(baseAccess), readClosedAccessFence(sourceAccess),
     ]);
-    const baseState = await scanAccessState(baseAccess);
+    const baseState = await scanAccessState(baseAccess, custody.baseCoverage.accessStateProfile ?? 'access-state-v5');
     const baseOutbox = await scanAccessOutbox(baseAccess);
     const sourceState = await scanAccessState(sourceAccess);
     const sourceOutbox = await scanAccessOutbox(sourceAccess);
@@ -512,7 +515,7 @@ async function captureNativeAccessErasureReference(
       exportJournalBoundAccessErasureRecoveryAttachment(baseAccess, sourceAccess, sourceRelay,
         baseJournal.epoch, sourceJournal.epoch, write);
     const summary = await exportAttachment(async () => {});
-    if (!sameCoverage(summary.baseState, rowCoverage(custody.baseCoverage.accessStateCount,
+    if (!sameCoverage(custody.baseCoverage.accessStateProfile === 'access-authority-v6' ? summary.baseState : summary.legacyBaseState!, rowCoverage(custody.baseCoverage.accessStateCount,
       custody.baseCoverage.accessStateDigest))
       || !sameCoverage(summary.baseOutbox, rowCoverage(custody.baseCoverage.accessOutboxCount,
         custody.baseCoverage.accessOutboxDigest))
@@ -579,6 +582,7 @@ export async function captureGraphRecoveryCoverage(
   const objects = objectStore ? await captureObjectRecoveryCoverage(fuseki, objectStore) : undefined;
   const outbox = await accessOutboxCoverage(accessPool);
   const state = await accessStateCoverage(accessPool);
+  const accessLeaseEpochs = await accessLeaseEpochCoverage(accessPool);
   const accountPg = await capturePgRecoveryFrontier(accountPool);
   const account = await accountRecoveryCoverage(accountPool);
   const relay = contentProof ? await relayCoverageOnClient(contentProof.relayClient, consumer)
@@ -596,8 +600,8 @@ export async function captureGraphRecoveryCoverage(
   }
   // A second checkout of a pool that this capture already holds deadlocks a
   // one-connection pool, so each pool's reads run one after another.
-  const [[outboxAfter, stateAfter], [accountPgAfter, accountAfter], relayAfter] = await Promise.all([
-    (async () => [await accessOutboxCoverage(accessPool), await accessStateCoverage(accessPool)] as const)(),
+  const [[outboxAfter, stateAfter, epochsAfter], [accountPgAfter, accountAfter], relayAfter] = await Promise.all([
+    (async () => [await accessOutboxCoverage(accessPool), await accessStateCoverage(accessPool), await accessLeaseEpochCoverage(accessPool)] as const)(),
     (async () => [await capturePgRecoveryFrontier(accountPool), await accountRecoveryCoverage(accountPool)] as const)(),
     contentProof ? relayCoverageOnClient(contentProof.relayClient, consumer) : relayCoverage(relayPool, consumer),
   ]);
@@ -624,6 +628,7 @@ export async function captureGraphRecoveryCoverage(
       || before.sequence !== final.sequence || before.relay.sequence !== final.relay.sequence ? 'graph control' : null,
     outbox.count !== outboxAfter.count || outbox.digest !== outboxAfter.digest
       ? 'Access outbox' : null,
+    JSON.stringify(accessLeaseEpochs) !== JSON.stringify(epochsAfter) ? 'Access lease epochs' : null,
     state.count !== stateAfter.count || state.digest !== stateAfter.digest
       ? 'Access state' : null,
     account.rowCount !== accountAfter.rowCount || account.rowDigest !== accountAfter.rowDigest
@@ -642,7 +647,7 @@ export async function captureGraphRecoveryCoverage(
   const coverage: RecoveryCoverage = { priorDataEpoch: before.dataEpoch, priorSequence: before.sequence,
     accountPg: retainedPg, account,
     accessOutboxCount: outbox.count, accessOutboxDigest: outbox.digest,
-    accessStateCount: state.count, accessStateDigest: state.digest,
+    accessStateProfile: 'access-authority-v6', accessLeaseEpochs, accessStateCount: state.count, accessStateDigest: state.digest,
     accessFenceGeneration: fence.rows[0]!.generation, erasureJournal, relay,
     content, commerce, ...(objects ? { objects } : {}) };
   if (nativeAccessCustody) {
@@ -842,6 +847,8 @@ function assertNativeAccessErasureReference(coverage: RecoveryCoverage): void {
   const reopened = canonicalDecimal(baseGeneration) && canonicalDecimal(sourceGeneration)
     && BigInt(sourceGeneration!) === BigInt(baseGeneration!) + 2n;
   const validSummary = summary?.profile === 'rezics-access-erasure-recovery-v1' && summary.version === 1
+    && (summary.catalogVersion === undefined || summary.catalogVersion === 1
+      || summary.catalogVersion === 2 && validRows(summary.legacyBaseState))
     && /^[0-9a-f]{64}$/.test(summary.catalogDigest ?? '')
     && validRows(summary.baseState) && validRows(summary.sourceState)
     && validRows(summary.baseOutbox) && validRows(summary.sourceOutbox)
@@ -886,7 +893,8 @@ export function assertNativeAccessErasureBaseBinding(
     || !sameCoreCoverage(reference.baseErasureJournal, base.erasureJournal)
     || !sameAccountRows(current.account, base.account)
     || JSON.stringify(current.commerce) !== JSON.stringify(base.commerce)
-    || !sameCoverage(reference.summary.baseState, rowCoverage(base.accessStateCount, base.accessStateDigest))
+    || !sameCoverage(base.accessStateProfile === 'access-authority-v6' || (reference.summary.catalogVersion ?? 1) === 1
+      ? reference.summary.baseState : reference.summary.legacyBaseState!, rowCoverage(base.accessStateCount, base.accessStateDigest))
     || !sameCoverage(reference.summary.baseOutbox, rowCoverage(base.accessOutboxCount, base.accessOutboxDigest))) {
     throw new RestoreLineageConflict('native Access erasure reference is not bound to signed C0');
   }
@@ -903,6 +911,11 @@ export function assertRecoveryCoverage(coverage: RecoveryCoverage): void {
       && coverage.account.profile !== 'full-rows' && coverage.account.profile !== 'authority-v1'
     || !/^[0-9]+$/.test(coverage.accessOutboxCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessOutboxDigest)
+    || coverage.accessStateProfile !== undefined && coverage.accessStateProfile !== 'access-state-v5'
+      && coverage.accessStateProfile !== 'access-authority-v6'
+    || coverage.accessStateProfile === 'access-authority-v6' && !coverage.accessLeaseEpochs
+    || coverage.accessLeaseEpochs !== undefined && (!/^(0|[1-9][0-9]*)$/.test(coverage.accessLeaseEpochs.derivedGeneration)
+      || !/^(0|[1-9][0-9]*)$/.test(coverage.accessLeaseEpochs.discoveryRefresh))
     || !/^[0-9]+$/.test(coverage.accessStateCount)
     || !/^[0-9a-f]{64}$/.test(coverage.accessStateDigest)
     || coverage.accessFenceGeneration !== undefined && !/^(0|[1-9][0-9]*)$/.test(coverage.accessFenceGeneration)
@@ -931,12 +944,12 @@ export function assertRetainedRecoveryRelayCut(coverage: RecoveryCoverage, retai
 export async function assertRestoreAuthorityBaseline(relay: PoolClient,
   evidence: Pick<AuthenticatedRecoveryCoverage, 'sealedCoverage' | 'retainedAuthorityCoverage' | 'hmacKey'>,
   base: RecoveryCoverage,
-  release?: { graphRelease: RestoredGraphReleaseExpectation; ownerRestore: OwnerRestoreEvidence }): Promise<void> {
+  release?: { graphRelease: RestoredGraphReleaseExpectation; ownerRestore: OwnerRestoreEvidence }): Promise<RecoveryCoverage> {
   if (evidence.retainedAuthorityCoverage === undefined) {
     if (release) throw new RestoreLineageConflict('two-cut release lacks independently current evidence');
     try { await assertCurrentRecoveryCoverageHead(relay, base); }
     catch (error) { throw new RestoreLineageConflict('signed recovery coverage is not the retained current capture', { cause: error }); }
-    return;
+    return base;
   }
   let current: RecoveryCoverage;
   try {
@@ -948,18 +961,18 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
   }
   if (evidence.retainedAuthorityCoverage === evidence.sealedCoverage) {
     if (release) throw new RestoreLineageConflict('two-cut release requires a distinct authenticated base');
-    return;
+    return current;
   }
   assertSameAccountRecoveryProfile(current.account, base.account);
   // A later WAL floor alone needs no attachment: all captured owner facts and
   // native Access values must still describe the same cut.
   if (!current.nativeAccessErasure) {
     if (release) throw new RestoreLineageConflict('two-cut release lacks signed native Access custody');
-    const ownerFacts = (cut: RecoveryCoverage) => ({ ...cut, accountPg: undefined });
+    const ownerFacts = (cut: RecoveryCoverage) => ({ ...cut, accountPg: undefined, accessLeaseEpochs: undefined });
     if (JSON.stringify(ownerFacts(current)) !== JSON.stringify(ownerFacts(base))) {
       throw new RestoreLineageConflict('current authority requires a signed native Access attachment');
     }
-    return;
+    return current;
   }
   try {
     assertNativeAccessErasureBaseBinding(current, base, evidence.sealedCoverage);
@@ -1036,6 +1049,7 @@ export async function assertRestoreAuthorityBaseline(relay: PoolClient,
     if (error instanceof RestoreLineageConflict) throw error;
     throw new RestoreLineageConflict('retained two-cut native evidence is unavailable or divergent', { cause: error });
   }
+  return current;
 }
 
 /** Derived owner facts carried by findings, request identity and both HMAC phases. */
@@ -1178,7 +1192,7 @@ export async function releaseRestoredGraphHold(
     if (!twoCutResume && (outbox.count !== coverage.accessOutboxCount || outbox.digest !== coverage.accessOutboxDigest)) {
       throw new RestoreLineageConflict('Access outbox differs from recovery coverage');
     }
-    const state = await scanAccessState(client);
+    const state = await scanAccessState(client, coverage.accessStateProfile ?? 'access-state-v5');
     if (!twoCutResume && (state.count !== coverage.accessStateCount || state.digest !== coverage.accessStateDigest)) {
       throw new RestoreLineageConflict('Access state differs from recovery coverage');
     }
@@ -1197,7 +1211,7 @@ export async function releaseRestoredGraphHold(
       && fenceGeneration !== coverage.accessFenceGeneration) {
       throw new RestoreLineageConflict('Access fence differs from signed C0');
     }
-    await assertRestoreAuthorityBaseline(relayHeadClient, evidence, coverage);
+    const retained = await assertRestoreAuthorityBaseline(relayHeadClient, evidence, coverage);
     if (!coverage.content) throw new RestoreLineageConflict('Content recovery coverage is missing');
     if (!evidence.contentPool) throw new RestoreLineageConflict('restored Content owner is unavailable');
     if (!coverage.objects) throw new RestoreLineageConflict('immutable object recovery coverage is missing');
@@ -1285,6 +1299,7 @@ export async function releaseRestoredGraphHold(
       if (delivering.rowCount !== 0) {
         throw new RestoreLineageConflict('Access delivery is still in progress before graph release');
       }
+      await resetAccessRecoveryState(client, restoredAccessLeaseEpochs(coverage.accessLeaseEpochs, retained.accessLeaseEpochs), lineage.dataEpoch);
       let updateError: unknown;
       if (held.boolean === true) {
         try { await fuseki.commandWithReceipt({ receipt, digest: releaseDigest, validations: [], deadlineMs: 10_000,
