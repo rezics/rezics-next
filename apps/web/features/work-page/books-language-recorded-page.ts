@@ -54,7 +54,7 @@ function recordedProblem(value: unknown, status: number): RecordedProblem | unde
 /**
  * The same failure adapter as `settle` in `read.ts`: one retry when Main
  * reports that the graph moved, then `failureOf`. The recorded problem is
- * kept, which `read.ts` does not do until that file can take this client.
+ * kept alongside the display category.
  */
 async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<Answered<T>> {
   try {
@@ -118,16 +118,12 @@ export function booksLanguageReading(input: {
 /**
  * The text page's Main reads, given a client. Production passes the
  * request-cached host from `reader()`; a story passes the replaying client.
- * The header query matches `readWorkHeader`. The selection query carries only
- * `language`, omitted when the header selects none. `read.ts` still builds
- * its own header client until that file can take this one.
+ * The shared `booksEditionReads.readWorkHeader` selects the language. The
+ * selection query carries only `language`, omitted when the header selects none.
  */
 export function booksLanguageReads(host: { main: MainClient; actingSubject?: string }) {
-  const { main, actingSubject } = host;
+  const { main } = host;
   return {
-    readWorkHeader(id: string): Promise<Answered<WorkHeader>> {
-      return settleCall(() => main.v1.works({ id }).get({ query: { actingSubject } }));
-    },
     readText(mainVersion: string, language: string | undefined): Promise<Answered<WorkText>> {
       const id = idOf(mainVersion);
       if (!id) return Promise.resolve({ ok: false, failure: 'missing' });

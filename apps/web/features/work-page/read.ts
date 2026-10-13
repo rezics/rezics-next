@@ -9,6 +9,7 @@ import { followHref } from '../entity-page/href.ts';
 import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
 import { booksEditionReads, settle } from './books-edition-page.read.ts';
+import { booksLanguageReads } from './books-language-recorded-page.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen, platformClosed } from '../api/platform-access.ts';
@@ -420,10 +421,7 @@ export type ReadStart =
  * named language or the one Main selects.
  */
 export const readText = cache(async (mainVersion: string, language: string | undefined): Promise<Loaded<WorkText>> => {
-  const { main } = await reader();
-  const id = idOf(mainVersion);
-  if (!id) return { ok: false, failure: 'missing' };
-  return settle(() => main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }));
+  return booksLanguageReads(await reader()).readText(mainVersion, language);
 });
 
 /** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */

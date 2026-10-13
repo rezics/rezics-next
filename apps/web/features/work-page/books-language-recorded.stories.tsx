@@ -7,6 +7,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { BooksLanguageRecordedView } from './books-language-recorded-page.tsx';
+import { booksEditionReads } from './books-edition-page.read.ts';
 import {
   booksLanguageReading,
   booksLanguageReads,
@@ -93,10 +94,10 @@ async function loadReading(main: MainClient, request: ReadingRequest): Promise<L
   const headerLabel = request.kind === 'private' ? 'private-reading-page-header' : 'reading-page-header';
   const header = sample(request.persona, headerLabel);
   const actingSubject = actingSubjectOf(header.path);
-  const reads = booksLanguageReads({ main, ...(actingSubject ? { actingSubject } : {}) });
-  const work = await reads.readWorkHeader(recordedId(header.path));
+  const host = { main, ...(actingSubject ? { actingSubject } : {}) };
+  const work = await booksEditionReads(host).readWorkHeader(recordedId(header.path));
   if (!work.ok) return { kind: 'work-missing' };
-  const text = await reads.readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
+  const text = await booksLanguageReads(host).readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
   return {
     kind: 'shown',
     reading: booksLanguageReading({ text, header: work.data }),

@@ -3,6 +3,7 @@ import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scri
 import books from '../../../../tests/qa/fixtures/outcomes/books/read-non-ui-languages-non-ui-languages.json';
 import { mainApiWithToken } from '../api/main.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
+import { booksEditionReads } from './books-edition-page.read.ts';
 import {
   booksLanguageReading,
   booksLanguageReads,
@@ -71,8 +72,9 @@ test('each persona reads the language its published header selects', async () =>
     ];
     if (persona !== 'visitor') selections.push({ label: 'reader-settings', state: 'populated' });
     const main = client(persona, selections);
-    const reads = booksLanguageReads({ main, ...(actingSubject ? { actingSubject } : {}) });
-    const work = await reads.readWorkHeader(recordedId(header.path));
+    const host = { main, ...(actingSubject ? { actingSubject } : {}) };
+    const reads = booksLanguageReads(host);
+    const work = await booksEditionReads(host).readWorkHeader(recordedId(header.path));
     expect(work.ok).toBe(true);
     if (!work.ok) return;
     same(work.data, header.answer);
@@ -105,8 +107,8 @@ test('a refused private header keeps its problem and the owner missing text keep
     expect(header.status).toBe(404);
     const actingSubject = queryOf(header.path).get('actingSubject');
     const main = client(persona, [{ label: 'private-reading-page-header', state: 'error' }]);
-    const reads = booksLanguageReads({ main, ...(actingSubject ? { actingSubject } : {}) });
-    const work = await reads.readWorkHeader(recordedId(header.path));
+    const work = await booksEditionReads({ main, ...(actingSubject ? { actingSubject } : {}) })
+      .readWorkHeader(recordedId(header.path));
     expect(work.ok).toBe(false);
     if (work.ok) return;
     expect(work.failure).toBe('missing');
@@ -122,8 +124,9 @@ test('a refused private header keeps its problem and the owner missing text keep
     { label: 'private-reading-page-header', state: 'populated' },
     { label: 'private-reading-page-selection', state: 'error' },
   ]);
-  const reads = booksLanguageReads({ main, actingSubject: actingSubject! });
-  const work = await reads.readWorkHeader(recordedId(header.path));
+  const host = { main, actingSubject: actingSubject! };
+  const reads = booksLanguageReads(host);
+  const work = await booksEditionReads(host).readWorkHeader(recordedId(header.path));
   expect(work.ok).toBe(true);
   if (!work.ok) return;
   same(work.data, header.answer);
