@@ -4,7 +4,7 @@ Wrap-up checkpoint for [API](GOAL.md), 2026-10-13 06:03 UTC. Paused at the maint
 
 | Measure | Checkpoint |
 | --- | --- |
-| Rows proved / scope | **0/67**; main cells **0 proved, 0 pending, 0 not applicable, 402 missing** |
+| Rows proved / scope | **1/67** since 2026-10-13 (G-2122); main cells **6 proved, 0 pending, 0 not applicable, 396 missing**. The rest of this table is the checkpoint of the wrap-up before it |
 | Rows covered by analysis | All 67 once, in 18 briefs, with every persona's operation/current inferred answer/intended answer/test lead or none; manager corrections preserved in those briefs |
 | Draft outcome work | 11 Books rows / 66 candidate cells on three unmerged branches; none executed, none certified. Planner failure is infrastructure, not a pending product cell |
 | Worker state | 0 live, 22 open; 15 matrix sessions idle for step two (five interrupted by Program), three blocked Books drafts, one merged/incomplete tooling task, three read design notes |
@@ -55,6 +55,8 @@ Each task's durable brief is linked below. Branches are `goal/g-<number>`; all w
 | [G-2111](tasks/G-2111.md) / 1 / exited | No commits; narrowed public-domain recipe note and Program ruling in brief; Read by program: 2026-10-13. | Recipes outcome cells first: text/structure, basis/source/link/credit/transcriber and platform-mandate denial; existing owners, <=400 changed lines/task. |
 
 ## Next plan and changes to practice
+
+**Resume, decided by the program on 2026-10-13 (10:58 UTC).** The seam this checkpoint waited for is settled on `main`: declarations import `scripts/qa/cases/outcome-cells.ts`; Main owns one lifecycle (`services/main/src/lifecycle.ts`) that its entry and the persona harness both run; the persona stack initialises and runs Main's relay as production does; and `books/catalogue-browse-and-search-in-its-zone` is proved for all six personas (G-2122, 1 of 67 rows). Step two started as a pilot of three matrix tasks in fresh sessions with automatic landing: G-2099 (recipes), G-2101 (Realm foundation) and G-2106 (Zone site bundle, which qualifies the reported 400 first). Their instruction is `.temp/goal-program/steps/api-step-two.txt`: declare the six cells of each row, test each persona over real HTTP, mark what passes `proved` and what fails `pending` with the request and the answer, and write no product code. The other twelve matrix tasks resume the same way once the pilot's handoffs show the instruction holds. Of the three Books drafts, G-2075 drops the catalogue row, which is proved, and G-2077 has returned `personas.ts` to `main`'s version; they rebase and run rather than rewrite. The program's supermanager holds the waits until the api manager's role is enrolled with the coordinator.
 
 Nothing further is ready under the wrap-up order. After a new plan, first settle the scanner/declaration-loader seam and qualify one Books candidate end to end before resuming the other tests. Resolve G-2077's unclaimed helper separately; split the retained backup boundary instead of extending G-2074 beyond its two-fix cap. Keep all 15 matrix sessions idle until then, and cut archival appendices back into one-session execution briefs. Settle boards and the other explicitly held product decisions before dispatching their affected cells.
 
