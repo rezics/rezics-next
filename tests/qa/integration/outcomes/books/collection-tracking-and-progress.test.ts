@@ -281,6 +281,17 @@ async function libraryRenderReads(sample: Sample) {
         occurrence: chapters.occurrences[0], completed: false, position: 'private owner bookmark' } },
       { work: series.work, status: { status: 'reading' } },
     ] });
+  const production = await json<{ profile: string; items: { work: string }[] }>(sample(
+    'production-reading-work-states', 'GET',
+    `/v1/me/work-states?works=${encodeURIComponent(series.work)}%2C${encodeURIComponent(book.work)}&${query()}`,
+  ));
+  expect(production.profile).toBe('reader-work-state-batch-v1');
+  expect(production.items).toHaveLength(2);
+  expect(production.items.find(item => item.work === series.work))
+    .toMatchObject({ work: series.work, status: { status: 'reading' } });
+  expect(production.items.find(item => item.work === book.work))
+    .toMatchObject({ work: book.work, status: { status: 'reading' }, progress: {
+      occurrence: chapters.occurrences[0], completed: false, position: 'private owner bookmark' } });
   for (const [label, work, title] of [['book', book, 'Original outcome volume'], ['series', series, 'Original outcome series']] as const) {
     expect(await json(sample(`${label}-card-and-chapter-count`, 'GET', `/v1/works/${short(work.work)}?${query()}`)))
       .toMatchObject({ profile: 'work-read-v1', mainVersion: work.mainVersion, ...bookCard(work, title) });

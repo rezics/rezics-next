@@ -605,6 +605,15 @@ outcomeTest(libraryImport, 'owner', async () => {
   }, randomUUID()), 400);
   await json(sample('import-review-empty', 'GET', `${root()}/rows?${query()}&cursor=4999`, undefined, randomUUID()));
   await ensureApplied(person);
+  const production = await json<Review>(sample(
+    'production-import-review', 'GET', `${root()}/rows?${query()}`,
+  ));
+  expect(production.rows.find(item => item.index === 0)?.source).toEqual(originals[0]);
+  expect(production.rows.find(item => item.index === 0)?.source).toMatchObject({
+    work: book, creators: ['Original fixture owner'],
+    review: { text: 'Original private review', language: 'en', spoiler: true },
+    shelves: ['Private portable shelf'], raw: { privateJournal: 'Private journal' },
+  });
   preserved(await collect(read(undefined, undefined, 20, person), person));
   await noActiveLendingEffects(person);
   await refused(
@@ -634,9 +643,29 @@ outcomeTest(libraryExport, 'moderator', () => deniedExport('moderator'), exportR
 outcomeTest(libraryExport, 'operator', () => deniedExport('operator'), exportRecording);
 outcomeTest(libraryExport, 'owner', async () => {
   const person = recordedPerson(exportRecording, 'owner');
+  const sample = exportRecording.session('owner', people.owner);
   await ensureApplied(person);
   const before = await collect(read(undefined, undefined, 20, person), person);
   preserved(before);
+  const first = await json<Page>(sample(
+    'production-export-first-page', 'GET', `/v1/me/library-export?${query()}&limit=2`,
+  ));
+  expect(first.profile).toBe('rezics-library-export-v1');
+  expect(first.nextCursor).toBeTruthy();
+  expect(first.snapshot).toBeTruthy();
+  expect(first.rows).toEqual(before.slice(0, 2));
+  // The production continuation omits limit and uses this unchanged read basis.
+  const remaining = await json<Page>(sample(
+    'production-export-continuation', 'GET',
+    `/v1/me/library-export?${query()}&cursor=${encodeURIComponent(first.nextCursor!)}&snapshot=${encodeURIComponent(first.snapshot)}`,
+  ));
+  expect(remaining.profile).toBe('rezics-library-export-v1');
+  expect(remaining.snapshot).toBe(first.snapshot);
+  expect(remaining.rows).toEqual(before.slice(first.rows.length));
+  expect(remaining.nextCursor).toBeNull();
+  const assembled = [...first.rows, ...remaining.rows];
+  expect(new Set(assembled.map(item => item.sourceId)).size).toBe(assembled.length);
+  preserved(assembled);
   const sourceSnapshot = (await read(undefined, undefined, 20, person)).snapshot;
   // Portability restores into an empty library under that destination Person's own authority.
   const destination = recordedPerson(exportRecording, 'owner', people.stranger, 'destination-');
