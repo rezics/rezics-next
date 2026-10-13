@@ -392,7 +392,7 @@ async function inventoryPageReads(sample: ReturnType<OutcomeRecorder['session']>
   await answer(sample('part-names', 'POST', '/v1/resources/summaries', {
     profile: 'resource-summary-batch-v1', resources: episodes.map(episode => episode.work), actingSubject: person.actingSubject,
   }));
-  await answer(sample('work-credits', 'POST', '/v1/query', { profile: 'template-query-v1',
+  await answer(sample('work-credits-template', 'POST', '/v1/query', { profile: 'template-query-v1',
     query: 'https://rezics.com/query/work-credits', revision: 1, parameters: { roots: [published.work] },
     presentation: { actingSubject: person.actingSubject } }));
   await answer(recording.session('owner', sessions.visitor)('work-showcase', 'POST', '/v1/resources/showcase', {

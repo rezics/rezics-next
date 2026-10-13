@@ -157,7 +157,6 @@ async function pageReads(sample: ReturnType<OutcomeRecorder['session']>, person:
     ['page-projection', `/v1/resources/${id}/page`],
     ['agent-credits', `/v1/works/${id}/agent-credits`],
     ['realizations', `/v1/works/${id}/realizations?limit=20`],
-    ['contents-empty', `/v1/works/${id}/contents`],
     ['parts-empty', `/v1/resources/${id}/parts?limit=7`],
     ['wholes-empty', `/v1/resources/${id}/wholes?limit=3`],
     ['availability-parts', `/v1/resources/${id}/parts?limit=1`],
@@ -183,7 +182,7 @@ async function pageReads(sample: ReturnType<OutcomeRecorder['session']>, person:
   }
   await answer(sample('facet-labels', 'GET', '/v1/facets'));
   for (const query of ['work-credits', 'work-adoptions']) {
-    const response = await sample(query, 'POST', '/v1/query', { profile: 'template-query-v1',
+    const response = await sample(`${query}-template`, 'POST', '/v1/query', { profile: 'template-query-v1',
       query: `https://rezics.com/query/${query}`, revision: 1, parameters: { roots: [manga.work] },
       presentation: { actingSubject: person.actingSubject } });
     await response.body?.cancel();
@@ -240,6 +239,14 @@ outcomeTest(hub, 'visitor', async () => {
   const person = sessions.visitor;
   const sample = recording.session('visitor', person);
   await publicHub('visitor');
+  // The public contents region may refuse a Work composition. Capture that
+  // answer once, as the page does, rather than the proof transport's 503 retry.
+  const contents = recording.session('visitor', { main: (method, path) => fetch(
+    new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`),
+    { method, redirect: 'manual', signal: AbortSignal.timeout(30_000) },
+  ) });
+  const response = await contents('contents-region', 'GET', `/v1/works/${short(manga.work)}/contents`);
+  await response.body?.cancel();
   for (const [index, path] of [preferencePath(), summaryPath()].entries()) await answer(sample(`sign-in-required-${index}`, 'GET', `${path}?${acting(person, sessions.owner.actingSubject!)}`), 401);
   await answer(person.main('PUT', preferencePath(), choice(person, releases[0]!, 0, sessions.owner.actingSubject)), 401);
 }, recording);
