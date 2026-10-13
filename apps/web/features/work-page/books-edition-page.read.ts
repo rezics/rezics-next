@@ -10,19 +10,21 @@ export type Answer<T> = { data: T | null; error: { status: number; value?: unkno
 /** The display category accompanies the unchanged HTTP problem; it never replaces it. */
 export type BooksRead<T> = Loaded<T> & { status?: number; problem?: unknown };
 
-const refused = (error: NonNullable<Answer<unknown>['error']>) => ({ ok: false as const,
-  failure: failureOf(error.status), ...(error.value === undefined ? {} : { status: error.status, problem: error.value }) });
+const refused = (error: NonNullable<Answer<unknown>['error']>, keepProblem: boolean) => ({ ok: false as const,
+  failure: failureOf(error.status), ...(keepProblem && error.value !== undefined
+    ? { status: error.status, problem: error.value } : {}) });
 
 /**
  * One Main read as a `Loaded` result. Main answers 409 when the graph moved
  * during the read; a read that is not continuing a cursor simply starts
  * again, once, as Main asks. A moved cursor is the reader's to restart.
+ * Books retain the HTTP problem; legacy consumers keep their existing result shape.
  */
-export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<BooksRead<T>> {
+export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string, keepProblem = false): Promise<BooksRead<T>> {
   try {
     let { data, error } = await call();
     if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return refused(error);
+    if (error) return refused(error, keepProblem);
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };
@@ -30,10 +32,10 @@ export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string)
 }
 
 /** These two type pages use JSON null for a visible Work without an owner-specific publication. */
-export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<BooksRead<T | null>> {
+export async function settleNullable<T>(call: () => Promise<Answer<T>>, keepProblem = false): Promise<BooksRead<T | null>> {
   try {
     const { data, error } = await call();
-    return error ? refused(error) : { ok: true, data };
+    return error ? refused(error, keepProblem) : { ok: true, data };
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
@@ -41,15 +43,15 @@ export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise
 export function booksEditionReads({ main, actingSubject }: { main: MainClient; actingSubject?: string }) {
   return {
     readWorkHeader: (id: string): Promise<BooksRead<WorkHeader>> =>
-      settle(() => main.v1.works({ id }).get({ query: { actingSubject } })),
+      settle(() => main.v1.works({ id }).get({ query: { actingSubject } }), undefined, true),
     readReleases: (id: string) =>
-      settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } })),
+      settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } }), undefined, true),
     readEditionPreference: (id: string): Promise<BooksRead<EditionPreference | null>> => actingSubject
-      ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }))
+      ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }), true)
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
     readProgressSummary: (id: string, language?: string): Promise<BooksRead<ProgressSummary>> => actingSubject
       ? settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
-        query: { actingSubject, ...(language ? { language } : {}) } }))
+        query: { actingSubject, ...(language ? { language } : {}) } }), undefined, true)
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
   };
 }
