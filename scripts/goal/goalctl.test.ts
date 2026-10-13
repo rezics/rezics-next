@@ -4252,7 +4252,7 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('implementation dispatch requires a complete declaration and pending persona for every referenced row', () => {
+  test('implementation dispatch requires a complete declaration and pending persona for every referenced row', async () => {
     const r = repo();
     const row = 'books/work-hub-and-edition-choice';
     try {
@@ -4269,6 +4269,14 @@ process.exit(0);
       writeFixtureOutcomes(r.dir, row, cells);
       result = r.run(['dispatch', brief, '--dry-run']);
       expect(result.status).toBe(1); expect(result.stderr).toContain('needs at least one pending persona cell');
+      // A proved cell the scheduled run on main read as failed is reopened; a run that passed it reopens nothing.
+      const run = (status: 'passed' | 'failed') => ({ version: 1 as const, runId: 'confirm-1', atCommit: 'c'.repeat(40),
+        startedAt: '2026-10-13T15:26:47.000Z', recordedAt: '2026-10-13T17:07:00.000Z',
+        outcomes: [{ rowId: row, persona: 'visitor' as const, file: 'outcome.test.ts', test: 'visitor gets their view', status, expectedFailure: false }] });
+      const parsed = parseBrief(text);
+      expect(await dispatchMethodErrors(parsed, text, r.dir, run('failed'))).toEqual([]);
+      expect((await dispatchMethodErrors(parsed, text, r.dir, run('passed'))).join()).toContain('needs at least one pending persona cell');
+      expect((await dispatchMethodErrors(parsed, text, r.dir, undefined)).join()).toContain('read as failed');
       cells.visitor = { state: 'pending', test: 'gets the public view' };
       cells.operator = { state: 'notApplicable', reason: 'No platform action in this row' };
       writeFixtureOutcomes(r.dir, row, cells);
@@ -4339,7 +4347,7 @@ process.exit(0);
       const named = r.run(['dispatch', unknown, '--dry-run']);
       expect(named.status).toBe(1);
       expect(named.stderr).toContain('unknown mechanism: not-a-mechanism');
-      const created = r.run(['new', '--goal', 'alpha', 'Example outcome']);
+      const created = r.run(['new', '--goal', 'alpha', '--kind', 'outcome', 'Example outcome']);
       expect(created.status, created.stderr).toBe(0);
       const written = created.stdout.match(/docs\/goals\/alpha\/tasks\/G-\d+\.md/);
       expect(written).not.toBeNull();

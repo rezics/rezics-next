@@ -10,13 +10,15 @@ import { describeAccount } from './usage.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { clearRefusal, mergeTask } from './merge.ts';
+import { cellReading, latestConfirmation, type ConfirmationRecord } from './confirmed.ts';
 import { land, handoffResult } from './land.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFiles } from './handover.ts';
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
-export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root): Promise<string[]> {
+export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root,
+  confirmation: ConfirmationRecord | undefined = latestConfirmation(stateDir)): Promise<string[]> {
   if (brief.kind === 'implementation') {
     if (!brief.rows?.length) return ['implementation brief needs at least one row in rows; tasks with no row are tooling or mechanism'];
     const owner = await import(pathToFileURL(join(outcomeRoot, 'scripts/qa/cases/outcomes.ts')).href);
@@ -28,8 +30,10 @@ export async function dispatchMethodErrors(brief: Brief, markdown: string, outco
       if (!declaration) { errors.push(`implementation row ${id}: outcome declaration is missing`); continue; }
       const missing = personas.filter(persona => !declaration.cells[persona]);
       if (missing.length) errors.push(`implementation row ${id}: missing persona cells: ${missing.join(', ')}`);
-      if (!personas.some(persona => declaration.cells[persona]?.state === 'pending')) {
-        errors.push(`implementation row ${id}: needs at least one pending persona cell`);
+      // The scheduled run on main is the judge: a declared proved cell it read as failed is reopened, and its repair is admitted.
+      const reopened = confirmation?.outcomes.some(cell => cell.rowId === id && cellReading(cell) === 'failed') ?? false;
+      if (!reopened && !personas.some(persona => declaration.cells[persona]?.state === 'pending')) {
+        errors.push(`implementation row ${id}: needs at least one pending persona cell, or a cell the last scheduled run on main read as failed`);
       }
     }
     return errors;
