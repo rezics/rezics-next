@@ -6,6 +6,7 @@ import { forgetChildScope, noteChildScope, reapChildEnvironment, reapSettleMs, r
 import { formatTierRunLine, goalSlotDirectory, implementedTiers, newRunId, parseArgs, qaArtifactDirectory, splitCallerTimeout, tierBunTestArgs, trackCommandProcess, untrackCommandProcess, type Tier } from './core.ts';
 import { isLocalQaRun, qaMemoryDeadline, qaMemoryNeed, waitForMemory } from './memory-admission.ts';
 import { STORY_SCREENSHOTS_ENV } from './story-screenshots.ts';
+import { assertWideRunAllowed } from '../goal/admission.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const testFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
@@ -263,6 +264,7 @@ async function runTierGroups(groups: TestGroup[], options: TestDispatchOptions):
 
 /** Explicit stories bypass the stack harness, but their browser workers still need host memory. */
 export async function dispatchTest(args: string[], options: TestDispatchOptions = {}): Promise<number> {
+  assertWideRunAllowed(['bun', 'scripts/qa/test.ts', ...args], options.env ?? process.env);
   const groups = selectTestGroups(args);
   const commands = commandsFor(groups, splitCallerTimeout(args).timeout ?? []);
   if (commands.length !== 1) return runTierGroups(groups, options);
@@ -330,6 +332,7 @@ export async function runAffected(plan: AffectedPlan, runner = run): Promise<{ f
 
 if (import.meta.main) {
   const args = process.argv.slice(2);
+  assertWideRunAllowed(['bun', 'scripts/qa/test.ts', ...args]);
   const affected = parseAffectedArgs(args);
   if (!affected) process.exit(await dispatchTest(args));
   const plan = affectedPlan(root, affected.ref);

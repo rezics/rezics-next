@@ -182,7 +182,7 @@ tasks:
   web:e2e:
     desc: Run Playwright journeys against the running web preview.
     cmds:
-      - node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
+      - bun scripts/goal/admission.ts -- node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
 
   web:typecheck:
     deps: [toolchain:bun-check]
@@ -207,14 +207,7 @@ tasks:
     desc: Run Storybook stories as Vitest browser tests with accessibility checks.
     dir: apps/web
     cmds:
-      # A Goal worker's run takes a QA slot and the heavy lock with two story workers: unbounded parallel
-      # browser runs exhausted the host, and two browser suites at once left 5 GiB on 2026-10-07.
-      - |
-        if [ -n "${GOAL_TASK_ID:-}" ] && [ -z "${GOAL_IN_SLOT:-}" ]; then
-          export STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}"
-          exec bun ../../scripts/goal/goalctl.ts slot --heavy -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
-        fi
-        exec ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+      - 'STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun ../../scripts/goal/admission.ts -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}'
 
   # Accounts site (apps/accounts): the public Account origin
 
@@ -247,18 +240,12 @@ tasks:
     desc: Run the Accounts stories as Vitest browser tests with accessibility checks.
     dir: apps/accounts
     cmds:
-      # Same host guard as storybook:test.
-      - |
-        if [ -n "${GOAL_TASK_ID:-}" ] && [ -z "${GOAL_IN_SLOT:-}" ]; then
-          export STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}"
-          exec bun ../../scripts/goal/goalctl.ts slot --heavy -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
-        fi
-        exec ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}
+      - 'STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun ../../scripts/goal/admission.ts -- ../../node_modules/.bin/vitest run --project storybook {{.CLI_ARGS}}'
 
   accounts:e2e:
     desc: Run the Accounts Playwright journeys against a running Accounts app (ACCOUNTS_URL, default http://127.0.0.1:3004).
     cmds:
-      - node_modules/.bin/playwright test --config apps/accounts/playwright.config.ts {{.CLI_ARGS}}
+      - bun scripts/goal/admission.ts -- node_modules/.bin/playwright test --config apps/accounts/playwright.config.ts {{.CLI_ARGS}}
 
   # About site (apps/about): the public product site, static pages plus a small Worker
 
@@ -318,7 +305,7 @@ tasks:
     silent: true
     cmds:
       # Six story workers (about 1.3 GiB of Chromium each) beside eleven agents and the 24 GiB Docker VM left 3 GiB on 2026-10-07.
-      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-34}" GOAL_MEMORY_FLOOR_GIB="${GOAL_MEMORY_FLOOR_GIB-8}" STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun scripts/goal/goalctl.ts {{.CLI_ARGS}}'
+      - 'GOAL_MAX_WORKERS="${GOAL_MAX_WORKERS-34}" GOAL_MEMORY_FLOOR_GIB="${GOAL_MEMORY_FLOOR_GIB-8}" STORYBOOK_MAX_WORKERS="${STORYBOOK_MAX_WORKERS-2}" bun scripts/goal/admission.ts --goalctl {{.CLI_ARGS}}'
 
   # The merge gate combines cheap unit files with owner inventory guards; the
   # public test selector deliberately refuses a mix of QA tiers.
@@ -390,12 +377,12 @@ tasks:
   test:
     desc: Run explicit test files or the affected plan (-- --affected [<base>] [--list]).
     cmds:
-      - bun scripts/qa/test.ts {{.CLI_ARGS}}
+      - bun scripts/goal/admission.ts -- bun scripts/qa/test.ts {{.CLI_ARGS}}
 
   qa:
     desc: Run the QA harness tiers (-- --backend, --tier, --record, ...).
     cmds:
-      - bun scripts/qa/cli.ts {{.CLI_ARGS}}
+      - bun scripts/goal/admission.ts -- bun scripts/qa/cli.ts {{.CLI_ARGS}}
 
   qa:replay:
     desc: Replay one property or model test with a logged seed.

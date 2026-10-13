@@ -15,6 +15,7 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
+import { slotWaiter, tryAcquireQaSlot, type SlotShareOptions } from '../goal/admission.ts';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import {
   bindReapOwnerExit, forgetChildScope, noteChildScope, reapActiveChildScopes, reapChildEnvironment, reapChildScope,
@@ -26,7 +27,7 @@ import { destroyHeldQaStacks, trackHeldQaStackStartup } from './stack-pool.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
 import { PINNED_FIXTURE_IDS } from '../fixture/stack.ts';
 import { processAlive, processAncestors } from './process/identity.ts';
-import { readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from './process/lease.ts';
+import { directoryLeaseHeld, readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from './process/lease.ts';
 import { defaultStopGraceMs, terminateProcessGroup, terminateProcessGroupSync } from './process/terminate.ts';
 import { regressionQaDirectory, regressionRunsRoot } from '../goal/regress.ts';
 
@@ -1160,6 +1161,7 @@ export function goalSlotDirectory(root: string): string | undefined {
 }
 
 export interface QaSlotOptions {
+  workerGoals?: SlotShareOptions['workerGoals'];
   /** Independent projects in one runner need distinct leases rather than its first lease. */
   inherit?: boolean;
   /** Wait deadline; runs without an inherited lease cannot start until one is free. */
@@ -1205,8 +1207,10 @@ export async function acquireQaSlots(
   const owner = (path: string) => readDirectoryLease(path)?.pid ?? 0;
   const paths = Array.from({ length: total }, (_, k) => join(directory, String(k)));
   const acquired: AcquiredDirectoryLease[] = [];
+  const waiter = slotWaiter(directory, env, pid);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
+    waiter.release();
     if (timer) clearTimeout(timer);
     process.off('exit', onExit);
     process.off('SIGINT', onSignal);
@@ -1234,11 +1238,13 @@ export async function acquireQaSlots(
       for (const path of paths) {
         if (held + acquired.length >= wanted) break;
         if (lineage.has(owner(path))) continue;
-        const lease = tryAcquireDirectoryLease(path, { now, pid, alive: candidate => processAlive({ pid: candidate }) });
+        const lease = tryAcquireQaSlot(directory, total, Number(path.slice(path.lastIndexOf('/') + 1)), {
+          now, pid, env, alive: candidate => processAlive({ pid: candidate }), workerGoals: options.workerGoals });
         if (lease === 'held') continue;
         acquired.push(lease);
       }
       if (held + acquired.length > 0) {
+        waiter.release();
         if (options.runDeadline !== undefined) {
           timer = setTimeout(() => {
             console.error('QA run reached its deadline; releasing QA leases');
@@ -1250,8 +1256,11 @@ export async function acquireQaSlots(
         return { count: held + acquired.length, release };
       }
       if (now() >= deadline) throw new Error('No QA slot became free before the deadline; no stack started');
+      waiter.update();
       if (!announced) {
-        (options.announce ?? console.error)(`Waiting for a QA slot; all ${total} slots are held`);
+        const busy = paths.every(path => directoryLeaseHeld(path));
+        (options.announce ?? console.error)(busy ? `Waiting for a QA slot; all ${total} slots are held`
+          : `Waiting for a QA slot; Goal share reserved for another waiting Goal (${total} slots)`);
         announced = true;
       }
       await sleep(Math.min(options.pollMs ?? 3_000, deadline - now()));

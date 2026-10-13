@@ -8,6 +8,8 @@ export const leaseInitializingMs = 10_000;
 
 export interface DirectoryLeaseNote {
   goal?: string;
+  task?: string;
+  besideWorkers?: number;
   command?: string;
   startedAt?: string;
   commandStartedAt?: string | null;
@@ -54,6 +56,8 @@ function clock(options: DirectoryLeaseOptions | undefined): number {
 function noteOf(raw: DirectoryLeaseNote): DirectoryLeaseNote {
   return {
     ...(typeof raw.goal === 'string' ? { goal: raw.goal } : {}),
+    ...(typeof raw.task === 'string' ? { task: raw.task } : {}),
+    ...(typeof raw.besideWorkers === 'number' ? { besideWorkers: raw.besideWorkers } : {}),
     ...(typeof raw.command === 'string' ? { command: raw.command } : {}),
     ...(typeof raw.startedAt === 'string' ? { startedAt: raw.startedAt } : {}),
     ...(raw.commandStartedAt === null || typeof raw.commandStartedAt === 'string'
