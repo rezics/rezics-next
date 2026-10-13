@@ -53,5 +53,5 @@ positions are in the archived end-of-run tables
 - Public-domain Recipe import: later corrections and translations with their own source basis and credits are outside this slice.
 - Public-domain Recipe import: corpus-wide clearance is not established by pins or tests and is outside this slice.
 - Contributions/submissions cannot list one Work without scanning a capped population; no present row requires that discovery path.
-- `/v1/me/continue` has six preview candidates without a tail cursor; books outcome tests qualify complete shelves/follows traversal plus per-Work resume as the row's existing full path.
-- `work-publication-years` lacks Realm/Condition-scoped continuation; catalogue outcome tests qualify complete Realm browse and direct year filters. Complete year-facet enumeration is outside the present rows.
+- `/v1/me/continue` has six preview candidates without a tail cursor; static inspection identifies complete shelves/follows traversal plus per-Work resume as the candidate full path; public-HTTP qualification is still missing.
+- `work-publication-years` lacks Realm/Condition-scoped continuation; static inspection identifies complete Realm browse and direct year filters as the candidate full path; public-HTTP qualification is still missing. Complete year-facet enumeration is outside the present rows.
