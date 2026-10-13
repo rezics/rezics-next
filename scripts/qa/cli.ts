@@ -159,6 +159,8 @@ const qaSlotDirectory = process.env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(
 if (qaSlotDirectory) process.env.GOAL_QA_WAIT_DIR ??= join(qaSlotDirectory, 'waiters');
 process.env.GOAL_QA_COMMAND ??= ['bun', ...process.argv.slice(1)].join(' ');
 const heavyQaRun = process.env.GOAL_QA_HEAVY_RUN === '1';
+let releaseDeferredHeavy: (() => void) | undefined;
+let deferredHeavyUsers = 0;
 const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
   slots: configuredQaSlots(qaSlotDirectory) });
 
@@ -194,7 +196,25 @@ async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof ac
   const removeWait = () => { if (waitPath) rmSync(waitPath, { force: true }); };
   process.on('exit', removeWait);
   try {
-    return await acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, {
+    if (heavyQaRun && process.env.GOAL_QA_DEFERRED_HEAVY === '1' && !releaseDeferredHeavy) {
+      const { acquireHeavy } = await import('../goal/qa-slots.ts');
+      try {
+        releaseDeferredHeavy = await acquireHeavy([process.env.GOAL_QA_COMMAND ?? 'QA'], {
+          lockDir: process.env.GOAL_QA_HEAVY_LOCK, lifecycleLockDir: process.env.GOAL_QA_LIFECYCLE_LOCK,
+          waitForWorkers: process.env.GOAL_QA_WIDE_RUN === '1',
+          besideWorkers: process.env.GOAL_QA_BESIDE_WORKERS === '1',
+          goal: process.env.GOAL_ID, deadline: runDeadline, signal: slotOptions.signal,
+          arrivedAt: Number(process.env.GOAL_QA_ARRIVED_AT_MS) || undefined,
+          now: slotOptions.now, sleep: slotOptions.sleep, announce: slotOptions.announce,
+          bindExit: false,
+        });
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('The heavy QA lock stayed held'))
+          throw new Error('No QA slot became free before the deadline; heavy turn is held');
+        throw error;
+      }
+    }
+    const lease = await acquireQaSlots(heavyQaRun ? undefined : qaSlotDirectory, wanted, process.env, process.pid, {
       ...slotOptions,
       announce: message => {
         const waiterDirectory = process.env.GOAL_QA_WAIT_DIR;
@@ -210,15 +230,27 @@ async function acquireRunSlots(wanted: number, slotOptions: Parameters<typeof ac
         (slotOptions.announce ?? console.error)(message);
       },
     });
+    if (releaseDeferredHeavy) {
+      deferredHeavyUsers++;
+      const release = lease.release;
+      let released = false;
+      lease.release = () => {
+        if (released) return;
+        released = true;
+        release();
+        if (--deferredHeavyUsers === 0) { releaseDeferredHeavy?.(); releaseDeferredHeavy = undefined; }
+      };
+    }
+    return lease;
   } finally {
     removeWait();
     process.off('exit', removeWait);
   }
 }
-// The child measures under the startup mutex; the runner owns the slot through cleanup.
+// The child measures before the short admission transaction; the runner owns the slot through cleanup.
 async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   start: (environment: NodeJS.ProcessEnv, onLine: (line: string) => void) => Promise<T>,
-  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<void>): Promise<T> {
+  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<(() => void) | void>): Promise<T> {
   const token = randomUUID();
   const gateDirectory = join(root, '.temp', 'qa-startup-gates');
   mkdirSync(gateDirectory, { recursive: true });
@@ -234,10 +266,23 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   const removeGate = () => { removeWait(); rmSync(gatePath, { force: true }); };
   process.on('exit', removeGate);
   publish('pending');
-  let admission: Promise<void> | undefined;
+  const admissions: Promise<void>[] = [];
+  const controllers = new Map<string, AbortController>();
   const requests = new Set<string>();
+  const cancellations = new Set<string>();
+  const grants = new Map<string, () => void>();
   try {
     return await start({ ...env, REZICS_QA_STARTUP_SLOT_GATE: gatePath }, line => {
+      const cancellation = /^QA_STARTUP_SLOT_CANCEL (\S+) (\S+) (\d+)$/.exec(line);
+      if (cancellation?.[1] === token) {
+        const key = `${cancellation[2]}:${cancellation[3]}`;
+        cancellations.add(key);
+        controllers.get(key)?.abort();
+        removeWait();
+        grants.get(key)?.();
+        grants.delete(key);
+        return;
+      }
       const request = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(line);
       if (request?.[1] === token) {
         const requester = request[2]!;
@@ -247,10 +292,14 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
         if (requests.has(key)) return;
         requests.add(key);
         // A busy slot means retrying memory + startup admission, never holding a stale reading.
-        admission = reserve({ deadline: Date.now(), runDeadline }).then(() => {
+        const controller = new AbortController(); controllers.set(key, controller);
+        const admission = reserve({ deadline: Date.now(), runDeadline, signal: controller.signal }).then(release => {
+          if (cancellations.has(key)) { release?.(); return; }
+          if (release) grants.set(key, release);
           removeWait();
           publish('granted', requester, sequence);
         }, error => {
+          if (cancellations.has(key)) return;
           const message = error instanceof Error ? error.message : String(error);
           if (!message.startsWith('No QA slot became free before the deadline')) {
             publish('failed', requester, sequence, message);
@@ -260,17 +309,21 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
             mkdirSync(waiterDirectory!, { recursive: true });
             writeFileSync(waitPath, JSON.stringify({ pid: process.pid, goal: env.GOAL_ID,
               command: env.GOAL_QA_COMMAND, waitingFor: 'slot',
-              message: 'Waiting for a QA slot after memory admission', since: new Date().toISOString() }));
+              message: 'Waiting for a QA slot after memory admission', since: env.GOAL_QA_ARRIVED_AT ?? new Date().toISOString() }));
           }
           publish('retry', requester, sequence);
         });
+        admissions.push(admission);
       } else {
         if (line.startsWith('Waiting; QA memory:') || line.startsWith('Waiting for another QA startup;')) removeWait();
         noteMemory(line);
       }
     });
   } finally {
-    try { await admission; }
+    try {
+      for (const [key, controller] of controllers) { cancellations.add(key); controller.abort(); }
+      await Promise.allSettled(admissions);
+    }
     finally {
       removeGate();
       process.off('exit', removeGate);
@@ -278,25 +331,31 @@ async function withStartupSlot<T>(env: NodeJS.ProcessEnv,
   }
 }
 
-async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4]): Promise<void> {
+type ReserveQaSlot = (options: Parameters<typeof acquireQaSlots>[4]) => Promise<(() => void) | void>;
+
+async function reserveRunSlot(slotOptions: Parameters<typeof acquireQaSlots>[4]): Promise<() => void> {
   runSlots ??= await acquireRunSlots(1, slotOptions);
+  const lease = runSlots;
+  return () => { if (runSlots === lease) { lease.release(); runSlots = undefined; } };
 }
 
 /** Finished host work and stopped fixture sources must not reserve capacity for later startups. */
-async function withWorkSlot<T>(work: (reserve: typeof reserveRunSlot) => Promise<T>): Promise<T> {
+async function withWorkSlot<T>(work: (reserve: ReserveQaSlot) => Promise<T>): Promise<T> {
   let slots: Awaited<ReturnType<typeof acquireQaSlots>> | undefined;
   try {
     return await work(async slotOptions => {
       // An earlier live stack retains its lease through the run's final cleanup.
       if (runSlots) return;
       slots ??= await acquireRunSlots(1, slotOptions);
+      const lease = slots;
+      return () => { if (slots === lease) { lease.release(); slots = undefined; } };
     });
   } finally { slots?.release(); }
 }
 
 /** Host-only tiers also own a lease, but retries never hold one through admission. */
 async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = process.env,
-  reserve?: typeof reserveRunSlot): Promise<T> {
+  reserve?: ReserveQaSlot): Promise<T> {
   if (!reserve) return withWorkSlot(reserveWork => admitRun(work, env, reserveWork));
   for (;;) {
     try {
@@ -313,7 +372,7 @@ async function admitRun<T>(work: () => Promise<T>, env: NodeJS.ProcessEnv = proc
 }
 
 async function startRunStack(args: string[], budget: number, env: NodeJS.ProcessEnv = process.env,
-  reserve = reserveRunSlot) {
+  reserve: ReserveQaSlot = reserveRunSlot) {
   return withStartupSlot(env,
     (environment, onLine) => runQaStartupChildAsync(root, args, budget, environment, onLine), reserve);
 }
@@ -411,8 +470,13 @@ async function runShard(
       async slotOptions => {
         if (usesRunSlot || slots) return;
         if (!runSlots && process.env.GOAL_IN_SLOT === '1' && !heavyQaRun) await reserveRunSlot(slotOptions);
-        if (runSlots && !runSlotInUse) { runSlotInUse = usesRunSlot = true; return; }
+        if (runSlots && !runSlotInUse) {
+          runSlotInUse = usesRunSlot = true;
+          return () => { runSlots?.release(); runSlots = undefined; runSlotInUse = usesRunSlot = false; };
+        }
         slots ??= await acquireRunSlots(1, { ...slotOptions, inherit: false });
+        const lease = slots;
+        return () => { if (slots === lease) { lease.release(); slots = undefined; } };
       });
   } finally {
     slots?.release();
@@ -429,7 +493,7 @@ async function runShardWork(
   isolated = false,
   startStack?: <T>(work: () => Promise<T>) => Promise<T>,
   batches: string[][] = [files],
-  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<void> = reserveRunSlot,
+  reserve: (slotOptions: Parameters<typeof acquireQaSlots>[4]) => Promise<(() => void) | void> = reserveRunSlot,
 ): Promise<ShardRun> {
   const preparationStartedAt = Date.now();
   const shardProjectRunId = projectRunId;
@@ -1325,6 +1389,7 @@ try {
     }
   } finally {
     runSlots?.release();
+    releaseDeferredHeavy?.();
     release();
   }
     console.log(readFileSync(join(directory, 'summary.md'), 'utf8'));

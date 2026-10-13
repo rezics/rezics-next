@@ -76,6 +76,43 @@ and storage growth before claiming a scale. If those commands cannot reach a
 requested scale within 600 seconds, fix their owner paths; bypassing admission,
 validation or projections cannot qualify the write cost.
 
+## Local test memory bound
+
+On 2026-10-13 at 16:22 UTC the host had 62 GiB of RAM, a 23.45 GiB
+Docker VM, eight ordinary QA slots and three concurrent startups. Six QA stacks
+used 1.2–2.5 GiB each. That proves six simultaneous stacks for those workloads;
+the eight slots are an admission ceiling, not a proof that eight arbitrary
+stacks fit. At 16:45:27 UTC four stacks used 0.79, 1.50, 1.76 and 1.97 GiB,
+the shared dev stack used 2.71 GiB, and host MemAvailable was 22.43 GiB.
+
+A new full stack promises 5.375 GiB (the authored container caps) and 1 GiB
+of host work until readiness; host work retains the 8 GiB reserve. Admission
+subtracts outstanding startup promises from the current reading. With 2.71 GiB
+of shared containers, the VM has room for three simultaneous cold promises
+(`floor((23.45 - 2.71) / 5.375)`); the configured startup concurrency of three
+also bounds that burst. Running stacks are measured again rather than charged
+the startup promise forever. At the observed high use of 2.5 GiB per stack,
+six running stacks leave 5.74 GiB, enough to admit a seventh; seven leave only
+3.24 GiB, insufficient for an eighth startup. Lower measured use can admit an
+eighth. These estimates describe this workload, not a guaranteed cap for every
+resource class or for concurrent builds.
+
+Increasing `qa-slot-count` admits more steady stacks only while both measured
+memory checks still pass. Increasing `qa-startup-concurrency` above three cannot
+admit a fourth cold full-stack promise on this VM alongside the shared stack;
+it can help only when live use and outstanding promises leave at least another
+5.375 GiB. A smaller startup promise would need measured startup peaks for each
+service and workload, beyond the steady readings above. Preserve the 8 GiB host
+reserve; lowering it has no supporting peak measurement here. The program
+manager chooses any VM resize or Docker restart because it stops running tests.
+
+Startup admission uses arrival tickets in the existing SQLite file and picks
+the oldest live fitting request. Ordinary lifetime leases and heavy turns are
+requested after the memory check; a rejected startup returns a provisional
+lease before retrying. Memory readers hold no admission transaction. These
+queues bound overtaking by later arrivals, while memory availability and the
+runtimes ahead still determine the actual wait.
+
 ## Fixed bounds for interactive requests
 
 The maintainer requires a fixed maximum of storage/service round trips for each

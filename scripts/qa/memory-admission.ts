@@ -140,7 +140,9 @@ function memoryWaitStatus(env: NodeJS.ProcessEnv, now: () => number): (message?:
     since ??= new Date(now()).toISOString();
     const temporary = `${path}.${randomUUID()}.tmp`;
     writeFileSync(temporary, JSON.stringify({ pid: process.pid, goal: env.GOAL_ID,
-      command: env.GOAL_QA_COMMAND ?? process.argv.slice(1).join(' '), waitingFor: 'memory', message, since }));
+      command: env.GOAL_QA_COMMAND ?? process.argv.slice(1).join(' '),
+      waitingFor: message.startsWith('Waiting for a QA lifetime lease;')
+        ? env.GOAL_QA_HEAVY_RUN === '1' ? 'heavy' : 'slot' : 'memory', message, since }));
     renameSync(temporary, path);
   };
 }
@@ -159,6 +161,8 @@ export async function isLocalQaRun(root = resolve(import.meta.dir, '../..'),
 export interface StartupMemoryOptions extends MemoryWaitOptions {
   /** Tests isolate their mutex; production processes all use the same host file. */
   lockFile?: string;
+  /** Process identity reader for deterministic queue/death tests. */
+  startTime?: (pid: number) => string | undefined;
 }
 
 export interface StartupSlotGate {
@@ -172,14 +176,20 @@ export interface StartupSlotGate {
 const startupSlotRequester = randomUUID();
 let startupSlotSequence = 0;
 /** Request the lifetime lease under admission, but poll it between transactions. */
-function waitForStartupSlot(options: StartupMemoryOptions): () => boolean {
+function waitForStartupSlot(options: StartupMemoryOptions): { ready: () => boolean; cancel: () => void } {
   const path = (options.env ?? process.env).REZICS_QA_STARTUP_SLOT_GATE;
-  if (!path) return () => true;
+  if (!path) return { ready: () => true, cancel: () => {} };
   const now = options.now ?? Date.now;
   const announce = options.announce ?? console.log;
   let sequence = ++startupSlotSequence;
   let announced = false;
-  return () => {
+  const cancel = () => {
+    if (!announced) return;
+    announce(`QA_STARTUP_SLOT_CANCEL ${JSON.parse(readFileSync(path, 'utf8')).token} ${startupSlotRequester} ${sequence}`);
+    sequence = ++startupSlotSequence;
+    announced = false;
+  };
+  return { cancel, ready: () => {
     if (now() >= options.deadline) throw new Error('QA startup slot deadline reached; no work started');
     let gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
     // Sibling startups can share the mailbox. A completed foreign reply may have
@@ -204,7 +214,7 @@ function waitForStartupSlot(options: StartupMemoryOptions): () => boolean {
       if (gate.status === 'failed') throw new Error(gate.error ?? 'QA startup slot acquisition failed');
     }
     return false;
-  };
+  } };
 }
 
 async function startupConcurrency(options: StartupMemoryOptions): Promise<number> {
@@ -218,6 +228,7 @@ async function startupConcurrency(options: StartupMemoryOptions): Promise<number
   } catch { return 1; }
 }
 
+interface StartupWaiter extends StartupPromise { seq: number; vm_reserve: number; host_reserve: number }
 interface StartupPromise { id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number }
 function sqliteBusy(error: unknown): boolean {
   return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
@@ -241,11 +252,17 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const slotReady = waitForStartupSlot(options);
   const read = options.read ?? (need.vm + need.vmReserve > 0 ? readMemory : async () => readHostMemory());
   const promiseId = randomUUID();
-  let held = false, promised = false;
+  const arrivedAt = now();
+  const arrivalSequence = process.hrtime.bigint().toString().padStart(24, '0');
+  const startTime = options.startTime ?? processStartTime;
+  const identity = startTime(process.pid);
+  if (!identity) { mutex.close(); throw new Error('Cannot read QA startup process start time'); }
+  let held = false, promised = false, registered = false;
   let message = `Waiting for another QA startup; ${admissionMessage(need)}`;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
     for (;;) {
+      let readingFits = false;
       const concurrency = await startupConcurrency(options);
       if (now() >= options.deadline)
         throw new Error(`Memory admission deadline reached${message.startsWith('Waiting for another')
@@ -257,13 +274,21 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           id TEXT PRIMARY KEY, pid INTEGER NOT NULL, start_time TEXT NOT NULL,
           vm REAL NOT NULL, host REAL NOT NULL, admitted_at REAL NOT NULL
         )`);
-        const promises = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all();
-        const live: StartupPromise[] = [];
-        for (const promise of promises) {
-          if (now() - promise.admitted_at > 15 * 60_000 || processStartTime(promise.pid) !== promise.start_time)
-            mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
-          else live.push(promise);
+        mutex.exec(`CREATE TABLE IF NOT EXISTS startup_waiters (
+          seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, arrival_seq TEXT NOT NULL,
+          pid INTEGER NOT NULL, start_time TEXT NOT NULL, vm REAL NOT NULL, host REAL NOT NULL,
+          vm_reserve REAL NOT NULL, host_reserve REAL NOT NULL, admitted_at REAL NOT NULL
+        )`);
+        if (!registered) {
+          mutex.query(`INSERT INTO startup_waiters
+            (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(promiseId, process.pid, identity, need.vm, need.host, need.vmReserve, need.hostReserve, arrivedAt, arrivalSequence);
         }
+        // Registration and admission are short transactions. Docker reads never own the writer lock.
+        mutex.exec('COMMIT');
+        held = false;
+        registered = true;
+        const beforeReading = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all();
         let reading: MemoryReading | undefined;
         let measured = admissionMessage(need);
         try {
@@ -273,17 +298,39 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           measured += `; measurement failed: ${error instanceof Error ? error.message : String(error)}`;
           reading = undefined;
         }
+        mutex.exec('BEGIN IMMEDIATE');
+        held = true;
+        const live: StartupPromise[] = [];
+        for (const promise of mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all()) {
+          if (now() - promise.admitted_at > 15 * 60_000 || startTime(promise.pid) !== promise.start_time)
+            mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
+          else live.push(promise);
+        }
+        const activeStartups = live.length;
+        for (const promise of beforeReading) {
+          if (!live.some(current => current.id === promise.id) && startTime(promise.pid) === promise.start_time
+            && now() - promise.admitted_at <= 15 * 60_000) live.push(promise);
+        }
+        const waiters: StartupWaiter[] = [];
+        for (const waiter of mutex.query<StartupWaiter, []>('SELECT * FROM startup_waiters ORDER BY admitted_at, arrival_seq, seq').all()) {
+          if (startTime(waiter.pid) !== waiter.start_time)
+            mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(waiter.id);
+          else waiters.push(waiter);
+        }
+        const vmFree = reading ? reading.vmTotal - reading.vmUsed - live.reduce((sum, p) => sum + p.vm, 0) : -1;
+        const hostFree = reading ? reading.hostAvailable - live.reduce((sum, p) => sum + p.host, 0) : -1;
+        const first = waiters.find(waiter => vmFree >= waiter.vm + waiter.vm_reserve
+          && hostFree >= waiter.host + waiter.host_reserve);
+        readingFits = activeStartups < concurrency && first?.id === promiseId;
         message = `Waiting; ${measured}`;
-        if (live.length >= concurrency) {
+        if (activeStartups >= concurrency) {
           message = `Waiting for another QA startup; ${measured}`;
-        } else if (reading && now() < options.deadline
-          && reading.vmTotal - reading.vmUsed - live.reduce((sum, promise) => sum + promise.vm, 0) >= need.vm + need.vmReserve
-          && reading.hostAvailable - live.reduce((sum, promise) => sum + promise.host, 0) >= need.host + need.hostReserve
-          && slotReady() && now() < options.deadline) {
-          const startTime = processStartTime(process.pid);
-          if (!startTime) throw new Error('Cannot read QA startup process start time');
+        } else if (first?.id !== promiseId) {
+          message += first ? `; older fitting startup pid ${first.pid} arrived ${new Date(first.admitted_at).toISOString()}` : '';
+        } else if (now() < options.deadline && slotReady.ready() && now() < options.deadline) {
           mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
-            .run(promiseId, process.pid, startTime, need.vm, need.host, now());
+            .run(promiseId, process.pid, identity, need.vm, need.host, now());
+          mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
           mutex.exec('COMMIT');
           held = false;
           promised = true;
@@ -291,24 +338,36 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           announce(`Admitted; ${measured}`);
           reportWait();
           break;
+        } else {
+          message = `Waiting for a QA lifetime lease; ${measured}`;
         }
+        mutex.exec('COMMIT');
+        held = false;
       } catch (error) {
         if (!sqliteBusy(error)) throw error;
+        readingFits = false;
         message = `Waiting for another QA startup; ${admissionMessage(need)}`;
       } finally {
         if (held) { mutex.exec('ROLLBACK'); held = false; }
       }
+      // A previously granted lifetime lease must be returned if a fresh reading
+      // or an older fitting request prevents startup. No promise is held yet.
+      if (!readingFits) slotReady.cancel();
       publishWait(message);
       announce(message);
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
     }
     return await start();
   } finally {
-    try { publishWait(); reportWait(); }
+    try { if (!promised) slotReady.cancel(); publishWait(); reportWait(); }
     finally {
       try {
-        if (promised) for (;;) {
-          try { mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId); break; }
+        if (registered) for (;;) {
+          try {
+            mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
+            if (promised) mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId);
+            break;
+          }
           catch (error) { if (!sqliteBusy(error)) throw error; }
           await sleep(pollMs);
         }

@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { acquireHeavy, qaSlotAdmission, withSlot } from '../../../scripts/goal/qa-slots.ts';
 import { GiB } from '../../../scripts/qa/memory-admission.ts';
 import { admittedCommandBudgetEnv, BUILD_ADMISSION_GIB, hostAdmissionUsage, parseHostAdmissionArgs, runHostAdmission, SERIAL_ADMISSION_GIB } from '../../../scripts/qa/host-admission.ts';
 
@@ -171,4 +172,80 @@ test('the serial lock wait preserves the budget for the finally admitted command
     await holder.exited;
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+for (const command of [
+  ['bun', 'scripts/qa/test.ts', 'tests/qa/integration/discovery-incremental.test.ts', 'scripts/api/answer-records.guard.test.ts'],
+  ['worker-check', 'tests/qa/integration/discovery-incremental.test.ts'],
+]) {
+  test(`a waiting harness holds no ordinary slot: ${command[0]}`, async () => {
+    const dir = mkdtempSync(join(scratch, 'waiting-harness-'));
+    try {
+      expect(await withSlot(command, false, undefined, {
+        slotDirectory: dir, slots: 1, reap: () => {},
+        runCommand: async (_command, env, start) => {
+          start();
+          expect(env.GOAL_IN_SLOT).toBe('0');
+          expect(existsSync(join(dir, '0'))).toBe(false);
+          return 0;
+        },
+      })).toBe(0);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+test('ordinary waiters retain FIFO order and a dead waiter gives up its place', () => {
+  const dir = mkdtempSync(join(scratch, 'ordinary-order-'));
+  let now = 0;
+  const live = new Set([11, 12, 13]);
+  const options = (pid: number) => ({ pid, now: () => now++, alive: (candidate: number) => live.has(candidate),
+    env: { GOAL_ID: 'program' }, workerGoals: () => [] });
+  const first = qaSlotAdmission(dir, 1, options(11));
+  const second = qaSlotAdmission(dir, 1, options(12));
+  const third = qaSlotAdmission(dir, 1, options(13));
+  try {
+    expect(third.acquire(0)).toBe('held');
+    const one = first.acquire(0); expect(one).not.toBe('held');
+    if (one !== 'held') one.release();
+    live.delete(12);
+    const three = third.acquire(0); expect(three).not.toBe('held');
+    if (three !== 'held') three.release();
+  } finally { first.release(); second.release(); third.release(); rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a heavy harness waits for memory before holding its heavy turn', async () => {
+  const dir = mkdtempSync(join(scratch, 'deferred-heavy-'));
+  try {
+    expect(await withSlot(['bun', 'scripts/qa/cli.ts', '--tier', 'unit', '--beside-workers'], true, undefined, {
+      slotDirectory: dir, env: { GOAL_ID: 'program' }, reap: () => {},
+      runCommand: async (_command, env, start) => {
+        start();
+        expect(env.GOAL_QA_DEFERRED_HEAVY).toBe('1');
+        expect(existsSync(join(dir, 'heavy'))).toBe(false);
+        return 0;
+      },
+    })).toBe(0);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('heavy waiters across Goals take arrival order rather than rotating past an older Goal', async () => {
+  const dir = mkdtempSync(join(scratch, 'heavy-order-'));
+  let now = 0;
+  const live = new Set([11, 12, 13]);
+  const options = (pid: number, goal: string) => ({ lockDir: join(dir, 'heavy'), pid, goal,
+    bindExit: false, now: () => now++, alive: (candidate: number) => live.has(candidate), announce: () => {} });
+  try {
+    const release = await acquireHeavy(['first'], options(11, 'api'));
+    let wake!: () => void;
+    let sleeping!: () => void;
+    const paused = new Promise<void>(resolve => { sleeping = resolve; });
+    const older = acquireHeavy(['older'], { ...options(12, 'api'), sleep: async () => {
+      sleeping(); await new Promise<void>(resolve => { wake = resolve; });
+    } });
+    await paused;
+    release();
+    await expect(acquireHeavy(['newer'], { ...options(13, 'program'), deadline: now,
+      sleep: async () => { throw new Error('Must not sleep past deadline'); } })).rejects.toThrow('deadline');
+    wake(); (await older)();
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

@@ -1,15 +1,20 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
 import { startDevCompose } from '../../../scripts/dev/cli.ts';
 import { startSearchFuseki } from '../../../scripts/operations/search-startup.ts';
-import { GiB } from '../../../scripts/qa/memory-admission.ts';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+
+import { Database } from 'bun:sqlite';
+import { GiB, withMemoryStartup } from '../../../scripts/qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 const plenty = { vmTotal: 24 * GiB, vmUsed: 0, hostAvailable: 20 * GiB };
 
+const { startDevCompose } = await import('../../../scripts/dev/cli.ts');
+const { startSearchFuseki } = await import('../../../scripts/operations/search-startup.ts');
 for (const [name, start, readinessMs] of [
   ['dev CLI', startDevCompose, 180_000],
   ['search rebuild', startSearchFuseki, 300_000],
@@ -50,3 +55,135 @@ for (const [name, start, readinessMs] of [
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 }
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>(done => { resolve = done; });
+  return { promise, resolve };
+}
+
+function orderedStartups() {
+  const dir = mkdtempSync(join(scratch, 'ordered-startups-'));
+  const lockFile = join(dir, 'startup.sqlite');
+  let now = 0, available = false;
+  const order: number[] = [];
+  const sleepers = new Map<number, ReturnType<typeof deferred<void>>>();
+  const sleeping = new Map<number, ReturnType<typeof deferred<void>>>();
+  const start = (id: number, vm = GiB) => {
+    const paused = deferred<void>();
+    sleeping.set(id, paused);
+    const run = withMemoryStartup({ vm, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
+      env: { REZICS_STACK_PROFILE: 'qa' }, root, lockFile, deadline: 1_000,
+      now: () => now, pollMs: 1, announce: () => {},
+      read: async () => {
+        // A slow Docker reader must not block another request's registration.
+        const probe = new Database(lockFile);
+        try { probe.exec('BEGIN IMMEDIATE'); probe.exec('ROLLBACK'); }
+        finally { probe.close(); }
+        return { vmTotal: 24 * GiB, vmUsed: available ? 20 * GiB : 24 * GiB, hostAvailable: 20 * GiB };
+      },
+      sleep: async () => {
+        const wake = deferred<void>(); sleepers.set(id, wake); sleeping.get(id)!.resolve(); await wake.promise;
+      },
+    }, () => { order.push(id); });
+    return run;
+  };
+  return { dir, lockFile, order, start,
+    paused: (id: number) => sleeping.get(id)!.promise,
+    nextPause: (id: number) => { const paused = deferred<void>(); sleeping.set(id, paused); return paused.promise; },
+    wake: (id: number) => { now++; sleepers.get(id)!.resolve(); },
+    fit: () => { available = true; },
+    expire: () => { now = 1_000; },
+  };
+}
+
+test('three startup waiters start in arrival order even when the newest polls first', async () => {
+  const queue = orderedStartups();
+  try {
+    const first = queue.start(1); await queue.paused(1);
+    const second = queue.start(2); await queue.paused(2);
+    const third = queue.start(3); await queue.paused(3);
+    queue.fit();
+    // A fresh later arrival cannot take the fitting head's place.
+    const fourth = queue.start(4); await queue.paused(4);
+    expect(queue.order).toEqual([]);
+    const thirdWaits = queue.nextPause(3); queue.wake(3); await thirdWaits;
+    const secondWaits = queue.nextPause(2); queue.wake(2); await secondWaits;
+    expect(queue.order).toEqual([]);
+    queue.wake(1); await first;
+    queue.wake(2); await second;
+    queue.wake(3); await third;
+    queue.wake(4); await fourth;
+    expect(queue.order).toEqual([1, 2, 3, 4]);
+  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+});
+
+test('the oldest fitting startup passes a larger waiter and keeps its place before later arrivals', async () => {
+  const queue = orderedStartups();
+  try {
+    const tooLarge = queue.start(1, 30 * GiB); await queue.paused(1);
+    const fitting = queue.start(2); await queue.paused(2);
+    queue.fit();
+    const later = queue.start(3); await queue.paused(3);
+    expect(queue.order).toEqual([]);
+    queue.wake(2); await fitting;
+    queue.wake(3); await later;
+    expect(queue.order).toEqual([2, 3]);
+    queue.expire(); queue.wake(1);
+    await expect(tooLarge).rejects.toThrow('Memory admission deadline');
+  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+});
+
+test('dead and reused startup waiters release their ordered place', async () => {
+  const queue = orderedStartups();
+  try {
+    const first = queue.start(1); await queue.paused(1);
+    const db = new Database(queue.lockFile);
+    db.query(`INSERT INTO startup_waiters
+      (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run('dead', 2_147_483_647, 'gone', GiB, GiB, 0, 8 * GiB, -1, '0');
+    // Make the dead request oldest in the actual queue, independently of wall time.
+    db.query('UPDATE startup_waiters SET seq = -1 WHERE id = ?').run('dead');
+    queue.fit(); queue.wake(1); await first;
+    expect(queue.order).toEqual([1]);
+    expect(db.query('SELECT * FROM startup_waiters').all()).toEqual([]);
+    db.close();
+  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+});
+
+test('a provisional ordinary slot is returned when memory no longer fits before startup', async () => {
+  const dir = mkdtempSync(join(scratch, 'startup-slot-retry-'));
+  const gatePath = join(dir, 'gate.json'), slot = join(dir, 'ordinary-slot');
+  let now = 0, reads = 0, request: string[] | undefined;
+  writeFileSync(gatePath, JSON.stringify({ token: 'test', status: 'pending' }));
+  try {
+    await withMemoryStartup({ vm: GiB, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
+      root, env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_STARTUP_SLOT_GATE: gatePath },
+      lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1,
+      read: async () => ({ ...plenty, vmUsed: ++reads === 2 ? plenty.vmTotal : 0 }),
+      announce: line => {
+        const parts = line.split(' ');
+        if (parts[0] === 'QA_STARTUP_SLOT_READY') {
+          request = parts;
+          if (reads > 2) {
+            mkdirSync(slot);
+            writeFileSync(gatePath, JSON.stringify({ token: 'test', status: 'granted',
+              requester: parts[2], sequence: Number(parts[3]) }));
+          }
+        }
+        if (parts[0] === 'QA_STARTUP_SLOT_CANCEL') rmSync(slot, { recursive: true, force: true });
+      },
+      sleep: async () => {
+        now++;
+        if (reads === 1) {
+          mkdirSync(slot);
+          writeFileSync(gatePath, JSON.stringify({ token: 'test', status: 'granted',
+            requester: request![2], sequence: Number(request![3]) }));
+        } else expect(existsSync(slot)).toBe(false);
+      },
+    }, () => { expect(existsSync(slot)).toBe(true); });
+    expect(reads).toBe(3);
+    expect(JSON.parse(readFileSync(gatePath, 'utf8')).status).toBe('granted');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});

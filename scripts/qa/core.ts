@@ -15,7 +15,7 @@ import {
 import { dirname, join, resolve } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { hostname } from 'node:os';
-import { slotWaiter, tryAcquireQaSlot, type SlotShareOptions } from '../goal/admission.ts';
+import { type SlotShareOptions } from '../goal/admission.ts';
 import { acceptanceStatuses, parseJUnit, titleIds, type Case, type TestResult } from './acceptance.ts';
 import {
   bindReapOwnerExit, forgetChildScope, noteChildScope, reapActiveChildScopes, reapChildEnvironment, reapChildScope,
@@ -1161,6 +1161,7 @@ export function goalSlotDirectory(root: string): string | undefined {
 }
 
 export interface QaSlotOptions {
+  signal?: AbortSignal;
   workerGoals?: SlotShareOptions['workerGoals'];
   /** Independent projects in one runner need distinct leases rather than its first lease. */
   inherit?: boolean;
@@ -1207,7 +1208,9 @@ export async function acquireQaSlots(
   const owner = (path: string) => readDirectoryLease(path)?.pid ?? 0;
   const paths = Array.from({ length: total }, (_, k) => join(directory, String(k)));
   const acquired: AcquiredDirectoryLease[] = [];
-  const waiter = slotWaiter(directory, env, pid);
+  const { qaSlotAdmission } = await import('../goal/qa-slots.ts');
+  const waiter = qaSlotAdmission(directory, total, { now, pid, env,
+    alive: candidate => processAlive({ pid: candidate }), workerGoals: options.workerGoals });
   let timer: ReturnType<typeof setTimeout> | undefined;
   const release = () => {
     waiter.release();
@@ -1238,8 +1241,7 @@ export async function acquireQaSlots(
       for (const path of paths) {
         if (held + acquired.length >= wanted) break;
         if (lineage.has(owner(path))) continue;
-        const lease = tryAcquireQaSlot(directory, total, Number(path.slice(path.lastIndexOf('/') + 1)), {
-          now, pid, env, alive: candidate => processAlive({ pid: candidate }), workerGoals: options.workerGoals });
+        const lease = waiter.acquire(Number(path.slice(path.lastIndexOf('/') + 1)));
         if (lease === 'held') continue;
         acquired.push(lease);
       }
@@ -1256,7 +1258,7 @@ export async function acquireQaSlots(
         return { count: held + acquired.length, release };
       }
       if (now() >= deadline) throw new Error('No QA slot became free before the deadline; no stack started');
-      waiter.update();
+
       if (!announced) {
         const busy = paths.every(path => directoryLeaseHeld(path));
         (options.announce ?? console.error)(busy ? `Waiting for a QA slot; all ${total} slots are held`
