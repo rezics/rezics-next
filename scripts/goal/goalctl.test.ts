@@ -178,7 +178,7 @@ describe('goalctl briefs', () => {
       expect((await dispatchMethodErrors(mechanism, markdown)).join()).toContain('non-empty ## Design note');
     }
     expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nRead by program: 2026-10-13\n')).toEqual([]);
-    for (const kind of ['outcome', 'implementation', 'surface', 'tooling'] as const) {
+    for (const kind of ['outcome', 'surface', 'tooling'] as const) {
       expect(await dispatchMethodErrors({ ...parseBrief(brief), kind }, '')).toEqual([]);
     }
   });
@@ -4233,6 +4233,21 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test.each(['omitted', 'empty'])('implementation dispatch refuses %s rows before launch', rows => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001');
+      writeFileSync(brief, readFileSync(brief, 'utf8').replace('kind: tooling',
+        `kind: implementation${rows === 'empty' ? '\nrows: []' : ''}`));
+      const result = r.run(['dispatch', brief, '--dry-run', '--force-usage']);
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain('implementation brief needs at least one row in rows');
+      expect(result.stderr).toContain('tasks with no row are tooling or mechanism');
+      expect(r.ledger().tasks['G-001']).toBeUndefined();
+      expect(existsSync(join(r.dir, '.temp/worktrees/g-001'))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
   test('implementation dispatch requires a complete declaration and pending persona for every referenced row', () => {
     const r = repo();
     const row = 'books/work-hub-and-edition-choice';
@@ -4464,16 +4479,54 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test.each([['exited', 'done'], ['exited', 'partial'], ['merged', 'done']] as const)(
-    'a %s task with a %s handoff resumes as a fix', async (state, result) => {
+  test.each([
+    ['exited', 'done', 'clean', 'fix'],
+    ['exited', 'partial', 'clean', 'step'],
+    ['merged', 'done', 'clean', 'fix'],
+    ['merged', 'partial', 'clean', 'step'],
+    ['exited', 'partial', 'unlanded', 'fix'],
+    ['exited', 'partial', 'empty-commit', 'fix'],
+    ['exited', 'partial', 'failed-handoff', 'fix'],
+    ['exited', 'partial', 'dirty', 'fix'],
+    ['exited', 'partial', 'untracked', 'fix'],
+  ] as const)('a %s task with a %s handoff and %s work resumes as a %s', async (state, result, work, round) => {
     const r = repo();
     try {
       await r.start('G-001'); await r.stopFixture('G-001');
       const ledger = r.ledger(); const task = ledger.tasks['G-001']!;
+      if (work === 'unlanded' || work === 'dirty') r.commit(task);
+      if (work === 'empty-commit') r.git('-C', task.worktree, 'commit', '--allow-empty', '-qm', 'Unlanded checkpoint');
+      if (work === 'dirty') {
+        // The commit is already on main; only the uncommitted edit is left to land.
+        r.git('merge', '--ff-only', task.branch);
+        writeFileSync(join(task.worktree, 'worker-001.ts'), 'export const value = "unfinished";\n');
+      }
+      if (work === 'untracked') writeFileSync(join(task.worktree, 'unfinished.ts'), 'export {};\n');
       task.state = state; r.save(ledger);
-      writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: `RESULT: ${result}` }));
+      writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: `RESULT: ${result}`, is_error: work === 'failed-handoff' }));
       expect(r.run(['resume', task.id, '-m', 'continue']).status).toBe(0);
-      expect(r.ledger().tasks[task.id]!.attempts.at(-1)!.round).toBe('fix');
+      expect(r.ledger().tasks[task.id]!.attempts.at(-1)!.round).toBe(round);
+    } finally { r.cleanup(); }
+  });
+
+  test('a read-only partial step retains exhausted fix rounds instead of spending another', async () => {
+    const r = repo();
+    const id = 'G-001';
+    try {
+      await r.start(id); await r.stopFixture(id);
+      const ledger = r.ledger(); const task = ledger.tasks[id]!;
+      task.attempts.push({ ...task.attempts[0]!, n: 2, round: 'fix' }, { ...task.attempts[0]!, n: 3, round: 'fix' });
+      writeFileSync(task.attempts.at(-1)!.output, JSON.stringify({ result: 'RESULT: partial\nNEXT: write the matrix tests' }));
+      r.save(ledger);
+      const resumed = r.run(['resume', id, '-m', 'write the tests']);
+      expect(resumed.stderr).toBe(''); expect(resumed.status).toBe(0);
+      expect(r.ledger().tasks[id]!.attempts.at(-1)!.round).toBe('step');
+      expect(r.ledger().tasks[id]!.attempts.filter(attempt => attempt.round === 'fix')).toHaveLength(2);
+      await waitUntil(() => JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')).worker !== r.workers.get(id)!.worker);
+      r.workers.set(id, JSON.parse(readFileSync(join(r.dir, '.temp/ready', id), 'utf8')));
+      await r.stopFixture(id);
+      const refused = r.run(['resume', id, '-m', 'fix the tests']);
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('two fix rounds exhausted');
     } finally { r.cleanup(); }
   });
 

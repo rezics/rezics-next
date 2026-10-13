@@ -47,7 +47,7 @@ export interface Brief {
 export interface Attempt {
   n: number; effort: string; engine?: Engine; pid: number; session: string; output: string; lastMessage?: string;
   startedAt: string; endedAt?: string;
-  /** A landed partial handoff advances a step; only fixes consume the task's two rounds. */
+  /** A partial handoff advances a landed or clean read-only step; only fixes consume the two rounds. */
   round?: 'initial' | 'step' | 'fix' | 'continuation';
   /** Wait started this attempt because the previous session lost its connection. */
   continuedFor?: 'transport' | 'capacity';
@@ -1461,7 +1461,8 @@ function transportContinuationPrompt(dirty: readonly string[]): string {
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root): Promise<string[]> {
-  if (brief.kind === 'implementation' && brief.rows?.length) {
+  if (brief.kind === 'implementation') {
+    if (!brief.rows?.length) return ['implementation brief needs at least one row in rows; tasks with no row are tooling or mechanism'];
     const owner = await import(pathToFileURL(join(outcomeRoot, 'scripts/qa/cases/outcomes.ts')).href);
     const { loadOutcomes, personas } = owner as typeof import('../qa/cases/outcomes.ts');
     const outcomes = await loadOutcomes({ root: outcomeRoot });
@@ -1776,7 +1777,12 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
-    const round = task.state === 'merged' && handoffResult(readResult(previous).text) === 'partial' ? 'step' : 'fix';
+    let round: 'step' | 'fix' = 'fix';
+    const result = readResult(previous);
+    if (!result.error && handoffResult(result.text) === 'partial') {
+      const changes = changedFiles(task);
+      if (task.state === 'merged' || (changes.ahead === 0 && changes.dirty.length === 0)) round = 'step';
+    }
     const refusal = round === 'fix' ? resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8')) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const nextEngine = engine ?? engineOf(previous);
