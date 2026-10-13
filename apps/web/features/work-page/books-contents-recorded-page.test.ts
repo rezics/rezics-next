@@ -184,12 +184,21 @@ test('member work header title is the recorded work title on the inventory page'
   expect(view.nextHref).toContain((inventory.answer as PageAnswer).nextCursor);
 });
 
-test('member empty search is recorded with + and the typed client requests %20', async () => {
+test('member search with no match is an empty recorded page', async () => {
   const read = await readRecorded('member', 'chapter-search-no-match', 'empty');
-  const recorded = read.chosen.path;
-  const client = read.requested[0] ?? '';
-  expect(recorded).toContain('q=unmatched+seed+path');
-  expect(client).toContain('q=unmatched%20seed%20path');
-  expect(read.answer.data).toBeNull();
-  expect(read.answer.error?.status).toBe(503);
+  // The record spells the space as + and the typed client sends %20. Replay matches the query value.
+  expect(read.chosen.path).toContain('q=unmatched+seed+path');
+  expect(read.requested[0]).toContain('q=unmatched%20seed%20path');
+  const recorded = read.chosen.answer as PageAnswer;
+  const view = mapRecorded(read);
+  expect(view.kind).toBe('page');
+  if (view.kind !== 'page') return;
+  expect(view.chapters).toHaveLength(0);
+  expect(view.count).toBe(0);
+  expect(recorded.count.value).toBe(0);
+  expect(recorded.count.total).toBeNull();
+  expect(view.complete).toBe(true);
+  expect(view.nextHref).toBeNull();
+  expect(recorded.nextCursor).toBeNull();
+  expect(view.workIri).toBe(recorded.work);
 });

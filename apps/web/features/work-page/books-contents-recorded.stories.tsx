@@ -154,6 +154,23 @@ function loadingPlay(phoneWidth: boolean): NonNullable<Story['play']> {
   };
 }
 
+function emptyPlay(phoneWidth: boolean): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const answer = pageAnswer('member', 'chapter-search-no-match');
+    const title = (recordedSample('member', 'work-header').answer as { title: { value: string } }).title.value;
+    await expect(canvas.findByText(title)).resolves.toBeVisible();
+    await expect(canvas.getByText(`${answer.count.value} on this page`)).toBeVisible();
+    await expect(canvas.getByRole('heading', { name: 'Nothing to read yet' })).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: 'Next page' })).toBeNull();
+    await expect(canvas.queryByRole('list')).toBeNull();
+    await expect(answer.complete).toBe(true);
+    await expect(answer.items).toHaveLength(0);
+    await expect(answer.nextCursor).toBeNull();
+    if (phoneWidth) await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  };
+}
+
 function memberPlay(phoneWidth: boolean): NonNullable<Story['play']> {
   return async ({ canvasElement }) => {
     const title = (recordedSample('member', 'work-header').answer as { title: { value: string } }).title.value;
@@ -187,6 +204,14 @@ export const VisitorRefusalPhone: Story = {
 };
 export const VisitorRefusalDesktop: Story = {
   args: { label: 'inventory-page-2', state: 'error' }, globals: desktop, play: refusalPlay(false),
+};
+export const MemberEmptyPhone: Story = {
+  args: { persona: 'member', label: 'chapter-search-no-match', state: 'empty', headerLabel: 'work-header' },
+  globals: phone, play: emptyPlay(true),
+};
+export const MemberEmptyDesktop: Story = {
+  args: { persona: 'member', label: 'chapter-search-no-match', state: 'empty', headerLabel: 'work-header' },
+  globals: desktop, play: emptyPlay(false),
 };
 export const MemberPopulatedPhone: Story = {
   args: { persona: 'member', headerLabel: 'work-header' }, globals: phone, play: memberPlay(true),
