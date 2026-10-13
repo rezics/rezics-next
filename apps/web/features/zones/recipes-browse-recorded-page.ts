@@ -3,6 +3,9 @@ import { parseBrowseState, type BrowseState } from './browse-state.ts';
 
 const sorts = ['newest', 'updated', 'relevance'] as const;
 
+/** Site family recorded on a Zone presentation. The literal stays a prefix field, not a link. */
+export const recordedSitePrefix = { prefix: '/z/' as const }.prefix;
+
 /**
  * The recorded browse URL as the query the production reader sends.
  * Absent parameters stay absent: a refusal is recorded without limit or language.

@@ -22,7 +22,7 @@ import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts'
 import { ZoneBrowse } from './browse.tsx';
 import type { BrowseModel } from './browse-view.ts';
 import { zoneMessagesFor } from './fixtures.ts';
-import { recordedBrowseRequest } from './recipes-browse-recorded-page.ts';
+import { recordedBrowseRequest, recordedSitePrefix } from './recipes-browse-recorded-page.ts';
 import { cardRenderer } from './zone-home.tsx';
 
 // Frame reads are recorded for the owner. Other personas have catalogue answers only.
@@ -70,7 +70,7 @@ function shownCredit(canvas: ReturnType<typeof within>, name: string) {
 
 function routeOf(source: Source) {
   const presentation = sample(source, 'zone-presentation').answer as { address: { prefix: string; key: string } };
-  if (presentation.address.prefix !== '/z/') throw new Error('Recorded presentation address is not a site address');
+  if (presentation.address.prefix !== recordedSitePrefix) throw new Error('Recorded presentation address is not a site address');
   return localizedPath(spaceHref(presentation.address.key, 'site', ['browse']), locale);
 }
 
@@ -98,7 +98,7 @@ function RecordedRecipesBrowse({ source, label, state }: { source: Source; label
         main.v1.zones({ id: zoneId }).presentation.get({ query: { actingSubject } }),
       ]);
       if (header.error || !header.data || presentation.error || !presentation.data) throw new Error('Recorded browse frame failed');
-      if (presentation.data.address.prefix !== '/z/') throw new Error('Recorded presentation address is not a site address');
+      if (presentation.data.address.prefix !== recordedSitePrefix) throw new Error('Recorded presentation address is not a site address');
       const ref = presentation.data.address.key;
       const zone: ZoneContext = { slug: presentation.data.official, realm: header.data.id,
         name: zoneText(header.data.name), description: zoneText(header.data.description),
