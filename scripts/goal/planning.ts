@@ -25,6 +25,11 @@ function declarationValues(file: string, text: string): RowOutcomes {
   const functions = { pending, proved, notApplicable, rowOutcomes };
   function value(node: ts.Expression): unknown {
     if (ts.isStringLiteralLike(node)) return node.text;
+    if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map(span => {
+      const text = value(span.expression);
+      if (typeof text !== 'string') throw new Error(`Unsupported outcome interpolation in ${file}: ${span.expression.getText(source)}`);
+      return text + span.literal.text;
+    }).join('');
     if (ts.isIdentifier(node) && values.has(node.text)) return values.get(node.text);
     // A declaration is valid TypeScript that the loader runs; notes are also built from constants.
     if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map(span => `${String(value(span.expression))}${span.literal.text}`).join('');

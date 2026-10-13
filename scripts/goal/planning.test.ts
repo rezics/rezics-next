@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
 import { git } from './ledger.ts';
@@ -62,6 +62,17 @@ test('pending main declarations raise one event containing every pending persona
     expect(events[0]!.body).not.toContain('program/proved');
     expect(events[0]!.body).not.toContain('program/missing');
     expect(events[0]!.body).not.toContain('program/unlanded');
+  } finally { f.close(); }
+});
+
+test('planning reads authored template notes without executing the declaration', () => {
+  const f = fixture();
+  try {
+    const file = f.declaration('interpolation', 'program', 'visitor: pending(`${collectionGap} ${placementGap}; ${lifecycleGap}`)');
+    const path = join(f.repo, file);
+    writeFileSync(path, "const collectionGap = 'collection';\nconst placementGap = 'placement';\nconst lifecycleGap = 'lifecycle';\n" + readFileSync(path, 'utf8'));
+    f.commit();
+    expect(f.events()[0]!.body).toContain('program/interpolation | visitor: "collection placement; lifecycle"');
   } finally { f.close(); }
 });
 
