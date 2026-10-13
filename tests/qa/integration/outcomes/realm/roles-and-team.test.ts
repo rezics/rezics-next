@@ -12,6 +12,7 @@ import {
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(team);
+let initialRole: string;
 const root = () => `/v1/realms/${sessions.realm.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
@@ -72,16 +73,45 @@ async function change(change: Change) {
 beforeAll(async () => {
   sessions = await personaSessions('private');
   await recording.prepare();
+  const roles = await answer<Roles>(sessions.owner.main('GET', `${root()}/roles?${acting(sessions.owner)}`));
+  initialRole = roles.roles[0]!.id;
 }, 180_000);
 afterAll(async () => {
   try { await recording.publish(); }
   finally { await sessions?.close(); }
 });
 
+async function renderRead(name: PersonaName, label: string, path: string, anonymous = false) {
+  const response = await recording.session(name, anonymous ? sessions.visitor : sessions[name])(label, 'GET', path);
+  const raw = await response.text();
+  if (response.status >= 500) throw new Error(`${name} ${label}: GET ${path}: ${response.status}: ${raw}`);
+  return { status: response.status, data: JSON.parse(raw) as { zone?: string; routeSegment?: string | null } };
+}
+
+async function frameSite(name: PersonaName) {
+  const person = sessions[name];
+  const zone = await renderRead(name, 'frame-site', `${root()}/zone?${acting(person)}`);
+  if (zone.status === 200 && zone.data.zone)
+    await renderRead(name, 'frame-site-editor', `/v1/zones/${zone.data.zone.slice(-36)}/showcase-editor?${acting(person)}`);
+  // UUID management addresses need no resolution. A returned official segment does.
+  if (zone.status === 200 && zone.data.routeSegment)
+    await renderRead(name, 'official-address', `/v1/addresses/resolve?scope=space&key=${encodeURIComponent(zone.data.routeSegment)}`, true);
+}
+
 async function refused(name: PersonaName) {
   const person = sessions[name],
     status = name === 'visitor' ? 401 : 403;
   const sample = recording.session(name, person);
+  if (name !== 'visitor') {
+    for (const [label, path] of [
+      ['session-agent', '/v1/me/session-agent'],
+      ['agent-choices', '/v1/me/agents?languages=en'],
+      ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+      ['acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`],
+    ] as const) await renderRead(name, label, path);
+    await frameSite(name);
+    await renderRead(name, 'members-role-filter', `${root()}/members?${acting(person)}&role=${initialRole}`);
+  }
   for (const path of ['roles', 'members'])
     await answer(sample(`${path}-denied`, 'GET', `${root()}/${path}?${acting(person)}`), status);
   const command = {
@@ -127,6 +157,7 @@ outcomeTest(team, 'owner', async () => {
   ] as const) await (await sample(label, 'GET', path)).body?.cancel();
   await answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`));
   await answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`));
+  await renderRead('owner', 'members-role-filter', `${root()}/members?${acting(owner)}&role=${initialRole}`);
   await answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`));
   await answer(recording.session('owner', sessions.visitor)('member-profile', 'GET', `/v1/agents/${sessions.member.actingSubject!.slice(-36)}`));
   await answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`));
@@ -148,7 +179,8 @@ outcomeTest(team, 'owner', async () => {
   const intent = await preview(assignment(roleId, stranger.actingSubject!), owner, 'role-impact-preview'),
     key = randomUUID();
   expect(intent.impact.changes).toEqual([
-    { member: stranger.actingSubject, gained: ['realm.roles.manage'], lost: [] },
+    { member: stranger.actingSubject, gained: ['realm.roles.manage'], lost: [],
+      jurisdictions: [{ targetScope: null, gained: ['realm.roles.manage'], lost: [] }] },
   ]);
   const receipt = await answer<Receipt>(
     sample('role-assignment-receipt', 'POST', `${root()}/role-changes`, intent.command, key),
