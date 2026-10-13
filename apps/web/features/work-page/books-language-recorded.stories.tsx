@@ -1,26 +1,15 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
-import type {
-  AnswerPersona,
-  AnswerRecord,
-  AnswerSample,
-} from '../../../../scripts/api/answer-record.ts';
+import type { AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/read-non-ui-languages-non-ui-languages.json';
-import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
-import {
-  recordedFetch,
-  type RecordedSelection,
-  type RecordedState,
-} from '../stories/recorded-fetch.ts';
+import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { BooksLanguageRecordedView } from './books-language-recorded-page.tsx';
 import {
-  fetchBooksLanguageMetadata,
-  fetchBooksLanguageSelection,
-  fetchMemberBooksLanguage,
-  fetchPublishedBooksLanguage,
+  booksLanguageReading,
+  booksLanguageReads,
   type BooksLanguageReading,
 } from './books-language-recorded-page.ts';
 import { messages } from './messages.ts';
@@ -29,17 +18,13 @@ import { textHref } from './route.ts';
 
 const record = books as AnswerRecord;
 
-type ReadingRequest =
-  | { kind: 'published'; metadata: string; text: string; credits: string; hold?: boolean }
-  | { kind: 'member'; header: string; text: string; credits: string }
-  | { kind: 'selection'; label: string }
-  | { kind: 'metadata'; label: string; state: 'error' | 'empty' };
+type MemberRequest =
+  | { kind: 'selected'; hold?: boolean }
+  | { kind: 'missing-language' };
 
-type ReadingArgs = { persona: AnswerPersona; locale: UiLocale; request: ReadingRequest };
-
-function recordedSample(persona: AnswerPersona, label: string): AnswerSample {
-  const found = record.personas[persona].find((item) => item.label === label);
-  if (!found) throw new Error(`Missing recorded sample ${persona}/${label}`);
+function recordedSample(label: string): AnswerSample {
+  const found = record.personas.member.find((item) => item.label === label);
+  if (!found) throw new Error(`Missing recorded sample member/${label}`);
   return found;
 }
 
@@ -51,12 +36,8 @@ function recordedId(path: string): string {
   return id;
 }
 
-function recordedQuery(path: string): URLSearchParams {
-  return new URL(path, 'https://recorded.invalid').searchParams;
-}
-
 function requireQuery(path: string, key: string): string {
-  const value = recordedQuery(path).get(key);
+  const value = new URL(path, 'https://recorded.invalid').searchParams.get(key);
   if (!value) throw new Error(`Recorded path has no ${key}: ${path}`);
   return value;
 }
@@ -69,15 +50,6 @@ function textOf(value: unknown): { language: string; body: string } {
   return { language: text.language, body: text.body };
 }
 
-function titleOf(value: unknown): string {
-  if (!value || typeof value !== 'object' || !('originalTitle' in value) || !value.originalTitle) {
-    throw new Error('Recorded metadata has no title');
-  }
-  const title = (value.originalTitle as { value?: unknown }).value;
-  if (typeof title !== 'string') throw new Error('Recorded title is empty');
-  return title;
-}
-
 function headerTitle(value: unknown): string {
   if (!value || typeof value !== 'object' || !('title' in value) || !value.title)
     throw new Error('Recorded header has no title');
@@ -87,119 +59,64 @@ function headerTitle(value: unknown): string {
 }
 
 function authorOf(value: unknown): string {
-  if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items)) {
+  if (!value || typeof value !== 'object' || !('items' in value) || !Array.isArray(value.items))
     throw new Error('Recorded credits have no author');
-  }
   const agent = (value.items[0] as { agent?: unknown } | undefined)?.agent;
   if (typeof agent !== 'string') throw new Error('Recorded author has no agent');
   return agent;
 }
 
 function problemTitle(value: unknown): string {
-  if (
-    !value ||
-    typeof value !== 'object' ||
-    !('title' in value) ||
-    typeof value.title !== 'string'
-  ) {
+  if (!value || typeof value !== 'object' || typeof (value as { title?: unknown }).title !== 'string')
     throw new Error('Recorded problem has no title');
-  }
-  return value.title;
+  return (value as { title: string }).title;
 }
 
-function workOf(value: unknown): string {
-  if (!value || typeof value !== 'object' || !('work' in value) || typeof value.work !== 'string') {
-    throw new Error('Recorded metadata has no work');
-  }
-  return value.work;
-}
-
-function selectionsFor(args: ReadingArgs): RecordedSelection[] {
-  const state = (
-    args.request.kind === 'published' && args.request.hold ? 'loading' : 'populated'
-  ) as RecordedState;
-  if (args.request.kind === 'published')
+function selectionsFor(request: MemberRequest): RecordedSelection[] {
+  if (request.kind === 'missing-language') {
     return [
-      { label: args.request.metadata, state },
-      { label: args.request.text, state },
-      { label: args.request.credits, state },
+      { label: 'work-header', state: 'populated' },
+      { label: 'missing-selected-language', state: 'error' },
     ];
-  if (args.request.kind === 'member')
-    return [
-      { label: args.request.header, state: 'populated' },
-      { label: args.request.text, state: 'populated' },
-      { label: args.request.credits, state: 'populated' },
-    ];
-  if (args.request.kind === 'selection') return [{ label: args.request.label, state: 'error' }];
-  return [{ label: args.request.label, state: args.request.state }];
+  }
+  const state = request.hold ? 'loading' : 'populated';
+  return [
+    { label: 'work-header', state },
+    { label: 'selected-swedish-text', state },
+    { label: 'credits-en', state },
+  ];
 }
 
-function workRefFor(args: ReadingArgs): string {
-  if (args.request.kind === 'published')
-    return recordedId(recordedSample(args.persona, args.request.metadata).path);
-  if (args.request.kind === 'member')
-    return recordedId(recordedSample(args.persona, args.request.header).path);
-  return recordedId(recordedSample(args.persona, args.request.label).path);
+async function loadMember(main: MainClient, request: MemberRequest): Promise<BooksLanguageReading> {
+  const header = recordedSample('work-header');
+  const actingSubject = requireQuery(header.path, 'actingSubject');
+  const reads = booksLanguageReads({ main, actingSubject });
+  const work = await reads.readWorkHeader(recordedId(header.path));
+  if (!work.ok) return booksLanguageReading({ text: work });
+  if (request.kind === 'missing-language') {
+    const refused = recordedSample('missing-selected-language');
+    const text = await reads.readText(work.data.mainVersion, requireQuery(refused.path, 'language'));
+    return booksLanguageReading({ text, header: work.data });
+  }
+  const credits = recordedSample('credits-en');
+  const text = await reads.readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
+  const creditPage = text.ok
+    ? await reads.readCredits(work.data.id, requireQuery(credits.path, 'language'))
+    : null;
+  return booksLanguageReading({ text, credits: creditPage, header: work.data });
 }
 
-async function loadReading(main: MainClient, args: ReadingArgs): Promise<BooksLanguageReading> {
-  if (args.request.kind === 'published') {
-    const metadata = recordedSample(args.persona, args.request.metadata);
-    const text = recordedSample(args.persona, args.request.text);
-    const acting = recordedQuery(metadata.path).get('actingSubject') ?? undefined;
-    return fetchPublishedBooksLanguage(main, {
-      workId: recordedId(metadata.path),
-      mainVersionId: recordedId(text.path),
-      presentationLanguage: requireQuery(metadata.path, 'language'),
-      ...(recordedQuery(text.path).get('language')
-        ? { selectionLanguage: requireQuery(text.path, 'language') }
-        : {}),
-      ...(acting ? { actingSubject: acting } : {}),
-    });
-  }
-  if (args.request.kind === 'member') {
-    const header = recordedSample(args.persona, args.request.header);
-    const credits = recordedSample(args.persona, args.request.credits);
-    return fetchMemberBooksLanguage(main, {
-      workId: recordedId(header.path),
-      actingSubject: requireQuery(header.path, 'actingSubject'),
-      presentationLanguage: requireQuery(credits.path, 'language'),
-    });
-  }
-  if (args.request.kind === 'selection') {
-    const refused = recordedSample(args.persona, args.request.label);
-    return fetchBooksLanguageSelection(
-      main,
-      recordedId(refused.path),
-      requireQuery(refused.path, 'language'),
-    );
-  }
-  const details = recordedSample(args.persona, args.request.label);
-  const acting = recordedQuery(details.path).get('actingSubject') ?? undefined;
-  return fetchBooksLanguageMetadata(
-    main,
-    recordedId(details.path),
-    requireQuery(details.path, 'language'),
-    acting,
-  );
-}
-
-function RecordedBooksLanguage(args: ReadingArgs) {
+function RecordedBooksLanguage({ request }: { request: MemberRequest }) {
   const [reading, setReading] = useState<BooksLanguageReading | { kind: 'loading' }>({
     kind: 'loading',
   });
-  const key = JSON.stringify(args);
+  const key = JSON.stringify(request);
   useEffect(() => {
-    const current = JSON.parse(key) as ReadingArgs;
-    const replay = recordedFetch(record, current.persona, selectionsFor(current), {
-      pathPrefix: BFF_PREFIX,
-    });
-    const main = browserMainApi(window.location.origin, {
-      anonymous: true,
-      fetcher: replay.fetcher,
-    });
+    const current = JSON.parse(key) as MemberRequest;
+    const replay = recordedFetch(record, 'member', selectionsFor(current), { pathPrefix: BFF_PREFIX });
+    const main = browserMainApi(window.location.origin, { anonymous: true, fetcher: replay.fetcher });
     let mounted = true;
-    void loadReading(main, current)
+    void loadMember(main, current)
       .then((next) => {
         if (mounted) setReading(next);
       })
@@ -215,175 +132,77 @@ function RecordedBooksLanguage(args: ReadingArgs) {
   return (
     <BooksLanguageRecordedView
       reading={reading}
-      workRef={workRefFor(args)}
+      workRef={recordedId(recordedSample('work-header').path)}
       settings={defaultReaderSettings}
       actingSubject={null}
-      locale={args.locale}
-      messages={messages[args.locale]}
+      locale="en"
+      messages={messages.en}
     />
   );
 }
 
-const publishedWork = recordedId(recordedSample('visitor', 'metadata-en').path);
-const visitorPublished: ReadingRequest = {
-  kind: 'published',
-  metadata: 'metadata-en',
-  text: 'selected-text-en',
-  credits: 'credits-en',
-};
-
 const meta = {
   title: 'Work page/Recorded content language',
   component: RecordedBooksLanguage,
-  args: { persona: 'visitor', locale: 'en', request: visitorPublished },
-  parameters: { controls: { disable: true }, route: { pathname: textHref(publishedWork) } },
+  args: { request: { kind: 'selected' } },
+  parameters: {
+    controls: { disable: true },
+    route: { pathname: textHref(recordedId(recordedSample('work-header').path)) },
+  },
   globals: { locale: 'en', viewport: { value: 'desktop' } },
 } satisfies Meta<typeof RecordedBooksLanguage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function expectReading(
-  canvasElement: HTMLElement,
-  persona: AnswerPersona,
-  title: string,
-  textLabel: string,
-  creditsLabel: string,
-) {
+async function expectSelected(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  const text = textOf(recordedSample(persona, textLabel).answer);
-  const agent = authorOf(recordedSample(persona, creditsLabel).answer);
-  await expect(canvas.findByRole('heading', { name: title })).resolves.toBeVisible();
+  const text = textOf(recordedSample('selected-swedish-text').answer);
+  const agent = authorOf(recordedSample('credits-en').answer);
+  await expect(
+    canvas.findByRole('heading', { name: headerTitle(recordedSample('work-header').answer) }),
+  ).resolves.toBeVisible();
   await expect(canvas.getByRole('article')).toHaveAttribute('lang', text.language);
   await expect(canvas.getByText(text.body)).toBeVisible();
   await expect(canvas.getByText(text.language)).toBeVisible();
+  await expect(canvas.getByText(messages.en.language)).toBeVisible();
+  await expect(canvas.getByText(messages.en.author)).toBeVisible();
   await expect(canvas.getByRole('link', { name: agent })).toBeVisible();
 }
 
-export const VisitorEnglishDesktop: Story = {
-  async play({ canvasElement }) {
-    const title = titleOf(recordedSample('visitor', 'metadata-en').answer);
-    await expectReading(canvasElement, 'visitor', title, 'selected-text-en', 'credits-en');
-    await expect(within(canvasElement).getByText(messages.en.language)).toBeVisible();
-    await expect(within(canvasElement).getByText(messages.en.author)).toBeVisible();
-  },
-};
-
-export const VisitorEnglishPhone: Story = {
-  globals: { locale: 'en', viewport: { value: 'phone' } },
-  async play({ canvasElement }) {
-    await expectReading(
-      canvasElement,
-      'visitor',
-      titleOf(recordedSample('visitor', 'metadata-en').answer),
-      'selected-text-en',
-      'credits-en',
-    );
-  },
-};
-
-export const VisitorSwedishRequestsDesktop: Story = {
-  args: {
-    request: {
-      kind: 'published',
-      metadata: 'metadata-sv',
-      text: 'selected-text-sv',
-      credits: 'credits-sv',
-    },
-  },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expectReading(
-      canvasElement,
-      'visitor',
-      titleOf(recordedSample('visitor', 'metadata-sv').answer),
-      'selected-text-sv',
-      'credits-sv',
-    );
-    await expect(canvas.getByText(messages.en.language)).toBeVisible();
-    await expect(canvas.getByText(messages.en.author)).toBeVisible();
-  },
-};
-
-export const VisitorSwedishTextJapaneseDesktop: Story = {
-  args: { locale: 'ja' },
-  globals: { locale: 'ja', viewport: { value: 'desktop' } },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    await expectReading(
-      canvasElement,
-      'visitor',
-      titleOf(recordedSample('visitor', 'metadata-en').answer),
-      'selected-text-en',
-      'credits-en',
-    );
-    await expect(canvas.getByText(messages.ja.language)).toBeVisible();
-    await expect(canvas.getByText(messages.ja.author)).toBeVisible();
-    await expect(canvas.queryByText(messages.en.author)).toBeNull();
-  },
-};
-
-export const VisitorSwedishTextJapanesePhone: Story = {
-  args: { locale: 'ja' },
-  globals: { locale: 'ja', viewport: { value: 'phone' } },
-  play: VisitorSwedishTextJapaneseDesktop.play,
-};
-
-export const VisitorLoading: Story = {
-  args: { request: { ...visitorPublished, hold: true } },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    const text = textOf(recordedSample('visitor', 'selected-text-en').answer);
-    await expect(canvas.getByRole('status')).toHaveTextContent(messages.en.loading);
-    await expect(canvas.queryByText(text.body)).toBeNull();
-    await expect(
-      canvas.queryByRole('heading', {
-        name: titleOf(recordedSample('visitor', 'metadata-en').answer),
-      }),
-    ).toBeNull();
-  },
-};
-
 export const MemberSelectedLanguageDesktop: Story = {
-  args: {
-    persona: 'member',
-    request: {
-      kind: 'member',
-      header: 'work-header',
-      text: 'selected-swedish-text',
-      credits: 'credits-en',
-    },
-  },
-  async play({ canvasElement }) {
-    await expectReading(
-      canvasElement,
-      'member',
-      headerTitle(recordedSample('member', 'work-header').answer),
-      'selected-swedish-text',
-      'credits-en',
-    );
+  play({ canvasElement }) {
+    return expectSelected(canvasElement);
   },
 };
 
 export const MemberSelectedLanguagePhone: Story = {
-  args: MemberSelectedLanguageDesktop.args,
   globals: { locale: 'en', viewport: { value: 'phone' } },
   play: MemberSelectedLanguageDesktop.play,
 };
 
-async function expectRefusal(canvasElement: HTMLElement, persona: AnswerPersona, label: string) {
-  const canvas = within(canvasElement);
-  const title = problemTitle(recordedSample(persona, label).answer);
-  const text = textOf(recordedSample('member', 'selected-swedish-text').answer);
-  await expect(canvas.findByRole('alert')).resolves.toBeVisible();
-  await expect(canvas.getByRole('heading', { name: title })).toBeVisible();
-  await expect(canvas.queryByText(text.body)).toBeNull();
-  await expect(canvas.queryByRole('heading', { name: messages.en.textNotFoundTitle })).toBeNull();
-}
+export const MemberLoading: Story = {
+  args: { request: { kind: 'selected', hold: true } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const text = textOf(recordedSample('selected-swedish-text').answer);
+    await expect(canvas.getByRole('status')).toHaveTextContent(messages.en.loading);
+    await expect(canvas.queryByText(text.body)).toBeNull();
+    await expect(
+      canvas.queryByRole('heading', { name: headerTitle(recordedSample('work-header').answer) }),
+    ).toBeNull();
+  },
+};
 
 export const MemberMissingLanguageDesktop: Story = {
-  args: { persona: 'member', request: { kind: 'selection', label: 'missing-selected-language' } },
-  play({ canvasElement }) {
-    return expectRefusal(canvasElement, 'member', 'missing-selected-language');
+  args: { request: { kind: 'missing-language' } },
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const title = problemTitle(recordedSample('missing-selected-language').answer);
+    const text = textOf(recordedSample('selected-swedish-text').answer);
+    await expect(canvas.findByRole('alert')).resolves.toBeVisible();
+    await expect(canvas.getByRole('heading', { name: title })).toBeVisible();
+    await expect(canvas.queryByText(text.body)).toBeNull();
+    await expect(canvas.queryByRole('heading', { name: messages.en.textNotFoundTitle })).toBeNull();
   },
 };
 
@@ -391,49 +210,4 @@ export const MemberMissingLanguagePhone: Story = {
   args: MemberMissingLanguageDesktop.args,
   globals: { locale: 'en', viewport: { value: 'phone' } },
   play: MemberMissingLanguageDesktop.play,
-};
-
-export const VisitorPrivateWorkDesktop: Story = {
-  args: { request: { kind: 'metadata', label: 'private-metadata', state: 'error' } },
-  parameters: {
-    route: { pathname: textHref(recordedId(recordedSample('visitor', 'private-metadata').path)) },
-  },
-  play({ canvasElement }) {
-    return expectRefusal(canvasElement, 'visitor', 'private-metadata');
-  },
-};
-
-export const VisitorPrivateWorkPhone: Story = {
-  args: VisitorPrivateWorkDesktop.args,
-  parameters: VisitorPrivateWorkDesktop.parameters,
-  globals: { locale: 'en', viewport: { value: 'phone' } },
-  play: VisitorPrivateWorkDesktop.play,
-};
-
-export const OwnerPrivateWorkDesktop: Story = {
-  args: {
-    persona: 'owner',
-    request: { kind: 'metadata', label: 'private-metadata', state: 'empty' },
-  },
-  parameters: {
-    route: { pathname: textHref(recordedId(recordedSample('owner', 'private-metadata').path)) },
-  },
-  async play({ canvasElement }) {
-    const canvas = within(canvasElement);
-    const details = recordedSample('owner', 'private-metadata').answer;
-    const refused = problemTitle(recordedSample('visitor', 'private-metadata').answer);
-    await expect(canvas.findByRole('heading', { name: messages.en.noContents })).resolves.toBeVisible();
-    await expect(canvas.getByRole('status')).toBeVisible();
-    await expect(canvas.queryByText(messages.en.loading)).toBeNull();
-    await expect(canvas.getByText(messages.en.noContentsBody)).toBeVisible();
-    await expect(canvas.getByText(workOf(details))).toBeVisible();
-    await expect(canvas.queryByRole('heading', { name: refused })).toBeNull();
-  },
-};
-
-export const OwnerPrivateWorkPhone: Story = {
-  args: OwnerPrivateWorkDesktop.args,
-  parameters: OwnerPrivateWorkDesktop.parameters,
-  globals: { locale: 'en', viewport: { value: 'phone' } },
-  play: OwnerPrivateWorkDesktop.play,
 };

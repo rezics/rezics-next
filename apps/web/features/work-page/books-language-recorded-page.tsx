@@ -67,8 +67,8 @@ function identityFor(
 }
 
 /**
- * The recorded text, its language and its credit. Loading, an authorized empty
- * record and a recorded refusal are the other states the answers prove.
+ * The recorded text, its language and its credit. Loading and a recorded
+ * refusal are the other states this route can show.
  */
 export function BooksLanguageRecordedView({
   reading,
@@ -104,23 +104,6 @@ export function BooksLanguageRecordedView({
           role="alert"
           title={reading.problem.title}
         />
-      </div>
-    );
-  }
-  if (reading.kind === 'empty') {
-    return (
-      <div className="mx-auto w-full max-w-3xl px-4 py-10">
-        <EmptyState
-          icon={FileQuestionIcon}
-          headingLevel={1}
-          role="status"
-          title={messages.noContents}
-          description={messages.noContentsBody}
-        >
-          <p className="max-w-full text-muted-foreground text-xs">
-            {messages.workId} <span className="break-all font-mono">{reading.workId}</span>
-          </p>
-        </EmptyState>
       </div>
     );
   }
