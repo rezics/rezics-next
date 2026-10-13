@@ -58,6 +58,25 @@ positions are in the archived end-of-run tables
 
 ## Regression of 2026-10-13
 
+### G-2153 qualification — 2026-10-13
+
+Decision `task:G-2153:1`: all twelve remain unconfirmed for promotion. Evidence is under `.temp/goal-api/refs/regression-personas/`; captures served `5af1784d`, not the later runtime. No cell or owner changes. Exact prerequisites and current stable-main requalification are held in G-2153's brief.
+
+- D007 — books/catalogue-browse-and-search-in-its-zone / visitor: unconfirmed; nonempty adoption 200, card truncated, full recapture cancelled; evidence D007.json.
+- D018 — books/navigate-a-thousand-chapter-inventory-thousand-chapters and books/continue-progress-across-devices-two-device-progress / owner: prerequisite not reached; thousand chooser 200, grouped second device and consumed graph bound absent, Mine unanswered; evidence D018.json.
+- D040 — books/library-import / owner: prerequisite not reached; review 400 missing GET key, catalogue matches/apply/re-import not reached; evidence D040.json; distinct from G-2148.
+- D048 — books/collection-tracking-and-progress / owner: unconfirmed; empty Continue and explicit resume 200 lack candidate-source/excluded-Book preparation; seed counter proves no reader failure; evidence D048.json.
+- D005 — anime/anime-manga-and-vn-hub-parts-wholes-and-relations / stranger: prerequisite not reached; subject creation 403, granted stranger projection absent; evidence D005.json.
+- D028 — anime/catalogue-browse-and-search-in-its-zone and anime/work-hub-and-edition-choice / owner: prerequisite not reached; both property submissions 403, neither catalogue nor edition journey prepared; evidence D028.json.
+- D034 — realm/create-a-realm / owner: unconfirmed; founded Realm listed and owner read 200 on earlier runtime; evidence D034.json.
+- D049 — realm/threads-and-replies / member: unconfirmed; sibling continuation after unrelated write 200 on earlier runtime; evidence D049.json.
+- D052 — zone/attached-realm-discussion / member: prerequisite not reached; about target 422 target_not_bound, canonical closing race absent; evidence D052.json.
+- D082 — realm/moderation-and-appeal / moderator: prerequisite not reached; decision 400 key mismatch, accepted moderation decision audit absent; evidence D082.json.
+- D102 — recipes/author-a-recipe / owner: prerequisite not reached; two source files imported, supported public withdrawal journey not established; evidence D102.json.
+- D112 — realm/roles-and-team / owner: unconfirmed; generation advanced and stale distinct command 409 on earlier runtime; evidence D112.json.
+
+### Deferred causes from the original run
+
 Causes of failing tests in the run on `main` d2a2e3166 that show no persona of a
 row a wrong answer, largest first (89 causes, 192 files; added by the program from
 its reading of that run). When a row's implementation is briefed, the causes
