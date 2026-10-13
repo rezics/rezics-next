@@ -1,0 +1,95 @@
+{
+  "apps/web/features/concept/works-read.ts": {
+    "sha256": "92c6250ba6713ce4863ad9fb38e74317f5c5d0d4e765bc7915bbd4e16798562d",
+    "reason": "conceptQuery fixes scope all; Main's concept-works branch uses publicWorkRead except scope mine.",
+    "dependencies": { "apps/web/features/concept/state.ts": "663ee34b552d89d5f11f9dc7dc5da68f902e0c1ef2c67eddeab0b8c778b50310", "services/main/src/routes/query.ts": "eb4658c5fd05483242fee231459a828ff8365365987c7ab8fba7a7904d950cfa" },
+    "reads": ["POST /v1/query: main.v1.query.post(query)"]
+  },
+  "apps/web/features/discover/api.ts": {
+    "sha256": "3f2e91cec593ae5430eff82231ba337b07459acca639cb544bf65144e1d75a85",
+    "reason": "resources forwards its ResourceQuery unchanged; Main's resource-list branch uses publicWorkRead.",
+    "dependencies": { "services/main/src/routes/query.ts": "eb4658c5fd05483242fee231459a828ff8365365987c7ab8fba7a7904d950cfa" },
+    "reads": ["POST /v1/query: contract.v1.query.post(query, { headers })"]
+  },
+  "apps/web/features/home/followed-concept-feed.ts": {
+    "sha256": "6f904a2842c96b6c736f498bb6f5b11d68beaef307ea77c38798bfcba4833320",
+    "reason": "conceptFeedQuery selects followed-concept-feed, whose admitted template scope is public; executeTemplate uses publicWorkRead.",
+    "dependencies": { "services/main/src/modules/query/template-read.ts": "c3fda121ce7bc3b6d6ba7200e824160929585b094304b856d065c0494d9e7c4e", "services/main/src/modules/query/templates/followed-concept-feed.schema.ts": "d37f235ae18a62d247cc9ac910769a0d9ac3ddb26a09898cdcb259e6416ed788" },
+    "reads": ["POST /v1/query: main.v1.query.post(query)"]
+  },
+  "apps/web/features/manage/commands.ts": {
+    "sha256": "da2d20347699f05ad54400a311ee3bdc6d774609fee1be004d2a2fb77a1c9b5b",
+    "reason": "previewRole forwards RoleCommand unchanged, derived from the role-impact body contract requiring actingSubject.",
+    "dependencies": { "apps/web/features/manage/types.ts": "208747ce35764e05942a566a2ae57503c050d5bb59455857415930bd857b68cb" },
+    "reads": ["POST /v1/realms/{realm}/role-impact: main.v1.realms({ realm })['role-impact'].post(command)"]
+  },
+  "apps/web/features/release-filter/read.ts": {
+    "sha256": "36e46f48a86c6eb27dd8dd981d89c6d59556eebee76a9186e6a651e2989f8755",
+    "reason": "Main's release-works Query branch unconditionally uses publicWorkRead; the legacy request schema has no actingSubject.",
+    "dependencies": { "services/main/src/routes/query.ts": "eb4658c5fd05483242fee231459a828ff8365365987c7ab8fba7a7904d950cfa" },
+    "reads": ["POST /v1/query: main.v1.query.post(query, { headers: { 'accept-language': locale } })"]
+  },
+  "apps/web/features/search/read.ts": {
+    "sha256": "4c0faaaef7b8c0a14b01695bfdcf6528dbb05067bac7f3926f553e210dcff4d7",
+    "reason": "searchRequest uses the legacy filter-document-v1 phrase schema; Main uses the public search owner and bearer-person mutes, without an acting Agent input.",
+    "dependencies": { "services/main/src/routes/query.ts": "eb4658c5fd05483242fee231459a828ff8365365987c7ab8fba7a7904d950cfa" },
+    "reads": ["POST /v1/query: clients.search.v1.query.post(searchRequest(state, options.continuation))"]
+  },
+  "apps/web/app/[locale]/manage/z/[space]/realm/page.tsx": {
+    "sha256": "21826e5cdb92f21493b9b7ba5408916f5eea2e7b5d3a6654ebdaa8909e9693c5",
+    "reason": "manager() supplies mainApiWithToken(undefined) as anonymous (features/manage/server.ts).",
+    "dependencies": { "apps/web/features/manage/server.ts": "23667b6965493abb71c3721d95acc87dd8f62888287edca6eee5f8fa9b81a0ff" },
+    "reads": ["GET /v1/realms/{realm}: anonymous.v1.realms({ realm: realm.slice(-36) }).get({ query: {} })"]
+  },
+  "apps/web/features/discover/read.ts": {
+    "sha256": "29508f25536550d99d93003419f7a228668a5fa20e4fd697d9ad9244394194b9",
+    "reason": "Discovery forwards Main's DiscoveryQuery unchanged; the sole Realm-header caller (concept/read.ts) passes mainApiWithToken(undefined).",
+    "dependencies": { "apps/web/features/concept/read.ts": "91917bc50332b29f7e1c7913e3d583ca52798cac3df9bec25df382cd49875b9b" },
+    "reads": ["GET /v1/realms/{realm}: main.v1.realms({ realm }).get({ query: {} })", "GET /v1/works: main.v1.works.get({ query })"]
+  },
+  "apps/web/features/feed/api.ts": {
+    "sha256": "4f014ca11c96dea551ab63ede6d8a7e6c7cce1682071a34319724d29ace39de2",
+    "reason": "page forwards FeedQuery; head forwards its interface input, including actingSubject. These adapters do not reconstruct either query.",
+    "reads": ["GET /v1/feed: main.v1.feed.get({ query })", "GET /v1/feed/head: main.v1.feed.head.get({ query: input })"]
+  },
+  "apps/web/features/home/server.ts": {
+    "sha256": "865e88d7a165cbcc96f05b3bda37fc9606bb6c1d216d86e10397cb7b8d4e9f83",
+    "reason": "readFeedPage forwards FeedQuery; client is reader.main only when query.actingSubject exists, otherwise reader.anonymous.",
+    "reads": ["GET /v1/feed: client.v1.feed.get({ query })"]
+  },
+  "apps/web/features/manage/read.ts": {
+    "sha256": "30604dde1e5c5050b1b2027108d7415b8e4a17f30c7015f75aa1d045447dcbce",
+    "reason": "readWorks forwards its query parameter, whose local signature requires actingSubject: string.",
+    "reads": ["GET /v1/works/{id}: main.v1.works({ id: uuidOf(iri) }).get({ query })"]
+  },
+  "apps/web/features/manage/settings-api.ts": {
+    "sha256": "a0a39d576c5f6d997542a2b695dc5585d10fa6841d0bfe10a1f523b4e0a9d5d6",
+    "reason": "Dormant helper: its only caller is tests/g-947-access.test.ts. The guard verifies that production has no import or invocation of this export.",
+    "unusedExport": "readPrivateSpaceJoinPage",
+    "reads": ["GET /v1/realms/{realm}/join-page: main.v1.realms({ realm: uuidOf(realm) })['join-page'].get({ query: {} })"]
+  },
+  "apps/web/features/onboarding/handle-field.tsx": {
+    "sha256": "4845824bf22b096bb8ded4062c82c0bb1c0cee1c22efdd518abf13bd3f83d7a0",
+    "reason": "Availability for scope agent requires no identity; withAliasAvailabilityAuthority requires an actor only for scope zone (modules/address/write.ts).",
+    "reads": ["GET /v1/addresses/availability: browserMainApi().v1.addresses.availability.get({ query: { scope: 'agent', alias: handle }, fetch: { signal, cache: 'no-store' }, })"]
+  },
+  "apps/web/features/shell/communities-read.ts": {
+    "sha256": "8af51d92346432aab0efcea6c2f60a515caeadd0039b1c4ff90a383c7327d3c9",
+    "reason": "shellReader() constructs reader.anonymous with mainApiWithToken(undefined).",
+    "reads": ["GET /v1/realms/{realm}: reader.anonymous.v1.realms({ realm: uuidOf(item.realm) }).get()", "GET /v1/realms/{realm}: reader.anonymous.v1.realms({ realm: uuidOf(zone.realm) }).get()"]
+  },
+  "apps/web/features/shell/notifications/invitations-read.ts": {
+    "sha256": "b1b1c299c29dd99ad8012c83974141a4896a2e09eeb1a950f2eabf21adff616f",
+    "reason": "The sole caller (app/[locale]/notifications/page.tsx) passes shellReader().anonymous for these name reads.",
+    "dependencies": {
+      "apps/web/app/[locale]/notifications/page.tsx": "f7ec161bcfee03755ee52f038e61f069a4dd06df8dea628dc486668b2e929930",
+      "apps/web/features/shell/communities-read.ts": "8af51d92346432aab0efcea6c2f60a515caeadd0039b1c4ff90a383c7327d3c9"
+    },
+    "reads": ["GET /v1/agents/{id}: anonymous.v1.agents({ id: uuidOf(item.inviter) }).get({ query: {} })", "GET /v1/realms/{realm}: anonymous.v1.realms({ realm: uuidOf(item.realm) }).get({ query: { language } })"]
+  },
+  "apps/web/features/wiki/position-picker.ts": {
+    "sha256": "31cf7884c64e8aedd7112583b51ba43a52945057b269799165f36803a17d0a96",
+    "reason": "The query rest destructure removes work from input and retains input.actingSubject; the request spreads that query unchanged.",
+    "reads": ["GET /v1/reading-positions/{work}: main.v1['reading-positions']({ work: work.slice(-36) }).get({ query: { ...query, // A lookup answers one bounded read and takes no page size. ...(input.around || input.firstSeen ? {} : { limit: input.limit ?? 50 }), }, })"]
+  }
+}
