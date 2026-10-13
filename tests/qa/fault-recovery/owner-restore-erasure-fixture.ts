@@ -1877,12 +1877,13 @@ export function operatorAttempt(fixture: Fixture, copy: Copy, key: string) {
 }
 
 export async function failOuterOutcome(copy: Copy, key: string) {
+  // Model a temporarily unavailable write with PostgreSQL lock_not_available.
   await copy.faultRetained([
     {
       sql: `CREATE FUNCTION relay.g1351_fail_outer_outcome() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
           IF NEW.state = 'reconciled' AND NEW.operation_id = 'owner:reconcile:${key}' THEN
-            RAISE EXCEPTION 'fault: outer restore outcome write' USING ERRCODE = 'XX000';
+            RAISE EXCEPTION 'fault: outer restore outcome write' USING ERRCODE = '55P03';
           END IF;
           RETURN NEW;
         END $$`,
@@ -1907,7 +1908,12 @@ export const FAILED = /Owner reconciliation did not verify the restore \(50[0-9]
 export async function lostOutcome(fixture: Fixture, copy: Copy) {
   const key = randomUUID();
   await failOuterOutcome(copy, key);
-  await expect(operatorAttempt(fixture, copy, key)).rejects.toThrow(FAILED);
+  await expect(operatorAttempt(fixture, copy, key).catch((error: unknown) => {
+    console.info('owner restore erasure outcome write refused', {
+      message: (error instanceof Error ? error.message : String(error)).slice(0, 500),
+    });
+    throw error;
+  })).rejects.toThrow(FAILED);
   await repairOuterOutcome(copy);
   const lost = await outerOperation(copy, key);
   expect(lost).toMatchObject({ state: 'running' });
@@ -1915,6 +1921,10 @@ export async function lostOutcome(fixture: Fixture, copy: Copy) {
   expect(await accessFence(copy)).toEqual([
     { open: true, generation: (BigInt(fixture.generation) + 1n).toString() },
   ]);
+  console.info('owner restore erasure lost outcome retained', {
+    state: lost.state,
+    releases: lost.releases.length,
+  });
   return { key, lost };
 }
 
@@ -1974,10 +1984,11 @@ export async function replicaAccess(copy: Copy, sql: string, values: unknown[] =
   }
 }
 export async function failAccessCommit(copy: Copy) {
+  // The deferred write must roll back as a transient lock-unavailable commit.
   const client = await copy.owners.access.connect();
   try {
     await client.query(`CREATE FUNCTION access.g1351_fail_commit() RETURNS trigger LANGUAGE plpgsql AS $$
-      BEGIN RAISE EXCEPTION 'fault: Access commit' USING ERRCODE = 'XX000'; END $$`);
+      BEGIN RAISE EXCEPTION 'fault: Access commit' USING ERRCODE = '55P03'; END $$`);
     await client.query(`CREATE CONSTRAINT TRIGGER g1351_fail_commit AFTER UPDATE ON access.recovery_fence
       DEFERRABLE INITIALLY DEFERRED FOR EACH ROW WHEN (NEW.open) EXECUTE FUNCTION access.g1351_fail_commit()`);
   } finally {
