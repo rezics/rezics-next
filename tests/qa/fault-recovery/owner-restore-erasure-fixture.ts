@@ -5,10 +5,14 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
   appendFileSync,
+  closeSync,
   cpSync,
   existsSync,
+  fstatSync,
   mkdirSync,
+  openSync,
   readFileSync,
+  readSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
@@ -1398,22 +1402,46 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         'candidate.postgres-startup-recovery',
         async () => {
           port = await freePort();
-          execFileSync(
-            'pg_ctl',
-            [
-              '-D',
-              data,
-              '-l',
-              logFile,
-              '-o',
-              `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
-              '-t',
-              '60',
-              '-w',
-              'start',
-            ],
-            { timeout: 65_000 },
-          );
+          try {
+            execFileSync(
+              'pg_ctl',
+              [
+                '-D',
+                data,
+                '-l',
+                logFile,
+                '-o',
+                `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
+                '-t',
+                '60',
+                '-w',
+                'start',
+              ],
+              { timeout: 65_000 },
+            );
+          } catch (error) {
+            // Final disposal owns the failed copy; keep its refusal outside that custody.
+            try {
+              const fd = openSync(logFile, 'r');
+              let logs: string;
+              try {
+                const size = fstatSync(fd).size;
+                const tail = Buffer.alloc(Math.min(size, 8_000));
+                const bytes = readSync(fd, tail, 0, tail.length, Math.max(0, size - tail.length));
+                logs = tail.subarray(0, bytes).toString('utf8');
+              } finally {
+                closeSync(fd);
+              }
+              for (const [key, secret] of Object.entries(qa.composeEnv)) {
+                if (secret && /(?:PASSWORD|SECRET|TOKEN|KEY)$/.test(key))
+                  logs = logs.replaceAll(secret, '[redacted]');
+              }
+              const evidence = join(artifacts, `copied-postgres-startup-${suffix}-${ordinal}.log`);
+              writeFileSync(evidence, logs.slice(-8_000), { mode: 0o600 });
+              console.error(`copied PostgreSQL startup failed; evidence: ${evidence}\n${logs.slice(-8_000)}`);
+            } catch { /* diagnostics must preserve the startup failure */ }
+            throw error;
+          }
           const restoredPool = (owner: keyof typeof source) => {
             const url = new URL(databases.urls[owner]);
             url.hostname = '127.0.0.1';
