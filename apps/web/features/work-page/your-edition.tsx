@@ -12,7 +12,8 @@ import type { TrackingApi } from '../tracking/api.ts';
 import type { EditionPreference, Editions } from '../tracking/types.ts';
 import type { WorkPageMessages } from './messages.ts';
 
-interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null }
+interface Setup { work: string; api: TrackingApi; preference: EditionPreference | null; editions: Editions | null;
+  failure: 'sign-in' | 'unavailable' | null }
 
 /**
  * The reader's private edition choice for this Work, where it is made: the language and the realization or
@@ -40,7 +41,8 @@ export function YourEdition({ work, signInHref, locale, messages }: {
       if (!current || !subject.applies(owner)) return;
       const preference = saved.ok ? saved.data : null;
       setLanguage(preference?.language ?? locale);
-      setSetup({ work, api, preference, editions: offered.ok ? offered.data : null });
+      setSetup({ work, api, preference, editions: offered.ok ? offered.data : null,
+        failure: saved.ok ? null : saved.failure === 'sign-in' ? 'sign-in' : 'unavailable' });
     });
     return () => { current = false; };
   }, [api, work, locale]);
@@ -48,9 +50,13 @@ export function YourEdition({ work, signInHref, locale, messages }: {
     return <p className="text-muted-foreground text-sm">
       <Link href={signInHref} className="text-primary underline underline-offset-4 hover:no-underline">{t.signInForEdition}</Link></p>;
   }
-  if (!api || !setup || setup.work !== work || setup.api !== api) return null;
+  if (!api) return null;
+  if (!setup || setup.work !== work || setup.api !== api)
+    return <p role="status" aria-busy="true" className="text-muted-foreground text-sm">{t.loadingRegion}</p>;
+  if (setup.failure) return <p role="alert" className="text-muted-foreground text-sm">
+    {setup.failure === 'sign-in' ? t.regionDenied : t.regionUnavailable}</p>;
   const owner = subject.capture();
-  return <div data-your-edition>
+  return <div data-your-edition className="min-w-0 [&_[data-part=value-text]]:min-w-0 [&_[data-part=value-text]]:[overflow-wrap:anywhere]">
     <PreferenceForm key={work} work={work} preference={setup.preference} language={language} editions={setup.editions} api={api}
       locale={locale} t={copyOf(locale)} onLanguage={setLanguage}
       onSaved={preference => {

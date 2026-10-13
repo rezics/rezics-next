@@ -8,6 +8,7 @@ import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
+import { booksEditionReads, settle } from './books-edition-page.read.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen, platformClosed } from '../api/platform-access.ts';
@@ -60,31 +61,7 @@ export async function readingAgent(): Promise<{ signedIn: boolean; actingSubject
 
 export { failureOf };
 
-export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
-
-/**
- * One Main read as a `Loaded` result. Main answers 409 when the graph moved
- * during the read; a read that is not continuing a cursor simply starts
- * again, once, as Main asks. A moved cursor is the reader's to restart.
- */
-export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
-  try {
-    let { data, error } = await call();
-    if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status) };
-    return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch {
-    return { ok: false, failure: 'unavailable' };
-  }
-}
-
-/** These two type pages use JSON null for a visible Work without an owner-specific publication. */
-export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T | null>> {
-  try {
-    const { data, error } = await call();
-    return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
-  } catch { return { ok: false, failure: 'unavailable' }; }
-}
+export { settle, settleNullable, type Answer } from './books-edition-page.read.ts';
 
 /**
  * The survivor a merged Work's address reports in its optional `resolution`, as a Work UUID; null when the
@@ -121,8 +98,7 @@ export const resolveWorkRef = cache(async (ref: WorkRef): Promise<ResolvedRef> =
 });
 
 export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promise<Loaded<WorkHeader>> => {
-  const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).get({ query: { actingSubject } }));
+  return booksEditionReads(await reader()).readWorkHeader(id);
 });
 
 /**
@@ -220,8 +196,7 @@ export async function loadWork(ref: string, locale: UiLocale):
 }
 
 export const readReleases = cache(async (id: string) => {
-  const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } }));
+  return booksEditionReads(await reader()).readReleases(id);
 });
 
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
@@ -423,17 +398,12 @@ export const readStart = cache(async (id: string, work: string, locale: UiLocale
  * (G-835). Nothing is derived here. Signed out, or without an acting Agent, there is nothing to read.
  */
 export const readProgressSummary = cache(async (id: string, language?: string): Promise<Loaded<ProgressSummary>> => {
-  const { main, actingSubject } = await reader();
-  if (!actingSubject) return { ok: false, failure: 'sign-in' };
-  return settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
-    query: { actingSubject, ...(language ? { language } : {}) } }));
+  return booksEditionReads(await reader()).readProgressSummary(id, language);
 });
 
 /** The reader's private edition choice for a Work: a language and optionally one realization or release. */
 export const readEditionPreference = cache(async (id: string): Promise<Loaded<EditionPreference | null>> => {
-  const { main, actingSubject } = await reader();
-  if (!actingSubject) return { ok: false, failure: 'sign-in' };
-  return settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }));
+  return booksEditionReads(await reader()).readEditionPreference(id);
 });
 
 export type ReadStart =

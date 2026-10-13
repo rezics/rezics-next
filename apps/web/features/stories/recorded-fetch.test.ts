@@ -23,7 +23,7 @@ test('a recorded public header with a bare question mark has the same empty quer
   const id = new URL(sample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
   const answer = await main.v1.works({ id }).get({ query: { actingSubject: undefined } });
   expect(answer.error).toBeNull();
-  expect(answer.data).toEqual(sample.answer);
+  expect<unknown>(answer.data).toEqual(sample.answer);
 });
 function replay(record: AnswerRecord, selections: RecordedSelection[], pathPrefix = '') {
   const result = recordedFetch(record, 'visitor', selections, { pathPrefix });

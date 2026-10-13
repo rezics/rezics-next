@@ -6,23 +6,28 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { readEntityProjection, sectionOf } from '../entity-page/read.ts';
+import { workExperience } from '../entity-page/experience.ts';
 import { entityHref, standaloneHrefFor } from '../entity-page/route.ts';
 import { copyOf as entityCopy } from '../entity-page/messages.ts';
 import { DiscussionSection, StatementsSection } from '../entity-page/sections.tsx';
 import Link from '../shell/localized-link.tsx';
 import { SeriesProgressPanel } from '../tracking/series-progress-panel.tsx';
+import { releaseChoiceName } from '../tracking/display.ts';
+import { copyOf as trackingCopy } from '../tracking/messages.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { readParts, readRealizations, readReleases as readReleasePage } from '../work-levels/read.ts';
 import { ConnectionsPreview, PartsPreview } from '../work-levels/previews-server.tsx';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
+import { editionsHref } from '../work-levels/route.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { IdentityStatus, nextAction, NextActionView } from './primary-action.tsx';
 import { ProposeCorrectionSlot } from './correction-slot.tsx';
-import { readEditionPreference, readProgressSummary, readReleases, readStart, readingAgent } from './read.ts';
+import { readEditionPreference, readProgressSummary, readReleases, readStart, readingAgent, readWorkHeader } from './read.ts';
 import { Region } from './region.tsx';
 import { iriOf, workHref, type WorkAt, workRefOf } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
 import { YourEdition } from './your-edition.tsx';
+import { BooksEditionPage } from './books-edition-page.tsx';
 
 // The server halves of the hub sections compose other owners' previews, controls and widgets.
 // Each reads on its own under the caller's Suspense, so one failing leaves the rest of the page.
@@ -57,7 +62,8 @@ export async function Status({ id, locale, messages }: Common & { id: string }) 
   const chosen = preference.ok ? preference.data?.edition : null;
   const release = chosen?.kind === 'release' && releases.ok ? releases.data.items.find(item => item.id === chosen.resource)
     : undefined;
-  return <IdentityStatus progress={progress} preference={preference} editionName={release?.title.value ?? null}
+  return <IdentityStatus progress={progress} preference={preference}
+    editionName={release ? releaseChoiceName(release, locale, trackingCopy(locale)) : null}
     locale={locale} messages={messages} />;
 }
 
@@ -87,6 +93,11 @@ export async function AboutFacts({ id, locale, messages }: Common & { id: string
  * and the edition its parts are read in, so a Work with parts has the section too; one with neither does not.
  */
 export async function Availability({ workRef, id, locale, messages }: Common & { workRef: WorkAt; id: string }) {
+  const [work, projection] = await Promise.all([readWorkHeader(id, locale), readEntityProjection(id)]);
+  if (work.ok && workExperience(projection.ok ? projection.data : null, work.data.types).kind === 'book') {
+    return <BooksEditionPage work={work.data.id} releases={await readReleases(id)} locale={locale} messages={messages}
+      signInHref={signInPath(localizedPath(workHref(workRef), locale))} editionsHref={editionsHref(workRefOf(workRef))} />;
+  }
   const [realizations, releases, parts] = await Promise.all([readRealizations(id), readReleasePage(id),
     readParts(id, { limit: 1 })]);
   const none = (read: { ok: true; data: { items?: unknown[]; parts?: unknown[] } } | { ok: false; failure: string }) =>

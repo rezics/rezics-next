@@ -3,6 +3,7 @@ import { defineMessages, type UiLocale } from '../../i18n/define.ts';
 import type { ReadFailure } from './types.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { editionCatalog } from './messages/editions.ts';
+import { copyOf } from '../work-levels/messages.ts';
 import { Region, RegionFailure } from './region.tsx';
 import { ReleaseCard, type EditionMessages, type ShownRelease } from './release.tsx';
 
@@ -15,9 +16,11 @@ export function EditionsSection({ items, failure, locale, messages }: {
 }) {
   const t = materializeData(editionMessages[locale], { locale });
   if (failure) return <RegionFailure title={t.editions} failure={failure} messages={messages} />;
-  if (!items?.length) return null;
-  return <Region id="work-editions" title={t.editions}>
-    <div className="grid gap-5">{items.map(release => <ReleaseCard key={release.id} release={release} locale={locale}
+  if (!items?.length) return <Region id="work-editions" title={t.editions}>
+    <p className="text-muted-foreground text-sm">{copyOf(locale).noReleasesBody}</p>
+  </Region>;
+  return <Region id="work-editions" title={t.editions} className="grid-cols-1">
+    <div className="grid min-w-0 grid-cols-1 gap-5">{items.map(release => <ReleaseCard key={release.id} release={release} locale={locale}
       messages={t} />)}</div>
   </Region>;
 }

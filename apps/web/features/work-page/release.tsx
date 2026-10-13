@@ -1,5 +1,10 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { formatDate, languageName } from './format.ts';
+import { formatLabel } from '../tracking/display.ts';
+import { copyOf } from '../tracking/messages.ts';
+import { releaseHref } from '../work-levels/route.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
+import Link from '../shell/localized-link.tsx';
 
 export interface EditionMessages {
   kindFormal: string; kindWeb: string; kindFixed: string; kindVirtual: string;
@@ -22,6 +27,7 @@ export interface ShownRelease {
   contentLanguages: string[]; isTranslation: boolean; originalLanguages: string[];
   titleLanguage: string | null; tracklistLanguage: string | null;
   title: { value: string; language: string }; publisher: string | null; publicationYear: number | null;
+  platform?: string | null; editionStatement?: string | null;
   originalUrl: string | null; fixedRelease: string | null;
   /** One entry per covered Work: an omnibus covers several. */
   coverage: ShownCoverage[]; snapshots: ShownSnapshot[];
@@ -51,10 +57,15 @@ export function ReleaseCard({ release, locale, messages: t }: {
     const date = new Date(value);
     return Number.isNaN(date.getTime()) ? value : formatDate(date, locale);
   };
-  return <article className="grid min-w-0 gap-3 border-border/70 border-b pb-5">
+  return <article className="grid min-w-0 grid-cols-1 gap-3 border-border/70 border-b pb-5">
     <div className="grid min-w-0 gap-1">
-      <h3 className="text-base" lang={release.title.language}>{release.title.value}</h3>
-      <p className="text-muted-foreground text-sm">{t[kindLabel[release.kind]]} · {t[statusLabel[release.status]]}
+      <h3 className="break-words text-base" lang={release.title.language}>
+        <Link href={releaseHref(release.id)} className="text-primary underline underline-offset-4">
+          {release.title.value}</Link>
+      </h3>
+      <p className="text-muted-foreground text-sm">{release.kind === 'formal' ? levelsCopy(locale).kindFormal : t[kindLabel[release.kind]]} · {t[statusLabel[release.status]]}
+        {release.platform ? ` · ${formatLabel(release.platform, copyOf(locale))}` : ''}
+        {release.editionStatement && release.editionStatement !== release.platform ? ` · ${release.editionStatement}` : ''}
         {release.publicationYear ? ` · ${release.publicationYear}` : ''}
         {release.publisher ? ` · ${release.publisher}` : ''}</p>
     </div>

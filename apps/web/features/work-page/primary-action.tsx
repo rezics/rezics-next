@@ -81,7 +81,8 @@ export function NextActionView({ action, workRef, locale, messages }: {
  * when Main has nothing to say, which is also the signed-out answer.
  */
 export function IdentityStatus({ progress, preference, editionName, locale, messages }: {
-  progress: Loaded<ProgressSummary> | null; preference: Loaded<EditionPreference | null> | null;
+  progress: { ok: true; data: ProgressSummary } | { ok: false } | null;
+  preference: Loaded<EditionPreference | null> | null;
   /** The name of the chosen realization or release, when Main could name it. */
   editionName: string | null; locale: UiLocale; messages: WorkPageMessages;
 }) {
@@ -106,7 +107,7 @@ export function IdentityStatus({ progress, preference, editionName, locale, mess
     }
   }
   if (!lines.length) return null;
-  return <ul aria-label={t.yourEdition} className="grid gap-0.5 text-muted-foreground text-sm" data-identity-status>
+  return <ul aria-label={t.yourEdition} className="grid min-w-0 gap-0.5 break-words text-muted-foreground text-sm" data-identity-status>
     {lines.map(line => <li key={line}>{line}</li>)}
   </ul>;
 }

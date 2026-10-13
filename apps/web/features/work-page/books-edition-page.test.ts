@@ -7,6 +7,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { mainTrackingApi } from '../tracking/api.ts';
 import type { EditionChoice, Editions } from '../tracking/types.ts';
+import { booksEditionReads } from './books-edition-page.read.ts';
 
 const records = [hub, ambiguous, formats] as AnswerRecord[];
 const disposals: (() => void)[] = [];
@@ -21,10 +22,10 @@ function sample(record: AnswerRecord, persona: AnswerPersona, label: string) {
 function transport(record: AnswerRecord, persona: AnswerPersona, selections: RecordedSelection[], failures: string[] = []) {
   const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
   disposals.push(replay.dispose);
-  const fetcher: typeof fetch = async (input, init) => {
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     try { return await replay.fetcher(input, init); }
     catch (error) { failures.push(String(error)); throw error; }
-  };
+  }) as typeof fetch;
   return browserMainApi('https://recorded.invalid', { fetcher });
 }
 
@@ -38,6 +39,29 @@ function command(record: AnswerRecord, persona: AnswerPersona, label: string) {
 }
 
 for (const record of records) {
+  test(`${record.row}: the server page seam consumes the same recorded Work and public releases`, async () => {
+    const header = sample(record, 'member', 'work-header');
+    const preference = sample(record, 'member', 'own-preference-before');
+    const releases = sample(record, 'member', record === records[0] ? 'availability-releases' : 'release-choices');
+    const main = transport(record, 'member', [
+      { label: header.label, state: 'populated' }, { label: releases.label, state: 'populated' },
+      { label: preference.label, state: 'empty' },
+    ]);
+    const actingSubject = new URL(header.path, 'https://recorded.invalid').searchParams.get('actingSubject')!;
+    const id = new URL(header.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
+    const reads = booksEditionReads({ main, actingSubject });
+    expect<unknown>(await reads.readWorkHeader(id)).toEqual({ ok: true, data: header.answer });
+    expect<unknown>(await reads.readReleases(id)).toEqual({ ok: true, data: releases.answer });
+    expect<unknown>(await reads.readEditionPreference(id)).toEqual({ ok: true, data: preference.answer });
+  });
+
+  test(`${record.row}: the server preference reader retains the recorded visitor refusal`, async () => {
+    const refused = sample(record, 'visitor', 'preference-sign-in');
+    const main = transport(record, 'visitor', [{ label: refused.label, state: 'error' }]);
+    const url = new URL(refused.path, 'https://recorded.invalid');
+    const reads = booksEditionReads({ main, actingSubject: url.searchParams.get('actingSubject')! });
+    expect(await reads.readEditionPreference(url.pathname.split('/').at(-1)!)).toEqual({ ok: false, failure: 'sign-in' });
+  });
   test(`${record.row}: the production reader consumes the recorded offered editions`, async () => {
     const persona = 'member';
     const own = sample(record, persona, 'own-preference-before');
@@ -77,8 +101,8 @@ for (const record of records) {
       const { answer, actingSubject, expectedVersion, choice, work } = command(record, 'member', label);
       const main = transport(record, 'member', [{ label, state: answer.status === 200 ? 'populated' : 'error' }]);
       const result = await mainTrackingApi(actingSubject, () => main).setPreference(work, expectedVersion, choice);
-      if (answer.status === 200) expect(result).toEqual({ ok: true, data: answer.answer });
-      else expect(result).toEqual({ ok: false, failure: 'stale',
+      if (answer.status === 200) expect<unknown>(result).toEqual({ ok: true, data: answer.answer });
+      else expect<unknown>(result).toEqual({ ok: false, failure: 'stale',
         current: (answer.answer as { current: unknown }).current, submitted: choice });
     }
   });
@@ -104,6 +128,8 @@ test('the Work hub progress summary retains the recorded saved edition and conti
     { label: own.label, state: 'populated' }, { label: progress.label, state: 'populated' },
   ]);
   const api = mainTrackingApi(actingSubject, () => main);
-  expect(await api.preference(work)).toEqual({ ok: true, data: own.answer });
-  expect(await api.series(work)).toEqual({ ok: true, data: progress.answer });
+  expect<unknown>(await api.preference(work)).toEqual({ ok: true, data: own.answer });
+  expect<unknown>(await api.series(work)).toEqual({ ok: true, data: progress.answer });
+  const reads = booksEditionReads({ main, actingSubject });
+  expect<unknown>(await reads.readProgressSummary(work.slice(-36))).toEqual({ ok: true, data: progress.answer });
 });
