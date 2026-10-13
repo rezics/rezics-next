@@ -50,6 +50,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 beforeAll(async () => {
   const started = performance.now();
   sessions = await personaSessions();
+  sessions.owner = await readingSession(sessions.owner);
   const owner = sessions.owner;
   const operator = sessions.operator;
   const authority = await answer<{ authorityEpoch: string }>(
@@ -234,19 +235,25 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
   const sessionKey = randomUUID();
   return {
     ...person,
-    main: async (method, path) => {
-      expect(method).toBe('GET');
-      const headers = {
+    main: async (method, path, body, key) => {
+      const headers = new Headers({
         authorization: `Bearer ${await oauth.current(Date.now(), 60_000)}`,
         'x-session-key': sessionKey,
-      };
-      return outcomeResponse((signal) =>
+      });
+      if (body !== undefined) headers.set('content-type', 'application/json');
+      if (key !== undefined || !['GET', 'HEAD'].includes(method))
+        headers.set('idempotency-key', key ?? randomUUID());
+      const request = (signal: AbortSignal) =>
         fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+          method,
           headers,
           redirect: 'manual',
           signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-        }),
-      );
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        });
+      return ['GET', 'HEAD'].includes(method)
+        ? outcomeResponse(request)
+        : request(AbortSignal.timeout(30_000));
     },
   };
 }
