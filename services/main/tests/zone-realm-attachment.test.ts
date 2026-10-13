@@ -20,6 +20,7 @@ const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${Strin
 const zone = id(1), zoneSpace = id(2), navigation = id(3), head = id(4), actor = id(5);
 const sameSpaceRealm = id(10), foreignRealm = id(11), otherRealm = id(13);
 const navigationRoute = navigation;
+const homeDocument = id(6);
 const lit = (value: string) => ({ type: 'literal' as const, value });
 const rows = (bindings: Record<string, ReturnType<typeof lit>>[]) => ({ results: { bindings } });
 
@@ -35,7 +36,7 @@ interface Fixture {
 
 function world(directory: string, fixture: Fixture = {}) {
   const configuration = { format: ZONE_CONFIG_FORMAT, zone, space: zoneSpace, navigation,
-    state: 'active', disclosure: 'public', budget: { timeMs: ZONE_LIMITS.queryBudgetMs, rows: ZONE_LIMITS.queryBudgetRows },
+    homeDocument, state: 'active', disclosure: 'public', budget: { timeMs: ZONE_LIMITS.queryBudgetMs, rows: ZONE_LIMITS.queryBudgetRows },
     queryBlocks: [], model: ZONE_PROFILE, ...(fixture.stored ? { defaultRealm: fixture.stored } : {}),
     ...(fixture.official ? { official: {} } : {}) };
   const manifest = prepareComponent(directory, zone, { configuration, name: 'Site', language: 'en' }, ZONE_PROFILE);
@@ -64,7 +65,7 @@ function world(directory: string, fixture: Fixture = {}) {
       if (query.includes('SELECT ?space ?navigation ?head')) {
         const { realm, attachment: linked } = state.link;
         return rows([{ space: lit(zoneSpace), navigation: lit(navigation), head: lit(head),
-          manifest: lit(`urn:rezics:sha256:${manifest}`), state: lit(RV + 'Active'),
+          homeDocument: lit(homeDocument), manifest: lit(`urn:rezics:sha256:${manifest}`), state: lit(RV + 'Active'),
           disclosure: lit(RV + 'Public'), spaceDisclosure: lit(RV + 'Public'),
           ...(realm ? { realm: lit(realm) } : {}),
           ...(fixture.official ? { official: lit('true') } : {}),
@@ -130,6 +131,9 @@ function world(directory: string, fixture: Fixture = {}) {
     },
   };
   const access = {
+    async withPreservationFence(_resource: string, _admission: string, run: () => Promise<unknown>) {
+      return { held: false, value: await run() };
+    },
     async register(input: { action: string; scope: string; requestDigest: string }) {
       state.admission = { ...input, id: id(20).slice(-36), authorityEpoch: '1' };
       return { ...state.admission, state: 'claimed', dispatchEligible: true, replayed: false } as never;
@@ -322,13 +326,13 @@ test('a withdrawal that lands between a publish\'s read and commit cannot be und
   await inDirectory(async directory => {
     const revision = '11111111-1111-4111-8111-111111111111';
     const content = { ownerPosition: async () => ({ dataEpoch: revision }),
-      owningResourceForRevision: async () => zone,
+      owningResourceForRevision: async () => homeDocument,
       readExactBatch: async () => [{ status: 'available', reference: { variantId: `urn:rezics:variant:${revision}`,
         byteDigest: 'a'.repeat(64) }, body: { document: fromPlainText('Home', 'blocks') } }],
       readPublicationPreparation: async () => null } as unknown as ContentCore;
     const publish = (w: ReturnType<typeof world>) => publishZoneSite(w.env, w.account, w.access, request(), {
       zone, expectedHead: head, actingSubject: actor, idempotencyKey: 'publish', routesRevision: navigationRoute,
-      navigationRevision: navigationRoute, pages: [{ page: zone, variantId: `urn:rezics:variant:${revision}`,
+      navigationRevision: navigationRoute, pages: [{ page: homeDocument, variantId: `urn:rezics:variant:${revision}`,
         revisionId: revision, byteDigest: 'a'.repeat(64), contentEpoch: revision }] }, content);
     const w = attachedWorld(directory);
     w.state.beforeApply = () => { w.state.link = {}; };

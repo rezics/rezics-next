@@ -10,6 +10,7 @@ const graphPosition = { dataEpoch: 'epoch', sequence: '3' };
 
 test('Discovery source advances past an unavailable classified Work without losing later candidates', async () => {
   const session = { position: { dataEpoch: 'epoch', sequence: '9' }, options: {}, deps: {},
+    selection: async (_name: string, read: (probe: WorkReadSession) => Promise<unknown>) => read(session),
     scope: async () => ({ kind: 'global', realm: null }),
     summaries: async (works: string[]) => works.map(reference => ({ reference, status: 'unavailable' })),
     query: async (query: string) => {
@@ -31,6 +32,7 @@ test('Discovery source advances past an unavailable classified Work without losi
 test('global discovery admits publicly selected Works through its source query', async () => {
   const work = id(1);
   const session = { position: { dataEpoch: 'epoch', sequence: '9' }, options: {}, deps: {},
+    selection: async (_name: string, read: (probe: WorkReadSession) => Promise<unknown>) => read(session),
     scope: async () => ({ kind: 'global', realm: null }),
     query: async (query: string) => {
       if (query.includes('SELECT ?epoch ?prior')) return [];

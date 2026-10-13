@@ -1,12 +1,22 @@
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { GovernanceRules } from '../src/modules/governance/rules.ts';
 import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AccessAdmissionRegistry, AdmissionUnavailable } from '../src/modules/access/admission.ts';
-import { DisclosureStore, DisclosureUnavailable } from '../src/modules/disclosure/read.ts';
+import { DisclosureStore, DisclosureUnavailable, resolveDisclosureSelections, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { PersonPreferencesStore } from '../src/modules/preferences/store.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+
+async function establishedTargets(targets: readonly DisclosureTarget[]) {
+  const environment = { lineage: { dataEpoch: 'policy-fixture', routingEpoch: 'policy-fixture' } } as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  return (await resolveDisclosureSelections(environment, targets)).map(selection => ({
+    ...selection.target, ancestry: selection.ancestry,
+  }));
+}
 
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000001034';
 const principal = {
@@ -76,8 +86,8 @@ test('G1034: atomic language/disclosure probes never interpret a missing recover
     'en',
   ]);
   expect(languages.calls).toHaveLength(1);
-  const db = database({ open: true, ordinal: 0, restricted: true, assessments: [] });
-  const target = [{ owner: 'graph' as const, resource: realm, component: 'name' as const }];
+  const db = database({ open: true, ordinal: 0, restricted: true, realmClosed: false, recoveryGeneration: '0', enforcementCut: 'a'.repeat(64), assessments: [] });
+  const target = await establishedTargets([{ owner: 'graph' as const, resource: realm, component: 'name' as const }]);
   expect(await new DisclosureStore(db.pool).read(target, ANONYMOUS_VIEWER, 'summary')).toEqual([
     'tombstone',
   ]);

@@ -1,3 +1,4 @@
+import { fixtureDisclosureCut } from '../../../services/main/tests/support/disclosure-ancestry.ts';
 import { expect, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { FusekiClient, type SparqlResult } from '../../../services/main/src/infrastructure/fuseki.ts';
@@ -49,13 +50,13 @@ function catalogue() {
     expect(sql).toContain('requested AS');
     const targets = JSON.parse(String(args[0])) as (DisclosureTarget & { ordinal: number })[];
     return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true,
-      restricted: false, assessments: [], nameVisible: true })) };
+      restricted: false, realmClosed: false, ...fixtureDisclosureCut, assessments: [], nameVisible: true, publicNameVisible: true })) };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: '.temp',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };
   configureDisclosure(environment, new DisclosureStore(pool));
   const work = { environment, account: { verify: async () => ({ issuer: 'account', subject: 'reader' }) },
-    access: { assertRecoveryOpen: async () => undefined },
+    access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => seed.work },
     platformAccess: { require: async () => { throw new Error('Public catalogue read requested a platform grant'); } },
   } as unknown as MainWorkDependencies;
   return { app: queryRoutes(graph, work), unexpectedQueries, restore: () => transport.mockRestore() };

@@ -92,7 +92,8 @@ test('G-897: target and owning-Work assessments compose before name/media hydrat
   expect(hydrations).toBe(0);
   expect(f.queries()).toBe(1);
   const missing = await readResourceSummaries(f.environment, media, {}, { ...input, resources: [id(99)] });
-  expect(missing.cost).toEqual(hidden.cost);
+  expect(hidden.cost).toEqual({ graphQueries: 3, mediaQueries: 0, accessChecks: 0, accessQueries: 1 });
+  expect(missing.cost).toEqual({ graphQueries: 2, mediaQueries: 0, accessChecks: 0, accessQueries: 1 });
   f.labels.set(id(1), []);
   f.labels.set(id(2), ['r18g']);
   const separate = await readResourceSummaries(f.environment, undefined, {}, input);

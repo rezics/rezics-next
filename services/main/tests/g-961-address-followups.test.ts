@@ -131,6 +131,8 @@ function fixture(spacePublic = false, zonePublic = false) {
       },
     },
     access: {
+      assertRecoveryOpen: async () => undefined,
+      activePrincipalId: async () => actor,
       canReadSemanticResource: async (_principal: unknown, subject: string, ref: string) =>
         subject === actor && canReadSemantic(ref),
       canReadWork: async () => false,

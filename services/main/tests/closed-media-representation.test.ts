@@ -57,7 +57,7 @@ function fixture(duringAwait: (phase: DisclosureAwait) => Promise<void> = async 
       return { decisions: targets.map(target =>
         target.resource === state.directHidden || state.closed && target.ancestry!.parents.some(parent =>
           parent.kind === 'realm' && parent.resource === realm) ? 'hidden' as const : 'visible' as const),
-      anonymousNames: [], fenceBasis: fixtureDisclosureCut };
+      anonymousNames: [], fenceBases: targets.map(() => fixtureDisclosureCut) };
     },
   });
   const read = (withUse: boolean, duringHydration?: () => void | Promise<void>) => readClosedRealmMedia(env,

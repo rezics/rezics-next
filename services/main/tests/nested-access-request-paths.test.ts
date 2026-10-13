@@ -1,3 +1,5 @@
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -14,8 +16,16 @@ import { AccessAdmissionRegistry, type VerifiedPrincipal } from '../src/modules/
 import { controlTransaction } from '../src/modules/access/topology-control.ts';
 import { PostgresReceiptCustodyStore } from '../src/modules/outbox/receipt-custody.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
-import { DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { DisclosureStore, resolveDisclosureSelections, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+
+async function establishedTargets(targets: readonly DisclosureTarget[]) {
+  const environment = { lineage: { dataEpoch: 'policy-fixture', routingEpoch: 'policy-fixture' } } as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  return (await resolveDisclosureSelections(environment, targets)).map(selection => ({
+    ...selection.target, ancestry: selection.ancestry,
+  }));
+}
 
 const root = resolve(import.meta.dir, '../../..');
 const previousMode = nestedPoolCheckoutMode();
@@ -54,7 +64,7 @@ test('an alias read discloses and resolves current holders on the checkout it al
   const subject = holder();
   const decisions = await registry.withRead(async (client) => {
     const visible = await disclosure.read(
-      [{ owner: 'graph', resource: subject, component: 'record' }],
+      await establishedTargets([{ owner: 'graph', resource: subject, component: 'record' }]),
       ANONYMOUS_VIEWER,
       'read',
       client,

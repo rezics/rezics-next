@@ -40,6 +40,7 @@ test('G-971/VIEW08: summary batches report page visibility and addresses while t
     throw new Error(`Unexpected summary query: ${query}`);
   } };
   const deps = {
+    access: { assertRecoveryOpen: async () => undefined },
     environment: { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: '1' },
       addresses: { currents: async (holders: string[]) => { names.push(holders); return new Map(); } } },
     media: { store: { avatarRows: async (targets: string[], context: string) => {
@@ -61,18 +62,18 @@ test('G-971/VIEW08: summary batches report page visibility and addresses while t
   for (const size of [1, 16, 64]) {
     const body = await batch(Array.from({ length: size }, () => work));
     expect(body.cost).toEqual({ graphQueries: size + 3, mediaQueries: 0, accessChecks: 0, accessQueries: 0 });
-    expect(queries).toHaveLength(4);
-    expect(mediaBatches).toEqual([[work]]);
-    expect(names).toEqual([[work]]);
+    expect(queries).toHaveLength(5);
+    expect(mediaBatches).toEqual([[work], [work], [work]]);
+    expect(names).toEqual([[work], [work]]);
     expect(body.summaries).toHaveLength(size);
     expect(body.summaries.every((summary: { status: string }) => summary.status === 'available')).toBe(true);
   }
   const mixed = await batch([work, space, foreign, missing, work]);
   expect(mixed.cost).toEqual({ graphQueries: 8, mediaQueries: 0, accessChecks: 0, accessQueries: 0 });
   expect(mixed.cost.graphQueries).not.toBe(queries.length);
-  expect(queries).toHaveLength(7);
-  expect(mediaBatches).toEqual([[work, space]]);
-  expect(names).toEqual([[work, space]]);
+  expect(queries).toHaveLength(11);
+  expect(mediaBatches).toEqual([[work, space], [work, space], [work, space]]);
+  expect(names).toEqual([[work, space], [work, space]]);
   expect(mixed.summaries).toMatchObject([
     { reference: work, status: 'available', type: 'work' },
     { reference: space, status: 'available', type: 'space',

@@ -94,7 +94,7 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
     objectDirectory: '.temp/realm-platform-closure-owner' } as WorkActivationEnvironment;
   if (input.reader !== false) configureDisclosure(environment, reader);
   reader.decision = target => closed && target.owner === 'graph' && target.resource === realm ? 'hidden' : 'visible';
-  const deps = { environment, access: { realmReadProof: async () => proof || null },
+  const deps = { environment, access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => native(20), realmReadProof: async () => proof || null },
     content: { readExactBatch: async () => { calls.content++; return []; } },
     realmReplyThreads: { assertThreadProjection: async () => { calls.thread++; },
       focusBasis: async () => { calls.thread++; return null; },
@@ -210,7 +210,8 @@ function replyHydrationOwner() {
   owner.session.deps.content = { readExactBatch: async () => { owner.calls.content++; hydrate(); return [exact]; } } as unknown as ContentCore;
   owner.session.deps.profiles = { agentFences: async () => new Map() } as never;
   owner.session.deps.realmReplyThreads = { ...owner.session.deps.realmReplyThreads,
-    focusBasis: async () => ({ thread: reply, active: true }), siblingPage: async () => [],
+    focusBasis: async () => ({ thread: reply, active: true }),
+    siblingOrderRevisions: async (_epoch: string, _realm: string, parents: readonly string[]) => new Map(parents.map(parent => [parent, '1'])), siblingPage: async () => [],
     identities: async () => [node], ancestors: async () => [],
     admitted: async () => new Map([[reply, { revisionId, reviewDecisionId }]]),
     rankedPage: async () => ({ rows: [{ reply, placement, rank_key: 1, time_key: '1' }], revision: '1' }),
@@ -472,18 +473,17 @@ test('narrow-search-restriction: directory classifies search visibility even whe
   expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
 });
 
-test('directory-final-fence: closure during profile hydration omits the item and its count', async () => {
+test('directory-final-fence: closure during profile hydration refuses the selected page', async () => {
   const owner = directoryOwner([realm, native(4001)]);
   owner.session.summaries = async ids => { owner.close(); return ids.map(summary); };
-  const page = await readRealmDirectory(owner.session, { sort: 'members' });
-  expect(page.items.map(item => item.id)).toEqual([native(4001)]);
+  await expect(readRealmDirectory(owner.session, { sort: 'members' })).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('directory-hidden-cut: restoring during hydration cannot revive an opening hidden candidate', async () => {
   const owner = directoryOwner([realm, native(4001)]);
   owner.close();
   owner.session.summaries = async ids => { owner.restore(); return ids.map(summary); };
-  expect((await readRealmDirectory(owner.session, { sort: 'members' })).items.map(item => item.id)).toEqual([native(4001)]);
+  await expect(readRealmDirectory(owner.session, { sort: 'members' })).rejects.toBeInstanceOf(WorkReadMoved);
 });
 
 test('directory-disclosure-unavailable: failed opening and final owner reads return unavailable without a page', async () => {

@@ -72,11 +72,11 @@ function fixture() {
         return { results: { bindings: [{ root: uri(work), main: uri(main), head: uri(head),
           mainHead: uri(id(5)), public: literal(String(state.public)) }] } };
       }
-      if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?public'))
+      if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head'))
         return { results: { bindings: [{ epoch: literal('epoch'), sequence: literal(state.sequence),
           r: uri(work), type: literal('work'), work: uri(work), head: uri(head),
           public: literal(String(state.public)), label: { ...literal(state.title), 'xml:lang': 'en' } }] } };
-      if (query.includes('SELECT ?work ?head ?owningWork ?owningHead'))
+      if (query.includes('SELECT ?work ?head ?nameOwner') || query.includes('SELECT ?work ?head ?owningWork ?owningHead'))
         return { results: { bindings: [{ work: uri(work), head: uri(head),
           owningWork: uri(work), owningHead: uri(head) }] } };
       throw new Error(`Unrecognized credits fixture query: ${query}`);

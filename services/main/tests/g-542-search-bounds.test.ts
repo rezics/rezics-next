@@ -1,3 +1,4 @@
+import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -49,7 +50,7 @@ function fixture(bodyCount: number, fieldCount: number, overlap = true, aliases 
       expect(sql).toContain('WITH fence AS MATERIALIZED');
       const targets = JSON.parse(String(args![0])) as (DisclosureTarget & { ordinal: number })[];
       expect(targets.length).toBeLessThanOrEqual(64);
-      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, restricted, assessments: [] })) };
+      return { rows: targets.map(target => ({ ordinal: target.ordinal, open: true, realmClosed: false, ...fixtureDisclosureCut, restricted, assessments: [] })) };
     }
     throw new Error(`Unexpected disclosure read: ${sql.slice(0, 100)}`);
   } } as unknown as Pool;

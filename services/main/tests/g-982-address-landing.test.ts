@@ -128,6 +128,7 @@ function fixture() {
   } as unknown as WorkActivationEnvironment;
   const work = {
     environment: env,
+    governance: { rules: { publishedRealmRules: async () => [] } },
     account: {
       verify: async (_request: Request, scopes: readonly string[]) => {
         if (state.semanticOnly && scopes.includes('work:read'))
@@ -138,6 +139,7 @@ function fixture() {
     access: { assertRecoveryOpen: async (): Promise<void> => {
       if (state.recoveryOpen !== true) throw new AdmissionUnavailable('Access is held for recovery');
     },
+      activePrincipalId: async () => actor,
       canReadSemanticResource: async () => false, canReadWork: async () => false },
   } as unknown as MainWorkDependencies;
   return { work, env, state, current, queries, app: new Elysia().use(addressRoutes(work)) };
@@ -290,7 +292,8 @@ test('G982: duplicate landing inputs share the read; retirement remains 410', as
   );
   expect(result).toHaveLength(ALIAS_COST.batch);
   expect(result.every((item) => item.status === 'resolved')).toBe(true);
-  expect(f.queries.filter((query) => query.includes('SELECT ?name WHERE'))).toHaveLength(1);
+  // One shared landing read captures its name, then rechecks that selected dependency.
+  expect(f.queries.filter((query) => query.includes('SELECT ?name WHERE'))).toHaveLength(2);
   f.current.state = 'retired';
   expect(
     (

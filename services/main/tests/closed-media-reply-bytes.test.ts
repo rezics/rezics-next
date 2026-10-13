@@ -69,7 +69,7 @@ function fixture() {
       calls.policy.push([...targets]); calls.viewers.push(viewer);
       return { decisions: targets.map(target => state.closed && target.ancestry!.parents.some(parent =>
         parent.kind === 'realm' && parent.resource === realm) ? 'hidden' as const : 'visible' as const),
-      anonymousNames: [], fenceBasis: { recoveryGeneration: state.recoveryGeneration, enforcementCut: state.enforcementCut } };
+      anonymousNames: [], fenceBases: targets.map(() => ({ recoveryGeneration: state.recoveryGeneration, enforcementCut: state.enforcementCut })) };
     },
   });
   const serve = async (reference: ClosedRealmMediaReference | null, validator: string | null = null,
@@ -126,10 +126,9 @@ test('an open read retains bytes and validators, and restoration admits a new re
 for (const cached of [false, true]) {
   test(`closure during hydration discards the response and all validators, cached=${cached}`, async () => {
     const f = fixture();
-    const response = await f.serve({ asset, representation, use }, cached ? etag : null, ANONYMOUS_VIEWER, () => {
+    await expect(f.serve({ asset, representation, use }, cached ? etag : null, ANONYMOUS_VIEWER, () => {
       f.state.closed = true; f.state.enforcementCut = 'b'.repeat(64);
-    });
-    expect(await observable(response)).toEqual(await observable(absent()));
+    })).rejects.toBeInstanceOf(DisclosureUnavailable);
     expect(f.calls.policy).toHaveLength(2);
   });
 }
@@ -152,8 +151,9 @@ test('missing attachment evidence cannot authorize hydration', async () => {
   expect(f.calls.hydrate).toBe(0);
 });
 
-test('missing ancestry or disclosure owners fail unavailable before loading any bytes', async () => {
+test('missing registered ancestry evidence or disclosure owner fails before loading any bytes', async () => {
   const env = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
+  configureDisclosureAncestrySource(env, 'media', { read: async () => [], reread: async () => [] });
   await expect(captureClosedRealmMedia(env, { asset })).rejects.toBeInstanceOf(DisclosureUnavailable);
   const f = fixture(); configureDisclosure(f.env, null);
   await expect(f.serve({ asset })).rejects.toBeInstanceOf(DisclosureUnavailable);

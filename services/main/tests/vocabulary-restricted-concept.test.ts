@@ -16,7 +16,7 @@ import { GLOBAL_CONTEXT, GovernanceStore, type DecisionInput } from '../src/modu
 import { readRealmDirectory } from '../src/modules/realm-directory/read.ts';
 import { readSharedVocabulary } from '../src/modules/realm-directory/vocabulary.ts';
 import { type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
-import { WorkReadInvalid, WorkReadUnavailable, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
+import { WorkReadInvalid, WorkReadMoved, WorkReadUnavailable, WorkReadSession, type ReadRow } from '../src/modules/work/read-session.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -78,6 +78,7 @@ function fixture(concepts: Concept[]) {
   // by GovernanceStore and classified by the real PostgreSQL disclosure owner.
   const graph = { query: async (query: string) => {
     let rows: ReadRow[] = [];
+    if (query.includes('SELECT DISTINCT ?kind ?head')) return { results: { bindings: [{ kind: binding('http://www.w3.org/2004/02/skos/core#Concept') }] } };
     if (query.includes('SELECT ?work ?head')) {
       rows = concepts.filter(value => query.includes(`<${value.id}>`))
         .map(value => ({ work: binding(value.id), head: binding(value.head) }));
@@ -101,15 +102,17 @@ function fixture(concepts: Concept[]) {
     { capture: async (_principal, _actor, target) => ({ ...target, state: 'available',
       representation: concepts.find(value => value.id === target.resource)?.label ?? 'Concept',
       revisionDigest: 'b'.repeat(64), provenance: {} }) },
-    { current: async target => concepts.find(value => value.id === target.resource)?.head ?? null },
+    { current: async target => concepts.find(value => value.id === target.resource)?.head ?? null, realmBasis: async () => null },
     { current: async () => rule },
     ownerModerationEffects({} as ContentModeration, environment));
   configureDisclosure(environment, governance.disclosure);
-  const session = new WorkReadSession({ environment,
+  const freshSession = () => new WorkReadSession({ environment,
     access: { realmDirectory: { page: async () => ({ rows: [], position, sourcePosition: position,
       next: null }), fence: async () => {} } } } as unknown as MainWorkDependencies,
   new Request('http://main.test/v1/shared-vocabulary', { headers: { 'accept-language': 'en' } }),
   { limit: 20, publicViewer: ANONYMOUS_VIEWER }, position);
+
+  let session = freshSession();
 
   async function restrict(value: Concept, component: 'record' | 'name' = 'record') {
     const target = { owner: 'graph' as const, resource: value.id, component,
@@ -136,9 +139,10 @@ function fixture(concepts: Concept[]) {
     // Establish that the real owner sees the committed fence before testing the
     // public adapters, so an adapter red cannot be blamed on fixture admission.
     expect(await governance.disclosure.read([target], ANONYMOUS_VIEWER, 'search')).toEqual(['hidden']);
+    session = freshSession();
     return decision;
   }
-  return { session, restrict, reader: governance.disclosure };
+  return { get session() { return session; }, restrict, reader: governance.disclosure };
 }
 
 test('restricted-concept-unique-label: anonymous vocabulary search omits a committed graph record search fence', async () => {
@@ -281,10 +285,9 @@ test('restricted-concept-vocabulary-final-fence: a committed restriction after o
     if (!installed) { installed = true; await f.restrict(hidden); }
     return decisions;
   };
-  const result = await readSharedVocabulary(f.session, hidden.label);
+  await expect(readSharedVocabulary(f.session, hidden.label)).rejects.toBeInstanceOf(WorkReadMoved);
   expect(installed).toBe(true);
-  expect(result.items).toEqual([]);
-  expect(result.hasMore).toBe(false);
+  expect((await readSharedVocabulary(f.session, hidden.label)).items).toEqual([]);
 });
 
 test('restricted-concept-topic-final-fence: a committed restriction after opening classification withholds the topic label', async () => {
@@ -297,9 +300,9 @@ test('restricted-concept-topic-final-fence: a committed restriction after openin
     if (!installed) { installed = true; await f.restrict(hidden); }
     return decisions;
   };
-  const result = await topicFailure(f.session, hidden.id);
+  await expect(topicFailure(f.session, hidden.id)).rejects.toBeInstanceOf(WorkReadMoved);
   expect(installed).toBe(true);
-  expect(result).toEqual({ error: 'WorkReadInvalid', message: 'Topic is unavailable' });
+  expect(await topicFailure(f.session, hidden.id)).toEqual({ error: 'WorkReadInvalid', message: 'Topic is unavailable' });
 });
 
 test('concept-disclosure-missing-owner: neither public resolver may turn an absent owner into visible labels', async () => {

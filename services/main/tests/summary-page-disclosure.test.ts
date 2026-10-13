@@ -102,6 +102,7 @@ function page(kind: Case) {
     : undefined);
   const session = new WorkReadSession({
     environment,
+    access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => actor },
     follows: {},
     personPreferences: {},
     profiles: {},

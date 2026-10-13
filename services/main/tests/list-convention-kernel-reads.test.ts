@@ -1,3 +1,4 @@
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { expect, test } from 'bun:test';
 import type { MainWorkDependencies } from '../src/app.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
@@ -19,6 +20,8 @@ interface Membership { continuity: string; occurrence: string }
 /** Works and projections the summary and exact-head probes already understand, plus one continuity page. */
 function catalogue(works: Work[], projections: Projection[] = [], memberships: readonly Membership[] = []) {
   const graph = new FusekiClient('http://graph.invalid');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
   const requested = (query: string) => [...(/VALUES \?[rp] \{([^}]*)\}/.exec(query)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
     .map(match => match[1]!);
   graph.query = async (query: string) => {
@@ -76,6 +79,8 @@ test('post identifications are complete only when the page bound does not cut th
   const post = id(7);
   const [first, second] = [id(10), id(11)];
   const graph = new FusekiClient('http://graph.invalid');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
   const works = [first, second];
   graph.query = async (query: string) => {
     const publication = structuredWorkPublicationAnswer(query);

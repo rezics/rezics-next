@@ -12,6 +12,9 @@ function session(times: Map<string, string> | undefined) {
   const calls: string[] = [];
   const read = {
     options: { limit: 20, language: 'zh-hans' }, position: { dataEpoch: 'epoch', sequence: '7' },
+    selection: async (_name: string, select: (probe: WorkReadSession) => Promise<unknown>) => select(read as unknown as WorkReadSession),
+    observeDependency: (_name: string, value: unknown) => JSON.stringify(value),
+    dependency: async (_name: string, get: () => Promise<unknown>) => get(),
     checkDeadline: () => {},
     realm: async () => ({ space: realm, realmRevision: id(5), visibility: 'public', reviewMode: 'open', revision: null }),
     query: async (body: string) => {

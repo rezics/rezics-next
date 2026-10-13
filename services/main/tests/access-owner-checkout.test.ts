@@ -1,3 +1,4 @@
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -21,7 +22,7 @@ import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
 import { GovernanceStore, GovernanceConflict, GovernanceStale, GovernanceUnavailable, GLOBAL_CONTEXT, type DecisionInput } from '../src/modules/governance/store.ts';
 import { ReviewReportOwner } from '../src/modules/governance/report-review.ts';
 import { PublicReports } from '../src/modules/public-report/store.ts';
-import { DisclosureStore } from '../src/modules/disclosure/read.ts';
+import { DisclosureStore, resolveDisclosureSelections, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { SuitabilityStore } from '../src/modules/suitability/store.ts';
 import { RealmVariantRecommendationStore } from '../src/modules/work/realm-variant-recommendation.ts';
@@ -30,6 +31,14 @@ import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts'
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { workRead } from '../src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+
+async function establishedTargets(targets: readonly DisclosureTarget[]) {
+  const environment = { lineage: { dataEpoch: 'policy-fixture', routingEpoch: 'policy-fixture' } } as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  return (await resolveDisclosureSelections(environment, targets)).map(selection => ({
+    ...selection.target, ancestry: selection.ancestry,
+  }));
+}
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -182,7 +191,7 @@ for (const signed of [false, true]) {
   test(`child-exploitation intake re-resolves ${signed ? 'signed' : 'anonymous'} disclosure under its actual owner and rejects moved targets`, async () => {
     const f = await identity();
     const reader = new DisclosureStore(pool);
-    const resource = native();
+    const resource = native(), revision = randomUUID();
     const graph = { query: async () => ({ results: { bindings: [{ epoch: { type: 'literal', value: 'reports' },
       sequence: { type: 'literal', value: '1' } }] } }) } as unknown as FusekiClient;
     const deps = { environment: { fuseki: graph, objectDirectory: '.temp/access-owner-checkout',
@@ -197,9 +206,9 @@ for (const signed of [false, true]) {
       expect(await workRead(deps, request, principal ? { actingSubject: f.actor } : {},
         async session => session.principal?.subject ?? null)).toBe(signed ? f.principal.subject : null);
       const target = { owner: 'content' as const, resource, component: 'body' as const };
-      expect(await reader.read([target], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
+      expect(await reader.read(await establishedTargets([target]), ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
       return { evidence: { ...target, resource: moved && resolves % 2 === 0 ? native() : resource,
-        locator: null, revision: randomUUID(), state: 'available' as const,
+        locator: null, revision, state: 'available' as const,
         representation: 'content-body-v1', revisionDigest: 'b'.repeat(64), provenance: {} }, author: f.actor, realm: null };
     } });
     const input = { profile: 'public-report-v1' as const, category: 'child_exploitation' as const,
@@ -224,7 +233,7 @@ test('recommendation eligibility discloses on its owner client and ineligible ca
     actingSubject: f.actor, idempotencyKey: randomUUID() };
   const eligible = async () => {
     const { client, id } = await heldTransaction();
-    expect(await reader.read([{ owner: 'content', resource: contribution, component: 'body' }], ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
+    expect(await reader.read(await establishedTargets([{ owner: 'content', resource: contribution, component: 'body' }]), ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
     await sameTransaction(client, id);
     return true;
   };
@@ -512,13 +521,14 @@ async function recoveryOwner(owner: RecoveryOwner, graph: ReturnType<typeof inde
   }
   if (owner === 'PublicReports signed' || owner === 'PublicReports anonymous') {
     const signed = owner === 'PublicReports signed';
+    const revision = randomUUID();
     let callback: () => Promise<void>;
     const reports = new PublicReports(pool, { resolve: async () => {
       // The first lookup precedes intake; the preservation re-admission is the
       // callback whose disclosure/index accesses must use the fenced holding.
       if (accessClient(pool)) await callback();
       return { evidence: { owner: 'content', resource: f.work, component: 'body', locator: null,
-        revision: randomUUID(), state: 'available', representation: 'content-body-v1',
+        revision, state: 'available', representation: 'content-body-v1',
         revisionDigest: 'b'.repeat(64), provenance: {} }, author: f.actor, realm: null };
     } });
     return { unavailable: GovernanceUnavailable, run: work => {
@@ -628,7 +638,7 @@ for (const owner of recoveryOwners) {
             expect(closeFinished).toBe(false);
           }
           const reader = new DisclosureStore(pool);
-          expect(await reader.read([{ owner: 'content', resource: native(), component: 'body' }],
+          expect(await reader.read(await establishedTargets([{ owner: 'content', resource: native(), component: 'body' }]),
             ANONYMOUS_VIEWER, 'thread')).toEqual(['visible']);
           // The Realm delivery wrapper itself is graph.command: invoking the
           // fixture command there would recurse into that wrapper. Use its

@@ -62,7 +62,7 @@ function app() {
   const work = {
     environment,
     account: { verify: async () => ({ issuer: 'account', subject: 'reader' }) },
-    access: {},
+    access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => visible },
     media: { store: { avatarRows: async () => {
       hydrations++;
       return { rows: new Map(), generation: { owner: 'content' as const, dataEpoch: 'media', sequence: '9' } };
@@ -106,7 +106,10 @@ test('a hidden summary id and an absent id share one response envelope', async (
     expect(concealed.cost).toEqual(missing.cost);
     expect(concealed.cost.mediaQueries).toBe(0);
     expect(concealed.generation.media).toBeNull();
-    expect(concealed.generation.graph).toBe(missing.generation.graph);
+    expect(concealed.generation.graph).toMatch(/^[a-f0-9]{64}$/);
+    expect(missing.generation.graph).toMatch(/^[a-f0-9]{64}$/);
+    expect((await send([hidden], authorization)).body.generation.graph).toBe(concealed.generation.graph);
+    expect((await send([absent], authorization)).body.generation.graph).toBe(missing.generation.graph);
     expect(concealed.generation.media).toBe(missing.generation.media);
     expect(Object.keys(concealed.generation).sort()).toEqual(Object.keys(missing.generation).sort());
     expect(Object.keys(concealed).sort()).toEqual(Object.keys(missing).sort());

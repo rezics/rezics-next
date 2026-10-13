@@ -1,3 +1,4 @@
+import { fixtureDisclosureCut } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import type { Pool } from 'pg';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
@@ -85,7 +86,7 @@ function summaryFixture(absenceEvidence = true) {
     if (!sql.includes('requested AS')) throw new Error('Unexpected disclosure statement');
     const targets = JSON.parse(String(args[0])) as Array<{ ordinal: number; resource: string; nameOwner?: string | null }>;
     return { rows: targets.map(target => ({
-      ordinal: target.ordinal, open: true, restricted: target.resource === hidden, assessments: [],
+      ordinal: target.ordinal, open: true, realmClosed: false, ...fixtureDisclosureCut, restricted: target.resource === hidden, assessments: [],
       nameVisible: ![agent, privateAgent].includes(target.nameOwner ?? ''),
       publicNameVisible: ![agent, privateAgent].includes(target.nameOwner ?? ''),
     })) };
@@ -167,7 +168,7 @@ for (const adapter of equalityAdapters) {
           const before = fixture.counters();
           const result = await adapter.read(fixture.session, resource);
           if (adapter.name === 'targetSummaries') expect(result).toMatchObject({
-            cost: { graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 1 },
+            cost: { graphQueries: 2, mediaQueries: 0, accessChecks: 0, accessQueries: 1 },
           });
           const response = await fixture.countResponse(Response.json(result));
           const after = fixture.counters();
@@ -267,7 +268,7 @@ test('the page owner mode gives hidden and absent summaries identical cost field
         resources: [resource], context: DEFAULT_MEDIA_CONTEXT, language: null,
         settleNonAgentNameOwners: 'includingAbsent',
       });
-      expect(batch.cost).toEqual({ graphQueries: 1, mediaQueries: 0, accessChecks: 0, accessQueries: 1 });
+      expect(batch.cost).toEqual({ graphQueries: 2, mediaQueries: 0, accessChecks: 0, accessQueries: 1 });
       return fixture.countResponse(Response.json({ summaries: batch.summaries, cost: batch.cost }));
     },
   });
@@ -293,7 +294,7 @@ test('a local summary re-read keeps the same dependency token when name owners s
   };
   const pool = { query: async (sql: string) => {
     if (!sql.includes('requested AS')) throw new Error('Unexpected disclosure statement');
-    return { rows: [{ ordinal: 0, open: true, restricted: false, assessments: [], nameVisible: true, publicNameVisible: true }] };
+    return { rows: [{ ordinal: 0, open: true, realmClosed: false, ...fixtureDisclosureCut, restricted: false, assessments: [], nameVisible: true, publicNameVisible: true }] };
   } } as unknown as Pool;
   const environment = { fuseki: graph, objectDirectory: '.temp/summary-dependency',
     lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } };

@@ -29,7 +29,7 @@ function fixture() {
     if (body.includes('SELECT ?epoch ?sequence')) return { results: { bindings: [{
       epoch: { type: 'literal', value: 'epoch' }, sequence: { type: 'literal', value: String(state.sequence) },
     }] } };
-    if (body.includes('SELECT ?r ?revision ?type') || body.includes('SELECT ?r ?mergedInto')
+    if (body.includes('SELECT DISTINCT ?zone ?head ?typed') || body.includes('SELECT DISTINCT ?resource ?revision') || body.includes('SELECT ?r ?revision ?type') || body.includes('SELECT ?r ?mergedInto')
       || body.includes('SELECT ?author ?realm')) return { results: { bindings: [] } };
     throw new Error(`Unexpected report graph read: ${body}`);
   };

@@ -146,15 +146,15 @@ test('G969/G282: unread progress, completed end and grouped reading order retain
 });
 
 test('G969/G282: unavailable publications, live disclosure and moving composition heads fence continuation links', async () => {
-  const f = await fixture(2);
+  let f = await fixture(2);
   f.unavailable.add(f.records[0]!.target!);
   await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', false))
     .rejects.toBeInstanceOf(WorkReadMissing);
-  f.unavailable.clear();
+  f = await fixture(2);
   f.session.hidden.add(f.records[1]!.target!);
   await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', true))
     .rejects.toBeInstanceOf(WorkReadMissing);
-  f.session.hidden.clear();
+  f = await fixture(2);
   f.move();
   await expect(readChapterContinuation(f.session, work, structure, f.records[0]!.occurrence, 'en', false))
     .rejects.toBeInstanceOf(WorkReadMoved);

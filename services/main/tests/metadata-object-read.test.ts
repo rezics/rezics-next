@@ -1,3 +1,4 @@
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { expect, test } from 'bun:test';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { ObjectUnavailable, type ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
@@ -39,6 +40,8 @@ async function fixture(state: MetadataEditionState | MetadataEditionStateV2, pro
   const manifest = await prepareWorkComponent(objects, edition, retained, profile);
   let graphModel = profile, graphRevision = revision;
   const graph = new FusekiClient('http://metadata.invalid/rezics');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
   graph.query = async query => {
     const publication = structuredWorkPublicationAnswer(query);
     if (publication) return publication;
@@ -117,6 +120,8 @@ test('Strong closure resolves a retired edition command from the owner without g
   const admission = admissionFor(metadataDigest({ work, expectedHead: id(8), state: v1 }));
   const terminal = terminalFor(admission);
   const graph = new FusekiClient('http://metadata.invalid/rezics');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
   graph.query = async () => { throw new Error('Retired receipt must resolve from custody'); };
   graph.commandWithReceipt = async () => { throw new Error('Successful owner result must not be cancelled'); };
   const env = { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, objectDirectory: '.temp/metadata-closure',
@@ -130,6 +135,8 @@ test('Strong closure dispatches cancellation inside the custody lock and reads t
   const admission = admissionFor('a'.repeat(64));
   let locked = false, cancelled = false, guarded = false;
   const graph = new FusekiClient('http://metadata.invalid/rezics');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
   graph.commandWithReceipt = async () => {
     expect(locked).toBe(true); cancelled = true; return { status: 'guard-unmatched' };
   };
@@ -158,6 +165,8 @@ test('Successful edition replay retires after Access records the owner result, a
     const digest = 'contentLanguages' in state ? editionV2Digest({ ...intent, state }) : metadataDigest({ ...intent, state });
     const admission = admissionFor(digest), terminal = terminalFor(admission), steps: string[] = [];
     const graph = new FusekiClient('http://metadata.invalid/rezics');
+  graph.commandHealth = async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) });
     graph.query = async query => ({ boolean: query.includes('restoreHold') });
     const deps = { environment: { fuseki: graph, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
       objectDirectory: '.temp/metadata-retirement', receiptCustody: {

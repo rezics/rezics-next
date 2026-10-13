@@ -48,7 +48,7 @@ function fixture() {
     }));
   const deps = {
     environment,
-    access: { canReadWork: async () => true },
+    access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => actor, canReadWork: async () => true },
     editorialReview: {
       appliedReceipts: async () => {
         receiptReads++;
@@ -101,10 +101,10 @@ test('G929: an admitted empty wiki preserves its journal control and live fence'
     nextCursor: null,
     sourcePosition: { dataEpoch: 'epoch', sequence: '0' },
   });
-  expect(f.counts()).toEqual({ receiptReads: 1, quotationReads: 1 });
+  expect(f.counts()).toEqual({ receiptReads: 2, quotationReads: 2 });
   f.hide();
   await expect(
     readWikiHistory(f.deps, principal, actor, work, result.revisions),
   ).rejects.toBeInstanceOf(WorkReadMissing);
-  expect(f.counts()).toEqual({ receiptReads: 1, quotationReads: 1 });
+  expect(f.counts()).toEqual({ receiptReads: 2, quotationReads: 2 });
 });

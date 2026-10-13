@@ -1,3 +1,4 @@
+import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
@@ -29,7 +30,8 @@ function fixture(options: { tombstone?: boolean; localBasis?: boolean } = {}) {
   const liveRow = { agent: term(live), displayName: term('Continuing author'),
     agentKind: term(`${RV}PersonAgent`), agentHead: term(id(20)) };
   const deps = {
-    environment: { fuseki: { query: async () => ({ results: { bindings: [] } }) } },
+    environment: { fuseki: { commandHealth: async () => ({ moduleVersion: 'fixture', instanceId: 'fixture', publicSearchWriteEpoch: '0', publicSearchWriteActive: false,
+    profiles: Object.fromEntries(Object.entries(profileRegistry).map(([key, profile]) => [key, profile.sha256])) }), query: async () => ({ results: { bindings: [] } }) } },
     profiles: {
       agentFence: async (agent: string) => agent === live ? 'active:1' : null,
       agentFences: async (agents: readonly string[]) => new Map(agents.includes(live) ? [[live, 'active:1']] : []),

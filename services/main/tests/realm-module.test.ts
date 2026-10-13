@@ -32,6 +32,9 @@ function session(options: { cursor?: string; candidate?: boolean; privateRealm?:
       ])
         : new Map();
     } } },
+    selection: async (_name: string, select: (probe: WorkReadSession) => Promise<unknown>) => select(read as unknown as WorkReadSession),
+    observeDependency: (_name: string, value: unknown) => JSON.stringify(value),
+    dependency: async (_name: string, get: () => Promise<unknown>) => get(),
     checkDeadline: () => {},
     realm: async () => {
       calls.push('realm basis');
