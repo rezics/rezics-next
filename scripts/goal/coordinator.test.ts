@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { git } from './ledger.ts';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
   claudeWakeArgs, eventTasks, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer, turnUsage,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
@@ -79,6 +80,50 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('planning completes through the existing event acknowledgement and survives restart without duplicate turns', async () => {
+    const f = fixture();
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program']});
+    try {
+      git(f.dir,['init','-b','main']);
+      git(f.dir,['config','user.email','planning@example.test']);
+      git(f.dir,['config','user.name','Planning fixture']);
+      mkdirSync(join(f.dir,'docs/goals/program'),{recursive:true});
+      writeFileSync(join(f.dir,'docs/goals/program/GOAL.md'),'---\nareas: [scripts/qa/cases/outcomes/**]\n---\n');
+      mkdirSync(join(f.dir,'scripts/qa/cases/outcomes'),{recursive:true});
+      const declare = (name: string) => {
+        writeFileSync(join(f.dir,`scripts/qa/cases/outcomes/${name}.ts`),
+          `import { rowOutcomes, pending } from '../outcome-cells.ts';\nexport default rowOutcomes('program/${name}', {owner: pending('failure')});`);
+        git(f.dir,['add','--','docs','scripts']); git(f.dir,['commit','-m','Pending declaration']);
+      };
+      declare('first');
+      mkdirSync(f.stateDir,{recursive:true});
+      writeFileSync(join(f.stateDir,'ledger.json'),JSON.stringify({tasks:{},goals:{program:{manager:'manager'}}}));
+      const first = f.open({events:goal=>managerEvents(f.stateDir,goal,mail,f.dir),maxTurns:6});
+      first.enroll(f.descriptor); first.step();
+      const attempt = first.status().attempts[0]!;
+      expect(attempt.event_key).toStartWith('planning:');
+      first.step();
+      expect(first.status().attempts).toHaveLength(1);
+      first.close();
+      const restarted = f.open({events:goal=>managerEvents(f.stateDir,goal,mail,f.dir),maxTurns:6});
+      restarted.step();
+      expect(restarted.status().attempts).toHaveLength(1);
+      await runAttempt(f.stateDir,attempt.token);
+      restarted.step(); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(1);
+      expect(restarted.db.query('SELECT handled FROM events WHERE event_key=?').get(attempt.event_key!)).toEqual({handled:1});
+      declare('second'); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(2);
+      const next = restarted.status().attempts[1]!;
+      expect(next.prompt).toContain('program/first');
+      expect(next.prompt).toContain('program/second');
+      declare('third'); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(2);
+      await runAttempt(f.stateDir,next.token); restarted.step(); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(3);
+      expect(restarted.status().attempts[2]!.prompt).toContain('program/third');
+    } finally { mail.close(); f.cleanup(); }
+  });
   test('mail acknowledged during a cut turn still receives its one required cut retry', async () => {
     const f = fixture();
     try {
@@ -1289,7 +1334,9 @@ describe('independent tmux launcher', () => {
       writeFileSync(release,'finish');
       await waitFor(()=>windowTurns(f.stateDir)[0]!.phase === 'done');
       expect(windowTurns(f.stateDir)[0]!.code).toBe(0);
-      expect(reconcileWindows(f.stateDir,{tasks:{}}).removed).toEqual([turnWindowName(turn)]);
+      // The launcher's completion cleanup can remove the view before reconciliation.
+      expect(reconcileWindows(f.stateDir,{tasks:{}}).error).toBeUndefined();
+      expect(goalWindows(termspacesSession()!).map(window=>window.name)).not.toContain(turnWindowName(turn));
       expect(readFileSync(join(f.stateDir,'manager-runs',turn.token,'output.jsonl'),'utf8')).toContain('Decided');
     } finally { f.cleanup(); }
   },15_000);

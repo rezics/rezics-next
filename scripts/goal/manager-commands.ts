@@ -10,6 +10,7 @@ import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
 import { ensureTermspacesSession, termspacesTarget, reconcileWindows } from './windows.ts';
 import { startGoal } from './tasks.ts';
+import { planningEvent } from './planning.ts';
 
 /** The override confines disposable mail/pump trials to their own ledger and local state. */
 export function eventStateDirectory(): string {
@@ -58,7 +59,7 @@ export function mailCommand(args: string[], options: {stateDir: string; goals: s
     throw new Error('mail needs send <goal> --file <path> --key <retry-key> [--deadline <minutes>] | inbox [goal] | ack <id> [--goal <goal>]');
   } finally { store.close(); }
 }
-export function managerEvents(directory: string, goal: string, mail: GoalMailStore): WakeEvent[] {
+export function managerEvents(directory: string, goal: string, mail: GoalMailStore, repo = root): WakeEvent[] {
   const body = (message: ReturnType<GoalMailStore['pending']>[number]) =>
     `From: ${message.sender ?? 'unknown (historical mail)'}\nDeadline: ${message.deadlineAt ?? 'none'}\n${message.body}`;
   const events: WakeEvent[] = mail.pending(goal).map(message => ({key:message.id,body:body(message)}));
@@ -66,13 +67,16 @@ export function managerEvents(directory: string, goal: string, mail: GoalMailSto
     if (message.overdueAt !== null) events.push({key:`mail:overdue:${message.id}:${goal}`,
       body:`Mail ${message.id} is overdue and remains unacknowledged. This is its one deadline wake.\n${body(message)}`});
   }
-  for (const task of Object.values(eventLedger(directory).tasks)) {
+  const ledger = eventLedger(directory);
+  for (const task of Object.values(ledger.tasks)) {
     if (task.goal !== goal || ['verified', 'cancelled'].includes(task.state) || !task.attempts.length) continue;
     const attempt = lastAttempt(task);
     if (task.state === 'running' && running(task)) continue;
     if (task.settlement?.attempt !== attempt.n || !task.settlement.settledAt) continue;
     events.push({key:`task:${task.id}:${attempt.n}`,body:task.settlement.reason ?? `${task.id}: attempt ${attempt.n} settled`});
   }
+  const planning = planningEvent(directory, goal, ledger, repo);
+  if (planning) events.push(planning);
   return events;
 }
 export function coordinatorEnrollmentOptions(args: string[]): {
