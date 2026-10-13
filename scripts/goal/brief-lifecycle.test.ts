@@ -123,6 +123,20 @@ function documentationLinks(repo: ReturnType<typeof repository>) {
 }
 
 describe('brief archive links', () => {
+  test('indented code examples remain source text', () => {
+    const repo = repository();
+    try {
+      const task = closedBrief(repo);
+      const text = '# State\n\n    [example](tasks/G-001.md)\n';
+      repo.write('docs/goals/alpha/state.md', text);
+      repo.git('add', 'docs'); repo.git('commit', '-qm', 'Show a code example');
+      const result = repo.run(['close', task.id, 'verified']);
+      expect(result.status, result.stderr).toBe(0);
+      expect(existsSync(task.brief)).toBe(false);
+      expect(readFileSync(join(repo.dir, 'docs/goals/alpha/state.md'), 'utf8')).toBe(text);
+    } finally { repo.cleanup(); }
+  });
+
   test('reference links and multiline destinations become text, including links in a kept brief', () => {
     const repo = repository();
     try {

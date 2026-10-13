@@ -315,14 +315,20 @@ function withoutBriefLinks(repo: string, source: string, text: string, briefs: R
   // Fences are block syntax; keep whole prose runs so a link or code span can cross a line.
   const runs: { prose: boolean; text: string }[] = [];
   let fence: string | undefined;
+  let indented = false;
+  let previousBlank = true;
   for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
-    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
-    const prose = !fence && !marker;
+    const blank = /^\s*$/.test(line);
+    const indentation = /^(?: {4}|\t)/.test(line);
+    if (!fence) indented = indented ? indentation || blank : previousBlank && indentation;
+    const marker = !indented ? /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1] : undefined;
+    const prose = !fence && !marker && !indented;
     if (marker && !fence) fence = marker;
     else if (marker && fence && marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
     const last = runs.at(-1);
     if (last?.prose === prose) last.text += line;
     else runs.push({ prose, text: line });
+    previousBlank = blank;
   }
   const references = new Set<string>();
   const referenceKey = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -369,7 +375,7 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
   // One search for every candidate: the cost follows the tree once, not once per brief.
   const citations = treeMentions(root, candidates.map(item => item.relativePath), { exclude: [`${GOALS_DIR}/**`, 'scripts/goal/**'] });
   const documents = candidates.length ? git(root, ['ls-files', '-z', '--', '*.md']).split('\0').filter(Boolean)
-    .filter(path => !path.startsWith('scripts/goal/'))
+    .filter(path => !path.startsWith('scripts/goal/') && existsSync(join(root, path)))
     .map(path => ({ path, text: readFileSync(join(root, path), 'utf8') })) : [];
   // Relative Markdown destinations outside the Goal tree can cite the same brief without spelling its root path.
   for (const document of documents.filter(document => !document.path.startsWith(`${GOALS_DIR}/`))) {
