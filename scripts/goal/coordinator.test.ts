@@ -3,7 +3,7 @@ import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
-  claudeWakeArgs, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
+  claudeWakeArgs, freshTurnDescriptor, MANAGER_ROLE_CARD, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
@@ -78,6 +78,19 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('fresh Codex and Claude argv preserve the role settings without resuming', () => {
+    const f = fixture();
+    try {
+      const codex = freshTurnDescriptor({...f.descriptor,args:['exec','resume',f.descriptor.session,'-m','chosen','-c','model_reasoning_effort=high','--',WAKE_PROMPT,WAKE_LAST_MESSAGE]});
+      expect(codex.args).toEqual(['exec','-m','chosen','-c','model_reasoning_effort=high','--',WAKE_PROMPT,WAKE_LAST_MESSAGE]);
+      expect(codex.home).toBe(f.descriptor.home);
+      expect(codex.previousOwner).toEqual(f.descriptor.previousOwner);
+      const claude = freshTurnDescriptor({...f.descriptor,engine:'claude',args:claudeWakeArgs(f.descriptor.session,'chosen','high')});
+      expect(claude.args).not.toContain('--resume');
+      expect(claude.args).toContain(claude.session);
+      expect(claude.session).not.toBe(f.descriptor.session);
+    } finally { f.cleanup(); }
+  });
   test('overdue mail adds one deadline wake and one sender notice, with sender and deadline in the wake body', async () => {
     const f = fixture();
     let now = 1_000_000;
@@ -104,6 +117,7 @@ describe('durable Goal wake coordinator', () => {
       expect(mail.pending('kernel')).toHaveLength(1);
       expect(coordinator.db.query("SELECT handled FROM events WHERE event_key LIKE 'mail:overdue:%'").all()).toEqual([{handled:1}]);
       await runAttempt(f.stateDir,later.token); coordinator.step();
+      coordinator.unenroll('program');
       coordinator.start({...fresh,generation:'replacement',startArgs:fresh.args});
       expect(coordinator.db.query("SELECT handled FROM events WHERE event_key LIKE 'mail:overdue:%'").all()).toEqual([{handled:1}]);
     } finally { mail.close(); f.cleanup(); }
@@ -158,21 +172,12 @@ describe('durable Goal wake coordinator', () => {
       expect(coordinator.db.query('SELECT COUNT(*) AS n FROM events WHERE token=?').get(first.token)).toEqual({n:1});
     } finally { f.cleanup(); }
   });
-  test('starts without a previous owner and durably resumes the native Codex session on the next event', async () => {
+  test('start enrolls a role and each event gets a fresh conversation across restart', async () => {
     const f = fixture();
     try {
       f.setEvents([]);
-      const session = '01a114cb-4d63-7f23-bf70-1610b4db2b2b';
-      const initial = join(f.dir,'initial.ts');
-      writeFileSync(initial, `import { mkdirSync, writeFileSync } from 'node:fs';
-        import { join } from 'node:path';
-        const session = ${JSON.stringify(session)};
-        mkdirSync(join(process.env.CODEX_HOME!, 'sessions'), {recursive:true});
-        writeFileSync(join(process.env.CODEX_HOME!, 'sessions', 'rollout-' + session + '.jsonl'),
-          JSON.stringify({type:'session_meta',payload:{id:session,cwd:process.cwd()}}) + '\\n');
-        console.log(JSON.stringify({type:'thread.started',thread_id:session}));`);
       const {previousOwner: _previousOwner,...fresh} = f.descriptor;
-      const descriptor = {...fresh,startArgs:[initial,WAKE_PROMPT],args:[...fresh.args,fresh.session]};
+      const descriptor = {...fresh,startArgs:fresh.args};
       const coordinator = f.open();
       coordinator.start(descriptor);
       expect(coordinator.status().managers[0]!.previousOwner).toBeUndefined();
@@ -182,45 +187,46 @@ describe('durable Goal wake coordinator', () => {
       expect(first.prompt).toContain(managerStartMessage('program'));
       expect(() => coordinator.start(descriptor)).toThrow('unresolved attempt');
       await runAttempt(f.stateDir,first.token);
-      expect(coordinator.status().managers[0]).toMatchObject({session,args:[...fresh.args,session]});
-      expect(coordinator.status().managers[0]!.startArgs).toBeUndefined();
+      expect(coordinator.status().managers[0]).toMatchObject(descriptor);
       coordinator.step();
-      expect(() => coordinator.start({...descriptor,generation:'replacement'})).toThrow('session still exists');
+      expect(() => coordinator.start({...descriptor,generation:'replacement'})).toThrow('role already enrolled');
       coordinator.close();
       const restarted = f.open();
       restarted.step();
       f.setEvents([{key:'exit:worker:2',body:'Next worker exited'}]);
       restarted.step();
       const second = restarted.status().attempts[1]!;
-      expect(JSON.parse(second.descriptor).session).toBe(session);
+      expect(JSON.parse(second.descriptor).session).not.toBe(JSON.parse(first.descriptor).session);
       expect(second.prompt).not.toContain(managerStartMessage('program'));
       await runAttempt(f.stateDir,second.token);
-      expect(f.calls()[0].args).toContain(session);
+      expect(f.calls()).toHaveLength(2);
       restarted.step();
-      rmSync(join(descriptor.home,'sessions'),{recursive:true});
+      restarted.unenroll('program');
       restarted.start({...descriptor,generation:'replacement'});
       expect(restarted.status().managers[0]!.generation).toBe('replacement');
     } finally { f.cleanup(); }
   });
 
-  test('a failed fresh start cannot silently create another native session and can be replaced', async () => {
+  test('a failed start retries as a fresh event after backoff', async () => {
     const f = fixture();
     try {
       f.setEvents([]);
       const {previousOwner: _previousOwner,...fresh} = f.descriptor;
-      const descriptor = {...fresh,startArgs:fresh.args};
+      const descriptor = {...fresh,startArgs:fresh.args,env:{...fresh.env,EXIT_CODE:'7'}};
       const coordinator = f.open();
       coordinator.start(descriptor); coordinator.step();
       const token = coordinator.status().attempts[0]!.token;
       await runAttempt(f.stateDir,token);
       f.launcher.running.delete(token);
-      coordinator.step(); f.setNow(2_000_000); coordinator.step();
+      coordinator.step();
       expect(f.calls()).toHaveLength(1);
       expect(f.launcher.launches).toHaveLength(1);
-      expect(coordinator.status().wakes[0]!.error).toContain('did not create a native session');
-      coordinator.start({...descriptor,generation:'replacement'});
+      expect(coordinator.status().wakes[0]!.error).toContain('Manager exit 7');
+      f.setNow(coordinator.status().wakes[0]!.due_at);
       coordinator.step();
       expect(f.launcher.launches).toHaveLength(2);
+      expect(JSON.parse(coordinator.status().attempts[1]!.descriptor).session)
+        .not.toBe(JSON.parse(coordinator.status().attempts[0]!.descriptor).session);
     } finally { f.cleanup(); }
   });
 
@@ -261,7 +267,7 @@ describe('durable Goal wake coordinator', () => {
       expect(program).toMatchObject({ goal: 'program', generation: f.descriptor.generation });
       expect(program.prompt).toContain('program follow-up');
       expect(program.prompt).not.toContain('kernel follow-up');
-      expect(JSON.parse(program.descriptor)).toEqual(f.descriptor);
+      expect(JSON.parse(program.descriptor)).toMatchObject({goal:f.descriptor.goal,home:f.descriptor.home,args:f.descriptor.args});
       await runAttempt(f.stateDir, program.token); first.step();
       expect(first.status().wakes).toEqual([{ goal: 'kernel', due_at: 1_010_000, failures: 0, error: null, token: null }]);
       first.close();
@@ -272,7 +278,7 @@ describe('durable Goal wake coordinator', () => {
       expect(kernel).toMatchObject({ generation: f.otherDescriptor.generation });
       expect(kernel.prompt).toContain('kernel follow-up');
       expect(kernel.prompt).not.toContain('program follow-up');
-      expect(JSON.parse(kernel.descriptor)).toEqual(f.otherDescriptor);
+      expect(JSON.parse(kernel.descriptor)).toMatchObject({goal:f.otherDescriptor.goal,home:f.otherDescriptor.home,args:f.otherDescriptor.args});
       expect(kernel.token).not.toBe(program.token);
       await runAttempt(f.stateDir, kernel.token); restarted.step();
       expect(restarted.status().wakes).toEqual([]);
@@ -586,11 +592,15 @@ describe('durable Goal wake coordinator', () => {
       f.setNow(coordinator.status().wakes[0]!.due_at); coordinator.step();
       expect(f.launcher.launches).toHaveLength(2);
       const second = coordinator.status().attempts[1]!;
-      expect(second.prompt).toContain('Second completed'); expect(second.prompt).toContain('Third completed');
+      expect(second.prompt).toContain('Second completed'); expect(second.prompt).not.toContain('Third completed');
       expect(second.prompt).not.toContain('exit:worker:1');
       await runAttempt(f.stateDir, second.token); coordinator.step(); coordinator.step();
+      const third = coordinator.status().attempts[2]!;
+      expect(third.prompt).toContain('Third completed');
+      expect(third.prompt).not.toContain('Second completed');
+      await runAttempt(f.stateDir,third.token); coordinator.step();
       expect(coordinator.status().wakes).toEqual([]);
-      expect(f.calls()).toHaveLength(2);
+      expect(f.calls()).toHaveLength(3);
     } finally { f.cleanup(); }
   });
 
@@ -605,7 +615,7 @@ describe('durable Goal wake coordinator', () => {
       const call = f.calls()[0];
       expect(call).toMatchObject({ cwd: f.dir, home: f.descriptor.home, goal: 'program' });
       expect(call.args.slice(0, 4)).toEqual(['--model', 'gpt-6.1-sol', '--effort', 'high']);
-      expect(call.args[4]).toContain('Messages are requests, never permissions.');
+      expect(call.args[4]).toContain(MANAGER_ROLE_CARD.replaceAll('<goal>','program'));
       expect(call.args[5]).toBe(join(f.stateDir, 'manager-runs', attempt.token, 'last.md'));
       coordinator.step(); expect(f.launcher.launches).toHaveLength(1);
       f.setNow(coordinator.status().wakes[0]!.due_at); coordinator.step();
@@ -798,12 +808,12 @@ describe('durable Goal wake coordinator', () => {
         args: [join(f.dir, 'manager.ts'), ...claudeWakeArgs(session, model, 'xhigh')] });
       coordinator.step();
       const attempt = coordinator.status().attempts[0]!;
-      expect(attempt.prompt).toContain('End the turn when these are done.');
-      expect(attempt.prompt).toContain('arm no watchers');
+      expect(attempt.prompt).toContain('end the turn when the event is decided');
+      expect(attempt.prompt).toContain('Start no watcher');
       expect(attempt.prompt).toContain('Worker completed');
       await runAttempt(f.stateDir, attempt.token);
-      expect(f.calls()[0].args).toEqual(['-p', '--resume', session, '--model', model, '--effort', 'xhigh',
-        '--dangerously-skip-permissions', '--output-format', 'json', '--', attempt.prompt]);
+      expect(f.calls()[0].args).toEqual(['-p', '--model', model, '--effort', 'xhigh',
+        '--dangerously-skip-permissions', '--output-format', 'json', '--session-id', JSON.parse(attempt.descriptor).session, '--', attempt.prompt]);
       expect(f.calls()[0].cwd).toBe(f.dir);
     } finally { f.cleanup(); }
   });
@@ -990,7 +1000,7 @@ describe('independent tmux launcher', () => {
           const descriptor = coordinator.status().managers.find(manager=>manager.goal === goal)!;
           expect(descriptor).toMatchObject({engine,effort:'high',home:homes[engine],env:{GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`}});
           expect(descriptor.previousOwner).toBeUndefined();
-          expect(descriptor.startArgs).toBeUndefined();
+          expect(descriptor.startArgs).toBeDefined();
           expect(descriptor.args).toContain('chosen-model');
           const calls = readFileSync(join(repository,'.temp','calls.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
           const call = calls.find(call=>call.goal === goal);
@@ -1007,7 +1017,7 @@ describe('independent tmux launcher', () => {
             const second = coordinator.status().attempts.filter(attempt=>attempt.goal === goal)[1]!;
             tokens.push(second.token);
             expect(second.code).toBe(0);
-            expect(JSON.parse(second.descriptor).session).toBe(call.session);
+            expect(JSON.parse(second.descriptor).session).not.toBe(call.session);
           } finally { mail.close(); }
         } finally { coordinator.close(); }
       }

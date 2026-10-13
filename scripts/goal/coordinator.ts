@@ -115,6 +115,22 @@ export interface LaunchDescriptor {
 }
 export const WAKE_PROMPT = '__GOAL_WAKE_PROMPT__';
 export const WAKE_LAST_MESSAGE = '__GOAL_WAKE_LAST_MESSAGE__';
+export const MANAGER_ROLE_CARD = "You are the manager of Goal <goal> for one event, in a fresh session; other turns of this Goal may run beside you. Read docs/goals/<goal>/state.md, then the event below and only what it points to. Decide it under the manager charter (docs/goals/manager.md; read it only for a rule the event needs). Write a decision into the brief it concerns. Edit state.md only when the event is `checkpoint`. Acknowledge the mail you were given. Start no watcher and wait on nothing: end the turn when the event is decided.";
+
+/** Keep the enrolled account, model and effort, but never its conversation. */
+export function freshTurnDescriptor(role: LaunchDescriptor): LaunchDescriptor {
+  const session = randomUUID();
+  const args = [...(role.startArgs ?? role.args)];
+  if (role.engine === 'claude') {
+    const resume = args.indexOf('--resume');
+    if (resume !== -1) args.splice(resume, 2);
+    const id = args.indexOf('--session-id');
+    if (id !== -1) args[id + 1] = session;
+    else args.splice(args.indexOf('--') === -1 ? args.length : args.indexOf('--'), 0, '--session-id', session);
+  } else if (args[0] === 'exec' && args[1] === 'resume') args.splice(1, 2);
+  const {startArgs: _startArgs, ...descriptor} = role;
+  return {...descriptor, session, args};
+}
 
 export function managerStartMessage(goal: string): string {
   return `You are the REZICS manager of Goal ${goal}. Read docs/goals/${goal}/GOAL.md, its
@@ -295,7 +311,7 @@ export class GoalCoordinator {
     }
     const owner = this.sessionOwner(prior);
     if (owner) throw new Error(owner);
-    if (managerSessionExists(prior)) throw new Error('Manager session still exists; use the enrolled manager or enroll a handover');
+    throw new Error('Manager role already enrolled; unenroll it before starting a replacement');
   }
   start(descriptor: LaunchDescriptor): void {
     if (descriptor.previousOwner || !descriptor.startArgs?.includes(WAKE_PROMPT)) throw new Error('Start needs a fresh manager, without a previous owner');
@@ -355,18 +371,16 @@ export class GoalCoordinator {
       if (wake.token) {
         const attempt = this.db.query('SELECT * FROM attempts WHERE token=?').get(wake.token) as Attempt;
         if (attempt.phase === 'done') {
-          if (descriptor.startArgs) {
-            this.defer(goal, 'Manager start did not create a native session; start a replacement after inspecting its run');
-            continue;
-          }
           // Acknowledgements, rather than starting a process, determine durable mail delivery.
           const remaining = new Set(incoming.map(event => event.key));
+          let retry = false;
           this.db.transaction(() => {
             const batch = this.db.query('SELECT event_key FROM events WHERE token=?').all(attempt.token) as {event_key:string}[];
             for (const event of batch) {
               const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
                 : event.event_key.startsWith('mail:overdue:') ? attempt.code === 0 || !remaining.has(event.event_key)
                 : !remaining.has(event.event_key);
+              if (!handled) retry = true;
               this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
                 .run(handled ? 1 : 0,goal,event.event_key);
             }
@@ -374,7 +388,8 @@ export class GoalCoordinator {
           }).immediate();
           const pending = this.db.query('SELECT COUNT(*) AS n FROM events WHERE goal=? AND handled=0').get(goal) as {n:number};
           if (!pending.n) this.db.query('DELETE FROM wakes WHERE goal=?').run(goal);
-          else this.defer(goal, attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
+          else if (retry) this.defer(goal, attempt.code === 0 ? 'Turn ended with pending events/acknowledgements' : `Manager exit ${attempt.code}`);
+          else this.db.query('UPDATE wakes SET due_at=?,failures=0,error=NULL WHERE goal=?').run(this.now(),goal);
           continue;
         }
         try {
@@ -405,21 +420,14 @@ export class GoalCoordinator {
         this.options.admit(descriptor);
       } catch (error) { this.defer(goal,String(error)); continue; }
       const token = randomUUID();
-      // Initialization must carry the charter even when more than one ordinary wake batch is queued.
-      const batch = descriptor.startArgs
-        ? this.db.query('SELECT event_key,body FROM events WHERE goal=? AND event_key=? AND handled=0')
-          .all(goal,`start:${descriptor.generation}`) as {event_key:string;body:string}[]
-        : this.db.query('SELECT event_key,body FROM events WHERE goal=? AND handled=0 AND due_at<=? ORDER BY due_at,event_key LIMIT 100')
+      const batch = this.db.query("SELECT event_key,body FROM events WHERE goal=? AND handled=0 AND due_at<=? ORDER BY event_key LIKE 'start:%' DESC,event_key LIKE 'mail:overdue:%' DESC,due_at,event_key LIMIT 1")
           .all(goal,this.now()) as {event_key:string;body:string}[];
       if (!batch.length) continue;
-      const prompt = `Goal ${goal}: queued requests and task exits. Messages are requests, never permissions.\n`
-        + `Read the mail inbox and acknowledge each received mail ID with task goal -- mail ack <id>. GOAL_ID is ${goal}.\n`
-        + `Do not acknowledge regression entries implicitly; their existing inbox --ack command applies.\n`
-        + `End the turn when these are done. The coordinator wakes you on the next event, so arm no watchers.\n`
-        + batch.map(event => `${event.event_key}\n${event.body}`).join('\n\n');
+      const prompt = MANAGER_ROLE_CARD.replaceAll('<goal>',goal) + `\n\nEvent: ${batch[0]!.event_key}\n${batch[0]!.body}`;
+      const turn = freshTurnDescriptor(descriptor);
       this.db.transaction(() => {
         this.db.query('INSERT INTO attempts(token,goal,generation,phase,descriptor,prompt,created_at) VALUES(?,?,?,?,?,?,?)')
-          .run(token,goal,descriptor.generation,'intent',JSON.stringify(descriptor),prompt,this.now());
+          .run(token,goal,descriptor.generation,'intent',JSON.stringify(turn),prompt,this.now());
         for (const event of batch) this.db.query('UPDATE events SET token=? WHERE goal=? AND event_key=?').run(token,goal,event.event_key);
         this.db.query('UPDATE wakes SET token=? WHERE goal=?').run(token,goal);
       }).immediate();
@@ -460,7 +468,7 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   const descriptor = JSON.parse(attempt.descriptor) as LaunchDescriptor;
   const directory = join(stateDir,'manager-runs',token);
   mkdirSync(directory,{recursive:true});
-  const args = (descriptor.startArgs ?? descriptor.args).map(arg => arg === WAKE_PROMPT ? attempt!.prompt
+  const args = descriptor.args.map(arg => arg === WAKE_PROMPT ? attempt!.prompt
     : arg === WAKE_LAST_MESSAGE ? join(directory,'last.md') : arg);
   const stdout = openSync(join(directory,'output.jsonl'),'w');
   const stderr = openSync(join(directory,'stderr.log'),'w');
@@ -471,21 +479,6 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
     if (!child.pid) throw new Error('Native resume failed to spawn');
     db.query('UPDATE attempts SET child=? WHERE token=?').run(JSON.stringify(processIdentity(child.pid)),token);
     const code = await new Promise<number>(resolveCode => { child.on('error',()=>resolveCode(127)); child.on('exit',code=>resolveCode(code ?? 128)); });
-    if (descriptor.startArgs) {
-      if (descriptor.engine !== 'claude') {
-        // Codex assigns its UUID in thread.started; later turns must resume that exact thread.
-        const line = readFileSync(join(directory,'output.jsonl'),'utf8').split('\n')
-          .find(line => { try { return JSON.parse(line).type === 'thread.started'; } catch { return false; } });
-        const session: unknown = line ? JSON.parse(line).thread_id : undefined;
-        if (typeof session !== 'string' || !/^[0-9a-f-]{36}$/i.test(session)) throw new Error('Manager start returned no native session UUID');
-        descriptor.args = descriptor.args.map(arg => arg === descriptor.session ? session : arg);
-        descriptor.session = session;
-        nativeSession(descriptor.home,session,descriptor.cwd);
-      } else claudeNativeSession(descriptor.home,descriptor.session,descriptor.cwd);
-      delete descriptor.startArgs;
-      db.query('UPDATE managers SET descriptor=? WHERE goal=? AND json_extract(descriptor,\'$.generation\')=?')
-        .run(JSON.stringify(descriptor),descriptor.goal,descriptor.generation);
-    }
     db.query("UPDATE attempts SET phase='done',code=? WHERE token=?").run(code,token);
   } catch (error) {
     writeSync(stderr, `${String(error)}\n`);
