@@ -8,7 +8,8 @@ import { CommandOutcomeUnknown } from '../../../services/main/src/infrastructure
 import { AccessAdmissionRegistry, AdmissionUnavailable }
   from '../../../services/main/src/modules/access/admission.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
-import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { assertCurrentRecoveryCoverageHead, retainRecoveryCoverageHead }
+  from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
 import { DATASET, GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import { RecoveryBudget } from '../../../scripts/ops/recovery-set.ts';
@@ -206,10 +207,62 @@ test('physical owner restore replays one retained journal over an independent co
       const originalAuthority = (await copy.retainedRelay.query(authoritySql)).rows;
       expect(originalHead).toHaveLength(1);
       expect(originalAuthority).toHaveLength(1);
-      await retainRecoveryCoverageHead(copy.retainedRelay, fixture.newerAuthority.sealedCoverage, restoreKey);
+      const journalSql = 'SELECT to_jsonb(erasure) AS original FROM relay.erasure erasure ORDER BY erasure_epoch';
+      const retainedJournal = (await copy.retainedRelay.query(journalSql)).rows;
+      expect(fixture.coverage.erasureJournal!.epoch).toBeNull();
+      expect(fixture.currentCoverage.erasureJournal!.epoch).toBeNull();
+      expect((await copy.retainedRelay.query(
+        'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure')).rows)
+        .toEqual([{ epoch: fixture.erased.erasureEpoch }]);
+      // Produce the superseding head against the historical copy's matching journal,
+      // then inject only its head/authority into the retained fault copy. Publishing
+      // the historical capture against the later journal would correctly refuse.
+      const historicalPublisher = await copy.owners.relay.connect();
+      let supersedingHead: typeof originalHead;
+      let supersedingAuthority: typeof originalAuthority;
+      try {
+        await historicalPublisher.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+        await retainRecoveryCoverageHead(historicalPublisher, fixture.newerAuthority.sealedCoverage, restoreKey);
+        await assertCurrentRecoveryCoverageHead(historicalPublisher, fixture.currentCoverage);
+        supersedingHead = (await historicalPublisher.query(headSql, [fixture.coverage.relay.consumer])).rows;
+        supersedingAuthority = (await historicalPublisher.query(authoritySql)).rows;
+      } finally {
+        await historicalPublisher.query('ROLLBACK');
+        historicalPublisher.release();
+      }
+      expect(supersedingHead).toHaveLength(1);
+      expect(supersedingAuthority).toHaveLength(1);
+      expect(supersedingHead[0]!.generation)
+        .toBe((BigInt(originalHead[0]!.generation) + 1n).toString());
+      expect(supersedingHead[0]!.coverage_digest).not.toBe(originalHead[0]!.coverage_digest);
+      expect(supersedingAuthority[0]!.coverage_generation).toBe(supersedingHead[0]!.generation);
+      expect(supersedingAuthority[0]!.revision)
+        .toBe((BigInt(originalAuthority[0]!.revision) + 1n).toString());
+      await copy.faultRetained([
+        { sql: 'DELETE FROM relay.current_authority_coverage WHERE id = true' },
+        { sql: 'DELETE FROM relay.recovery_coverage_head WHERE consumer = $1',
+          values: [fixture.coverage.relay.consumer] },
+        { sql: `INSERT INTO relay.recovery_coverage_head
+            SELECT * FROM jsonb_populate_record(NULL::relay.recovery_coverage_head, $1::jsonb)`,
+          values: [JSON.stringify(supersedingHead[0]!.original)] },
+        { sql: `INSERT INTO relay.current_authority_coverage
+            SELECT * FROM jsonb_populate_record(NULL::relay.current_authority_coverage, $1::jsonb)`,
+          values: [JSON.stringify(supersedingAuthority[0]!.original)] },
+      ]);
+      await assertCurrentRecoveryCoverageHead(copy.retainedRelay, fixture.currentCoverage);
+      expect((await copy.retainedRelay.query(journalSql)).rows).toEqual(retainedJournal);
       const newerHead = await copy.request(randomUUID());
       expect(newerHead.status).toBe(201);
-      expect(await newerHead.json()).toMatchObject({ state: 'held' });
+      const newerHeadResult = await newerHead.json();
+      expect(newerHeadResult).toMatchObject({ state: 'held',
+        hold_reason: 'signed recovery coverage is not the retained current capture' });
+      console.info('newer-head restore admission refused', {
+        historical: { digest: originalHead[0]!.coverage_digest, generation: originalHead[0]!.generation,
+          epoch: fixture.coverage.erasureJournal!.epoch, accountPg: fixture.coverage.accountPg },
+        current: { digest: supersedingHead[0]!.coverage_digest, generation: supersedingHead[0]!.generation,
+          epoch: fixture.currentCoverage.erasureJournal!.epoch, accountPg: fixture.currentCoverage.accountPg },
+        retainedEpoch: fixture.erased.erasureEpoch, result: newerHeadResult,
+      });
       assertPresent(await sourceRow(copy, fixture.revisionId), cut);
       await assertClosed(fixture, copy);
       await copy.faultRetained([
@@ -223,6 +276,10 @@ test('physical owner restore replays one retained journal over an independent co
             SELECT * FROM jsonb_populate_record(NULL::relay.current_authority_coverage, $1::jsonb)`,
           values: [JSON.stringify(originalAuthority[0]!.original)] },
       ]);
+      expect((await copy.retainedRelay.query(headSql, [fixture.coverage.relay.consumer])).rows)
+        .toEqual(originalHead);
+      expect((await copy.retainedRelay.query(authoritySql)).rows).toEqual(originalAuthority);
+      expect((await copy.retainedRelay.query(journalSql)).rows).toEqual(retainedJournal);
 
       const release = copy.fuseki.commandWithReceipt.bind(copy.fuseki);
       let lostCommittedRelease = false;
