@@ -8,7 +8,7 @@ import { type CheckGroup, type CheckRunner, runCheckCommand, checkFailureLines }
 import { affectedSelection } from './merge.ts';
 import { mergeUnitFiles, unitFilesFromPlan } from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
-import { withGateLane, withSlot, type SlotRunOptions } from './qa-slots.ts';
+import { withGateLane, withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath } from '../qa/acceptance.ts';
 
@@ -132,6 +132,7 @@ export interface SurfaceRunOptions {
   now?: () => number;
   only?: readonly CheckGroup[];
   slotOptions?: Omit<SlotRunOptions, 'runCommand'>;
+  gateLaneOptions?: Omit<GateLaneOptions, 'command'>;
   /** Landing commits and verifies generated artifacts using its existing owner. */
   generate?: () => Promise<string | undefined>;
   /** Landing keeps evidence after its worktree is archived and removed. */
@@ -150,7 +151,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   const now = options.now ?? Date.now;
   const run = options.runner ?? runCheckCommand;
   const only = options.only ?? ['types', 'lint', 'tests', 'guards'];
-  if (only.includes('guards')) print(repositoryGuardSelectionLine(selection.changed));
+  if (only.includes('guards')) print(repositoryGuardSelectionLine(selection.changed, cwd));
   let env = process.env;
   writeFileSync(log, `${JSON.stringify(selection)}\n`);
   async function part(name: SurfacePart, commands: string[][], waitSeconds = 0): Promise<boolean> {
@@ -194,7 +195,7 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   ];
   for (const [name, commands] of staticParts) {
     const waiting = now();
-    const ok = await withGateLane(() => part(name, commands, (now() - waiting) / 1000), { command: `surface ${name}` });
+    const ok = await withGateLane(() => part(name, commands, (now() - waiting) / 1000), { ...options.gateLaneOptions, command: `surface ${name}` });
     if (!ok) return finish();
   }
   const waiting = now();

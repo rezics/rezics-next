@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
+import { integrationGateFiles } from './integration-gate-files.ts';
 
 /** Outcome proofs may depend on public clients and fixture support, never product internals. */
 export function outcomeTestViolations(
@@ -82,7 +83,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/qa/raw-sparql-integration-files.test.ts',
-    reads: ['tests/**', 'services/*/tests/**', 'scripts/qa/**', 'scripts/fixture/**', 'scripts/dev/**'],
+    reads: ['tests/**', ...integrationGateFiles, 'services/*/tests/**', 'scripts/qa/**', 'scripts/fixture/**', 'scripts/dev/**'],
     reason:
       'No new test file may write raw SPARQL; a new test selects only itself, never this inventory.',
   },
@@ -293,8 +294,9 @@ export function filterRepositoryGuardFiles(files: readonly string[], changed: re
   return files.filter(file => !all.has(file) || selected.has(file));
 }
 
-export function repositoryGuardSelectionLine(changed: readonly string[]): string {
-  return `Repository guards: ${selectRepositoryGuards(changed).length}/${repositoryGuards.length} selected for changed paths: ${changed.join(', ') || '(none)'}`;
+export function repositoryGuardSelectionLine(changed: readonly string[], root = process.cwd()): string {
+  const present = selectRepositoryGuards(changed).filter(guard => existsSync(resolve(root, guard.file)));
+  return `Repository guards: ${present.length}/${repositoryGuards.length} selected for changed paths: ${changed.join(', ') || '(none)'}`;
 }
 
 // `task guards`: a worker runs the same rules before it hands off. Prints the failures or one summary line.

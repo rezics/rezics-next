@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import ts from 'typescript-6';
+import { integrationGateFiles } from './integration-gate-files.ts';
 import { outcomeRepositoryViolations, outcomeTestViolations, outcomeSourcePattern, repositoryGuards, selectRepositoryGuards, type RepositoryGuard } from './repository-guards.ts';
 
 const file = 'tests/qa/integration/outcomes/reading.test.ts';
@@ -110,6 +111,12 @@ test('selection matches deleted and newly added paths without inspecting the fil
     .toEqual(['web.test.ts', 'always.test.ts']);
   expect(selectRepositoryGuards(['README.md'], guards).map(guard => guard.file)).toEqual(['always.test.ts']);
   expect(selectRepositoryGuards([], guards)).toEqual([]);
+});
+
+test('raw SPARQL inventory retains every registered integration root outside its default tree', () => {
+  for (const file of integrationGateFiles) {
+    expect(guardFiles([file]), file).toContain('scripts/qa/raw-sparql-integration-files.test.ts');
+  }
 });
 
 test('every declared inventory matches a tracked file and is nonempty', () => {

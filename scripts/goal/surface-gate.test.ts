@@ -54,7 +54,8 @@ ${personas.map(persona => `test('${row} / ${persona}: reads catalogue', () => {}
   const commands: string[][] = [];
   const runner: CheckRunner = async command => { commands.push([...command]); return { code: 0, output: '' }; };
   const slotOptions = { slotDirectory: join(cwd, '.temp/slots'), slots: 1, reap: () => {}, announce: () => {} };
-  return { cwd, row, brief, changed, write, git, commands, runner, slotOptions, print: () => {} };
+  const gateLaneOptions = { directory: join(cwd, '.temp/gate-lanes'), lanes: 1, announce: () => {} };
+  return { cwd, row, brief, changed, write, git, commands, runner, slotOptions, gateLaneOptions, print: () => {} };
 }
 
 test('surface guards follow changed inputs and cannot reappear through the affected transcript', async () => {

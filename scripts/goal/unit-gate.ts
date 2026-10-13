@@ -2293,7 +2293,7 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
   const changed = streamSelectionFiles(own, readMergeEvents(), taskIds, mainRoot);
   console.log(`Pre-merge selection since ${currentMain.slice(0, 12)} (${changed.length} path(s))\n  ${changed.join('\n  ')}`);
   const selection = await affectedSelection(worktree, currentMain, changed);
-  console.log(repositoryGuardSelectionLine(own));
+  console.log(repositoryGuardSelectionLine(own, worktree));
   const unit = 'plan' in selection ? unitFilesFromPlan(worktree, selection.plan, own) : mergeUnitFiles(worktree, selection.text, own);
   const owner = new Set(filterRepositoryGuardFiles(selectedOwnerFiles(worktree, selection), own).filter(file => !unit.includes(file)));
   const affected = [...unit, ...owner].sort();
