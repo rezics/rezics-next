@@ -1,10 +1,11 @@
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-rankings.ts';
-import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
   personaSessions,
+  personaNames,
   type PersonaName,
   type PersonaSession,
   type PersonaSessions,
@@ -16,6 +17,7 @@ type Publication = Work & { contribution: string; publicationDecision: string; s
 let sessions: PersonaSessions;
 const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
+let journeyStarted = 0;
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
@@ -57,7 +59,7 @@ async function independent(person: PersonaSession) {
   }
 }
 
-async function publishOriginals() {
+export async function publishRankingOriginals(sessions: PersonaSessions, publications: Publication[]) {
   const owner = sessions.owner;
   const root = `/v1/realms/${short(sessions.realm)}`;
   const roleId = randomUUID();
@@ -82,11 +84,15 @@ async function publishOriginals() {
       semanticTypes: ['https://schema.org/Book'], authoring: 'own-work',
       actingSubject: owner.actingSubject,
     }), 201);
-    await answer(owner.main('POST', `/v1/works/${short(work.work)}/agent-credits`, {
-      profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
-      agent: owner.actingSubject, role: 'author', expectedWorkHead: work.workRevision,
-      actingSubject: owner.actingSubject,
-    }), 201);
+    // Own-work creation supplies the native author credit; consume its public inventory.
+    const credits = await answer<{ items: { id: string; agent: string; role: string }[]; nextCursor: string | null }>(
+      owner.main('GET', `/v1/works/${short(work.work)}/agent-credits?${acting(owner)}`),
+    );
+    expect(credits.nextCursor).toBeNull();
+    expect(credits.items).toHaveLength(1);
+    expect(credits.items[0]).toMatchObject({ agent: owner.actingSubject, role: 'author' });
+    expect(credits.items[0]!.id).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+    console.log('Local original credit', JSON.stringify({ row: closure.rowId, work: work.work, inventory: credits }));
     const draft = await answer<{ contribution: string; draftRevision: string }>(
       owner.main('POST', '/v1/contributions', {
         profile: 'text-contribution-v1', work: work.work, language: 'en',
@@ -122,18 +128,6 @@ async function publishOriginals() {
   }
 }
 
-beforeAll(async () => {
-  sessions = await personaSessions('public');
-  closureUnavailable = await closureSetup(sessions, async () => {
-    const rule = await publishClosureRule(sessions);
-    await publishOriginals();
-    await prepareSurface();
-    await effectClosure(sessions, rule);
-  });
-}, 180_000);
-
-afterAll(async () => { await sessions?.close(); });
-
 async function prepareSurface() {
   const baseline = await answer<{ items: { id: string }[] }>(
     sessions.visitor.main('GET', `/v1/realms/${short(sessions.realm)}/modules/new-adoptions`),
@@ -164,10 +158,48 @@ async function delivered(name: PersonaName) {
   await independent(person);
 }
 
-outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')));
-outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')));
-outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')));
-outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')));
-outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')));
-outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')));
+describe('rankings closure journey', () => {
+  beforeAll(async () => {
+    const started = performance.now();
+    sessions = await personaSessions('public');
+    for (const persona of personaNames) {
+      const person = sessions[persona];
+      const call = person.main;
+      person.main = async (method, path, body, key, options) => {
+        const idempotencyKey = key ?? (method === 'POST' ? randomUUID() : undefined);
+        const at = performance.now();
+        const response = await call(method, path, body, idempotencyKey, options);
+        console.log('Local closure request', JSON.stringify({ row: closure.rowId, persona,
+          caller: person.accountId, actingSubject: person.actingSubject, method, path, body, idempotencyKey,
+          phase: journeyStarted ? 'journey' : 'preparation', source: import.meta.path,
+          elapsedMs: performance.now() - at, sinceStartMs: performance.now() - started,
+          answer: { status: response.status, body: await response.clone().text() } }));
+        return response;
+      };
+    }
+    closureUnavailable = await closureSetup(sessions, async () => {
+      const rule = await publishClosureRule(sessions);
+      await publishRankingOriginals(sessions, publications);
+      await prepareSurface();
+      await effectClosure(sessions, rule);
+    });
+    console.log('Local closure preparation', JSON.stringify({ row: closure.rowId,
+      personaSeconds: sessions.elapsedSeconds, preparationSeconds: (performance.now() - started) / 1000,
+      source: import.meta.path, failure: closureUnavailable }));
+    journeyStarted = performance.now();
+  }, 180_000);
 
+  afterAll(async () => {
+    console.log('Local closure journey timing', JSON.stringify({ row: closure.rowId,
+      journeySeconds: (performance.now() - journeyStarted) / 1000 }));
+    await sessions?.close();
+  });
+
+  outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')));
+  outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')));
+  outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')));
+  outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')));
+  outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')));
+  outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')));
+
+});
