@@ -82,12 +82,15 @@ export interface Manifest {
   /** Browser tiers are inventoried but excluded from routine runs; older manifests included them. */
   selection?: 'routine' | 'explicit' | 'nightly';
   verticalJourneys?: readonly VerticalJourney[];
+  /** Host width chosen at the start of this invocation; memory admission remains independent. */
+  laneCount?: number;
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
   shards?: number; slots?: number; runId?: string; checkoutRoot?: string; legacyRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
   outcomeRegistry?: (checkout: string) => Promise<readonly RowOutcomes[]>;
+  workersLive?: () => boolean;
   nightly?: boolean;
   journeyRegistry?: (checkout: string) => Promise<readonly VerticalJourney[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
@@ -148,6 +151,10 @@ export function regressionLaneLimit(stateDir: string, fallback: number): number 
   const file = join(stateDir, 'regress-lane-count');
   const stored = existsSync(file) ? readFileSync(file, 'utf8').trim() : '';
   return /^[1-9]\d*$/.test(stored) && Number.isSafeInteger(Number(stored)) ? Number(stored) : fallback;
+}
+
+export function regressionLaneCount(stateDir: string, slots: number, workersLive: boolean): number {
+  return workersLive ? regressionLaneLimit(stateDir, Math.min(slots, 2)) : slots;
 }
 const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook', 'jena:check'];
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
@@ -237,6 +244,7 @@ interface RegressionTimingTier {
 export interface RegressionTiming {
   runId: string; atCommit: string; status: Manifest['status']; wallMs?: number;
   lanes: string[]; tiers: RegressionTimingTier[];
+  laneCount?: number;
   batches: { id: string; attempts: number; totalMs: number; queueMs: number; testMs: number }[];
   files: { file: string; durationMs: number }[];
 }
@@ -296,7 +304,7 @@ export function regressionTiming(directory: string): RegressionTiming {
   const start = Date.parse(manifest.startedAt);
   const finish = manifest.finishedAt ? Date.parse(manifest.finishedAt) : undefined;
   return { runId: manifest.runId, atCommit: manifest.atCommit, status: manifest.status,
-    wallMs: finish === undefined ? span(allAttempts) : finish - start, lanes, tiers: tierRecords,
+    wallMs: finish === undefined ? span(allAttempts) : finish - start, lanes, laneCount: manifest.laneCount, tiers: tierRecords,
     batches: timings.sort((a, b) => b.totalMs - a.totalMs).slice(0, 10),
     files: [...fileTimes].map(([file, durationMs]) => ({ file, durationMs })).sort((a, b) => b.durationMs - a.durationMs).slice(0, 10) };
 }
@@ -306,7 +314,7 @@ export function regressionTimingReport(directory: string): string {
   const minutes = (ms: number | undefined): string => ms === undefined ? 'unrecorded' : `${(ms / 60_000).toFixed(2)} min`;
   return [`Regression ${report.runId}: ${report.atCommit}; ${report.status}`,
     `Wall: ${minutes(report.wallMs)}${report.status === 'running' ? ' (recorded attempts; run has no finish yet)' : ''}`,
-    `Lanes used: ${report.lanes.join(', ') || 'unrecorded'}`,
+    `Lanes used: ${report.lanes.join(', ') || 'unrecorded'}; chosen count: ${report.laneCount ?? 'unrecorded (legacy run)'}`,
     'Tier | wall span | summed queue | summed runner/test | stack startup | bootstrap',
     ...report.tiers.map(tier => `${tier.tier} | ${minutes(tier.wallMs)} | ${minutes(tier.queueMs)} | ${minutes(tier.testMs)} | ${minutes(tier.startupMs)} | ${minutes(tier.bootstrapMs)}`),
     `Time queueing: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.queueMs, 0))}; starting stacks: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.startupMs, 0))}; bootstrap: ${minutes(report.tiers.reduce((sum, tier) => sum + tier.bootstrapMs, 0))}`,
@@ -1143,12 +1151,18 @@ function diagnosisReport(item: Diagnosis): string {
 
 export async function runRegression(options: RegressionOptions): Promise<Manifest> {
   const { repo, stateDir } = options;
-  const configuredSlots = options.slots ?? Number(process.env.GOAL_QA_SLOTS ?? 3);
+  // These helpers share goalctl's initialization graph; consult them only after the entry has initialized.
+  const configuredSlots = options.slots ?? (await import('./qa-slots.ts')).qaSlotCount(join(stateDir, 'qa-slots'));
   if (!Number.isSafeInteger(configuredSlots) || configuredSlots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
   const diagnosisBudget = options.diagnosisBudgetMs !== undefined
     ? regressionDiagnosisBudgetMs(String(options.diagnosisBudgetMs)) : regressionDiagnosisBudgetMs();
   const slotLimit = Math.min(configuredSlots, 2);
-  const laneLimit = regressionLaneLimit(stateDir, slotLimit);
+  let workersLive = options.workersLive?.();
+  if (workersLive === undefined) {
+    const [{ readLedger }, { running }] = await Promise.all([import('./ledger.ts'), import('./launch.ts')]);
+    workersLive = Object.values(readLedger().tasks).some(task => task.attempts.length > 0 && running(task));
+  }
+  const laneLimit = regressionLaneCount(stateDir, configuredSlots, workersLive);
   // A batch leases only the host slots numbered below the count it is given. With six lanes and a count of
   // two, four lanes waited for the same two slots.
   const batchSlots = Math.max(slotLimit, laneLimit);
@@ -1296,6 +1310,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     }
     if (!manifest) throw new Error('Regression manifest was not recorded');
     const runManifest = manifest;
+    runManifest.laneCount = laneLimit;
     const save = () => atomic(path, runManifest);
     runManifest.probeCounts ??= {};
     runManifest.diagnosisSpentMs ??= 0;

@@ -20,7 +20,7 @@ import { appendInbox, checkoutNameLength, classify, regressionFailureCause, exec
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
   regressionBatchEnvironment, runRegression, waitForRegressionTurn, type Batch, type Execution, type ExpectedFile, type Manifest, type MergeEvent, type RegressionOptions } from './regress.ts';
-import { regressionTiming, regressionTimingReport } from './regress.ts';
+import { regressionLaneCount, regressionTiming, regressionTimingReport } from './regress.ts';
 
 let repoSequence = 0;
 
@@ -63,7 +63,7 @@ function repo(extraIntegration = 0) {
   };
   const options: RegressionOptions = { repo: dir, stateDir, checkoutRoot, legacyRoot: join(checkoutRoot, 'l'),
     registry: async () => files.map(file => ({ ...file })),
-    prepare: async () => ({ ok: true, artifactPaths: [] }), runner, slots: 1, waitForTurn: async () => {} };
+    prepare: async () => ({ ok: true, artifactPaths: [] }), runner, slots: 1, workersLive: () => true, waitForTurn: async () => {} };
   const event = (before: string, after: string, goal = 'owner') => {
     mkdirSync(stateDir, { recursive: true });
     const path = join(stateDir, 'merges.jsonl');
@@ -269,6 +269,36 @@ console.log('Owner deadline: ' + process.env.REZICS_QA_OWNER_BUDGET_MS);
       expect(maximum).toBe(4);
       expect(result.batches.filter(batch => batch.tier === 'owner').every(batch => batch.state === 'done')).toBe(true);
     } finally { r.cleanup(); }
+  });
+
+  test('an idle host uses every QA slot while live workers retain the configured regression width', async () => {
+    const r = repo(20);
+    const inheritedSlots = process.env.GOAL_QA_SLOTS;
+    delete process.env.GOAL_QA_SLOTS;
+    r.commit();
+    mkdirSync(r.options.stateDir, { recursive: true });
+    writeFileSync(join(r.options.stateDir, 'qa-slot-count'), '4\n');
+    writeFileSync(join(r.options.stateDir, 'regress-lane-count'), '3\n');
+    try {
+      for (const workersLive of [false, true]) {
+        let active = 0; let maximum = 0;
+        const result = await r.run({ runId: workersLive ? 'worker-width' : 'idle-width', slots: undefined,
+          workersLive: () => workersLive, runner: async (...args) => {
+            expect(args[4]).toBe(workersLive ? 3 : 4);
+            active++; maximum = Math.max(maximum, active);
+            try { await Bun.sleep(5); return await r.runner(...args); } finally { active--; }
+          } });
+        expect(result.laneCount).toBe(workersLive ? 3 : 4);
+        expect(r.manifest(result.runId).laneCount).toBe(result.laneCount);
+        expect(maximum).toBe(workersLive ? 3 : 4);
+      }
+      expect(regressionLaneCount(r.options.stateDir, 8, false)).toBe(8);
+      expect(regressionLaneCount(r.options.stateDir, 8, true)).toBe(3);
+    } finally {
+      if (inheritedSlots === undefined) delete process.env.GOAL_QA_SLOTS;
+      else process.env.GOAL_QA_SLOTS = inheritedSlots;
+      r.cleanup();
+    }
   });
 
   test('the owner deadline planner comes from the entry module when it hands itself over', async () => {
