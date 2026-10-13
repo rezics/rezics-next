@@ -14,6 +14,8 @@ import { verticalJourneys, verticalJourneyFilter, type VerticalJourney } from '.
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { reapScopeLabel } from '../qa/container-reaper.ts';
+import { confirmedScopeReport, latestConfirmation } from './confirmed.ts';
+import { notApplicable, outcomeTitle, personas, proved, rowOutcomes } from '../qa/cases/outcome-cells.ts';
 import { appendInbox, checkoutNameLength, classify, regressionFailureCause, executionOutcomes, inboxEntries, isRamBackedFileSystem, parseRegressArgs, provideGoalctl, regressionLaneLimit,
   pruneRegressionCheckouts, regressionBatchArtifactPaths, regressionBatchCommand, regressionCheckoutRoot, regressionDiagnosisBudgetMs,
   regressionRegistry, runBatch,
@@ -87,6 +89,37 @@ describe('pinned main-wide regression', () => {
   afterEach(() => {
     if (inheritedOwnerBudget === undefined) delete process.env.REZICS_QA_OWNER_BUDGET_MS;
     else process.env.REZICS_QA_OWNER_BUDGET_MS = inheritedOwnerBudget;
+  });
+  test('a pinned run records both outcome files for scope without using diagnosis reruns', async () => {
+    const r = repo();
+    const rows = ['books/pass', 'books/fail'].map(id => rowOutcomes(id, Object.fromEntries(personas.map(persona =>
+      [persona, persona === 'visitor' ? proved('gets the outcome') : notApplicable('No distinct action')]))));
+    for (const row of rows) {
+      const cell = row.cells.visitor!;
+      if (cell.state === 'notApplicable') throw new Error('Expected outcome');
+      r.files.push({ file: cell.file!, tier: 'integration', outcome: 'pending' });
+      r.write(cell.file!, row.rowId.endsWith('/fail') ? 'fail\n' : 'pass\n');
+    }
+    const commit = r.commit();
+    try {
+      await r.run({ runId: 'outcomes', outcomeRegistry: async () => rows, runner: async (...args) => {
+        const execution = await r.runner(...args);
+        const path = join(args[2], 'results'); mkdirSync(path, { recursive: true });
+        writeFileSync(join(path, 'integration.xml'), `<testsuite>${rows.filter(row =>
+          args[1].files.includes(row.cells.visitor!.state === 'proved' ? row.cells.visitor.file! : '')).map(row =>
+          `<testcase name="${outcomeTitle(row, 'visitor')}" file="tests/qa/integration/outcomes/${row.rowId}.test.ts">${row.rowId.endsWith('/fail') ? '<failure message="outcome failed"/>' : ''}</testcase>`).join('')}</testsuite>`);
+        return { ...execution, artifactPaths: [...execution.artifactPaths, path] };
+      } });
+      const record = latestConfirmation(r.options.stateDir)!;
+      expect(record.atCommit).toBe(commit);
+      expect(record.outcomes.map(cell => [cell.rowId, cell.persona, cell.status])).toEqual([
+        ['books/pass', 'visitor', 'passed'], ['books/fail', 'visitor', 'failed'],
+      ]);
+      expect(JSON.parse(readFileSync(join(r.options.stateDir, 'regress/outcomes/confirmed.json'), 'utf8'))).toEqual(record);
+      const report = confirmedScopeReport(rows, rows.map(row => row.rowId), record);
+      expect(report.split('\n')[1]).toBe('Declared proved rows seen failing: books/fail');
+      expect(report).toContain('books: declared proved 2/2; last run confirmed 1; saw fail 1');
+    } finally { r.cleanup(); }
   });
   test('each routine regression schedules the pinned Jena check as its own entry', async () => {
     const r = repo();

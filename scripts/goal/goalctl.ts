@@ -74,7 +74,10 @@ async function main(argv: string[]): Promise<number> {
     case 'wait': await waitFor(positional[0] ?? ''); return 0;
     case 'resume': await resumeTask(rest[0] ?? '', rest.slice(1)); return 0;
     case 'stop': await stopTask(positional[0] ?? ''); return 0;
-    case 'scope': console.log(describe(taskOf(readLedger(), positional[0] ?? ''))); return 0;
+    case 'scope':
+      if (positional.length) console.log(describe(taskOf(readLedger(), positional[0]!)));
+      else return (await loadGoalCommand('scope.ts')).default(rest);
+      return 0;
     case 'merge': await mergeTask(positional[0] ?? '', flags); return 0;
     case 'gate': await mergeTask(positional[0] ?? '', flags, undefined, undefined, undefined, true); return 0;
     case 'land': await landTask(positional[0] ?? '', flags.has('--step')); return 0;

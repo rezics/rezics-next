@@ -17,6 +17,8 @@ import { qaMemoryDeadline } from '../qa/memory-admission.ts';
 import type { DeclaredTestTimeout } from './goalctl.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
 import { verticalJourneyFilter, type VerticalJourney } from '../qa/cases/vertical-journeys.ts';
+import { recordConfirmation } from './confirmed.ts';
+import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
@@ -82,6 +84,7 @@ export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
   shards?: number; slots?: number; runId?: string; checkoutRoot?: string; legacyRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
+  outcomeRegistry?: (checkout: string) => Promise<readonly RowOutcomes[]>;
   nightly?: boolean;
   journeyRegistry?: (checkout: string) => Promise<readonly VerticalJourney[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
@@ -1454,6 +1457,12 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     runManifest.status = complete && runManifest.preflight.ok && !runManifest.batches.some(batch => batch.attempts.at(-1)?.code)
       ? 'passed' : runManifest.files.some(file => file.outcome === 'failed') || !runManifest.preflight.ok ? 'failed' : 'incomplete';
     runManifest.finishedAt = new Date().toISOString(); save();
+    const outcomesModule = join(checkout, 'scripts/qa/cases/outcomes.ts');
+    const declarations = options.outcomeRegistry ? await options.outcomeRegistry(checkout)
+      : existsSync(outcomesModule)
+        ? [...(await (await import(pathToFileURL(outcomesModule).href) as typeof import('../qa/cases/outcomes.ts'))
+          .loadOutcomes({ root: checkout })).values()] : [];
+    recordConfirmation(stateDir, directory, runManifest, declarations, runManifest.finishedAt);
     writeFileSync(join(directory, 'summary.md'), [`# Regression ${runId}`, '', `Commit: ${pinned}`,
       `Result: ${runManifest.status}; complete execution: ${complete}; shards: ${runManifest.shards}`,
       `Preflight: ${runManifest.preflight.ok ? 'passed' : runManifest.preflight.reason}`, '',
