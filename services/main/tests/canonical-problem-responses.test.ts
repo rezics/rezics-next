@@ -11,6 +11,10 @@ import { StaleSemanticHead, UnavailableSemanticReference } from '../src/modules/
 import { StaleRatingObservation } from '../src/modules/rating/observation.ts';
 import { EditorialBlocked, type Blocker } from '../src/modules/editorial-review/contract.ts';
 import { StaleSession, type SessionState } from '../src/modules/session/contract.ts';
+import { StaleEditionPreference, type EditionPreference } from '../src/modules/session/preference-contract.ts';
+import { AccountAssertionDenied, AccountAssertionUnavailable } from '../src/modules/account/verify-assertion.ts';
+import { operationTools, type CapabilityDocument } from '../src/modules/mcp/capabilities.ts';
+import type { OwnerOutcome, ProtectionRejection } from '../src/modules/protection/content-store.ts';
 import { contentRoutes } from '../src/routes/content.ts';
 import { contributionRoutes } from '../src/routes/contributions.ts';
 import { agentRoutes } from '../src/routes/agents.ts';
@@ -33,6 +37,9 @@ import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { sessionsRoutes } from '../src/routes/sessions.ts';
 import { editorialProposalRoutes } from '../src/routes/editorial-proposals.ts';
+import { protectionRoutes } from '../src/routes/protection.ts';
+import { progressSummariesRoutes } from '../src/routes/progress-summaries.ts';
+import { mcpRoutes } from '../src/routes/mcp.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const uuid = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -77,6 +84,132 @@ async function conforms(response: Response, path: string, method: string, status
 }
 const problemBody = (status: number, code: string, title: string, details = {}) => ({
   type: `https://rezics.com/problems/${code}`, title, status, code, ...details,
+});
+
+const protectionCalls = [
+  { path: '/v1/editorial-protections', declaration: '/v1/editorial-protections',
+    profile: 'content-draft-protection-v1', family: 'content-protection-change', fields: { action: 'tighten' } },
+  { path: '/v1/corrections', declaration: '/v1/corrections',
+    profile: 'content-draft-correction-v1', family: 'content-correction-propose', fields: { predecessor: null, body: 'Correction' } },
+  { path: `/v1/corrections/${uuid(7)}/decisions`, declaration: '/v1/corrections/{proposalRevision}/decisions',
+    profile: 'content-draft-correction-decision-v1', family: 'content-correction-decide',
+    fields: { outcome: 'approved', expectedCandidateDigest: 'a'.repeat(64), expectedDecisionHead: null } },
+] as const;
+for (const call of protectionCalls) for (const [status, code] of [
+  [403, 'reviewer_not_independent'], [403, 'cancelled'], [404, 'target_unavailable'], [409, 'stale_content'],
+] as const) test(`Protected ${call.path} preserves ${status} ${code} and Content owner position`, async () => {
+  const ownerPosition = { owner: 'content', dataEpoch: 'content-epoch', sequence: '9007199254740993' } as const;
+  const operation = `${call.family}:${uuid(5)}`;
+  let recorded: unknown;
+  const reject = async (command: { operationId: string }): Promise<OwnerOutcome<unknown>> => {
+    expect(command.operationId).toBe(operation);
+    return { operationId: command.operationId, outcome: 'rejected', code: code as ProtectionRejection,
+      value: null, position: ownerPosition, replayed: true };
+  };
+  const work = dependencies(new Graph(), {
+    access: {
+      register: async (input: { action: string; scope: string; requestDigest: string }) => ({ ...input,
+        id: uuid(5), state: 'claimed', authorityEpoch: '1', principalId: 'writer', replayed: true }),
+      claim: async () => {}, recordGraphOutcome: async (_id: string, proof: unknown) => { recorded = proof; },
+    },
+    editorialProtection: { changeProtection: reject, proposeCorrection: reject, decideCorrection: reject,
+      readCorrection: async () => ({ proposal: { resourceId: id(1) } }) },
+  });
+  const response = await protectionRoutes(work).handle(request(call.path, {
+    profile: call.profile, resourceId: id(1), variantId: `urn:rezics:variant:${uuid(2)}`,
+    actingSubject: id(3), expectedContentHead: uuid(9), expectedProtectionHead: null,
+    expectedRuleRevision: 'urn:rezics:protection-rule:independent-human-review-v1', reason: 'Retained basis',
+    evidence: [], ...call.fields,
+    // Decisions identify the target through the proposal, rather than through body fields.
+    ...(call.family === 'content-correction-decide' ? { resourceId: undefined, variantId: undefined } : {}),
+  }));
+  await conforms(response, call.declaration, 'post', status,
+    problemBody(status, code, 'Protected command was not applied', { operation, position: ownerPosition }));
+  expect(recorded).toMatchObject({ outcome: 'cancelled', dataEpoch: ownerPosition.dataEpoch, sequence: ownerPosition.sequence });
+  const schema = declaration.paths[call.declaration]!.post!.responses[String(status)]!.content['application/problem+json']!.schema;
+  expect(Value.Check(schema, problemBody(status, code, 'Protected command was not applied',
+    { operation, position: { ...ownerPosition, unexpected: true } }))).toBe(false);
+});
+
+const editionPreferences: (EditionPreference | null)[] = [null,
+  { work: id(1), language: 'en', edition: null, version: 2 },
+  ...(['realization', 'release'] as const).map(kind => ({ work: id(1), language: 'en',
+    edition: { kind, resource: id(2), revision: id(9) }, version: 2 })),
+];
+for (const current of editionPreferences) test(`Edition preference conflict retains ${JSON.stringify(current)}`, async () => {
+  const work = dependencies(new Graph(), { editionPreferences: {}, account: throwingAccount(new StaleEditionPreference(current)) });
+  const response = await progressSummariesRoutes(work).handle(request(`/v1/me/edition-preferences/${uuid(1)}`,
+    { actingSubject: id(3), expectedVersion: 1, language: 'en', edition: null }, 'PUT'));
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  const path = '/v1/me/edition-preferences/{work}';
+  await conforms(response, path, 'put', 409,
+    problemBody(409, 'stale_edition_preference', 'Edition preference changed', { current }));
+  const schema = declaration.paths[path]!.put!.responses['409']!.content['application/problem+json']!.schema;
+  expect(Value.Check(schema, problemBody(409, 'stale_edition_preference', 'Edition preference changed', { current: uuid(9) }))).toBe(false);
+});
+
+function mcpRequest() {
+  return new Request('http://main.test/mcp', { method: 'POST',
+    headers: { authorization: 'Bearer writer', 'content-type': 'application/json',
+      accept: 'application/json, text/event-stream', 'mcp-protocol-version': '2026-07-28', 'mcp-method': 'tools/list' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: { _meta: {
+      'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+      'io.modelcontextprotocol/clientInfo': { name: 'contract-refusal', version: '1' },
+      'io.modelcontextprotocol/clientCapabilities': {},
+    } } }),
+  });
+}
+function mcpContract() { return declaration as unknown as CapabilityDocument; }
+function mcpScopes() {
+  return [...new Set(operationTools(mcpContract()).flatMap(tool => tool.operation['x-rezics-capability']!.mcp!.scopes))].sort();
+}
+for (const [status, error, code] of [
+  [401, new AccountAssertionDenied('expired'), 'invalid_account_assertion'],
+  [503, new AccountAssertionUnavailable('unavailable'), 'account_unavailable'],
+] as const) test(`Hidden MCP transport preserves ${status} about:blank authority answer and header`, async () => {
+  const app = mcpRoutes({ account: throwingAccount(error),
+    mcp: { issuer: 'https://account.test', resource: 'http://main.test/mcp' } },
+  async () => { throw new Error('unexpected dispatch'); }, mcpContract);
+  const response = await app.handle(mcpRequest());
+  expect(response.status).toBe(status);
+  expect(response.headers.get('content-type')?.split(';')[0]).toBe('application/problem+json');
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(response.headers.get('www-authenticate')).toBe(status === 401
+    ? `Bearer resource_metadata="http://main.test/.well-known/oauth-protected-resource/mcp", scope="${mcpScopes().join(' ')}"` : null);
+  expect(response.headers.get('retry-after')).toBe(status === 503 ? '5' : null);
+  expect(await response.json()).toEqual({ type: 'about:blank', title: 'Account authorization unavailable', status, code });
+  expect(declaration.paths['/mcp']).toBeUndefined();
+});
+test('Hidden MCP preserves bodyless origin refusal, successful metadata and JSON-RPC', async () => {
+  let verifies = 0;
+  const app = mcpRoutes({ account: { verify: async () => { verifies++; return principal; } },
+    mcp: { issuer: 'https://account.test', resource: 'http://main.test/mcp' } },
+  async () => { throw new Error('unexpected dispatch'); }, mcpContract);
+  const hostile = mcpRequest();
+  hostile.headers.set('origin', 'https://hostile.test');
+  const refused = await app.handle(hostile);
+  expect(refused.status).toBe(403);
+  expect(await refused.text()).toBe('');
+  expect(verifies).toBe(0);
+  for (const path of ['/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp']) {
+    const metadata = await app.handle(new Request(`http://main.test${path}`));
+    expect(metadata.status).toBe(200);
+    expect(metadata.headers.get('content-type')?.split(';')[0]).toBe('application/json');
+    expect(metadata.headers.get('cache-control')).toBe('no-store');
+    expect(await metadata.json()).toEqual({ resource: 'http://main.test/mcp', authorization_servers: ['https://account.test'],
+      scopes_supported: mcpScopes(), bearer_methods_supported: ['header'] });
+    expect(declaration.paths[path]).toBeUndefined();
+  }
+  expect(verifies).toBe(0);
+  const response = await app.handle(mcpRequest());
+  expect(response.status).toBe(200);
+  expect(response.headers.get('content-type')?.split(';')[0]).toBe('application/json');
+  const body = await response.json() as { jsonrpc: string; id: number; result: { tools: { name: string }[] } };
+  expect(body.jsonrpc).toBe('2.0');
+  expect(body.id).toBe(1);
+  expect(body.result.tools.map(tool => tool.name)).toEqual(operationTools(mcpContract())
+    .filter(tool => tool.operation['x-rezics-exposure'] === 'public').map(tool => tool.name));
+  expect(verifies).toBe(2);
 });
 
 // These are route conformance tests at dependency boundaries, not population outcomes.

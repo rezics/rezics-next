@@ -8,6 +8,7 @@ import { mcpBody } from '../modules/mcp/body.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { anonymousPlatformAccess, exposureAllows } from '../modules/access/exposure.ts';
 import { exposureOperationId } from '../modules/access/exposure-routes.ts';
+import { problem } from './problems.ts';
 
 /** Initial toolkit bindings live here while their route owners are concurrently claimed.
  * Discovery still checks the operation exists and uses its generated runtime schema. */
@@ -75,10 +76,10 @@ export function mcpRoutes(work: Pick<MainWorkDependencies, 'account' | 'mcp' | '
       try { await work.account.verify(request, []); }
       catch (error) {
         const status = error instanceof AccountAssertionDenied ? 401 : 503;
-        return Response.json({ type: 'about:blank', status, code: status === 401
-          ? 'invalid_account_assertion' : 'account_unavailable', title: 'Account authorization unavailable' },
-        { status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store',
-          ...(status === 401 ? { 'www-authenticate': challenge() } : { 'retry-after': '5' }) } });
+        return problem(status, status === 401 ? 'invalid_account_assertion' : 'account_unavailable',
+          'Account authorization unavailable',
+          status === 401 ? { 'www-authenticate': challenge() } : { 'retry-after': '5' },
+          undefined, { type: 'about:blank' });
       }
       const body = await mcpBody(request);
       if (body instanceof Response) return body;

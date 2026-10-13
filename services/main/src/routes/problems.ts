@@ -1,5 +1,7 @@
 import { logWorkerFault } from '@rezics/observability/log';
 import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
+import type { EditionPreference } from '../modules/session/preference-contract.ts';
+import type { OwnerPosition } from '../modules/protection/content-store.ts';
 import type { Interpretation } from '../modules/context/interpretation.ts';
 import type { RefreshConflict } from '../modules/structure/refresh.ts';
 import type { Blocker } from '../modules/editorial-review/contract.ts';
@@ -139,7 +141,9 @@ export class LibraryImportTimedOut extends Error {}
 
 interface ProblemDetails {
   currentHead?: string | null;
-  current?: string | null | SessionState;
+  current?: string | null | SessionState | EditionPreference;
+  operation?: string;
+  position?: OwnerPosition;
   submitted?: SessionChanges & { expectedVersion: number };
   replayed?: boolean;
   sourcePosition?: { datasetId: 'product'; dataEpoch: string; sequence: string } | null;
@@ -157,8 +161,8 @@ interface ProblemDetails {
 }
 
 export function problem(status: number, code: string, title: string, headers?: HeadersInit,
-  details?: ProblemDetails): Response {
-  return Response.json({ type: `https://rezics.com/problems/${code}`, title, status, code, ...details }, {
+  details?: ProblemDetails, options?: { type: 'about:blank' }): Response {
+  return Response.json({ type: options?.type ?? `https://rezics.com/problems/${code}`, title, status, code, ...details }, {
     status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store', ...headers },
   });
 }

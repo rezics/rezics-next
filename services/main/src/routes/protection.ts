@@ -34,7 +34,8 @@ export const openApiOperations = {
 const NATIVE = '^https://rezics\\.com/id/[0-9a-f-]{36}$';
 const UUID = '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$';
 const VARIANT = '^urn:rezics:variant:[0-9a-f-]{36}$';
-const ownerPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() });
+const ownerPosition = t.Object({ owner: t.Literal('content'), dataEpoch: t.String(), sequence: t.String() },
+  { additionalProperties: false });
 const outcome = t.Object({ operation: t.String(), value: t.Unknown(), position: ownerPosition, replayed: t.Boolean() });
 const nullableRef = t.Union([t.String(), t.Null()]);
 const protectionState = t.Object({ id: t.String(), epoch: t.String(),
@@ -92,9 +93,12 @@ const workEditorialState = t.Object({ work: t.String(), fieldKey: t.Literal('tit
   protectionMode: t.Union([t.Literal('open'), t.Literal('review-required')]),
   protectionEpoch: t.String(), controlHead: nullableRef, controlEpoch: t.String(),
   ruleRevision: t.String() });
+const protectedCommandProblem = (status: number) => t.Object({ ...problemResult(status).properties,
+  operation: t.Optional(t.String()), position: t.Optional(ownerPosition) }, { additionalProperties: false });
 const writeResponses = { 200: outcome, 201: outcome,
   202: t.Object({ operationId: t.String(), status: t.Literal('reconciling') }),
-  ...writeProblems, 404: problemResult(404) };
+  ...writeProblems, 403: protectedCommandProblem(403), 404: protectedCommandProblem(404),
+  409: protectedCommandProblem(409) };
 
 function idempotencyKey(request: Request): string | null {
   const key = request.headers.get('idempotency-key');
@@ -109,9 +113,8 @@ function written(result: OwnerOutcome<unknown>): Response {
   }
   const code = result.code!;
   const status = code === 'target_unavailable' ? 404 : code === 'reviewer_not_independent' || code === 'cancelled' ? 403 : 409;
-  return Response.json({ type: `https://rezics.com/problems/${code}`, title: 'Protected command was not applied',
-    status, code, operation: result.operationId, position: result.position }, {
-    status, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+  return problem(status, code, 'Protected command was not applied', undefined,
+    { operation: result.operationId, position: result.position });
 }
 
 function failed(error: unknown): Response {

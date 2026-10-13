@@ -27,10 +27,8 @@ function failure(error: unknown) {
   if (error instanceof InvalidEditionPreference || error instanceof InvalidContentLanguages) {
     return problem(400, 'invalid_edition_preference', error.message);
   }
-  if (error instanceof StaleEditionPreference) return Response.json({
-    ...{ type: 'https://rezics.com/problems/stale_edition_preference', title: error.message, status: 409,
-      code: 'stale_edition_preference' }, current: error.current },
-  { status: 409, headers: { ...headers, 'content-type': 'application/problem+json' } });
+  if (error instanceof StaleEditionPreference) return problem(409, 'stale_edition_preference', error.message,
+    headers, { current: error.current });
   if (error instanceof EditionPreferenceConflict) return problem(409, 'edition_preference_conflict', error.message);
   if (error && typeof error === 'object' && 'code' in error
     && ['55P03', '57014', '40P01'].includes(String(error.code))) {
@@ -81,7 +79,8 @@ export function progressSummariesRoutes(work: MainWorkDependencies) {
       body: t.Object({ actingSubject: readId, expectedVersion: t.Integer({ minimum: 0,
         maximum: Number.MAX_SAFE_INTEGER - 1 }), ...editionChoice.properties }, { additionalProperties: false }),
       response: { 200: t.Object({ ...editionPreference.properties, replayed: t.Boolean() }),
-        ...workReadProblems, 409: t.Object({ ...problemResult(409).properties, current: t.Optional(t.Nullable(editionPreference)) }) } },
+        ...workReadProblems, 409: t.Object({ ...problemResult(409).properties,
+          current: t.Optional(t.Nullable(editionPreference)) }, { additionalProperties: false }) } },
     async ({ request, params, body }) => {
       try {
         if (!work.editionPreferences) throw new WorkReadUnavailable('Edition preferences are unavailable');
