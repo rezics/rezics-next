@@ -59,6 +59,7 @@ import type { ReadFailure } from './types.ts';
 import { type AboutPerson, ListFailure, Pager, RealmAbout, RealmDecisions } from './views.tsx';
 import { profileHref } from '../profile/route.ts';
 import { CommunitySetupChecklist } from '../communities/setup-checklist.tsx';
+import { publishedRealmRules } from '../manage/realm-rules-recorded-page.ts';
 
 // The `/r/{realm}` routes are thin: each resolves the Realm view, renders the
 // Zone frame and its tab's content. Tabs render the frame themselves (not a
@@ -492,15 +493,7 @@ export function RealmRulesRoute(props: RealmRouteProps) {
       others={[]}
       locale={locale}
       messages={view.messages}
-      rules={
-        view.realm.header.rules?.map((rule) => ({
-          id: rule.id,
-          title: rule.title.value,
-          body: rule.body.value,
-          governed: rule.governanceRule !== null,
-          lang: rule.title.language,
-        })) ?? null
-      }
+      rules={publishedRealmRules(view.realm.header.rules)}
     />
   ));
 }
