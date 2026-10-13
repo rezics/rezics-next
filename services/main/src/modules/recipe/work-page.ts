@@ -310,7 +310,8 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
   const isRecipe = await readType();
   session.observeDependency(`recipe-type:${work}`, isRecipe, readType);
   if (!isRecipe) { await fenceWorkBasis(session, basis); return null; }
-  const hasPrivatePreview = await readRecipePreviewGrant(session, work);
+  // A published Recipe follows its pin even when the reader can preview drafts.
+  const hasPrivatePreview = !basis.structuredPublication && await readRecipePreviewGrant(session, work);
   if (!hasPrivatePreview && !basis.structuredPublication) {
     await fenceWorkBasis(session, basis);
     return null;
