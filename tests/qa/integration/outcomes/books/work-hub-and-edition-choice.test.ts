@@ -347,6 +347,23 @@ async function supportingReads(mode: 'hub' | 'ambiguous' | 'formats', sample: Re
   );
   if (mode === 'hub') {
     sharedReads.push(
+      async () => {
+        const response = await outcomeResponse(() => sample('edition-preference-empty', 'GET',
+          `/v1/me/edition-preferences/${short(emptyBook.work)}?${acting(person)}`));
+        const raw = await response.text();
+        expect(response.status, `${response.status}: ${raw}`).toBe(200);
+        if (raw) expect(JSON.parse(raw)).toBeNull();
+      },
+      async () => {
+        const summary = await answer<{ preference: Preference | null; status: string | null; language: string; counts: { completed: number; required: number; completedRequired: number } }>(
+          () => sample('progress-summary-empty', 'GET',
+            `/v1/me/progress-summaries/${short(emptyBook.work)}?${acting(person)}&language=en`),
+        );
+        expect(summary).toMatchObject({
+          preference: null, status: 'not-started', language: 'en',
+          counts: { completed: 0, required: 1, completedRequired: 0 },
+        });
+      },
       () => read('platform-access', '/v1/me/platform-access'),
       () => read('availability-parts-unavailable', `${resourcePath}/parts?limit=1`, 404),
       () => read('parts-preview-unavailable', `${resourcePath}/parts?limit=7`, 404),
