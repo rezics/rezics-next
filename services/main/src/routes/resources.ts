@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
-import { authorizedReadProblems, readProblems, writeProblems } from '../api-responses.ts';
+import { authorizedReadProblems, readProblems, selectionConflictProblem, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { selectAdmittedAvatar, selectAdmittedShowcase } from '../modules/media/commands.ts';
 import { showcaseBatchCommand, showcaseBatchResult, showcaseSelectionCommand, showcaseSelectionResult,
@@ -125,9 +125,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       if (target?.status !== 'available' || target.type !== 'work') return unavailable();
       const result = await selectAdmittedShowcase(work.environment,work.media,work.account,work.access,request,
         { ...input,idempotencyKey:key });
-      if (result.outcome === 'stale_head') return Response.json({ type:'https://rezics.com/problems/stale_head',
-        title:'Showcase selection changed',status:409,code:'stale_head',current:result.predecessor,replayed:result.replayed },
-      { status:409,headers:{ 'content-type':'application/problem+json','cache-control':'no-store' } });
+      if (result.outcome === 'stale_head') return problem(409, 'stale_head', 'Showcase selection changed',
+        undefined, { current: result.predecessor, replayed: result.replayed });
       return Response.json({ target:input.target,selection:result.id,predecessor:result.predecessor,
         position:result.position,replayed:result.replayed },{ status:result.replayed?200:201,headers:{ 'cache-control':'no-store' } });
     } catch (error) { return summaryError(error); }
@@ -135,14 +134,14 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
   return new Elysia()
     .use(mediaRoutes(fuseki, work))
     .put('/v1/resources/:resource/showcase/art',{ params:t.Object({ resource:uuid }),body:showcaseSelectionCommand,
-      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,404:problemResult(404),422:problemResult(422) } },
+      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) } },
     ({request,params,body}) => {
       const { profile:_profile,...input } = body;
       return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT,
         crop:input.crop??null,focalArea:input.focalArea??null });
     })
     .put('/v1/resources/:resource/showcase/trailer',{ params:t.Object({ resource:uuid }),body:showcaseTrailerCommand,
-      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,404:problemResult(404),422:problemResult(422) } },
+      response:{ 200:showcaseSelectionResult,201:showcaseSelectionResult,...writeProblems,409:selectionConflictProblem,404:problemResult(404),422:problemResult(422) } },
     ({request,params,body}) => {
       const { profile:_profile,...input } = body;
       return showcaseWrite(request,{ ...input,target:`${ID}${params.resource}`,context:input.context??DEFAULT_MEDIA_CONTEXT });
@@ -254,7 +253,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         expectedSelection: t.Nullable(uuid), asset: t.Nullable(uuid),
         crop: t.Optional(t.Nullable(t.String({ maxLength: 64 }))), actingSubject: nativeId },
       { additionalProperties: false }),
-      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) },
+      response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) },
     }, async ({ request, params, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = request.headers.get('idempotency-key');
@@ -279,9 +278,8 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
             expectedSelection: body.expectedSelection, asset: body.asset, crop: body.crop ?? null,
             actingSubject: body.actingSubject, idempotencyKey: key });
         if (result.outcome === 'stale_head') {
-          return Response.json({ type: 'https://rezics.com/problems/stale_head', title: 'Avatar selection changed',
-            status: 409, code: 'stale_head', current: result.predecessor, replayed: result.replayed },
-          { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+          return problem(409, 'stale_head', 'Avatar selection changed', undefined,
+            { current: result.predecessor, replayed: result.replayed });
         }
         return Response.json({ target, selection: result.id, predecessor: result.predecessor,
           position: result.position, replayed: result.replayed },

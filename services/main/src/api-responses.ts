@@ -40,6 +40,9 @@ export const writeProblems = {
   403: problemResult(403), 409: problemResult(409),
   500: problemResult(500), 503: problemResult(503),
 };
+export const selectionConflictProblem = t.Object({ ...problemResult(409).properties,
+  current: t.Optional(t.Nullable(t.String())), replayed: t.Optional(t.Boolean()),
+}, { additionalProperties: false });
 export const readProblems = {
   400: problemResult(400), 404: problemResult(404),
   500: problemResult(500), 503: problemResult(503),

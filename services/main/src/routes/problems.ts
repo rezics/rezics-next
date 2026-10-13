@@ -1,4 +1,8 @@
 import { logWorkerFault } from '@rezics/observability/log';
+import type { SessionChanges, SessionState } from '../modules/session/contract.ts';
+import type { Interpretation } from '../modules/context/interpretation.ts';
+import type { RefreshConflict } from '../modules/structure/refresh.ts';
+import type { Blocker } from '../modules/editorial-review/contract.ts';
 import { InvalidRatingCalendar } from '../modules/rating/calendar.ts';
 import { PlatformClosed } from '../modules/access/exposure.ts';
 import { platformExposureProblem } from '../modules/access/exposure-routes.ts';
@@ -134,6 +138,17 @@ export class LibraryImportTooLarge extends Error {}
 export class LibraryImportTimedOut extends Error {}
 
 interface ProblemDetails {
+  currentHead?: string | null;
+  current?: string | null | SessionState;
+  submitted?: SessionChanges & { expectedVersion: number };
+  replayed?: boolean;
+  sourcePosition?: { datasetId: 'product'; dataEpoch: string; sequence: string } | null;
+  conflicts?: RefreshConflict[];
+  interpretation?: Interpretation;
+  itemIndex?: number;
+  pointer?: string;
+  reference?: string;
+  blocker?: Blocker;
   agents?: AccountOwnedAgent[];
   hasMore?: boolean;
   moreCount?: number;

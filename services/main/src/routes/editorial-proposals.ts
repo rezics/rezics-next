@@ -7,7 +7,7 @@ import { EditorialBlocked, EditorialInvalid, EditorialReceiptInvalid } from '../
 import type { EditorialCall, CommandResult } from '../modules/editorial-review/store.ts';
 import { InvalidWorkMetadata } from '../modules/work/metadata-schema.ts';
 import { InvalidSemanticValue, UnsupportedSemanticValue } from '../modules/semantic/value.ts';
-import { semanticError } from './semantic.ts';
+import { semanticChangeProblem, semanticError } from './semantic.ts';
 import { workReadError } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -51,9 +51,10 @@ export const editorialBlocker = t.Union([
   t.Object({ code: t.Literal('budget_exhausted') }),
   t.Object({ code: t.Literal('apply_pending'),operationKey: ref }),
 ]);
-const blockedProblem = (status: number) => t.Object({ ...problemResult(status).properties,blocker: t.Optional(editorialBlocker) });
+const blockedProblem = (status: number) => t.Object({ ...problemResult(status).properties,blocker: t.Optional(editorialBlocker) },
+{ additionalProperties: false });
 const problems = { ...writeProblems,...authorizedReadProblems,403: blockedProblem(403),409: blockedProblem(409),
-  503: blockedProblem(503),422: problemResult(422) };
+  503: blockedProblem(503),422: semanticChangeProblem };
 const commandResult = t.Object({ profile: t.Literal('editorial-command-v1'),proposal: uuid,revision: n,
   outcome: t.Union([t.Literal('created'),t.Literal('revised'),t.Literal('approve'),t.Literal('request_changes'),
     t.Literal('comment'),t.Literal('applied'),t.Literal('rejected'),t.Literal('withdrawn'),
@@ -83,9 +84,8 @@ export function editorialError(error: unknown): Response {
   if (error instanceof EditorialBlocked) {
     const status = ['self_review','review_authority_required','owner_authority_required'].includes(error.blocker.code) ? 403
       : error.blocker.code === 'owner_unavailable' ? 503 : 409;
-    return Response.json({ type: `https://rezics.com/problems/editorial_${error.blocker.code}`,
-      title: error.blocker.code,status,code: `editorial_${error.blocker.code}`,blocker: error.blocker },
-    { status,headers: { ...noStore.headers,'content-type': 'application/problem+json' } });
+    return problem(status, `editorial_${error.blocker.code}`, error.blocker.code,
+      noStore.headers, { blocker: error.blocker });
   }
   if (error instanceof EditorialInvalid || error instanceof ControlInvalid || error instanceof InvalidWorkMetadata
     || error instanceof InvalidSemanticValue || error instanceof UnsupportedSemanticValue) {

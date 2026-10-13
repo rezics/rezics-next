@@ -15,7 +15,8 @@ const command = { actingSubject: readId, expectedVersion: t.Integer({ minimum: 0
   maximum: Number.MAX_SAFE_INTEGER - 1 }), ...sessionChanges };
 const conflict = t.Object({ ...problemResult(409).properties,
   current: t.Optional(sessionState),
-  submitted: t.Optional(t.Object({ expectedVersion: command.expectedVersion, ...sessionChanges })) });
+  submitted: t.Optional(t.Object({ expectedVersion: command.expectedVersion, ...sessionChanges },
+    { additionalProperties: false })) }, { additionalProperties: false });
 const errors = { ...workReadProblems, 409: conflict };
 export const openApiOperations = {
   '/v1/me/sessions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: true }, post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
@@ -28,9 +29,8 @@ function failure(error: unknown): Response {
   if (error instanceof SessionMissing) return problem(404, 'session_unavailable', error.message);
   if (error instanceof SessionConflict) return problem(409, 'session_conflict', error.message);
   if (error instanceof TargetNotBound) return problem(422, error.code, error.message);
-  if (error instanceof StaleSession) return Response.json({ type: 'https://rezics.com/problems/stale_session',
-    title: error.message, status: 409, code: 'stale_session', current: error.current, submitted: error.submitted },
-  { status: 409, headers: { ...privateHeaders, 'content-type': 'application/problem+json' } });
+  if (error instanceof StaleSession) return problem(409, 'stale_session', error.message,
+    privateHeaders, { current: error.current, submitted: error.submitted });
   if (error && typeof error === 'object' && 'code' in error
     && ['55P03', '57014', '40P01'].includes(String(error.code))) {
     return problem(503, 'session_unavailable', 'Sessions are busy; retry with the same Idempotency-Key');

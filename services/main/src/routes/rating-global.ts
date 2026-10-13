@@ -23,7 +23,7 @@ const policy = { targetGrain: 'mainVersion', scale: { min: 1, max: 5, step: 1 },
 
 const staleRating = t.Object({ ...problemResult(409).properties,
   currentHead: t.Nullable(globalObservationInput.properties.context),
-  sourcePosition: t.Nullable(sourcePosition) });
+  sourcePosition: t.Nullable(sourcePosition) }, { additionalProperties: false });
 
 function idempotencyKey(request: Request): string | null {
   const key = request.headers.get('idempotency-key');
@@ -118,12 +118,10 @@ export function globalRatingRoutes(work: MainWorkDependencies) {
           if (!await work.access.canReadAsBaselineMember?.(principal, body.actingSubject)) {
             return problem(403, 'authority_denied', 'Authority is not admitted');
           }
-          return Response.json({ type: 'https://rezics.com/problems/stale_head',
-            title: 'Expected standing rating revision is stale', status: 409, code: 'stale_head',
+          return problem(409, 'stale_head', 'Expected standing rating revision is stale', undefined, {
             currentHead: row?.head!.value ?? null,
             sourcePosition: row ? { datasetId: 'product', dataEpoch: row.dataEpoch!.value,
-              sequence: row.sequence!.value } : null },
-          { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+              sequence: row.sequence!.value } : null });
         } catch (readError) { return commandError(readError); }
       }
     })

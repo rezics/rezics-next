@@ -91,7 +91,7 @@ export function problemResult<const Status extends number>(status: Status) {
     validation: t.Optional(t.Object({
       path: t.Nullable(t.String({ maxLength: 180 })),
       constraint: t.Nullable(t.String({ maxLength: 180 })),
-    }, { additionalProperties: false })) });
+    }, { additionalProperties: false })) }, { additionalProperties: false });
 }
 
 export const phraseMatch = t.Object({

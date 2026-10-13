@@ -177,9 +177,8 @@ export function ratingRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               if (rows.length > limit) throw new RatingObservationUnavailable('Own target rating is ambiguous');
               return rows;
             }, principalId, body.context, body.target) : null;
-            return Response.json({ type: 'https://rezics.com/problems/stale_head', title: 'Expected standing rating revision is stale',
-              status: 409, code: 'stale_head', currentHead: current?.revisionHead ?? null },
-            { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+            return problem(409, 'stale_head', 'Expected standing rating revision is stale',
+              undefined, { currentHead: current?.revisionHead ?? null });
           } catch { return ratingError(error); }
         }
       }

@@ -1,6 +1,6 @@
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
-import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
+import { authorizedReadProblems, selectionConflictProblem, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable }
   from '../modules/access/admission.ts';
@@ -504,7 +504,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         disclosure: t.Union([t.Literal('private'), t.Literal('public')]),
         lifecycle: t.Union([t.Literal('active'), t.Literal('deleted'), t.Literal('erased')]),
         actingSubject: nativeId }, { additionalProperties: false }),
-      response: { 200: commandResult, 201: commandResult, ...writeProblems, 404: problemResult(404) },
+      response: { 200: commandResult, 201: commandResult, ...writeProblems, 409: selectionConflictProblem, 404: problemResult(404) },
     }, async ({ request, params, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');
       const key = idempotencyKey(request);
@@ -514,9 +514,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           request, { asset: params.asset, expectedState: body.expectedState, disclosure: body.disclosure,
             lifecycle: body.lifecycle, actingSubject: body.actingSubject, idempotencyKey: key });
         if (result.outcome === 'stale_head') {
-          return Response.json({ type: 'https://rezics.com/problems/stale_head', title: 'Asset state changed',
-            status: 409, code: 'stale_head', current: result.predecessor, replayed: result.replayed },
-          { status: 409, headers: { 'content-type': 'application/problem+json', 'cache-control': 'no-store' } });
+          return problem(409, 'stale_head', 'Asset state changed', undefined,
+            { current: result.predecessor, replayed: result.replayed });
         }
         return Response.json(result, { status: result.replayed ? 200 : 201,
           headers: { 'cache-control': 'no-store' } });

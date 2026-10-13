@@ -30,11 +30,8 @@ export const openApiOperations = {
 function errorResponse(error: unknown): Response {
   if (error instanceof RealmProfileInvalid) return problem(400, 'invalid_realm_profile', error.message);
   if (error instanceof RealmProfileMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
-  if (error instanceof RealmProfileStale) return Response.json({
-    type: 'https://rezics.com/problems/stale_realm_profile', title: error.message,
-    status: 409, code: 'stale_realm_profile', currentHead: error.currentHead,
-  }, { status: 409, headers: { 'content-type': 'application/problem+json',
-    'cache-control': 'no-store' } });
+  if (error instanceof RealmProfileStale) return problem(409, 'stale_realm_profile', error.message,
+    undefined, { currentHead: error.currentHead });
   if (error instanceof RealmProfileUnavailable) return problem(503, 'realm_profile_unavailable',
     'Realm public profile is unavailable');
   if (error instanceof PendingActivation) return problem(503, 'realm_profile_pending', error.message);

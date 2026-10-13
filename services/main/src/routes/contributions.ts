@@ -108,10 +108,8 @@ export function contributionRoutes(fuseki: FusekiClient, work: MainWorkDependenc
       } catch (error) {
         if (error instanceof StaleContributionDraftHead) {
           const head = await readContributionHead(work.environment, body.contribution);
-          return Response.json({ type: 'https://rezics.com/problems/stale_head',
-            title: 'Expected Contribution draft revision is stale', status: 409,
-            code: 'stale_head', currentHead: head?.draftHead ?? null,
-          }, { status: 409, headers: { 'cache-control': 'no-store' } });
+          return problem(409, 'stale_head', 'Expected Contribution draft revision is stale',
+            undefined, { currentHead: head?.draftHead ?? null });
         }
         return commandError(error);
       }

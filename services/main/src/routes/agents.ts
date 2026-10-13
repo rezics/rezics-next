@@ -103,11 +103,8 @@ export function agentRoutes(work: MainWorkDependencies) {
       } catch (error) {
         if (error instanceof AgentProfileInvalid) return problem(400, 'invalid_agent_profile', error.message);
         if (error instanceof AgentProfileDenied) return problem(403, 'agent_profile_denied', error.message);
-        if (error instanceof AgentProfileStale) return Response.json({
-          type: 'https://rezics.com/problems/stale_agent_profile', title: error.message,
-          status: 409, code: 'stale_agent_profile', currentHead: error.currentHead,
-        }, { status: 409, headers: { 'content-type': 'application/problem+json',
-          'cache-control': 'no-store' } });
+        if (error instanceof AgentProfileStale) return problem(409, 'stale_agent_profile', error.message,
+          undefined, { currentHead: error.currentHead });
         if (error instanceof AgentProfileConflict) return problem(409, 'agent_profile_conflict', error.message);
         if (error instanceof AgentProfileValidationFailed) return problem(422,
           'agent_profile_validation_failed', error.message);

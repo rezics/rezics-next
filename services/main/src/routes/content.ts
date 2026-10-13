@@ -105,10 +105,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           status: saved.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
       } catch (error) {
-        if (error instanceof ContentDraftStale) return Response.json({
-          type: 'https://rezics.com/problems/stale_head', title: error.message,
-          status: 409, code: 'stale_head', currentHead: error.currentHead,
-        }, { status: 409, headers: { 'cache-control': 'no-store' } });
+        if (error instanceof ContentDraftStale) return problem(409, 'stale_head', error.message,
+          undefined, { currentHead: error.currentHead });
         return commandError(error);
       }
     })

@@ -261,12 +261,16 @@ const graphWriteResponses = { 202: pendingOperation, ...writeProblems };
 const graphReadResponses = { ...authorizedReadProblems, 409: problemResult(409) };
 const interpretationProblem = t.Object({ type: ref, status: t.Literal(409),
   code: t.Literal('interpretation_unresolved'), title: ref,
-  interpretation: t.Union([t.Object({ state: t.Literal('unavailable') }),
+  interpretation: t.Union([t.Object({ state: t.Literal('unavailable') }, { additionalProperties: false }),
     t.Object({ state: t.Literal('ambiguous'), basis, context: ref, semanticRevision: ref,
+      sourcePosition: t.Optional(t.Object({ ...source.properties, dependencyToken: t.String() }, { additionalProperties: false })),
       selectionRevision: nullableRef,
-      candidates: t.Array(t.Object({ relation: ref, definition: ref, entryRevision: ref }), { maxItems: 26 }) }),
+      candidates: t.Array(t.Object({ relation: ref, definition: ref, entryRevision: ref }, { additionalProperties: false }),
+        { maxItems: 26 }) }, { additionalProperties: false }),
     t.Object({ state: t.Union([t.Literal('unresolved'), t.Literal('disabled')]), basis,
-      context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef })]) });
+      sourcePosition: t.Optional(t.Object({ ...source.properties, dependencyToken: t.String() }, { additionalProperties: false })),
+      context: ref, semanticRevision: ref, entryRevision: ref, selectionRevision: nullableRef },
+    { additionalProperties: false })]) }, { additionalProperties: false });
 
 function contextError(error: unknown): Response {
   if (error instanceof StatementApplicabilityRefused) return problem(422, error.code, error.message);
@@ -337,7 +341,7 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       : { kind: 'personal', canReadPrivate: privateReader(principal, input.actingSubject),
         ...(selections ? { privateCandidates: (scopes: ContextSelectionScope[]) =>
           selections.candidates(principal, scopes) } : {}) };
-  const interpretationBody = (interpretation: Interpretation) => interpretation.state === 'unavailable'
+  const interpretationBody = (interpretation: Interpretation): Interpretation => interpretation.state === 'unavailable'
     ? { state: 'unavailable' } : interpretation;
 
   return new Elysia()
@@ -804,12 +808,8 @@ export function contextRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
       } catch (error) {
         const interpretation = seen.interpretation;
         if (error instanceof ContextCommandUnavailable && interpretation && interpretation.state !== 'resolved') {
-          return Response.json({ type: 'https://rezics.com/problems/interpretation_unresolved', status: 409,
-            code: 'interpretation_unresolved', title: 'Interpretation is not resolved',
-            interpretation: interpretationBody(interpretation),
-              },
-          { status: 409, headers: { 'content-type': 'application/problem+json', ...noStore } },
-            );
+          return problem(409, 'interpretation_unresolved', 'Interpretation is not resolved',
+            noStore, { interpretation: interpretationBody(interpretation) });
         }
         return contextError(error);
       }

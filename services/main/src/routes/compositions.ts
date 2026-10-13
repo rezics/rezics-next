@@ -253,7 +253,8 @@ const stageResult = t.Object({ id: groupUuid, structure: ref, generation: ref,
   graphSequence: t.Nullable(t.String()), cost: t.Optional(cost) });
 const stageResponses = { 200: stageResult, 201: stageResult, ...workReadProblems };
 const refreshConflict = t.Object({ ...problemResult(409).properties,
-  conflicts: t.Array(t.Object({ sourceKey: t.String(), reason: t.String() })) });
+  conflicts: t.Array(t.Object({ sourceKey: t.String(), reason: t.String() }, { additionalProperties: false })) },
+{ additionalProperties: false });
 const refreshResponses = { ...stageResponses, 409: t.Union([problemResult(409), refreshConflict]) };
 const stageParams = t.Object({ id: groupUuid, stage: groupUuid });
 
@@ -430,10 +431,8 @@ function compositionStageRoutes(fuseki: FusekiClient, work: MainWorkDependencies
             revision: stage.revision });
           if (plan.conflicts.length) {
             await store().cancel(stage.id, proof.principalId, structure);
-            return Response.json({ type: 'https://rezics.com/problems/structure_refresh_conflict',
-              title: 'Source and local changes need a correspondence decision', status: 409,
-              code: 'structure_refresh_conflict', conflicts: plan.conflicts },
-            { status: 409, headers: { 'cache-control': 'no-store' } });
+            return problem(409, 'structure_refresh_conflict',
+              'Source and local changes need a correspondence decision', undefined, { conflicts: plan.conflicts });
           }
           stage = await store().renew(stage.id, proof.principalId, structure);
           const records = [...plan.records].sort((a, b) => a.occurrence.localeCompare(b.occurrence));
