@@ -3,7 +3,6 @@ import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/site-pages.ts';
 import { outcomeTitle } from '../../../../../scripts/qa/cases/outcome-cells.ts';
-import { ZONE_SITE_PUBLICATION_COST } from '../../../../../services/main/src/modules/zone/config-format.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -13,6 +12,8 @@ type Home = { realm: string | null; page?: { reference: Reference; document: Doc
 type Receipt = { receipt: string; revision: string; homeDocument: string; homeRevision: string;
   routesRevision: string; navigationRevision: string; themeRevision: string;
   pages: Array<Pick<Page, 'page' | 'variantId' | 'revisionId'>>; replayed: boolean };
+// Freeze the declared public promise: reducing an implementation limit must not turn this proof green.
+const publicationPageBound = 32;
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(row);
@@ -148,14 +149,14 @@ async function publishBoundedPages(sample: ReturnType<typeof recording.session>,
   const pages: Page[] = [];
   const drafts = [];
   // Distinct variants have independent draft heads; bounded concurrency fits the existing proof wall.
-  for (let index = 0; index < ZONE_SITE_PUBLICATION_COST.maxPages; index += 4) {
+  for (let index = 0; index < publicationPageBound; index += 4) {
     const prepared = await Promise.all(Array.from({
-      length: Math.min(4, ZONE_SITE_PUBLICATION_COST.maxPages - index),
+      length: Math.min(4, publicationPageBound - index),
     }, (_, offset) => saveBoundedPage(sample, f, index + offset)));
     pages.push(...prepared.map(item => item.page));
     drafts.push(...prepared.map(item => item.draft));
   }
-  expect(pages).toHaveLength(ZONE_SITE_PUBLICATION_COST.maxPages);
+  expect(pages).toHaveLength(publicationPageBound);
   expect(new Set(pages.map(page => page.revisionId)).size).toBe(pages.length);
   const preparationMs = performance.now() - preparationStarted;
   const body = { ...f.body, expectedHead, pages };
@@ -165,7 +166,7 @@ async function publishBoundedPages(sample: ReturnType<typeof recording.session>,
   const responseBody: unknown = await response.clone().json();
   await Bun.write(`.temp/site-pages-owner-bound-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({
     runId: Bun.env.REZICS_QA_RUN_ID, row: row.rowId, persona: 'owner',
-    declaredMaxPages: ZONE_SITE_PUBLICATION_COST.maxPages, preparationMs,
+    declaredMaxPages: publicationPageBound, preparationMs,
     homeDocument: f.homeDocument, drafts, selections: pages,
     request: { method: 'POST', path, idempotencyKey: key, body },
     response: { status: response.status, body: responseBody },
