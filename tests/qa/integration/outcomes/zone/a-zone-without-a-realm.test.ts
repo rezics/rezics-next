@@ -119,16 +119,23 @@ async function reader(name: Exclude<PersonaName, 'owner' | 'operator'>) {
   expect(await publicCut(site, person)).toEqual(provenance);
 }
 async function platformPage() {
-  return answer<{ authorityEpoch: string; items: Array<{ permission: string; scopeId: string; recipient: { principalId: string } }> }>(
+  return answer<{ authorityEpoch: string; items: Array<{ id: string; permission: string; scopeId: string; recipient: { principalId: string } }> }>(
     sessions.operator.main('GET', `/v1/access/grants?profile=platform-grants-v1&issuerSubject=${encodeURIComponent(sessions.operator.actingSubject!)}`));
 }
 async function exactMandate(site: Site) {
   const page = await platformPage();
   const principalId = page.items.find(item => item.permission === 'platform:grant')!.recipient.principalId;
-  return answer<{ grant: { id: string; generation: string } }>(sessions.operator.main('POST', '/v1/access/grant-changes', {
+  // The exact grant sorts after the broad grant, so authority cannot depend on UUID order.
+  const lastId = page.items.map(item => item.id).sort().at(-1)!;
+  const hex = (BigInt(`0x${lastId.replaceAll('-', '')}`) + 1n).toString(16).padStart(32, '0');
+  const grantId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const created = await answer<{ grant: { id: string; generation: string } }>(sessions.operator.main('POST', '/v1/access/grant-changes', {
     profile: 'platform-grant-change-v1', issuerSubject: sessions.operator.actingSubject,
-    expectedAuthorityEpoch: page.authorityEpoch, action: 'create', grantId: randomUUID(),
+    expectedAuthorityEpoch: page.authorityEpoch, action: 'create', grantId,
     permission: 'platform:resource:zone.edit', scopeId: `zone:edit:${site.zone}`, recipient: { principalId }, validUntil: null }));
+  expect(created.grant).toMatchObject({ id: grantId, active: true, permission: 'platform:resource:zone.edit',
+    scopeId: `zone:edit:${site.zone}`, recipient: { principalId } });
+  return created;
 }
 
 outcomeTest(independent, 'visitor', () => reader('visitor'));
@@ -155,6 +162,9 @@ outcomeTest(independent, 'owner', async () => {
   await publicCut(site, sessions.visitor, later, document);
   expect(preview.reference.provenance).toEqual(provenance);
   await answer(sessions.visitor.main('GET', exactPath(site.saved)), 404);
+  const editor = await answer<{ draft: { revisionId: string; document: DocumentSnapshot } }>(
+    owner.main('GET', `${path(site)}/showcase-editor?${acting(owner)}`));
+  expect(editor.draft).toMatchObject({ revisionId: later.revisionId, document });
 });
 outcomeTest(independent, 'moderator', () => reader('moderator'));
 outcomeTest(independent, 'operator', async () => {
@@ -171,4 +181,7 @@ outcomeTest(independent, 'operator', async () => {
   await publish(site, operator, later);
   const credit = await publicCut(site, sessions.visitor, later, laterDocument);
   expect(credit.author).toBe(provenance.author);
+  const editor = await answer<{ draft: { revisionId: string; document: DocumentSnapshot } }>(
+    operator.main('GET', `${path(site)}/showcase-editor?${acting(operator)}`));
+  expect(editor.draft).toMatchObject({ revisionId: later.revisionId, document: laterDocument });
 });
