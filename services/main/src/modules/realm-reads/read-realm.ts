@@ -8,15 +8,28 @@ import { legacyLocalizedText, selectDisplayName } from '../display-language/sele
 import { pageDiscoveryPolicy } from '../space/visibility.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
+import { discloseInventory, hasDisclosure } from '../disclosure/read.ts';
 
 export interface RealmBasis { id: string; space: string; revision: string;
   visibility: RealmVisibility; reviewMode: RealmReviewMode; policyRevision: string | null;
   history: RealmHistory }
 
+async function readRealmDisclosure(session: WorkReadSession, realm: string) {
+  if (!hasDisclosure(session.deps.environment)) throw new WorkReadUnavailable('Realm disclosure is unavailable');
+  const read = async () => (await discloseInventory(session.deps.environment,
+    [{ owner: 'graph', resource: realm, component: 'record' }], session.viewer, 'read'))[0];
+  const decision = await read();
+  // Closure must become the ordinary missing answer before selected-dependency
+  // tracking can classify the newly hidden record as a cursor-basis change.
+  if (decision !== 'visible') throw new WorkReadMissing('Realm is unavailable');
+  session.observeDependency(`realm-disclosure:${realm}`, decision, read);
+}
+
 /** A private Realm and an absent Realm have the same public answer. */
 export async function readRealmBasis(session: WorkReadSession, realm: string): Promise<RealmBasis> {
   const policy = await session.realm(realm);
   if (!policy.realmRevision) throw new WorkReadUnavailable('Realm basis is incomplete');
+  await readRealmDisclosure(session, realm);
   return { id: realm, space: policy.space, revision: policy.realmRevision,
     visibility: policy.visibility, reviewMode: policy.reviewMode, policyRevision: policy.revision,
     history: policy.history };
@@ -85,6 +98,7 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   // Recheck live disclosure after all profile, media and governance hydration.
   // The enclosing read also fences the graph position and private membership.
   const policy = await session.realm(realm);
+  await readRealmDisclosure(session, realm);
   return { profile: 'realm-read-v1' as const, ...basis,
     name: profile ? selected(profile.name) : summary.name, icon,
     originalName: profile ? selectDisplayName(profile.name, []) : summary.name,
@@ -111,6 +125,8 @@ export async function readRealmLanding(session: WorkReadSession, realm: string) 
     if (!(error instanceof WorkReadMissing)) throw error;
     const policy = await readRealmPolicy(session.deps.environment, realm);
     if (!policy || policy.visibility !== 'private' || policy.admission !== 'request') throw error;
+    // Request admission relaxes membership only; a closed record has no teaser.
+    await readRealmDisclosure(session, realm);
     const published = await readCurrentProfile(session.deps.environment, realm);
     const selected = (value: { original: string; labels: Record<string,string> } | { en: string; 'zh-CN': string }) =>
       selectDisplayName('labels' in value ? value : legacyLocalizedText(value), session.displayLanguages)!;
@@ -129,6 +145,7 @@ export async function readRealmLanding(session: WorkReadSession, realm: string) 
     const current = await readRealmPolicy(session.deps.environment, realm);
     if (!current || current.revision !== policy.revision || current.visibility !== 'private'
       || current.admission !== 'request') throw new WorkReadMissing('Realm is unavailable');
+    await readRealmDisclosure(session, realm);
     return { profile: 'realm-join-page-v1' as const, id: realm, space: policy.space, name,
       description: published ? selected(published.profile.description) : null,
       rules: rules.map(rule => ({ id: rule.id, title: selected(rule.title), body: selected(rule.body) })),

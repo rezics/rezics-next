@@ -12,7 +12,7 @@ import { WorkReadSession, WorkReadMissing, WorkReadUnavailable, WorkReadInvalid,
   decodeReadCursor, type ReadRow } from '../src/modules/work/read-session.ts';
 import { readRealmBasis, readRealmHeader, readRealmLanding } from '../src/modules/realm-reads/read-realm.ts';
 import { readRealmWorks } from '../src/modules/realm-reads/read-works.ts';
-import { readRealmDecision } from '../src/modules/realm-reads/public-decision-index.ts';
+import { readRealmDecision, readRealmDecisions } from '../src/modules/realm-reads/public-decision-index.ts';
 import { readRealmZone } from '../src/modules/realm-reads/read-zone.ts';
 import { readRealmThreads, readRealmThread } from '../src/modules/realm-reply/thread-read.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
@@ -35,7 +35,7 @@ const native = (number: number) => `https://rezics.com/id/00000000-0000-4000-800
 const realm = native(1), space = native(2), head = native(3), work = native(4), selection = native(5), reply = native(6), zone = native(7);
 const position = { dataEpoch: 'closure-owner-epoch', sequence: '17' };
 const binding = (value: string) => ({ type: 'uri', value });
-const actors = ['anonymous', 'member', 'manager', 'case-party'] as const;
+const actors = ['anonymous', 'stranger', 'member', 'owner', 'manager', 'moderator', 'operator', 'case-party'] as const;
 type Actor = typeof actors[number];
 
 async function expectUnavailable(operation: Promise<unknown>) {
@@ -95,6 +95,8 @@ function ownerSession(actor: Actor = 'anonymous', input: { private?: boolean; re
   if (input.reader !== false) configureDisclosure(environment, reader);
   reader.decision = target => closed && target.owner === 'graph' && target.resource === realm ? 'hidden' : 'visible';
   const deps = { environment, access: { assertRecoveryOpen: async () => undefined, activePrincipalId: async () => native(20), realmReadProof: async () => proof || null },
+    governance: { rules: { publishedRealmRules: async () => [],
+      realmHeaderRules: async () => ({ rules: [], heads: new Map() }) } },
     content: { readExactBatch: async () => { calls.content++; return []; } },
     realmReplyThreads: { assertThreadProjection: async () => { calls.thread++; },
       focusBasis: async () => { calls.thread++; return null; },
@@ -138,8 +140,75 @@ function workHydrationOwner() {
 const selectedWorkRow = { work: binding(work), head: binding(head), main: binding(native(8)),
   selection: binding(selection), contribution: binding(native(9)), language: binding('en') };
 
-// readRealmBasis has no final Realm record disclosure adapter after Work summary hydration.
-test.failing('closure-during-works-hydration: a populated Realm collection discards hydrated Works', async () => {
+for (const actor of ['anonymous', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+  test(`closed-direct-deliveries-${actor}: current identity and authority cannot deliver Realm metadata or selections`, async () => {
+    const owner = ownerSession(actor);
+    owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official')
+      ? [{ zone: binding(zone), zoneSpace: binding(native(30)) }]
+      : query.includes('SELECT DISTINCT ?id ?kind') ? [{ id: binding(selection), kind: binding('adoption'),
+        work: binding(work), main: binding(native(8)), subject: binding(native(9)),
+        revisionEpoch: binding(position.dataEpoch), sequence: binding('12'), epochOrder: binding('0') }] : []);
+    const publication = async () => ({ zone, realm, space: native(30), disclosure: 'public', official: null,
+      listing: 'listed', revision: head, presentation: {}, discovery: {} }) as never;
+    const reads = [() => readRealmHeader(owner.session, realm), () => readRealmWorks(owner.session, realm),
+      () => readRealmDecisions(owner.session, realm), () => readRealmDecision(owner.session, realm, selection),
+      () => readRealmZone(owner.session, realm, publication)];
+    for (const read of reads) await read();
+    const hydrated = { ...owner.calls };
+    owner.close();
+    for (const read of reads) await expect(read()).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(owner.calls.profile).toBe(hydrated.profile);
+    expect(owner.calls.summary).toBe(hydrated.summary);
+    expect(owner.calls.content).toBe(hydrated.content);
+    owner.restore();
+    for (const read of reads) await read();
+  });
+
+  test(`closed-private-teaser-${actor}: request admission preserves its live teaser without bypassing closure`, async () => {
+    const owner = ownerSession(actor, { private: true });
+    owner.revoke();
+    expect((await readRealmLanding(owner.session, realm)).profile).toBe('realm-join-page-v1');
+    const profiles = owner.calls.profile;
+    owner.close();
+    await expect(readRealmLanding(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+    expect(owner.calls.profile).toBe(profiles);
+    owner.restore();
+    expect((await readRealmLanding(owner.session, realm)).profile).toBe('realm-join-page-v1');
+  });
+}
+
+test('closure-during-private-teaser-hydration: published request rules cannot deliver after Realm closure', async () => {
+  const owner = ownerSession('anonymous', { private: true });
+  owner.session.deps.governance!.rules!.publishedRealmRules = async () => { owner.close(); return []; };
+  await expect(readRealmLanding(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+test('closure-during-decision-index-hydration: a populated public decision page is discarded at delivery', async () => {
+  const owner = ownerSession();
+  let hydrate = () => {};
+  owner.rows(query => {
+    if (!query.includes('SELECT DISTINCT ?id ?kind')) return [];
+    hydrate();
+    return [{ id: binding(selection), kind: binding('adoption'), work: binding(work), main: binding(native(8)),
+      subject: binding(native(9)), revisionEpoch: binding(position.dataEpoch), sequence: binding('12'), epochOrder: binding('0') }];
+  });
+  expect((await readRealmDecisions(owner.session, realm)).items.map(item => item.id)).toEqual([selection]);
+  hydrate = owner.close;
+  await expect(readRealmDecisions(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
+});
+
+for (const mismatch of [{ zone: native(31) }, { realm: native(31) }, { space: native(31) }, { official: 'other' }]) {
+  test(`realm-zone-publication-pairing-${Object.keys(mismatch)[0]}: independent Spaces retain exact published identity checks`, async () => {
+    const owner = ownerSession();
+    owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official')
+      ? [{ zone: binding(zone), zoneSpace: binding(native(30)) }] : []);
+    const publication = async () => ({ zone, realm, space: native(30), disclosure: 'public', official: null,
+      listing: 'listed', revision: head, presentation: {}, discovery: {}, ...mismatch }) as never;
+    await expect(readRealmZone(owner.session, realm, publication)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  });
+}
+
+test('closure-during-works-hydration: a populated Realm collection discards hydrated Works', async () => {
   const owner = workHydrationOwner();
   owner.rows(query => query.includes('SELECT DISTINCT ?work ?head ?main ?selection')
     ? [selectedWorkRow] : owner.commonRows(query));
@@ -148,8 +217,7 @@ test.failing('closure-during-works-hydration: a populated Realm collection disca
   await expect(readRealmWorks(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// readRealmBasis has no final Realm record disclosure adapter after publication selection hydration.
-test.failing('closure-during-selection-hydration: an exact adopted selection is discarded after its owner row closes the Realm', async () => {
+test('closure-during-selection-hydration: an exact adopted selection is discarded after its owner row closes the Realm', async () => {
   const owner = ownerSession();
   let hydrate = () => {};
   owner.rows(query => {
@@ -163,14 +231,13 @@ test.failing('closure-during-selection-hydration: an exact adopted selection is 
   await expect(readRealmDecision(owner.session, realm, selection)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// readRealmBasis has no final Realm record disclosure adapter after Zone publication hydration.
-test.failing('closure-during-zone-entry-hydration: a fetched Zone publication cannot deliver its closed Realm entry', async () => {
+test('closure-during-zone-entry-hydration: a fetched Zone publication cannot deliver its closed Realm entry', async () => {
   const owner = ownerSession();
-  owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official') ? [{ zone: binding(zone) }] : []);
+  owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official') ? [{ zone: binding(zone), zoneSpace: binding(native(30)) }] : []);
   let hydrate = () => {};
   const publication = async () => {
     hydrate();
-    return { realm, space, disclosure: 'public', official: null, listing: 'listed',
+    return { zone, realm, space: native(30), disclosure: 'public', official: null, listing: 'listed',
       revision: head, presentation: {}, discovery: {} } as never;
   };
   expect((await readRealmZone(owner.session, realm, publication)).zone).toBe(zone);
@@ -178,8 +245,7 @@ test.failing('closure-during-zone-entry-hydration: a fetched Zone publication ca
   await expect(readRealmZone(owner.session, realm, publication)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// readZoneWorks has no final Realm record disclosure adapter for Realm-backed module delivery.
-test.failing('closure-during-zone-module-hydration: the mounted adoption shelf discards its hydrated cards', async () => {
+test('closure-during-zone-module-hydration: the mounted adoption shelf discards its hydrated cards', async () => {
   const owner = workHydrationOwner();
   owner.rows(query => query.includes('SELECT DISTINCT ?work ?head ?main ?evidence')
     ? [{ ...selectedWorkRow, evidence: binding(selection), revisionEpoch: binding(position.dataEpoch),
@@ -268,8 +334,7 @@ for (const surface of ['threads', 'reply'] as const) {
 }
 
 for (const actor of actors) {
-  // Realm self-target closure disclosure is missing.
-  test.failing(`closed-home-${actor}: ordinary Realm basis stays absent with current identity and membership`, async () => {
+  test(`closed-home-${actor}: ordinary Realm basis stays absent with current identity and membership`, async () => {
     const owner = ownerSession(actor, { private: actor !== 'anonymous' });
     expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
     owner.close();
@@ -279,8 +344,7 @@ for (const actor of actors) {
   });
 }
 
-// Realm closure gating before private membership restoration is missing.
-test.failing('restored-home-member: restoration restores current private policy and does not restore revoked membership', async () => {
+test('restored-home-member: restoration restores current private policy and does not restore revoked membership', async () => {
   const owner = ownerSession('member', { private: true });
   owner.close();
   await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
@@ -290,23 +354,20 @@ test.failing('restored-home-member: restoration restores current private policy 
   await expect(readRealmBasis(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// The private request landing closure gate is missing.
-test.failing('closure-private-landing-no-exception: request admission cannot expose a closed Realm join teaser', async () => {
+test('closure-private-landing-no-exception: request admission cannot expose a closed Realm join teaser', async () => {
   const owner = ownerSession('anonymous', { private: true });
   expect((await readRealmLanding(owner.session, realm)).profile).toBe('realm-join-page-v1');
   owner.close();
   await expect(readRealmLanding(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// The final Realm header disclosure fence is missing.
-test.failing('closure-delivery-race: a closure confirmed after summary hydration discards the Realm header', async () => {
+test('closure-delivery-race: a closure confirmed after summary hydration discards the Realm header', async () => {
   const owner = ownerSession('manager');
   owner.session.summaries = async ids => { owner.close(); return ids.map(summary); };
   await expect(readRealmHeader(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
 
-// Fail-closed Realm disclosure composition is missing.
-test.failing('closure-owner-unavailable-replay: missing or unavailable disclosure never grants a public Realm basis', async () => {
+test('closure-owner-unavailable-replay: missing or unavailable disclosure never grants a public Realm basis', async () => {
   const missing = ownerSession('anonymous', { reader: false });
   await expectUnavailable(readRealmBasis(missing.session, realm));
   const owner = ownerSession();
@@ -326,16 +387,14 @@ test('narrow-realm-restriction: title and search restrictions do not imply whole
   expect((await readRealmBasis(owner.session, realm)).id).toBe(realm);
 });
 
-// The Realm Works collection closure gate is missing.
-test.failing('closed-works-anonymous: the Realm collection is missing before summary hydration even when empty', async () => {
+test('closed-works-anonymous: the Realm collection is missing before summary hydration even when empty', async () => {
   const owner = ownerSession();
   owner.close();
   await expect(readRealmWorks(owner.session, realm)).rejects.toBeInstanceOf(WorkReadMissing);
   expect(owner.calls.summary).toBe(0);
 });
 
-// The containing Realm gate for publication selection reads is missing.
-test.failing('closed-selection-member: an exact publication selection cannot bypass the containing Realm', async () => {
+test('closed-selection-member: an exact publication selection cannot bypass the containing Realm', async () => {
   const owner = ownerSession('member');
   owner.rows(query => query.includes('SELECT DISTINCT ?id ?kind') ? [{ id: binding(selection), kind: binding('adoption'),
     work: binding(work), main: binding(native(8)), subject: binding(native(9)), revisionEpoch: binding(position.dataEpoch),
@@ -346,8 +405,7 @@ test.failing('closed-selection-member: an exact publication selection cannot byp
 });
 
 for (const surface of ['threads', 'reply'] as const) {
-  // The current placement Realm gate before thread and reply hydration is missing.
-  test.failing(`closed-${surface}-manager: closure precedes Content and ranking owner hydration`, async () => {
+  test(`closed-${surface}-manager: closure precedes Content and ranking owner hydration`, async () => {
     const owner = ownerSession('manager');
     owner.close();
     const read = surface === 'threads' ? readRealmThreads(owner.session, realm, { sort: 'top' })
@@ -358,12 +416,11 @@ for (const surface of ['threads', 'reply'] as const) {
   });
 }
 
-// The Realm-backed Zone discussion entry closure gate is missing.
-test.failing('closed-zone-discussion-entry: the Realm-owned Zone entry is missing before Zone presentation hydration', async () => {
+test('closed-zone-discussion-entry: the Realm-owned Zone entry is missing before Zone presentation hydration', async () => {
   const owner = ownerSession();
-  owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official') ? [{ zone: binding(zone) }] : []);
+  owner.rows(query => query.includes('SELECT DISTINCT ?zone ?official') ? [{ zone: binding(zone), zoneSpace: binding(native(30)) }] : []);
   let publications = 0;
-  const publication = async () => { publications++; return { realm, space, disclosure: 'public', official: null,
+  const publication = async () => { publications++; return { zone, realm, space: native(30), disclosure: 'public', official: null,
     listing: 'listed', revision: head, presentation: {}, discovery: {} } as never; };
   expect((await readRealmZone(owner.session, realm, publication)).zone).toBe(zone);
   publications = 0;
@@ -535,8 +592,7 @@ test('directory-continuation-opacity: native continuation encrypts identity, ran
 });
 
 for (const sort of ['best', 'top'] as const) {
-  // The closed Realm scope gate for Best and Top ranking reads is missing.
-  test.failing(`closed-thread-rankings-${sort}: ordinary ranked Realm routes read as missing until restored`, async () => {
+  test(`closed-thread-rankings-${sort}: ordinary ranked Realm routes read as missing until restored`, async () => {
     const owner = ownerSession();
     expect((await readRealmThreads(owner.session, realm, { sort })).items).toEqual([]);
     owner.close();
@@ -547,8 +603,7 @@ for (const sort of ['best', 'top'] as const) {
 }
 
 for (const order of ['score', 'growth'] as const) {
-  // The closed Realm scope gate for retained read rankings is missing.
-  test.failing(`closed-read-rankings-${order}: a retained ranking projection cannot expose a closed Realm scope`, async () => {
+  test(`closed-read-rankings-${order}: a retained ranking projection cannot expose a closed Realm scope`, async () => {
     const owner = ownerSession();
     // The projected aggregate stays intact: this milestone only filters reads.
     const checkpoint = { generation: 'one', contentEpoch: 'content', contentSequence: '1',
@@ -565,8 +620,7 @@ for (const order of ['score', 'growth'] as const) {
 }
 
 for (const order of ['score', 'growth'] as const) {
-  // readRankings has no final Realm record disclosure adapter after ranking summary hydration.
-  test.failing(`closure-during-read-rankings-${order}-hydration: retained ranking rows cannot deliver after their Realm closes`, async () => {
+  test(`closure-during-read-rankings-${order}-hydration: retained ranking rows cannot deliver after their Realm closes`, async () => {
     const owner = workHydrationOwner();
     owner.rows(query => query.includes('SELECT DISTINCT ?work ?main ?head')
       ? [selectedWorkRow] : owner.commonRows(query));

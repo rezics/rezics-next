@@ -10,16 +10,19 @@ import { readZoneVisibility } from '../zone/route-visibility.ts';
  * Native graph matching can scan Z active Zones; hydration remains one Zone. */
 export async function readRealmZone(session: WorkReadSession, realm: string,
   publicationRead: typeof readZonePublication = readZonePublication) {
-  const basis = await readRealmBasis(session, realm);
-  const rows = await session.query(`SELECT DISTINCT ?zone ?official WHERE {
+  await readRealmBasis(session, realm);
+  const rows = await session.query(`SELECT DISTINCT ?zone ?official ?zoneSpace WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:zoneState rv:Active ;
-      rv:disclosure ?disclosure ; rv:defaultRealm ${iri(realm)} .
+      rv:disclosure ?disclosure ; rv:defaultRealm ${iri(realm)} ; rv:space ?zoneSpace .
+      ?zoneSpace a rv:Space ; rv:zoneCapability ?zone .
+      FILTER NOT EXISTS { ?zone rv:space ?otherSpace . FILTER(?otherSpace != ?zoneSpace) }
+      FILTER NOT EXISTS { ?otherSpace rv:zoneCapability ?zone . FILTER(?otherSpace != ?zoneSpace) }
       FILTER(?disclosure IN (rv:Public,rv:Private))
       OPTIONAL { ?zone rv:official ?official }
     }
   } LIMIT 2`, 2);
   if (!rows.length) throw new WorkReadMissing('Realm Zone is unavailable');
-  if (rows.length !== 1 || !rows[0]?.zone?.value) {
+  if (rows.length !== 1 || !rows[0]?.zone?.value || !rows[0].zoneSpace?.value) {
     throw new WorkReadUnavailable('Realm Zone relation is ambiguous');
   }
   const zone = rows[0].zone.value;
@@ -30,8 +33,10 @@ export async function readRealmZone(session: WorkReadSession, realm: string,
     throw error;
   }
   if (publication.disclosure === 'private') await readZoneVisibility(session, zone);
-  if (publication.realm !== realm
-    || publication.space !== basis.space
+  // The current attachment only finds a candidate. Its publicly selected
+  // configuration decides the entry; the Realm and Zone have independent Spaces.
+  if (publication.zone !== zone || publication.realm !== realm
+    || publication.space !== rows[0].zoneSpace.value
     || (publication.official !== null) !== (rows[0].official?.value === 'true')) {
     throw new WorkReadUnavailable('Realm Zone presentation differs from its public relation');
   }

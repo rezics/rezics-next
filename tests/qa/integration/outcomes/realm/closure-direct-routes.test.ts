@@ -2,6 +2,7 @@ import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { fromPlainText } from '@rezics/document';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/closure-direct-routes.ts';
 import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
@@ -111,6 +112,34 @@ async function role(sessions: PersonaSessions, permissions: string[], holder: Pe
   }
 }
 
+async function publishSite(sessions: PersonaSessions) {
+  const owner = sessions.owner;
+  const path = `/v1/zones/${short(sessions.zone)}`;
+  const current = await command<{ revision: string }>(owner, 'GET', `${path}/configuration?${acting(owner)}`);
+  await command(owner, 'PUT', `${path}/configuration`, {
+    expectedHead: current.revision, prepareHomeDocument: true, actingSubject: owner.actingSubject,
+  });
+  const configuration = await command<{ revision: string; configuration: { homeDocument: string } }>(
+    owner, 'GET', `${path}/configuration?${acting(owner)}`);
+  const navigation = await command<{ revision: string }>(owner, 'GET', `${path}?${acting(owner)}`);
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const draft = await command<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+    owner, 'POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: configuration.configuration.homeDocument,
+      variantId, expectedHead: null,
+      document: fromPlainText('An original published home for the Realm entry control.', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
+      actingSubject: owner.actingSubject,
+    }, 201,
+  );
+  await command(owner, 'POST', `${path}/site-publications`, {
+    expectedHead: configuration.revision, actingSubject: owner.actingSubject,
+    routesRevision: navigation.revision, navigationRevision: navigation.revision,
+    pages: [{ page: configuration.configuration.homeDocument, variantId, revisionId: draft.revisionId,
+      byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
+  }, 201, randomUUID());
+}
+
 // Setup uses public commands. A product refusal remains an explicit pending
 // prerequisite; OAuth/application failures escape beforeAll as infrastructure errors.
 beforeAll(async () => {
@@ -126,6 +155,7 @@ beforeAll(async () => {
       const config = await command<{ configuration: { defaultRealm: string } }>(fixture.owner, 'GET',
         `/v1/zones/${short(fixture.zone)}/configuration?${acting(fixture.owner)}`);
       expect(config.configuration.defaultRealm).toBe(fixture.realm);
+      await publishSite(fixture);
     }
     const owner = privateRealm.owner;
     const settings = await command<{ generation: string }>(owner, 'GET',
