@@ -129,7 +129,7 @@ test('a cursor retains its source position but never retains revoked private par
   const first = await json<Page>(read());
   expect(first.next).toBeString();
   const mandate = (await stack.accessPool.query<{ id: string }>(`SELECT id FROM access.representation
-    WHERE principal_id=$1 AND represented_subject=$2 AND action='work.read' AND active`,
+    WHERE principal_id=$1 AND subject_id=$2 AND action='work.read' AND active`,
   [reader.principalId, reader.actor])).rows[0]!;
   await setFixtureMandateState(stack.accessPool, mandate.id, 'revoked');
   const seen: string[] = [];
