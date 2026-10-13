@@ -83,7 +83,8 @@ function readHostMemory(): MemoryReading {
 
 const execute = promisify(execFile);
 export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = process.env): Promise<MemoryReading> {
-  const timeout = Math.max(1, Math.min(10_000, remainingMs));
+  // Twenty host readings peaked at 6.731 s; allow twice that, rounded up.
+  const timeout = Math.max(1, Math.min(14_000, remainingMs));
   const [info, stats] = await Promise.all([
     execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env: preserveReapEnvironment(env) }),
     execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'],
@@ -104,6 +105,11 @@ export interface MemoryWaitOptions {
   onAdmissionWait?: (ms: number) => void;
   /** Nested admission uses its parent's event and elapsed-time accounting. */
   emitEvents?: boolean;
+  /** All admission entry points on this host share the startup state file. */
+  lockFile?: string;
+  /** Bound the sharing window; a completed startup always invalidates it sooner. */
+  readingMaxAgeMs?: number;
+  startTime?: (pid: number) => string | undefined;
 }
 
 let admissionSequence = 0;
@@ -158,12 +164,7 @@ export async function isLocalQaRun(root = resolve(import.meta.dir, '../..'),
   return goalSlotDirectory(root) !== undefined;
 }
 
-export interface StartupMemoryOptions extends MemoryWaitOptions {
-  /** Tests isolate their mutex; production processes all use the same host file. */
-  lockFile?: string;
-  /** Process identity reader for deterministic queue/death tests. */
-  startTime?: (pid: number) => string | undefined;
-}
+export type StartupMemoryOptions = MemoryWaitOptions;
 
 export interface StartupSlotGate {
   token: string;
@@ -234,12 +235,93 @@ function sqliteBusy(error: unknown): boolean {
   return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
 }
 
+const memoryStateFile = '/tmp/rezics-qa-memory-startup.sqlite';
+const readingMaxAgeMs = 3_000;
+interface SharedReading {
+  scope: string; owner: string; pid: number; start_time: string;
+  generation: number; finished_at: number | null; reading: string | null; error: string | null;
+}
+
+function memoryState(db: Database): number {
+  db.exec(`CREATE TABLE IF NOT EXISTS memory_generation (id INTEGER PRIMARY KEY, generation INTEGER NOT NULL);
+    INSERT OR IGNORE INTO memory_generation VALUES (1, 0);
+    CREATE TABLE IF NOT EXISTS memory_readings (
+      scope TEXT PRIMARY KEY, owner TEXT NOT NULL, pid INTEGER NOT NULL, start_time TEXT NOT NULL,
+      generation INTEGER NOT NULL, finished_at REAL, reading TEXT, error TEXT
+    )`);
+  return memoryGeneration(db);
+}
+
+function memoryGeneration(db: Database): number {
+  return db.query<{ generation: number }, []>('SELECT generation FROM memory_generation WHERE id = 1').get()!.generation;
+}
+
+/** A process owns a measurement, never the SQLite writer lock while Docker runs.
+ * Both successful and failed results have the same lifetime. Dead owners can be replaced. */
+async function sharedMemoryReading(db: Database, needsVm: boolean, options: MemoryWaitOptions,
+  read: (remainingMs: number) => Promise<MemoryReading>): Promise<{ reading?: MemoryReading; error?: string; generation: number }> {
+  const now = options.now ?? Date.now;
+  const sleep = options.sleep ?? (ms => Bun.sleep(ms));
+  const startTime = options.startTime ?? processStartTime;
+  const identity = startTime(process.pid);
+  if (!identity) throw new Error('Cannot read QA measurement process start time');
+  const scope = needsVm ? 'docker' : 'host';
+  const owner = randomUUID();
+  for (;;) {
+    if (now() >= options.deadline) throw new Error('Memory measurement deadline reached');
+    let held = false, claimed = false, generation = 0;
+    try {
+      db.exec('BEGIN IMMEDIATE'); held = true;
+      generation = memoryState(db);
+      const cached = db.query<SharedReading, [string]>('SELECT * FROM memory_readings WHERE scope = ?').get(scope);
+      if (cached?.finished_at !== null && cached?.finished_at !== undefined
+        && cached.generation === generation && now() >= cached.finished_at
+        && now() - cached.finished_at < (options.readingMaxAgeMs ?? readingMaxAgeMs)) {
+        db.exec('COMMIT'); held = false;
+        return { reading: cached.reading ? JSON.parse(cached.reading) as MemoryReading : undefined,
+          error: cached.error ?? undefined, generation };
+      }
+      // Even after invalidation, a live owner finishes before anyone measures again.
+      if (!cached || cached.finished_at !== null || startTime(cached.pid) !== cached.start_time) {
+        db.query(`INSERT OR REPLACE INTO memory_readings
+          (scope, owner, pid, start_time, generation) VALUES (?, ?, ?, ?, ?)`)
+          .run(scope, owner, process.pid, identity, generation);
+        claimed = true;
+      }
+      db.exec('COMMIT'); held = false;
+    } catch (error) { if (!sqliteBusy(error)) throw error; }
+    finally { if (held) db.exec('ROLLBACK'); }
+    if (!claimed) {
+      await sleep(Math.min(50, Math.max(0, options.deadline - now())));
+      continue;
+    }
+    let reading: MemoryReading | undefined, error: string | undefined;
+    try {
+      reading = await read(options.deadline - now());
+      measuredAdmissionMessage({ vm: 0, host: 0, vmReserve: 0, hostReserve: 0 }, reading);
+    } catch (failure) {
+      reading = undefined;
+      error = failure instanceof Error ? failure.message : String(failure);
+    }
+    // Publishing uses one statement and retains the generation from before measurement.
+    for (;;) {
+      try {
+        db.query(`UPDATE memory_readings SET finished_at = ?, reading = ?, error = ? WHERE scope = ? AND owner = ?`)
+          .run(now(), reading ? JSON.stringify(reading) : null, error ?? null, scope, owner);
+        break;
+      } catch (failure) { if (!sqliteBusy(failure)) throw failure; }
+      await sleep(Math.min(50, Math.max(0, options.deadline - now())));
+    }
+    return { reading, error, generation };
+  }
+}
+
 /** A short host-wide transaction promises memory until Compose readiness makes
  * the startup's containers visible to the next measured reading. */
 export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMemoryOptions,
   start: () => T | Promise<T>): Promise<T> {
   if (!await isLocalQaRun(options.root, options.env)) return await start();
-  const lockFile = options.lockFile ?? '/tmp/rezics-qa-memory-startup.sqlite';
+  const lockFile = options.lockFile ?? memoryStateFile;
   mkdirSync(dirname(lockFile), { recursive: true });
   const mutex = new Database(lockFile, { create: true });
   const now = options.now ?? Date.now;
@@ -263,6 +345,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
     mutex.exec('PRAGMA busy_timeout=0');
     for (;;) {
       let readingFits = false;
+      let retryReading = false;
       const concurrency = await startupConcurrency(options);
       if (now() >= options.deadline)
         throw new Error(`Memory admission deadline reached${message.startsWith('Waiting for another')
@@ -290,10 +373,14 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         registered = true;
         const beforeReading = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all();
         let reading: MemoryReading | undefined;
+        let readingGeneration = -1;
         let measured = admissionMessage(need);
         try {
-          reading = await read(options.deadline - now());
-          measured = measuredAdmissionMessage(need, reading);
+          const shared = await sharedMemoryReading(mutex, need.vm + need.vmReserve > 0, options, read);
+          reading = shared.reading;
+          readingGeneration = shared.generation;
+          if (shared.error) measured += `; measurement failed: ${shared.error}`;
+          if (reading) measured = measuredAdmissionMessage(need, reading);
         } catch (error) {
           measured += `; measurement failed: ${error instanceof Error ? error.message : String(error)}`;
           reading = undefined;
@@ -302,11 +389,18 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         held = true;
         const live: StartupPromise[] = [];
         for (const promise of mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all()) {
-          if (now() - promise.admitted_at > 15 * 60_000 || startTime(promise.pid) !== promise.start_time)
+          if (now() - promise.admitted_at > 15 * 60_000 || startTime(promise.pid) !== promise.start_time) {
             mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
+            mutex.exec('UPDATE memory_generation SET generation = generation + 1 WHERE id = 1');
+          }
           else live.push(promise);
         }
         const activeStartups = live.length;
+        if (readingGeneration !== memoryGeneration(mutex)) {
+          reading = undefined;
+          retryReading = true;
+          measured = `${admissionMessage(need)}; reading predates a completed QA startup`;
+        }
         for (const promise of beforeReading) {
           if (!live.some(current => current.id === promise.id) && startTime(promise.pid) === promise.start_time
             && now() - promise.admitted_at <= 15 * 60_000) live.push(promise);
@@ -353,6 +447,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       // A previously granted lifetime lease must be returned if a fresh reading
       // or an older fitting request prevents startup. No promise is held yet.
       if (!readingFits) slotReady.cancel();
+      if (retryReading) continue;
       publishWait(message);
       announce(message);
       await sleep(Math.min(pollMs, Math.max(0, options.deadline - now())));
@@ -365,7 +460,14 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         if (registered) for (;;) {
           try {
             mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
-            if (promised) mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId);
+            if (promised) {
+              mutex.exec('BEGIN IMMEDIATE');
+              try {
+                mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId);
+                mutex.exec('UPDATE memory_generation SET generation = generation + 1 WHERE id = 1');
+                mutex.exec('COMMIT');
+              } catch (error) { mutex.exec('ROLLBACK'); throw error; }
+            }
             break;
           }
           catch (error) { if (!sqliteBusy(error)) throw error; }
@@ -427,15 +529,21 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const read = options.read ?? (needsVm ? readMemory : async () => readHostMemory());
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive');
+  const lockFile = options.lockFile ?? memoryStateFile;
+  mkdirSync(dirname(lockFile), { recursive: true });
+  const db = new Database(lockFile, { create: true });
+  db.exec('PRAGMA busy_timeout=0');
   let message = admissionMessage(need);
   try {
   for (;;) {
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     let reading: MemoryReading;
     try {
-      reading = await read(options.deadline - now());
+      const shared = await sharedMemoryReading(db, needsVm, options, read);
+      if (!shared.reading) throw new Error(shared.error ?? 'No memory reading');
+      reading = shared.reading;
       message = measuredAdmissionMessage(need, reading);
-      if (now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve
+      if (shared.generation === memoryGeneration(db) && now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve
         && reading.hostAvailable >= need.host + need.hostReserve) {
         publishWait();
         announce(`Admitted; ${message}`);
@@ -450,5 +558,5 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     await sleep(Math.min(pollMs, options.deadline - now()));
   }
-  } finally { publishWait(); reportWait(); }
+  } finally { db.close(true); publishWait(); reportWait(); }
 }

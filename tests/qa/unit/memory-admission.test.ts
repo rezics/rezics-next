@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterEach, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
@@ -10,9 +10,9 @@ import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
 import { processStartTime } from '../../../scripts/qa/process/identity.ts';
-import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory,
-  isLocalQaRun, qaMemoryDeadline, withMemoryStartup, withQaStackStartup,
-  type MemoryReading } from '../../../scripts/qa/memory-admission.ts';
+import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
+  isLocalQaRun, qaMemoryDeadline, withMemoryStartup as withMemoryStartupImpl, withQaStackStartup,
+  type MemoryReading, type MemoryWaitOptions, type StartupMemoryOptions } from '../../../scripts/qa/memory-admission.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const need = qaMemoryNeed(root, 'other', 'ordinary', {});
@@ -46,6 +46,20 @@ test('admission inherits the run deadline without capping it to the fallback dur
 
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
+
+const readingDirectories: string[] = [];
+afterEach(() => {
+  for (const dir of readingDirectories.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+function waitForMemory(need: Parameters<typeof waitForMemoryImpl>[0], options: MemoryWaitOptions) {
+  const dir = mkdtempSync(join(scratch, 'qa-reading-'));
+  readingDirectories.push(dir);
+  return waitForMemoryImpl(need, { lockFile: join(dir, 'state.sqlite'), readingMaxAgeMs: 1, ...options });
+}
+function withMemoryStartup<T>(need: Parameters<typeof withMemoryStartupImpl>[0], options: StartupMemoryOptions,
+  start: () => T | Promise<T>) {
+  return withMemoryStartupImpl(need, { readingMaxAgeMs: 1, ...options }, start);
+}
 
 for (const activeMs of [240_000, 400_000]) {
 test(`a restore reports five minutes of admission separately and qualifies ${activeMs} ms of active work`, async () => {
@@ -195,6 +209,103 @@ function assertStartupUnlocked(lockFile: string) {
   finally { competitor.close(true); }
 }
 
+for (const fails of [false, true]) {
+  test(`ten waiting processes share one ${fails ? 'failed' : 'successful'} measurement and refresh after expiry`, async () => {
+    const dir = mkdtempSync(join(scratch, 'qa-reading-sharing-'));
+    const script = join(dir, 'wait.ts');
+    writeFileSync(script, `
+      import { waitForMemory } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
+      import { appendFileSync } from 'node:fs';
+      await waitForMemory(${JSON.stringify(need)}, {
+        env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(join(dir, 'state.sqlite'))},
+        deadline: Date.now() + 5000, readingMaxAgeMs: 3000,
+        read: async () => {
+          appendFileSync(${JSON.stringify(join(dir, 'readings'))}, 'reading\\n');
+          await Bun.sleep(100);
+          ${fails ? "throw new Error('Docker measurement unavailable');" : `return ${JSON.stringify({ ...plenty, vmUsed: plenty.vmTotal })};`}
+        },
+        announce: message => { console.log(message); throw new Error('observed'); },
+      });
+    `);
+    const children: ReturnType<typeof Bun.spawn>[] = [];
+    const wave = async (count: number) => {
+      const waveChildren = Array.from({ length: count }, () => Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' }));
+      children.push(...waveChildren);
+      const lines = await Promise.all(waveChildren.map(async child => {
+        const stdout = new Response(child.stdout).text();
+        const stderr = new Response(child.stderr).text();
+        expect(await child.exited).toBe(1);
+        expect(await stderr).toContain('observed');
+        return await stdout;
+      }));
+      for (const line of lines) expect(line).toContain(fails ? 'measurement failed: Docker measurement unavailable' : 'free 0.00 GiB');
+    };
+    try {
+      await wave(10);
+      expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(1);
+      const db = new Database(join(dir, 'state.sqlite'));
+      try { db.query('UPDATE memory_readings SET finished_at = ?').run(Date.now() - 3000); }
+      finally { db.close(true); }
+      await wave(2);
+      expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(2);
+    } finally {
+      for (const child of children) { child.kill(); await child.exited; }
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }, 10_000);
+}
+
+test('a dead measuring process leaves its turn to the next waiter', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-reading-death-'));
+  const lockFile = join(dir, 'state.sqlite'), ready = join(dir, 'measuring'), script = join(dir, 'measure.ts');
+  writeFileSync(script, `
+    import { waitForMemory } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
+    import { writeFileSync } from 'node:fs';
+    await waitForMemory(${JSON.stringify(need)}, {
+      env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(lockFile)}, deadline: Date.now() + 5000,
+      read: async () => { writeFileSync(${JSON.stringify(ready)}, 'ready');
+        await new Promise(() => { setInterval(() => {}, 1000); }); return ${JSON.stringify(plenty)}; },
+    });
+  `);
+  const child = Bun.spawn(['bun', script], { stdout: 'pipe', stderr: 'pipe' });
+  try {
+    await untilFile(ready);
+    let reads = 0;
+    const waiting = deferred<void>();
+    const next = waitForMemoryImpl(need, { env: qaEnv, lockFile, deadline: Date.now() + 2000,
+      read: async () => { reads++; return plenty; }, announce: () => {},
+      sleep: async ms => { waiting.resolve(); await Bun.sleep(ms); } });
+    await waiting.promise;
+    expect(reads).toBe(0);
+    child.kill('SIGKILL'); await child.exited;
+    await next;
+    expect(reads).toBe(1);
+  } finally { child.kill(); await child.exited; rmSync(dir, { recursive: true, force: true }); }
+});
+
+test('a reading begun before startup completion cannot admit even when it finishes afterwards', async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-reading-generation-'));
+  let now = 0, reads = 0, started = false;
+  const ready = deferred<void>(), finish = deferred<void>();
+  const options = { env: qaEnv, lockFile: join(dir, 'state.sqlite'), readingMaxAgeMs: 3000,
+    now: () => now, deadline: 3100, pollMs: 5, sleep: async (ms: number) => { now += ms; }, announce: () => {} };
+  try {
+    const first = withMemoryStartupImpl(need, { ...options, read: async () => { reads++; return plenty; } }, async () => {
+      ready.resolve(); await finish.promise;
+    });
+    await ready.promise;
+    now = 3001;
+    await expect(withMemoryStartupImpl(need, { ...options, read: async () => {
+      reads++;
+      assertStartupUnlocked(options.lockFile);
+      if (reads === 2) { finish.resolve(); await first; return plenty; }
+      return { ...plenty, vmUsed: plenty.vmTotal };
+    } }, () => { started = true; })).rejects.toThrow('free 0.00 GiB');
+    expect(started).toBe(false);
+    expect(reads).toBe(3);
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+
 async function startupScenario(concurrency?: string) {
   const directory = mkdtempSync(join(scratch, 'qa-startup-promises-'));
   const lockFile = join(directory, 'mutex.sqlite');
@@ -295,7 +406,7 @@ test(`live promises subtract ${constrained} need while memory readings include c
     scenario.wake.resolve(); await second;
     expect(firstFinished).toBe(true);
     expect(secondStarted).toBe(true);
-    expect(readings).toBe(3);
+    expect(readings).toBe(2);
   } finally { rmSync(scenario.directory, { recursive: true, force: true }); }
 });
 }
@@ -368,7 +479,7 @@ test('process death discards startup promises before the next admission', async 
       await untilFile(ready);
       child.kill(signal);
       await child.exited;
-      expect(await withMemoryStartup(need, { env: qaEnv, lockFile, deadline: Date.now() + 500,
+      expect(await withMemoryStartup(need, { env: qaEnv, lockFile, deadline: Date.now() + 5000,
         announce: () => {}, read: async () => plenty }, () => 'recovered')).toBe('recovered');
     } finally { child.kill(); await child.exited; rmSync(dir, { recursive: true, force: true }); }
   }
@@ -379,7 +490,7 @@ test('each source and restore target startup receives a fresh reading and its in
   let now = 0, used = 0, reads = 0;
   const starts: string[] = [];
   const env = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '25' };
-  const options = { lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 10,
+  const options = { lockFile: join(dir, 'mutex.sqlite'), readingMaxAgeMs: 0, now: () => now, pollMs: 10,
     announce: () => {}, sleep: async (ms: number) => { now += ms; }, read: async () => {
       reads++; return { vmTotal: 12 * GiB, vmUsed: used, hostAvailable: 20 * GiB };
     } };
@@ -408,7 +519,7 @@ test('host-only admission can start without Docker and still enforces its reserv
   try {
     process.env.PATH = '';
     await waitForMemory({ vm: 0, vmReserve: 0, host: 0, hostReserve: 0 }, {
-      env: qaEnv, deadline: Date.now() + 100, announce: () => {},
+      env: qaEnv, deadline: Date.now() + 2000, announce: () => {},
     });
   } finally { process.env.PATH = previous; }
   let now = 0;
