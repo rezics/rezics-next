@@ -64,6 +64,12 @@ async function privateReply(response: Response, expected: number) {
   expect(raw).not.toContain(privateLoan.id);
   expect(raw).not.toContain('Private fixture borrower');
 }
+async function activeLoanRefusal(sample: Sample, name: PersonaName) {
+  const response = await sample('active-loans-refused', 'GET', `${loanPage('active')}&limit=20`);
+  const problem = await response.clone().json() as { code: string };
+  await privateReply(response, name === 'visitor' ? 401 : 403);
+  expect(problem.code).toBe(name === 'visitor' ? 'account_assertion_denied' : 'library_record_denied');
+}
 async function createBook(title: string): Promise<Work> {
   const work = await json<Work>(ownerCall('POST', '/v1/works', {
     profile: 'metadata-only-v1', authoring: 'own-work', ...own(), title, language: 'en', semanticTypes: ['https://schema.org/Book'],
@@ -220,7 +226,7 @@ async function deniedLoans(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
   const sample = recordings.loans.session(name, person);
   await privateReply(await sample('copies-refused', 'GET', `/v1/works/${short(book.work)}/copies?${query()}`), expected);
-  await privateReply(await sample('active-loans-refused', 'GET', `${loanPage('active')}&limit=20`), expected);
+  await activeLoanRefusal(sample, name);
   await privateReply(await sample('open-loan-refused', 'POST', '/v1/me/library-loans', openBody(privateCopy.id)), expected);
   await privateReply(await sample('extend-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/extend`, {
     ...own(), expectedVersion: 1, dueAt: new Date(Date.now() + 10 * 86_400_000).toISOString(),
@@ -232,6 +238,7 @@ async function deniedLoans(name: PersonaName) {
 async function deniedExpired(name: PersonaName) {
   const expected = name === 'visitor' ? 401 : 403;
   const sample = recordings.expired.session(name, people[name]);
+  await activeLoanRefusal(sample, name);
   await privateReply(await sample('overdue-loans-refused', 'GET', loanPage('overdue')), expected);
   await privateReply(await sample('returned-loans-refused', 'GET', loanPage('returned')), expected);
   await privateReply(await sample('return-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/return`, { ...own(), expectedVersion: 1 }), expected);
