@@ -147,6 +147,8 @@ export function planningEvent(directory: string, goal: string, ledger: Ledger, r
   if (!existsSync(file)) return;
   const db = new Database(file, { readonly: true });
   try {
+    // Enrollment and turn completion can briefly hold the event store's write lock.
+    db.exec('PRAGMA busy_timeout = 5000;');
     if (!db.query('SELECT goal FROM managers WHERE goal=?').get(goal)) return;
     if (db.query("SELECT event_key FROM events WHERE goal=? AND event_key LIKE 'planning:%' AND handled=0 LIMIT 1").get(goal)) return;
     const previous = db.query("SELECT rowid,event_key,handled FROM events WHERE goal=? AND event_key LIKE 'planning:%' ORDER BY rowid DESC LIMIT 1")

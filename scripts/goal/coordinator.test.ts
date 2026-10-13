@@ -1379,6 +1379,24 @@ describe('independent tmux launcher', () => {
     const f = tmuxFixture(); const {socket} = f;
     const tokens: string[] = [];
     let pump: ChildProcess | undefined;
+    let pumpErrors = '';
+    const waitForPump = async (coordinator: GoalCoordinator, predicate: () => boolean, label: string) => {
+      try {
+        // A pump failure must not masquerade as a synthetic startup timeout.
+        await waitFor(() => {
+          if (pump && (pump.exitCode !== null || pump.signalCode !== null)) throw new Error('Coordinator pump exited');
+          return predicate();
+        });
+      } catch (error) {
+        const state = {
+          pump: {code:pump?.exitCode,signal:pump?.signalCode,stderr:pumpErrors},
+          admissions:coordinator.db.query('SELECT goal,error FROM admissions').all(),
+          events:coordinator.db.query('SELECT goal,event_key,error FROM events').all(),
+          turns:coordinator.db.query('SELECT goal,phase,code FROM attempts').all(),
+        };
+        throw new Error(`${label}: ${String(error)}\n${JSON.stringify(state)}`);
+      }
+    };
     try {
       const repository = join(f.dir,'repository');
       mkdirSync(repository);
@@ -1417,8 +1435,9 @@ describe('independent tmux launcher', () => {
       try {
         // Start before any Goal exists: the pump must discover registrations added while it runs.
         pump = spawn(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator','--interval-ms','100'],
-          {cwd:repository,env,stdio:'ignore'});
-        await waitFor(()=>Boolean(pumpState.db.query('SELECT identity FROM pump_owner').get()));
+          {cwd:repository,env,stdio:['ignore','ignore','pipe']});
+        pump.stderr!.on('data',chunk=>{ pumpErrors = (pumpErrors + String(chunk)).slice(-8_000); });
+        await waitForPump(pumpState,()=>Boolean(pumpState.db.query('SELECT identity FROM pump_owner').get()),'Pump registration');
       } finally { pumpState.close(); }
       for (const engine of ['codex','codex-1','claude'] as const) {
         const goal = `manager-${engine}`;
@@ -1429,7 +1448,8 @@ describe('independent tmux launcher', () => {
         expect(result.status,result.stderr).toBe(0);
         const coordinator = new GoalCoordinator({stateDir:directory,events:()=>[],admit:()=>{}});
         try {
-          await waitFor(()=> coordinator.status().attempts.filter(attempt=>attempt.goal === goal).some(attempt=>attempt.phase === 'done'));
+          // Completion polling needs durable turn records, not repeated host-wide session-owner scans.
+          await waitForPump(coordinator,()=>coordinator.turns({goal}).turns.some(turn=>turn.phase === 'done'),`${goal} startup`);
           const first = coordinator.status().attempts.find(attempt=>attempt.goal === goal)!;
           tokens.push(first.token);
           expect(first.code,readFileSync(join(directory,'manager-runs',first.token,'stderr.log'),'utf8')).toBe(0);
@@ -1448,7 +1468,7 @@ describe('independent tmux launcher', () => {
           const mail = new GoalMailStore({stateDir:directory,goals:[goal],sender:goal});
           try {
             const message = mail.send(goal,'Next request',`request-${engine}`);
-            await waitFor(()=>coordinator.status().attempts.filter(attempt=>attempt.goal === goal).filter(attempt=>attempt.phase === 'done').length >= 2);
+            await waitForPump(coordinator,()=>coordinator.turns({goal}).turns.filter(turn=>turn.phase === 'done').length >= 2,`${goal} mail wake`);
             mail.ack(goal,message.id);
             const second = coordinator.status().attempts.filter(attempt=>attempt.goal === goal)[1]!;
             tokens.push(second.token);

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { Database } from 'bun:sqlite';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { git } from './ledger.ts';
 import { GoalMailStore } from './mail.ts';
 import { managerEvents } from './manager-commands.ts';
@@ -63,6 +63,34 @@ test('pending main declarations raise one event containing every pending persona
     expect(events[0]!.body).not.toContain('program/missing');
     expect(events[0]!.body).not.toContain('program/unlanded');
   } finally { f.close(); }
+});
+
+test('planning waits for a concurrent coordinator transaction instead of terminating the pump', async () => {
+  const f = fixture();
+  let writer: ReturnType<typeof spawn> | undefined;
+  try {
+    f.declaration('failure'); f.commit();
+    const file = join(f.repo, '.temp/writer.ts');
+    writeFileSync(file, `import { Database } from 'bun:sqlite';
+      const db = new Database(${JSON.stringify(join(f.state, 'coordinator.sqlite'))});
+      db.exec('BEGIN EXCLUSIVE');
+      console.log('locked');
+      await Bun.sleep(500);
+      db.exec('COMMIT'); db.close();`);
+    writer = spawn(process.execPath, [file], { stdio: ['ignore', 'pipe', 'pipe'] });
+    await new Promise<void>((resolve, reject) => {
+      writer!.stdout!.once('data', () => resolve());
+      writer!.once('error', reject);
+      writer!.once('exit', code => { if (code !== 0) reject(new Error(`Coordinator writer exited ${code}`)); });
+    });
+    expect(f.events()).toHaveLength(1);
+  } finally {
+    if (writer && writer.exitCode === null) {
+      const exited = new Promise<void>(resolve => writer!.once('exit', () => resolve()));
+      writer.kill('SIGTERM'); await exited;
+    }
+    f.close();
+  }
 });
 
 test('only an open implementation task naming a row covers it', () => {
