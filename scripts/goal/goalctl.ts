@@ -6107,13 +6107,15 @@ function namedOptions(args: string[], allowed: string[]): Record<string, string>
 }
 export function mailCommand(args: string[], options: {stateDir: string; goals: string[]; callerGoal?: string}): string[] {
   const [action, ...rest] = args;
-  const store = new GoalMailStore(options);
+  const store = new GoalMailStore({...options,sender:options.callerGoal ?? ''});
   try {
     if (action === 'send') {
       const goal = rest[0] ?? '';
-      const flags = namedOptions(rest.slice(1), ['--file', '--key']);
+      const flags = namedOptions(rest.slice(1), ['--file', '--key', '--deadline']);
       if (!flags['--file'] || !flags['--key']) throw new Error('mail send <goal> needs --file <path> --key <retry-key>');
-      return [JSON.stringify(store.send(goal, readFileSync(resolve(flags['--file']), 'utf8'), flags['--key']))];
+      if (!options.callerGoal) throw new Error('mail send needs GOAL_ID to record its sender');
+      return [JSON.stringify(store.send(goal, readFileSync(resolve(flags['--file']), 'utf8'), flags['--key'],
+        flags['--deadline'] === undefined ? undefined : Number(flags['--deadline'])))];
     }
     if (action === 'inbox') {
       if (rest.length > 1) throw new Error('mail inbox accepts one Goal');
@@ -6127,11 +6129,17 @@ export function mailCommand(args: string[], options: {stateDir: string; goals: s
       if (!goal || !rest[0]) throw new Error('mail ack <id> needs GOAL_ID or --goal <goal>');
       return [JSON.stringify(store.ack(goal, rest[0]))];
     }
-    throw new Error('mail needs send <goal> --file <path> --key <retry-key> | inbox [goal] | ack <id> [--goal <goal>]');
+    throw new Error('mail needs send <goal> --file <path> --key <retry-key> [--deadline <minutes>] | inbox [goal] | ack <id> [--goal <goal>]');
   } finally { store.close(); }
 }
-function managerEvents(directory: string, goal: string, mail: GoalMailStore): WakeEvent[] {
-  const events: WakeEvent[] = mail.pending(goal).map(message => ({key:message.id,body:message.body}));
+export function managerEvents(directory: string, goal: string, mail: GoalMailStore): WakeEvent[] {
+  const body = (message: ReturnType<GoalMailStore['pending']>[number]) =>
+    `From: ${message.sender ?? 'unknown (historical mail)'}\nDeadline: ${message.deadlineAt ?? 'none'}\n${message.body}`;
+  const events: WakeEvent[] = mail.pending(goal).map(message => ({key:message.id,body:body(message)}));
+  for (const message of mail.overdue(goal)) {
+    if (message.overdueAt !== null) events.push({key:`mail:overdue:${message.id}:${goal}`,
+      body:`Mail ${message.id} is overdue and remains unacknowledged. This is its one deadline wake.\n${body(message)}`});
+  }
   for (const task of Object.values(eventLedger(directory).tasks)) {
     if (task.goal !== goal || ['verified', 'cancelled', 'merged'].includes(task.state) || !task.attempts.length) continue;
     const attempt = lastAttempt(task);
@@ -6237,7 +6245,10 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     }
     if (action === 'status') {
       if (rest.length) throw new Error('coordinator status takes no options');
-      console.log(JSON.stringify(coordinator.status(),null,2)); return;
+      const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
+      try { console.log(JSON.stringify({...coordinator.status(),overdueMail:mail.overdue()},null,2)); }
+      finally { mail.close(); }
+      return;
     }
     if (action === 'unenroll') {
       if (rest.length !== 1) throw new Error('coordinator unenroll needs <goal>');
@@ -6291,7 +6302,12 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     const stop = () => { stopped = true; };
     process.on('SIGTERM',stop); process.on('SIGINT',stop);
     try {
-      do { coordinator.step(); if (!once && !stopped) await Bun.sleep(interval); } while (!once && !stopped);
+      do {
+        const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
+        try { mail.notifyOverdue(); } finally { mail.close(); }
+        coordinator.step();
+        if (!once && !stopped) await Bun.sleep(interval);
+      } while (!once && !stopped);
     } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
   } finally { coordinator.close(); }
 }
@@ -6405,7 +6421,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | gate <id> [--skip-unit-gate] [--skip-type-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
-        + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
+        + ' | mail send <goal> --file <path> --key <key> [--deadline <minutes>] | mail inbox [goal] | mail ack <id> [--goal <goal>]'
         + ' | coordinator [start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]|enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
       return 2;

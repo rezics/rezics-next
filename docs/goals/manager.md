@@ -188,12 +188,21 @@ loop: end each turn when nothing is ready, and arm no watcher. It resumes the
 same native session when mail or a task exit arrives.
 
 Managers message each other through durable Goal mail:
-`task goal -- mail send <goal> --file <path> --key <unique-key>`. The same key
-never sends twice. Read with `task goal -- mail inbox <goal>` and acknowledge
+`task goal -- mail send <goal> --file <path> --key <unique-key> [--deadline <minutes>]`.
+Sending requires the caller's `GOAL_ID`, recorded as the sender. The same key
+never sends twice or extends its deadline. Read with `task goal -- mail inbox <goal>` and acknowledge
 each message after acting on it with `task goal -- mail ack <id>`. The old
 `messages/<goal>.md` files are read-only history and still appear in the inbox
 view. Keep the same reserve as any manager: if its account nears its limit,
 move workers to the other account first.
+
+Inbox entries and wake prompts show the sender and deadline. Mail has no
+deadline unless one was supplied. Once an unacknowledged delivery is past its
+deadline, the coordinator adds one deadline wake and sends the original sender
+one automatic notice, attributed to the recipient. The notice has no deadline.
+`task goal -- coordinator status` lists overdue deliveries; acknowledgements
+remove them from that list. Historical mail keeps unknown sender and deadline
+fields rather than inventing them.
 
 ### Handing a Codex manager to the coordinator
 

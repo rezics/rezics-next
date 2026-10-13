@@ -3,14 +3,17 @@ import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalMailStore } from './mail.ts';
+import { mailCommand } from './goalctl.ts';
 
 function fixture() {
   const root = join(import.meta.dir, '../../.temp/mail-tests');
   mkdirSync(root, { recursive: true });
   const dir = mkdtempSync(join(root, 'case-'));
-  const options = { stateDir: join(dir, 'state'), goals: ['program', 'kernel', 'launch'] };
+  let now = Date.parse('2026-01-01T00:00:00Z');
+  const options = { stateDir: join(dir, 'state'), goals: ['program', 'kernel', 'launch'], sender:'launch', now:()=>now };
   const stores: GoalMailStore[] = [];
-  return { dir, options, open() { const store = new GoalMailStore(options); stores.push(store); return store; },
+  return { dir, options, setNow(value: number) { now=value; },
+    open() { const store = new GoalMailStore(options); stores.push(store); return store; },
     cleanup() { for (const store of stores) store.close(); rmSync(dir, { recursive: true, force: true }); } };
 }
 
@@ -35,6 +38,140 @@ async function childSend(options: ReturnType<typeof fixture>['options'], key: st
 }
 
 describe('durable Goal mail', () => {
+  test('sender and deadline survive retries without extending the deadline or changing authorship', () => {
+    const f = fixture();
+    try {
+      const store = f.open();
+      const message = store.send('program','Please act','deadline-request',0.5);
+      expect(message).toMatchObject({sender:'launch',deadlineMinutes:0.5,deadlineAt:'2026-01-01T00:00:30.000Z'});
+      expect(store.inbox('program')[0]).toMatchObject({sender:'launch',deadlineAt:message.deadlineAt});
+      f.setNow(Date.parse('2026-01-01T00:10:00Z'));
+      expect(store.send('program',message.body,message.key,0.5)).toEqual(message);
+      expect(()=>store.send('program',message.body,message.key,1)).toThrow('different payload');
+      store.send('program','Far future','future',10_000_000_000);
+      expect(store.overdue().map(delivery=>delivery.id)).toEqual([message.id]);
+      const other = new GoalMailStore({...f.options,sender:'kernel'});
+      try { expect(()=>other.send('program',message.body,message.key,0.5)).toThrow('different payload'); }
+      finally { other.close(); }
+    } finally { f.cleanup(); }
+  });
+
+  test('missing or unknown sender and invalid deadlines are refused before any store is written', () => {
+    const f = fixture();
+    try {
+      for (const sender of ['','missing']) {
+        const store = new GoalMailStore({...f.options,sender});
+        try { expect(()=>store.send('program','Request','key')).toThrow(sender ? 'Unknown' : 'GOAL_ID'); }
+        finally { store.close(); }
+      }
+      for (const deadline of [0,-1,NaN,Infinity,Number.MAX_VALUE]) {
+        expect(()=>f.open().send('program','Request','key',deadline)).toThrow('positive finite');
+      }
+      expect(existsSync(f.options.stateDir)).toBe(false);
+    } finally { f.cleanup(); }
+  });
+
+  test('only unacknowledged deliveries past their deadline escalate once, including across restarts', () => {
+    const f = fixture();
+    try {
+      const store = f.open();
+      const message = store.send(['program','kernel'],'Request','due',1);
+      store.ack('program',message.id);
+      f.setNow(Date.parse(message.deadlineAt!));
+      store.notifyOverdue();
+      expect(store.overdue()).toEqual([]);
+      expect(store.pending('launch')).toEqual([]);
+      f.setNow(Date.parse(message.deadlineAt!)+1);
+      expect(store.overdue().map(delivery=>delivery.goal)).toEqual(['kernel']);
+      store.notifyOverdue(); store.notifyOverdue();
+      const notice = store.pending('launch')[0]!;
+      expect(notice).toMatchObject({sender:'kernel',deadlineAt:null,deadlineMinutes:null});
+      expect(notice.body).toContain(message.id);
+      expect(notice.body).toContain(message.deadlineAt!);
+      expect(store.overdue('kernel')[0]!.overdueAt).toBe('2026-01-01T00:01:00.001Z');
+      store.close();
+      const restarted = f.open(); restarted.notifyOverdue();
+      expect(restarted.pending('launch').map(delivery=>delivery.id)).toEqual([notice.id]);
+      expect(restarted.ack('kernel',message.id).overdueAt).not.toBeNull();
+      expect(restarted.overdue()).toEqual([]);
+    } finally { f.cleanup(); }
+  });
+
+  test('deadline processing commits its notification and marker together', () => {
+    const f = fixture();
+    try {
+      const store = f.open(); const message = store.send('kernel','Request','due',1);
+      f.setNow(Date.parse(message.deadlineAt!)+1);
+      const db = new Database(store.path);
+      try {
+        db.exec(`CREATE TRIGGER refuse_notice BEFORE INSERT ON deliveries WHEN NEW.goal='launch'
+          BEGIN SELECT RAISE(ABORT,'notice failed'); END;`);
+        expect(()=>store.notifyOverdue()).toThrow('notice failed');
+        expect(store.overdue()[0]!.overdueAt).toBeNull();
+        expect(store.pending('launch')).toEqual([]);
+        db.exec('DROP TRIGGER refuse_notice');
+        store.notifyOverdue();
+        expect(store.pending('launch')).toHaveLength(1);
+        expect(store.overdue()[0]!.overdueAt).not.toBeNull();
+      } finally { db.close(); }
+    } finally { f.cleanup(); }
+  });
+
+  test('concurrent deadline processors publish one sender notice for each overdue recipient', async () => {
+    const f = fixture();
+    try {
+      const store = f.open(); store.send(['program','kernel'],'Request','due',1); store.close();
+      const source = `import { GoalMailStore } from ${JSON.stringify(join(import.meta.dir,'mail.ts'))};
+        const store = new GoalMailStore(${JSON.stringify({...f.options,now:undefined})});
+        try { store.notifyOverdue(); } finally { store.close(); }`;
+      const results = await Promise.all(Array.from({length:6},async()=> {
+        const child = Bun.spawn([process.execPath,'-e',source],{stdout:'pipe',stderr:'pipe'});
+        return {code:await child.exited,stderr:await new Response(child.stderr).text()};
+      }));
+      for (const result of results) expect(result.code,result.stderr).toBe(0);
+      expect(f.open().pending('launch')).toHaveLength(2);
+    } finally { f.cleanup(); }
+  },20_000);
+
+  test('legacy mail can be read without writes and upgrades on a later send without inventing historical sender or deadline', () => {
+    const f = fixture();
+    try {
+      mkdirSync(f.options.stateDir);
+      const db = new Database(join(f.options.stateDir,'mail.sqlite'));
+      db.exec(`CREATE TABLE messages(id TEXT PRIMARY KEY,key TEXT UNIQUE,body TEXT,createdAt TEXT);
+        CREATE TABLE deliveries(messageId TEXT,goal TEXT,acknowledgedAt TEXT,PRIMARY KEY(messageId,goal));
+        INSERT INTO messages VALUES('mail:01a114cb-4d63-7f23-bf70-1610b4db2b2b','old','History','2025-01-01T00:00:00.000Z');
+        INSERT INTO deliveries VALUES('mail:01a114cb-4d63-7f23-bf70-1610b4db2b2b','program',NULL);`);
+      db.close();
+      const before = snapshot(f.options.stateDir);
+      const store = f.open();
+      expect(store.pending('program')[0]).toMatchObject({sender:null,deadlineAt:null,overdueAt:null});
+      expect(store.overdue()).toEqual([]); store.notifyOverdue();
+      expect(snapshot(f.options.stateDir)).toEqual(before);
+      store.send('program','New request','new',1);
+      expect(store.pending('program')[0]).toMatchObject({sender:null,deadlineAt:null,overdueAt:null});
+      expect(store.pending('program')[1]).toMatchObject({sender:'launch',deadlineMinutes:1});
+    } finally { f.cleanup(); }
+  });
+
+  test('mail CLI derives its sender from GOAL_ID context and shows the deadline in the inbox', () => {
+    const f = fixture();
+    const file = join(f.dir,'request.md'); writeFileSync(file,'Please act');
+    const args = ['send','program','--file',file,'--key','cli','--deadline','2'];
+    try {
+      expect(()=>mailCommand(args,{stateDir:f.options.stateDir,goals:f.options.goals})).toThrow('GOAL_ID');
+      expect(existsSync(f.options.stateDir)).toBe(false);
+      const options = {...f.options,callerGoal:'launch'};
+      const sent = JSON.parse(mailCommand(args,options)[0]!);
+      expect(sent.sender).toBe('launch');
+      expect(Date.parse(sent.deadlineAt)-Date.parse(sent.createdAt)).toBe(120_000);
+      expect(JSON.parse(mailCommand(['inbox','program'],options)[0]!)).toMatchObject({sender:'launch',deadlineAt:sent.deadlineAt});
+      expect(()=>mailCommand([...args,'--sender','kernel'],options)).toThrow('Invalid option');
+      for (const deadline of ['0','-1','NaN','Infinity','nonsense']) {
+        expect(()=>mailCommand([...args.slice(0,-1),deadline],options)).toThrow('positive finite');
+      }
+    } finally { f.cleanup(); }
+  });
   test('committed mail survives closing the sender; each Goal acknowledges separately and retries preserve the receipt', () => {
     const f = fixture();
     try {
@@ -45,7 +182,7 @@ describe('durable Goal mail', () => {
       expect(Number.isNaN(Date.parse(message.createdAt))).toBe(false);
       sender.close();
       const receiver = f.open();
-      expect(receiver.pending('program')).toEqual([{ ...message, goal: 'program', acknowledged: false, acknowledgedAt: null }]);
+      expect(receiver.pending('program')).toEqual([{ ...message, goal: 'program', acknowledged: false, acknowledgedAt: null, overdueAt:null }]);
       const receipt = receiver.ack('program', message.id);
       receiver.close();
       const retried = f.open();

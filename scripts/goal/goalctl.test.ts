@@ -6280,7 +6280,7 @@ describe('Goal mail CLI', () => {
   test('lost sender response and acknowledgement retries preserve IDs and each Goal receipt', () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/goal-mail-command-'));
     const payload = join(directory, 'request.md');
-    const options = { stateDir: directory, goals: ['program', 'kernel'] };
+    const options = { stateDir: directory, goals: ['program', 'kernel'], callerGoal:'program' };
     writeFileSync(payload, 'Please review this request; it conveys no permission.');
     try {
       const first = JSON.parse(mailCommand(['send', 'program', '--file', payload, '--key', 'retry-send'], options)[0]!);
@@ -6302,13 +6302,13 @@ describe('Goal mail CLI', () => {
     const directory = mkdtempSync(join(import.meta.dir, '../../.temp/goal-mail-refusal-'));
     const payload = join(directory,'request.md');
     writeFileSync(payload,'Request');
-    const options = {stateDir:directory,goals:['program']};
+    const options = {stateDir:directory,goals:['program'],callerGoal:'program'};
     try {
       expect(() => mailCommand(['send','missing','--file',payload,'--key','a'],options)).toThrow('Unknown');
       expect(() => mailCommand(['send','program','--file',payload],options)).toThrow('needs');
       expect(() => mailCommand(['send','program','--file',payload,'--key','a','--key','b'],options)).toThrow('Invalid option');
       expect(() => mailCommand(['inbox','program','--ack','1'],options)).toThrow('one Goal');
-      expect(() => mailCommand(['inbox'],options)).toThrow('GOAL_ID');
+      expect(() => mailCommand(['inbox'],{...options,callerGoal:undefined})).toThrow('GOAL_ID');
       expect(() => mailCommand(['ack','regression:program:1'],{...options,callerGoal:'program'})).toThrow('inbox --ack');
       expect(existsSync(join(directory,'mail.sqlite'))).toBe(false);
     } finally { rmSync(directory,{recursive:true,force:true}); }

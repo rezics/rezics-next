@@ -6,7 +6,7 @@ import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNa
   claudeWakeArgs, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
-import { coordinatorStartDescriptor, coordinatorStartOptions } from './goalctl.ts';
+import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
 
 class RecordingLauncher implements IndependentLauncher {
   readonly launches: string[] = [];
@@ -78,6 +78,73 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('overdue mail adds one deadline wake and one sender notice, with sender and deadline in the wake body', async () => {
+    const f = fixture();
+    let now = 1_000_000;
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program','kernel'],sender:'kernel',now:()=>now});
+    try {
+      const message = mail.send('program','Please act','due',1);
+      const coordinator = f.open({events:goal=>managerEvents(f.stateDir,goal,mail)});
+      coordinator.enroll(f.descriptor); coordinator.step();
+      const first = coordinator.status().attempts[0]!;
+      expect(first.prompt).toContain('From: kernel');
+      expect(first.prompt).toContain(`Deadline: ${message.deadlineAt}`);
+      await runAttempt(f.stateDir,first.token); coordinator.step();
+      now += 60_001; f.setNow(now); mail.notifyOverdue(); coordinator.step();
+      const deadline = coordinator.status().attempts[1]!;
+      expect(deadline.prompt).toContain('one deadline wake');
+      expect(deadline.prompt).toContain(message.deadlineAt!);
+      await runAttempt(f.stateDir,deadline.token);
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      expect(()=>coordinator.start({...fresh,generation:'replacement',startArgs:fresh.args})).toThrow('unresolved attempt');
+      coordinator.step();
+      now += 30_000; f.setNow(now); mail.notifyOverdue(); coordinator.step();
+      const later = coordinator.status().attempts[2]!;
+      expect(later.prompt).not.toContain('one deadline wake');
+      expect(mail.pending('kernel')).toHaveLength(1);
+      expect(coordinator.db.query("SELECT handled FROM events WHERE event_key LIKE 'mail:overdue:%'").all()).toEqual([{handled:1}]);
+      await runAttempt(f.stateDir,later.token); coordinator.step();
+      coordinator.start({...fresh,generation:'replacement',startArgs:fresh.args});
+      expect(coordinator.db.query("SELECT handled FROM events WHERE event_key LIKE 'mail:overdue:%'").all()).toEqual([{handled:1}]);
+    } finally { mail.close(); f.cleanup(); }
+  });
+
+  test('acknowledging overdue mail before its queued deadline turn cancels that extra wake', async () => {
+    const f = fixture();
+    let now = 1_000_000;
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program','kernel'],sender:'kernel',now:()=>now});
+    try {
+      const message = mail.send('program','Please act','due',1);
+      const coordinator = f.open({events:goal=>managerEvents(f.stateDir,goal,mail)});
+      coordinator.enroll(f.descriptor); coordinator.step();
+      const first = coordinator.status().attempts[0]!;
+      now += 60_001; f.setNow(now); mail.notifyOverdue(); coordinator.step();
+      mail.ack('program',message.id);
+      await runAttempt(f.stateDir,first.token); coordinator.step(); coordinator.step();
+      expect(f.launcher.launches).toHaveLength(1);
+      expect(coordinator.status().wakes).toEqual([]);
+    } finally { mail.close(); f.cleanup(); }
+  });
+
+  test('coordinator status lists overdue mail without sending notices or changing the store', () => {
+    const f = fixture();
+    const mail = new GoalMailStore({stateDir:f.stateDir,goals:['program','kernel'],sender:'kernel',
+      now:()=>Date.parse('2020-01-01T00:00:00Z')});
+    try {
+      const message = mail.send('program','Please act','due',1);
+      writeFileSync(join(f.stateDir,'ledger.json'),JSON.stringify({tasks:{},goals:{program:{manager:'manager'},kernel:{manager:'sender'}}}));
+      const result = spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator','status'],
+        {cwd:join(import.meta.dir,'../..'),env:{...process.env,GOAL_MAIL_STATE_DIR:f.stateDir},encoding:'utf8'});
+      expect(result.status,result.stderr).toBe(0);
+      expect(JSON.parse(result.stdout).overdueMail).toEqual([expect.objectContaining({id:message.id,sender:'kernel',
+        goal:'program',deadlineAt:message.deadlineAt,overdueAt:null})]);
+      expect(mail.pending('kernel')).toEqual([]);
+      const pump = spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator','--once'],
+        {cwd:join(import.meta.dir,'../..'),env:{...process.env,GOAL_MAIL_STATE_DIR:f.stateDir},encoding:'utf8'});
+      expect(pump.status,pump.stderr).toBe(0);
+      expect(mail.pending('kernel')).toHaveLength(1);
+    } finally { mail.close(); f.cleanup(); }
+  });
   test('a new manager receives its charter before a backlog larger than a wake batch', () => {
     const f = fixture();
     try {
@@ -117,6 +184,7 @@ describe('durable Goal wake coordinator', () => {
       await runAttempt(f.stateDir,first.token);
       expect(coordinator.status().managers[0]).toMatchObject({session,args:[...fresh.args,session]});
       expect(coordinator.status().managers[0]!.startArgs).toBeUndefined();
+      coordinator.step();
       expect(() => coordinator.start({...descriptor,generation:'replacement'})).toThrow('session still exists');
       coordinator.close();
       const restarted = f.open();
@@ -466,7 +534,7 @@ describe('durable Goal wake coordinator', () => {
 
   test('externally acknowledged queued mail cancels its pending wake during admission backoff', () => {
     const f = fixture();
-    const mail = new GoalMailStore({ stateDir: f.stateDir, goals: ['program'] });
+    const mail = new GoalMailStore({ stateDir: f.stateDir, goals: ['program'],sender:'program' });
     try {
       const message = mail.send('program', 'Already received elsewhere', 'external-ack');
       const coordinator = f.open({ events: goal => mail.pending(goal).map(entry => ({ key: entry.id, body: entry.body })),
@@ -481,7 +549,7 @@ describe('durable Goal wake coordinator', () => {
 
   test('successful launch is not mail delivery; a lost ack response retries idempotently after restart', async () => {
     const f = fixture();
-    const mail = new GoalMailStore({ stateDir: f.stateDir, goals: ['program', 'kernel'] });
+    const mail = new GoalMailStore({ stateDir: f.stateDir, goals: ['program', 'kernel'],sender:'program' });
     try {
       const message = mail.send(['program', 'kernel'], 'Sentinel request', 'sentinel');
       const events = (goal: string) => mail.pending(goal).map(entry => ({ key: entry.id, body: entry.body }));
@@ -931,7 +999,7 @@ describe('independent tmux launcher', () => {
           expect(call.args).toContain('chosen-model');
           expect(call.args.join('\n')).toContain(managerStartMessage(goal));
           expect(invoke(['start',goal,'--engine',engine,'--effort','high']).status).not.toBe(0);
-          const mail = new GoalMailStore({stateDir:directory,goals:[goal]});
+          const mail = new GoalMailStore({stateDir:directory,goals:[goal],sender:goal});
           try {
             const message = mail.send(goal,'Next request',`request-${engine}`);
             await waitFor(()=>coordinator.status().attempts.filter(attempt=>attempt.goal === goal).filter(attempt=>attempt.phase === 'done').length >= 2);

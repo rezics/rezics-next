@@ -289,7 +289,8 @@ export class GoalCoordinator {
     if (prior.startArgs && !this.db.query('SELECT token FROM attempts WHERE goal=? AND generation=?').get(goal,prior.generation)) {
       throw new Error('Manager start is already queued');
     }
-    if (this.db.query("SELECT token FROM attempts WHERE goal=? AND phase!='done'").get(goal)) {
+    if (this.db.query("SELECT token FROM attempts WHERE goal=? AND phase!='done'").get(goal)
+      || (!prior.startArgs && this.db.query('SELECT token FROM wakes WHERE goal=? AND token IS NOT NULL').get(goal))) {
       throw new Error('Manager has an unresolved attempt; reconcile it before starting a replacement');
     }
     const owner = this.sessionOwner(prior);
@@ -304,7 +305,8 @@ export class GoalCoordinator {
       // Incoming mail and task exits will be collected again for the replacement.
       this.db.query('DELETE FROM managers WHERE goal=?').run(descriptor.goal);
       this.db.query('DELETE FROM wakes WHERE goal=?').run(descriptor.goal);
-      this.db.query('DELETE FROM events WHERE goal=?').run(descriptor.goal);
+      // A replacement still shares the Goal's one-time deadline receipts.
+      this.db.query("DELETE FROM events WHERE goal=? AND NOT (event_key LIKE 'mail:overdue:%' AND handled=1)").run(descriptor.goal);
       this.enroll(descriptor);
       this.db.query('INSERT INTO events(goal,event_key,body,due_at) VALUES(?,?,?,?)')
         .run(descriptor.goal,`start:${descriptor.generation}`,managerStartMessage(descriptor.goal),this.now());
@@ -362,7 +364,9 @@ export class GoalCoordinator {
           this.db.transaction(() => {
             const batch = this.db.query('SELECT event_key FROM events WHERE token=?').all(attempt.token) as {event_key:string}[];
             for (const event of batch) {
-              const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0 : !remaining.has(event.event_key);
+              const handled = !event.event_key.startsWith('mail:') ? attempt.code === 0
+                : event.event_key.startsWith('mail:overdue:') ? attempt.code === 0 || !remaining.has(event.event_key)
+                : !remaining.has(event.event_key);
               this.db.query('UPDATE events SET token=NULL,handled=? WHERE goal=? AND event_key=?')
                 .run(handled ? 1 : 0,goal,event.event_key);
             }
