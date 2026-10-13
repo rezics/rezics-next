@@ -230,6 +230,17 @@ test.each(['brief', 'handoff', 'branch'] as const)('a %s change after the refusa
   expect(existsSync(f.launches)).toBe(false);
 });
 
+test('a missing worker session stays with the manager rather than starting a fresh worker', async () => {
+  const f = fixture();
+  stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery`);
+  const ledger = f.ledger(); ledger.tasks[f.task.id]!.attempts[0]!.session = ''; f.save(ledger);
+  await f.execute(['settle']);
+  await until(() => !!f.ledger().tasks[f.task.id]!.settlement?.settledAt);
+  expect(f.ledger().tasks[f.task.id]!.settlement?.reason).toContain('worker session is missing');
+  expect(f.ledger().tasks[f.task.id]!.settlement?.reason).toContain('(fail) delivery');
+  expect(existsSync(f.launches)).toBe(false);
+});
+
 test('the resume cap settles the last failure for the manager without changing the brief', async () => {
   const f = fixture(); stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery\n      error: Expected fixed`);
   const ledger = f.ledger();

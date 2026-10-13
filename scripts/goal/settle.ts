@@ -55,6 +55,9 @@ async function returnRefusal(task: Task, attempt: number): Promise<string | unde
   if (task.branch !== record.branch || task.worktree !== record.worktree
     || readFileSync(briefPathOf(task) ?? '', 'utf8') !== record.brief
     || readResult(lastAttempt(task)).text !== record.handoff) return 'task or brief changed after landing stopped';
+  if (!lastAttempt(task).session && !readResult(lastAttempt(task)).session) {
+    return `worker session is missing; cannot return the refusal to its own session\n${refusal.message}`;
+  }
   record.check = refusal.check;
   record.output = output;
   // Publish intent before resume. resumeTask publishes the new attempt under the ledger lock;
