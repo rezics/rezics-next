@@ -6,7 +6,6 @@ import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerR
 import { type Ledger, type Task, modelOf, engineOf, type Brief, UNLANDED, HOLDING } from './types.ts';
 import { readResult, taskOf, changedFiles } from './launch.ts';
 import { type LandScope } from './land.ts';
-import { filesOnlyRegenerated, regenerationOnlyFiles } from './goalctl.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, type AcquiredDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 
@@ -373,5 +372,33 @@ export async function withLedger<T>(change: (ledger: Ledger) => T | Promise<T>):
   } finally {
     lease.release();
   }
+}
+
+/** Subject of the commit that records generator output. Scope checks recognise it by this text. */
+export const REGENERATION_COMMIT_SUBJECT = 'Regenerate generated outputs (goalctl)';
+
+/** Paths whose every change in this `git log --name-only` output is from a regeneration commit.
+ * A path the task's own commit also changed stays in the claim check. */
+function filesOnlyRegenerated(log: string): string[] {
+  const regen = new Set<string>();
+  const own = new Set<string>();
+  let bucket: Set<string> | undefined;
+  for (const line of log.split('\n')) {
+    const header = /^[0-9a-f]{40}\t(.*)$/.exec(line);
+    if (header) {
+      bucket = header[1] === REGENERATION_COMMIT_SUBJECT ? regen : own;
+      continue;
+    }
+    if (!line) { bucket = undefined; continue; }
+    bucket?.add(line);
+  }
+  return [...regen].filter(file => !own.has(file)).sort();
+}
+
+/** Paths whose every change on the branch since `main` is from a regeneration commit.
+ * A path the task's own commit also changed stays in the claim check. */
+export function regenerationOnlyFiles(repo: string): string[] {
+  if (!existsSync(repo)) return [];
+  return filesOnlyRegenerated(git(repo, ['log', '--name-only', '--pretty=format:%H%x09%s', 'main..HEAD']));
 }
 

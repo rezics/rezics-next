@@ -9,7 +9,7 @@ import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { clearRefusal, mergeTask } from './goalctl.ts';
+import { clearRefusal, mergeTask } from './merge.ts';
 import { land, handoffResult } from './land.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 

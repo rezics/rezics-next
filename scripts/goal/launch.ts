@@ -1,11 +1,10 @@
 import { type Engine, GROK_MODEL, cursorModel, isCodex, MODELS, type Task, engineOf, modelOf, type Ledger, type Attempt, programOf, isClaudeCode, type UsageLevel, engineEnv, TRANSPORT_ERRORS } from './types.ts';
 import { join, resolve } from 'node:path';
-import { stateDir, root, pidAlive, readLedger, git } from './ledger.ts';
+import { stateDir, root, pidAlive, readLedger, git, regenerationOnlyFiles } from './ledger.ts';
 import { existsSync, readFileSync, mkdirSync, openSync } from 'node:fs';
 import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
 import { spawn } from 'node:child_process';
 import { type ChangedFile, isGeneratedOutput, outOfScope } from './briefs.ts';
-import { regenerationOnlyFiles } from './goalctl.ts';
 
 // Workers run in bypass permission mode, as the manager does, and accept no inbound session
 // messages; the manager changes a worker's instructions only by stopping or resuming it.
