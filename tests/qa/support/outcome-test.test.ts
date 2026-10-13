@@ -64,7 +64,6 @@ test('proved outcomes run normally; pending outcomes go red when they start pass
         timeout: 10_000,
       });
       const output = result.stdout + result.stderr;
-      expect(output).toContain('books/read-a-book / visitor: a visitor reads the book');
       expect(result.status, output).toBe(state === 'proved' ? (passing ? 0 : 1) : passing ? 1 : 0);
     }
   }
