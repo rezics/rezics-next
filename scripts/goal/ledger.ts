@@ -4,8 +4,9 @@ import { join, dirname, relative, basename } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerRefusal, goalBriefFile, isGeneratedOutput, outOfScope, pathsOverlap } from './briefs.ts';
 import { type Ledger, type Task, modelOf, engineOf, type Brief, UNLANDED, HOLDING } from './types.ts';
-import { readResult, filesOnlyRegenerated, taskOf, changedFiles, regenerationOnlyFiles } from './goalctl.ts';
+import { readResult, taskOf, changedFiles } from './launch.ts';
 import { type LandScope } from './land.ts';
+import { filesOnlyRegenerated, regenerationOnlyFiles } from './goalctl.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, type AcquiredDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 
