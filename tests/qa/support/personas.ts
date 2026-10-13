@@ -16,6 +16,7 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { joiningAuthFixture } from './joining-auth.ts';
 import { outcomeResponse } from './outcome-test.ts';
+import { provisionedAgent } from './provisioned-agent.ts';
 
 export const personaNames = [
   'visitor',
@@ -280,17 +281,7 @@ async function applications(options: PersonaOptions) {
       );
       const person = session(mainBase, accountBase, user.user.id, cookie, oauth);
       person.actingSubject =
-        previous?.actingSubject ??
-        (
-          await json<{ agent: string }>(
-            person.main('POST', '/v1/agents', {
-              profile: 'agent-provision-v1',
-              kind: 'person',
-              displayName: `Outcome ${name}`,
-            }),
-            201,
-          )
-        ).agent;
+        previous?.actingSubject ?? (await provisionedAgent(person.main, `Outcome ${name}`));
       await json(
         person.main('PUT', '/v1/me/session-agent', {
           actingSubject: person.actingSubject,
