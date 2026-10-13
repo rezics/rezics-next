@@ -54,10 +54,10 @@ async function expectSelected(
   state: 'done' | 'open',
   text: string,
 ) {
-  await waitFor(() => {
+  await waitFor(async () => {
     const selected = region.querySelector('[data-selected]');
-    expect(selected).toHaveTextContent(label);
-    expect(selected?.querySelector(`[data-state="${state}"]`)).toHaveTextContent(text);
+    await expect(selected).toHaveTextContent(label);
+    await expect(selected?.querySelector(`[data-state="${state}"]`)).toHaveTextContent(text);
   });
 }
 
@@ -80,7 +80,7 @@ async function playVisitor({ canvasElement, args }: { canvasElement: HTMLElement
   await expect(canvas.queryByRole('heading', { name: 'Episodes' })).not.toBeInTheDocument();
   await expect(canvas.queryByText('First device')).not.toBeInTheDocument();
   await expectNoOverflow(canvasElement);
-  expect(args.persona).toBe('visitor');
+  await expect(args.persona).toBe('visitor');
 }
 
 async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement; args: Props }) {
@@ -124,7 +124,9 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
       secondCanvas.findByRole('heading', { name: copy.episodes }),
     ).resolves.toBeVisible();
     await expect(second).toHaveAttribute('data-pending');
-    expect(secondCanvas.queryByRole('textbox', { name: copy.jumpTo })).not.toBeInTheDocument();
+    await expect(
+      secondCanvas.queryByRole('textbox', { name: copy.jumpTo }),
+    ).not.toBeInTheDocument();
     await expectNoOverflow(canvasElement);
     return;
   }
