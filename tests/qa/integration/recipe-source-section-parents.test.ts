@@ -5,12 +5,13 @@ import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { sourceFieldOccurrence } from '../../../services/main/src/modules/source/support-attach.ts';
+import { ensureFixtureScopeGate } from '../../../services/main/src/modules/access/fixture-authority.ts';
 
 type Occurrence = { occurrence: string; parent: string; role: string; sourceKey: string;
   labels: Array<{ value: string; language: string }>;
   qualifier?: { originalText?: { value: string; language: string };
     instructionText?: { value: string; language: string } } };
-type RecipePage = { revision: string; occurrences: Occurrence[];
+type RecipePage = { revision: string; next?: string; occurrences: Occurrence[];
   ingredients: Array<{ originalText: string; amount?: { numerator: number; denominator: number } }> };
 type Imported = { revision: string; sourceObservation: string; supports?: string[];
   unboundSourceKeys?: string[]; receipts: string[] };
@@ -44,7 +45,7 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
       const work = await f.json<{ work: string; mainVersion: string }>(await f.call('POST', '/v1/works',
         await f.authoredBody({ profile: 'metadata-only-v1', title: `Retained Recipe layout ${mode}`,
           language: 'en', semanticTypes: ['https://schema.org/Recipe'], actingSubject: f.actor })), 201);
-      const editGrant = await f.grant(`work:edit:${work.work}`, 'recipe.edit');
+      await f.grant(`work:edit:${work.work}`, 'recipe.edit');
       await f.grant(`work:edit:${work.work}`, 'work.edit');
       await f.grant(`work:read:${work.work}`, 'work.read');
       const created = await f.json<{ structure: string; revision: string }>(await f.call('POST',
@@ -52,6 +53,22 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
           mainVersion: work.mainVersion, actingSubject: f.actor }), 201);
       const recipePath = `/v1/recipes/${shortId(created.structure)}`;
       const readPath = `/v1/recipes/works/${shortId(work.work)}?actingSubject=${encodeURIComponent(f.actor)}`;
+      const readRecipe = async () => {
+        const page = await f.json<RecipePage>(await f.call('GET', readPath), 200);
+        let cursor = page.next;
+        const cursors = new Set<string>();
+        while (cursor) {
+          expect(cursors.has(cursor)).toBe(false);
+          cursors.add(cursor);
+          const next = await f.json<RecipePage>(await f.call('GET',
+            `${readPath}&cursor=${encodeURIComponent(cursor)}`), 200);
+          expect(next.revision).toBe(page.revision);
+          page.occurrences.push(...next.occurrences);
+          page.ingredients.push(...next.ingredients);
+          cursor = next.next;
+        }
+        return page;
+      };
       const importKey = `recipe-layout-${randomUUID()}`;
       let observation: { observation: string; record: string } | undefined;
       if (mode === 'observation') {
@@ -74,7 +91,7 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
       const retained = await f.json<{ rawBytesBase64: string }>(await f.call('GET',
         `/v1/sources/observations/${shortId(imported.sourceObservation)}`), 200);
       expect(retained.rawBytesBase64).toBe(bytes.toString('base64'));
-      const page = await f.json<RecipePage>(await f.call('GET', readPath), 200);
+      const page = await readRecipe();
       expect(page.revision).toBe(imported.revision);
       const groups = page.occurrences.filter(row => row.role === 'group');
       const group = (label: string) => groups.find(row => row.labels[0]?.value === label)!;
@@ -118,9 +135,26 @@ test('Recipe imports preserve retained parents, interleaved siblings and empty g
         }
       }
       expect(await f.json<Imported>(await importRecipe(created.revision), 200)).toMatchObject(imported);
-      expect((await f.json<RecipePage>(await f.call('GET', readPath), 200)).occurrences).toEqual(page.occurrences);
+      expect((await readRecipe()).occurrences).toEqual(page.occurrences);
       expect((await importRecipe(created.revision, `stale-${randomUUID()}`)).status).toBe(409);
-      await f.accessPool.query('DELETE FROM access.permission_grant WHERE id = $1', [editGrant]);
+      if (mode === 'file') {
+        // Ordinary flat imports still append their own groups/content and replay
+        // without disturbing an existing retained hierarchy.
+        const flatBytes = Buffer.from(JSON.stringify({ '@type': 'Recipe', recipeIngredient: ['1 cup salt'],
+          recipeInstructions: [section('Flat layout', [step('Mix the salt.')])] }));
+        const flatKey = `recipe-flat-${randomUUID()}`;
+        const flatImport = () => f.callRaw('POST', `${recipePath}/file-imports`
+          + `?actingSubject=${encodeURIComponent(f.actor)}&expectedHead=${encodeURIComponent(imported.revision)}`,
+        flatBytes, 'application/json', flatKey);
+        const flat = await f.json<Imported>(await flatImport(), 201);
+        const flatPage = await readRecipe();
+        expect(flatPage.occurrences.slice(0, page.occurrences.length)).toEqual(page.occurrences);
+        expect(flatPage.occurrences.slice(page.occurrences.length).map(text))
+          .toEqual(['Flat layout', 'Mix the salt.', '1 cup salt']);
+        expect(await f.json<Imported>(await flatImport(), 200)).toMatchObject(flat);
+        expect((await readRecipe()).occurrences).toEqual(flatPage.occurrences);
+      }
+      await ensureFixtureScopeGate(f.accessPool, `work:edit:${work.work}`, { open: false });
       expect((await importRecipe(created.revision)).status).toBe(403);
     }
   } finally { await f.close(); }
