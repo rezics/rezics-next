@@ -536272,6 +536272,29 @@
                                 "name": {
                                   "type": "string"
                                 },
+                                "targetScope": {
+                                  "~elyTyp": 7,
+                                  "additionalProperties": false,
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "concept",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                },
                                 "validUntil": {
                                   "type": "string"
                                 }
@@ -557993,6 +558016,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -558020,6 +558066,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -558105,6 +558174,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -558132,6 +558224,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -558217,6 +558332,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -558244,6 +558382,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -558323,6 +558484,77 @@
                                 },
                                 "type": "array"
                               },
+                              "jurisdictions": {
+                                "items": {
+                                  "properties": {
+                                    "gained": {
+                                      "items": {
+                                        "enum": [
+                                          "governance.moderate",
+                                          "governance.rule.publish",
+                                          "realm.members.manage",
+                                          "realm.roles.manage",
+                                          "realm.settings.manage",
+                                          "review.decide",
+                                          "publication.adopt",
+                                          "rating.configure",
+                                          "rating.question-presentation.review"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "lost": {
+                                      "items": {
+                                        "enum": [
+                                          "governance.moderate",
+                                          "governance.rule.publish",
+                                          "realm.members.manage",
+                                          "realm.roles.manage",
+                                          "realm.settings.manage",
+                                          "review.decide",
+                                          "publication.adopt",
+                                          "rating.configure",
+                                          "rating.question-presentation.review"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "targetScope": {
+                                      "~elyTyp": 7,
+                                      "additionalProperties": false,
+                                      "nullable": true,
+                                      "properties": {
+                                        "id": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "concept",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id"
+                                      ],
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "targetScope",
+                                    "gained",
+                                    "lost"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 2,
+                                "type": "array"
+                              },
                               "lost": {
                                 "items": {
                                   "enum": [
@@ -558365,6 +558597,52 @@
                         "generation": {
                           "pattern": "^(0|[1-9][0-9]{0,17})$",
                           "type": "string"
+                        },
+                        "previousTargetScope": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "concept",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "targetScope": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "concept",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -558430,6 +558708,77 @@
                                 },
                                 "type": "array"
                               },
+                              "jurisdictions": {
+                                "items": {
+                                  "properties": {
+                                    "gained": {
+                                      "items": {
+                                        "enum": [
+                                          "governance.moderate",
+                                          "governance.rule.publish",
+                                          "realm.members.manage",
+                                          "realm.roles.manage",
+                                          "realm.settings.manage",
+                                          "review.decide",
+                                          "publication.adopt",
+                                          "rating.configure",
+                                          "rating.question-presentation.review"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "lost": {
+                                      "items": {
+                                        "enum": [
+                                          "governance.moderate",
+                                          "governance.rule.publish",
+                                          "realm.members.manage",
+                                          "realm.roles.manage",
+                                          "realm.settings.manage",
+                                          "review.decide",
+                                          "publication.adopt",
+                                          "rating.configure",
+                                          "rating.question-presentation.review"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "type": "array"
+                                    },
+                                    "targetScope": {
+                                      "~elyTyp": 7,
+                                      "additionalProperties": false,
+                                      "nullable": true,
+                                      "properties": {
+                                        "id": {
+                                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "const": "concept",
+                                          "type": "string"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "id"
+                                      ],
+                                      "type": [
+                                        "object",
+                                        "null"
+                                      ]
+                                    }
+                                  },
+                                  "required": [
+                                    "targetScope",
+                                    "gained",
+                                    "lost"
+                                  ],
+                                  "type": "object"
+                                },
+                                "maxItems": 2,
+                                "type": "array"
+                              },
                               "lost": {
                                 "items": {
                                   "enum": [
@@ -558472,6 +558821,52 @@
                         "generation": {
                           "pattern": "^(0|[1-9][0-9]{0,17})$",
                           "type": "string"
+                        },
+                        "previousTargetScope": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "concept",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
+                        },
+                        "targetScope": {
+                          "~elyTyp": 7,
+                          "additionalProperties": false,
+                          "nullable": true,
+                          "properties": {
+                            "id": {
+                              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                              "type": "string"
+                            },
+                            "kind": {
+                              "const": "concept",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "id"
+                          ],
+                          "type": [
+                            "object",
+                            "null"
+                          ]
                         }
                       },
                       "required": [
@@ -559140,6 +559535,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -559167,6 +559585,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -559247,6 +559688,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -559274,6 +559738,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -559354,6 +559841,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -559381,6 +559891,29 @@
                           "roleId": {
                             "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                             "type": "string"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           },
                           "validUntil": {
                             "format": "date-time",
@@ -559449,6 +559982,77 @@
                             },
                             "type": "array"
                           },
+                          "jurisdictions": {
+                            "items": {
+                              "properties": {
+                                "gained": {
+                                  "items": {
+                                    "enum": [
+                                      "governance.moderate",
+                                      "governance.rule.publish",
+                                      "realm.members.manage",
+                                      "realm.roles.manage",
+                                      "realm.settings.manage",
+                                      "review.decide",
+                                      "publication.adopt",
+                                      "rating.configure",
+                                      "rating.question-presentation.review"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "lost": {
+                                  "items": {
+                                    "enum": [
+                                      "governance.moderate",
+                                      "governance.rule.publish",
+                                      "realm.members.manage",
+                                      "realm.roles.manage",
+                                      "realm.settings.manage",
+                                      "review.decide",
+                                      "publication.adopt",
+                                      "rating.configure",
+                                      "rating.question-presentation.review"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "type": "array"
+                                },
+                                "targetScope": {
+                                  "~elyTyp": 7,
+                                  "additionalProperties": false,
+                                  "nullable": true,
+                                  "properties": {
+                                    "id": {
+                                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                      "type": "string"
+                                    },
+                                    "kind": {
+                                      "const": "concept",
+                                      "type": "string"
+                                    }
+                                  },
+                                  "required": [
+                                    "kind",
+                                    "id"
+                                  ],
+                                  "type": [
+                                    "object",
+                                    "null"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "targetScope",
+                                "gained",
+                                "lost"
+                              ],
+                              "type": "object"
+                            },
+                            "maxItems": 2,
+                            "type": "array"
+                          },
                           "lost": {
                             "items": {
                               "enum": [
@@ -559491,6 +560095,52 @@
                     "generation": {
                       "pattern": "^(0|[1-9][0-9]{0,17})$",
                       "type": "string"
+                    },
+                    "previousTargetScope": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "concept",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
+                    },
+                    "targetScope": {
+                      "~elyTyp": 7,
+                      "additionalProperties": false,
+                      "nullable": true,
+                      "properties": {
+                        "id": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "kind": {
+                          "const": "concept",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "kind",
+                        "id"
+                      ],
+                      "type": [
+                        "object",
+                        "null"
+                      ]
                     }
                   },
                   "required": [
@@ -560179,6 +560829,29 @@
                               "type": "string"
                             },
                             "type": "array"
+                          },
+                          "targetScope": {
+                            "~elyTyp": 7,
+                            "additionalProperties": false,
+                            "nullable": true,
+                            "properties": {
+                              "id": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "kind": {
+                                "const": "concept",
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "kind",
+                              "id"
+                            ],
+                            "type": [
+                              "object",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
