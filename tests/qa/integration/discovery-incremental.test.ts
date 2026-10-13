@@ -8,7 +8,7 @@ import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../service
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { startMediaStack } from './media-support.ts';
 
-test('Discovery incremental: appended Works preserve a partial pin and a moved read commits no rows', async () => {
+test('Discovery incremental: appended Works preserve a partial pin and later births join the next refresh', async () => {
   const stack = await startMediaStack('discovery-incremental');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
@@ -42,7 +42,8 @@ test('Discovery incremental: appended Works preserve a partial pin and a moved r
       WHERE generation_id = $1 AND work_type = '' AND term = '' ORDER BY work`, [pinned.generation_id])).rows.map(row => row.work))
       .toEqual(originals.map(work => work.work).sort());
 
-    // Mutate after the source SELECT returns, before workRead's final fence.
+    // A birth after the source SELECT belongs to the next cut; local selected
+    // Work proofs keep the completed population usable.
     const query = stack.fuseki.query.bind(stack.fuseki);
     let inject = true;
     stack.fuseki.query = async (sparql, bytes) => {
@@ -53,16 +54,16 @@ test('Discovery incremental: appended Works preserve a partial pin and a moved r
       }
       return result;
     };
-    expect(await tick()).toBe('retry');
+    expect(await tick()).toBe('activated');
     stack.fuseki.query = query;
     const pending = (await stack.accessPool.query(`SELECT d.generation_id, d.complete, d.work_count,
-      g.lease_expires_at <= clock_timestamp() AS released FROM access.discovery_generation d
-      JOIN access.derived_generation g ON g.id = d.generation_id WHERE g.state = 'building'`)).rows[0];
-    expect(pending).toMatchObject({ complete: false, work_count: '2', released: true });
+      g.state, g.lease_expires_at FROM access.discovery_generation d
+      JOIN access.derived_generation g ON g.id = d.generation_id WHERE d.generation_id = $1`,
+    [pinned.generation_id])).rows[0];
+    expect(pending).toMatchObject({ complete: true, work_count: '3', state: 'active', lease_expires_at: null });
     expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_entry WHERE generation_id = $1 AND work = $2',
-      [pending.generation_id, appended.work])).rows[0].count).toBe('0');
+      [pending.generation_id, appended.work])).rows[0].count).toBe('1');
     await drain();
-    expect(await tick()).toBe('activated');
     expect((await stack.accessPool.query('SELECT work_count FROM access.discovery_generation WHERE generation_id = $1', [pending.generation_id])).rows[0].work_count).toBe('3');
     const cut = await projection.active({ scope: 'global', realm: null, context: null, owner: null },
       (await deps.relayPosition.read())!);

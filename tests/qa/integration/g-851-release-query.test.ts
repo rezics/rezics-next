@@ -247,7 +247,7 @@ test('G851: one usable release supplies every condition and every explanation; d
   } finally { await stack.stop(); }
 }, 180_000);
 
-/** Isolated query-owner fixture, built in one graph update. Owner commands are tested above.
+/** Isolated query-owner fixture, built in bounded graph updates. Owner commands are tested above.
  * Each Work has its own public selection, draft, head and release; 620 rows cross 60/128/512.
  * The oldest matching Work follows all nonmatching candidates to detect pre-filter LIMIT mutations. */
 async function catalogue(stack: MediaStack, realm: string, size: number, gap = 70) {
@@ -280,10 +280,12 @@ async function catalogue(stack: MediaStack, realm: string, size: number, gap = 7
         rv:work ${iri(work)} ; rv:mainVersion ${iri(main)} ; rv:contribution ${iri(contribution)} ;
         rv:publicationDecision ${iri(decision)} ; rv:selectedDraft ${iri(draft)} .`);
   }
-  await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
-    GRAPH ${iri(GRAPHS.current)} { ${current.join('\n')} }
-    GRAPH ${iri(GRAPHS.revisions)} { ${revisions.join('\n')} }
-  }`);
+  for (let offset = 0; offset < size; offset += 50) {
+    await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA {
+      GRAPH ${iri(GRAPHS.current)} { ${current.slice(offset, offset + 50).join('\n')} }
+      GRAPH ${iri(GRAPHS.revisions)} { ${revisions.slice(offset, offset + 50).join('\n')} }
+    }`);
+  }
   return { works, matching };
 }
 

@@ -71,6 +71,8 @@ test('Discovery refresh expires already purged superseded generations and resume
         time: expect.any(String),
         level: 'error', event: 'worker_fault', 'rezics.worker.name': 'main.discovery.refresh',
         'error.class': 'RecommendationUnavailable', 'error.code': '08006',
+        'error.chain.classes': ['RecommendationUnavailable', 'Error'],
+        'error.chain.codes': ['08006'],
       });
       expect(String(logged.mock.calls[0]?.[0])).not.toContain('activation interrupted');
     } finally { projection.activate = activate; logged.mockRestore(); }

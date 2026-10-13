@@ -1192,9 +1192,9 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
           UPDATE relay.erasure SET kind='account' WHERE id='${entry.erasureId}'`, values: [] },
       { name: 'journal not suppressed', owner: 'relay', sql: `ALTER TABLE relay.erasure DISABLE TRIGGER erasure_guard;
           UPDATE relay.erasure SET suppression_status='pending',suppressed_at=NULL,stage='requested' WHERE id='${entry.erasureId}'`, values: [] },
-      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+      { name: 'missing full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
           DELETE FROM relay.erasure_target WHERE erasure_id='${entry.erasureId}'`, values: [] },
-      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_immutable;
+      { name: 'foreign full journal target', owner: 'relay', sql: `ALTER TABLE relay.erasure_target DISABLE TRIGGER erasure_target_completion_guard;
           UPDATE relay.erasure_target SET target_ref='${randomUUID()}' WHERE erasure_id='${entry.erasureId}'`, values: [] },
       { name: 'extra full journal target', owner: 'relay', sql: `INSERT INTO relay.erasure_target
           (erasure_id,ordinal,owner,target_kind,target_ref) VALUES ('${entry.erasureId}',2,'content','content_revision','${randomUUID()}')`, values: [] },

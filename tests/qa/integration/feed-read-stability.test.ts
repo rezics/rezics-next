@@ -44,8 +44,10 @@ test('Home and Realm thread cursors survive an unrelated graph command and its e
       undefined, path === following ? home.reader.token : undefined));
     expect(BigInt(next.sourcePosition.sequence)).toBeGreaterThan(BigInt(first.sourcePosition.sequence));
   }
-  // Fresh ranked admissions still require a complete projection at their cut.
-  expect((await home.call('GET', `${realmPath}?sort=top&limit=1`)).status).toBe(503);
+  // Local membership proof keeps fresh ranked reads available across an
+  // unrelated command, even before the relay's empty refresh catches up.
+  const fresh = await home.json<Threads>(await home.call('GET', `${realmPath}?sort=top&limit=1`));
+  expect(fresh.items).toEqual(pages.get(`${realmPath}?sort=top&limit=1`)!.items);
   await home.project();
   expect((await home.deps.feed.checkpoint(home.stack.env.lineage.dataEpoch)).revision).toBe(revision);
   for (const path of paths) {

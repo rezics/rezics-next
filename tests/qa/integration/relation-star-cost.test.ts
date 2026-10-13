@@ -7,7 +7,7 @@ import { readExactDefinition, starConflict, type OccurrenceState } from '../../.
 import { systemDisclosure } from '../../../services/main/src/modules/target/disclosed-references.ts';
 
 const scales = [1_000, 10_000, 40_000];
-const BATCH = 2_000;
+const BATCH = 100;
 
 type Changed = { component: string; revision: string };
 

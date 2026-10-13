@@ -107,8 +107,8 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     expect(active.work_count).toBe('11');
     expect(active.changed_works).toEqual(appended.map(work => work.work).sort());
 
-    // A moved multi-query read leaves both the population checkpoint and its
-    // validation watermark untouched, releasing the step for the next tick.
+    // A birth outside this population's pin does not invalidate its selected
+    // Work proofs. The completed cut activates; later changes get a new delta.
     await f.publicWork(writer.actor, ['en'], 'Start another refresh');
     await drain();
     projection.commitBatch = (operator, id, lease, checkpoint, result, position) =>
@@ -130,15 +130,19 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
       }
       return result;
     };
-    expect(await tick()).toBe('retry');
-    f.fuseki.query = nativeQuery;
-    const unchanged = (await f.accessPool.query(`SELECT d.checkpoint,d.work_count::text,i.checkpoint_sequence::text AS validated,
-      g.lease_expires_at<=clock_timestamp() AS released FROM access.discovery_generation d
+    try {
+      expect(await tick()).toBe('activated');
+      expect(inject).toBe(false);
+    } finally {
+      f.fuseki.query = nativeQuery;
+    }
+    const completed = (await f.accessPool.query(`SELECT d.checkpoint,d.work_count::text,i.checkpoint_sequence::text AS validated,
+      d.complete,g.state,g.lease_expires_at FROM access.discovery_generation d
       JOIN access.derived_generation g ON g.id=d.generation_id
       JOIN access.derived_generation_input i ON i.generation_id=g.id AND i.source='main-graph'
       WHERE d.generation_id=$1`, [building.generation_id])).rows[0];
-    expect(unchanged).toEqual({ checkpoint: building.checkpoint, work_count: building.work_count,
-      validated: building.validated, released: true });
+    expect(completed).toEqual({ checkpoint: building.checkpoint, work_count: building.work_count,
+      validated: building.validated, complete: true, state: 'active', lease_expires_at: null });
     await drain();
     // Edits to original Works join the catch-up journal instead of cancelling
     // the scan. Reconciliation prevents mixed-position activation.
@@ -152,10 +156,12 @@ test('G1016: Discovery resumes one generation under steady appends after graph o
     expect(edited.status, await edited.text()).toBe(200);
     await drain();
     await f.fuseki.update(`DELETE WHERE { GRAPH ${iri(GRAPHS.outbox)} { ?s ?p ?o } }`);
-    expect(await tick()).toBe('advanced');
-    expect((await f.accessPool.query('SELECT state FROM access.derived_generation WHERE id=$1',
-      [building.generation_id])).rows[0].state).toBe('building');
     expect(await tick()).toBe('activated');
+    expect((await f.accessPool.query('SELECT state FROM access.derived_generation WHERE id=$1',
+      [building.generation_id])).rows[0].state).toBe('superseded');
+    expect((await f.accessPool.query(`SELECT d.work_count::text FROM access.discovery_generation d
+      JOIN access.derived_generation_head h ON h.active_generation=d.generation_id WHERE h.scope_key=$1`,
+    [key])).rows[0].work_count).toBe('13');
     // A stale refresh claim cannot overwrite validation evidence.
     await f.accessPool.query(`UPDATE access.discovery_refresh SET due_at=clock_timestamp()-interval '1 second' WHERE scope_key=$1`, [key]);
     const old = await refresh.claim();

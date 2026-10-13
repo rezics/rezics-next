@@ -42,7 +42,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
   const graphs = [GRAPHS.current,GRAPHS.revisions,GRAPHS.receipts,GRAPHS.outbox,GRAPHS.control];
   const prefix = `urn:rezics:test-copy:${randomUUID()}`;
   for (const [index,graph] of graphs.entries())
-    await f.env.fuseki.update(`ADD SILENT GRAPH ${iri(graph)} TO GRAPH ${iri(`${prefix}:${index}`)}`);
+    await f.env.fuseki.update(`INSERT { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
   try {
     await f.globalAcceptance();
     const input = {label: 'Refresh retained definition',actingSubject: f.actorA};
@@ -187,7 +187,7 @@ test('refresh alone converts populated catalogue decisions, resumes fenced failu
     await f.accessPool.query('UPDATE access.recovery_fence SET open=true WHERE id');
     for (const [index,graph] of graphs.entries()) {
       await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)};
-        ADD SILENT GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
+        INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);
       await f.env.fuseki.update(`DROP SILENT GRAPH ${iri(`${prefix}:${index}`)}`);
     }
     await new StatementSeek(f.accessPool,f.env).rebuild();
@@ -204,11 +204,11 @@ test('CTX02/CTX09: catalogue imports use exact definitions, replay and CAS; popu
     const prefix = `urn:rezics:test-copy:${randomUUID()}`;
     for (const [index,graph] of graphs.entries()) {
       const copy = `${prefix}:${index}`;copies.push(copy);
-      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
+      await f.env.fuseki.update(`INSERT { GRAPH ${iri(copy)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
     }
     return async () => {
       for (const [index,graph] of graphs.entries())
-        await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);
+        await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)}; INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);
     };
   };
   let restoreLive: (() => Promise<void>)|null = null;
@@ -367,10 +367,10 @@ test('retained catalogue restore converts the exact legacy input and preserves i
     const prefix = `urn:rezics:test-copy:${randomUUID()}`;
     for (const [index,graph] of graphs.entries()) {
       const copy = `${prefix}:${index}`;copies.push(copy);
-      await f.env.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH ${iri(copy)}`);
+      await f.env.fuseki.update(`INSERT { GRAPH ${iri(copy)} { ?s ?p ?o } } WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
     }
     return async () => {for (const [index,graph] of graphs.entries())
-      await f.env.fuseki.update(`COPY GRAPH ${iri(`${prefix}:${index}`)} TO GRAPH ${iri(graph)}`);};
+      await f.env.fuseki.update(`CLEAR SILENT GRAPH ${iri(graph)}; INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } } WHERE { GRAPH ${iri(`${prefix}:${index}`)} { ?s ?p ?o } }`);};
   };
   try {
     await f.globalAcceptance();

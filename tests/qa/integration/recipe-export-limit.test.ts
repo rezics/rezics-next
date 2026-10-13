@@ -89,7 +89,8 @@ test('RECIPE_EXPORT_LIMIT: exact revisions export at 4,096 occurrences and deny 
       cost: { occurrences: number } }>(await f.call('GET', `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`
         + `&revision=${encodeURIComponent(boundaryRevision)}`), 200);
     expect(exact).toMatchObject({ revision: boundaryRevision, cost: { occurrences: 4096 } });
-    expect(exact.recipe.recipeIngredient).toEqual(['water']);
+    expect(exact.recipe.recipeIngredient).toEqual([{ '@type': 'PropertyValue',
+      text: 'water', parseStatus: 'parsed', inLanguage: 'en' }]);
 
     const overLimit = await f.json<{ code: string; status: number }>(await f.call('GET',
       `${recipePath}?actingSubject=${encodeURIComponent(f.actor)}`), 413);

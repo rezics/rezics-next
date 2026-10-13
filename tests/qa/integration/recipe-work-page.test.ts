@@ -87,10 +87,11 @@ test('G-415: a visible Recipe Work page scales the pinned ingredient revision an
       await f.call('GET', `${path}${query}&servings=10`), 200);
     expect(page).toMatchObject({ profile: 'recipe-work-page-v1',
       ingredients: [{ originalText: '1 1/2 cups flour', amount: { numerator: 15, denominator: 4 },
-        line: '3 ¾ cups flour', alternateLine: '900 ml flour', alternateSystem: 'metric',
-        hint: '1 1/2 cups flour', scaled: true }],
+        line: '1 1/2 cups flour', scaled: true }],
       cost: { occurrences: 2 } });
     expect(page.occurrences).toHaveLength(2);
+    expect(page.ingredients[0]).not.toHaveProperty('alternateLine');
+    expect(page.ingredients[0]).not.toHaveProperty('hint');
     expect(page.measures.map(item => item.kind)).toContain('servings');
     expect(page.cost.pages).toBeGreaterThanOrEqual(1);
     expect(page.cost.pagesRead).toBeGreaterThanOrEqual(page.cost.pages);

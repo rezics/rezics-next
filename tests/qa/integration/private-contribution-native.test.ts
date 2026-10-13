@@ -64,10 +64,9 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
     const health = await env.fuseki.commandHealth();
     expect(health.moduleVersion).toBe(COMMAND_MODULE_VERSION);
     expect(health.privateSearchWriteActive).toBe(false);
-    // The shared QA assembler exposes raw update for fault fixtures. The
-    // adapter must reject that writer topology even though native postings
-    // can be inspected here; its command-only path needs separate evidence.
-    expect(health.publicSearchDeltaAvailable).toBe(false);
+    // Fenced raw maintenance retains native delta proof. An idle writer and
+    // a qualified index let the diagnostic adapter read the exact private head.
+    expect(health.publicSearchDeltaAvailable).toBe(true);
     const title = `Private native projection ${randomUUID()}`;
     const created = await activateMetadataWork(env, {
       title, admission: admission('work:create:root', 'work.create',
@@ -93,9 +92,14 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
       predicate: { value: `${RV}privateSearchBody` },
     });
     expect(await privatePosting(firstUnit, 'privateBody:*')).toHaveLength(1);
+    expect(await queryPrivateContributionPhrase(env,
+      { contribution: first.contribution, phrase: firstTerm })).toMatchObject({
+      complete: true, total: 1, results: [{ matchUnit: firstUnit,
+        contribution: first.contribution, revision: first.draftRevision, field: 'body', language: 'en' }],
+    });
+    // An unavailable exact source remains a refusal rather than an empty match.
     await expect(queryPrivateContributionPhrase(env,
-      { contribution: first.contribution, phrase: firstTerm }))
-      .rejects.toBeInstanceOf(PrivateSearchUnavailable);
+      { contribution: ID + randomUUID(), phrase: firstTerm })).rejects.toBeInstanceOf(PrivateSearchUnavailable);
     expect(await publicHits(firstTerm)).toEqual([]);
 
     const editInput = { contribution: first.contribution,
@@ -120,6 +124,12 @@ test('SEARCH11/SEARCH12 foundation: native private posting follows one current C
     });
     expect(await publicHits(firstTerm)).toEqual([]);
     expect(await publicHits(secondTerm)).toEqual([]);
+    expect(await queryPrivateContributionPhrase(env,
+      { contribution: first.contribution, phrase: firstTerm })).toMatchObject({ complete: true, total: 0, results: [] });
+    expect(await queryPrivateContributionPhrase(env,
+      { contribution: first.contribution, phrase: secondTerm })).toMatchObject({
+      complete: true, total: 1, results: [{ revision: edited.draftRevision }],
+    });
 
     const replay = await activateTextContribution(env, createAdmission, firstInput);
     expect(replay).toEqual(first);

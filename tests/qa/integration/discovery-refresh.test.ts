@@ -25,7 +25,7 @@ const native = () => `https://rezics.com/id/${randomUUID()}`;
 interface Page { items: { id: string; rating: { mean: number }; primaryCredits: { key: string; ordinal: number; displayName: null }[] }[];
   nextCursor: string | null }
 
-test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, leases, Mine isolation and bounded work', async () => {
+test('Discovery scheduled refresh: native source proof, automatic enrollment, restart, leases, Mine isolation and bounded work', async () => {
   const stack = await startMediaStack('discovery-refresh');
   const relay = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
   try {
@@ -61,9 +61,16 @@ test('Discovery scheduled refresh: relay gating, automatic enrollment, restart, 
       await stack.accessPool.query("UPDATE access.discovery_refresh SET due_at = due_at - interval '1 minute'");
       await stack.accessPool.query("UPDATE access.discovery_refresh_catalog SET due_at = clock_timestamp() - interval '1 second'");
     };
-    expect(await worker().tick()).toBe('relay-behind');
+    // Native delta proof admits the population before relay delivery. Interrupt
+    // activation to retain the exact ready cut for the restart checks below.
+    const initialActivate = projection.activate.bind(projection);
+    projection.activate = async () => { throw new WorkReadUnavailable('Fixture activation outage'); };
+    try { expect(await worker().tick()).toBe('retry'); }
+    finally { projection.activate = initialActivate; }
     expect((await read()).status).toBe(503);
-    expect((await stack.accessPool.query('SELECT count(*) FROM access.discovery_generation')).rows[0].count).toBe('0');
+    expect((await stack.accessPool.query(`SELECT d.complete,g.state FROM access.discovery_generation d
+      JOIN access.derived_generation g ON g.id=d.generation_id`)).rows)
+      .toEqual([{ complete: true, state: 'ready' }]);
     await drain();
     let maxQueries = 0, maxMs = 0, ticks = 0;
     const scheduledWorker = worker();

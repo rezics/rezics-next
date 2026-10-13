@@ -20,7 +20,7 @@ test('OPS01: host Main work readiness accepts the pinned live command module', a
   const actual = await new FusekiClient(fusekiUrl).commandHealth();
   expect(actual.moduleVersion).toBe(expected);
   expect(expected).toBe(COMMAND_MODULE_VERSION);
-  expect(actual.publicSearchDeltaAvailable).toBe(false); // QA exposes a general update operation.
+  expect(actual.publicSearchDeltaAvailable).toBe(true);
 
   const logs = join(artifacts, 'logs');
   mkdirSync(logs, { recursive: true });

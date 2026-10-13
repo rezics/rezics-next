@@ -27,7 +27,7 @@ const ownRelay = /^01\d_/;
  * target check created by 010, so an upgrade applies it with that series. */
 const erasureKindsMigration = 22;
 const erasureSeries = (name: string) =>
-  ownRelay.test(name) || migrationVersion(name) === erasureKindsMigration;
+  ownRelay.test(name) || [erasureKindsMigration, 23, 26, 29, 30, 31].includes(migrationVersion(name));
 const ownContent = /^12\d_/;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
@@ -55,7 +55,7 @@ async function rejects(promise: Promise<unknown>, code: string): Promise<void> {
   await expect(promise).rejects.toMatchObject({ code });
 }
 
-/** Columns in PostgreSQL match the typed row declaration exactly. */
+/** The installed owner columns match the full retained schema exactly. */
 async function expectColumns(pool: Pool, tables: Record<string, Record<string, true>>) {
   for (const [qualified, columns] of Object.entries(tables)) {
     const [schema, table] = qualified.split('.');
@@ -103,7 +103,12 @@ afterAll(async () => {
 test('erasure journal schema installs empty, upgrades current head and allocates commit-ordered epochs', async () => {
   const fresh = await database('relay_fresh');
   await applyRelay(fresh, relayFiles(() => true));
-  await expectColumns(fresh, { ...erasureTables, ...ownerTables });
+  await expectColumns(fresh, { ...erasureTables, ...ownerTables,
+    // Live completion scheduling is installed after the retained journal schema.
+    'relay.erasure': { ...erasureTables['relay.erasure'],
+      suppression_receipt: true, live_completion_pending: true,
+      last_completion_attempt: true, live_completion_attempt: true },
+  });
   await expectValues(fresh, 'relay.erasure', 'stage', ERASURE_STAGES);
   await expectValues(fresh, 'relay.erasure', 'kind', ERASURE_KINDS);
   await expectValues(fresh, 'relay.erasure', 'authority', ERASURE_AUTHORITIES);
@@ -346,6 +351,16 @@ test('erasure lifecycle reports suppression and destruction separately per reten
     WHERE erasure_id = $1 AND domain_id = $2`, [erasure, snapshot, digest('snapshot-erasure')]);
 
   // Verified completion may keep an explicitly retained backup copy.
+  // A terminal retention report cannot qualify unfinished owner targets.
+  await rejects(relay.query(`UPDATE relay.erasure SET stage = 'verified', destruction_status = 'retained',
+    verified_at = clock_timestamp() WHERE id = $1`, [erasure]), '23514');
+  await relay.query(`UPDATE relay.erasure_target SET completion_state = 'completed',
+    completion_evidence_ref = $2, completed_at = clock_timestamp() WHERE erasure_id = $1`,
+  [erasure, digest('owner-target-completion')]);
+  await rejects(relay.query(`UPDATE relay.erasure_target SET completion_state = 'pending',
+    completion_evidence_ref = NULL, completed_at = NULL WHERE erasure_id = $1`, [erasure]), '23514');
+  await rejects(relay.query(`UPDATE relay.erasure_target SET completion_evidence_ref = $2
+    WHERE erasure_id = $1`, [erasure, digest('changed-completion-evidence')]), '23514');
   await relay.query(`UPDATE relay.erasure SET stage = 'verified', destruction_status = 'retained',
     verified_at = clock_timestamp() WHERE id = $1`, [erasure]);
   expect((await relay.query(`SELECT stage, suppression_status, destruction_status FROM relay.erasure

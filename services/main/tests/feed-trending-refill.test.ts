@@ -222,13 +222,24 @@ for (const field of ['generation', 'contentSequence', 'contentEpoch', 'reviewPos
   });
 }
 
-for (const field of ['personalRevision', 'followsRevision', 'graphSequence'] as const) {
+for (const field of ['personalRevision', 'followsRevision'] as const) {
   test(`G1034: Trending rejects real ${field} movement within a page`, async () => {
     const f = fixture(7);
     f.state.onSeek = () => { f.state[field] = '2'; };
     await expect(f.read()).rejects.toBeInstanceOf(WorkReadMoved);
   });
 }
+
+test('Trending retains admitted candidates across unrelated graph sequence movement', async () => {
+  const f = fixture(7);
+  f.state.onSeek = () => { f.state.graphSequence = '2'; };
+  const page = await f.read();
+  expect(page.items.map(item => item.work)).toEqual(f.candidates.slice(0, TRENDING_COST.items).map(item => item.work));
+  expect(page.hasMore).toBe(true);
+  const continued = await f.read({ scope: 'global', cursor: page.cursor! });
+  expect([...page.items, ...continued.items].map(item => item.work)).toEqual(f.candidates.map(item => item.work));
+  expect(continued.hasMore).toBe(false);
+});
 
 for (const dependency of ['scope', 'window', 'preferences', 'follows', 'principal', 'actingSubject'] as const) {
   test(`G1034: Trending continuation binds ${dependency}`, async () => {

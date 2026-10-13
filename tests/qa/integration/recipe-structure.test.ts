@@ -335,9 +335,13 @@ test('RECIPE01/RECIPE02/RECIPE03: recipe Structure retains duplicate lines, scal
       + `?actingSubject=${encodeURIComponent(f.actor)}&revision=${encodeURIComponent(imported.revision)}`), 200);
     expect(exported.cost.occurrences).toBeGreaterThan(4);
     expect(exported.cost.pagesRead).toBeGreaterThanOrEqual(exported.cost.pages);
-    expect(exported.recipe.recipeIngredient).toContain('2 tbsp olive oil');
     expect(exported.recipe.recipeIngredient).toContainEqual(expect.objectContaining({
-      '@type': 'PropertyValue', name: '1/2 tsp salt', value: '1/2', unitText: 'tsp',
+      '@type': 'PropertyValue', text: '2 tbsp olive oil', value: '2', unitText: 'tbsp',
+      parseStatus: 'partial',
+    }));
+    expect(exported.recipe.recipeIngredient).toContainEqual(expect.objectContaining({
+      '@type': 'PropertyValue', text: 'salt', name: 'salt', value: '1/2', unitText: 'tsp',
+      parseStatus: 'partial',
     }));
     expect(exported.recipe.recipeInstructions).toContainEqual(expect.objectContaining({
       '@type': 'HowToSection', name: 'Finish', itemListElement: [

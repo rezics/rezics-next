@@ -40,11 +40,12 @@ async function startLibraryStack(label: string) {
       // so these 1,000 publication pointers cannot enter later global reads.
       const subjects = [...fixtureSubjects];
       for (let offset = 0; offset < subjects.length; offset += 100) {
-        await home.stack.fuseki.update(`DELETE { GRAPH ?graph { ?subject ?predicate ?object } } WHERE {
-          VALUES ?graph { ${iri(GRAPHS.current)} ${iri(GRAPHS.revisions)} }
-          VALUES ?subject { ${subjects.slice(offset, offset + 100).map(iri).join(' ')} }
-          GRAPH ?graph { ?subject ?predicate ?object }
-        }`);
+        for (const graph of [GRAPHS.current, GRAPHS.revisions]) {
+          await home.stack.fuseki.update(`DELETE { GRAPH ${iri(graph)} { ?subject ?predicate ?object } } WHERE {
+            VALUES ?subject { ${subjects.slice(offset, offset + 100).map(iri).join(' ')} }
+            GRAPH ${iri(graph)} { ?subject ?predicate ?object }
+          }`);
+        }
       }
     } finally { try { await home.stop(); } finally { await databases.close(); } }
   } };

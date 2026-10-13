@@ -80,7 +80,11 @@ test('a connection left idle in a transaction is closed and the pool recovers', 
     stuck.release(true);
     const fresh = await pool.query<{ pid: number }>('SELECT pg_backend_pid() AS pid');
     expect(fresh.rows[0]!.pid).not.toBe(pid);
-    expect(errors.join('\n')).toContain('Database connection failed');
+    const faults = errors.map(line => JSON.parse(line));
+    expect(faults).toContainEqual({ time: expect.any(String), level: 'error',
+      event: 'worker_fault', 'rezics.worker.name': 'main.database.connection',
+      'error.class': 'DatabaseError', 'error.code': '25P03' });
+    expect(errors.join('\n')).not.toContain('terminating connection');
   } finally {
     console.error = original;
     await pool.end();

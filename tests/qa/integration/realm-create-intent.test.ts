@@ -261,7 +261,7 @@ test('Initial review policy accepts trusted member submissions in open mode and 
         async value => value);
       const laterRevisions = JSON.stringify({ realm, reviewMode, permitRevision: laterPermit.revision,
         graphPolicyRevision: laterPolicy?.revision });
-      expect(laterPolicy!.revision, laterRevisions).toMatch(/^urn:rezics:realm-policy:[0-9a-f-]{36}$/);
+      expect(laterPolicy!.revision, laterRevisions).toMatch(/^urn:rezics:receipt:[0-9a-f]{64}$/);
       expect(laterPermit.revision, laterRevisions).toBe(laterPolicy!.revision);
       const laterWorkResponse = await post('/v1/works', { profile: 'metadata-only-v1', authoring: 'own-work',
         title: `A later ${reviewMode} submission`, language: 'en', actingSubject: creator.actor });

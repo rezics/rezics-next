@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import { rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { createHash, randomUUID } from 'node:crypto';
+import { readFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { createMainApp, type MainWorkDependencies } from '../../../services/main/src/app.ts';
@@ -10,16 +10,18 @@ import { AccessExposure } from '../../../services/main/src/modules/access/exposu
 import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
 import { graphErasureReceipt } from '../../../services/main/src/modules/erasure/graph.ts';
 import { MediaAccessBatchReader } from '../../../services/main/src/modules/media/access-batch.ts';
+import { CONTRIBUTION_PROFILE } from '../../../services/main/src/modules/contribution/draft.ts';
 import { GRAPHS, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
 
 interface Report {
   erasureId: string; erasureEpoch: string; replayed: boolean;
-  targets: { owner: string; kind: string; ref: string }[];
+  targets: { owner: string; kind: string; ref: string;
+    completionState: string; completedAt: string | null }[];
 }
 
-test('each honoured revision kind tombstones through the one erasure operation', async () => {
+test('Work, Contribution, Release, Composition and semantic revisions tombstone through one erasure operation', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.ACCOUNT_RELAY_DATABASE_URL) {
     throw new Error('Run through the isolated QA integration tier');
   }
@@ -59,13 +61,48 @@ test('each honoured revision kind tombstones through the one erasure operation',
       authorization: `Bearer ${f.account.tokenA}`, 'content-type': 'application/json', 'idempotency-key': key },
     body: JSON.stringify({ profile: 'content-revision-erasure-v1', actingSubject: f.actor, resourceId,
       revisionIds: [uuidOf(revision)] }) }));
+  const sourceObjects = new Map<string, string[]>();
+  const objectDigest = (bytes: Uint8Array) => `sha256:${createHash('sha256').update(bytes).digest('hex')}`;
+  const captureSourceObjects = async (revision: string) => {
+    if (sourceObjects.has(revision)) return sourceObjects.get(revision)!;
+    const refs: string[] = [];
+    const anchors = (await f.nativeFuseki.query(`PREFIX rv: <${RV}> SELECT ?manifest WHERE {
+      GRAPH <${GRAPHS.revisions}> { <${revision}> rv:modelRevision <${CONTRIBUTION_PROFILE}> ;
+        rv:manifest ?manifest }
+    } LIMIT 2`)).results?.bindings ?? [];
+    expect(anchors.length).toBeLessThanOrEqual(1);
+    for (const anchor of anchors) {
+      const manifest = anchor.manifest!.value;
+      expect(manifest).toMatch(/^urn:rezics:sha256:[0-9a-f]{64}$/);
+      const stored = JSON.parse(readFileSync(join(f.env.objectDirectory, manifest.slice(-64)), 'utf8')) as { payload: string };
+      expect(stored.payload).toMatch(/^sha256:[0-9a-f]{64}$/);
+      const payload = readFileSync(join(f.env.objectDirectory, stored.payload.slice(7)));
+      expect(objectDigest(payload)).toBe(stored.payload);
+      refs.push(stored.payload);
+    }
+    // Capture the actual command-source bytes before erasure, independently
+    // of the erasure inventory's claimed object hashes.
+    const custody = (await f.accessPool.query<{ payload: Buffer }>(
+      'SELECT payload FROM access.command_custody WHERE revision=$1 LIMIT 2', [revision])).rows;
+    expect(custody.length).toBeLessThanOrEqual(1);
+    refs.push(...custody.map(row => objectDigest(row.payload)));
+    const unique = [...new Set(refs)];
+    sourceObjects.set(revision, unique);
+    return unique;
+  };
   const erase = async (revision: string, resourceId: string, key = randomUUID()) => {
+    const objects = await captureSourceObjects(revision);
     await f.grant(`erasure:${resourceId}`, 'erasure.request');
     const response = await postErasure(revision, resourceId, key);
     const body = await response.json() as Report & { code?: string };
     if (response.status !== 200) throw new Error(`${response.status}: ${JSON.stringify(body)}`);
-    return { ...body, key };
+    return { ...body, key, objects };
   };
+  const completedTargets = (report: { objects: string[] }, kind: string, revision: string) => [
+    { owner: 'graph', kind, ref: uuidOf(revision), completionState: 'completed', completedAt: expect.any(String) },
+    ...report.objects.map(ref => ({ owner: 'object', kind: 'object', ref,
+      completionState: 'completed', completedAt: expect.any(String) })),
+  ];
   const proof = async (revision: string, report: Report) => {
     const receipt = graphErasureReceipt(report.erasureId);
     const result = await f.nativeFuseki.query(`PREFIX rv: <${RV}> PREFIX xsd: <http://www.w3.org/2001/XMLSchema#>
@@ -112,8 +149,7 @@ test('each honoured revision kind tombstones through the one erasure operation',
         body: 'Unpublished later draft', actingSubject: f.actor }), 200);
 
     const unpublished = await erase(unselected.draftRevision, draft.contribution);
-    expect(unpublished.targets).toEqual([{ owner: 'graph', kind: 'text_contribution_draft',
-      ref: uuidOf(unselected.draftRevision) }]);
+    expect(unpublished.targets).toEqual(completedTargets(unpublished, 'text_contribution_draft', unselected.draftRevision));
     await proof(unselected.draftRevision, unpublished);
     expect((await call('GET', `/v1/resources/${shortId(draft.contribution)}`)).status).toBe(200);
     const pin = await f.nativeFuseki.query(`PREFIX rv: <${RV}> SELECT ?draft WHERE {
@@ -141,18 +177,16 @@ test('each honoured revision kind tombstones through the one erasure operation',
       actingSubject: f.actor }), 201);
 
     const published = await erase(draft.draftRevision, draft.contribution);
-    expect(published.targets).toEqual([{ owner: 'graph', kind: 'text_contribution_draft',
-      ref: uuidOf(draft.draftRevision) }]);
+    expect(published.targets).toEqual(completedTargets(published, 'text_contribution_draft', draft.draftRevision));
     await proof(draft.draftRevision, published);
     await hidden(draft.contribution);
 
     const released = await erase(paperback.revision, paperback.release);
-    expect(released.targets).toEqual([{ owner: 'graph', kind: 'release_revision',
-      ref: uuidOf(paperback.revision) }]);
+    expect(released.targets).toEqual(completedTargets(released, 'release_revision', paperback.revision));
     await proof(paperback.revision, released);
     await hidden(paperback.release);
     const fixed = await erase(sealed.release, sealed.release);
-    expect(fixed.targets).toEqual([{ owner: 'graph', kind: 'release_revision', ref: uuidOf(sealed.release) }]);
+    expect(fixed.targets).toEqual(completedTargets(fixed, 'release_revision', sealed.release));
     await proof(sealed.release, fixed);
     await hidden(sealed.release);
 
@@ -164,8 +198,7 @@ test('each honoured revision kind tombstones through the one erasure operation',
           position: 'last', role: 'chapter', target: 'https://schema.org/DigitalDocument',
           label: { value: 'Chapter', language: 'en' } }] }), 200);
     const composed = await erase(placed.revision, created.structure);
-    expect(composed.targets).toEqual([{ owner: 'graph', kind: 'composition_revision',
-      ref: uuidOf(placed.revision) }]);
+    expect(composed.targets).toEqual(completedTargets(composed, 'composition_revision', placed.revision));
     await proof(placed.revision, composed);
     await hidden(placed.occurrences[0]!);
 
@@ -177,8 +210,7 @@ test('each honoured revision kind tombstones through the one erasure operation',
     201);
     await f.grant(`semantic:read:${character.component}`, 'semantic.read');
     const semantic = await erase(character.revision, character.component);
-    expect(semantic.targets).toEqual([{ owner: 'graph', kind: 'semantic_revision',
-      ref: uuidOf(character.revision) }]);
+    expect(semantic.targets).toEqual(completedTargets(semantic, 'semantic_revision', character.revision));
     await proof(character.revision, semantic);
     await hidden(character.component, true);
 
@@ -187,7 +219,7 @@ test('each honoured revision kind tombstones through the one erasure operation',
     await f.grant(`erasure:${work.work}`, 'erasure.request');
     expect((await postErasure(`https://rezics.com/id/${randomUUID()}`, work.work)).status).toBe(400);
     const head = await erase(work.workRevision, work.work);
-    expect(head.targets).toEqual([{ owner: 'graph', kind: 'work_head', ref: uuidOf(work.workRevision) }]);
+    expect(head.targets).toEqual(completedTargets(head, 'work_head', work.workRevision));
     await proof(work.workRevision, head);
     await hidden(work.work);
   } finally {
