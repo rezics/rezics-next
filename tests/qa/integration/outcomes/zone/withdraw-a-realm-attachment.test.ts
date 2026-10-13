@@ -325,6 +325,33 @@ outcomeTest(withdrawal, 'moderator', async () => {
 });
 outcomeTest(withdrawal, 'operator', async () => {
   await denied('operator', 403);
+  const target = sites.operator;
+  const navigation = await answer<{ revision: string }>(
+    sessions.owner.main('GET', `/v1/zones/${short(target.zone)}?${acting(sessions.owner)}`),
+  );
+  await publishHome({ ...target, navigationRevision: navigation.revision });
+  await resourceMandate('zone.edit', `zone:edit:${target.zone}`);
+  const removed = await configure(
+    sessions.operator,
+    target.zone,
+    (await head(target.zone)).revision,
+    null,
+  );
+  console.info(
+    JSON.stringify({
+      operatorZoneAuthority: {
+        operation: 'withdraw-through-zone-mandate',
+        status: removed.status,
+        answer: await removed.clone().json(),
+      },
+    }),
+  );
+  await answer(Promise.resolve(removed));
+  expect(await publicRealm(target.zone)).toEqual({ route: null, presentation: null });
+  // Realm intervention uses its own attachment and mandate; Zone editing granted no stewardship.
+  await answer(
+    configure(sessions.owner, target.zone, (await head(target.zone)).revision, sessions.realm),
+  );
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   await answer(withdraw(sessions.operator, sites.operator.zone));
 });
