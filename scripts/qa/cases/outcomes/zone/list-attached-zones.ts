@@ -13,6 +13,6 @@ export default rowOutcomes('zone/list-attached-zones', {
     'moderation alone conceals inventory; delegated stewardship lists until revoked',
   ),
   operator: pending(
-    'bare platform authority refuses; exact resource intervention awaits a supported assignment-ceiling fixture',
+    'exact Realm mandate is assigned; attachment inventory returns dependency_unavailable',
   ),
 });
