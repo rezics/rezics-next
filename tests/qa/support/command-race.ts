@@ -1,6 +1,6 @@
 type CommandResponse = Response | { status: number; body: unknown };
 
-type RaceOptions = {
+export type RaceOptions = {
   maxAttempts?: number;
   timeoutMs?: number;
   phase?: string;
@@ -15,6 +15,72 @@ async function bodyOf(response: CommandResponse): Promise<unknown> {
   } catch {
     return text;
   }
+}
+
+/** Follow only the API's reconciling answer, preserving its operation identity. */
+export async function settlePendingAnswer<T extends CommandResponse>(
+  initial: T,
+  resend: () => Promise<T>,
+  options: RaceOptions & { deadline?: number },
+  fail: (reason: string) => never,
+  record: (response: T, attempt: number) => Promise<void>,
+): Promise<T> {
+  const maxAttempts = options.maxAttempts ?? 5;
+  const timeoutMs = options.timeoutMs ?? 60_000;
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1 || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    fail('requires a positive retry count and timeout');
+  }
+  const deadline = options.deadline ?? Date.now() + timeoutMs;
+  let response = initial;
+  let operationId: string | undefined;
+  let attempt = 0;
+  while (response.status === 202) {
+    const pending = (await bodyOf(response)) as {
+      operationId?: unknown;
+      status?: unknown;
+      phase?: unknown;
+      result?: unknown;
+      retry?: { allowed?: unknown; afterMs?: unknown };
+    } | null;
+    const afterMs = pending?.retry?.afterMs;
+    if (
+      pending?.status !== 'reconciling' ||
+      pending.result !== null ||
+      typeof pending.operationId !== 'string' || !pending.operationId.length ||
+      typeof pending.phase !== 'string' || !pending.phase.length ||
+      (options.phase !== undefined && pending.phase !== options.phase) ||
+      pending.retry?.allowed !== true ||
+      typeof afterMs !== 'number' || !Number.isFinite(afterMs) || afterMs < 0
+    ) {
+      fail('returned an invalid reconciling answer');
+    }
+    operationId ??= pending!.operationId as string;
+    if (pending!.operationId !== operationId) fail('changed operation identity');
+    if (attempt >= maxAttempts || Date.now() + (afterMs as number) >= deadline) {
+      fail(`did not settle within ${maxAttempts} retries / ${timeoutMs}ms`);
+    }
+    await (options.sleep ?? Bun.sleep)(afterMs as number);
+    attempt++;
+    // Bound the resend itself, including a hung request, by the same deadline.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      response = await Promise.race([
+        resend(),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error('Command race resend timed out')),
+            Math.max(0, deadline - Date.now()),
+          );
+        }),
+      ]);
+    } catch (error) {
+      fail(`retry ${attempt} failed: ${String(error)}`);
+    } finally {
+      clearTimeout(timer);
+    }
+    await record(response, attempt);
+  }
+  return response;
 }
 
 /** Retry the original losing intent and key; changing either can admit another successor. */
@@ -56,59 +122,12 @@ export async function assertCommandRace<T extends CommandResponse>(
   for (let index = 0; index < settled.length; index++) {
     let response = settled[index]!;
     if (response.status === expectedStatus) continue;
-    let operationId: string | undefined;
-    let attempt = 0;
-    while (response.status === 202) {
-      const pending = (await bodyOf(response)) as {
-        operationId?: unknown;
-        status?: unknown;
-        phase?: unknown;
-        result?: unknown;
-        retry?: { allowed?: unknown; afterMs?: unknown };
-      } | null;
-      const afterMs = pending?.retry?.afterMs;
-      if (
-        pending?.status !== 'reconciling' ||
-        pending.result !== null ||
-        typeof pending.operationId !== 'string' ||
-        !pending.operationId.length ||
-        typeof pending.phase !== 'string' ||
-        !pending.phase.length ||
-        (options.phase !== undefined && pending.phase !== options.phase) ||
-        pending.retry?.allowed !== true ||
-        typeof afterMs !== 'number' ||
-        !Number.isFinite(afterMs) ||
-        afterMs < 0
-      ) {
-        fail(`contender ${index} returned an invalid reconciling answer`);
-      }
-      operationId ??= pending!.operationId as string;
-      if (pending!.operationId !== operationId)
-        fail(`contender ${index} changed operation identity`);
-      if (attempt >= maxAttempts || Date.now() + (afterMs as number) >= deadline) {
-        fail(`contender ${index} did not settle within ${maxAttempts} retries / ${timeoutMs}ms`);
-      }
-      await (options.sleep ?? Bun.sleep)(afterMs as number);
-      attempt++;
-      // Bound the resend itself, including a hung request, by the same deadline.
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      try {
-        response = await Promise.race([
-          resend(index),
-          new Promise<never>((_, reject) => {
-            timer = setTimeout(
-              () => reject(new Error('Command race resend timed out')),
-              Math.max(0, deadline - Date.now()),
-            );
-          }),
-        ]);
-      } catch (error) {
-        fail(`contender ${index} retry ${attempt} failed: ${String(error)}`);
-      } finally {
-        clearTimeout(timer);
-      }
-      evidence.push({ index, attempt, status: response.status, body: await bodyOf(response) });
-    }
+    response = await settlePendingAnswer(response, () => resend(index),
+      { ...options, timeoutMs, deadline },
+      reason => fail(`contender ${index} ${reason}`),
+      async (answer, attempt) => {
+        evidence.push({ index, attempt, status: answer.status, body: await bodyOf(answer) });
+      });
     if (response.status !== 409)
       fail(`contender ${index} settled to ${response.status}, expected 409`);
     settled[index] = response;

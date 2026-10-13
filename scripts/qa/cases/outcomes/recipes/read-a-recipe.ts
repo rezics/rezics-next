@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { settledWrite } from '../../../../../tests/qa/support/settled-write.ts';
 import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('recipes/read-a-recipe', {
@@ -47,10 +48,10 @@ export async function originalRecipe(person: RecipePerson, title: string,
   options: { published?: boolean; paged?: boolean; laterDraft?: boolean; language?: string; type?: string } = {}): Promise<RecipeWork> {
   const actor = person.actingSubject;
   const work = await fixtureAnswer<{ work: string; workRevision: string; mainVersion: string }>(
-    person.main('POST', '/v1/works', { profile: 'metadata-only-v1', title,
+    settledWrite(person.main, 'POST', '/v1/works', { profile: 'metadata-only-v1', title,
       language: options.language ?? 'en', semanticTypes: [options.type ?? 'https://schema.org/Recipe'],
       authoring: 'own-work', actingSubject: actor }), 201);
-  const created = await fixtureAnswer<{ structure: string; revision: string }>(person.main('POST',
+  const created = await fixtureAnswer<{ structure: string; revision: string }>(settledWrite(person.main, 'POST',
     '/v1/compositions', { profile: 'recipe-composition', work: work.work,
       mainVersion: work.mainVersion, actingSubject: actor }), 201);
   let revision = created.revision;
@@ -58,7 +59,7 @@ export async function originalRecipe(person: RecipePerson, title: string,
   const change = async (operations: object[]) => {
     const ids: string[] = [];
     for (let index = 0; index < operations.length; index += 16) {
-      const result = await fixtureAnswer<{ revision: string; occurrences: string[] }>(person.main('POST',
+      const result = await fixtureAnswer<{ revision: string; occurrences: string[] }>(settledWrite(person.main, 'POST',
         `/v1/compositions/${short(created.structure)}/changes`, { profile: 'recipe-composition',
           expectedHead: revision, actingSubject: actor, operations: operations.slice(index, index + 16) }));
       revision = result.revision;
@@ -81,13 +82,13 @@ export async function originalRecipe(person: RecipePerson, title: string,
   ...['Mix the sauce.', 'Cook for five minutes.'].map(text => ({ op: 'insert',
     parent: created.structure, position: 'last', role: 'step', qualifier: { type: 'recipe-step',
       instructionText: { value: text, language: 'en' }, usesIngredient: [], media: [], scaling: 'linear' } }))]);
-  const measured = await fixtureAnswer<{ revision: string }>(person.main('POST',
+  const measured = await fixtureAnswer<{ revision: string }>(settledWrite(person.main, 'POST',
     `/v1/recipes/${short(created.structure)}/measures`, { expectedHead: revision, actingSubject: actor,
       yield: { value: { numerator: 4, denominator: 1 }, unitText: 'servings', coverage: 'complete', provenance: 'declared' },
       servings: { value: { numerator: 4, denominator: 1 }, coverage: 'complete', provenance: 'declared' },
       nutrition: { basis: 'whole-recipe', inputs: [] } }));
   revision = measured.revision;
-  if (options.published !== false) await fixtureAnswer(person.main('POST', '/v1/work-publications', {
+  if (options.published !== false) await fixtureAnswer(settledWrite(person.main, 'POST', '/v1/work-publications', {
     profile: 'work-structure-publication-v1', operation: 'publish', work: work.work,
     actingSubject: actor, expectedWorkHead: work.workRevision, expectedMainVersion: work.mainVersion,
     structure: created.structure, expectedStructureHead: revision, expectedPublicationHead: null,
@@ -111,32 +112,32 @@ export async function recipeCatalogue(sessions: { owner: RecipePerson; realm: st
     const roles = await fixtureAnswer<{ generation: string }>(owner.main('GET', `${root}/roles?${acting(owner)}`));
     const command = { actingSubject: actor, expectedGeneration: roles.generation,
       reason: 'Publish the original recipe outcome catalogue', change };
-    const preview = await fixtureAnswer<{ digest: string }>(owner.main('POST', `${root}/role-impact`, command));
-    await fixtureAnswer(owner.main('POST', `${root}/role-changes`, { ...command, impactDigest: preview.digest }), 201);
+    const preview = await fixtureAnswer<{ digest: string }>(settledWrite(owner.main, 'POST', `${root}/role-impact`, command));
+    await fixtureAnswer(settledWrite(owner.main, 'POST', `${root}/role-changes`, { ...command, impactDigest: preview.digest }), 201);
   }
   const matching: string[] = [];
   const excluded: string[] = [];
   for (let index = 0; index < 24; index++) {
     const language = index === 21 ? 'it' : 'en';
-    const work = await fixtureAnswer<{ work: string; mainVersion: string }>(owner.main('POST', '/v1/works', {
+    const work = await fixtureAnswer<{ work: string; mainVersion: string }>(settledWrite(owner.main, 'POST', '/v1/works', {
       profile: 'metadata-only-v1', title: `${phrase} ${index}`, language, authoring: 'own-work',
       semanticTypes: [index === 22 ? 'https://schema.org/Book' : 'https://schema.org/Recipe'], actingSubject: actor,
     }), 201);
     if (index < 21) matching.push(work.work); else excluded.push(work.work);
     if (index === 23) continue;
-    const draft = await fixtureAnswer<{ contribution: string; draftRevision: string }>(owner.main('POST',
+    const draft = await fixtureAnswer<{ contribution: string; draftRevision: string }>(settledWrite(owner.main, 'POST',
       '/v1/contributions', { profile: 'text-contribution-v1', work: work.work, language,
         body: `Original recipe ${index}: mix the sauce, then cook for five minutes.`, actingSubject: actor }), 201);
-    const publication = await fixtureAnswer<{ publicationDecision: string }>(owner.main('POST', '/v1/contribution-publications', {
+    const publication = await fixtureAnswer<{ publicationDecision: string }>(settledWrite(owner.main, 'POST', '/v1/contribution-publications', {
       profile: 'text-publication-v1', contribution: draft.contribution, expectedDraftHead: draft.draftRevision,
       expectedPublicationHead: null, rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: actor,
     }), 201);
     const selection = { work: work.work, contribution: draft.contribution,
       publicationDecision: publication.publicationDecision, expectedSelectionHead: null, actingSubject: actor };
-    await fixtureAnswer(owner.main('POST', '/v1/publication-selections', { ...selection,
+    await fixtureAnswer(settledWrite(owner.main, 'POST', '/v1/publication-selections', { ...selection,
       profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
       selectionBasis: 'main-maintainer' }), 201);
-    await fixtureAnswer(owner.main('POST', '/v1/publication-selections', { ...selection,
+    await fixtureAnswer(settledWrite(owner.main, 'POST', '/v1/publication-selections', { ...selection,
       profile: 'realm-local-selection-v1', context: { kind: 'realm-local', id: sessions.realm },
       mainVersion: work.mainVersion, selectionBasis: 'realm-manager-review' }), 201);
   }
