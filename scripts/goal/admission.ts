@@ -1,8 +1,9 @@
-import { basename, join } from 'node:path';
+import { basename, dirname, join, resolve } from 'node:path';
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { readLedger, pidAlive } from './ledger.ts';
 import { running } from './launch.ts';
 import { directoryLeaseHeld, readDirectoryLease, tryAcquireDirectoryLease, type AcquiredDirectoryLease } from '../qa/process/lease.ts';
+import type { SlotRunOptions } from './qa-slots.ts';
 
 const namedFile = /\.(?:test|spec|e2e|stories)\.[cm]?[jt]sx?$/;
 
@@ -121,6 +122,41 @@ export function admissionCommand(input: readonly string[]): string[] {
   return input[0] === '--' ? input.slice(1) : [...input];
 }
 
+/** Admit a test selector before it expands the requested plan into commands. */
+export async function withTestAdmission(command: string[], heavy = false, resultFile?: string, options: SlotRunOptions = {}): Promise<number> {
+  const selector = basename(command[0] ?? '') === 'bun'
+    && resolve(command[1] ?? '') === resolve(import.meta.dir, '../qa/test.ts');
+  const affected = selector ? (await import('../qa/test.ts')).parseAffectedArgs(command.slice(2)) : undefined;
+  // Listing starts neither tests nor a stack, so it must never enter admission.
+  if (affected?.list) {
+    const now = options.now ?? Date.now;
+    const queuedAt = now();
+    let startedAt: number | undefined;
+    let code: number | undefined;
+    const start = () => { startedAt = now(); };
+    try {
+      const env = options.env ?? process.env;
+      if (options.runCommand) code = await options.runCommand(command, env, start);
+      else {
+        const child = Bun.spawn(command, { env, stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' });
+        start();
+        code = await child.exited;
+      }
+      return code;
+    } finally {
+      if (resultFile) {
+        const finishedAt = now();
+        mkdirSync(dirname(resultFile), { recursive: true });
+        writeFileSync(resultFile, JSON.stringify({ code, queuedAt, startedAt, finishedAt,
+          queueMs: (startedAt ?? finishedAt) - queuedAt, testMs: startedAt === undefined ? 0 : finishedAt - startedAt,
+          totalMs: finishedAt - queuedAt, artifactPaths: [] }, null, 2));
+      }
+    }
+  }
+  const { withSlot } = await import('./qa-slots.ts');
+  return withSlot(command, heavy, resultFile, options);
+}
+
 if (import.meta.main) {
   try {
     const command = admissionCommand(process.argv.slice(2));
@@ -133,7 +169,7 @@ if (import.meta.main) {
       const child = Bun.spawn(command, { stdout: 'inherit', stderr: 'inherit', stdin: 'inherit' });
       process.exit(await child.exited);
     }
-    process.exit(await withSlot(command));
+    process.exit(await withTestAdmission(command));
   } catch (error) {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(1);

@@ -15,6 +15,7 @@ import { pathToFileURL } from 'node:url';
 import { provideGoalctl, runRegression, parseRegressArgs, regressionTimingReport, appendInbox, inboxEntries } from './regress.ts';
 import { declaredTestTimeout, planUnitGateShards } from './unit-gate.ts';
 import { heavyQaStatus, qaSlotCount, withSlot, withRecovery } from './qa-slots.ts';
+import { withTestAdmission } from './admission.ts';
 import { usageReport } from './usage.ts';
 import { goalMeasures } from './measures.ts';
 import { prepareCheckTree, warnHarnessCurrency } from './tree-currency.ts';
@@ -156,7 +157,7 @@ async function main(argv: string[]): Promise<number> {
       if (at >= 0 && (!resultFile || resultFile.startsWith('--'))) throw new Error('--result-file needs a path');
       const args = rest.filter((arg, index) => arg !== '--heavy' && (at < 0 || (index !== at && index !== at + 1)));
       warnHarnessCurrency(process.cwd());
-      return withSlot(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
+      return withTestAdmission(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
     }
     case 'slot': {
       warnHarnessCurrency(process.cwd());

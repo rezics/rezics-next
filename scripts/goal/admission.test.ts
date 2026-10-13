@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { admissionCommand, assertWideRunAllowed, isWideRun, slotHolderLines, tryAcquireQaSlot } from './admission.ts';
+import { admissionCommand, assertWideRunAllowed, isWideRun, slotHolderLines, tryAcquireQaSlot, withTestAdmission } from './admission.ts';
 import { acquireHeavy, withSlot } from './qa-slots.ts';
 import { readDirectoryLease } from '../qa/process/lease.ts';
 import { acquireQaSlots } from '../qa/core.ts';
@@ -194,6 +194,106 @@ test('ordinary dispatcher slots record their holder and --holders groups by Goal
   });
   expect(lines).toEqual([`Goal a: slot 0, task worker-a (pid ${process.pid})`]);
 });
+
+async function occupyAdmission(directory: string): Promise<() => void> {
+  const held = Array.from({ length: 8 }, (_, slot) => {
+    const lease = tryAcquireQaSlot(directory, 8, slot, { env: { GOAL_ID: 'program' }, workerGoals: () => [] });
+    if (lease === 'held') throw new Error(`Fixture slot ${slot} is already held`);
+    return lease;
+  });
+  const releaseHeavy = await acquireHeavy(['holder'], { lockDir: join(directory, 'heavy'), bindExit: false });
+  return () => { for (const lease of held) lease.release(); releaseHeavy(); };
+}
+
+for (const args of [['--affected', '--list'], ['--affected', 'HEAD', '--list'], ['--affected=HEAD', '--list'], ['--list', '--affected']]) {
+  test(`list-only plan ${args.join(' ')} bypasses full admission without a waiter`, async () => {
+    const directory = fixture();
+    const release = await occupyAdmission(directory);
+    const env = { GOAL_ID: 'program', GOAL_TASK_ID: 'worker' };
+    const command = ['bun', 'scripts/qa/test.ts', ...args];
+    let ran = false;
+    try {
+      expect(await withTestAdmission(command, false, undefined, {
+        env, slotDirectory: directory, slots: 8,
+        sleep: async () => { throw new Error('A list-only plan waited for admission'); },
+        reap: () => { throw new Error('A list-only plan prepared a test run'); },
+        runCommand: async (selected, childEnv, start) => {
+          ran = true;
+          expect(selected).toEqual(command);
+          expect(childEnv).toEqual(env);
+          expect(slotHolderLines(directory, 8)).toHaveLength(8);
+          expect(existsSync(join(directory, 'waiters'))).toBe(false);
+          start();
+          return 7;
+        },
+      })).toBe(7);
+      expect(ran).toBe(true);
+      expect(existsSync(join(directory, 'waiters'))).toBe(false);
+    } finally { release(); }
+  });
+}
+
+test('--affected without --list still waits for admission', async () => {
+  const directory = fixture();
+  const release = await occupyAdmission(directory);
+  let slept = 0;
+  try {
+    expect(await withTestAdmission(['bun', 'scripts/qa/test.ts', '--affected'], false, undefined, {
+      env: { GOAL_ID: 'program' }, slotDirectory: directory, slots: 8, workerGoals: () => [],
+      announce: () => {}, reap: () => {}, sleep: async () => {
+        slept++;
+        expect(readdirSync(join(directory, 'heavy-queue')).filter(name => name.endsWith('.json'))).toHaveLength(1);
+        release();
+      },
+      runCommand: async (_command, env, start) => {
+        expect(slept).toBe(1);
+        expect(env.GOAL_QA_HEAVY_RUN).toBe('1');
+        start();
+        return 0;
+      },
+    })).toBe(0);
+  } finally { release(); }
+});
+
+test('a list-only plan keeps the result report and bypasses an explicit heavy request', async () => {
+  const directory = fixture();
+  const release = await occupyAdmission(directory);
+  const result = join(directory, 'result.json');
+  let clock = 100;
+  try {
+    expect(await withTestAdmission(['bun', 'scripts/qa/test.ts', '--affected', '--list'], true, result, {
+      env: { GOAL_ID: 'program' }, slotDirectory: directory, slots: 8, now: () => clock,
+      sleep: async () => { throw new Error('A list-only plan waited for heavy admission'); },
+      runCommand: async (_command, _env, start) => { start(); clock = 125; return 2; },
+    })).toBe(2);
+    expect(JSON.parse(readFileSync(result, 'utf8'))).toEqual({ code: 2, queuedAt: 100, startedAt: 100,
+      finishedAt: 125, queueMs: 0, testMs: 25, totalMs: 25, artifactPaths: [] });
+    expect(existsSync(join(directory, 'waiters'))).toBe(false);
+  } finally { release(); }
+});
+
+for (const heavy of [false, true]) {
+  test(`named files retain ${heavy ? 'heavy' : 'ordinary'} admission`, async () => {
+    const directory = fixture();
+    const release = await occupyAdmission(directory);
+    const file = join(directory, 'selection.test.ts');
+    writeFileSync(file, '');
+    let slept = 0;
+    try {
+      expect(await withTestAdmission(['bun', 'scripts/qa/test.ts', file], heavy, undefined, {
+        env: { GOAL_ID: 'program' }, slotDirectory: directory, slots: 8, workerGoals: () => [],
+        announce: () => {}, reap: () => {}, sleep: async () => { slept++; release(); },
+        runCommand: async (_command, env, start) => {
+          expect(slept).toBe(1);
+          if (heavy) expect(env.GOAL_QA_HEAVY_RUN).toBe('1');
+          else expect(slotHolderLines(directory, 8)).toHaveLength(1);
+          start();
+          return 0;
+        },
+      })).toBe(0);
+    } finally { release(); }
+  });
+}
 
 for (const harness of [false, true]) {
   test(`${harness ? 'harness' : 'dispatcher'} waits at its share despite a free slot, then borrows when nobody else waits`, async () => {
