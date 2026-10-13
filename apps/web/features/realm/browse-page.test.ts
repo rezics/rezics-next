@@ -2,6 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { materializeData } from 'native-i18n';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
+import { spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { parseBrowseState } from '../zones/browse-state.ts';
@@ -27,7 +28,7 @@ async function pageFrom(label: string, sort: 'newest' | 'relevance') {
     readBrowseAnswer(main, realm, { sort, limit: 10, type: ['https://schema.org/Book'] }),
     readFacetAnswer(main),
   ]);
-  const result = buildBrowsePage({ page, facets, base: '/z/books/browse', zoneName: 'Books',
+  const result = buildBrowsePage({ page, facets, base: spaceHref('books', 'site', ['browse']), zoneName: 'Books',
     state: parseBrowseState({ type: 'schema:Book', sort }), context: { realm, ref: 'books', locale: 'en' },
     locale: 'en', messages });
   return { result, page, facets, sample };
@@ -39,9 +40,9 @@ test('recorded answers keep titles, lower-bound count, sorts and opaque continua
   expect(result.ok).toBe(true);
   if (!result.ok) throw new Error('The recorded browse did not build');
   const answer = sample.answer as ZoneBrowsePage;
-  expect(result.data.items.map(item => item.title.value)).toEqual(answer.items.map(item => item.title.value));
+  expect(result.data.items.map(item => item.title?.value)).toEqual(answer.items.map(item => item.title.value));
   expect(result.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
-  expect(result.data.items[0]?.title.lang).toBe(answer.items[0]?.title.language);
+  expect(result.data.items[0]?.title?.lang).toBe(answer.items[0]?.title.language);
   const t = materializeData(messages, { locale: 'en' });
   expect(result.data.results).toBe(t.resultsAtLeast({ count: String(answer.matches.value) }));
   expect(result.data.sorts.map(item => [item.sort, item.current])).toEqual([['newest', true], ['updated', false]]);
@@ -56,5 +57,6 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
   expect(sample.status).toBe(400);
   expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
   expect(page).toEqual({ ok: false, failure: 'invalid' });
+  if (page.ok) throw new Error('The recorded refusal became a successful read');
   expect(result).toBe(page);
 });
