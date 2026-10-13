@@ -142,7 +142,7 @@ async function expectTracked(canvasElement: HTMLElement, persona: SignedIn) {
   await expect(canvas.findByText(progress.occurrence)).resolves.toBeVisible();
   await expect(canvas.findByText(String(progress.version))).resolves.toBeVisible();
   await expect(canvas.findByText(progress.position ?? tracking.notSet)).resolves.toBeVisible();
-  expect(status.replayed).toBe(false);
+  await expect(status.replayed).toBe(false);
   const root = canvasElement.ownerDocument.documentElement;
   await expect(root.scrollWidth).toBeLessThanOrEqual(root.clientWidth + 1);
 }
