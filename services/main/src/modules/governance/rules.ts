@@ -5,6 +5,7 @@ import { Value } from 'typebox/value';
 import { checkedCommunityRules, communityRule, legacyRuleText, localizedCommunityRule,
   MAX_RULES } from '../realm-profile/schema.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
+import { platformResourceAuthority } from '../access/platform-administrator.ts';
 import { GovernanceConflict, GovernanceDenied, GovernanceInvalid, GovernanceStale, GovernanceUnavailable,
   sha256, type RuleBasis } from './store.ts';
 
@@ -217,8 +218,11 @@ export class GovernanceRules implements RuleBasis {
       WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
         AND r.valid_until > clock_timestamp() LIMIT 1 FOR SHARE OF p, r, a, g, s`,
     [principal.issuer, principal.subject, actingSubject, scopeId, RULE_PUBLISH_ACTION])).rows[0];
-    if (!row) throw new GovernanceDenied('rule authority is missing');
-    return row.id;
+    if (row) return row.id;
+    const designated = await platformResourceAuthority(client, principal, actingSubject,
+      RULE_PUBLISH_ACTION, scopeId);
+    if (!designated) throw new GovernanceDenied('rule authority is missing');
+    return designated;
   }
 
   async publish(principal: VerifiedPrincipal, input: RulePublication): Promise<PublishedRule> {

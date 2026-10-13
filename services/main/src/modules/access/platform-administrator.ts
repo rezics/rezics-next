@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
+import type { VerifiedPrincipal } from './admission.ts';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { definitionCreatorAllowed } from './definition-creator.ts';
@@ -15,6 +16,32 @@ import { questionContextPattern } from '../rating/question-presentation-context.
 import { ratingQuestionPresentationAction } from './rating-question-presentation.ts';
 
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
+
+/** Live resource designation needs a controller, not platform-admin status.
+ * The caller holds the recovery fence and transaction; the shared bounded
+ * permission proof and platform gate serialize use with designation revocation. */
+export async function platformResourceAuthority(
+  client: PoolClient,
+  principal: VerifiedPrincipal,
+  actor: string,
+  action: string,
+  scope: string,
+): Promise<string | null> {
+  if (!native.test(actor) || !platformAdministratorAction(action, scope)) return null;
+  const identity = (await client.query<{ id: string }>(`SELECT p.id FROM access.principal p
+    JOIN access.representation r ON r.principal_id = p.id AND r.subject_id = $3
+      AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+    JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
+    JOIN access.scope_gate resource ON resource.id = $4 AND resource.open AND resource.dispatch_open
+    JOIN access.scope_gate platform ON platform.id = $5 AND platform.open AND platform.dispatch_open
+    WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active
+    ORDER BY r.id LIMIT 1 FOR SHARE OF p,r,s,resource,platform`,
+  [principal.issuer, principal.subject, actor, scope, PLATFORM_SCOPE])).rows[0];
+  if (!identity || !await platformPermissionProof(client, identity.id, `platform:resource:${action}`, scope)) {
+    return null;
+  }
+  return identity.id;
+}
 
 /** A syntactic candidate only. The exact action and scope must be held as an
  * ordinary resource grant below; being an administrator supplies no action. */
