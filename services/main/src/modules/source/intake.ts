@@ -16,7 +16,7 @@ export interface ManualSourceIntake {
   rawBytesBase64?: string;
   coverage: { scope: string; complete: boolean; omittedFields: string[] };
   rightsEvidence: {
-    basis: 'unknown' | 'facts' | 'original' | 'license' | 'permission' | 'exception';
+    basis: 'unknown' | 'public-domain' | 'facts' | 'original' | 'license' | 'permission' | 'exception';
     note: string;
   };
 }
@@ -78,7 +78,7 @@ function checkedInput(input: ManualSourceIntake): { bytes: Buffer | null; digest
   if (new Set(input.coverage.omittedFields).size !== input.coverage.omittedFields.length) {
     throw new SourceIntakeInvalid('duplicate omitted field');
   }
-  if (!input.rightsEvidence || !['unknown', 'facts', 'original', 'license', 'permission', 'exception']
+  if (!input.rightsEvidence || !['unknown', 'public-domain', 'facts', 'original', 'license', 'permission', 'exception']
     .includes(input.rightsEvidence.basis) || typeof input.rightsEvidence.note !== 'string'
     || input.rightsEvidence.note.length > 1024) {
     throw new SourceIntakeInvalid('invalid rights evidence');

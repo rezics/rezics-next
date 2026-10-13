@@ -3,7 +3,7 @@ import { t } from 'elysia';
 export const groupUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 
 export const sourceRightsEvidence = t.Object({ basis: t.Union([
-  t.Literal('unknown'), t.Literal('facts'), t.Literal('original'),
+  t.Literal('unknown'), t.Literal('public-domain'), t.Literal('facts'), t.Literal('original'),
   t.Literal('license'), t.Literal('permission'), t.Literal('exception') ]),
 note: t.String({ maxLength: 1024 }) }, { additionalProperties: false });
 
