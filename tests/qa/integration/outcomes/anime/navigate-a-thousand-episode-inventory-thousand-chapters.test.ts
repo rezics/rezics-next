@@ -33,6 +33,7 @@ let privateWork: Work;
 const episodes: Work[] = [];
 const occurrences: string[] = [];
 const recording = new OutcomeRecorder(inventory);
+const contentsRefusals = new Set<PersonaName>();
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession, fields: Record<string, string> = {}) =>
   new URLSearchParams({
@@ -179,7 +180,11 @@ beforeAll(async () => {
   expect(performance.now() - started).toBeLessThan(600_000);
 }, 600_000);
 afterAll(async () => {
-  try { await recording.publish(); }
+  try {
+    // An unrelated failure must not satisfy a pending contents proof.
+    expect([...contentsRefusals].sort()).toEqual(['member', 'moderator', 'operator', 'owner', 'stranger', 'visitor']);
+    await recording.publish();
+  }
   finally { await sessions?.close(); }
 });
 
@@ -202,8 +207,19 @@ async function credit(person: PersonaSession, work: Work, sample?: ReturnType<Ou
   );
 }
 
+// Read the known contents refusal once so pending proofs fail on the answer, not a retry timeout.
+const isContentsRead = (method: string, path: string) =>
+  method === 'GET' && /^\/v1\/works\/[^/?]+\/contents(?:\?|$)/.test(path);
+
 async function readingSession(person: PersonaSession): Promise<PersonaSession> {
-  if (!person.accountId) return person;
+  if (!person.accountId) return {
+    ...person,
+    main: (method, path, ...args) => isContentsRead(method, path)
+      ? fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+        method, redirect: 'manual', signal: AbortSignal.timeout(5000),
+      })
+      : person.main(method, path, ...args),
+  };
   const stack = resolve('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const directory = readdirSync(stack).find((name) => name.startsWith('g-1005-auth-'));
   if (!directory) throw new Error('Persona OAuth public configuration is unavailable');
@@ -256,6 +272,7 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
           signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
+      if (isContentsRead(method, path)) return request(AbortSignal.timeout(5000));
       return ['GET', 'HEAD'].includes(method)
         ? outcomeResponse(request)
         : request(AbortSignal.timeout(30_000));
@@ -265,7 +282,20 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
 
 async function navigate(name: PersonaName) {
   const person = await readingSession(sessions[name]);
-  const sample = recording.session(name, person);
+  const sample = recording.session(name, {
+    main: async (...args) => {
+      const response = await person.main(...args);
+      if (isContentsRead(args[0], args[1])) {
+        const problem = await response.clone().json() as { code?: string };
+        if (response.status === 503 && problem.code === 'work_read_unavailable') {
+          // The route's log identifies the underlying composition_mapping_differs.
+          contentsRefusals.add(name);
+          console.info(`${name} ${args[0]} ${args[1]}: ${response.status} ${JSON.stringify(problem)}`);
+        }
+      }
+      return response;
+    },
+  });
   const path = `/v1/reading-positions/${short(published.work)}`;
   const read = (fields: Record<string, string> = {}, label?: string) =>
     answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
