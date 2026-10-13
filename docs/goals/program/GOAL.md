@@ -56,16 +56,17 @@ no limit. The [method](../method.md) has the figures and what replaced that.
 way. First attempts were 92% in api, 62% in web and 60% in program, and no row
 was proved. What cost was the managing:
 
-| Measured on 2026-10-13 | Value |
+| Measured on 2026-10-13, 04:20 to 06:12 UTC | Value |
 | --- | --- |
-| Input tokens of the three managers | 66 million of 207 million, 32% |
-| The supermanager alone (one interactive Opus session) | 40 million, 19%: 149 model calls carrying 267,000 tokens on average and 418,000 at the end |
-| api and web managers (headless Sol, resumed for each wake) | 103 and 100 calls at 114,000 and 149,000 tokens on average |
-| Calls of the supermanager that needed judgment | About a quarter: briefs, four diffs read, three design notes, mail. The rest read a handoff, merged, closed or forwarded |
+| Input tokens of the three managers | 65 million of 205 million, 32%. Tokens, not cost; workers' sub-agent sessions are not counted |
+| The supermanager alone (one interactive Opus session) | 38.5 million, 19%: 146 model calls carrying 264,000 tokens on average and 385,000 at the end |
+| api and web managers (headless Sol, resumed for each wake) | 103 and 100 calls at 114,000 and 149,000 tokens on average; 3 and 11 turns |
+| What the supermanager's 146 calls were, by a pattern on each call's commands | 55 mechanical (a handoff or status read, a merge, a close, an acknowledgement, a wait armed); 24 reports to the maintainer; 17 mails written, 12 of the 16 mails saying "no reply needed"; 17 diffs or notes read; 13 documents or code read to decide; 11 documents written; 5 briefs; 4 tasks sent back |
 
 A usage report the maintainer passed on for 2026-10-11 to 2026-10-13 shows the
 same for the earlier run: 44% of the cost in managers, about 505,000 cached
-tokens for each manager call, 36 tasks of 407 taking 44% of the task cost.
+tokens for each manager call, 36 tasks of 407 taking 44% of the task cost. Its
+figures for the four managers agree with their session logs.
 
 Three more things happened that day. One api manager read 18 persona matrices
 one after another, so 15 worker sessions stood idle. Mail could not reach that
@@ -92,10 +93,13 @@ lands, a manager applies its rule by hand and says so.
   reviewer makes the one pass the method allows.
 - **A manager is a role, not a session.** The coordinator starts one short turn
   for an event, in a fresh session whose context is the Goal's `state.md`, the
-  event and what the event points to: 20,000 tokens or fewer at its start. Turns
+  event and what the event points to. A fresh Sol session carries about 17,000
+  tokens before it reads anything (measured over 44 sessions), so the aim is
+  about 40,000 once it has read its state. Turns
   of one Goal run side by side on unrelated events, and the ledger's claims keep
-  them apart, so eighteen handoffs are read by eighteen turns. A turn ends
-  within ten minutes and the coordinator ends one that does not. A turn resumes
+  them apart, so eighteen handoffs are read by eighteen turns. A turn is
+  bounded, at ten minutes to begin with; no measurement stands behind that
+  number yet. A turn resumes
   an earlier session only for a thread the event names. Turns write decisions
   into the brief they concern; one checkpoint turn at a time edits `state.md`.
 - **The tool settles what needs no judgment.** A `done` handoff of an outcome,
@@ -104,9 +108,9 @@ lands, a manager applies its rule by hand and says so.
   `done`, or a decision someone asked for.
 - **Mail has three levels.** `fyi` starts no turn and rides with the next one;
   the default starts a turn; `urgent` ends the recipient's running turn and
-  starts one with that mail first. Half of the supermanager's mail on
-  2026-10-13 said "no reply needed" and still cost a turn of over 100,000
-  tokens each.
+  starts one with that mail first. Twelve of the sixteen mails the supermanager
+  sent on 2026-10-13 said "no reply needed"; what each cost its reader was not
+  measured.
 - **Managers are autonomous and trusted.** A manager decides everything inside
   its Goal, reads its own workers' design notes, and settles a cross-Goal
   matter with the other manager by mail, without the supermanager; on
@@ -136,22 +140,27 @@ lands, a manager applies its rule by hand and says so.
   program's own tooling tasks are run by a program manager role in short turns,
   like any Goal's.
 - **A session's cost is its calls times its average context.** Every call sends
-  the whole context again, and a session that compacts at a limit carries about
-  half that limit on average. The usage report shows it for sessions that ran
-  for days: four managers at about 500,000 tokens a call over some 3,000 calls
-  each, which is the midpoint of the default limit near a million. The
-  supermanager of that run made about 940 calls a day, 430 million cached
-  tokens a day. A limit of 500,000 alone brings that to about 260 million;
-  leaving the mechanical calls to the tool alone, to about 120 million; both, to
-  about 65 million; and a limit of 200,000 on top of both would save 35 million
-  more for three times as many compactions. So a limit goes against the number
-  of calls: low for a session that loops on events, high for one that is called
-  seldom and holds a conversation. The run of 2026-10-13 was too short to show
-  any of this: its supermanager never reached a limit.
+  the whole context again. Checked in the session logs of the four managers of
+  2026-10-11 and 2026-10-12: each compacted four or five times in about 3,000
+  calls, at 760,000 to 970,000 tokens, down to 30,000 to 75,000, and averaged
+  480,000 to 525,000 a call. A session carries a little over half its
+  compaction limit. The supermanager of that run made 2,188 calls in 48 hours,
+  about 1,090 a day at 482,000: 530 million cached tokens a day. After an hour
+  without a call a Claude session sends its context uncached: on 2026-10-13 a
+  call after 78 idle minutes wrote 375,000 tokens to the cache and read 40,000.
+
+  What follows is an estimate, not a measurement. If the tool takes the
+  mechanical calls and managers mail each other, the supermanager makes perhaps
+  45% fewer calls (the 55 mechanical calls and 12 relayed mails of the 146
+  above; one short session, classified by pattern). At about 600 calls a day a
+  limit of 500,000 gives about 165 million cached tokens a day, 300,000 about
+  105 million and 200,000 about 75 million, with about two, three and six
+  compactions a day. The limit is the larger lever for the supermanager, and
+  it is to be set again from each turn's record.
 
   | Who | Session | Compaction |
   | --- | --- | --- |
-  | Supermanager | One resident session; `state.md` written at each checkpoint | 500,000 (`claude --autocompact 500000`), to be looked at again when each turn is measured |
+  | Supermanager | One resident session; `state.md` written at each checkpoint | 500,000 for now, the maintainer's number (`claude --autocompact 500000`; the flag was not tried); the estimate above favours a lower one |
   | A Goal's manager | A fresh turn for an event, several side by side. Compaction alone would not let two turns run at once, let mail in between turns, or spare a session woken after an hour from sending its history uncached | Not reached; while managers are still resumed, 150,000 |
   | Worker, researcher | One session for an attempt. The report's long tasks carried about 100,000 tokens a call and one made 3,182 calls, so their cost is their calls. A fix round resumes it when it is under 200,000 tokens and was active within the hour, and starts fresh from the brief, the findings and the changed files otherwise | 400,000 for Sol and 200,000 for Luna, a backstop: a compaction in the middle of a task loses what was read. The control is the brief and a budget of calls for an attempt |
 - **termspaces is the agents' terminal, and `goalctl` maintains it.** `goalctl`
