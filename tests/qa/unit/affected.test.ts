@@ -69,6 +69,30 @@ test('documentation and static configuration select no tests', () => {
     'scripts/static/ast-grep/rules/no-dynamic-code.yml', 'services/main/tsconfig.json']);
 });
 
+test('outcome tree inputs select the declarations guard without an import edge', () => {
+  const guard = 'scripts/qa/cases/outcomes.test.ts';
+  const outcome = 'tests/qa/integration/outcomes/books/read-a-book.test.ts';
+  const declaration = 'scripts/qa/cases/outcomes/books/read-a-book.ts';
+  const reader = 'scripts/qa/cases/outcomes.ts';
+  const present = new Set([...files, guard, outcome, declaration, reader]);
+  for (const path of [outcome, declaration, reader, 'scripts/qa/cases/outcome-cells.ts',
+    'tests/qa/integration/outcomes/books/proof.json', 'scripts/qa/cases/outcomes/books/removed.ts']) {
+    const result = plan([path], {
+      exists: file => present.has(file),
+      sources: new Map([...sources, [guard, "readFileSync('tests/qa/integration/outcomes/books/')"]]),
+      typecheckRoot: '.temp/affected-empty-root',
+    });
+    expect(result.tests.unit).toContain(guard);
+    expect(result.widened).toEqual([]);
+    expect(unitFilesFromPlan(resolve(import.meta.dir, '../../..'), result, [path])).toContain(guard);
+  }
+  expect(plan(['tests/qa/integration/access-api.test.ts'], {
+    exists: file => present.has(file),
+    sources: new Map([...sources, [guard, '']]),
+    typecheckRoot: '.temp/affected-empty-root',
+  }).tests.unit).not.toContain(guard);
+});
+
 test('inputs outside the import graph widen to the tiers that load them', () => {
   const migration = plan(['services/main/migrations/access/020_roles.sql', 'services/main/src/access.ts']);
   expect(migration.widened.map(item => item.tier)).toEqual(['integration', 'fault/recovery']);

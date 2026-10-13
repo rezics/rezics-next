@@ -72,6 +72,14 @@ const webSourcePattern = 'apps/web/**/*.{ts,tsx,js,jsx,mts,cts}';
  * inventories; main-wide runs retain the complete registry. */
 export const repositoryGuards = [
   {
+    file: 'scripts/qa/cases/outcomes.test.ts',
+    reads: ['tests/qa/integration/outcomes/**', 'scripts/qa/cases/outcomes/**',
+      'scripts/qa/cases/outcomes.ts', 'scripts/qa/cases/outcome-cells.ts',
+      'scripts/qa/cases/launch-coverage.ts', 'scripts/qa/isolated-integration-files.ts',
+      'tests/qa/support/outcome-test.ts'],
+    reason: 'Every declared outcome cell must have its registered proof in the repository tree.',
+  },
+  {
     file: 'scripts/api/answer-records.guard.test.ts',
     reads: ['tests/qa/fixtures/outcomes/**/*.json', ...mainContractReads],
     reason: 'Every outcome answer record must validate against the public contract generated from the tree.',

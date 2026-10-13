@@ -25,6 +25,7 @@ import {
 import { expandTestPaths } from './core.ts';
 import { WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
 import { dockerfileCopySources } from '../dev/fuseki-image.ts';
+import { selectRepositoryGuards } from './repository-guards.ts';
 
 export { affectedOwnerTierEntries };
 
@@ -487,6 +488,13 @@ export function planAffected(input: {
       plan.tests[route.tier].push(path);
     }
   }
+  // Inventory guards read trees without import edges; use the gate's input rules.
+  for (const guard of selectRepositoryGuards(plan.changed)) {
+    if (!input.sources.has(guard.file) || !input.exists(guard.file)) continue;
+    if (!(unitWidened && inRegisteredUnit(guard.file)) && !plan.tests.unit.includes(guard.file))
+      plan.tests.unit.push(guard.file);
+  }
+  plan.tests.unit.sort();
   plan.frontend.sort((a, b) => frontendWorkspaces.indexOf(a.workspace) - frontendWorkspaces.indexOf(b.workspace));
   plan.widened.sort((a, b) => affectedTiers.indexOf(a.tier) - affectedTiers.indexOf(b.tier));
   return plan;
