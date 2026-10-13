@@ -23,14 +23,14 @@ const root = resolve(import.meta.dir, '../../..');
 function harnessAdmission(env: NodeJS.ProcessEnv, slotDirectory: string) {
   const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
     ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const names = new Set(['qaSlotDirectory', 'heavyQaRun']);
+  const names = new Set(['qaSlotDirectory', 'heavyQaRun', 'releaseDeferredHeavy', 'deferredHeavyUsers']);
   const statements = source.statements.filter(node =>
     ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
       ts.isIdentifier(declaration.name) && names.has(declaration.name.text))
     || ts.isFunctionDeclaration(node) && node.name?.text === 'acquireRunSlots'
     || ts.isIfStatement(node) && node.getText(source).startsWith('if (qaSlotDirectory)')
     || ts.isExpressionStatement(node) && node.getText(source).startsWith('process.env.GOAL_QA_COMMAND ??='));
-  if (statements.length !== 5) throw new Error('Missing QA CLI admission boundary');
+  if (statements.length !== 7) throw new Error('Missing QA CLI admission boundary');
   const boundary = ts.transpileModule(statements.map(node => node.getText(source)).join('\n')
     + '\nacquireRunSlots;', { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
   return new Script(boundary).runInNewContext({
@@ -987,13 +987,13 @@ for (const inherited of [false, true]) {
       let polls = 0;
       const slots = await acquire(1, { announce: () => {}, sleep: async () => {
         polls++;
-        const files = readdirSync(waiterDirectory);
+        // The ordered ticket stands beside the wait's own record; the status shows the run once.
+        const files = readdirSync(waiterDirectory).filter(name => !name.startsWith('ordered-slot-'));
         expect(files).toHaveLength(1);
-        expect(JSON.parse(readFileSync(join(waiterDirectory, files[0]!), 'utf8'))).toMatchObject({
-          pid: process.pid, goal: 'program', command, waitingFor: 'slot',
-        });
+        const record = JSON.parse(readFileSync(join(waiterDirectory, files[0]!), 'utf8')) as { since: string };
+        expect(record).toMatchObject({ pid: process.pid, goal: 'program', command, waitingFor: 'slot' });
         expect(qaWaitStatusLines(statusDirectory)).toEqual([
-          `QA waiting for slot: Goal program (pid ${process.pid}): ${command}; Waiting for a QA slot; all 1 slots are held`,
+          `QA waiting for slot: Goal program (pid ${process.pid}): ${command}; since ${record.since}; Waiting for a QA slot; all 1 slots are held`,
         ]);
         rmSync(join(directory, '0'), { recursive: true });
       } });
@@ -1045,7 +1045,7 @@ test('direct QA harness publishes memory waits through its inherited startup env
       sleep: async ms => {
         const lines = qaWaitStatusLines(directory);
         expect(lines).toHaveLength(1);
-        expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): bun scripts/qa/cli.ts --tier model; Waiting; QA memory:`);
+        expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): bun scripts/qa/cli.ts --tier model; since 1970-01-01T00:00:00.000Z; Waiting; QA memory:`);
         now += ms;
       },
     });
@@ -1069,7 +1069,7 @@ test('direct Storybook test dispatch publishes memory waits before launching bro
           expect(started).toBe(false);
           const lines = qaWaitStatusLines(directory);
           expect(lines).toHaveLength(1);
-          expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): ${[command[0], ...command[1]].join(' ')}; Waiting; QA memory:`);
+          expect(lines[0]).toStartWith(`QA waiting for memory: Goal program (pid ${process.pid}): ${[command[0], ...command[1]].join(' ')}; since 1970-01-01T00:00:00.000Z; Waiting; QA memory:`);
           now += ms;
         },
       }),

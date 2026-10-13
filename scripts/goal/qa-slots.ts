@@ -139,7 +139,7 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
   const directory = join(qaSlotsDir, 'waiters');
   let names: string[];
   try { names = readdirSync(directory); } catch { return []; }
-  const lines: string[] = [];
+  const waits: { ticket: boolean; wait: QaWaitStatus }[] = [];
   for (const name of names) {
     if (!name.endsWith('.json')) continue;
     const path = join(directory, name);
@@ -150,11 +150,14 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
         rmSync(path, { force: true });
         continue;
       }
-      lines.push(`QA waiting for ${wait.waitingFor}: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}`
-        + `; since ${wait.since}` + (wait.message ? `; ${wait.message}` : ''));
+      waits.push({ ticket: name.startsWith('ordered-slot-'), wait });
     } catch { rmSync(path, { force: true }); }
   }
-  return lines.sort();
+  // A run's ordered ticket and its slot wait are one waiter: the wait's own record names the command and the reason.
+  const waitingForSlot = new Set(waits.filter(entry => !entry.ticket && entry.wait.waitingFor === 'slot').map(entry => entry.wait.pid));
+  return waits.filter(entry => !entry.ticket || !waitingForSlot.has(entry.wait.pid))
+    .map(({ wait }) => `QA waiting for ${wait.waitingFor}: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}`
+      + `; since ${wait.since}` + (wait.message ? `; ${wait.message}` : '')).sort();
 }
 
 /** Both dispatcher and harness use the existing waiter directory and share owner.
