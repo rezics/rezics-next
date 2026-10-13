@@ -1,15 +1,28 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md). Not started; written on 2026-10-12 from
-the end-of-run tables of the kernel and trust-ops managers, which are archived at
+The checkpoint for [this Goal](GOAL.md). Running since 2026-10-13. Carried work
+below comes from the kernel and trust-ops end-of-run tables, archived at
 `archive/goals:program-2026-10-06/study-2026-10-12/`.
 
-| Field | State (2026-10-12) |
+| Field | State (2026-10-13) |
 | --- | --- |
-| Manager | None. The program starts one after its first three tasks |
-| Rows | 67 in scope; 50 have an API proof, each with one persona; 17 have none ([GOAL.md](GOAL.md#order-of-work)) |
-| Shared stack | Carries `main` as the program's state file says |
-| Not verified | No main-wide integration or fault/recovery run was made on the final `main`: the retained seed set refuses to restore there (compatibility digest), so those tiers are unqualified until the seed set is rebuilt |
+| Manager | `api`, registered and coordinator-enrolled; end a turn when nothing is ready |
+| Rows proved | 0/67 under the six-persona method; 50 legacy API proofs, 17 without one |
+| Rows in work | None dispatched; G-2075–G-2087 brief all 13 registered books rows (the initial instruction said 14; discrepancy mailed to Program) |
+| Tooling in work | G-2074, first attempt, rebuild existing retained load checkpoints and prove restores; gates no row |
+| Measures | First-attempt share 1/1 attempts (100%); no landed API task yet, so landed-task attempts and tokens per proved row are undefined |
+| Shared stack | `task urls`: Main 3001, Account 3002, all six resources healthy; Program's main d2a2e3166 loan integration probe passed in 11.9 s |
+| Retained set | Static reading: compatibility refusal affects growth consumers and retained-checkpoint restore verification, not integration startup. `scripts/qa/cli.ts` starts and bootstraps fresh stacks; only the specific growth files read `seed-checkpoints.ts` |
+| Not verified | No main-wide integration or fault/recovery qualification claimed; ordinary outcome tests can run independently of the retained set |
+| Next action | After Program mails G-2070 and G-2071 landed, confirm row IDs and harness, dispatch G-2087 (expired loan) alone, read its matrix, merge and correct all briefs from the pilot before widening |
+| Following waves | Remaining books with legacy proofs, then the other verticals, then all 17 rows without proofs (including G-2085, interrupted Book export) |
+| Landing and cap | Tooling/outcome tasks use `merge`, no review; enforce two fresh fix rounds until G-2072 does. Stop dispatch below half first-attempt share; no task with an unsettled dependency or decision |
+
+Books briefs are 36 lines each and claim only their row declaration and public
+API tests. They permit existing proofs only when the named persona is actually
+proved without mocks of our modules; failures on main become pending cells.
+The manager reads each handoff matrix before any implementation brief. Program
+mail `program-api-probe-1` was acted on and acknowledged.
 
 ## Carried work
 
