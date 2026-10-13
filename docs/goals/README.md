@@ -69,6 +69,7 @@ engine: claude                        # claude | sonnet | haiku | codex | codex-
 effort: xhigh
 cases: []                             # acceptance IDs such as IAM02, when the task has them
 paths: [apps/accounts/**, packages/ui/src/data-table/**]   # name new files by capability, never g-NNN
+tests: [apps/accounts/src/admin/user-search.test.ts]   # optional: the files `task goal -- check` runs in one QA slot
 migrations: []                        # <directory>:<first>-<last>
 shared: [route:accounts-admin]
 depends: [G-099]

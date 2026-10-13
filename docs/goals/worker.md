@@ -74,17 +74,23 @@ manager with the reason. Other tests go with the code they cover, at the lowest
 tier that proves it. Prove your own work, nothing wider:
 
 ```sh
-task goal -- test <your test files>        # one QA slot, including files from several tiers; never --heavy for your own files
-task <workspace>:typecheck                 # waits for host memory on a local Goal run
-node_modules/.bin/oxlint --type-aware <changed directories>
-task ast-grep -- scan <changed files>
+task goal -- check                         # before a handoff: types, type-aware lint, ast-grep, the brief's `tests:` files in one QA slot and the guards, in one blocking call
+task goal -- check --only types,lint       # a subset while you work: types, lint, tests, guards
+task goal -- test <your test files>        # one file or a few while you work; one QA slot, also for files of several tiers; never --heavy for your own files
 task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
-task guards                                # the repository-wide rules the merge gate enforces; no stack, about three minutes
 ```
 
-Run `task guards` once before you hand off `done`: on 2026-10-11 two thirds of
-the landings that a gate stopped failed one of these rules, after a review had
-already been spent on them.
+`check` prints `ok` or `failed` for each check and, for a failed one, only the
+failing cases and the first lines of each error; the whole output is in the file
+it names under `.temp/goal/check/`. It checks what the merge gate checks, from
+the gate's own functions. A brief names its test files in the frontmatter list
+`tests:`; without it `check` runs no test file and says so. Wait on it with one
+long call rather than polling.
+
+Run `task goal -- check` once before you hand off `done`; it includes the
+repository-wide rules of `task guards` (about two minutes). On 2026-10-11 two
+thirds of the landings that a gate stopped failed one of these rules, after a
+review had already been spent on them.
 
 The gate may run from an agent session, where `CLAUDECODE=1` makes `bun test`
 print only failures and the summary. A test that runs `bun test` in a child
