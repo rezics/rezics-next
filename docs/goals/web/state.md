@@ -25,7 +25,7 @@ Program stops the coordinator after this checkpoint; no watcher is armed.
 | Task | State, branch work, what remains |
 | --- | --- |
 | G-2091 | Exited, attempt 2, partial, clean branch with 3 unlanded commits: structural admission guard; retained pending keys; Manage/Zone/proposal and Recipe admission fixes/tests. First merge refused: `G-2091 changed files outside its claim:` (recipe-editor/api.ts and accepted-command.test.ts). Leave unchanged; exact Library/rating/Studio and unresolved-alias debt remains on the branch. |
-| G-2093 | Merged partial at `a91993670e54`, attempt 1; clean branch, no unlanded task code. Structural filter guard/test/inventory passed scripts types and all 35 merge unit/guard files on the first try. Remains open: 81 of 144 inventoried expressions need owner evidence and API gaps prevent some consumer fixes; no resume, split or fix during wrap-up. |
+| G-2093 | Merged partial at `a91993670e54`, attempt 1; clean branch, no unlanded task code. Structural filter guard/test/inventory passed scripts types and all 35 merge unit/guard files on the first try. Remains open: 81 of 144 inventoried expressions need owner evidence and API gaps prevent some consumer fixes; no resume, split or fix during wrap-up. **Closed as verified by the program on 2026-10-13** to release `apps/web/features/zones/**` and `apps/web/features/discover/**` for the first surface: the landed guard stands, the branch held nothing unlanded, and the 81 expressions marked `owner-audit` in `scripts/static/web-page-filtering.inventory.json` are this Goal's to brief in pieces when it resumes |
 
 ## Landed and converged
 
