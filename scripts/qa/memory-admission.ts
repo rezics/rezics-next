@@ -107,8 +107,10 @@ export interface MemoryWaitOptions {
   onAdmissionWait?: (ms: number) => void;
   /** Nested admission uses its parent's event and elapsed-time accounting. */
   emitEvents?: boolean;
-  /** All admission entry points on this host share the startup state file. */
+  /** An explicit file opts into shared state, including with injected readers or clocks. */
   lockFile?: string;
+  /** Override the host path without opting injected readers or clocks into sharing. */
+  defaultStateFile?: string;
   /** Bound the sharing window; a completed startup always invalidates it sooner. */
   readingMaxAgeMs?: number;
   startTime?: (pid: number) => string | undefined;
@@ -261,6 +263,16 @@ function sqliteBusy(error: unknown): boolean {
 
 const memoryStateFile = '/tmp/rezics-qa-memory-startup.sqlite';
 const readingMaxAgeMs = 3_000;
+
+function openMemoryState(options: MemoryWaitOptions): { db: Database; readingOptions: MemoryWaitOptions } {
+  // Synthetic readings and clocks must neither consume nor publish host admission state.
+  const privateState = options.lockFile === undefined && (options.read !== undefined || options.now !== undefined);
+  const file = options.lockFile ?? (privateState ? ':memory:' : options.defaultStateFile ?? memoryStateFile);
+  if (file !== ':memory:') mkdirSync(dirname(file), { recursive: true });
+  return { db: new Database(file, { create: true }),
+    readingOptions: privateState ? { ...options, readingMaxAgeMs: 0 } : options };
+}
+
 interface SharedReading {
   scope: string; owner: string; pid: number; start_time: string;
   generation: number; finished_at: number | null; reading: string | null; error: string | null;
@@ -345,9 +357,7 @@ async function sharedMemoryReading(db: Database, needsVm: boolean, options: Memo
 export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMemoryOptions,
   start: () => T | Promise<T>): Promise<T> {
   if (!await isLocalQaRun(options.root, options.env)) return await start();
-  const lockFile = options.lockFile ?? memoryStateFile;
-  mkdirSync(dirname(lockFile), { recursive: true });
-  const mutex = new Database(lockFile, { create: true });
+  const { db: mutex, readingOptions } = openMemoryState(options);
   const now = options.now ?? Date.now;
   const sleep = options.sleep ?? (ms => Bun.sleep(ms));
   const announce = options.announce ?? console.log;
@@ -361,7 +371,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   if (!Number.isSafeInteger(processors) || processors < 1) { mutex.close(); throw new Error('Invalid QA processor count'); }
   const readLoad = options.readLoad ?? (() => hostLoad(options.env ?? process.env));
   const slotReady = waitForStartupSlot(options);
-  const read = options.read ?? (need.vm + need.vmReserve > 0 ? readMemory : async () => readHostMemory());
+  const read = options.read ?? (need.vm + need.vmReserve > 0
+    ? remaining => readMemory(remaining, options.env ?? process.env) : async () => readHostMemory());
   const promiseId = randomUUID();
   const arrivedAt = now();
   const arrivalSequence = process.hrtime.bigint().toString().padStart(24, '0');
@@ -416,7 +427,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           // Expiring load does not authorize memory: allow one final bounded
           // measurement with the same cache and promise accounting as every startup.
           const measurementOptions = loadExpired
-            ? { ...options, deadline: now() + memoryMeasurementTimeoutMs } : options;
+            ? { ...readingOptions, deadline: now() + memoryMeasurementTimeoutMs } : readingOptions;
           const shared = await sharedMemoryReading(mutex, need.vm + need.vmReserve > 0, measurementOptions, read);
           reading = shared.reading;
           readingGeneration = shared.generation;
@@ -556,7 +567,6 @@ export async function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv
   return withMemoryStartup(qaMemoryNeed(root, env.REZICS_QA_MEMORY_KIND === 'browser' ? 'browser' : 'other',
     'catalogue-disk', env, options.services), {
     ...options, root, env, deadline: qaMemoryDeadline(env, deadline),
-    read: options.read ?? (remaining => readMemory(remaining, env)),
   }, start);
 }
 
@@ -591,9 +601,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
   const read = options.read ?? (needsVm ? readMemory : async () => readHostMemory());
   const pollMs = options.pollMs ?? threshold(process.env, 'REZICS_QA_MEMORY_POLL_MS', 3_000);
   if (pollMs <= 0) throw new Error('REZICS_QA_MEMORY_POLL_MS must be positive');
-  const lockFile = options.lockFile ?? memoryStateFile;
-  mkdirSync(dirname(lockFile), { recursive: true });
-  const db = new Database(lockFile, { create: true });
+  const { db, readingOptions } = openMemoryState(options);
   db.exec('PRAGMA busy_timeout=0');
   let message = admissionMessage(need);
   try {
@@ -601,7 +609,7 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
     if (now() >= options.deadline) throw new Error(`Memory admission deadline reached; ${message}; no work started`);
     let reading: MemoryReading;
     try {
-      const shared = await sharedMemoryReading(db, needsVm, options, read);
+      const shared = await sharedMemoryReading(db, needsVm, readingOptions, read);
       if (!shared.reading) throw new Error(shared.error ?? 'No memory reading');
       reading = shared.reading;
       message = measuredAdmissionMessage(need, reading);

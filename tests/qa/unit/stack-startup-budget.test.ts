@@ -74,7 +74,7 @@ function orderedStartups() {
     sleeping.set(id, paused);
     const run = withMemoryStartup({ vm, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
       env: { REZICS_STACK_PROFILE: 'qa' }, root, lockFile, deadline: 1_000,
-      now: () => now, pollMs: 1, announce: () => {},
+      now: () => now, pollMs: 1, readingMaxAgeMs: 0, announce: () => {},
       read: async () => {
         // A slow Docker reader must not block another request's registration.
         const probe = new Database(lockFile);
@@ -160,7 +160,7 @@ test('a provisional ordinary slot is returned when memory no longer fits before 
   try {
     await withMemoryStartup({ vm: GiB, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
       root, env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_STARTUP_SLOT_GATE: gatePath },
-      lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1,
+      lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
       read: async () => ({ ...plenty, vmUsed: ++reads === 2 ? plenty.vmTotal : 0 }),
       announce: line => {
         const parts = line.split(' ');

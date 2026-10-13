@@ -64,6 +64,70 @@ function withMemoryStartup<T>(need: Parameters<typeof withMemoryStartupImpl>[0],
   return withMemoryStartupImpl(need, { readingMaxAgeMs: 1, ...options }, start);
 }
 
+for (const entry of ['wait', 'startup', 'stack'] as const) {
+for (const clock of [false, true]) {
+  test(`${entry} admission with an injected reader${clock ? ' and clock' : ''} leaves host state untouched and reads every poll`, async () => {
+    const dir = mkdtempSync(join(scratch, 'qa-private-admission-'));
+    const defaultStateFile = join(dir, 'host.sqlite');
+    const sentinel = 'Host admission state must never be opened by this call';
+    writeFileSync(defaultStateFile, sentinel);
+    let now = 0, reads = 0, sleeps = 0, starts = 0;
+    const options = { root, env: qaEnv, defaultStateFile, deadline: clock ? 30 : Date.now() + 2000,
+      ...(clock ? { now: () => now } : {}), pollMs: 10, readingMaxAgeMs: 3000, announce: () => {},
+      read: async () => ({ ...plenty, vmUsed: ++reads % 3 === 0 ? 0 : plenty.vmTotal }),
+      sleep: async (ms: number) => { sleeps++; now += ms; } };
+    try {
+      // Each call owns its state; the next call must measure again even inside the sharing window.
+      for (let call = 0; call < 2; call++) {
+        now = 0;
+        if (entry === 'wait') await waitForMemoryImpl(need, options);
+        else if (entry === 'startup') await withMemoryStartupImpl(need, options, () => { starts++; });
+        else await withQaStackStartup(root, qaEnv, options.deadline, () => { starts++; }, options);
+        expect(readFileSync(defaultStateFile, 'utf8')).toBe(sentinel);
+        expect(readdirSync(dir)).toEqual(['host.sqlite']);
+        expect(reads).toBe((call + 1) * 3);
+        expect(sleeps).toBe((call + 1) * 2);
+      }
+      expect(starts).toBe(entry === 'wait' ? 0 : 2);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+}
+
+for (const entry of ['wait', 'startup'] as const) {
+  test(`${entry} admission with only an injected clock leaves host state untouched`, async () => {
+    const dir = mkdtempSync(join(scratch, 'qa-private-clock-'));
+    const defaultStateFile = join(dir, 'host.sqlite');
+    const sentinel = 'Host state sentinel';
+    writeFileSync(defaultStateFile, sentinel);
+    const options = { root, env: qaEnv, defaultStateFile, deadline: 10, now: () => 0, announce: () => {} };
+    const hostNeed = { vm: 0, host: 0, vmReserve: 0, hostReserve: 0 };
+    try {
+      if (entry === 'wait') await waitForMemoryImpl(hostNeed, options);
+      else expect(await withMemoryStartupImpl(hostNeed, options, () => 'started')).toBe('started');
+      expect(readFileSync(defaultStateFile, 'utf8')).toBe(sentinel);
+      expect(readdirSync(dir)).toEqual(['host.sqlite']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
+
+for (const entry of ['wait', 'startup', 'stack'] as const) {
+test(`${entry} admission without injected readings or clock uses the configured host state`, async () => {
+  const dir = mkdtempSync(join(scratch, 'qa-default-state-'));
+  const defaultStateFile = join(dir, 'host.sqlite');
+  const hostNeed = { vm: 0, host: 0, vmReserve: 0, hostReserve: 0 };
+  const options = { root, env: qaEnv, defaultStateFile, deadline: Date.now() + 2000, announce: () => {} };
+  try {
+    if (entry === 'wait') await waitForMemoryImpl(hostNeed, options);
+    else if (entry === 'startup') await withMemoryStartupImpl(hostNeed, options, () => {});
+    else await withQaStackStartup(root, qaEnv, options.deadline, () => {}, { ...options, services: [] });
+    const db = new Database(defaultStateFile);
+    try { expect(db.query('SELECT * FROM memory_readings').all()).toHaveLength(1); }
+    finally { db.close(true); }
+  } finally { rmSync(dir, { recursive: true, force: true }); }
+});
+}
+
 for (const activeMs of [240_000, 400_000]) {
 test(`a restore reports five minutes of admission separately and qualifies ${activeMs} ms of active work`, async () => {
   const dir = mkdtempSync(join(scratch, 'qa-restore-timing-'));
@@ -216,11 +280,14 @@ for (const fails of [false, true]) {
   test(`ten waiting processes share one ${fails ? 'failed' : 'successful'} measurement and refresh after expiry`, async () => {
     const dir = mkdtempSync(join(scratch, 'qa-reading-sharing-'));
     const script = join(dir, 'wait.ts');
+    const defaultStateFile = join(dir, 'host.sqlite');
+    writeFileSync(defaultStateFile, 'Host state sentinel');
     writeFileSync(script, `
       import { waitForMemory } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
       import { appendFileSync } from 'node:fs';
       await waitForMemory(${JSON.stringify(need)}, {
         env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(join(dir, 'state.sqlite'))},
+        defaultStateFile: ${JSON.stringify(defaultStateFile)},
         deadline: 5000, now: () => 1000, readingMaxAgeMs: 3000,
         read: async () => {
           appendFileSync(${JSON.stringify(join(dir, 'readings'))}, 'reading\\n');
@@ -251,6 +318,7 @@ for (const fails of [false, true]) {
       finally { db.close(true); }
       await wave(2);
       expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(2);
+      expect(readFileSync(defaultStateFile, 'utf8')).toBe('Host state sentinel');
     } finally {
       for (const child of children) { child.kill(); await child.exited; }
       rmSync(dir, { recursive: true, force: true });
