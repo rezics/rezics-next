@@ -55,13 +55,6 @@ async function publish(game: Work) {
   }), 201);
   return selection;
 }
-async function credit(person: PersonaSession, game: Work) {
-  const page = await answer<{ items: { role: string; participantKind: string; agent: string | null }[] }>(
-    person.main('GET', `/v1/works/${short(game.work)}/credits?${acting(person)}`));
-  expect(page.items).toContainEqual(expect.objectContaining({
-    role: 'author', participantKind: 'agent', agent: sessions.owner.actingSubject,
-  }));
-}
 afterAll(async () => { await sessions?.close(); });
 
 type Standing = { standing: string; version: number; replayed?: boolean };
