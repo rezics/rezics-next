@@ -230,6 +230,7 @@ test('physical owner restore replays one retained journal over an independent co
         await historicalPublisher.query('ROLLBACK');
         historicalPublisher.release();
       }
+      await assertCurrentRecoveryCoverageHead(copy.owners.relay, fixture.coverage);
       expect(supersedingHead).toHaveLength(1);
       expect(supersedingAuthority).toHaveLength(1);
       expect(supersedingHead[0]!.generation)
@@ -254,14 +255,18 @@ test('physical owner restore replays one retained journal over an independent co
       const newerHead = await copy.request(randomUUID());
       expect(newerHead.status).toBe(201);
       const newerHeadResult = await newerHead.json();
-      expect(newerHeadResult).toMatchObject({ state: 'held',
-        hold_reason: 'signed recovery coverage is not the retained current capture' });
+      expect(newerHeadResult).toMatchObject({ state: 'held' });
+      const newerHeadReason = (await copy.retainedRelay.query<{ hold_reason: string }>(
+        'SELECT hold_reason FROM relay.owner_reconciliation WHERE id = $1', [newerHeadResult.id])).rows;
+      expect(newerHeadReason).toEqual([
+        { hold_reason: 'signed recovery coverage is not the retained current capture' },
+      ]);
       console.info('newer-head restore admission refused', {
         historical: { digest: originalHead[0]!.coverage_digest, generation: originalHead[0]!.generation,
           epoch: fixture.coverage.erasureJournal!.epoch, accountPg: fixture.coverage.accountPg },
         current: { digest: supersedingHead[0]!.coverage_digest, generation: supersedingHead[0]!.generation,
           epoch: fixture.currentCoverage.erasureJournal!.epoch, accountPg: fixture.currentCoverage.accountPg },
-        retainedEpoch: fixture.erased.erasureEpoch, result: newerHeadResult,
+        retainedEpoch: fixture.erased.erasureEpoch, result: newerHeadResult, reason: newerHeadReason,
       });
       assertPresent(await sourceRow(copy, fixture.revisionId), cut);
       await assertClosed(fixture, copy);
