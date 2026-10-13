@@ -2,20 +2,14 @@ import { existsSync, lstatSync, realpathSync } from 'node:fs';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { searchOperations, type IndexedOperation } from '../api/operation-index.ts';
 import type { PersonaName } from '../../tests/qa/support/personas.ts';
+import { answerPersonas, redactAnswer, type AnswerCall, type RecordedAnswer } from '../api/answer-record.ts';
 
 // Keep validation independent of the test-only application composition and its environment.
-export const probePersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const satisfies readonly PersonaName[];
-export interface ProbeCall {
+export const probePersonas = answerPersonas satisfies readonly PersonaName[];
+export interface ProbeCall extends AnswerCall {
   persona: PersonaName;
-  operationId: string;
-  method: string;
-  path: string;
-  body?: unknown;
 }
-export interface ProbeAnswer extends ProbeCall {
-  status: number;
-  headers: Record<string, string>;
-  answer: unknown;
+export interface ProbeAnswer extends ProbeCall, RecordedAnswer {
   elapsedSeconds: number;
 }
 export interface ProbeResult {
@@ -26,23 +20,8 @@ export interface ProbeResult {
 }
 export const probeHeaders = ['location', 'retry-after', 'etag', 'cache-control'] as const;
 const placeholder = /\{(realm|space|zone|[1-9]\d*\.[A-Za-z0-9_.-]+)\}/g;
-const credentialKey = /^(?:authorization|bearer|cookies?|setcookie|xsessionkey|sessionkey|sessiontoken|accesstoken|refreshtoken|idtoken|password|clientsecret)$/;
-
-function secretKey(key: string): boolean {
-  return credentialKey.test(key.toLowerCase().replace(/[-_\s]/g, ''));
-}
-
 /** Only application data crosses the probe boundary; credentials never do. */
-export function redactProbe(value: unknown): unknown {
-  if (typeof value === 'string') return value
-    .replace(/\bBearer\s+[^\s"'<>;,]+/gi, '[redacted]')
-    .replace(/\b(?:authorization|(?:set-)?cookie|x-session-key|session[-_]?key)\s*[:=]\s*[^\r\n]*/gi, '[redacted]')
-    .replace(/([?&])(?:access_token|refresh_token|id_token|session_key|cookie|bearer)=[^&#\s]*/gi, '$1redacted');
-  if (Array.isArray(value)) return value.map(redactProbe);
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value)
-    .filter(([key]) => !secretKey(key)).map(([key, field]) => [key, redactProbe(field)]));
-  return value;
-}
+export const redactProbe = redactAnswer;
 
 function pathParts(path: string): [string, string] {
   if (!path.startsWith('/') || path.startsWith('//') || /[\\\s#]/.test(path)) throw new Error('A call needs an absolute service path');
