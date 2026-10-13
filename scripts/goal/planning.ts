@@ -1,18 +1,21 @@
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join, resolve } from 'node:path';
 import { Database } from 'bun:sqlite';
 import ts from 'typescript-6';
 import { git, root } from './ledger.ts';
-import { goalAreas, goalFile, pathsOverlap } from './briefs.ts';
+import { goalAreas, goalFile, parseBrief, pathsOverlap } from './briefs.ts';
 import { HOLDING, type Ledger, type Task } from './types.ts';
 import { personas, pending, proved, notApplicable, rowOutcomes, type Persona, type RowOutcomes } from '../qa/cases/outcome-cells.ts';
 import type { WakeEvent } from './coordinator.ts';
 import { retryEventDatabase } from './event-store.ts';
+import { launchCoverage } from '../qa/cases/launch-coverage.ts';
 
 const declarationsPath = 'scripts/qa/cases/outcomes';
-const declarationsCache = new Map<string, { tree: string; rows: { file: string; declaration: RowOutcomes }[] }>();
+type DeclarationRead = { file: string } & ({ declaration: RowOutcomes; unreadable?: never } | { declaration?: never; unreadable: string });
+const declarationsCache = new Map<string, { tree: string; rows: DeclarationRead[] }>();
+const verticalOrder = [...new Set(launchCoverage.map(row => row.kind))];
 const ancestryCache = new Map<string, boolean>();
 const introductionsCache = new Map<string, string>();
 const commitOrderCache = new Map<string, { main: string; order: Map<string, number> }>();
@@ -31,9 +34,11 @@ function declarationValues(file: string, text: string): RowOutcomes {
       return text + span.literal.text;
     }).join('');
     if (ts.isIdentifier(node) && values.has(node.text)) return values.get(node.text);
-    // A declaration is valid TypeScript that the loader runs; notes are also built from constants.
-    if (ts.isTemplateExpression(node)) return node.head.text + node.templateSpans.map(span => `${String(value(span.expression))}${span.literal.text}`).join('');
-    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) return `${String(value(node.left))}${String(value(node.right))}`;
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+      const left = value(node.left), right = value(node.right);
+      if (typeof left !== 'string' || typeof right !== 'string') throw new Error(`Unsupported outcome string sum: ${node.getText(source)}`);
+      return left + right;
+    }
     if (ts.isParenthesizedExpression(node) || ts.isAsExpression(node) || ts.isSatisfiesExpression(node)) return value(node.expression);
     if (ts.isObjectLiteralExpression(node)) {
       const object: Record<string, unknown> = {};
@@ -69,13 +74,20 @@ function declarationValues(file: string, text: string): RowOutcomes {
   throw new Error(`Missing rowOutcomes default export: ${file}`);
 }
 
-function mainDeclarations(repo: string, main: string): { file: string; declaration: RowOutcomes }[] {
+function mainDeclarations(repo: string, main: string): DeclarationRead[] {
   const tree = git(repo, ['rev-parse', `${main}:${declarationsPath}`], true);
   if (!tree) return [];
   const cached = declarationsCache.get(repo);
   if (cached?.tree === tree) return cached.rows;
   const files = git(repo, ['ls-tree', '-r', '--name-only', main, '--', declarationsPath]).split('\n').filter(file => file.endsWith('.ts'));
-  const rows = files.map(file => ({ file, declaration: declarationValues(file, git(repo, ['show', `${main}:${file}`])) }));
+  const rows: DeclarationRead[] = files.map(file => {
+    const text = git(repo, ['show', `${main}:${file}`]);
+    try {
+      const declaration = declarationValues(file, text);
+      return { file, declaration: rowOutcomes(declaration.rowId, declaration.cells, declaration) };
+    }
+    catch (error) { return { file, unreadable: (error instanceof Error ? error.message : String(error)).replace(/\s+/g, ' ') }; }
+  });
   declarationsCache.set(repo, { tree, rows });
   return rows;
 }
@@ -86,6 +98,7 @@ export interface PlanningRow {
   pending: { persona: Persona; note: string }[];
   task?: string;
   handoff?: string;
+  unreadable?: string;
 }
 
 /** The declaration's introducing task owns the row even when another Goal owns its file area. */
@@ -125,19 +138,27 @@ export function uncoveredPlanningRows(directory: string, ledger: Ledger, repo = 
   const main = git(repo, ['rev-parse', 'main'], true);
   const covered = new Set(tasks.filter(task => (task.kind === 'implementation' || task.kind === 'outcome')
     && HOLDING.includes(task.state)).flatMap(task => task.rows ?? []));
+  for (const goal of goals) {
+    const briefs = join(repo, 'docs/goals', goal, 'tasks');
+    if (!existsSync(briefs)) continue;
+    for (const file of readdirSync(briefs).filter(file => file.endsWith('.md'))) {
+      for (const row of parseBrief(readFileSync(join(briefs, file), 'utf8')).rows ?? []) covered.add(row);
+    }
+  }
   const result = new Map<string, PlanningRow[]>(goals.sort().map(goal => [goal, []]));
-  for (const { file, declaration } of mainDeclarations(repo, main)) {
-    const cells = personas.flatMap(persona => {
+  for (const { file, declaration, unreadable } of mainDeclarations(repo, main)) {
+    const id = declaration?.rowId ?? file.slice(declarationsPath.length + 1, -3);
+    const cells = declaration ? personas.flatMap(persona => {
       const cell = declaration.cells[persona];
       return cell?.state === 'pending' ? [{ persona, note: cell.test }] : [];
-    });
-    if (!cells.length || covered.has(declaration.rowId)) continue;
+    }) : [];
+    if ((!unreadable && !cells.length) || covered.has(id)) continue;
     const task = landedDeclaration(repo, main, file, tasks);
     const goal = task?.goal ?? areas.find(area => area.paths.some(path => pathsOverlap(path, file)))?.goal;
     if (!goal || !result.has(goal)) continue;
     const attempt = task?.attempts.at(-1);
     const handoff = attempt ? join(directory, 'runs', task!.id, basename(attempt.lastMessage ?? attempt.output)) : undefined;
-    result.get(goal)!.push({ id: declaration.rowId, file, pending: cells, task: task?.id, handoff });
+    result.get(goal)!.push({ id, file, pending: cells, task: task?.id, handoff, unreadable });
   }
   for (const rows of result.values()) rows.sort((a, b) => a.id.localeCompare(b.id));
   return result;
@@ -145,10 +166,18 @@ export function uncoveredPlanningRows(directory: string, ledger: Ledger, repo = 
 
 export function planningBody(goal: string, rows: readonly PlanningRow[]): string {
   const lines = [`Planning for Goal ${goal}: ${rows.length} uncovered pending rows.`];
-  for (const row of rows.slice(0, 40)) lines.push(`${row.id} | ${row.pending.map(cell => `${cell.persona}: ${JSON.stringify(cell.note)}`).join('; ')} | declaration: ${row.file} | landed: ${row.task ?? 'no task in ledger'} | handoff: ${row.handoff ?? 'none'}`);
-  if (rows.length > 40) lines.push(`${rows.length - 40} more uncovered rows omitted.`);
+  const rank = (row: PlanningRow): number => {
+    const index = verticalOrder.findIndex(vertical => vertical === row.id.split('/')[0]);
+    return index < 0 ? verticalOrder.length : index;
+  };
+  const ordered = [...rows].sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
+  const vertical = ordered[0]?.id.split('/')[0];
+  const slice = ordered.filter(row => row.id.split('/')[0] === vertical).slice(0, 6);
+  for (const row of slice) lines.push(row.unreadable ? `${row.file}: unreadable declaration: ${row.unreadable}`
+    : `${row.id} | ${row.pending.map(cell => `${cell.persona}: ${JSON.stringify(cell.note)}`).join('; ')} | declaration: ${row.file} | landed: ${row.task ?? 'no task in ledger'} | handoff: ${row.handoff ?? 'none'}`);
+  lines.push(`${rows.length - slice.length} uncovered rows wait after this slice.`);
   lines.push('Create one implementation task for each cause, not for each cell; a fixture that cannot reach the state counts as a cause.',
-    `Name each row left uncovered with its reason in docs/goals/${goal}/state.md.`);
+    'A row that waits for another task gets its brief now, queued behind that task.');
   return lines.join('\n');
 }
 

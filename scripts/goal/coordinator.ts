@@ -127,7 +127,23 @@ export interface LaunchDescriptor {
 }
 export const WAKE_PROMPT = '__GOAL_WAKE_PROMPT__';
 export const WAKE_LAST_MESSAGE = '__GOAL_WAKE_LAST_MESSAGE__';
-export const MANAGER_ROLE_CARD = "You are the manager of Goal <goal> for one event, in a fresh session; other turns of this Goal may run beside you. Read docs/goals/<goal>/state.md, then the event below and only what it points to. Decide it under the manager charter (docs/goals/manager.md; read it only for a rule the event needs). Write a decision into the brief it concerns. Edit state.md only when the event is `checkpoint`. Acknowledge the mail you were given. Start no watcher and wait on nothing: end the turn when the event is decided.\nIf a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.";
+export const MANAGER_ROLE_CARD = "You are the manager of Goal <goal> for one event, in a fresh session; other turns of this Goal may run beside you. Read docs/goals/<goal>/state.md, then the event below and only what it points to. Decide it under the manager charter (docs/goals/manager.md; read it only for a rule the event needs). Write a decision into the brief it concerns. Edit state.md only when the event is `checkpoint`. Acknowledge the mail you were given. Start no watcher and wait on nothing: end the turn when the event is decided.\nIf a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.\nCarry out what the decision needs before the turn ends: `resume <id> -m` for a worker given more work, `land <id> --step` then `close` for an accepted step with nothing left, and `dispatch` or `queue` for a brief you wrote.\nCommit each brief when it is written, with `git commit --only <path>`.";
+
+function cutRetryBody(body: string, descriptor: LaunchDescriptor): string {
+  const directory = `docs/goals/${descriptor.goal}/tasks/`;
+  const status = spawnSync('git', ['status', '--porcelain=v1', '-z', '--untracked-files=all', '--', directory],
+    { cwd: descriptor.cwd, encoding: 'utf8' });
+  const briefs: string[] = [];
+  const entries = status.status === 0 ? status.stdout.split('\0') : [];
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index]!;
+    const file = entry.slice(3);
+    if (file.startsWith(directory) && file.endsWith('.md') && existsSync(join(descriptor.cwd, file))) briefs.push(file);
+    if (entry.slice(0, 2).includes('R') || entry.slice(0, 2).includes('C')) index++;
+  }
+  return `${body}\n\nIts first turn was cut at the manager turn bound; decide this retry within the bound.`
+    + (briefs.length ? `\nContinue these briefs rather than writing them again:\n${briefs.sort().join('\n')}` : '');
+}
 
 /** Keep the enrolled account, model and effort, but never its conversation. */
 export function freshTurnDescriptor(role: LaunchDescriptor): LaunchDescriptor {
@@ -553,7 +569,7 @@ export class GoalCoordinator {
             this.db.transaction(()=>{
               const cuts = event.cuts+1;
               this.db.query('UPDATE events SET token=NULL,cuts=?,handled=?,body=? WHERE goal=? AND event_key=?')
-                .run(cuts,cuts >= 2 ? 1 : 0,cuts === 1 ? `${event.body}\n\nIts first turn was cut at the manager turn bound; decide this retry within the bound.` : event.body,goal,event.event_key);
+                .run(cuts,cuts >= 2 ? 1 : 0,cuts === 1 ? cutRetryBody(event.body,descriptor) : event.body,goal,event.event_key);
               if (cuts >= 2) this.db.query('INSERT OR IGNORE INTO cut_notices(goal,event_key) VALUES(?,?)').run(goal,event.event_key);
               else this.deferEvent(event,'First manager turn was cut; retrying once');
             }).immediate();

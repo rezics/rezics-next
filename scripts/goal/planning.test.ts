@@ -76,6 +76,49 @@ test('planning reads authored template notes without executing the declaration',
   } finally { f.close(); }
 });
 
+test('planning reads string sums built from constants', () => {
+  const f = fixture();
+  try {
+    const file = f.declaration('sum', 'program', "visitor: pending(prefix + (' ' + suffix))");
+    const path = join(f.repo, file);
+    writeFileSync(path, "const prefix = 'collection';\nconst suffix = 'placement';\n" + readFileSync(path, 'utf8'));
+    f.commit();
+    expect(f.events()[0]!.body).toContain('program/sum | visitor: "collection placement"');
+  } finally { f.close(); }
+});
+
+test('an unreadable declaration stays uncovered and reports one line without executing it or aborting the pass', () => {
+  const f = fixture();
+  try {
+    const file = f.declaration('unreadable', 'program', "visitor: pending(\n  buildNote()\n)");
+    const path = join(f.repo, file);
+    writeFileSync(path, "function buildNote() { throw new Error('declaration executed'); }\n" + readFileSync(path, 'utf8'));
+    f.declaration('readable'); f.commit();
+    const rows = uncoveredPlanningRows(f.state, f.ledger, f.repo).get('program')!;
+    expect(rows.map(row => row.id)).toContain('program/unreadable');
+    const body = f.events()[0]!.body;
+    expect(body).toContain('2 uncovered pending rows.');
+    expect(body).toContain('program/readable | visitor: "visitor note"');
+    const diagnostics = body.split('\n').filter(line => line.includes('unreadable declaration:'));
+    expect(diagnostics).toHaveLength(1);
+    expect(diagnostics[0]).toStartWith(`${file}: unreadable declaration: `);
+    expect(diagnostics[0]).toContain('buildNote()');
+    expect(body).not.toContain('declaration executed');
+  } finally { f.close(); }
+});
+
+test('a row named by a brief is covered before dispatch, including untracked and queued briefs', () => {
+  const f = fixture();
+  try {
+    f.declaration('written'); f.declaration('queued'); f.declaration('remaining'); f.commit();
+    f.write('docs/goals/program/tasks/G-100.md', '---\nid: G-100\nrows: [program/written]\n---\n');
+    f.write('docs/goals/program/tasks/G-101.md', '---\nid: G-101\nrows: [program/queued]\ndepends: [G-100]\n---\n');
+    expect(uncoveredPlanningRows(f.state, f.ledger, f.repo).get('program')!.map(row => row.id))
+      .toEqual(['program/remaining']);
+    expect(f.ledger.tasks).toEqual({});
+  } finally { f.close(); }
+});
+
 test('planning waits for a concurrent coordinator transaction instead of terminating the pump', async () => {
   const f = fixture();
   let writer: ReturnType<typeof spawn> | undefined;
@@ -175,8 +218,10 @@ test('each Goal gets its own rows; the landed declaration task takes precedence 
     expect(f.events()[0]!.body).not.toContain('program/landed');
     const body = f.events('kernel')[0]!.body;
     expect(body).toContain('kernel/fallback');
-    expect(body).toContain('program/landed');
-    expect(body).toContain(`landed: G-12 | handoff: ${join(f.state, 'runs/G-12/attempt-1.last.md')}`);
+    expect(body).not.toContain('program/landed');
+    const landed = uncoveredPlanningRows(f.state, f.ledger, f.repo).get('kernel')!.filter(row => row.id === 'program/landed');
+    expect(landed).toHaveLength(1);
+    expect(planningBody('kernel', landed)).toContain(`landed: G-12 | handoff: ${join(f.state, 'runs/G-12/attempt-1.last.md')}`);
   } finally { f.close(); }
 });
 
@@ -211,26 +256,45 @@ test('a later task with an old base cannot take an introduction, including an ad
   } finally { f.close(); }
 });
 
-test('planning output bounds forty rows to fewer than sixty lines and counts the rest', () => {
+test('planning slices six rows from one vertical in scope order and raises the next slice when briefs cover it', () => {
   const f = fixture();
   try {
-    for (let index = 0; index < 45; index++) f.declaration(`row-${index}`, 'program', "visitor: pending('two\\nlines'), owner: pending('owner')");
+    for (const vertical of ['anime', 'recipes', 'books']) {
+      for (let index = 0; index < 8; index++) {
+        const file = f.declaration(`row-${index}`, 'program', "visitor: pending('two\\nlines'), owner: pending('owner')");
+        const path = join(f.repo, file);
+        const content = readFileSync(path, 'utf8').replace(`program/row-${index}`, `${vertical}/row-${index}`);
+        f.write(`scripts/qa/cases/outcomes/program/${vertical}-${index}.ts`, content);
+        rmSync(path);
+      }
+    }
     f.commit();
     const rows = uncoveredPlanningRows(f.state, f.ledger, f.repo).get('program')!;
-    const body = planningBody('program', rows);
-    expect(rows).toHaveLength(45);
-    expect(body.split('\n').length).toBeLessThanOrEqual(60);
-    expect(body).toContain('5 more uncovered rows omitted.');
-    expect(body.match(/declaration:/g)).toHaveLength(40);
-    expect(body).toEndWith('Name each row left uncovered with its reason in docs/goals/program/state.md.');
+    const body = planningBody('program', [...rows].reverse());
+    expect(rows).toHaveLength(24);
+    expect(body).toContain('18 uncovered rows wait after this slice.');
+    expect(body.match(/declaration:/g)).toHaveLength(6);
+    expect(body).toContain('books/row-0 |');
+    expect(body).toContain('books/row-5 |');
+    expect(body).not.toContain('books/row-6 |');
+    expect(body).not.toContain('anime/row-');
+    expect(body).not.toContain('recipes/row-');
+    expect(body).toEndWith('A row that waits for another task gets its brief now, queued behind that task.');
     expect(body).toContain('a fixture that cannot reach the state counts as a cause');
     const event = f.events()[0]!;
     f.db.query('INSERT INTO events(goal,event_key,body,handled) VALUES(?,?,?,1)').run('program', event.key, event.body);
-    f.declaration('zz-omitted'); f.commit();
+    expect(f.events()).toEqual([]);
+    f.write('docs/goals/program/tasks/G-100.md', '---\nrows: [books/row-0, books/row-1, books/row-2, books/row-3, books/row-4, books/row-5]\n---\n');
     const changed = f.events()[0]!;
     expect(changed.key).not.toBe(event.key);
-    expect(changed.body).toContain('6 more uncovered rows omitted.');
-    expect(changed.body).not.toContain('program/zz-omitted');
+    expect(changed.body).toContain('16 uncovered rows wait after this slice.');
+    expect(changed.body.match(/declaration:/g)).toHaveLength(2);
+    expect(changed.body).toContain('books/row-6 |');
+    expect(changed.body).toContain('books/row-7 |');
+    f.db.query('INSERT INTO events(goal,event_key,body,handled) VALUES(?,?,?,1)').run('program', changed.key, changed.body);
+    f.write('docs/goals/program/tasks/G-101.md', '---\nrows: [books/row-6, books/row-7]\n---\n');
+    expect(f.events()[0]!.body).toContain('recipes/row-0 |');
+    expect(f.events()[0]!.body).not.toContain('anime/row-');
   } finally { f.close(); }
 });
 

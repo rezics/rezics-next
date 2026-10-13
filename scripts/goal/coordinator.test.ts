@@ -71,6 +71,12 @@ test('the manager role card sends program readings and rulings immediately with 
   expect(MANAGER_ROLE_CARD.split('\n')).toContain("If a brief needs a reading or a ruling by the program, mail the program at once with the brief's path and the question in one sentence.");
 });
 
+test('the manager role card requires decisions to be carried out and each brief committed before the turn ends', () => {
+  expect(MANAGER_ROLE_CARD).toContain('before the turn ends');
+  for (const command of ['resume <id> -m', 'land <id> --step', 'close', 'dispatch', 'queue', 'git commit --only <path>'])
+    expect(MANAGER_ROLE_CARD).toContain(command);
+});
+
 test('a second event writer waits for the first and a permanent lock ends with the statement named', async () => {
   const f = fixture();
   let writer: Bun.Subprocess<'ignore', 'ignore', 'pipe'> | undefined;
@@ -424,6 +430,35 @@ describe('durable Goal wake coordinator', () => {
       expect(f.launcher.launches).toEqual([token]);
       f.setNow(1_005_000); restarted.step();
       expect(restarted.status().attempts[1]!.prompt).toContain('first turn was cut');
+    } finally { f.cleanup(); }
+  });
+  test('a cut retry names untracked, changed and staged briefs of its Goal so it can continue them', () => {
+    const f = fixture();
+    try {
+      git(f.dir, ['init', '-b', 'main']);
+      git(f.dir, ['config', 'user.email', 'retry@example.test']);
+      git(f.dir, ['config', 'user.name', 'Retry fixture']);
+      const tasks = join(f.dir, 'docs/goals/program/tasks');
+      const otherTasks = join(f.dir, 'docs/goals/kernel/tasks');
+      mkdirSync(tasks, {recursive:true}); mkdirSync(otherTasks, {recursive:true});
+      for (const id of ['G-100', 'G-101', 'G-102']) writeFileSync(join(tasks, `${id}.md`), 'original');
+      writeFileSync(join(otherTasks, 'G-200.md'), 'original');
+      git(f.dir, ['add', '.']); git(f.dir, ['commit', '-m', 'Brief fixture']);
+      writeFileSync(join(tasks, 'G-100.md'), 'changed');
+      writeFileSync(join(tasks, 'G-101.md'), 'staged');
+      git(f.dir, ['add', 'docs/goals/program/tasks/G-101.md']);
+      writeFileSync(join(tasks, 'G-103.md'), 'untracked');
+      writeFileSync(join(otherTasks, 'G-200.md'), 'other Goal changed');
+      writeFileSync(join(tasks, 'notes.txt'), 'not a brief');
+      const coordinator = f.open({turnMinutes:1}); coordinator.enroll(f.descriptor); coordinator.step();
+      f.setNow(1_060_000); coordinator.step(); coordinator.step();
+      f.setNow(1_065_000); coordinator.step();
+      const prompt = coordinator.status().attempts[1]!.prompt;
+      for (const id of ['G-100', 'G-101', 'G-103']) expect(prompt).toContain(`docs/goals/program/tasks/${id}.md`);
+      expect(prompt).toContain('Continue these briefs rather than writing them again');
+      expect(prompt).not.toContain('G-102.md');
+      expect(prompt).not.toContain('G-200.md');
+      expect(prompt).not.toContain('notes.txt');
     } finally { f.cleanup(); }
   });
   test('the default bound retries an event once, stops it on a second cut and mails program durably', () => {
