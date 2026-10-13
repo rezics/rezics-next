@@ -1,4 +1,8 @@
 import { expect, test } from 'bun:test';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { OutcomeRecorder } from '../../tests/qa/support/outcome-test.ts';
+import { proved, rowOutcomes } from '../qa/cases/outcome-cells.ts';
 import { AnswerRecordValidator, answerPersonas, answerRecord, recordAnswer, redactAnswer,
   type AnswerContract, type AnswerRecord, type AnswerSample } from './answer-record.ts';
 
@@ -94,4 +98,104 @@ test('rejects incomplete or non-application envelopes and credentials in checked
   delete record.personas.owner[0]!.headers['set-cookie'];
   record.personas.owner[0]!.body = { idempotencyKey: 'secret' };
   expect(() => new AnswerRecordValidator(contract).validate(record)).toThrow('Record contains credentials');
+});
+
+const declaration = rowOutcomes('books/browse', Object.fromEntries(answerPersonas.map(persona => [persona, proved('reads')] )));
+function scratch() {
+  mkdirSync('.temp/answer-record-tests', { recursive: true });
+  return mkdtempSync(resolve('.temp/answer-record-tests/run-'));
+}
+const session = { main: async () => Response.json({ items: [], nextCursor: null }, {
+  headers: { 'set-cookie': 'secret', 'server-timing': 'duration=3' },
+}) };
+
+test('the harness publishes once only after all six proofs pass, preserving the response for assertions', async () => {
+  const directory = scratch();
+  try {
+    const recorder = new OutcomeRecorder(declaration, { directory, contract });
+    for (const persona of answerPersonas) {
+      await recorder.prove(persona, async () => {
+        const response = await recorder.session(persona, session)('empty', 'GET', '/v1/browse?limit=10');
+        expect(await response.json()).toEqual({ items: [], nextCursor: null });
+      });
+      if (persona !== 'operator') { await recorder.publish(); expect(existsSync(join(directory, 'books/browse.json'))).toBe(false); }
+    }
+    await recorder.publish();
+    const file = join(directory, 'books/browse.json');
+    const recorded = readFileSync(file, 'utf8');
+    await recorder.publish();
+    expect(readFileSync(file, 'utf8')).toBe(recorded);
+    expect(recorded).not.toMatch(/secret|server-timing|elapsedSeconds|setupSeconds/);
+    const validator = new AnswerRecordValidator(contract);
+    validator.validate(JSON.parse(recorded));
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a failed persona proof or an invalid sample publishes nothing', async () => {
+  for (const invalidSample of [false, true]) {
+    const directory = scratch();
+    try {
+      const recorder = new OutcomeRecorder(declaration, { directory, contract });
+      for (const persona of answerPersonas) {
+        const proof = recorder.prove(persona, async () => {
+          await recorder.session(persona, session)('empty', 'GET', `/v1/browse?limit=${invalidSample ? 99 : 10}`);
+          if (!invalidSample && persona === 'member') throw new Error('proof failed');
+        });
+        if (!invalidSample && persona === 'member') await expect(proof).rejects.toThrow('proof failed');
+        else await proof;
+      }
+      if (invalidSample) await expect(recorder.publish()).rejects.toThrow('persona visitor, sample empty');
+      else await recorder.publish();
+      expect(existsSync(join(directory, 'books/browse.json'))).toBe(false);
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  }
+});
+
+test('recording is off by default, and output cannot escape .temp or overwrite an existing record', async () => {
+  const off = new OutcomeRecorder(declaration, { directory: '' });
+  expect(await off.session('visitor', session)('unused', 'GET', '/not-a-contract-operation')).toBeInstanceOf(Response);
+  await off.publish();
+  for (const directory of ['tests/qa/fixtures', '.temp', '/tmp/answer-record'])
+    expect(() => new OutcomeRecorder(declaration, { directory, contract })).toThrow('under .temp/');
+  const directory = scratch();
+  try {
+    symlinkSync('/tmp', join(directory, 'escape'));
+    expect(() => new OutcomeRecorder(declaration, { directory: join(directory, 'escape', 'records'), contract }))
+      .toThrow('symlink escapes');
+    const recorder = new OutcomeRecorder(declaration, { directory, contract });
+    for (const persona of answerPersonas) await recorder.prove(persona, async () => {
+      await recorder.session(persona, session)('empty', 'GET', '/v1/browse?limit=10');
+    });
+    await recorder.publish();
+    const again = new OutcomeRecorder(declaration, { directory, contract });
+    for (const persona of answerPersonas) await again.prove(persona, async () => {
+      await again.session(persona, session)('empty', 'GET', '/v1/browse?limit=10');
+    });
+    await expect(again.publish()).rejects.toThrow('EEXIST');
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('a failed or timed out registered persona test cannot publish a record', async () => {
+  const directory = scratch();
+  try {
+    for (const timeout of [false, true]) {
+      const output = join(directory, timeout ? 'timeout' : 'failure');
+      const file = join(directory, timeout ? 'timeout.test.ts' : 'failure.test.ts');
+      writeFileSync(file, `import { afterAll, expect, setDefaultTimeout, test } from 'bun:test';
+import { outcomeTest, OutcomeRecorder } from ${JSON.stringify(resolve('tests/qa/support/outcome-test.ts'))};
+const declaration = ${JSON.stringify(declaration)};
+const recorder = new OutcomeRecorder(declaration, { directory: ${JSON.stringify(output)}, contract: ${JSON.stringify(contract)} });
+setDefaultTimeout(20);
+afterAll(() => recorder.publish());
+for (const persona of ${JSON.stringify(answerPersonas)}) outcomeTest(declaration, persona, async () => {
+  await recorder.session(persona, { main: async () => Response.json({ items: [], nextCursor: null }) })('empty', 'GET', '/v1/browse?limit=10');
+  if (persona === 'visitor') ${timeout ? 'await Bun.sleep(50)' : 'expect(false).toBe(true)'};
+}, recorder);
+test('wait for a late timed-out proof', () => Bun.sleep(70), 200);
+`);
+      const child = Bun.spawn(['bun', 'test', file], { stdout: 'ignore', stderr: 'ignore', env: { ...process.env, CLAUDECODE: '1' } });
+      expect(await child.exited).not.toBe(0);
+      expect(existsSync(join(output, 'books/browse.json'))).toBe(false);
+    }
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
