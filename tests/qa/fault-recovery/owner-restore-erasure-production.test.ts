@@ -1,5 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { PoolClient } from 'pg';
@@ -15,9 +15,12 @@ import {
 import { ContentCore } from '../../../services/content/src/core.ts';
 import { journalErasure, readErasure } from '../../../services/main/src/modules/erasure/journal.ts';
 import { ReceiptCustody } from '../../../services/main/src/modules/outbox/receipt-custody.ts';
-import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { openRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
 import { DATASET, GRAPHS, RV, hash } from '../../../services/main/src/modules/work/activate.ts';
-import { RestoreLineageConflict } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import {
+  RestoreLineageConflict,
+  type RecoveryCoverage,
+} from '../../../services/main/src/modules/work/restore-lineage.ts';
 import {
   scanAccessOutbox,
   scanAccessState,
@@ -32,6 +35,18 @@ import {
   type Copy,
   type Fixture,
 } from './owner-restore-erasure-fixture.ts';
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, item]) => [key, canonical(item)]),
+    );
+  }
+  return value;
+}
 
 async function contentEpochs(copy: Copy) {
   return (
@@ -633,19 +648,73 @@ test(
         ).rows;
         expect(originalAuthority).toHaveLength(1);
         expect(originalAuthority[0]!.coverage_generation).toBe('1');
+        const newer = openRecoveryPayload<RecoveryCoverage>(
+          fixture.newerAuthority.sealedCoverage,
+          restoreKey,
+          'graph-recovery-coverage',
+        );
+        const { accountPg: basePg, ...baseOwners } = fixture.coverage;
+        const { accountPg: newerPg, ...newerOwners } = newer;
+        expect(newerOwners).toEqual(baseOwners);
+        expect(newer.relay.consumer).toBe(fixture.coverage.relay.consumer);
+        expect(newer.erasureJournal).toEqual(fixture.coverage.erasureJournal);
+        expect(newer.erasureJournal!.epoch).toBeNull();
+        expect(
+          (
+            await shared.owners.relay.query(
+              'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure',
+            )
+          ).rows,
+        ).toEqual([{ epoch: newer.erasureJournal!.epoch }]);
+        expect(originalHead[0]!.coverage_digest).toBe(
+          createHash('sha256')
+            .update(JSON.stringify(canonical(fixture.coverage)))
+            .digest('hex'),
+        );
+        expect(newerPg.systemIdentifier).toBe(basePg.systemIdentifier);
+        expect(
+          (
+            await shared.owners.account.query('SELECT $2::pg_lsn > $1::pg_lsn AS advanced', [
+              basePg.flushedLsn,
+              newerPg.flushedLsn,
+            ])
+          ).rows,
+        ).toEqual([{ advanced: true }]);
+        const journalSql =
+          'SELECT to_jsonb(erasure) AS original FROM relay.erasure erasure ORDER BY erasure_epoch';
+        const journal = (await shared.retainedRelay.query(journalSql)).rows;
+        const liveEpoch = (
+          await shared.retainedRelay.query(
+            'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure',
+          )
+        ).rows;
+        expect(liveEpoch).toEqual([{ epoch: fixture.erased.erasureEpoch }]);
+        const epochSql =
+          'SELECT erasure_epoch::text FROM relay.recovery_coverage_head WHERE consumer=$1';
+        const originalEpoch = (await shared.retainedRelay.query(epochSql, [newer.relay.consumer]))
+          .rows;
+        expect(originalEpoch).toEqual([{ erasure_epoch: newer.erasureJournal!.epoch }]);
+        const digest = createHash('sha256')
+          .update(JSON.stringify(canonical(newer)))
+          .digest('hex');
         await controlledFault(
           'newer-retained-frontier',
           async () => {
-            await retainRecoveryCoverageHead(
-              shared.retainedRelay,
-              fixture.newerAuthority.sealedCoverage,
-              restoreKey,
-            );
+            // Install only the historical newer head; publishing it against the later journal refuses.
+            await shared.faultRetained([
+              // Run the existing authority-pointer trigger normally within this fault transaction.
+              { sql: 'SET LOCAL session_replication_role = origin' },
+              {
+                sql: 'UPDATE relay.recovery_coverage_head SET coverage_digest=$1,generation=generation+1,captured_at=clock_timestamp() WHERE consumer=$2',
+                values: [digest, newer.relay.consumer],
+              },
+            ]);
             const current = (
               await shared.retainedRelay.query(headSql, [fixture.coverage.relay.consumer])
             ).rows;
             expect(current).toHaveLength(1);
             expect(current[0]!.generation).toBe('2');
+            expect(current[0]!.coverage_digest).toBe(digest);
             expect(current[0]!.coverage_digest).not.toBe(originalHead[0]!.coverage_digest);
             const authority = (await shared.retainedRelay.query(authoritySql)).rows;
             expect(authority).toHaveLength(1);
@@ -655,6 +724,22 @@ test(
             );
             expect(authority[0]!.coverage_digest).toBe(current[0]!.coverage_digest);
             expect(authority[0]!.coverage_digest).not.toBe(originalAuthority[0]!.coverage_digest);
+            expect(
+              (await shared.retainedRelay.query(epochSql, [newer.relay.consumer])).rows,
+            ).toEqual(originalEpoch);
+            expect((await shared.retainedRelay.query(journalSql)).rows).toEqual(journal);
+            console.info('historical newer-head fault installed', {
+              consumer: newer.relay.consumer,
+              baseAccountPg: basePg,
+              newerAccountPg: newerPg,
+              historicalJournalEpoch: newer.erasureJournal!.epoch,
+              liveJournalEpoch: liveEpoch[0]!.epoch,
+              originalHead,
+              head: current,
+              originalAuthority,
+              authority,
+              journalUnchanged: true,
+            });
           },
           async () => {
             expect(
@@ -682,6 +767,13 @@ test(
             expect((await shared.retainedRelay.query(authoritySql)).rows).toEqual(
               originalAuthority,
             );
+            expect((await shared.retainedRelay.query(journalSql)).rows).toEqual(journal);
+            console.info('historical newer-head fault restored', {
+              consumer: newer.relay.consumer,
+              head: originalHead,
+              authority: originalAuthority,
+              journalUnchanged: true,
+            });
           },
         );
         const originalManifest = readFileSync(join(shared.directory, fixture.historicalManifest));

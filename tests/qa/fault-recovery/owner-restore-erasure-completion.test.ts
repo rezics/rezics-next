@@ -1,5 +1,7 @@
 import { expect, test } from 'bun:test';
-import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { createHash } from 'node:crypto';
+import { openRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import type { RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import {
   expectRefusedCompletion,
@@ -11,6 +13,18 @@ import {
   restoreKey,
   type Copy,
 } from './owner-restore-erasure-fixture.ts';
+
+function canonical(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonical);
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, item]) => [key, canonical(item)]),
+    );
+  }
+  return value;
+}
 
 /** Insert a finding without the recovery key: well-formed, but not authentic. */
 async function forgeFinding(copy: Copy, key: string, reference: string) {
@@ -55,12 +69,100 @@ test(
         {
           label: 'newer-frontier',
           reason: /a newer retained frontier needs reconciliation/,
-          tamper: async (copy) =>
-            retainRecoveryCoverageHead(
-              copy.retainedRelay,
+          tamper: async (copy) => {
+            const newer = openRecoveryPayload<RecoveryCoverage>(
               fixture.newerAuthority.sealedCoverage,
               restoreKey,
-            ),
+              'graph-recovery-coverage',
+            );
+            const { accountPg: basePg, ...baseOwners } = fixture.coverage;
+            const { accountPg: newerPg, ...newerOwners } = newer;
+            expect(newerOwners).toEqual(baseOwners);
+            expect(newer.relay.consumer).toBe(fixture.coverage.relay.consumer);
+            expect(newer.erasureJournal).toEqual(fixture.coverage.erasureJournal);
+            expect(newer.erasureJournal!.epoch).toBeNull();
+            expect(
+              (
+                await copy.owners.relay.query(
+                  'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure',
+                )
+              ).rows,
+            ).toEqual([{ epoch: newer.erasureJournal!.epoch }]);
+            expect(newerPg.systemIdentifier).toBe(basePg.systemIdentifier);
+            expect(
+              (
+                await copy.owners.account.query('SELECT $2::pg_lsn > $1::pg_lsn AS advanced', [
+                  basePg.flushedLsn,
+                  newerPg.flushedLsn,
+                ])
+              ).rows,
+            ).toEqual([{ advanced: true }]);
+            const journalSql =
+              'SELECT to_jsonb(erasure) AS original FROM relay.erasure erasure ORDER BY erasure_epoch';
+            const journal = (await copy.retainedRelay.query(journalSql)).rows;
+            const liveEpoch = (
+              await copy.retainedRelay.query(
+                'SELECT max(erasure_epoch)::text AS epoch FROM relay.erasure',
+              )
+            ).rows;
+            expect(liveEpoch).toEqual([{ epoch: fixture.erased.erasureEpoch }]);
+            const headSql =
+              'SELECT generation::text,erasure_epoch::text,coverage_digest FROM relay.recovery_coverage_head WHERE consumer=$1';
+            const original = (await copy.retainedRelay.query(headSql, [newer.relay.consumer])).rows;
+            expect(original).toHaveLength(1);
+            expect(original[0]!.erasure_epoch).toBe(newer.erasureJournal!.epoch);
+            expect(original[0]!.coverage_digest).toBe(
+              createHash('sha256')
+                .update(JSON.stringify(canonical(fixture.coverage)))
+                .digest('hex'),
+            );
+            const authoritySql =
+              'SELECT coverage_generation::text,revision::text,coverage_digest FROM relay.current_authority_coverage WHERE id=true';
+            const originalAuthority = (await copy.retainedRelay.query(authoritySql)).rows;
+            expect(originalAuthority).toHaveLength(1);
+            const digest = createHash('sha256')
+              .update(JSON.stringify(canonical(newer)))
+              .digest('hex');
+            // This is a historical newer-head fault, not a publication against the later journal.
+            await copy.faultRetained([
+              // Run the existing authority-pointer trigger normally within this fault transaction.
+              { sql: 'SET LOCAL session_replication_role = origin' },
+              {
+                sql: 'UPDATE relay.recovery_coverage_head SET coverage_digest=$1,generation=generation+1,captured_at=clock_timestamp() WHERE consumer=$2',
+                values: [digest, newer.relay.consumer],
+              },
+            ]);
+            const head = (await copy.retainedRelay.query(headSql, [newer.relay.consumer])).rows;
+            expect(head).toEqual([
+              {
+                generation: (BigInt(original[0]!.generation) + 1n).toString(),
+                erasure_epoch: original[0]!.erasure_epoch,
+                coverage_digest: digest,
+              },
+            ]);
+            expect(digest).not.toBe(original[0]!.coverage_digest);
+            const authority = (await copy.retainedRelay.query(authoritySql)).rows;
+            expect(authority).toEqual([
+              {
+                coverage_generation: head[0]!.generation,
+                revision: (BigInt(originalAuthority[0]!.revision) + 1n).toString(),
+                coverage_digest: digest,
+              },
+            ]);
+            expect((await copy.retainedRelay.query(journalSql)).rows).toEqual(journal);
+            console.info('historical newer-head fault installed', {
+              consumer: newer.relay.consumer,
+              baseAccountPg: basePg,
+              newerAccountPg: newerPg,
+              historicalJournalEpoch: newer.erasureJournal!.epoch,
+              liveJournalEpoch: liveEpoch[0]!.epoch,
+              originalHead: original,
+              head,
+              originalAuthority,
+              authority,
+              journalUnchanged: true,
+            });
+          },
         },
         {
           // Arbitrary coverage: the live values with a finding the key never signed.
