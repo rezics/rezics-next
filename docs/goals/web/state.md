@@ -52,6 +52,16 @@ submission API gaps to api for matrix checks. No workaround was built.
 - Program's nightly vertical selection has seven passing journeys and recipes missing; Zone publishing's 400 belongs to api.
 - Other carried work remains under `refs/archive/2026-10-12/goal/<task>`; the detailed carried table is preserved in this file's history at `709dd3a4f` and the launch tables at `archive/goals:program-2026-10-06/study-2026-10-12/`. Nothing from it was resumed.
 
+## From the regression of 2026-10-13
+
+Added by the program from its reading of the run on `main` d2a2e3166: four
+causes in this Goal's sources, six failing files.
+
+- D030, 3 files: Bun UI module mocks omit real exports (notFound/readReviewer) or replace the real browse route used later in the batch. Source: `apps/web/tests/showcase-zone-editor.test.tsx`.
+- D060, 1 file: Mounted Collection shelf preview loader reports failed rather than ready and does not retain its paging state. Source: `apps/web/features/zones/`.
+- D080, 1 file: Localized about-discussion copy exposes internal service name Content. Source: `apps/web/features/zones/messages/`.
+- D129, 1 file: Official ai-workshop slots imports outside the allowed React/SDK/UI/icon/local boundary. Source: `apps/web/zones/official/`.
+
 ## Next plan and what I would change
 
 All current attempts have been handled under the single-try wrap-up rule.
