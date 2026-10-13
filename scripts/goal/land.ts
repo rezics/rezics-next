@@ -158,7 +158,7 @@ const git = (worktree: string, args: string[]) =>
 
 const FINDINGS_SCHEMA = { type: 'object', additionalProperties: false, required: ['findings'],
   properties: { findings: { type: 'array', items: { type: 'object', additionalProperties: false,
-    required: ['text'], properties: { text: { type: 'string' }, test: { type: 'object', additionalProperties: false,
+    required: ['text', 'test'], properties: { text: { type: 'string' }, test: { type: ['object', 'null'], additionalProperties: false,
       required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } } } } } } };
 
 /** Waits before a refused pass runs again; `GOAL_REVIEW_RETRY_MS` overrides them (tests use 1). */
