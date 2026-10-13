@@ -131,7 +131,7 @@ async function storedObjectBytes(objects: ImmutableObjects, digest: string, budg
     return bytes;
   } catch (error) {
     budget?.signal.throwIfAborted();
-    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionReadBudgetExceeded(error.message);
+    if (error instanceof ObjectReadBudgetExceeded) throw new RevisionReadBudgetExceeded(error.message, { cause: error });
     if (error instanceof ObjectIntegrityError) throw new RevisionCorrupt(error.message, { cause: error });
     if (error instanceof ObjectUnavailable) throw new RevisionUnavailable(error.message, { cause: error });
     throw error;
