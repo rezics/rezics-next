@@ -3,11 +3,13 @@ import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { RankingGenerations } from '../src/modules/recommendation/ranking.ts';
+import { DiscoveryRefreshStore } from '../src/modules/discovery/refresh-store.ts';
 import { prepareAccessErasureRecoveryFixture } from '../src/modules/access/fixture-erasure-recovery.ts';
 import { sealRecoveryPayload, openRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { cloneQaOwnerDatabases } from '../../../tests/qa/support/databases.ts';
 import { engageAccessRecoveryFence, releaseAccessRecoveryFence } from '../src/modules/access/admission.ts';
-import { importAccessErasureRecoveryAttachment, type AccessErasureRecoveryExpectation } from '../src/modules/access/erasure-recovery.ts';
+import { exportAccessErasureRecoveryAttachment, importAccessErasureRecoveryAttachment,
+  type AccessErasureRecoveryExpectation } from '../src/modules/access/erasure-recovery.ts';
 import { ACCESS_RECOVERY_CLASSIFICATION, accessRecoveryRule, assertAccessRecoveryClassification,
   scanAccessTables, scanAccessOutbox, accessStateTables, accessStateCoverage, resetAccessRecoveryState } from '../src/modules/work/access-recovery-coverage.ts';
 import { captureReleaseBasis, proveReleaseTransition } from '../src/modules/owner/restore-release-binding.ts';
@@ -96,6 +98,67 @@ test('restored ranking owner resumes the retained source stream before becoming 
     } finally { await client.query('ROLLBACK'); client.release(); }
   } finally { await pool.end(); await owners.close(); }
 }, 120_000);
+
+for (const mode of ['ordinary', 'native'] as const) {
+test(`held ${mode} restore fences Discovery scheduler leases above retained epochs without clearing backup state`, async () => {
+  const runId = Bun.env.REZICS_QA_RUN_ID;
+  if (!runId) throw new Error('Run through goalctl test with the migrated owner fixture');
+  const owners = await cloneQaOwnerDatabases(runId, ['access'], 'owner');
+  const pool = new Pool({ connectionString: owners.urls.access, max: 1 });
+  const scopeKey = 'e'.repeat(64);
+  try {
+    const fixture = await prepareAccessErasureRecoveryFixture(pool, { principalId: randomUUID(),
+      actor: `https://rezics.com/id/${randomUUID()}`, resource: `https://rezics.com/id/${randomUUID()}`,
+      scope: `https://rezics.com/id/${randomUUID()}`, generationId: randomUUID(),
+      dataEpoch: randomUUID(), rateKey: scopeKey, suffix: randomUUID().slice(0, 8) });
+    const fence = await engageAccessRecoveryFence(pool);
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(`UPDATE access.discovery_refresh SET due_at = '-infinity', attempts = 7
+        WHERE scope_key = $1`, [scopeKey]);
+      const before = (await client.query(`SELECT to_jsonb(r) - 'lease_epoch' AS state
+        FROM access.discovery_refresh r WHERE scope_key = $1`, [scopeKey])).rows[0]!.state;
+      if (mode === 'ordinary') {
+        await resetAccessRecoveryState(client, { derivedGeneration: '0', discoveryRefresh: '3' });
+      } else {
+        const chunks: string[] = [];
+        const summary = await exportAccessErasureRecoveryAttachment(client, client,
+          async chunk => { chunks.push(Buffer.from(chunk).toString('utf8')); });
+        // Preserve the older catalog-2 wire shape under authenticated plaintext
+        // custody; only its lease fence changes the restored scheduler epoch.
+        chunks.splice(1, 0, `${JSON.stringify({ kind: 'lease-fence', table: 'access.discovery_refresh',
+          generation: scopeKey, epoch: '5', basis: { $rezicsNativeJson: 'value', $value: '{"scope":"global"}' } })}\n`);
+        const input = chunks.join('');
+        const signed = sealRecoveryPayload({ ...summary, plaintextBytes: String(Buffer.byteLength(input)),
+          plaintextDigest: createHash('sha256').update(input).digest('hex') }, 'ab'.repeat(32), 'graph-recovery');
+        const expected = openRecoveryPayload<AccessErasureRecoveryExpectation>(JSON.stringify(signed),
+          'ab'.repeat(32), 'graph-recovery');
+        async function* attachment() { yield input; }
+        await importAccessErasureRecoveryAttachment(client, attachment(), expected);
+      }
+      const after = (await client.query(`SELECT lease_epoch::text AS epoch, to_jsonb(r) - 'lease_epoch' AS state
+        FROM access.discovery_refresh r WHERE scope_key = $1`, [scopeKey])).rows[0]!;
+      expect(after.state).toEqual(before);
+      await releaseAccessRecoveryFence(client, fence);
+      const borrowed = { connect: async () => ({
+        query: (sql: string, params?: unknown[]) => client.query(
+          sql.startsWith('BEGIN') || sql === 'COMMIT' || sql === 'ROLLBACK' ? 'SELECT 1' : sql, params),
+        release: () => {},
+      }) } as unknown as Pool;
+      const owner = new DiscoveryRefreshStore(borrowed);
+      const claimed = (await owner.claim())!;
+      expect(claimed.scope_key).toBe(scopeKey);
+      // An old holder must fail even while the newly claimed lease is live.
+      await expect(owner.attach({ ...claimed, lease_epoch: mode === 'ordinary' ? '2' : '3' }, fixture.cleanupGenerationId))
+        .rejects.toThrow('Refresh lease changed');
+      await owner.attach(claimed, fixture.cleanupGenerationId);
+      expect(after.epoch).toBe(mode === 'ordinary' ? '4' : '6');
+      expect(claimed.lease_epoch).toBe(mode === 'ordinary' ? '5' : '7');
+    } finally { await client.query('ROLLBACK'); client.release(); }
+  } finally { await pool.end(); await owners.close(); }
+}, 120_000);
+}
 
 test('legacy signed Access coverage and version-1 native attachments keep their original digest rule', async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;

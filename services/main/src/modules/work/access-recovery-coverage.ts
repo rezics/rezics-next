@@ -220,6 +220,10 @@ export const ACCESS_RECOVERY_CLASSIFICATION: Readonly<Record<string, AccessRecov
     writer: 'services/main/src/modules/discovery/refresh-store.ts', writerKind: 'scheduler or progress worker',
     reason: 'The owner advances scheduling, counters or replay/build progress independently of durable authority.',
     leaseFloor: 'discoveryRefresh',
+    // Preserve the backup schedule and attached generation, but never reuse a
+    // lease held before either authenticated cut when Access reopens.
+    reset: 'UPDATE access.discovery_refresh SET lease_epoch = greatest(lease_epoch, $1::bigint) + 1',
+    rebuild: 'DiscoveryRefreshStore.claim (services/main/src/modules/discovery/refresh-store.ts)',
   },
   'access.discovery_refresh_catalog': { class: 'operational',
     writer: 'services/main/src/modules/discovery/refresh-store.ts', writerKind: 'scheduler or progress worker',

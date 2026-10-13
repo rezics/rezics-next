@@ -701,6 +701,7 @@ export async function importAccessErasureRecoveryAttachment(
   let discoveryInvalidations = 0n;
   let alsoEnjoyedInvalidations = 0n;
   let pendingTable: string | undefined;
+  let schedulerLeaseFloor = 0n;
   let pending: AccessErasureRecoveryRow[] = [];
   let lastKey: { table: string; key: Record<string, string> } | undefined;
   let footer: AccessErasureRecoveryFooter | undefined;
@@ -857,9 +858,12 @@ export async function importAccessErasureRecoveryAttachment(
       const basis = scheduler && isObject(value.basis) && value.basis.$rezicsNativeJson === 'value'
         && typeof value.basis.$value === 'string' ? value.basis.$value : undefined;
       if (scheduler && basis === undefined) throw new AccessErasureRecoveryConflict('native Access scheduler basis is invalid');
-      // Older attachments supplied scheduler fences. Validate their wire data
-      // above, but keep the restored scheduler exactly as in the backup.
-      if (scheduler) return;
+      // Older attachments supplied scheduler fences. Keep the backup schedule
+      // and basis, but apply their authenticated high-water mark at reset.
+      if (scheduler) {
+        schedulerLeaseFloor = BigInt(value.epoch) > schedulerLeaseFloor ? BigInt(value.epoch) : schedulerLeaseFloor;
+        return;
+      }
       const fenced = await client.query(`UPDATE access.derived_generation
         SET lease_epoch = greatest(lease_epoch, $2::bigint)
         WHERE id = $1 AND state = 'building'`, [value.generation, value.epoch]);
@@ -979,7 +983,8 @@ export async function importAccessErasureRecoveryAttachment(
   }
   // The original profile signs every raw row. Preserve those bytes until the
   // release owner derives the explicitly authorized reset transition.
-  if (catalogVersion === 2) await resetAccessRecoveryState(client);
+  if (catalogVersion === 2) await resetAccessRecoveryState(client,
+    { derivedGeneration: '0', discoveryRefresh: schedulerLeaseFloor.toString() });
   await client.query('RELEASE SAVEPOINT access_erasure_recovery_guard');
   return { imported: imported.toString(), alreadyPresent: alreadyPresent.toString() };
   } catch (error) {
