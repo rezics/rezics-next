@@ -7,28 +7,28 @@
         "label": "metadata-en",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -40,14 +40,14 @@
         "label": "selected-text-en",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -60,19 +60,19 @@
         "label": "native-variants-en",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -85,7 +85,7 @@
         "label": "credits-en",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -93,13 +93,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -107,9 +107,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
           },
           "count": {
             "value": 1,
@@ -120,35 +120,35 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"608095ecc40f1eb5a416afdb33cdb8917dced32abba72c640e3f6d5c50920662\""
+          "etag": "W/\"dba810270f675c4e8ca35ef32bf4b42445aebd6a8bdb51423fa7bdc9af6f8f50\""
         }
       },
       {
         "label": "metadata-sv",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -160,14 +160,14 @@
         "label": "selected-text-sv",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -180,19 +180,19 @@
         "label": "native-variants-sv",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -205,7 +205,7 @@
         "label": "credits-sv",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -213,13 +213,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -227,9 +227,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
           },
           "count": {
             "value": 1,
@@ -240,14 +240,14 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"a032f718ed2269a7b869c32e875f3a452bdd7e3bd1ec4b662d76c168cad026eb\""
+          "etag": "W/\"bc22178587896efb6a7b13b03d3b25919065851ea7aa45851859f6fe5322dd22\""
         }
       },
       {
         "label": "private-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -264,266 +264,7 @@
         "label": "missing-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/90e4659a-f132-4c2d-b8bd-7960ac9fcb28/metadata?language=en",
-        "status": 404,
-        "answer": {
-          "type": "https://rezics.com/problems/work_unavailable",
-          "title": "Resource is unavailable",
-          "status": 404,
-          "code": "work_unavailable"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/problem+json"
-        }
-      }
-    ],
-    "stranger": [
-      {
-        "label": "metadata-en",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
-          "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-            "language": "sv"
-          },
-          "completionStatus": null,
-          "localized": [
-            {
-              "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-              "description": "En egen berättelse om Mira och hennes fröträdgård.",
-              "mainVersionLabel": null,
-              "tagline": null
-            }
-          ],
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "selected-text-en",
-        "operationId": "getV1Main-versionsByMainVersionSelection",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-          "language": "sv",
-          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "native-variants-en",
-        "operationId": "getV1Main-versionsByMainVersionNative-variants",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "complete": true,
-          "variants": [
-            {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-              "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
-            }
-          ]
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "credits-en",
-        "operationId": "getV1WorksByIdCredits",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
-        "status": 200,
-        "answer": {
-          "profile": "template-result-v1",
-          "query": "https://rezics.com/query/work-credits",
-          "revision": 1,
-          "items": [
-            {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
-              "role": "author",
-              "participantKind": "agent",
-              "provider": null,
-              "key": null,
-              "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
-              "displayName": null,
-              "handle": null
-            }
-          ],
-          "complete": true,
-          "nextCursor": null,
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
-          },
-          "count": {
-            "value": 1,
-            "kind": "exact-page",
-            "total": null
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"b3addb986a8e9ac14379389b072d7c7b7d7a63e4b5cfffb4debb40b6043ba15c\""
-        }
-      },
-      {
-        "label": "metadata-sv",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
-          "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-            "language": "sv"
-          },
-          "completionStatus": null,
-          "localized": [
-            {
-              "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-              "description": "En egen berättelse om Mira och hennes fröträdgård.",
-              "mainVersionLabel": null,
-              "tagline": null
-            }
-          ],
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "selected-text-sv",
-        "operationId": "getV1Main-versionsByMainVersionSelection",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-          "language": "sv",
-          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "native-variants-sv",
-        "operationId": "getV1Main-versionsByMainVersionNative-variants",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "complete": true,
-          "variants": [
-            {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-              "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
-            }
-          ]
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "credits-sv",
-        "operationId": "getV1WorksByIdCredits",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
-        "status": 200,
-        "answer": {
-          "profile": "template-result-v1",
-          "query": "https://rezics.com/query/work-credits",
-          "revision": 1,
-          "items": [
-            {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
-              "role": "author",
-              "participantKind": "agent",
-              "provider": null,
-              "key": null,
-              "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
-              "displayName": null,
-              "handle": null
-            }
-          ],
-          "complete": true,
-          "nextCursor": null,
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
-          },
-          "count": {
-            "value": 1,
-            "kind": "exact-page",
-            "total": null
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"0ca7b8a515aac1d0238360db97818be72a0dfcf1d3d37654c5b42a3f4de345ca\""
-        }
-      },
-      {
-        "label": "private-metadata",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
+        "path": "/v1/works/2b552964-6a55-4f56-b371-e67b1789f7fc/metadata?language=en",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -537,277 +278,18 @@
         }
       },
       {
-        "label": "missing-metadata",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/96eaa73b-2e77-43fc-9898-fe907b015889/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0b35c3c1-7c9c-4dfa-8aae-03f16af5863d",
-        "status": 404,
-        "answer": {
-          "type": "https://rezics.com/problems/work_unavailable",
-          "title": "Resource is unavailable",
-          "status": 404,
-          "code": "work_unavailable"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/problem+json"
-        }
-      }
-    ],
-    "member": [
-      {
-        "label": "metadata-en",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
-          "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-            "language": "sv"
-          },
-          "completionStatus": null,
-          "localized": [
-            {
-              "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-              "description": "En egen berättelse om Mira och hennes fröträdgård.",
-              "mainVersionLabel": null,
-              "tagline": null
-            }
-          ],
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "selected-text-en",
-        "operationId": "getV1Main-versionsByMainVersionSelection",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-          "language": "sv",
-          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "native-variants-en",
-        "operationId": "getV1Main-versionsByMainVersionNative-variants",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "complete": true,
-          "variants": [
-            {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-              "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
-            }
-          ]
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "credits-en",
-        "operationId": "getV1WorksByIdCredits",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
-        "status": 200,
-        "answer": {
-          "profile": "template-result-v1",
-          "query": "https://rezics.com/query/work-credits",
-          "revision": 1,
-          "items": [
-            {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
-              "role": "author",
-              "participantKind": "agent",
-              "provider": null,
-              "key": null,
-              "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
-              "displayName": null,
-              "handle": null
-            }
-          ],
-          "complete": true,
-          "nextCursor": null,
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
-          },
-          "count": {
-            "value": 1,
-            "kind": "exact-page",
-            "total": null
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"68a4f76f0e5c6ae39ee186affead8ad5f5e29e061392c8fdf9e13201526f4842\""
-        }
-      },
-      {
-        "label": "metadata-sv",
-        "operationId": "getV1WorksByIdMetadata",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
-          "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-            "language": "sv"
-          },
-          "completionStatus": null,
-          "localized": [
-            {
-              "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
-              "description": "En egen berättelse om Mira och hennes fröträdgård.",
-              "mainVersionLabel": null,
-              "tagline": null
-            }
-          ],
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "selected-text-sv",
-        "operationId": "getV1Main-versionsByMainVersionSelection",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-          "language": "sv",
-          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "native-variants-sv",
-        "operationId": "getV1Main-versionsByMainVersionNative-variants",
-        "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
-        "status": 200,
-        "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "complete": true,
-          "variants": [
-            {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
-              "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
-            }
-          ]
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "credits-sv",
-        "operationId": "getV1WorksByIdCredits",
-        "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
-        "status": 200,
-        "answer": {
-          "profile": "template-result-v1",
-          "query": "https://rezics.com/query/work-credits",
-          "revision": 1,
-          "items": [
-            {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
-              "role": "author",
-              "participantKind": "agent",
-              "provider": null,
-              "key": null,
-              "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
-              "displayName": null,
-              "handle": null
-            }
-          ],
-          "complete": true,
-          "nextCursor": null,
-          "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
-          },
-          "count": {
-            "value": 1,
-            "kind": "exact-page",
-            "total": null
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"1d6640e50492a367fecbe47a0d610bba266e51ef56174c81e372b975263bfe79\""
-        }
-      },
-      {
-        "label": "work-header",
+        "label": "reading-page-header",
         "operationId": "getV1WorksById",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f",
         "status": 200,
         "answer": {
           "profile": "work-read-v1",
-          "id": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e037-7558-8959-de41455c77fb",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "title": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv",
             "direction": "ltr",
             "basis": "fallback"
@@ -816,7 +298,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "5208014886ad6de6ece1e69a36269815"
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
           },
           "types": [
             "https://schema.org/Book"
@@ -837,29 +319,807 @@
             "direction": "ltr",
             "basis": "fallback"
           },
-          "metadataRevision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv",
             "direction": "ltr"
           },
-          "mainVersionRevision": "https://rezics.com/id/01a13613-eaab-7329-a5f8-f1d46a86d240",
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
           "mainVersionLabel": null,
           "selectedLanguage": "sv",
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "9b2d647519eac5638cd644accdd35008244f1c1f2da86ce0b042dfc6885d1b3b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
           },
           "links": {
             "versions": "/v1/query#work-versions",
-            "classifications": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/classifications",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
             "adoptions": "/v1/query#work-adoptions",
-            "ratings": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/ratings",
-            "history": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/history",
-            "credits": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits",
-            "metadata": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata",
-            "editions": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/editions"
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "credits-zh-Hant",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=zh-Hant",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"88805f30dceefe5a35171c4ddca00c7222b93ae0856d30ef5261e8d63e9233e8\""
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "metadata-en",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv"
+          },
+          "completionStatus": null,
+          "localized": [
+            {
+              "language": "sv",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+              "description": "En egen berättelse om Mira och hennes fröträdgård.",
+              "mainVersionLabel": null,
+              "tagline": null
+            }
+          ],
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-text-en",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "native-variants-en",
+        "operationId": "getV1Main-versionsByMainVersionNative-variants",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "complete": true,
+          "variants": [
+            {
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+              "language": "sv",
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "credits-en",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"ec414c23b23c656ee35e9b5f4832b55b5438b67d9414886b30b7a6de601b654a\""
+        }
+      },
+      {
+        "label": "metadata-sv",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv"
+          },
+          "completionStatus": null,
+          "localized": [
+            {
+              "language": "sv",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+              "description": "En egen berättelse om Mira och hennes fröträdgård.",
+              "mainVersionLabel": null,
+              "tagline": null
+            }
+          ],
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-text-sv",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "native-variants-sv",
+        "operationId": "getV1Main-versionsByMainVersionNative-variants",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "complete": true,
+          "variants": [
+            {
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+              "language": "sv",
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "credits-sv",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"51cbd9bb5facb504afc6467cc7f2fb3ffd683e908dce01b594a0db495fb5890c\""
+        }
+      },
+      {
+        "label": "private-metadata",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "missing-metadata",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/e791eab1-4e58-45c3-9a86-5e63d350098e/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4c007d2e-5454-4242-b6e1-07aa9a311d09",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "metadata-en",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv"
+          },
+          "completionStatus": null,
+          "localized": [
+            {
+              "language": "sv",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+              "description": "En egen berättelse om Mira och hennes fröträdgård.",
+              "mainVersionLabel": null,
+              "tagline": null
+            }
+          ],
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-text-en",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "native-variants-en",
+        "operationId": "getV1Main-versionsByMainVersionNative-variants",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "complete": true,
+          "variants": [
+            {
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+              "language": "sv",
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "credits-en",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"a45af48b9c1d02f9e4a341efff4d0965f2ce20a3b70b77f10ff5d574b0df90c4\""
+        }
+      },
+      {
+        "label": "metadata-sv",
+        "operationId": "getV1WorksByIdMetadata",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv"
+          },
+          "completionStatus": null,
+          "localized": [
+            {
+              "language": "sv",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+              "description": "En egen berättelse om Mira och hennes fröträdgård.",
+              "mainVersionLabel": null,
+              "tagline": null
+            }
+          ],
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "selected-text-sv",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "native-variants-sv",
+        "operationId": "getV1Main-versionsByMainVersionNative-variants",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "complete": true,
+          "variants": [
+            {
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+              "language": "sv",
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "credits-sv",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"7c2b9826716e3f98d447a32602234689688f58f659986fa31e3c7e173660bfb5\""
+        }
+      },
+      {
+        "label": "work-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
           }
         },
         "headers": {
@@ -871,14 +1131,14 @@
         "label": "selected-swedish-text",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -891,7 +1151,7 @@
         "label": "missing-selected-language",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection?language=ja",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=ja",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/variant_unavailable",
@@ -911,9 +1171,9 @@
         "path": "/v1/suitability/reads",
         "body": {
           "targets": [
-            "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c"
+            "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f"
           ],
-          "actingSubject": "https://rezics.com/id/e6477202-e5b2-4ca8-88eb-b3f81a08b99a"
+          "actingSubject": "https://rezics.com/id/407d9cf4-c551-4b26-8262-ddacbe165cf6"
         },
         "status": 200,
         "answer": {
@@ -933,10 +1193,10 @@
           "items": [
             {
               "target": {
-                "resource": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
+                "resource": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
                 "base": "work",
-                "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-                "revision": "https://rezics.com/id/01a13613-e037-7558-8959-de41455c77fb",
+                "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+                "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
                 "types": [
                   "https://schema.org/Book",
                   "https://schema.org/CreativeWork"
@@ -961,23 +1221,23 @@
         "label": "public-preview",
         "operationId": "getV1Public-previewsByResource",
         "method": "GET",
-        "path": "/v1/public-previews/01a13613-e037-7556-84f9-883d5555b64c",
+        "path": "/v1/public-previews/01a136b9-f732-7678-9afd-a45bea8ca24f",
         "status": 200,
         "answer": {
           "profile": "public-preview-v1",
-          "reference": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
+          "reference": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
           "status": "available",
           "type": "work",
           "address": {
             "prefix": "/w/",
-            "key": "1CfzYcp6s4CPUk3cEcUqB1",
-            "suffixSource": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d"
+            "key": "1CfznTBYoofw9y2jjedFve",
+            "suffixSource": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29"
           },
           "base": "work",
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
           "disclosure": "public",
           "name": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv",
             "direction": "ltr",
             "basis": "fallback"
@@ -986,33 +1246,33 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "5208014886ad6de6ece1e69a36269815"
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
           },
           "generation": {
-            "graph": "fb4ab3e77daad65bc8635a49fd31688234e2f047555a20e2398937aac47950ae",
-            "media": "3f082be7-620d-417d-81e7-ec17c875c6b2:0",
-            "addresses": "49e7698a03bdef42836ff00d81e0394e7e0d5724181d2ab94110b21ef1739c40"
+            "graph": "f9e0d9d58df35fcc8babcd03a0e99d9ca250b14684f50238a44ae7e08be76e1d",
+            "media": "a8af0f80-76b4-4e30-b26a-2bf7e308b033:0",
+            "addresses": "e6f4d4a9359c9ded74763ac34fae4602acaa1573d8f8c670a15b0ce2e5804cf0"
           }
         },
         "headers": {
           "cache-control": "public, no-cache",
           "content-type": "application/json;charset=utf-8",
-          "etag": "\"8ec5b919561a3b8aaf550eca0c607f9b\""
+          "etag": "\"699cdfb12337ea94cffd542766211153\""
         }
       },
       {
         "label": "public-work-header",
         "operationId": "getV1WorksById",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f",
         "status": 200,
         "answer": {
           "profile": "work-read-v1",
-          "id": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e037-7558-8959-de41455c77fb",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "title": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv",
             "direction": "ltr",
             "basis": "fallback"
@@ -1021,7 +1281,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "5208014886ad6de6ece1e69a36269815"
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
           },
           "types": [
             "https://schema.org/Book"
@@ -1042,29 +1302,29 @@
             "direction": "ltr",
             "basis": "fallback"
           },
-          "metadataRevision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv",
             "direction": "ltr"
           },
-          "mainVersionRevision": "https://rezics.com/id/01a13613-eaab-7329-a5f8-f1d46a86d240",
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
           "mainVersionLabel": null,
           "selectedLanguage": "sv",
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "9b2d647519eac5638cd644accdd35008244f1c1f2da86ce0b042dfc6885d1b3b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
           },
           "links": {
             "versions": "/v1/query#work-versions",
-            "classifications": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/classifications",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
             "adoptions": "/v1/query#work-adoptions",
-            "ratings": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/ratings",
-            "history": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/history",
-            "credits": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits",
-            "metadata": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata",
-            "editions": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/editions"
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
           }
         },
         "headers": {
@@ -1076,7 +1336,7 @@
         "label": "private-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1093,7 +1353,7 @@
         "label": "missing-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/f454d85e-a756-422d-977f-16a50eb5b307/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe6477202-e5b2-4ca8-88eb-b3f81a08b99a",
+        "path": "/v1/works/97474801-24eb-4202-8d97-c4cee49ef2cf/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1105,6 +1365,157 @@
           "cache-control": "no-store",
           "content-type": "application/problem+json"
         }
+      },
+      {
+        "label": "reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "credits-zh-Hant",
+        "operationId": "getV1WorksByIdCredits",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=zh-Hant&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F407d9cf4-c551-4b26-8262-ddacbe165cf6",
+        "status": 200,
+        "answer": {
+          "profile": "template-result-v1",
+          "query": "https://rezics.com/query/work-credits",
+          "revision": 1,
+          "items": [
+            {
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
+              "role": "author",
+              "participantKind": "agent",
+              "provider": null,
+              "key": null,
+              "ordinal": null,
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+              "displayName": null,
+              "handle": null
+            }
+          ],
+          "complete": true,
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8",
+          "etag": "W/\"bd18dde87298e91b8b27afeb8c88e881459509cf40a2c26e16a34374fa3a68e4\""
+        }
       }
     ],
     "owner": [
@@ -1112,28 +1523,28 @@
         "label": "metadata-en",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff4ea9538-07df-408b-a267-e42c07af264d",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1145,14 +1556,14 @@
         "label": "selected-text-en",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1165,19 +1576,19 @@
         "label": "native-variants-en",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1190,7 +1601,7 @@
         "label": "credits-en",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff4ea9538-07df-408b-a267-e42c07af264d",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1198,13 +1609,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1212,9 +1623,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
           },
           "count": {
             "value": 1,
@@ -1225,35 +1636,35 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"b37c22270056d24178d73a8c28613f8d238544ab81d0188c1f4d38620de363cb\""
+          "etag": "W/\"65b19386053c462cba31796b1867fb6d29e538a20261da1a95b9405520680ea5\""
         }
       },
       {
         "label": "metadata-sv",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff4ea9538-07df-408b-a267-e42c07af264d",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1265,14 +1676,14 @@
         "label": "selected-text-sv",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1285,19 +1696,19 @@
         "label": "native-variants-sv",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1310,7 +1721,7 @@
         "label": "credits-sv",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff4ea9538-07df-408b-a267-e42c07af264d",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1318,13 +1729,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1332,9 +1743,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
           },
           "count": {
             "value": 1,
@@ -1345,14 +1756,14 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"684f72b1e68d289319ff46bc4e7703f978ff62a59639a4ad2fdafb650cb5cbfb\""
+          "etag": "W/\"7d9cf692268e901f4272e4b55c64c3b78ca3aba3380c0955f2a39dccd02fbb18\""
         }
       },
       {
         "label": "unselected-text",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e1f9-7131-a2e7-ac34fa5e8721/selection",
+        "path": "/v1/main-versions/01a136ba-02cc-768c-90e2-44d41631e72d/selection",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/variant_unavailable",
@@ -1369,22 +1780,194 @@
         "label": "private-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff4ea9538-07df-408b-a267-e42c07af264d",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e1f9-7130-829e-1e81227ddab4",
+          "work": "https://rezics.com/id/01a136ba-02cc-768b-a2bb-cb570ee5fa9a",
           "revision": null,
           "originalTitle": null,
           "completionStatus": null,
           "localized": [],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136ba-02cc-768b-a2bb-cb570ee5fa9a",
+          "revision": "https://rezics.com/id/01a136ba-02cc-768d-b573-11e1b57fd68a",
+          "mainVersion": "https://rezics.com/id/01a136ba-02cc-768c-90e2-44d41631e72d",
+          "title": {
+            "value": "En opublicerad fröträdgård",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "da65a0b829d5ac17c750bc840b60e5f5"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "restricted",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-02cc-768e-b4b7-cbdf8948a047",
+          "mainVersionLabel": null,
+          "selectedLanguage": null,
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "3efb7dd340b7e16051513862d2076a51348cbaf993bb43fd76a3659ec7fa0d15"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/ratings",
+            "history": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/history",
+            "credits": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/credits",
+            "metadata": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata",
+            "editions": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136ba-02cc-768c-90e2-44d41631e72d/selection",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/variant_unavailable",
+          "title": "Native variant is unavailable",
+          "status": 404,
+          "code": "variant_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
         }
       }
     ],
@@ -1393,28 +1976,28 @@
         "label": "metadata-en",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1426,14 +2009,14 @@
         "label": "selected-text-en",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1446,19 +2029,19 @@
         "label": "native-variants-en",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1471,7 +2054,7 @@
         "label": "credits-en",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1479,13 +2062,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1493,9 +2076,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
           },
           "count": {
             "value": 1,
@@ -1506,35 +2089,35 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"18215fd83611fe7784e24b308ff2dfe8f2a360baa494e437c6ce5e62b4ca7518\""
+          "etag": "W/\"cd4ebd26bd2d54a0fee02b7452b55d74306f0bdfaf2173ad3cf0f5ee655b4536\""
         }
       },
       {
         "label": "metadata-sv",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1546,14 +2129,14 @@
         "label": "selected-text-sv",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1566,19 +2149,19 @@
         "label": "native-variants-sv",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1591,7 +2174,7 @@
         "label": "credits-sv",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1599,13 +2182,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1613,9 +2196,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
           },
           "count": {
             "value": 1,
@@ -1626,14 +2209,14 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"85b14797cc0080d0a2198cf03c6dde946904784935c60f2665bb4ca7b2f163b1\""
+          "etag": "W/\"93d9c512f27671d673a0d32bcbf7e14409dc4607fbdec08ffbdc2cf36fb9ea83\""
         }
       },
       {
         "label": "private-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1650,7 +2233,116 @@
         "label": "missing-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/726a4c01-9d4b-4fc3-8dd0-b53e1e08dff7/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbb1be80-919b-44b2-87d5-3e3e528037e6",
+        "path": "/v1/works/50e81a2a-20e8-4778-9431-6d91d07b0cad/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F38608cd7-fc57-4b1b-ad38-742f7b817c9f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1669,28 +2361,28 @@
         "label": "metadata-en",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1702,14 +2394,14 @@
         "label": "selected-text-en",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1722,19 +2414,19 @@
         "label": "native-variants-en",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1747,7 +2439,7 @@
         "label": "credits-en",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1755,13 +2447,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1769,9 +2461,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "533ec9104e7f30d2b8c2119831b96e08ecf71601d2a1faaef129e77e2525821b"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "1f789d5daa0bb38e5fe816be7ab87c3e58ac0d2b9a1ab4a8811f455b0105cd0e"
           },
           "count": {
             "value": 1,
@@ -1782,35 +2474,35 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"41da5f98a180c7e545c4037006bb96bbcab96cd7522aee68991fc85525b65408\""
+          "etag": "W/\"707867045a7aad5fa44a3118b140b54506ddf0dd5fe6908d90f4b2646502432d\""
         }
       },
       {
         "label": "metadata-sv",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "revision": "https://rezics.com/id/01a13613-e486-71e4-905a-c4baea46d67a",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
           "originalTitle": {
-            "value": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
             "language": "sv"
           },
           "completionStatus": null,
           "localized": [
             {
               "language": "sv",
-              "title": "Den lilla fröträdgården 38c9527f-9884-41b9-9ab9-6970183db18d",
+              "title": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
               "description": "En egen berättelse om Mira och hennes fröträdgård.",
               "mainVersionLabel": null,
               "tagline": null
             }
           ],
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16"
           }
         },
         "headers": {
@@ -1822,14 +2514,14 @@
         "label": "selected-text-sv",
         "operationId": "getV1Main-versionsByMainVersionSelection",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/selection",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
-          "selection": "https://rezics.com/id/01a13613-eaab-7328-9c43-c2fbf2cc2f1a",
-          "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-          "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
           "language": "sv",
           "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
         },
@@ -1842,19 +2534,19 @@
         "label": "native-variants-sv",
         "operationId": "getV1Main-versionsByMainVersionNative-variants",
         "method": "GET",
-        "path": "/v1/main-versions/01a13613-e037-7557-83fc-aadc6bd342e7/native-variants?language=sv",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/native-variants?language=sv",
         "status": 200,
         "answer": {
-          "work": "https://rezics.com/id/01a13613-e037-7556-84f9-883d5555b64c",
-          "mainVersion": "https://rezics.com/id/01a13613-e037-7557-83fc-aadc6bd342e7",
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
           "complete": true,
           "variants": [
             {
-              "contribution": "https://rezics.com/id/01a13613-e677-70bf-8377-a8b3af46a90b",
-              "publicationDecision": "https://rezics.com/id/01a13613-e917-76a7-9f2a-fbdccbb2bddc",
-              "selectedDraft": "https://rezics.com/id/01a13613-e677-70c0-bb28-7c9041eccdb1",
+              "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+              "publicationDecision": "https://rezics.com/id/01a136ba-1db0-7675-bb5d-4dfbfacf7e6c",
+              "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
               "language": "sv",
-              "author": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d"
+              "author": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c"
             }
           ]
         },
@@ -1867,7 +2559,7 @@
         "label": "credits-sv",
         "operationId": "getV1WorksByIdCredits",
         "method": "GET",
-        "path": "/v1/works/01a13613-e037-7556-84f9-883d5555b64c/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits?language=sv&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 200,
         "answer": {
           "profile": "template-result-v1",
@@ -1875,13 +2567,13 @@
           "revision": 1,
           "items": [
             {
-              "id": "https://rezics.com/id/01a13613-e07c-748c-940e-0d1928dbdc29",
+              "id": "https://rezics.com/id/01a136b9-f756-7445-88a8-356fe1134336",
               "role": "author",
               "participantKind": "agent",
               "provider": null,
               "key": null,
               "ordinal": null,
-              "agent": "https://rezics.com/id/f4ea9538-07df-408b-a267-e42c07af264d",
+              "agent": "https://rezics.com/id/089e3c85-97f2-4c0d-81f1-a800a44a2a6c",
               "displayName": null,
               "handle": null
             }
@@ -1889,9 +2581,9 @@
           "complete": true,
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "9d99cd8f-d48a-4a7b-8570-5208bd74e8da",
-            "sequence": "452",
-            "dependencyToken": "7d48e7ba609d8c62ede2002372e2a3fe830455227e9b55a163f7732d436a38a2"
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "f5e7df25ad6b07eeb26e2356e7844643d2497560e0eedfcfbe1f3baf09bb8b36"
           },
           "count": {
             "value": 1,
@@ -1902,14 +2594,14 @@
         "headers": {
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "W/\"6402333478588c37aacad09f8498d42cfa68a999ee8704d183cee9335def1a73\""
+          "etag": "W/\"749179b00d7517a033b3712cdc21b813d1a3575806ed08dd6814d5c1f97b540b\""
         }
       },
       {
         "label": "private-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/01a13613-e1f9-7130-829e-1e81227ddab4/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",
@@ -1926,7 +2618,116 @@
         "label": "missing-metadata",
         "operationId": "getV1WorksByIdMetadata",
         "method": "GET",
-        "path": "/v1/works/95009105-74fc-44c3-9003-147257598635/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd762cf2a-8b5c-4b66-851f-6831c9c1f7ce",
+        "path": "/v1/works/6330e1df-6909-473c-8204-9d2b82f5c410/metadata?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "revision": "https://rezics.com/id/01a136b9-f732-767a-be84-3bc1228d3798",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "title": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "d58c4e36a0bf5f762654ab3e792918cc"
+          },
+          "types": [
+            "https://schema.org/Book"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": {
+            "value": "En egen berättelse om Mira och hennes fröträdgård.",
+            "language": "sv",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "metadataRevision": "https://rezics.com/id/01a136ba-0c26-737c-bb34-284b53290765",
+          "originalTitle": {
+            "value": "Den lilla fröträdgården b3c70e2b-c79a-486f-aa62-4459cbde9b29",
+            "language": "sv",
+            "direction": "ltr"
+          },
+          "mainVersionRevision": "https://rezics.com/id/01a136ba-23a0-7334-891c-9f35378d32e4",
+          "mainVersionLabel": null,
+          "selectedLanguage": "sv",
+          "sourcePosition": {
+            "dataEpoch": "e4bb9fa2-cba6-400c-9a6e-72a60fc9fc17",
+            "sequence": "16",
+            "dependencyToken": "8da2ba3df863c3fff6aa33043d778af6d7a6fa3d602a37e85fccdfa0c8cf1206"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/ratings",
+            "history": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/history",
+            "credits": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/credits",
+            "metadata": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/metadata",
+            "editions": "/v1/works/01a136b9-f732-7678-9afd-a45bea8ca24f/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "reading-page-selection",
+        "operationId": "getV1Main-versionsByMainVersionSelection",
+        "method": "GET",
+        "path": "/v1/main-versions/01a136b9-f732-7679-bb44-4d7f84a9efc3/selection?language=sv",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a136b9-f732-7678-9afd-a45bea8ca24f",
+          "mainVersion": "https://rezics.com/id/01a136b9-f732-7679-bb44-4d7f84a9efc3",
+          "selection": "https://rezics.com/id/01a136ba-23a0-7333-87c2-f2d1f713cc4b",
+          "contribution": "https://rezics.com/id/01a136ba-14c1-7104-b132-3394af46180c",
+          "selectedDraft": "https://rezics.com/id/01a136ba-14c1-7105-bff2-31bebc695a69",
+          "language": "sv",
+          "body": "På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka."
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "private-reading-page-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a136ba-02cc-768b-a2bb-cb570ee5fa9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F69e70b4d-eecb-4e4c-a926-41f761ec1f02",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/work_unavailable",

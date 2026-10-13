@@ -160,7 +160,6 @@ async function read(name: PersonaName) {
     await answer(sample('work-header', 'GET', `/v1/works/${short(published.work)}?${viewer}`));
     await answer(sample('selected-swedish-text', 'GET', `/v1/main-versions/${short(published.mainVersion)}/selection?language=sv`));
     await answer(sample('missing-selected-language', 'GET', `/v1/main-versions/${short(published.mainVersion)}/selection?language=ja`), 404);
-    // Reader settings cannot be recorded until the contract admits the API's numeric fontSize.
     await answer(sample('text-suitability', 'POST', '/v1/suitability/reads', {
       targets: [published.work], actingSubject: person.actingSubject,
     }));
@@ -181,6 +180,35 @@ async function read(name: PersonaName) {
     );
     expect(hidden).toEqual(absent);
   }
+
+  const caller = person.actingSubject
+    ? `?${new URLSearchParams({ actingSubject: person.actingSubject })}` : '';
+  const header = await answer<{ selectedLanguage?: string | null }>(
+    sample('reading-page-header', 'GET', `/v1/works/${short(published.work)}${caller}`),
+  );
+  // readText retains the caller's session but sends only the header's selected language.
+  const selectedLanguage = header.selectedLanguage
+    ? `?${new URLSearchParams({ language: header.selectedLanguage })}` : '';
+  await answer(sample('reading-page-selection', 'GET',
+    `/v1/main-versions/${short(published.mainVersion)}/selection${selectedLanguage}`));
+
+  const privateHeader = await answer<{ selectedLanguage?: string | null }>(
+    sample('private-reading-page-header', 'GET', `/v1/works/${short(privateWork.work)}${caller}`),
+    name === 'owner' ? 200 : 404,
+  );
+  if (name === 'owner') {
+    const privateLanguage = privateHeader.selectedLanguage
+      ? `?${new URLSearchParams({ language: privateHeader.selectedLanguage })}` : '';
+    await answer(sample('private-reading-page-selection', 'GET',
+      `/v1/main-versions/${short(privateWork.mainVersion)}/selection${privateLanguage}`), 404);
+  }
+  if (name === 'visitor' || name === 'member')
+    await answer(sample('credits-zh-Hant', 'GET',
+      `/v1/works/${short(published.work)}/credits?${query(person, 'zh-Hant')}`));
+  // Settings currently return numeric fontSize against a string response contract.
+  // Read them without recording until that API contract admits the actual answer.
+  if (person.actingSubject)
+    await answer(person.main('GET', `/v1/reader/settings${caller}`));
 }
 
 outcomeTest(reading, 'visitor', () => read('visitor'), recording);
