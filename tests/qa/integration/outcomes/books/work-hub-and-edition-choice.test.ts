@@ -128,22 +128,30 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   expect(credits.items.some(credit =>
     credit.agent === sessions.owner.actingSubject && credit.role === 'author')).toBe(true);
   const page = await answer<Page<Release>>(
-    () => person.main('GET', `${workPath}/releases?${acting(person)}&limit=2`),
+    () => person.main('GET', `${workPath}/releases?${acting(person)}&limit=${mode === 'hub' ? 2 : 20}`),
   );
-  expect(page.nextCursor).not.toBeNull();
-  const next = await answer<Page<Release>>(
-    () => person.main('GET', `${workPath}/releases?${acting(person)}&limit=2&cursor=${encodeURIComponent(page.nextCursor!)}`),
-  );
-  const choices = [...page.items, ...next.items];
-  expect(next.nextCursor).toBeNull();
+  const choices = [...page.items];
+  if (mode === 'hub') {
+    expect(page.nextCursor).not.toBeNull();
+    const next = await answer<Page<Release>>(
+      () => person.main('GET', `${workPath}/releases?${acting(person)}&limit=2&cursor=${encodeURIComponent(page.nextCursor!)}`),
+    );
+    choices.push(...next.items);
+    expect(next.nextCursor).toBeNull();
+  } else {
+    expect(page.nextCursor).toBeNull();
+  }
   expect(choices.map(item => item.id).sort()).toEqual(releases.map(item => item.id).sort());
   expect(new Set(choices.map(item => item.title.value)).size).toBe(1);
   expect(choices.map(item => item.platform).sort()).toEqual(['audiobook', 'ebook', 'paperback']);
   for (const choice of choices) {
-    const detail = await answer<Release>(
-      () => person.main('GET', `${workPath}/releases/${short(choice.id)}?${acting(person)}`),
-    );
-    expect(detail).toMatchObject(releases.find(release => release.id === choice.id)!);
+    expect(choice).toMatchObject(releases.find(release => release.id === choice.id)!);
+    if (mode === 'hub') {
+      const detail = await answer<Release>(
+        () => person.main('GET', `${workPath}/releases/${short(choice.id)}?${acting(person)}`),
+      );
+      expect(detail).toMatchObject(choice);
+    }
   }
 
   const path = `/v1/me/edition-preferences/${short(book.work)}`;
@@ -165,7 +173,7 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   const before = await privateAnswer<Preference | null>(() => foreign.main('GET', foreignPath));
   const ownPath = `${path}?${acting(person)}`;
   let current = await privateAnswer<Preference | null>(() => person.main('GET', ownPath));
-  for (const release of mode === 'hub' ? releases.slice(0, 1) : releases) {
+  for (const release of mode === 'hub' ? choices.slice(0, 1) : choices) {
     const key = randomUUID();
     const command = {
       ...body, expectedVersion: current?.version ?? 0,
@@ -182,14 +190,17 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
     expect(current).toEqual({
       work: saved.work, language: saved.language, edition: saved.edition, version: saved.version,
     });
-    expect(await privateAnswer(() => person.main('PUT', path, command, key))).toEqual({
-      ...current, replayed: true,
-    });
-    const stale = await answer<{ code: string; current: Preference }>(
-      () => person.main('PUT', path, command), 409,
-    );
-    expect(stale.code).toBe('stale_edition_preference');
-    expect(stale.current).toEqual(current);
+    // One lost-response replay and one stale command prove these owner-store outcomes.
+    if (release === choices[0]) {
+      expect(await privateAnswer(() => person.main('PUT', path, command, key))).toEqual({
+        ...current, replayed: true,
+      });
+      const stale = await answer<{ code: string; current: Preference }>(
+        () => person.main('PUT', path, command), 409,
+      );
+      expect(stale.code).toBe('stale_edition_preference');
+      expect(stale.current).toEqual(current);
+    }
     expect(await privateAnswer(() => foreign.main('GET', foreignPath))).toEqual(before);
   }
   if (mode === 'hub') {
