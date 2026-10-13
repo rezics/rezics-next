@@ -842,22 +842,25 @@ test('native container work hangs until its batch deadline', async () => {
 
   test('nightly runs all non-browser tiers and only one exact journey per vertical, preserving resume', async () => {
     const r = repo();
+    // Prove a complete plan even while the shipped registry explicitly records a recipe gap.
+    const journeys = verticalJourneys.map(journey => 'missing' in journey
+      ? { kind: journey.kind, file: `apps/web/tests/${journey.kind}.e2e.ts`, test: `${journey.kind} signed-in journey` } : journey);
     try {
-      for (const journey of verticalJourneys) if ('file' in journey && !r.files.some(file => file.file === journey.file)) {
+      for (const journey of journeys) if (!r.files.some(file => file.file === journey.file)) {
         r.files.push({ file: journey.file, tier: 'e2e', outcome: 'pending' }); r.write(journey.file, 'pass\n');
       }
       r.commit();
-      const options = { nightly: true, journeyRegistry: async () => verticalJourneys };
+      const options = { nightly: true, journeyRegistry: async () => journeys };
       const result = await r.run({ runId: 'vertical-nightly', ...options });
       expect(result.selection).toBe('nightly');
       expect(result.status).toBe('passed');
       expect(result.partial).toBe(false);
-      expect(result.verticalJourneys).toEqual(verticalJourneys);
+      expect(result.verticalJourneys).toEqual(journeys);
       expect(new Set(r.calls.map(call => call.batch.tier))).toEqual(new Set(['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'jena:check']));
       const browser = r.calls.filter(call => call.batch.tier === 'e2e');
       expect(browser).toHaveLength(6);
       expect(browser.flatMap(call => call.batch.tests ?? []).sort())
-        .toEqual(verticalJourneys.flatMap(journey => 'test' in journey ? [journey.test] : []).sort());
+        .toEqual(journeys.map(journey => journey.test).sort());
       for (const { batch } of browser) {
         expect(batch.files).toHaveLength(1);
         const command = regressionBatchCommand(batch, '/disk/report.json', '/disk/tests.xml');
@@ -883,12 +886,16 @@ test('native container work hangs until its batch deadline', async () => {
     } finally { r.cleanup(); }
   });
 
-  test('nightly reports a missing vertical instead of silently completing its coverage', async () => {
+  test('nightly uses the pinned registry and reports a missing vertical instead of silently completing coverage', async () => {
     const r = repo();
     const journeys: VerticalJourney[] = [{ kind: 'books', file: 'apps/web/tests/example.e2e.ts', test: 'reader saves' },
       { kind: 'games', missing: 'No passing signed-in journey on the clean QA profile' }];
     try {
-      const result = await r.run({ runId: 'missing-vertical', nightly: true, journeyRegistry: async () => journeys });
+      const module = 'scripts/qa/cases/vertical-journeys.ts';
+      r.write(module, `export const verticalJourneys = ${JSON.stringify(journeys)};\n`);
+      r.commit();
+      r.write(module, 'export const verticalJourneys = [];\n');
+      const result = await r.run({ runId: 'missing-vertical', nightly: true });
       expect(result.status).toBe('incomplete');
       expect(result.verticalJourneys).toEqual(journeys);
       expect(readFileSync(join(r.options.stateDir, 'regress/missing-vertical/summary.md'), 'utf8'))

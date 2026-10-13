@@ -6,9 +6,7 @@ export type VerticalJourney = { kind: LaunchCoverage['kind'] } & (NamedProof | {
 export const verticalJourneys: readonly VerticalJourney[] = [
   { kind: 'books', file: 'apps/web/tests/library-loans.e2e.ts',
     test: 'a reader owns a copy, lends it overdue, extends it and returns it' },
-  // The authoring proof currently expects a missing published-reader unit control; exchange still walks signed-in editing.
-  { kind: 'recipes', file: 'apps/web/tests/recipe-exchange.e2e.ts',
-    test: 'a cook imports, edits, exports, and reimports a Schema.org recipe with its supported representation' },
+  { kind: 'recipes', missing: 'Neither signed-in browser proof passes on the clean QA profile: recipe-authoring expects a missing “As written” reader radio; recipe-exchange expects ASCII fractions but the editor displays ½ and ⅓. The catalogue proofs only read.' },
   { kind: 'visual-novels', file: 'apps/web/tests/partless-progress.e2e.ts',
     test: 'a visual novel with no parts is marked on one phone and seen on the other' },
   { kind: 'anime', file: 'apps/web/tests/tracking-media.e2e.ts',
