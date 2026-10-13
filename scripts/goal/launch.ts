@@ -50,7 +50,7 @@ export function launchCommand(options: { id: string; effort: string; session: st
 function codexMcpOverrides(engine: Engine): string[] {
   const config = join(engineEnv(engine).CODEX_HOME!, 'config.toml');
   if (!existsSync(config)) return [];
-  const { mcp_servers: servers } = Bun.TOML.parse(readFileSync(config, 'utf8'));
+  const { mcp_servers: servers } = Bun.TOML.parse(readFileSync(config, 'utf8')) as { mcp_servers?: Record<string, unknown> };
   // Codex merges tables, so an empty mcp_servers override does not clear the account's servers.
   const disabled = Object.keys(servers ?? {}).map(name => `${JSON.stringify(name)}={enabled=false}`);
   return disabled.length ? ['-c', `mcp_servers={${disabled.join(',')}}`] : [];
