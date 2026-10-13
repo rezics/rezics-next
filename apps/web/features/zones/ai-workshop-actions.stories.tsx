@@ -30,8 +30,8 @@ function Actions({ kind, tryHref, locale }: { kind: Kind; tryHref?: string; loca
       <div className="aw-page grid gap-6 py-6 sm:grid-cols-2">
         {layouts.map(layout => <section key={layout} aria-label={layout} className={layout === 'cover' ? 'sm:row-span-2' : ''}>
           <h2 className="mb-3 font-semibold capitalize">{layout}</h2>
-          <WorkshopCard zone={zone} work={pick(kind, locale)} layout={layout} tryHref={tryHref}
-            fallback={null} nextVolume={null} Link={LocalizedLink} />
+          <div><WorkshopCard zone={zone} work={pick(kind, locale)} layout={layout} tryHref={tryHref}
+            fallback={null} nextVolume={null} Link={LocalizedLink} /></div>
         </section>)}
       </div>
     </div>
