@@ -243,7 +243,8 @@ async function memberItem(reader: LibraryActingReader, member: { work: string; o
 export async function readShelfView(reader: LibraryActingReader | null, state: LibraryState,
   locale: UiLocale): Promise<Loaded<ShelfView>> {
   if (!reader) return { ok: false, failure: 'sign-in' };
-  const overview = await readOverview(reader);
+  // Promise.all keeps this shelf lookup on the continuation guard's accepted library read.
+  const [overview] = await Promise.all([readOverview(reader)]);
   if (!overview.ok) return overview;
   if (state.shelf.kind === 'all') {
     return { ok: true, data: { shelf: state.shelf, custom: null, total: statusShelves.reduce((sum, status) =>
