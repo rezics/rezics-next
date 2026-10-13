@@ -1,11 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNativeSession, claudeProjectKey,
-  claudeWakeArgs, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
+  claudeWakeArgs, managerStartMessage, nativeOwner, nativeSession, processIdentity, runAttempt, sameProcess, tmuxServer,
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
+import { coordinatorStartDescriptor, coordinatorStartOptions } from './goalctl.ts';
 
 class RecordingLauncher implements IndependentLauncher {
   readonly launches: string[] = [];
@@ -77,6 +78,107 @@ async function waitFor(predicate: () => boolean, timeout = 5_000): Promise<void>
 }
 
 describe('durable Goal wake coordinator', () => {
+  test('a new manager receives its charter before a backlog larger than a wake batch', () => {
+    const f = fixture();
+    try {
+      f.setEvents(Array.from({length:101},(_,index)=>({key:`mail:${index}`,body:'Mail waiting'})));
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      const coordinator = f.open();
+      coordinator.start({...fresh,startArgs:fresh.args}); coordinator.step();
+      const first = coordinator.status().attempts[0]!;
+      expect(first.prompt).toContain(managerStartMessage('program'));
+      expect(first.prompt).not.toContain('Mail waiting');
+      expect(coordinator.db.query('SELECT COUNT(*) AS n FROM events WHERE token=?').get(first.token)).toEqual({n:1});
+    } finally { f.cleanup(); }
+  });
+  test('starts without a previous owner and durably resumes the native Codex session on the next event', async () => {
+    const f = fixture();
+    try {
+      f.setEvents([]);
+      const session = '01a114cb-4d63-7f23-bf70-1610b4db2b2b';
+      const initial = join(f.dir,'initial.ts');
+      writeFileSync(initial, `import { mkdirSync, writeFileSync } from 'node:fs';
+        import { join } from 'node:path';
+        const session = ${JSON.stringify(session)};
+        mkdirSync(join(process.env.CODEX_HOME!, 'sessions'), {recursive:true});
+        writeFileSync(join(process.env.CODEX_HOME!, 'sessions', 'rollout-' + session + '.jsonl'),
+          JSON.stringify({type:'session_meta',payload:{id:session,cwd:process.cwd()}}) + '\\n');
+        console.log(JSON.stringify({type:'thread.started',thread_id:session}));`);
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      const descriptor = {...fresh,startArgs:[initial,WAKE_PROMPT],args:[...fresh.args,fresh.session]};
+      const coordinator = f.open();
+      coordinator.start(descriptor);
+      expect(coordinator.status().managers[0]!.previousOwner).toBeUndefined();
+      expect(() => coordinator.start(descriptor)).toThrow('already queued');
+      coordinator.step();
+      const first = coordinator.status().attempts[0]!;
+      expect(first.prompt).toContain(managerStartMessage('program'));
+      expect(() => coordinator.start(descriptor)).toThrow('unresolved attempt');
+      await runAttempt(f.stateDir,first.token);
+      expect(coordinator.status().managers[0]).toMatchObject({session,args:[...fresh.args,session]});
+      expect(coordinator.status().managers[0]!.startArgs).toBeUndefined();
+      expect(() => coordinator.start({...descriptor,generation:'replacement'})).toThrow('session still exists');
+      coordinator.close();
+      const restarted = f.open();
+      restarted.step();
+      f.setEvents([{key:'exit:worker:2',body:'Next worker exited'}]);
+      restarted.step();
+      const second = restarted.status().attempts[1]!;
+      expect(JSON.parse(second.descriptor).session).toBe(session);
+      expect(second.prompt).not.toContain(managerStartMessage('program'));
+      await runAttempt(f.stateDir,second.token);
+      expect(f.calls()[0].args).toContain(session);
+      restarted.step();
+      rmSync(join(descriptor.home,'sessions'),{recursive:true});
+      restarted.start({...descriptor,generation:'replacement'});
+      expect(restarted.status().managers[0]!.generation).toBe('replacement');
+    } finally { f.cleanup(); }
+  });
+
+  test('a failed fresh start cannot silently create another native session and can be replaced', async () => {
+    const f = fixture();
+    try {
+      f.setEvents([]);
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      const descriptor = {...fresh,startArgs:fresh.args};
+      const coordinator = f.open();
+      coordinator.start(descriptor); coordinator.step();
+      const token = coordinator.status().attempts[0]!.token;
+      await runAttempt(f.stateDir,token);
+      f.launcher.running.delete(token);
+      coordinator.step(); f.setNow(2_000_000); coordinator.step();
+      expect(f.calls()).toHaveLength(1);
+      expect(f.launcher.launches).toHaveLength(1);
+      expect(coordinator.status().wakes[0]!.error).toContain('did not create a native session');
+      coordinator.start({...descriptor,generation:'replacement'});
+      coordinator.step();
+      expect(f.launcher.launches).toHaveLength(2);
+    } finally { f.cleanup(); }
+  });
+
+  test('replacement refuses a live owner even when the native session file is missing', () => {
+    const f = fixture();
+    try {
+      const coordinator = f.open({owner:()=> 'Native session still owned by process 123'});
+      coordinator.enroll(f.descriptor);
+      const {previousOwner: _previousOwner,...fresh} = f.descriptor;
+      expect(() => coordinator.start({...fresh,startArgs:fresh.args})).toThrow('still owned');
+      expect(coordinator.status().managers[0]!.generation).toBe(f.descriptor.generation);
+    } finally { f.cleanup(); }
+  });
+
+  test('start enforces required engine, effort and strict options while accepting model overrides', () => {
+    for (const engine of ['codex','codex-1','claude'] as const) {
+      expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high','--model','chosen-model']))
+        .toEqual({goal:'program',engine,effort:'high',model:'chosen-model'});
+      expect(coordinatorStartOptions(['program','--engine',engine,'--effort','high']).model).toBeTruthy();
+    }
+    for (const args of [[],['program'],['program','--engine','luna','--effort','high'],
+      ['program','--engine','codex'],['program','--engine','codex','--effort','invalid'],
+      ['program','--engine','codex','--effort','high','--previous-owner-pid','1']]) {
+      expect(() => coordinatorStartOptions(args)).toThrow();
+    }
+  });
   test('Goals on different account homes retain independent wakes and launch descriptors across restart', async () => {
     const f = fixture();
     const events = (goal: string): WakeEvent[] => [{ key: 'timer:follow-up', body: `${goal} follow-up`,
@@ -724,6 +826,149 @@ try {
 } catch { /* Hosts without an independent tmux server exercise the injected launcher above. */ }
 
 describe('independent tmux launcher', () => {
+  test.skipIf(!independentServer)('commands verify against the recorded live pump cgroup across tmux session scopes', async () => {
+    const f = fixture();
+    const name = `manager-start-check-${crypto.randomUUID()}`;
+    try {
+      const coordinator = f.open(); coordinator.acquire();
+      const descriptor = {...f.descriptor,socket,server:independentServer!};
+      const output = join(f.dir,'verified.json');
+      const script = join(f.dir,'verify.ts');
+      writeFileSync(script, `import { writeFileSync } from 'node:fs';
+        import { TmuxLauncher, processIdentity } from ${JSON.stringify(join(import.meta.dir,'coordinator.ts'))};
+        let error = null;
+        try { new TmuxLauncher(${JSON.stringify(f.stateDir)}).verify(${JSON.stringify(descriptor)}); }
+        catch (cause) { error = String(cause); }
+        writeFileSync(${JSON.stringify(output)},JSON.stringify({error,identity:processIdentity(process.pid)}));`);
+      const quote = (value: string) => `'${value.replaceAll("'", "'\\''")}'`;
+      const result = spawnSync('tmux',['-S',socket,'new-session','-d','-s',name,
+        [process.execPath,script].map(quote).join(' ')],{encoding:'utf8'});
+      expect(result.status,result.stderr).toBe(0);
+      await waitFor(()=>existsSync(output));
+      expect(JSON.parse(readFileSync(output,'utf8')).error).toBeNull();
+      // The server can spawn into a fresh scope. A caller's different cgroup must not hide
+      // a live pump that was started in the server's own cgroup.
+      coordinator.db.query('UPDATE pump_owner SET identity=?').run(JSON.stringify(independentServer));
+      rmSync(output);
+      const second = spawnSync('tmux',['-S',socket,'new-session','-d','-s',`${name}-refusal`,
+        [process.execPath,script].map(quote).join(' ')],{encoding:'utf8'});
+      expect(second.status,second.stderr).toBe(0);
+      await waitFor(()=>existsSync(output));
+      expect(JSON.parse(readFileSync(output,'utf8')).error).toContain('outside the coordinator cgroup');
+      coordinator.release();
+    } finally {
+      spawnSync('tmux',['-S',socket,'kill-session','-t',name],{stdio:'ignore'}); f.cleanup();
+      spawnSync('tmux',['-S',socket,'kill-session','-t',`${name}-refusal`],{stdio:'ignore'});
+    }
+  });
+  test.skipIf(!independentServer)('start CLI registers headless managers and wakes their exact native sessions for all engines', async () => {
+    const f = fixture();
+    const tokens: string[] = [];
+    let pump: ChildProcess | undefined;
+    try {
+      const repository = join(f.dir,'repository');
+      mkdirSync(repository);
+      expect(spawnSync('git',['init',repository],{encoding:'utf8'}).status).toBe(0);
+      const bin = join(f.dir,'bin'); mkdirSync(bin);
+      const agent = `#!${process.execPath}
+        import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+        import { join } from 'node:path';
+        const args = process.argv.slice(2);
+        const claude = process.argv[1].endsWith('/claude');
+        const resume = claude ? args.includes('--resume') : args[1] === 'resume';
+        const session = claude ? args[args.indexOf(resume ? '--resume' : '--session-id') + 1]
+          : resume ? args[2] : crypto.randomUUID();
+        const home = claude ? process.env.CLAUDE_CONFIG_DIR : process.env.CODEX_HOME;
+        const directory = claude ? join(home,'projects',process.cwd().replace(/[^a-zA-Z0-9]/g,'-')) : join(home,'sessions');
+        mkdirSync(directory,{recursive:true});
+        if (!resume) writeFileSync(join(directory,(claude ? '' : 'rollout-') + session + '.jsonl'),
+          JSON.stringify(claude ? {sessionId:session,cwd:process.cwd()} : {type:'session_meta',payload:{id:session,cwd:process.cwd()}}) + '\\n');
+        appendFileSync(join(process.cwd(),'.temp','calls.jsonl'),JSON.stringify({args,session,resume,home,
+          goal:process.env.GOAL_ID,manager:process.env.GOAL_MANAGER,
+          ledger:JSON.parse(readFileSync(join(process.cwd(),'.temp','goal-orchestration','ledger.json'),'utf8'))}) + '\\n');
+        console.log(JSON.stringify(claude ? {session_id:session,result:'Ready'} : {type:'thread.started',thread_id:session}));`;
+      for (const engine of ['codex','claude']) {
+        writeFileSync(join(bin,engine),agent); chmodSync(join(bin,engine),0o755);
+      }
+      const homes = {codex:join(f.dir,'first-account'),'codex-1':join(f.dir,'second-account'),claude:join(f.dir,'claude-account')};
+      for (const home of Object.values(homes)) mkdirSync(home);
+      const env: NodeJS.ProcessEnv = {...process.env,PATH:`${bin}:${process.env.PATH}`,GOAL_COORDINATOR_TMUX_SOCKET:socket,
+        GOAL_CODEX_HOME:homes.codex,GOAL_CODEX_1_HOME:homes['codex-1'],CLAUDE_CONFIG_DIR:homes.claude,
+        GOAL_MEMORY_FLOOR_GIB:'0'};
+      delete env.GOAL_MAIL_STATE_DIR;
+      const invoke = (args: string[]) => spawnSync(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator',...args],
+        {cwd:repository,env,encoding:'utf8',timeout:15_000});
+      const directory = join(repository,'.temp','goal-orchestration');
+      const pumpState = new GoalCoordinator({stateDir:directory,events:()=>[],admit:()=>{}});
+      try {
+        // Start before any Goal exists: the pump must discover registrations added while it runs.
+        pump = spawn(process.execPath,[join(import.meta.dir,'goalctl.ts'),'coordinator','--interval-ms','100'],
+          {cwd:repository,env,stdio:'ignore'});
+        await waitFor(()=>Boolean(pumpState.db.query('SELECT identity FROM pump_owner').get()));
+      } finally { pumpState.close(); }
+      for (const engine of ['codex','codex-1','claude'] as const) {
+        const goal = `manager-${engine}`;
+        mkdirSync(join(repository,'docs','goals',goal),{recursive:true});
+        writeFileSync(join(repository,'docs','goals',goal,'GOAL.md'),`---\nareas: []\n---\n# Synthetic Goal\n`);
+        writeFileSync(join(repository,'docs','goals',goal,'state.md'),'Ready\n');
+        const result = invoke(['start',goal,'--engine',engine,'--effort','high','--model','chosen-model']);
+        expect(result.status,result.stderr).toBe(0);
+        const coordinator = new GoalCoordinator({stateDir:directory,events:()=>[],admit:()=>{}});
+        try {
+          await waitFor(()=> coordinator.status().attempts.filter(attempt=>attempt.goal === goal).some(attempt=>attempt.phase === 'done'));
+          const first = coordinator.status().attempts.find(attempt=>attempt.goal === goal)!;
+          tokens.push(first.token);
+          expect(first.code,readFileSync(join(directory,'manager-runs',first.token,'stderr.log'),'utf8')).toBe(0);
+          const descriptor = coordinator.status().managers.find(manager=>manager.goal === goal)!;
+          expect(descriptor).toMatchObject({engine,effort:'high',home:homes[engine],env:{GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`}});
+          expect(descriptor.previousOwner).toBeUndefined();
+          expect(descriptor.startArgs).toBeUndefined();
+          expect(descriptor.args).toContain('chosen-model');
+          const calls = readFileSync(join(repository,'.temp','calls.jsonl'),'utf8').trim().split('\n').map(line=>JSON.parse(line));
+          const call = calls.find(call=>call.goal === goal);
+          expect(call.resume).toBe(false);
+          expect(call.ledger.goals[goal].manager).toBe(`goal-${goal}`);
+          expect(call.args).toContain('chosen-model');
+          expect(call.args.join('\n')).toContain(managerStartMessage(goal));
+          expect(invoke(['start',goal,'--engine',engine,'--effort','high']).status).not.toBe(0);
+          const mail = new GoalMailStore({stateDir:directory,goals:[goal]});
+          try {
+            const message = mail.send(goal,'Next request',`request-${engine}`);
+            await waitFor(()=>coordinator.status().attempts.filter(attempt=>attempt.goal === goal).filter(attempt=>attempt.phase === 'done').length >= 2);
+            mail.ack(goal,message.id);
+            const second = coordinator.status().attempts.filter(attempt=>attempt.goal === goal)[1]!;
+            tokens.push(second.token);
+            expect(second.code).toBe(0);
+            expect(JSON.parse(second.descriptor).session).toBe(call.session);
+          } finally { mail.close(); }
+        } finally { coordinator.close(); }
+      }
+    } finally {
+      if (pump && pump.exitCode === null) {
+        pump.kill('SIGTERM');
+        await new Promise<void>(resolve=>pump!.once('exit',()=>resolve()));
+      }
+      for (const token of tokens) spawnSync('tmux',['-S',socket,'kill-session','-t',`goal-wake-${token}`],{stdio:'ignore'});
+      f.cleanup();
+    }
+  },60_000);
+
+  test.skipIf(!independentServer)('startup descriptors retain the selected account and model without inherited session ownership', () => {
+    const f = fixture();
+    const prior = {...process.env};
+    try {
+      process.env.GOAL_CODEX_HOME = f.descriptor.home;
+      process.env.CLAUDE_CONFIG_DIR = f.descriptor.home;
+      for (const engine of ['codex','claude'] as const) {
+        const descriptor = coordinatorStartDescriptor(coordinatorStartOptions(['program','--engine',engine,'--effort','high','--model','chosen-model']),f.dir,socket);
+        expect(descriptor.args).toContain('chosen-model');
+        expect(descriptor.startArgs).toContain('chosen-model');
+        expect(descriptor.previousOwner).toBeUndefined();
+        expect(descriptor.env.CODEX_SESSION_ID).toBeUndefined();
+        expect(descriptor.env.CLAUDE_CODE_SESSION_ID).toBeUndefined();
+      }
+    } finally { process.env = prior; f.cleanup(); }
+  });
   test.skipIf(spawnSync('tmux', ['-V']).status !== 0)('refuses a server in the coordinator cgroup', () => {
     const f = fixture();
     const ownSocket = join(f.dir, 's');

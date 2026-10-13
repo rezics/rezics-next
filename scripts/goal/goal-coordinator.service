@@ -1,6 +1,8 @@
 # Copy to ~/.config/systemd/user/goal-coordinator.service after review.
 # Customize WorkingDirectory and supply PATH (Bun + Task + tmux + Codex) in the env file.
-# Start tmux OUTSIDE this unit first; name the live interactive owner when enrolling.
+# Start tmux OUTSIDE this unit first; set GOAL_COORDINATOR_TMUX_SOCKET for a custom socket.
+# task goal -- coordinator start <goal> --engine codex --effort high
+# Handover of an existing interactive manager:
 # task goal -- coordinator enroll <goal> --session <UUID> --engine codex --effort high --cwd <root> --previous-owner-pid <pid> --tmux-socket <socket>
 # Claude: the same command with --engine claude --model <id>.
 # The first wake waits until that exact previous owner exits; status reports the wait.

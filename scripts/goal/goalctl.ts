@@ -26,7 +26,7 @@ import { mechanisms } from '../static/mechanisms.ts';
 import { printScopeProgress } from '../qa/cases/outcomes.ts';
 import { GoalMailStore } from './mail.ts';
 import { goalMeasures } from './measures.ts';
-import { GoalCoordinator, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
+import { GoalCoordinator, TmuxLauncher, claudeConfigHome, claudeNativeSession, claudeWakeArgs, nativeSession, processIdentity, tmuxServer,
   WAKE_LAST_MESSAGE, WAKE_PROMPT, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 
 export { typecheckWorkspaces, TYPECHECK_WORKSPACES };
@@ -6166,12 +6166,47 @@ export function coordinatorEnrollmentOptions(args: string[]): {
   if (!previousOwner) throw new Error(`Cannot establish the live previous owner ${pid}; enroll while that process is still running`);
   return { goal, session, engine, effort, cwd, model, socket: flags['--tmux-socket'], previousOwner };
 }
+export function coordinatorStartOptions(args: string[]): {
+  goal: string; engine: 'codex' | 'codex-1' | 'claude'; effort: string; model: string;
+} {
+  const goal = args[0] ?? '';
+  const flags = namedOptions(args.slice(1), ['--engine', '--effort', '--model']);
+  const engine = flags['--engine'];
+  if (!validGoalSlug(goal) || (engine !== 'codex' && engine !== 'codex-1' && engine !== 'claude')) {
+    throw new Error('coordinator start needs <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]');
+  }
+  const effort = flags['--effort'] ?? '';
+  if (!effortsOf(engine).includes(effort)) throw new Error(`${engine} effort must be one of ${effortsOf(engine).join(', ')}`);
+  return {goal,engine,effort,model:flags['--model'] ?? modelOf(engine)};
+}
+export function coordinatorStartDescriptor(options: ReturnType<typeof coordinatorStartOptions>, cwd: string, socket: string): LaunchDescriptor {
+  const {goal,engine,effort,model} = options;
+  const session = randomUUID();
+  const home = realpathSync(engine === 'claude' ? claudeConfigHome() : engineEnv(engine).CODEX_HOME!);
+  const command = (resume: boolean): [string, string[]] => {
+    const [program,args] = launchCommand({id:goal,engine,effort,session,worktree:cwd,resume,
+      prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
+    const modelFlag = args.findIndex(arg => arg === '--model' || arg === '-m');
+    args[modelFlag + 1] = model;
+    return [program,args];
+  };
+  const [program,args] = command(true);
+  return {goal,generation:randomUUID(),session,engine,effort,cwd,home,
+    program:Bun.which(program) ?? program,args,startArgs:command(false)[1],socket,server:tmuxServer(socket),
+    env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,GOAL_MANAGER:`goal-${goal}`,
+      ...(engine === 'claude' ? (process.env.CLAUDE_CONFIG_DIR ? {CLAUDE_CONFIG_DIR:home} : {}) : {CODEX_HOME:home}),
+      ...Object.fromEntries(['GOAL_MAX_WORKERS','GOAL_MEMORY_FLOOR_GIB','STORYBOOK_MAX_WORKERS','GOAL_CODEX_HOME',
+        'GOAL_CODEX_1_HOME','GOAL_CODEX_SERVICE_TIER'].filter(key=>process.env[key] !== undefined).map(key=>[key,process.env[key]!]))}};
+}
 async function coordinatorCommand(args: string[]): Promise<void> {
   const directory = eventStateDirectory();
-  const goals = Object.keys(eventLedger(directory).goals ?? {});
-  const mail = new GoalMailStore({stateDir:directory,goals});
   const coordinator = new GoalCoordinator({stateDir:directory,
-    events:goal => goals.includes(goal) ? managerEvents(directory,goal,mail) : [],
+    events:goal => {
+      const goals = Object.keys(eventLedger(directory).goals ?? {});
+      if (!goals.includes(goal)) return [];
+      const mail = new GoalMailStore({stateDir:directory,goals});
+      try { return managerEvents(directory,goal,mail); } finally { mail.close(); }
+    },
     admit:descriptor => {
       if (!activeGoals(eventLedger(directory)).includes(descriptor.goal)) throw new Error('Enrolled Goal is no longer active');
       const home = descriptor.engine === 'claude' ? realpathSync(claudeConfigHome()) : engineEnv(descriptor.engine).CODEX_HOME;
@@ -6180,6 +6215,26 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     }});
   try {
     const [action, ...rest] = args;
+    if (action === 'start') {
+      const options = coordinatorStartOptions(rest);
+      // Registration uses goal start's existing ledger and area owner checks.
+      if (directory !== stateDir) throw new Error('coordinator start must use the Goal ledger directory');
+      const socket = process.env.GOAL_COORDINATOR_TMUX_SOCKET
+        ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
+      if (!socket) throw new Error('Start needs an independent tmux server; set GOAL_COORDINATOR_TMUX_SOCKET');
+      const descriptor = coordinatorStartDescriptor(options,realpathSync(root),socket);
+      new TmuxLauncher(directory).verify(descriptor);
+      coordinator.assertStartable(options.goal);
+      managerWakeGates(options.engine);
+      await startGoal(options.goal,['--manager',descriptor.env.GOAL_MANAGER!]);
+      coordinator.start(descriptor);
+      // A running pump collects the durable start event; otherwise make the first turn concrete now.
+      let acquired = false;
+      try { coordinator.acquire(); acquired = true; }
+      catch (error) { if (!(error instanceof Error) || error.message !== 'Coordinator already running') throw error; }
+      if (acquired) { try { coordinator.step(); } finally { coordinator.release(); } }
+      console.log(JSON.stringify(descriptor,null,2)); return;
+    }
     if (action === 'status') {
       if (rest.length) throw new Error('coordinator status takes no options');
       console.log(JSON.stringify(coordinator.status(),null,2)); return;
@@ -6238,7 +6293,7 @@ async function coordinatorCommand(args: string[]): Promise<void> {
     try {
       do { coordinator.step(); if (!once && !stopped) await Bun.sleep(interval); } while (!once && !stopped);
     } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
-  } finally { mail.close(); coordinator.close(); }
+  } finally { coordinator.close(); }
 }
 
 async function main(argv: string[]): Promise<number> {
@@ -6351,7 +6406,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
         + ' | mail send <goal> --file <path> --key <key> | mail inbox [goal] | mail ack <id> [--goal <goal>]'
-        + ' | coordinator [enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
+        + ' | coordinator [start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]|enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
       return 2;
   }

@@ -1,6 +1,6 @@
 # Goal manager charter
 
-A manager is an interactive agent session that runs one Goal on the
+A manager is an agent session that runs one Goal on the
 maintainer's behalf; several Goals may run at once, each with its own manager.
 This page gives every manager its authority, the maintainer's standing
 directions, the resources it can spend and what earlier Goals learned, whatever
@@ -136,8 +136,8 @@ opinion, such as
 
 ## How to run the Goal
 
-1. **Start.** Run `goalctl goal start <goal> --manager <session>` and
-   `goalctl status`; check `git log` and `git status` for maintainer edits. Read
+1. **Start.** Confirm the registered manager with `goalctl status`; check
+   `git log` and `git status` for maintainer edits. Read
    the Goal's `GOAL.md` and `state.md`, the [method](method.md), this charter
    and the [program](README.md). Load other documents only as a task needs them.
 2. **Take rows, not tasks.** Work is a row of the scope registry. For each row:
@@ -164,65 +164,36 @@ opinion, such as
 ## Starting a manager
 
 A Goal gets a manager once its directory exists, with `GOAL.md` and
-`state.md`. Any agent CLI can manage that runs shell commands without
-approval prompts, keeps `goalctl wait` running in the background and hears when
-it exits (or polls `goalctl status`), and can message other sessions; the
-maintainer chooses the model at launch. A session that drops on a transport
-error continues by itself twice; after that the manager resumes the task with
-`goalctl resume <id> --fresh`. The maintainer starts it from the
-repository root, in tmux so that it survives a closed terminal, with `GOAL_ID`
-set, for example with Claude Code:
+`state.md`. From the repository root, start and register its headless manager:
 
 ```sh
-tmux new -s goal-<goal>
-GOAL_ID=<goal> claude --model <model> --effort xhigh --dangerously-skip-permissions
+task goal -- coordinator start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]
 ```
 
-and sends:
-
-```text
-You are the REZICS manager of Goal <goal>. Read docs/goals/<goal>/GOAL.md, its
-state.md, docs/goals/method.md and docs/goals/manager.md, register with
-`task goal -- goal start <goal> --manager <the name other sessions message you by>`
-and run the Goal. You hold the maintainer's authority as the manager charter
-describes; documents are practice to consult, and only its standing directions
-bind you. Local host credentials are in .temp/vault/ (manager only; never pass
-them to workers or external tools).
-```
-
-The manager may change its own effort when a stretch of work calls for it.
-
-A Claude manager can stay interactive or be handed to the coordinator. Program
-runs in the maintainer's own terminal. An enrolled manager ends each turn when nothing is ready and
-arms no watcher; the coordinator starts the next turn when mail or a task exit
-arrives.
+The existing independent tmux server must run outside the coordinator service's
+cgroup. The command uses its default socket; set `GOAL_COORDINATOR_TMUX_SOCKET`
+when the server has a custom socket. It uses `goal start`'s registration and area
+checks, sends the [start message](../../scripts/goal/coordinator.ts), and enrolls
+the new native session without an interactive owner. Repeating it refuses an
+existing session or an unresolved turn; when the native session is gone, it
+starts a replacement. `enroll` below remains the handover command. Program runs
+in the maintainer's own terminal.
 
 ### A manager on Codex
 
 A manager can run on GPT-6.1 Sol when the maintainer chooses so (2026-10-07).
-Start it in the Goal's
-tmux session with
-`GOAL_ID=<goal> codex --dangerously-bypass-approvals-and-sandbox -m gpt-6.1-sol -c model_reasoning_effort=high`
-(or `codex-1` for the second account) and the start message above. Codex has no
-background notifications and no cross-session messages, so:
+Choose `--engine codex --effort high` (or `codex-1` for the second account) in
+the start command. The coordinator replaces the foreground `next-event.sh`
+loop: end each turn when nothing is ready, and arm no watcher. It resumes the
+same native session when mail or a task exit arrives.
 
-- Work in a loop: handle what is ready, then run
-  `scripts/goal/next-event.sh <goal>` in the foreground; it returns when one of
-  the Goal's tasks changes state, the Goal's inbox grows, or after 20 minutes.
-- Managers message each other through durable Goal mail:
-  `task goal -- mail send <goal> --file <path> --key <unique-key>`. The same key
-  never sends twice. Read with `task goal -- mail inbox <goal>` and acknowledge
-  each message after acting on it with `task goal -- mail ack <id>`. The old
-  `messages/<goal>.md` files are read-only history and still appear in the
-  inbox view.
-- `scripts/goal/next-event.sh <goal>` returns on new unacknowledged mail, on a
-  task state change, or after 20 minutes. A Claude manager keeps it running as
-  a background command and re-arms it each time it returns. A manager enrolled
-  in the coordinator (`task goal -- coordinator status`) loops on nothing: the
-  coordinator starts a turn when mail or a task exit arrives, so it ends each
-  turn once nothing is ready.
-- Keep the same reserve as any manager: if the account the manager runs on
-  nears its limit, move workers to the other account first.
+Managers message each other through durable Goal mail:
+`task goal -- mail send <goal> --file <path> --key <unique-key>`. The same key
+never sends twice. Read with `task goal -- mail inbox <goal>` and acknowledge
+each message after acting on it with `task goal -- mail ack <id>`. The old
+`messages/<goal>.md` files are read-only history and still appear in the inbox
+view. Keep the same reserve as any manager: if its account nears its limit,
+move workers to the other account first.
 
 ### Handing a Codex manager to the coordinator
 
