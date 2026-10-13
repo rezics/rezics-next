@@ -304,11 +304,15 @@ async function navigate(name: PersonaName) {
     let searchPages = 0;
     do {
       expect(++searchPages).toBeLessThan(1100);
-      const page = await read({
+      const fields = {
         q,
         limit: '100',
         ...(searchCursor ? { cursor: searchCursor } : {}),
-      }, searchPages === 1 ? 'distant-episode-search' : undefined);
+      };
+      const page = await read(fields, searchPages === 1 ? 'distant-episode-search' : undefined);
+      // A search can scan empty windows before finding the distant episode.
+      // Retain its successful page as well as its first window for the story.
+      if (page.items.length) await read(fields, 'distant-episode-match');
       expect(page.search).toEqual({ status: 'current' });
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.complete).toBe(page.nextCursor === null);
@@ -363,6 +367,7 @@ async function inventoryPageReads(sample: ReturnType<OutcomeRecorder['session']>
   const reads: [string, string][] = [
     ['work-header', `/v1/works/${id}`],
     ['page-projection', `/v1/resources/${id}/page`],
+    ['wiki-shortcut-statements', `/v1/resources/${id}/statements`],
     ['agent-credits', `/v1/works/${id}/agent-credits`],
     ['parts-preview', `/v1/resources/${id}/parts?limit=7`],
     ['availability-parts', `/v1/resources/${id}/parts?limit=1`],
