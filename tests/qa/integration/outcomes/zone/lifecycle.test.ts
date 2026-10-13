@@ -123,12 +123,18 @@ async function reader(name: Exclude<PersonaName, 'owner' | 'operator'>) {
 }
 async function exactMandate(site: Site) {
   const operator = sessions.operator;
-  const page = await answer<{ authorityEpoch: string; items: Array<{ permission: string; recipient: { principalId: string } }> }>(operator.main('GET',
+  const page = await answer<{ authorityEpoch: string; items: Array<{ id: string; permission: string; recipient: { principalId: string } }> }>(operator.main('GET',
     `/v1/access/grants?profile=platform-grants-v1&issuerSubject=${encodeURIComponent(operator.actingSubject!)}`));
   const principalId = page.items.find(item => item.permission === 'platform:grant')!.recipient.principalId;
-  await answer(operator.main('POST', '/v1/access/grant-changes', { profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
-    expectedAuthorityEpoch: page.authorityEpoch, action: 'create', grantId: randomUUID(), permission: 'platform:resource:zone.edit',
+  // The exact grant sorts after the broad grant, so authority cannot depend on UUID order.
+  const lastId = page.items.map(item => item.id).sort().at(-1)!;
+  const hex = (BigInt(`0x${lastId.replaceAll('-', '')}`) + 1n).toString(16).padStart(32, '0');
+  const grantId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const created = await answer<{ grant: unknown }>(operator.main('POST', '/v1/access/grant-changes', { profile: 'platform-grant-change-v1', issuerSubject: operator.actingSubject,
+    expectedAuthorityEpoch: page.authorityEpoch, action: 'create', grantId, permission: 'platform:resource:zone.edit',
     scopeId: `zone:edit:${site.zone}`, recipient: { principalId }, validUntil: null }));
+  expect(created.grant).toMatchObject({ id: grantId, active: true, permission: 'platform:resource:zone.edit',
+    scopeId: `zone:edit:${site.zone}`, recipient: { principalId } });
 }
 async function steward(name: 'owner' | 'operator') {
   const site = fixture(name), person = sessions[name];
