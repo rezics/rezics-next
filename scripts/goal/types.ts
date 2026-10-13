@@ -138,4 +138,3 @@ export const HOLDING: State[] = ['running', 'exited', 'conflict', 'merged', 'sto
 // Landed (`merged`) and closed tasks no longer have to land. Every other holding state
 // still does, including files it committed outside its claim.
 export const UNLANDED: State[] = ['running', 'exited', 'conflict', 'stopped'];
-

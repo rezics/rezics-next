@@ -401,4 +401,3 @@ export function regenerationOnlyFiles(repo: string): string[] {
   if (!existsSync(repo)) return [];
   return filesOnlyRegenerated(git(repo, ['log', '--name-only', '--pretty=format:%H%x09%s', 'main..HEAD']));
 }
-

@@ -2302,4 +2302,3 @@ export async function preMergeUnitGate(worktree: string, mainRoot: string, curre
     writeUnitEvidence(evidence);
   }
 }
-

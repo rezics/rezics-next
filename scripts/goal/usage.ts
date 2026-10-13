@@ -301,4 +301,3 @@ export function describeAccount(account: AccountUsage): string {
         + (account.resetInHours !== undefined ? `, resets in ${account.resetInHours}h` : '')
         + (account.ageSeconds !== undefined ? ` (${Math.round(account.ageSeconds / 60)}m old)` : ''));
 }
-

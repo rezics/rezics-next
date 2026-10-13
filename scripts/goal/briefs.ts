@@ -330,4 +330,3 @@ export function isHeavyTest(args: readonly string[]): boolean {
   } else if (tiers.length > 1 && tiers.some((tier, index) => !light.has(tier) || !filesForTier[index])) return true;
   return args.some(arg => arg === '--affected' || arg.startsWith('--affected='));
 }
-

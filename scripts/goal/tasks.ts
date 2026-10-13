@@ -635,4 +635,3 @@ export async function tidy(args: string[]): Promise<void> {
     console.log(notes.length ? notes.join('\n') : 'Nothing to tidy');
   });
 }
-

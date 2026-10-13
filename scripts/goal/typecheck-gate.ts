@@ -185,4 +185,3 @@ export async function preMergeTypecheckGate(worktree: string, mainRoot: string, 
     }
   }
 }
-

@@ -12,7 +12,7 @@ import { landedBoundary, prepareCompositionMerge, compositionSyntaxFailure, type
 import { historyIntroductions } from './briefs.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { preMergeTypecheckGate, reinstallStaleDependencies, missingPinnedImage } from './typecheck-gate.ts';
-import { withGateLane } from './goalctl.ts';
+import { withGateLane } from './qa-slots.ts';
 
 export function readMergeEvents(): RecordedMerge[] {
   const eventPath = join(stateDir, 'merges.jsonl');
@@ -447,4 +447,3 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     }
   }
 }
-

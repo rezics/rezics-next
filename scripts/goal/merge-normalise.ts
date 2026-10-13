@@ -364,4 +364,3 @@ export function landedBoundary(repo: string, task: Pick<Task, 'base' | 'branch'>
   }
   return before;
 }
-

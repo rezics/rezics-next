@@ -302,4 +302,3 @@ export function transportContinuationPrompt(dirty: readonly string[]): string {
       ...dirty.map(file => `- ${file}`), 'Review them, commit what stands, and continue the brief.'].join('\n')
     : 'The previous session lost its connection. The worktree is clean; continue the brief from its commits.';
 }
-
