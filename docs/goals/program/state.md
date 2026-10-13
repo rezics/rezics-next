@@ -3,16 +3,16 @@
 The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-13 06:11 UTC) |
+| Field | State (2026-10-13 07:45 UTC) |
 | --- | --- |
-| Run | Paused at the maintainer's order of about 05:39 UTC ("finish what is in flight, converge and pause; Codex has reset, we plan again"). Started the same day at about 04:20 UTC |
-| Running | No worker and no manager turn. The coordinator service is stopped and disabled, so nothing wakes by itself. The main-wide regression still runs (below) |
-| Managers | `program`: the maintainer's interactive Claude session. `api` (GPT-6.1 Sol, `codex-1`, session `01a13389`) and `web` (Sol, `codex`, session `01a13391`) are headless, still enrolled and idle; each wrote its checkpoint ([api](../api/state.md), [web](../web/state.md)). `operations` was not started |
+| Run | Paused since about 05:39 UTC on 2026-10-13 at the maintainer's order. The plan for the next start is in [GOAL.md](GOAL.md); its first work is tasks N1 and N2 |
+| Running | No worker, no manager turn, no watcher. The coordinator service is stopped and disabled and no manager is enrolled |
+| Managers | None. The maintainer starts the supermanager's desk in termspaces ([GOAL.md](GOAL.md#starting)). The api and web managers of 2026-10-13 were Sol sessions `01a13389` (`~/.codex-1`) and `01a13391` (`~/.codex`); their checkpoints are [api](../api/state.md) and [web](../web/state.md), and nothing needs those sessions |
 | Scope | 0 of 67 rows proved; 402 persona cells missing (`task goal -- status`). All 67 rows have a persona matrix, read and corrected by the api manager, in 18 briefs |
-| First tasks | On `main`: P1 (registry cells and `outcomeTest`), P2 (`tests/qa/support/personas.ts`), P3 and P4 (`dispatch`, `land`, `resume` enforce the method), P6 (measures in `status`), P7 steps 1 and 2 (`coordinator start`, mail with sender and deadline), P8 (`regress --nightly`, one journey for each vertical; recipes has none that passes). Not built: P5 (the surface gate), P7 step 3 (the coordinator lands `land: auto` tasks) |
-| Open tasks | program: none. api: 22 (three Books drafts refused at their first merge, 15 matrix tasks idle before step two, the load-set rebuild merged and incomplete, three design notes read). web: 2 (one guard refused for scope, one merged). Their state files list each |
-| Regression | `task goal -- regress` on `main` d2a2e3166, run `20261013t043515-585e9a`, in `tmux -L goal`, window `regress`, log `.temp/program-regress.log`. At 06:10 UTC: unit, model, jena and all 54 owner batches done, 19 of 152 integration batches started. It uses no model. `task goal -- regress --resume 20261013t043515-585e9a` continues it after a stop |
-| Allowances | Claude: managers only. Codex: both accounts reset on 2026-10-13 at about 04:58 UTC, two hours before the time codex-resets.com listed; 1% of the new week used by 05:45. Service tier `default`. No top-up, no reset credits |
+| On `main` | Persona cells and `outcomeTest`; `tests/qa/support/personas.ts`; `dispatch`, `land` and `resume` enforcing the method; measures in `status`; `coordinator start`; mail with sender and deadline; `regress --nightly`. `coordinator start` has not been run on a real Goal |
+| Open tasks | program: none. api: 22, kept with their worktrees and sessions (three Books drafts refused at their first merge, 15 matrix tasks before step two, the load-set rebuild merged and incomplete, three design notes read). web: 2 (one guard refused for scope, one merged). Their state files list each |
+| Regression | `task goal -- regress` on `main` d2a2e3166, run `20261013t043515-585e9a`, still running at 07:43 UTC with 74 of 152 integration batches started; unit, model, jena and owner batches are done. It runs in the tmux server `tmux -L goal`, window `regress`, which is the last thing outside termspaces: end that server when the run is over (`tmux -L goal kill-server`). Results arrive in `task goal -- inbox`; `task goal -- regress --resume 20261013t043515-585e9a` continues it after a stop |
+| Allowances | Claude: managers only, and quantity is not the limit (maintainer, 2026-10-13). Codex: both accounts reset on 2026-10-13 at about 04:58 UTC; about 1% of the new week used. Service tier `default`. No top-up, no reset credits |
 | Capacity settings | `.temp/goal-orchestration/`: QA slots 8, gate lanes 4, regress lanes 3, review engine `codex-1` |
 
 ## What the run of 2026-10-13 showed
@@ -48,10 +48,11 @@ For the next plan. Figures are the managers' own counts where the tool's differ.
    relay again ([search index](../../operations/search-index.md)).
 4. The host's third swap device (`zram2`, 16 GiB) does not survive a restart;
    add it again before running more than about fifteen workers.
-5. `systemd-run --user --scope --unit=goal-tmux -- tmux -L goal new-session -d -s goal-host`,
-   then `systemctl --user enable --now goal-coordinator.service`. A manager is
-   started with `task goal -- coordinator start <goal> --engine <engine> --effort high`;
-   the api and web managers are still enrolled and wake on their next mail.
+5. `termspaces doctor`, then `termspaces apply --autostart`: the sessions
+   `rezics` and `rezics-agents` run on termspaces' own tmux server. Until
+   `goalctl` registers windows there (task N4), a coordinator turn needs
+   `GOAL_COORDINATOR_TMUX_SOCKET=/tmp/tmux-1000/termspaces`. Enable
+   `goal-coordinator.service` only when a manager role is configured.
 6. Ports 3000, 3001, 3002, 3004 and 8025 are forwarded to the tailnet
    (`tailscale serve status`); remove one with `sudo tailscale serve --tcp=<port> off`.
 

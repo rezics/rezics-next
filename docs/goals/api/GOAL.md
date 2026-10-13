@@ -16,9 +16,9 @@ areas:
 
 # API
 
-Status: running since 2026-10-13. The [program](../program/GOAL.md)
-started its manager while its first tasks were in work; [state.md](state.md)
-lists the work carried over from the Goals it replaces.
+Status: paused on 2026-10-13 after ninety minutes. Every row has a persona
+matrix and none is proved; [state.md](state.md) is the checkpoint. It resumes
+when the [program](../program/GOAL.md#next-tasks)'s tasks N1 to N4 are on `main`.
 
 The [retained checkpoint rebuild](seed-rebuild.md) records preparation evidence
 for growth checks.

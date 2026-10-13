@@ -2,7 +2,8 @@
 
 Paused on 2026-10-13 at the maintainer's order, to plan again after the Codex
 reset. The program, api and web Goals ran that day for about ninety minutes;
-their managers are idle and enrolled, and each `state.md` is its checkpoint.
+each `state.md` is its checkpoint, and the [program](docs/goals/program/GOAL.md)
+states how the next start runs and what it builds first.
 The way of working was redesigned on 2026-10-12 after the maintainer stopped
 the run of 2026-10-07 to 2026-10-12.
 
@@ -15,7 +16,7 @@ the [goal page](docs/product/goal.md) and the
 
 | Goal | Outcome | Starts |
 | --- | --- | --- |
-| [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | Paused |
+| [Program](docs/goals/program/GOAL.md) | Supermanager: the scope, the method and the tool that enforces it, the shared host | When the maintainer starts its desk in termspaces |
 | [API](docs/goals/api/GOAL.md) | Every row of the first public scope is proved through the API, for each persona | Paused; every row has its persona matrix, none is proved |
 | [Web](docs/goals/web/GOAL.md) | Every proved row has its surface | Paused; three client-contract guards on `main`; surfaces when the first vertical's rows are proved |
 | [Operations](docs/goals/operations/GOAL.md) | Erasure and restore proved on physical fixtures; deployment prepared | When the erasure and recovery contracts are stable |

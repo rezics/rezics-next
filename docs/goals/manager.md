@@ -47,7 +47,7 @@ the maintainer.
 
 ## Standing directions
 
-The maintainer's directions in force on 2026-10-12, each with the day it was
+The maintainer's directions in force on 2026-10-13, each with the day it was
 given. They bind every manager until the maintainer changes them. Earlier
 wording and directions that later ones replaced are in this file's history.
 
@@ -94,6 +94,16 @@ wording and directions that later ones replaced are in this file's history.
     not see managers' sessions. What a manager would ask him goes to the
     [program](program/GOAL.md) manager, who decides within this charter and
     passes on only what needs him.
+12. **Context length is the cost** (2026-10-13). "opus 用量到不是不够，主要是 token
+    效率 … 就是上下文太长." A manager's state lives in the repository and the
+    ledger, and a session is short and starts from them; the supermanager may be
+    split. The [program](program/GOAL.md#how-managers-run-from-now-on) says how.
+13. **Agents maintain termspaces** (2026-10-13). `goalctl` registers and removes
+    every agent's window there. The maintainer starts only the supermanager's
+    desk in it.
+14. **Reports are references** (2026-10-13). An analysis the maintainer passes on
+    informs the manager. What is best practice is the manager's to work out and
+    decide, and it is judged by measured efficiency.
 
 ## Resources
 

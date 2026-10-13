@@ -10,9 +10,9 @@ areas:
 
 # Web
 
-Status: written on 2026-10-12 and not started. The [program](../program/GOAL.md)
-starts this Goal's manager when the first vertical's rows are proved by the
-[api](../api/GOAL.md) Goal; [state.md](state.md) lists the work carried over.
+Status: paused on 2026-10-13. It ran that day on the client-contract guards,
+which need no proved row; [state.md](state.md) is the checkpoint. Surfaces start
+when the first vertical's rows are proved by the [api](../api/GOAL.md) Goal.
 
 ## Outcome
 

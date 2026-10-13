@@ -219,6 +219,15 @@ The PGroonga comparison needs the inspected local image
 digest `sha256:c8052fbed36391ce9c01825ede5f70d78ddac575ae00b2c2f6f72642736afe81`);
 the runner reports its absence rather than treating that comparison as a pass.
 
+## Agent terminal workspaces
+
+termspaces 0.2.0 (the maintainer's CLI, installed on the host with `yarn global`,
+not a repository dependency) declares tmux workspaces in
+`~/.config/termspaces/workspaces/` and runs them on its own tmux server under
+systemd. Goal managers and workers are meant to run in its windows, registered
+by `goalctl` ([program](../goals/program/GOAL.md#how-managers-run-from-now-on));
+`termspaces doctor` checks the host.
+
 ## Runtimes and languages
 
 <!-- toolchain-inventory:start -->
