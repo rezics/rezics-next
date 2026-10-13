@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import reading from '../../../../../scripts/qa/cases/outcomes/books/read-non-ui-languages-non-ui-languages.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -18,6 +18,7 @@ let contribution: string;
 const title = `Den lilla fröträdgården ${randomUUID()}`;
 const body =
   'På morgonen planterade Mira ett frö. När regnet kom öppnade hon grinden och lät trädgården dricka.';
+const recording = new OutcomeRecorder(reading);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession, language = 'en') =>
   new URLSearchParams({
@@ -34,6 +35,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 
 beforeAll(async () => {
   sessions = await personaSessions();
+  await recording.prepare();
   const owner = sessions.owner;
   const create = (name: string) =>
     answer<Work>(
@@ -112,25 +114,26 @@ beforeAll(async () => {
   );
 }, 180_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); } finally { await sessions?.close(); }
 });
 
 async function read(name: PersonaName) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
   for (const language of ['en', 'sv']) {
     const metadata = await answer<{ localized: { language: string; title: string }[] }>(
-      person.main('GET', `/v1/works/${short(published.work)}/metadata?${query(person, language)}`),
+      sample(`metadata-${language}`, 'GET', `/v1/works/${short(published.work)}/metadata?${query(person, language)}`),
     );
     expect(metadata.localized).toContainEqual(expect.objectContaining({ language: 'sv', title }));
     const text = await answer<{ body: string; language: string; contribution: string }>(
-      person.main('GET', `/v1/main-versions/${short(published.mainVersion)}/selection`),
+      sample(`selected-text-${language}`, 'GET', `/v1/main-versions/${short(published.mainVersion)}/selection`),
     );
     expect(text).toMatchObject({ body, language: 'sv', contribution });
     const variants = await answer<{
       variants: { contribution: string; author: string; language: string }[];
     }>(
-      person.main(
-        'GET',
+      sample(
+        `native-variants-${language}`, 'GET',
         `/v1/main-versions/${short(published.mainVersion)}/native-variants?language=sv`,
       ),
     );
@@ -142,7 +145,7 @@ async function read(name: PersonaName) {
       }),
     );
     const credits = await answer<{ items: { role: string; agent: string }[] }>(
-      person.main('GET', `/v1/works/${short(published.work)}/credits?${query(person, language)}`),
+      sample(`credits-${language}`, 'GET', `/v1/works/${short(published.work)}/credits?${query(person, language)}`),
     );
     // Native credit identity is retained independently of nullable name presentation.
     expect(credits.items).toContainEqual(
@@ -152,22 +155,37 @@ async function read(name: PersonaName) {
       }),
     );
   }
+  if (name === 'member') {
+    const viewer = person.actingSubject ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
+    await answer(sample('work-header', 'GET', `/v1/works/${short(published.work)}?${viewer}`));
+    await answer(sample('selected-swedish-text', 'GET', `/v1/main-versions/${short(published.mainVersion)}/selection?language=sv`));
+    await answer(sample('missing-selected-language', 'GET', `/v1/main-versions/${short(published.mainVersion)}/selection?language=ja`), 404);
+    // Reader settings cannot be recorded until the contract admits the API's numeric fontSize.
+    await answer(sample('text-suitability', 'POST', '/v1/suitability/reads', {
+      targets: [published.work], actingSubject: person.actingSubject,
+    }));
+    const publicSample = recording.session(name, sessions.visitor);
+    await answer(publicSample('public-preview', 'GET', `/v1/public-previews/${short(published.work)}`));
+    await answer(publicSample('public-work-header', 'GET', `/v1/works/${short(published.work)}`));
+  }
+  if (name === 'owner')
+    await answer(sample('unselected-text', 'GET', `/v1/main-versions/${short(privateWork.mainVersion)}/selection`), 404);
   const privatePath = `/v1/works/${short(privateWork.work)}/metadata?${query(person)}`;
   if (name === 'owner') {
-    expect(await answer(person.main('GET', privatePath))).toMatchObject({ work: privateWork.work });
+    expect(await answer(sample('private-metadata', 'GET', privatePath))).toMatchObject({ work: privateWork.work });
   } else {
-    const hidden = await answer(person.main('GET', privatePath), 404);
+    const hidden = await answer(sample('private-metadata', 'GET', privatePath), 404);
     const absent = await answer(
-      person.main('GET', `/v1/works/${randomUUID()}/metadata?${query(person)}`),
+      sample('missing-metadata', 'GET', `/v1/works/${randomUUID()}/metadata?${query(person)}`),
       404,
     );
     expect(hidden).toEqual(absent);
   }
 }
 
-outcomeTest(reading, 'visitor', () => read('visitor'));
-outcomeTest(reading, 'stranger', () => read('stranger'));
-outcomeTest(reading, 'member', () => read('member'));
-outcomeTest(reading, 'owner', () => read('owner'));
-outcomeTest(reading, 'moderator', () => read('moderator'));
-outcomeTest(reading, 'operator', () => read('operator'));
+outcomeTest(reading, 'visitor', () => read('visitor'), recording);
+outcomeTest(reading, 'stranger', () => read('stranger'), recording);
+outcomeTest(reading, 'member', () => read('member'), recording);
+outcomeTest(reading, 'owner', () => read('owner'), recording);
+outcomeTest(reading, 'moderator', () => read('moderator'), recording);
+outcomeTest(reading, 'operator', () => read('operator'), recording);
