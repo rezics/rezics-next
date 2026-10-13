@@ -28,6 +28,7 @@ import { readProgressOrder } from '../modules/progress/order.ts';
 import { configureProgressProjections } from '../modules/progress/completion-plan.ts';
 import { memberAnchoring } from '../modules/reading-position/continuity.ts';
 import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
+import { AdmissionDenied } from '../modules/access/admission.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevision = t.String({ pattern: '^urn:rezics:content:revision:[0-9a-f-]{36}$' });
@@ -80,10 +81,17 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     (work.environment as typeof work.environment & { structureObjects?: typeof work.structureObjects })
       .structureObjects = work.structureObjects;
   }
+  const own = async (request: Request, actingSubject: string, write = false) => {
+    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    if (!await work.access.canReadAsBaselineMember?.(principal, actingSubject)) {
+      throw new AdmissionDenied('Progress is private to the principal’s controlled Person');
+    }
+    return principal;
+  };
   const visibleOccurrence = async (request: Request, structure: string, occurrence: string,
     actingSubject: string, selectedRevision: string | null, write = false) => {
     await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    const principal = await own(request, actingSubject, write);
     configureProgressProjections(work);
     const visible = await workRead(work, request, { actingSubject }, async session => {
       const header = await readCompositionHeader(work.environment, structure);
@@ -135,8 +143,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       if (!work.progress) return problem(503, 'progress_unavailable', 'Progress owner is unavailable');
       try {
         const structure = `https://rezics.com/id/${params.id}`;
-        // A bearer supplies the private owner key even when the parent is public.
-        await work.account.verify(request, ['work:read']);
+        await own(request, query.actingSubject);
         configureProgressProjections(work);
         const page = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
           const header = await readCompositionHeader(work.environment, structure);
@@ -226,7 +233,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const workId = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const principal = await work.account.verify(request, ['work:read']);
+        const principal = await own(request, query.actingSubject);
         const basis = await workProgressBasis(work, request, workId, query.actingSubject);
         if (basis.parts) return Response.json({ work: workId, parts: true },
           { headers: { 'cache-control': 'private, no-store' } });
@@ -251,7 +258,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const workId = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const principal = await work.account.verify(request, ['work:read', 'library:write']);
+        const principal = await own(request, body.actingSubject, true);
         const basis = await workProgressBasis(work, request, workId, body.actingSubject);
         if (basis.parts) throw new WorkHasParts('Progress for this Work is kept on its parts');
         const canonical = basis.work;
