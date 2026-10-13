@@ -70,6 +70,7 @@ describe('wide admission on commands built for every entry point', () => {
   test('slot commands that only mention QA words do not become test runs', () => {
     expect(isWideRun(['echo', 'qa', '--tier', 'unit'])).toBe(false);
     expect(isWideRun(['task', 'goal', '--', 'regress'])).toBe(true);
+    expect(isWideRun(['task', 'goal', '--', 'regress', '--timing', 'a-run'])).toBe(false);
     expect(isWideRun(['task', 'goal', '--', 'test', '--affected=main'])).toBe(true);
   });
   test('Task entry points all use the admission adapter', () => {

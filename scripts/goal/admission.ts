@@ -14,7 +14,7 @@ export function isWideRun(command: readonly string[]): boolean {
   const goalctl = program === 'goalctl.ts' ? 0 : program === 'bun' && script === 'goalctl.ts' ? 1 : -1;
   if (goalctl >= 0) {
     const action = args[goalctl + 1];
-    if (action === 'regress') return true;
+    if (action === 'regress') return !args.includes('--timing'); // the timing report reads a finished run
     if (action === 'slot') return isWideRun(args.slice(goalctl + 2).filter(arg => !['--', '--heavy', '--beside-workers'].includes(arg)));
     if (action === 'test') return isWideRun(['test.ts', ...args.slice(goalctl + 2)]);
   }
