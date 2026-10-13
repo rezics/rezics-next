@@ -41,7 +41,7 @@ test('a failed second owner-template create drops the first clone', async () => 
   const sql = fake.sessions[0]!.queries;
   expect(sql[0]).toBe('CREATE DATABASE qa_abc123_access WITH TEMPLATE access_tpl OWNER access');
   expect(sql[1]).toBe('CREATE DATABASE qa_abc123_content WITH TEMPLATE content_tpl OWNER content');
-  expect(sql[2]).toBe('ALTER DATABASE qa_abc123_access ALLOW_CONNECTIONS false');
+  expect(sql[2]).toContain('ALTER DATABASE qa_abc123_access ALLOW_CONNECTIONS false');
   expect(sql[4]).toBe('DROP DATABASE IF EXISTS qa_abc123_access');
   expect(sql.some(query => query.includes('FORCE'))).toBe(false);
   expect(sql.some(query => query.includes('qa_abc123_content') && query.startsWith('DROP'))).toBe(false);
@@ -133,10 +133,12 @@ test('removing a clone waits for its clients and preserves a neighbouring client
     await listener.query('LISTEN clone_cleanup');
     let removed = false;
     const removal = first.close().then(() => { removed = true; });
-    // Observe the cleanup fence while the first clone still has its own client.
+    // Observe a sleeping cleanup loop while the first clone still has its own client.
     for (let turn = 0; turn < 100; turn++) {
-      const state = await admin.query("SELECT datallowconn FROM pg_database WHERE datname = 'qa_first_relay'");
-      if (state.rows[0]?.datallowconn === false) break;
+      const state = await admin.query(`SELECT EXISTS (SELECT 1 FROM pg_stat_activity
+        WHERE query LIKE 'DO $$ DECLARE deadline%' AND query LIKE '%qa_first_relay%'
+          AND wait_event = 'PgSleep') AS waiting`);
+      if (state.rows[0]?.waiting === true) break;
       if (turn === 99) throw new Error('clone cleanup did not fence new clients');
       await Bun.sleep(10);
     }
@@ -144,6 +146,7 @@ test('removing a clone waits for its clients and preserves a neighbouring client
     expect((await own.query('SELECT 1 AS value')).rows[0].value).toBe(1);
     await own.end();
     await removal;
+    await first.close(); // Cleanup remains safe when a finally block repeats it.
     first = undefined;
     expect((await neighbour.query('SELECT 2 AS value')).rows[0].value).toBe(2);
     const notification = new Promise<string | undefined>(resolve => listener.once('notification', event => resolve(event.payload)));

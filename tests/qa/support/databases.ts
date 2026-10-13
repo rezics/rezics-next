@@ -100,9 +100,15 @@ async function dropClones(session: QaCloneSession, names: readonly string[]): Pr
     try {
       // Stop new clients, then let the file's closing pools/listeners disconnect.
       // FORCE sends asynchronous backend errors that can escape into the next file.
-      await session.query(`ALTER DATABASE ${name} ALLOW_CONNECTIONS false`);
+      await session.query(`DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_database WHERE datname = '${name}') THEN
+          ALTER DATABASE ${name} ALLOW_CONNECTIONS false;
+        END IF; END $$`);
       await session.query(`DO $$ DECLARE deadline timestamptz := clock_timestamp() + interval '30 seconds';
-        BEGIN WHILE EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = '${name}') LOOP
+        BEGIN LOOP
+          -- Activity snapshots belong to the transaction; observe clients that closed during this wait.
+          PERFORM pg_stat_clear_snapshot();
+          EXIT WHEN NOT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = '${name}');
           IF clock_timestamp() >= deadline THEN
             RAISE EXCEPTION 'QA database ${name} still has open clients';
           END IF;
