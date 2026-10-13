@@ -1,11 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { fromPlainText } from '@rezics/document';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/manga/catalogue-browse-and-search-in-its-zone.ts';
 import { classificationContextBody, classifiedStatementBody, discloseClassificationConcept, type ClassificationPost } from '../../../../../scripts/dev/seed/classified-statement.ts';
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
 import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string; contribution: string; publicationDecision: string; concept: string | null; year: number | null; status: string };
@@ -15,6 +16,7 @@ setDefaultTimeout(90_000);
 let sessions: PersonaSessions, pool: Pool;
 let manga: string, oneShot: string, statement: string, privateWork: string;
 const works: Work[] = [];
+const recording = new OutcomeRecorder(catalogue);
 const phrase = `InkCatalogue${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
@@ -26,6 +28,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 const grant = (person: PersonaSession, scope: string, action: string) => grantMangaFixtureAuthority(pool, person, scope, action);
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const owner = sessions.owner, actor = owner.actingSubject!;
   const root = `/v1/realms/${short(sessions.realm)}`;
@@ -116,6 +119,25 @@ beforeAll(async () => {
     }
     works.push({ ...work, ...selection, concept, year, status });
   }
+  const zoneRoot = `/v1/zones/${short(sessions.zone)}`;
+  const current = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`));
+  await answer(owner.main('PUT', `${zoneRoot}/configuration`, {
+    expectedHead: current.revision, prepareHomeDocument: true, actingSubject: actor,
+  }));
+  const configuration = await answer<{ revision: string; configuration: { homeDocument: string } }>(
+    owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`));
+  const navigation = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}?${acting(owner)}`));
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const draft = await answer<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+    owner.main('POST', '/v1/content-drafts', { profile: 'content-text-v1', resourceId: configuration.configuration.homeDocument,
+      variantId, expectedHead: null, document: fromPlainText('Original Manga fixture catalogue', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor }), 201);
+  await answer(owner.main('POST', `${zoneRoot}/site-publications`, {
+    routesRevision: navigation.revision, navigationRevision: navigation.revision,
+    expectedHead: configuration.revision, actingSubject: actor,
+    pages: [{ page: configuration.configuration.homeDocument, variantId, revisionId: draft.revisionId,
+      byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
+  }), 201);
   // Catalogue filters consume a Realm Discovery generation. Build it through
   // its separately mandated platform API after all fixture publication writes.
   await answer(sessions.visitor.main('GET', `${root}/modules/browse?limit=3`));
@@ -129,13 +151,20 @@ beforeAll(async () => {
     actingSubject: operator.actingSubject, expectedCheckpoint: generation.checkpoint,
   }));
 }, 300_000);
-afterAll(async () => { await sessions?.close(); await pool?.end(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); await pool?.end(); }
+});
 
 async function browse(name: PersonaName) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}/modules/browse`;
-  for (const filter of [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
+  const sample = recording.session(name, person), sampledCards = new Set<string>();
+  const filters = [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
     { publicationYear: '1995' }, { publicationYear: '1995-2001', concept: manga },
-    { q: phrase, publicationYear: '1995', concept: manga, status: 'upcoming' }]) {
+    { q: phrase, publicationYear: '1995', concept: manga, status: 'upcoming' }];
+  const labels = ['browse-newest', 'search-newest', 'format-manga', 'format-one-shot', 'status-upcoming',
+    'publication-year', 'publication-year-range-and-format', 'combined-filters'];
+  for (const [index, filter] of filters.entries()) {
     const expected = works.filter(work => (!('concept' in filter) || work.concept === filter.concept)
       && (!('status' in filter) || work.status === filter.status)
       && (!('publicationYear' in filter) || work.year !== null && (filter.publicationYear === '1995-2001' || work.year === 1995)));
@@ -143,7 +172,12 @@ async function browse(name: PersonaName) {
     const seen: string[] = [], cursors = new Set<string>();
     let page: Page;
     do {
-      page = await answer<Page>(person.main('GET', `${root}?${params}`));
+      page = await answer<Page>(seen.length === 0
+        ? sample(labels[index]!, 'GET', `${root}?${params}`)
+        : index === 0 && seen.length === 3
+          ? sample('browse-newest-continuation', 'GET', `${root}?${params}`)
+          : person.main('GET', `${root}?${params}`));
+      if (seen.length === 0 || index === 0 && seen.length === 3) for (const item of page.items) sampledCards.add(item.id);
       for (const item of page.items) expect(item.primaryCredits).toContainEqual(expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }));
       seen.push(...page.items.map(item => item.id));
       if ('publicationYear' in filter) {
@@ -164,6 +198,13 @@ async function browse(name: PersonaName) {
     expect(page.window.complete).toBe(true);
     if (expected.length > 3) expect(cursors.size).toBeGreaterThan(0);
   }
+  const empty = await answer<Page>(sample('search-no-match', 'GET', `${root}?${new URLSearchParams({
+    sort: 'newest', limit: '3', q: `${phrase}nomatch`,
+  })}`));
+  expect(empty.items).toEqual([]);
+  expect(empty.nextCursor).toBeNull();
+  await answer(sample('unsupported-query-shape', 'GET', `${root}?sort=relevance&limit=3`), 400);
+  if (name === 'owner') await supportingReads(sample, person, sampledCards);
   if (name !== 'visitor' && name !== 'owner') {
     await answer(person.main('POST', '/v1/statement-decisions', { profile: 'statement-decision-v1',
       target: { kind: 'statement', statement }, acceptance: { kind: 'global' }, expectedDecisionHead: null,
@@ -175,9 +216,40 @@ async function browse(name: PersonaName) {
       selectionBasis: 'realm-manager-review', actingSubject: person.actingSubject }), 403);
   }
 }
-outcomeTest(catalogue, 'visitor', () => browse('visitor'));
-outcomeTest(catalogue, 'stranger', () => browse('stranger'));
-outcomeTest(catalogue, 'member', () => browse('member'));
-outcomeTest(catalogue, 'owner', () => browse('owner'));
-outcomeTest(catalogue, 'moderator', () => browse('moderator'));
-outcomeTest(catalogue, 'operator', () => browse('operator'));
+// The Zone browse frame and catalogue-facts/year-directory reads used by the page.
+async function supportingReads(sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession, cards: Set<string>) {
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  const realmRoot = `/v1/realms/${short(sessions.realm)}`, zoneRoot = `/v1/zones/${short(sessions.zone)}`;
+  await answer(sample('realm-context', 'GET', viewer(realmRoot)));
+  await answer(sample('space-address', 'GET', viewer(`/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key: short(sessions.space) })}`)));
+  await answer(sample('zone-presentation', 'GET', viewer(`${zoneRoot}/presentation`)));
+  await answer(sample('browse-route-fallback', 'GET', viewer(`${zoneRoot}/routes?path=browse`)), 404);
+  await answer(sample('facet-labels', 'GET', '/v1/facets'));
+  await answer(sample('joining-context', 'GET', `${realmRoot}/joining?${acting(person)}`));
+  await answer(sample('follow-context', 'GET', `/v1/follows/${short(sessions.realm)}?kind=realm&${acting(person)}`));
+  const ban = await sample('member-ban-context', 'GET', `${realmRoot}/member-ban?${acting(person)}`);
+  await ban.body?.cancel();
+  const definition = await sample('volume-count-definition', 'GET', viewer('/v1/lexicon/definitions/volume-count?languages=en'));
+  expect([200, 404]).toContain(definition.status);
+  await definition.body?.cancel();
+  for (const [index, work] of works.filter(work => cards.has(work.work)).entries()) {
+    const id = short(work.work);
+    const projection = await answer<{ sections: { id: string; href: string }[] }>(
+      sample(`card-${index}-projection`, 'GET', viewer(`/v1/resources/${id}/page`)));
+    await answer(sample(`card-${index}-classifications`, 'GET', viewer(`/v1/works/${id}/classifications?scope=global`)));
+    const section = projection.sections.find(section => section.id === 'statements');
+    expect(section).toBeDefined();
+    await answer(sample(`card-${index}-statements`, 'GET', viewer(section!.href)));
+  }
+  await answer(recording.session('owner', sessions.visitor)('publication-year-directory', 'POST', '/v1/query', {
+    profile: 'template-query-v1', query: 'https://rezics.com/query/work-publication-years', revision: 1,
+    parameters: {}, limit: 20,
+  }));
+}
+
+outcomeTest(catalogue, 'visitor', () => browse('visitor'), recording);
+outcomeTest(catalogue, 'stranger', () => browse('stranger'), recording);
+outcomeTest(catalogue, 'member', () => browse('member'), recording);
+outcomeTest(catalogue, 'owner', () => browse('owner'), recording);
+outcomeTest(catalogue, 'moderator', () => browse('moderator'), recording);
+outcomeTest(catalogue, 'operator', () => browse('operator'), recording);

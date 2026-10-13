@@ -9,7 +9,7 @@ import {
   type LocalOAuthClient,
 } from '../../../../../scripts/lib/oauth-client.ts';
 import inventory from '../../../../../scripts/qa/cases/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.ts';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -32,6 +32,7 @@ let published: Work;
 let privateWork: Work;
 const episodes: Work[] = [];
 const occurrences: string[] = [];
+const recording = new OutcomeRecorder(inventory);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession, fields: Record<string, string> = {}) =>
   new URLSearchParams({
@@ -50,6 +51,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 beforeAll(async () => {
   const started = performance.now();
   sessions = await personaSessions();
+  await recording.prepare();
   sessions.owner = await readingSession(sessions.owner);
   const owner = sessions.owner;
   const operator = sessions.operator;
@@ -177,20 +179,23 @@ beforeAll(async () => {
   expect(performance.now() - started).toBeLessThan(600_000);
 }, 600_000);
 afterAll(async () => {
-  await sessions?.close();
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
 });
 
-async function credit(person: PersonaSession, work: Work) {
+async function credit(person: PersonaSession, work: Work, sample?: ReturnType<OutcomeRecorder['session']>, label = 'work') {
   const fields = query(person);
   fields.delete('position');
   const credits = await answer<{ items: { role: string; agent: string }[] }>(
-    person.main('GET', `/v1/works/${short(work.work)}/credits?${fields}`),
+    sample ? sample(`${label}-credits`, 'GET', `/v1/works/${short(work.work)}/credits?${fields}`)
+      : person.main('GET', `/v1/works/${short(work.work)}/credits?${fields}`),
   );
   expect(credits.items).toContainEqual(
     expect.objectContaining({ role: 'author', agent: sessions.owner.actingSubject }),
   );
   const variants = await answer<{ variants: { author: string; language: string }[] }>(
-    person.main('GET', `/v1/main-versions/${short(work.mainVersion)}/native-variants`),
+    sample ? sample(`${label}-native-variants`, 'GET', `/v1/main-versions/${short(work.mainVersion)}/native-variants`)
+      : person.main('GET', `/v1/main-versions/${short(work.mainVersion)}/native-variants`),
   );
   expect(variants.variants).toContainEqual(
     expect.objectContaining({ author: sessions.owner.actingSubject, language: 'en' }),
@@ -260,10 +265,12 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
 
 async function navigate(name: PersonaName) {
   const person = await readingSession(sessions[name]);
+  const sample = recording.session(name, person);
   const path = `/v1/reading-positions/${short(published.work)}`;
-  const read = (fields: Record<string, string> = {}) =>
-    answer<Page>(person.main('GET', `${path}?${query(person, fields)}`));
-  await credit(person, published);
+  const read = (fields: Record<string, string> = {}, label?: string) =>
+    answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
+      : person.main('GET', `${path}?${query(person, fields)}`));
+  await credit(person, published, sample);
   const seen: string[] = [];
   let cursor: string | null = null;
   let pages = 0;
@@ -301,7 +308,7 @@ async function navigate(name: PersonaName) {
         q,
         limit: '100',
         ...(searchCursor ? { cursor: searchCursor } : {}),
-      });
+      }, searchPages === 1 ? 'distant-episode-search' : undefined);
       expect(page.search).toEqual({ status: 'current' });
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.complete).toBe(page.nextCursor === null);
@@ -311,14 +318,14 @@ async function navigate(name: PersonaName) {
     expect(matches, `Completed GET ${path}?q=${q}: ${JSON.stringify(matches)}`).toHaveLength(1);
     expect(matches[0]?.occurrence).toBe(occurrences[number - 1]);
     expect(matches[0]?.labels).toContainEqual({ value: q, language: 'en' });
-    await credit(person, episodes[(number - 1) % episodes.length]!);
+    await credit(person, episodes[(number - 1) % episodes.length]!, sample, 'distant-episode');
   }
-  const first = await read({ limit: '2' });
+  const first = await read({ limit: '2' }, 'inventory-start');
   expect(first.nextCursor).not.toBeNull();
-  const second = await read({ limit: '2', cursor: first.nextCursor! });
+  const second = await read({ limit: '2', cursor: first.nextCursor! }, 'inventory-continuation');
   expect(second.items.map((item) => item.occurrence)).toEqual(occurrences.slice(2, 4));
   await answer(
-    person.main(
+    sample('cursor-query-refused',
       'GET',
       `${path}?${query(person, { q: 'Episode 8', limit: '2', cursor: first.nextCursor! })}`,
     ),
@@ -330,20 +337,72 @@ async function navigate(name: PersonaName) {
     400,
   );
   const hiddenPath = `/v1/reading-positions/${short(privateWork.work)}?${query(person)}`;
-  if (name === 'owner') await answer(person.main('GET', hiddenPath));
+  if (name === 'owner') await answer(sample('private-inventory', 'GET', hiddenPath));
   else
-    expect(await answer(person.main('GET', hiddenPath), 404)).toEqual(
+    expect(await answer(sample('private-inventory-refused', 'GET', hiddenPath), 404)).toEqual(
       await answer(
         person.main('GET', `/v1/reading-positions/${randomUUID()}?${query(person)}`),
         404,
       ),
     );
   await credit(person, published);
+  const empty = await read({ q: 'An episode label that does not exist', limit: '2' }, 'inventory-search-empty');
+  expect(empty.items).toEqual([]);
+  if (name === 'owner') await inventoryPageReads(sample, person);
 }
 
-outcomeTest(inventory, 'visitor', () => navigate('visitor'));
-outcomeTest(inventory, 'stranger', () => navigate('stranger'));
-outcomeTest(inventory, 'member', () => navigate('member'));
-outcomeTest(inventory, 'owner', () => navigate('owner'));
-outcomeTest(inventory, 'moderator', () => navigate('moderator'));
-outcomeTest(inventory, 'operator', () => navigate('operator'));
+// ConnectionsPage, WorkFrameView and the series/episode panels read these alongside the positions inventory.
+async function inventoryPageReads(sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession) {
+  const id = short(published.work);
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(person.actingSubject!)}`;
+  const parts = await answer<{ structure: string }>(sample('parts-inventory', 'GET', viewer(`/v1/resources/${id}/parts?limit=50`)));
+  const structure = short(parts.structure);
+  const composition = await answer<{ next: string | null }>(sample('episode-structure', 'GET', viewer(`/v1/compositions/${structure}?limit=20`)));
+  if (composition.next) await answer(sample('episode-structure-continuation', 'GET',
+    viewer(`/v1/compositions/${structure}?${new URLSearchParams({ limit: '20', after: composition.next })}`)));
+  const reads: [string, string][] = [
+    ['work-header', `/v1/works/${id}`],
+    ['page-projection', `/v1/resources/${id}/page`],
+    ['agent-credits', `/v1/works/${id}/agent-credits`],
+    ['parts-preview', `/v1/resources/${id}/parts?limit=7`],
+    ['availability-parts', `/v1/resources/${id}/parts?limit=1`],
+    ['episode-structure-discovery', `/v1/resources/${id}/parts?limit=20`],
+    ['wholes-empty', `/v1/resources/${id}/wholes?limit=20`],
+    ['wholes-preview', `/v1/resources/${id}/wholes?limit=3`],
+    ['relations-empty', `/v1/resources/${id}/relations?limit=20`],
+    ['releases-empty', `/v1/works/${id}/releases?limit=20`],
+    ['realizations-empty', `/v1/works/${id}/realizations?limit=20`],
+    ['rating-contexts', `/v1/resources/${id}/rating-contexts?scope=global`],
+    ['ratings', `/v1/resources/${id}/ratings?scope=global`],
+    ['reader-stats', `/v1/works/${id}/reader-stats`],
+    ['reader-state', `/v1/works/${id}/reader-state`],
+    ['progress-summary', `/v1/me/progress-summaries/${id}?language=en`],
+    ['edition-preference-empty', `/v1/me/edition-preferences/${id}`],
+    ['episode-resume', `/v1/reading-positions/${id}?position=mine&limit=1`],
+    ['chapter-standing', `/v1/reading-positions/${id}?position=mine&limit=50`],
+    ['episode-progress-empty', `/v1/compositions/${structure}/occurrences/${short(occurrences[0]!)}/progress`],
+    ['composition-progress-empty', `/v1/compositions/${structure}/progress?limit=50`],
+    ['work-progress', `/v1/works/${id}/progress`],
+    ['correspondence-definition', '/v1/lexicon/definitions/correspondence-equivalent'],
+  ];
+  for (const [label, path] of reads) {
+    const response = await sample(label, 'GET', viewer(path));
+    await response.body?.cancel();
+  }
+  await answer(sample('part-names', 'POST', '/v1/resources/summaries', {
+    profile: 'resource-summary-batch-v1', resources: episodes.map(episode => episode.work), actingSubject: person.actingSubject,
+  }));
+  await answer(sample('work-credits', 'POST', '/v1/query', { profile: 'template-query-v1',
+    query: 'https://rezics.com/query/work-credits', revision: 1, parameters: { roots: [published.work] },
+    presentation: { actingSubject: person.actingSubject } }));
+  await answer(recording.session('owner', sessions.visitor)('work-showcase', 'POST', '/v1/resources/showcase', {
+    profile: 'work-showcase-batch-v1', targets: [published.work],
+  }));
+}
+
+outcomeTest(inventory, 'visitor', () => navigate('visitor'), recording);
+outcomeTest(inventory, 'stranger', () => navigate('stranger'), recording);
+outcomeTest(inventory, 'member', () => navigate('member'), recording);
+outcomeTest(inventory, 'owner', () => navigate('owner'), recording);
+outcomeTest(inventory, 'moderator', () => navigate('moderator'), recording);
+outcomeTest(inventory, 'operator', () => navigate('operator'), recording);

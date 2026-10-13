@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import hub, { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
 import { classificationContextBody, classifiedStatementBody } from '../../../../../scripts/dev/seed/classified-statement.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string };
@@ -15,6 +15,7 @@ let sessions: PersonaSessions;
 let pool: Pool;
 let manga: Work, undated: Work;
 const releases: Release[] = [];
+const recording = new OutcomeRecorder(hub);
 const short = (id: string) => id.slice(-36);
 const iri = () => `https://rezics.com/id/${randomUUID()}`;
 const acting = (person: PersonaSession, actor = person.actingSubject!) => `actingSubject=${encodeURIComponent(actor)}`;
@@ -29,6 +30,7 @@ const grant = (person: PersonaSession, scope: string, action: string) => grantMa
 // Fixture failures are outside outcomeTest and cannot be counted as expected product failures.
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const owner = sessions.owner, actor = owner.actingSubject;
   for (const title of ['Ink Garden', 'Ink Garden without a recorded date']) {
@@ -114,32 +116,88 @@ beforeAll(async () => {
     profile: 'work-composition', work: manga.work, mainVersion: manga.mainVersion, actingSubject: actor,
   }), 201);
 }, 180_000);
-afterAll(async () => { await sessions?.close(); await pool?.end(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); await pool?.end(); }
+});
 
 const preferencePath = () => `/v1/me/edition-preferences/${short(manga.work)}`;
 const summaryPath = () => `/v1/me/progress-summaries/${short(manga.work)}`;
 const choice = (person: PersonaSession, release: Release, expectedVersion = 0, actor = person.actingSubject) => ({
   actingSubject: actor, expectedVersion, language: 'ja', edition: { kind: 'release', resource: release.id, revision: release.revision },
 });
-async function publicHub(person: PersonaSession) {
+async function publicHub(name: PersonaName) {
+  const person = sessions[name], sample = recording.session(name, person);
   const query = person.actingSubject ? `?${acting(person)}` : '';
   for (const [work, dates] of [[manga, ['1995-07-12']], [undated, []]] as const) {
-    await answer(person.main('GET', `/v1/works/${short(work.work)}${query}`));
+    const label = work === manga ? 'work' : 'undated-work';
+    await answer(sample(label, 'GET', `/v1/works/${short(work.work)}${query}`));
     const page = await answer<{ groups: { predicate: string; items: { value?: { lexical?: string } }[] }[] }>(
-      person.main('GET', `/v1/resources/${short(work.work)}/statements${query}`));
+      sample(`${label}-statements`, 'GET', `/v1/resources/${short(work.work)}/statements${query}`));
     expect(page.groups.filter(group => group.predicate === 'https://schema.org/datePublished')
       .flatMap(group => group.items.map(item => item.value?.lexical))).toEqual(dates);
-    const credit = await answer<{ items: { agent: string | null; role: string }[] }>(person.main('GET', `/v1/works/${short(work.work)}/credits${query}`));
+    const credit = await answer<{ items: { agent: string | null; role: string }[] }>(sample(`${label}-credits`, 'GET', `/v1/works/${short(work.work)}/credits${query}`));
     expect(credit.items).toContainEqual(expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }));
   }
-  const page = await answer<{ items: Release[] }>(person.main('GET', `/v1/works/${short(manga.work)}/releases${query}`));
+  const page = await answer<{ items: Release[] }>(sample('releases', 'GET', `/v1/works/${short(manga.work)}/releases${query}`));
   expect(page.items.map(item => item.id).sort()).toEqual(releases.map(item => item.id).sort());
-  for (const release of releases) expect(await answer(person.main('GET', `/v1/works/${short(manga.work)}/releases/${short(release.id)}${query}`))).toMatchObject(release);
+  for (const [index, release] of releases.entries()) expect(await answer(sample(`release-${index}`, 'GET', `/v1/works/${short(manga.work)}/releases/${short(release.id)}${query}`))).toMatchObject(release);
+  if (name === 'owner') await pageReads(sample, person);
 }
+
+// WorkFrameView, the overview's hub sections and YourEdition consume these reads.
+// Keep empty and refused regions as the API returned them; stories can name each one.
+async function pageReads(sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession) {
+  const id = short(manga.work);
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  const contexts = await answer<{ items: { context: string }[] }>(sample('rating-contexts', 'GET',
+    viewer(`/v1/resources/${id}/rating-contexts?scope=global`)));
+  const context = contexts.items[0]?.context;
+  const reads: [string, string][] = [
+    ['page-projection', `/v1/resources/${id}/page`],
+    ['agent-credits', `/v1/works/${id}/agent-credits`],
+    ['realizations', `/v1/works/${id}/realizations?limit=20`],
+    ['contents-empty', `/v1/works/${id}/contents`],
+    ['parts-empty', `/v1/resources/${id}/parts?limit=7`],
+    ['wholes-empty', `/v1/resources/${id}/wholes?limit=3`],
+    ['availability-parts', `/v1/resources/${id}/parts?limit=1`],
+    ['relations-empty', `/v1/resources/${id}/relations?limit=20`],
+    ['classifications', `/v1/works/${id}/classifications?scope=global`],
+    ['ratings', `/v1/resources/${id}/ratings?${new URLSearchParams({ scope: 'global', ...(context ? { context } : {}) })}`],
+    ['rating-populations', `/v1/rating-populations?${new URLSearchParams({ target: manga.work, limit: '20' })}`],
+    ['reader-stats', `/v1/works/${id}/reader-stats?${new URLSearchParams(context ? { context } : {})}`],
+    ['reader-state', `/v1/works/${id}/reader-state`],
+    ['also-enjoyed', `/v1/works/${id}/also-enjoyed?limit=12`],
+    ['author-works', `/v1/agents/${short(sessions.owner.actingSubject!)}/works?limit=12`],
+    ['continue-empty', '/v1/me/continue?limit=6'],
+    ['progress-summary-empty', `/v1/me/progress-summaries/${id}?language=en`],
+    ['tracking-sessions-empty', `/v1/me/sessions?${new URLSearchParams({ target: manga.work, limit: '50' })}`],
+    ['realm-context', `/v1/realms/${short(sessions.realm)}`],
+    ['correspondence-definition', '/v1/lexicon/definitions/correspondence-equivalent'],
+    ['discussion-empty', `/v1/resources/${id}/discussion?limit=3`],
+  ];
+  if (context) reads.push(['reviews-empty', `/v1/resources/${id}/reviews?${new URLSearchParams({ context, sort: 'helpful', limit: '10' })}`]);
+  for (const [label, path] of reads) {
+    const response = await sample(label, 'GET', viewer(path));
+    await response.body?.cancel();
+  }
+  await answer(sample('facet-labels', 'GET', '/v1/facets'));
+  for (const query of ['work-credits', 'work-adoptions']) {
+    const response = await sample(query, 'POST', '/v1/query', { profile: 'template-query-v1',
+      query: `https://rezics.com/query/${query}`, revision: 1, parameters: { roots: [manga.work] },
+      presentation: { actingSubject: person.actingSubject } });
+    await response.body?.cancel();
+  }
+  await answer(recording.session('owner', sessions.visitor)('work-showcase', 'POST', '/v1/resources/showcase', {
+    profile: 'work-showcase-batch-v1', targets: [manga.work],
+  }));
+}
+
 async function reader(name: Exclude<PersonaName, 'visitor'>) {
   const person = sessions[name];
-  await publicHub(person);
-  expect(await answer(person.main('GET', `${preferencePath()}?${acting(person)}`))).toBeNull();
+  const sample = recording.session(name, person);
+  await publicHub(name);
+  expect(await answer(sample('edition-preference-empty', 'GET', `${preferencePath()}?${acting(person)}`))).toBeNull();
   const commands = releases.map(release => ({ body: choice(person, release), key: randomUUID() }));
   const responses = await Promise.all(commands.map(command => person.main('PUT', preferencePath(), command.body, command.key)));
   expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
@@ -149,12 +207,13 @@ async function reader(name: Exclude<PersonaName, 'visitor'>) {
   expect(retained).toMatchObject({ work: manga.work, language: 'ja', version: 1, edition: winner.body.edition });
   expect(await answer(Promise.resolve(responses[1 - index]!), 409)).toMatchObject({ code: 'stale_edition_preference', current: retained });
   expect(await answer(person.main('PUT', preferencePath(), winner.body, winner.key))).toEqual({ ...retained, replayed: true });
-  expect(await answer(person.main('GET', `${summaryPath()}?language=ja&${acting(person)}`))).toMatchObject({ preference: retained, language: 'ja' });
+  expect(await answer(sample('progress-summary', 'GET', `${summaryPath()}?language=ja&${acting(person)}`))).toMatchObject({ preference: retained, language: 'ja' });
+  await answer(sample('edition-preference', 'GET', `${preferencePath()}?${acting(person)}`));
   expect(await answer(person.main('PUT', preferencePath(), { ...choice(person, releases[0]!, 1), language: 'fr' }), 400)).toMatchObject({ code: 'invalid_edition_preference' });
   expect(await answer(person.main('PUT', `/v1/me/edition-preferences/${short(undated.work)}`, choice(person, releases[0]!)), 404)).toMatchObject({ code: 'work_unavailable' });
   const target = name === 'owner' ? sessions.member : sessions.owner;
   const before = await answer(target.main('GET', `${preferencePath()}?${acting(target)}`));
-  for (const path of [preferencePath(), summaryPath()]) expect(await answer(person.main('GET', `${path}?${acting(person, target.actingSubject!)}`), 403)).toMatchObject({ code: 'progress_denied' });
+  for (const [index, path] of [preferencePath(), summaryPath()].entries()) expect(await answer(sample(`other-reader-refused-${index}`, 'GET', `${path}?${acting(person, target.actingSubject!)}`), 403)).toMatchObject({ code: 'progress_denied' });
   expect(await answer(person.main('PUT', preferencePath(), choice(person, releases[0]!, 1, target.actingSubject)), 403)).toMatchObject({ code: 'progress_denied' });
   expect(await answer(target.main('GET', `${preferencePath()}?${acting(target)}`))).toEqual(before);
   if (name === 'moderator' || name === 'operator') {
@@ -179,12 +238,13 @@ async function reader(name: Exclude<PersonaName, 'visitor'>) {
 }
 outcomeTest(hub, 'visitor', async () => {
   const person = sessions.visitor;
-  await publicHub(person);
-  for (const path of [preferencePath(), summaryPath()]) await answer(person.main('GET', `${path}?${acting(person, sessions.owner.actingSubject!)}`), 401);
+  const sample = recording.session('visitor', person);
+  await publicHub('visitor');
+  for (const [index, path] of [preferencePath(), summaryPath()].entries()) await answer(sample(`sign-in-required-${index}`, 'GET', `${path}?${acting(person, sessions.owner.actingSubject!)}`), 401);
   await answer(person.main('PUT', preferencePath(), choice(person, releases[0]!, 0, sessions.owner.actingSubject)), 401);
-});
-outcomeTest(hub, 'stranger', () => reader('stranger'));
-outcomeTest(hub, 'member', () => reader('member'));
-outcomeTest(hub, 'owner', () => reader('owner'));
-outcomeTest(hub, 'moderator', () => reader('moderator'));
-outcomeTest(hub, 'operator', () => reader('operator'));
+}, recording);
+outcomeTest(hub, 'stranger', () => reader('stranger'), recording);
+outcomeTest(hub, 'member', () => reader('member'), recording);
+outcomeTest(hub, 'owner', () => reader('owner'), recording);
+outcomeTest(hub, 'moderator', () => reader('moderator'), recording);
+outcomeTest(hub, 'operator', () => reader('operator'), recording);
