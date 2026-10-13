@@ -214,6 +214,8 @@ export const isolatedIntegrationFileList = [
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  // Context vocabulary growth owns its command-built Concept population and bounded read budget.
+  'tests/qa/integration/classification-context-continuation.test.ts',
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   'tests/qa/integration/growth-search-refresh.test.ts',
   // API-built corpus backups need the product assembler and a closed raw-update endpoint.
