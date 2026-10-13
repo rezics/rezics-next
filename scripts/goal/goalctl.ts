@@ -32,9 +32,12 @@ export { typecheckWorkspaces, TYPECHECK_WORKSPACES };
 
 export type State = 'running' | 'exited' | 'conflict' | 'merged' | 'stopped' | 'verified' | 'cancelled';
 export type Engine = 'claude' | 'sonnet' | 'haiku' | 'fable' | 'codex' | 'codex-1' | 'luna' | 'grok' | 'cursor';
+export const BRIEF_KINDS = ['outcome', 'implementation', 'surface', 'mechanism', 'tooling'] as const;
+export type BriefKind = typeof BRIEF_KINDS[number];
 export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
+  kind?: BriefKind; rows?: string[];
   /** A shared worktree name within a Goal: its tasks work concurrently in one tree and branch. */
   worktree?: string;
   /** Opt in to review, merge and close when the worker's waiter sees a done handoff. */
@@ -200,6 +203,7 @@ export function parseBrief(text: string): Brief {
   if (!fields) throw new Error('Brief needs a leading --- frontmatter block');
   const list = (key: string): string[] => listField(fields, key);
   return {
+    kind: fields.kind as BriefKind | undefined, rows: list('rows'),
     id: fields.id ?? '', title: fields.title ?? '', effort: fields.effort ?? 'medium',
     engine: (fields.engine as Engine | undefined) ?? DEFAULT_ENGINE,
     cases: list('cases'), paths: list('paths'), migrations: list('migrations'), shared: list('shared'),
@@ -212,6 +216,10 @@ export function validateBrief(brief: Brief): string[] {
   const errors: string[] = [];
   if (!/^G-\d{3,}$/.test(brief.id)) errors.push(`id must look like G-038: ${brief.id || '(missing)'}`);
   if (!brief.title) errors.push('title is required');
+  if (!brief.kind || !(BRIEF_KINDS as readonly string[]).includes(brief.kind)) {
+    errors.push(`kind must be one of ${BRIEF_KINDS.join(', ')}: ${brief.kind ?? '(missing)'}`);
+  }
+  for (const row of brief.rows ?? []) if (!/^[a-z][a-z0-9-]*\/[a-z][a-z0-9-]*$/.test(row)) errors.push(`bad outcome row: ${row}`);
   if (brief.land !== undefined && brief.land !== 'auto') errors.push(`land must be auto: ${brief.land}`);
   const engine = brief.engine ?? DEFAULT_ENGINE;
   if (!ENGINES.includes(engine)) errors.push(`engine must be one of ${ENGINES.join(', ')}: ${engine}`);
@@ -1671,9 +1679,20 @@ async function landTask(id: string, step = false): Promise<void> {
         head, base: git(root, ['merge-base', 'main', task.branch]) };
     });
     await land({ id: snapshot.task.id, worktree: snapshot.task.worktree, runDir, step,
+      kind: parseBrief(snapshot.brief).kind, changedFiles: git(snapshot.task.worktree, ['diff', '--name-only', '--no-renames', `${snapshot.base}..${snapshot.head}`]).split('\n'),
       brief: snapshot.brief, handoff: snapshot.handoff, base: snapshot.base, head: snapshot.head,
       scope: () => landScope(id),
-      merge: permittedFiles => mergeTask(id, new Set(), snapshot.head, current => {
+      checkpoint: () => {
+        const current = taskOf(readLedger(), id);
+        if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
+          || readResult(lastAttempt(current)).text !== snapshot.handoff
+          || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) throw new Error(`${id}: task or brief changed during review`);
+      },
+      checkTargets: files => {
+        const claimed = claimingTasks(readLedger(), files, new Set([id]));
+        if (claimed.length) throw new Error(`review test paths claimed by another task: ${claimed.map(item => item.id).join(', ')}`);
+      },
+      merge: (permittedFiles, head) => mergeTask(id, new Set(), head, current => {
         if (current.state !== 'exited' || lastAttempt(current).n !== snapshot.attempt
           || current.branch !== snapshot.task.branch || current.worktree !== snapshot.task.worktree
           || readResult(lastAttempt(current)).text !== snapshot.handoff
@@ -1684,6 +1703,17 @@ async function landTask(id: string, step = false): Promise<void> {
   } finally {
     landingLease.release();
   }
+}
+
+/** Transport/capacity continuations consume no fix round; a new decision must follow the last start. */
+export function resumeDecisionError(attempts: readonly Attempt[], markdown: string): string | undefined {
+  if (attempts.filter(attempt => !attempt.continuedFor).length < 3) return undefined;
+  const section = /^## Decision[ \t]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/m.exec(markdown)?.[1] ?? '';
+  const lastStart = Date.parse(attempts.at(-1)?.startedAt ?? '');
+  const dates = [...section.matchAll(/\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z|[ \t]+\d{2}:\d{2}(?::\d{2})?[ \t]+UTC|(?=[ \t]+UTC))/g)];
+  const dated = dates.some(match => Date.parse(match[0].length === 10 ? `${match[0]}T00:00:00Z` : match[0].replace(/ UTC$/, 'Z').replace(' ', 'T')) > lastStart);
+  return dated && /\b(?:cut|split|design note)\b/i.test(section) ? undefined
+    : 'two fix rounds exhausted; brief needs a ## Decision dated UTC after the last attempt started, naming a cut, split or design note';
 }
 
 async function resumeTask(id: string, args: string[]): Promise<void> {
@@ -1708,6 +1738,8 @@ async function resumeTask(id: string, args: string[]): Promise<void> {
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
     const previous = lastAttempt(task);
+    const refusal = resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8'));
+    if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const nextEngine = engine ?? engineOf(previous);
     const nextEffort = effort ?? previous.effort;
     if (!effortsOf(nextEngine).includes(nextEffort)) {
@@ -5136,7 +5168,7 @@ async function reclaimTask(id: string, briefPath: string, flags: Set<string>): P
       ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
     if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
     if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
-    Object.assign(task, { title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
+    Object.assign(task, { kind: brief.kind, rows: brief.rows, title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
       migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land });
     if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     console.log(`${task.id} claims replaced from ${briefPath}`);

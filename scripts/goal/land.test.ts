@@ -1,9 +1,9 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
-import { blocksLanding, findingsFromText, handoffResult, land, REVIEW_LENSES, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
+import { findingsFromText, handoffResult, land, needsReview, reviewBranch, reviewEngine, reviewPrompt } from './land.ts';
 import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts';
 
 // A refused review pass is run again after a wait; the tests do not wait.
@@ -28,14 +28,15 @@ function repo(options: { result?: string; auto?: boolean; files?: Record<string,
   write('scripts/goal/composition-roots.ts', readFileSync(join(import.meta.dir, 'composition-roots.ts'), 'utf8'));
   for (const file of ['app.ts', 'index.ts', 'composition.ts', 'routes/dependencies.ts']) write(`services/main/src/${file}`, 'export {};\n');
   for (const [path, content] of Object.entries(options.files ?? {})) write(path, content);
-  const paths = options.paths ?? ['value.ts', 'value.test.ts'];
+  write('services/account/src/value.ts', 'export const value = 0;\n');
+  const paths = options.paths ?? ['services/account/src/value.ts', 'value.test.ts'];
   const brief = 'docs/goals/alpha/tasks/G-001.md';
-  write(brief, `---\nid: G-001\ntitle: Deliver value\nengine: codex\neffort: high\npaths: [${paths.join(', ')}]\n${options.auto ? 'land: auto\n' : ''}---\nDeliver value.\n`);
+  write(brief, `---\nid: G-001\ntitle: Deliver value\nkind: implementation\nengine: codex\neffort: high\npaths: [${paths.join(', ')}]\n${options.auto ? 'land: auto\n' : ''}---\nDeliver value.\n`);
   git(dir, 'add', '.'); git(dir, 'commit', '-qm', 'Initial');
   const base = git(dir, 'rev-parse', 'HEAD');
   const worktree = join(dir, '.temp/worktrees/worker');
   git(dir, 'worktree', 'add', '-qb', 'goal/worker', worktree);
-  writeFileSync(join(worktree, 'value.ts'), 'export const value = 1;\n');
+  writeFileSync(join(worktree, 'services/account/src/value.ts'), 'export const value = 1;\n');
   git(worktree, 'add', '.'); git(worktree, 'commit', '-qm', 'Deliver value');
   const runDir = join(dir, '.temp/goal-orchestration/runs/G-001');
   mkdirSync(runDir, { recursive: true });
@@ -64,7 +65,7 @@ const args = process.argv.slice(2);
 await Bun.stdin.text();
 appendFileSync(process.env.REVIEW_LOG!, JSON.stringify(args) + '\\n');
 if (process.env.REVIEW_MUTATE === 'yes') {
-  writeFileSync('value.ts', 'export const value = 99;\\n');
+  writeFileSync('services/account/src/value.ts', 'export const value = 99;\\n');
   Bun.spawnSync(['git', 'commit', '-qam', 'Changed during review']);
 }
 const phase = 'review';
@@ -73,9 +74,21 @@ writeFileSync(args[args.indexOf('--output-last-message') + 1]!, process.env.REVI
 process.exit(Number(process.env.REVIEW_EXIT ?? 0));
 `);
   write('.temp/bin/task', `#!/usr/bin/env bun
-import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 const args = process.argv.slice(2);
-if (args[0] === 'install') process.exit(0);
+if (args.includes('--result-file')) {
+  const resultFile = args[args.indexOf('--result-file') + 1]!;
+  const directory = resultFile + '.artifacts';
+  mkdirSync(directory, { recursive: true });
+  const status = process.env.REVIEW_TEST_STATUS ?? 'unavailable';
+  const files = args.filter(arg => arg.startsWith('tests/qa/integration/review/'));
+  writeFileSync(directory + '/acceptance.json', JSON.stringify({ sourceStable: status !== 'unstable',
+    tests: status === 'unavailable' ? [] : files.map(file => ({ file, name: 'public API assertion', failed: status !== 'passed', skipped: false,
+      detail: status === 'timeout' ? 'test timed out' : 'Expected: 403 Received: 200', timeout: status === 'timeout' })) }));
+  writeFileSync(resultFile, JSON.stringify({ artifactPaths: [directory] }));
+  process.exit(status === 'passed' ? 0 : 1);
+}
+if (args[0] === 'install' || args.some(arg => arg.endsWith(':typecheck'))) process.exit(0);
 if (args.includes('--list')) {
   console.log('Affected since HEAD: fixture');
   if (process.env.GOAL_TEST_PLAN) console.log(readFileSync(process.env.GOAL_TEST_PLAN, 'utf8'));
@@ -107,7 +120,7 @@ process.exit(await child.exited);
 
 describe('Goal landing', () => {
   test('auto landing is an explicit validated brief option', () => {
-    const brief = '---\nid: G-001\ntitle: t\nengine: codex\neffort: high\nland: auto\n---\n';
+    const brief = '---\nid: G-001\ntitle: t\nkind: tooling\nengine: codex\neffort: high\nland: auto\n---\n';
     expect(parseBrief(brief).land).toBe('auto');
     expect(validateBrief(parseBrief(brief))).toEqual([]);
     expect(validateBrief(parseBrief(brief.replace('auto', 'yes')))).toContain('land must be auto: yes');
@@ -137,10 +150,10 @@ describe('Goal landing', () => {
       expect(result.stderr).toBe(''); expect(result.status).toBe(0);
       expect(result.stdout).toContain('landed and verified');
       expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
-      expect(r.git(r.dir, 'show', 'main:value.ts')).toContain('value = 1');
+      expect(r.git(r.dir, 'show', 'main:services/account/src/value.ts')).toContain('value = 1');
       expect(existsSync(r.worktree)).toBe(false);
       const passes = readFileSync(r.log, 'utf8').trim().split('\n').map(line => JSON.parse(line) as string[]);
-      expect(passes).toHaveLength(REVIEW_LENSES.length);
+      expect(passes).toHaveLength(1);
       for (const args of passes) {
         expect(args.slice(0, 7)).toEqual(['exec', '-m', 'gpt-6.1-sol', '-c', 'model_reasoning_effort=high', '-s', 'read-only']);
       }
@@ -150,7 +163,6 @@ describe('Goal landing', () => {
   });
 
   test.each([
-    ['review finding', { REVIEW_JSON: '{"findings":["Wrong behaviour in value.ts"]}' }, 'Wrong behaviour'],
     ['review failure', { REVIEW_EXIT: '1' }, 'reviewer exited 1'],
     ['malformed review', { REVIEW_JSON: '{}' }, 'invalid findings report'],
     ['empty finding', { REVIEW_JSON: '{"findings":[""]}' }, 'invalid findings report'],
@@ -189,7 +201,7 @@ describe('Goal landing', () => {
   test.each(['dirty', 'sharer', 'stopped', 'checkout'])('refuses an unsafe task before review: %s', kind => {
     const r = repo();
     try {
-      if (kind === 'dirty') writeFileSync(join(r.worktree, 'value.ts'), 'unfinished');
+      if (kind === 'dirty') writeFileSync(join(r.worktree, 'services/account/src/value.ts'), 'unfinished');
       if (kind === 'checkout') r.git(r.worktree, 'checkout', '--detach', r.base);
       if (kind === 'sharer' || kind === 'stopped') {
         const ledger = r.ledger();
@@ -250,7 +262,7 @@ describe('Goal landing', () => {
     try {
       await expect(reviewBranch({ directory, worktree: join(directory, 'absent'),
         brief: 'brief', handoff: 'RESULT: done', base: 'base', head: 'head' }, 'codex')).rejects.toThrow();
-      expect(existsSync(join(directory, REVIEW_LENSES[0].name, 'stderr.log'))).toBe(true);
+      expect(existsSync(join(directory, 'stderr.log'))).toBe(true);
     } finally { rmSync(directory, { recursive: true, force: true }); }
   });
 
@@ -310,10 +322,10 @@ echo '{"findings":[]}' > "$out"
       expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex')).toEqual([]);
       const ran = readFileSync(calls, 'utf8').trim().split('\n');
-      expect(ran.filter(name => name === 'codex')).toHaveLength(2 * REVIEW_LENSES.length);
-      expect(ran.filter(name => name === 'codex-1')).toHaveLength(REVIEW_LENSES.length);
+      expect(ran.filter(name => name === 'codex')).toHaveLength(2);
+      expect(ran.filter(name => name === 'codex-1')).toHaveLength(1);
       // The refused tries stay in the pass's log.
-      expect(readFileSync(join(directory, REVIEW_LENSES[0].name, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
+      expect(readFileSync(join(directory, 'stderr.log'), 'utf8').match(/at capacity/g)).toHaveLength(2);
     } finally { process.env.PATH = path; rmSync(bin, { recursive: true, force: true }); r.cleanup(); }
   }, 30_000);
 
@@ -325,7 +337,7 @@ echo '{"findings":[]}' > "$out"
         review: async (request: { step?: boolean }) => { calls.push(`review step=${request.step}`); return []; },
         merge: async () => { calls.push('merge'); }, close: async () => { calls.push('close'); } };
       await land({ ...options, step: true });
-      expect(calls).toEqual(['review step=true', 'merge']);
+      expect(calls).toEqual(['merge']);
       await expect(land(options)).rejects.toThrow('expected done');
       await expect(land({ ...options, step: true, handoff: 'RESULT: blocked\n' })).rejects.toThrow('expected done or partial');
       const prompt = reviewPrompt({ worktree: '/w', base: 'a', head: 'b', brief: 'brief', handoff: 'RESULT: partial', directory: '/d', step: true });
@@ -335,103 +347,151 @@ echo '{"findings":[]}' > "$out"
     } finally { rmSync(runDir, { recursive: true, force: true }); }
   });
 
-  test('what blocks a landing is decided from severity and origin', () => {
-    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'first' })).toBe(true);
-    expect(blocksLanding({ text: 'x', severity: 'P3', origin: 'first' })).toBe(false);
-    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'earlier' })).toBe(true);
-    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'fix' })).toBe(true);
-    expect(blocksLanding({ text: 'x', severity: 'P2', origin: 'old' })).toBe(false);
-    expect(blocksLanding({ text: 'x', severity: 'P1', origin: 'old' })).toBe(true);
+  test('only implementation and mechanism changes in sensitive owners get a reviewer', () => {
+    for (const kind of ['implementation', 'mechanism']) {
+      for (const path of ['services/account/tests/login.test.ts', 'services/main/src/modules/access/grants.ts',
+        'services/main/src/modules/disclosure/read.ts', 'services/main/src/modules/rights/store.ts',
+        'services/main/src/modules/erasure/request.ts', 'services/main/src/routes/erasures.ts',
+        'services/main/migrations/access/123_authority.sql', 'services/content/migrations/123_rights.sql',
+        'services/main/src/modules/media/erasure.ts']) expect(needsReview(kind, [path])).toBe(true);
+      expect(needsReview(kind, ['apps/web/page.tsx', 'scripts/goal/land.ts'])).toBe(false);
+    }
+    for (const kind of ['outcome', 'surface', 'tooling', undefined]) {
+      expect(needsReview(kind, ['services/account/src/login.ts'])).toBe(false);
+    }
   });
 
-  test('the first review reads the whole change through every lens and records what does not block', async () => {
+  test.each(['outcome', 'surface', 'tooling'])('%s lands sensitive changes on gates without review', kind => {
     const r = repo();
-    const stub = reviewerStub();
     try {
-      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
-      const directory = join(r.runDir, 'review-1000-first');
-      stub.answer([{ text: 'value.ts:1 loses the draft', severity: 'P2', origin: 'first' },
-        { text: 'a clearer name exists', severity: 'P3', origin: 'first' }]);
-      const blocking = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
-        base: r.base, head }, 'codex');
-      // Every lens reported the same two findings; each is kept once.
-      expect(blocking).toEqual(['P2: value.ts:1 loses the draft']);
-      expect(JSON.parse(readFileSync(join(directory, 'recorded.json'), 'utf8')).findings).toEqual(
-        [{ text: 'a clearer name exists', severity: 'P3', origin: 'first' }]);
-      for (const lens of REVIEW_LENSES) {
-        const prompt = readFileSync(join(directory, lens.name, 'stdin.txt'), 'utf8');
-        expect(prompt).toContain(lens.question);
-        expect(prompt).toContain('the one exhaustive review');
-      }
-      // The candidates of every lens go through one confirming pass.
-      const merge = readFileSync(join(directory, 'merge', 'stdin.txt'), 'utf8');
-      expect(merge.match(/- \[P2, first\] value\.ts:1 loses the draft/g)).toHaveLength(REVIEW_LENSES.length);
-      expect(merge).toContain('Add no finding of your own');
-      expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8'))).toEqual({ base: r.base, head, mode: 'whole' });
-    } finally { stub.cleanup(); r.cleanup(); }
-  }, 30_000);
+      writeFileSync(r.task.brief, readFileSync(r.task.brief, 'utf8').replace('kind: implementation', `kind: ${kind}`));
+      const result = r.run();
+      expect(result.status).toBe(0);
+      expect(existsSync(r.log)).toBe(false);
+      expect(r.ledger().tasks[r.task.id]!.state).toBe('verified');
+    } finally { r.cleanup(); }
+  });
 
-  test.each([['recorded request', true], ['prompt of a review made before requests were recorded', false]])(
-    'a later review checks the earlier findings and the changes since it (%s)', async (_name, recorded) => {
-      const r = repo();
-      const stub = reviewerStub();
-      try {
-        const reviewed = r.git(r.worktree, 'rev-parse', 'HEAD');
-        const first = join(r.runDir, 'review-1000-first');
-        mkdirSync(first, { recursive: true });
-        writeFileSync(join(first, 'findings.json'), JSON.stringify({ findings: ['P2: value.ts:1 loses the draft'] }));
-        if (recorded) writeFileSync(join(first, 'request.json'), JSON.stringify({ base: r.base, head: reviewed, mode: 'whole' }));
-        else writeFileSync(join(first, 'prompt.md'), `Inspect git diff ${r.base}..${reviewed} and relevant source/tests in this worktree.\n`);
-        // A review that crashed before reporting is not a reviewed commit.
-        mkdirSync(join(r.runDir, 'review-1500-crashed'), { recursive: true });
-        writeFileSync(join(r.worktree, 'value.ts'), 'export const value = 1;\nexport const draft = "kept";\n');
-        r.git(r.worktree, 'commit', '-qam', 'Keep the draft');
-        const head = r.git(r.worktree, 'rev-parse', 'HEAD');
-        const directory = join(r.runDir, 'review-2000-second');
-        stub.answer([{ text: 'the draft is still lost on retry', severity: 'P2', origin: 'earlier' },
-          { text: 'the fix drops the title', severity: 'P2', origin: 'fix' },
-          { text: 'covered code names it oddly', severity: 'P2', origin: 'old' },
-          { text: 'covered code shows a private name', severity: 'P1', origin: 'old' }]);
-        const blocking = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
-          base: r.base, head }, 'codex');
-        expect(blocking).toEqual(['P2: the draft is still lost on retry', 'P2: the fix drops the title',
-          'P1: covered code shows a private name']);
-        expect(JSON.parse(readFileSync(join(directory, 'recorded.json'), 'utf8')).findings.map((finding: { text: string }) => finding.text))
-          .toEqual(['covered code names it oddly']);
-        // One pass, which gets the earlier finding and exactly what changed since the reviewed commit.
-        expect(existsSync(join(directory, REVIEW_LENSES[0].name))).toBe(false);
-        const prompt = readFileSync(join(directory, 'stdin.txt'), 'utf8');
-        expect(prompt).toContain('- P2: value.ts:1 loses the draft');
-        expect(prompt).toContain(`$ git diff ${reviewed}..${head}`);
-        expect(prompt).toContain('+export const draft = "kept";');
-        expect(prompt).not.toContain('+export const value = 1;');
-        expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8')).mode).toBe('verify');
-      } finally { stub.cleanup(); r.cleanup(); }
-    }, 30_000);
-
-  test('a change mostly rewritten since its last review is read from the start again', async () => {
-    const r = repo();
-    const stub = reviewerStub();
+  test('one reviewer returns findings without severities or a confirming pass', async () => {
+    const r = repo(); const stub = reviewerStub();
     try {
-      const reviewed = r.git(r.worktree, 'rev-parse', 'HEAD');
-      const first = join(r.runDir, 'review-1000-first');
-      mkdirSync(first, { recursive: true });
-      writeFileSync(join(first, 'findings.json'), JSON.stringify({ findings: ['P2: value.ts:1 loses the draft'] }));
-      writeFileSync(join(first, 'request.json'), JSON.stringify({ base: r.base, head: reviewed, mode: 'whole' }));
-      writeFileSync(join(r.worktree, 'value.ts'),
-        Array.from({ length: 500 }, (_unused, index) => `export const value${index} = ${index};`).join('\n'));
-      r.git(r.worktree, 'commit', '-qam', 'A fresh implementation');
-      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
-      const directory = join(r.runDir, 'review-2000-second');
-      stub.answer([]);
+      const directory = join(r.runDir, 'review-first');
+      stub.answer([{ text: 'private name disclosed' }, 'another observation']);
       expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
-        base: r.base, head }, 'codex')).toEqual([]);
-      const prompt = readFileSync(join(directory, REVIEW_LENSES[0].name, 'stdin.txt'), 'utf8');
-      expect(prompt).toContain('the one exhaustive review');
-      expect(prompt).toContain('- P2: value.ts:1 loses the draft');
-      expect(JSON.parse(readFileSync(join(directory, 'request.json'), 'utf8')).mode).toBe('whole');
+        base: r.base, head: r.git(r.worktree, 'rev-parse', 'HEAD') }, 'codex')).toEqual([
+        { text: 'private name disclosed' }, { text: 'another observation' }]);
+      expect(readdirSync(directory).filter(name => !name.includes('.'))).toEqual([]);
+      const prompt = readFileSync(join(directory, 'stdin.txt'), 'utf8');
+      expect(prompt).toContain('public HTTP API of the real QA stack');
+      expect(prompt).toContain('No severity labels');
     } finally { stub.cleanup(); r.cleanup(); }
-  }, 30_000);
+  });
+
+  test('a failing review test is committed; later land runs that target without another reviewer', () => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const content = "import { test, expect } from 'bun:test'; test('private name is refused', async () => { const response = await fetch('http://main.local/private'); expect(response.status).toBe(403); });\n";
+      const finding = { text: 'a stranger reads a private name', test: { path, content } };
+      const first = r.run('land', { REVIEW_JSON: JSON.stringify({ findings: [finding] }), REVIEW_TEST_STATUS: 'failed' });
+      expect(first.status).toBe(1); expect(first.stderr).toContain('blocking review tests committed');
+      expect(r.git(r.worktree, 'show', `HEAD:${path}`)).toBe(content.trim());
+      expect(r.git(r.worktree, 'status', '--porcelain')).toBe('');
+      const stillFailing = r.run('land', { REVIEW_TEST_STATUS: 'failed' });
+      expect(stillFailing.stderr).toContain('committed review tests did not pass');
+      const unavailable = r.run('land', { REVIEW_TEST_STATUS: 'unavailable' });
+      expect(unavailable.stderr).toContain('committed review tests did not pass');
+      const fixed = r.run('land', { REVIEW_TEST_STATUS: 'passed', REVIEW_EXIT: '1' });
+      expect(fixed.status).toBe(0); expect(fixed.stdout).toContain('landed and verified');
+      expect(readFileSync(r.log, 'utf8').trim().split('\n')).toHaveLength(1);
+      expect(r.git(r.dir, 'show', `main:${path}`)).toBe(content.trim());
+    } finally { r.cleanup(); }
+  });
+
+  test.each(['edited', 'deleted'])('a committed review target cannot be %s to pass landing', action => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const finding = { text: 'private name disclosed', test: { path, content: 'await fetch("http://main.local/private");\n' } };
+      expect(r.run('land', { REVIEW_JSON: JSON.stringify({ findings: [finding] }), REVIEW_TEST_STATUS: 'failed' }).status).toBe(1);
+      if (action === 'edited') writeFileSync(join(r.worktree, path), 'test.skip("private name", () => {});\n');
+      else rmSync(join(r.worktree, path));
+      r.git(r.worktree, 'add', path); r.git(r.worktree, 'commit', '-qm', 'Weaken the review target');
+      const result = r.run('land', { REVIEW_TEST_STATUS: 'passed' });
+      expect(result.status).toBe(1); expect(result.stderr).toContain(action === 'edited' ? 'was edited' : 'is missing');
+      expect(readFileSync(r.log, 'utf8').trim().split('\n')).toHaveLength(1);
+    } finally { r.cleanup(); }
+  });
+
+  test('retry after interrupted review validation reuses the report, without calling the reviewer', async () => {
+    const r = repo();
+    try {
+      let reviews = 0; let interrupt = true; let merges = 0;
+      const options = { id: r.task.id, runDir: r.runDir, worktree: r.worktree, base: r.base,
+        head: r.git(r.worktree, 'rev-parse', 'HEAD'), kind: 'implementation', changedFiles: ['services/account/src/value.ts'],
+        brief: 'brief', handoff: 'RESULT: done', review: async () => { reviews++; return [{ text: 'observation' }]; },
+        checkpoint: () => { if (interrupt) throw new Error('interrupted validation'); },
+        merge: async () => { merges++; }, close: async () => {} };
+      await expect(land(options)).rejects.toThrow('interrupted validation');
+      interrupt = false;
+      await land(options);
+      expect(reviews).toBe(1); expect(merges).toBe(1);
+    } finally { r.cleanup(); }
+  });
+
+  test('review tests cannot write through a symlink, mock modules or instantiate route handlers', async () => {
+    const r = repo();
+    try {
+      const head = r.git(r.worktree, 'rev-parse', 'HEAD');
+      const findings = [
+        { text: 'mock', test: { path: 'tests/qa/integration/review/mock.test.ts', content: 'mock.module("service", () => ({}));' } },
+        { text: 'route', test: { path: 'tests/qa/integration/review/route.test.ts', content: 'app.handle(new Request("http://main.local"));' } },
+        { text: 'internal', test: { path: 'tests/qa/integration/review/internal.test.ts', content: 'import { Owner } from "../../../../services/main/src/owner.ts";' } },
+      ];
+      const options = { id: r.task.id, runDir: r.runDir, worktree: r.worktree, base: r.base, head,
+        kind: 'implementation', changedFiles: ['services/account/src/value.ts'], brief: 'brief', handoff: 'RESULT: done',
+        review: async () => findings, test: async () => { throw new Error('must not run invalid tests'); },
+        merge: async () => {}, close: async () => {} };
+      await land(options);
+      expect(existsSync(join(r.worktree, findings[0]!.test.path))).toBe(false);
+      mkdirSync(join(r.worktree, 'tests/qa/integration'), { recursive: true });
+      mkdirSync(join(r.worktree, '.temp/elsewhere'), { recursive: true });
+      symlinkSync(join(r.worktree, '.temp/elsewhere'), join(r.worktree, 'tests/qa/integration/review'));
+      r.git(r.worktree, 'add', 'tests'); r.git(r.worktree, 'commit', '-qm', 'Add directory alias');
+      const runDir = join(r.runDir, 'other-task'); mkdirSync(runDir);
+      await land({ ...options, runDir, head: r.git(r.worktree, 'rev-parse', 'HEAD'), review: async () => [
+        { text: 'alias', test: { path: 'tests/qa/integration/review/alias.test.ts', content: 'fetch("http://main.local");' } }] });
+      expect(existsSync(join(r.worktree, '.temp/elsewhere/alias.test.ts'))).toBe(false);
+    } finally { r.cleanup(); }
+  });
+
+  test.each(['passed', 'unavailable', 'timeout', 'unstable'])('a review test that is %s is recorded and cannot block', status => {
+    const r = repo();
+    try {
+      const path = 'tests/qa/integration/review/private-name.test.ts';
+      const findings = [{ text: 'an observation without a test' }, { text: 'a candidate', test: { path, content: 'await fetch("http://main.local");' } }];
+      const result = r.run('land', { REVIEW_JSON: JSON.stringify({ findings }), REVIEW_TEST_STATUS: status });
+      expect(result.status).toBe(0);
+      const report = readdirSync(r.runDir).find(name => name.startsWith('review-'))!;
+      expect(JSON.parse(readFileSync(join(r.runDir, report, 'recorded.json'), 'utf8')).findings).toHaveLength(2);
+      expect(r.git(r.dir, 'ls-tree', '-r', '--name-only', 'main')).not.toContain(path);
+    } finally { r.cleanup(); }
+  });
+
+  test('missing or invalid tests are recorded without writing outside the review directory', () => {
+    const r = repo();
+    try {
+      const findings = [
+        { text: 'outside', test: { path: '../escape.test.ts', content: 'fail' } },
+        { text: 'replace', test: { path: 'services/account/src/value.ts', content: 'fail' } },
+        { text: 'empty', test: { path: 'tests/qa/integration/review/empty.test.ts', content: '' } },
+      ];
+      expect(r.run('land', { REVIEW_JSON: JSON.stringify({ findings }) }).status).toBe(0);
+      expect(existsSync(join(r.worktree, '../escape.test.ts'))).toBe(false);
+      const report = readdirSync(r.runDir).find(name => name.startsWith('review-'))!;
+      expect(JSON.parse(readFileSync(join(r.runDir, report, 'recorded.json'), 'utf8')).findings).toHaveLength(3);
+    } finally { r.cleanup(); }
+  });
 
   test('the sonnet reviewer gets the diff in its prompt and its findings fail closed', async () => {
     const r = repo();
@@ -452,12 +512,12 @@ echo '{"findings":[]}' > "$out"
       process.env.PATH = `${bin}:${path}`;
       const findings = await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base, head }, 'sonnet');
-      expect(findings).toEqual(['P1 stub']);
+      expect(findings).toEqual([{ text: 'P1 stub' }]);
       expect(readFileSync(join(directory, 'stdin.txt'), 'utf8')).toContain('+reviewed change');
       // A schema-validated object from the CLI wins over the text.
       writeFileSync(reply, JSON.stringify({ is_error: false, result: 'prose', structured_output: { findings: ['P2 structured'] } }));
       expect(await reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
-        base, head }, 'sonnet')).toEqual(['P2 structured']);
+        base, head }, 'sonnet')).toEqual([{ text: 'P2 structured' }]);
       writeFileSync(reply, JSON.stringify({ is_error: true, result: 'limit' }));
       await expect(reviewBranch({ directory, worktree: r.worktree, brief: 'brief', handoff: 'RESULT: done',
         base, head }, 'sonnet')).rejects.toThrow('reported an error');
@@ -526,7 +586,7 @@ echo '{"findings":[]}' > "$out"
       + `test('main timeout is isolated on retry', async () => {\n`
       + `  const runs = readFileSync(process.env.GOAL_TEST_LOG!, 'utf8').trim().split('\\n').length;\n`
       + `  if (runs === 3) await Bun.sleep(1_000);\n  expect(true).toBe(true);\n});\n`;
-    const r = repo({ files: { [file]: baseline }, paths: ['value.ts', file] });
+    const r = repo({ files: { [file]: baseline }, paths: ['services/account/src/value.ts', file] });
     try {
       writeFileSync(join(r.worktree, file), `import { expect, test } from 'bun:test';\n`
         + `test('branch failure', () => expect(false).toBe(true));\n`);
@@ -585,7 +645,7 @@ echo '{"findings":[]}' > "$out"
         scope: async () => ({ outOfClaim: [...permitted, permitted[0]!], claimedByOthers: [] }),
         review: async request => { reviewed = request.permittedFiles; return []; },
         merge: async files => { merged = files; }, close: async () => {} });
-      expect(reviewed).toEqual(permitted);
+      expect(reviewed).toBeUndefined();
       expect(merged).toEqual(permitted);
       expect(reports.join('\n')).toContain(`G-001: permitted unclaimed files:\n  ${permitted.join('\n  ')}`);
     } finally {

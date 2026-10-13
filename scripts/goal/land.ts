@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join } from 'node:path';
+import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
 
 export interface LandReview {
   worktree: string; base: string; head: string; brief: string; handoff: string; directory: string;
@@ -15,9 +15,14 @@ export interface LandScope {
 }
 export interface LandOptions extends Omit<LandReview, 'directory'> {
   id: string; runDir: string;
-  review?: (request: LandReview) => Promise<string[]>;
+  kind?: string;
+  changedFiles?: string[];
+  review?: (request: LandReview) => Promise<ReviewFinding[]>;
+  test?: (files: string[], directory: string) => Promise<Map<string, ReviewTestResult>>;
+  checkTargets?: (files: string[]) => void;
+  checkpoint?: () => void;
   scope?: () => Promise<LandScope>;
-  merge: (permittedFiles: string[]) => Promise<void>;
+  merge: (permittedFiles: string[], head: string) => Promise<void>;
   close: () => Promise<void>;
 }
 
@@ -87,26 +92,27 @@ function runReviewer(program: string, args: string[], request: LandReview, promp
   }).finally(() => { closeSync(stdout); closeSync(stderr); });
 }
 
-export type FindingSeverity = 'P1' | 'P2' | 'P3';
-export type FindingOrigin = 'first' | 'earlier' | 'fix' | 'old';
-export interface ReviewFinding { text: string; severity: FindingSeverity; origin: FindingOrigin }
+export interface ReviewFinding { text: string; test?: { path: string; content: string } }
+export type ReviewTestResult = 'passed' | 'failed' | 'unavailable';
 
-/** What the reviews already made of this task say: every finding they reported and the last commit reviewed. */
-export interface EarlierReviews { findings: string[]; base: string; head: string }
-
-/** The first review reads the whole change three times, each pass with one question, because one pass finds a
- * small share of a change's defects and every later round costs a worker session and another landing. */
-export const REVIEW_LENSES = [
-  { name: 'contract', question: 'Contract. Take each outcome, case, decision and check in the brief in turn and find where the code does something else, does less, or is not held by a test that would fail without it.' },
-  { name: 'failure', question: 'Failure and hostile use. Malformed, oversized, repeated and out-of-order input; two requests at once; a value read before an await and used after it; retries, timeouts and partial failure; an error mapped to the wrong outcome; who may do or see what.' },
-  { name: 'structure', question: 'Structure. Files changed beyond the brief; tests weakened, skipped or deleted; a read or write whose cost grows with unrelated data; repository rules broken, such as a task ID in code or comments or a test writing another owner\'s tables directly.' },
+// These are the current owners and their route/storage adapters, not every caller of an owner.
+export const SENSITIVE_REVIEW_PATHS = [
+  'services/account/',
+  'services/main/src/modules/access/', 'services/main/migrations/access/',
+  'services/main/src/modules/disclosure/', 'services/main/src/modules/search-disclosure/',
+  'services/main/src/modules/rights/', 'services/main/src/modules/erasure/',
+  'services/main/src/modules/governance/',
+  'services/main/src/routes/rights.ts', 'services/main/src/routes/erasures.ts',
+  'services/main/src/modules/composition/disclosure-read.ts',
+  'services/main/src/modules/outbox/account-deletion-journal.ts',
+  'services/main/src/modules/outbox/account-subject-deletion.ts',
 ] as const;
 
-const SEVERITIES = `Give each finding a severity. Report what you find; what blocks the landing is decided elsewhere.
-P1: someone gets wrong, lost or exposed data, or an authorization, disclosure or integrity rule is broken.
-P2: behaviour differs from the brief; a behaviour the brief claims has no test that would fail without it; a test is weakened; a change beyond the brief or in another owner's mechanism; a cost that grows with unrelated data.
-P3: anything else worth recording.
-Each finding names the file and line, what happens, and the input or sequence that shows it.`;
+export function needsReview(kind: string | undefined, files: readonly string[]): boolean {
+  return (kind === 'implementation' || kind === 'mechanism')
+    && files.some(file => SENSITIVE_REVIEW_PATHS.some(path => path.endsWith('/') ? file.startsWith(path) : file === path)
+      || /^services\/(main|content)\/(src\/.*|migrations\/.*)(?:authority|disclosure|rights|erasure|account-deletion)[^/]*\.(?:ts|sql)$/.test(file));
+}
 
 function reviewRules(request: LandReview): string {
   return `Which owner carries this change? Report a finding when any new table, predicate, action or policy duplicates a mapped mechanism. When the brief merges copies, report a finding if non-test lines grow without a correctness gain the brief names.
@@ -126,125 +132,34 @@ ${request.handoff}
 </handoff>`;
 }
 
-/** The whole-change review. `question` narrows one pass to a lens; `earlier` lists what former reviews
- * reported when a rewritten change is read from the start again. */
-export function reviewPrompt(request: LandReview, question?: string, earlier: readonly string[] = []): string {
-  return `Review this exited Goal worker's committed branch against its assigned brief.
-This is the one exhaustive review of the change: later reviews only check the fixes, so report every defect you can confirm from the code now. Use origin "first" for each.
-${question ? `Your part of the review: ${question}\n` : ''}Report wrong behaviour, scope beyond the brief, weakened tests and security defects.
-${SEVERITIES}
+/** One review supplies reproducible public API tests; the harness decides which findings block. */
+export function reviewPrompt(request: LandReview): string {
+  return `Review this exited Goal worker's committed branch against its assigned brief, once.
+Report confirmed authority, disclosure, rights, erasure or Account defects, not style or speculative improvements.
+For each finding provide text and, if reproducible, a test object with path and content.
+Tests must be new files under tests/qa/integration/review/<capability>.test.ts, exercise the public HTTP API of the real QA stack, and mock none of our own modules. Use the existing QA support helpers; do not instantiate owners or route handlers. A failing assertion must show a persona reading or changing what its row refuses, or data lost or corrupted. No severity labels.
 Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
-${earlier.length ? `Earlier reviews of a former version reported these; report any that still holds:\n${earlier.map(text => `- ${text}`).join('\n')}\n` : ''}${reviewRules(request)}`;
+${reviewRules(request)}`;
 }
 
-/** A later review checks the fixes: the earlier findings and what changed since the last reviewed commit. */
-export function verifyPrompt(request: LandReview, earlier: EarlierReviews, changes: string): string {
-  return `Review what changed on this exited Goal worker's branch since its last review. The whole change was reviewed at commit ${earlier.head}; it is not reviewed from the start again.
-1. For each earlier finding below, read the code and decide whether it is fixed. Report it again with origin "earlier" only if it is not.
-2. Read the changes since the last review and report every defect they introduce, with origin "fix".
-3. A defect you come across in code the last review already covered gets origin "old". Do not go looking for these.
-${SEVERITIES}
-The whole change is git diff ${request.base}..${request.head}.
-${reviewRules(request)}
-<earlier-findings>
-${earlier.findings.length ? earlier.findings.map(text => `- ${text}`).join('\n') : 'none'}
-</earlier-findings>
-<changes-since-last-review>
-${changes}
-</changes-since-last-review>`;
-}
-
-/** The passes of a first review report the same defect in different words, and a single pass is sometimes
- * wrong. One more pass confirms each candidate against the code and returns each distinct defect once. */
-export function mergePrompt(request: LandReview, candidates: readonly ReviewFinding[]): string {
-  return `Several reviewers read this exited Goal worker's branch independently and reported the candidate findings below. Some describe the same defect in different words, and some may be wrong.
-Read the code for each candidate and confirm or refute it. Return one finding for each distinct confirmed defect: merge candidates that describe the same defect, keep the most precise wording, the highest severity among them that the code supports, and the origin as given. Drop a candidate only when the code shows it is wrong. Add no finding of your own.
-Inspect git diff ${request.base}..${request.head} and relevant source/tests in this worktree.
-${reviewRules(request)}
-<candidates>
-${candidates.map(finding => `- [${finding.severity}, ${finding.origin}] ${finding.text}`).join('\n')}
-</candidates>`;
-}
-
-/** The landing rule lives here, not in the reviewer's prompt: a reviewer told what blocks shifts its findings
- * to fit. A later round does not reopen code the first review covered unless data or a rule is at stake. */
-export function blocksLanding(finding: ReviewFinding): boolean {
-  if (finding.severity === 'P3') return false;
-  return finding.origin !== 'old' || finding.severity === 'P1';
-}
-
-/** A bare string is a finding from a reviewer that ignored the schema; it blocks. */
 export function reviewFinding(item: unknown): ReviewFinding | undefined {
-  if (typeof item === 'string') return item.trim() ? { text: item, severity: 'P2', origin: 'first' } : undefined;
+  if (typeof item === 'string') return item.trim() ? { text: item } : undefined;
   if (!item || typeof item !== 'object') return undefined;
-  const { text, severity, origin } = item as Record<string, unknown>;
+  const { text, test } = item as Record<string, unknown>;
   if (typeof text !== 'string' || !text.trim()) return undefined;
-  if (severity !== 'P1' && severity !== 'P2' && severity !== 'P3') return undefined;
-  if (origin !== 'first' && origin !== 'earlier' && origin !== 'fix' && origin !== 'old') return undefined;
-  return { text, severity, origin };
-}
-
-function describeFinding(finding: ReviewFinding): string {
-  return /^P[1-3]\b/.test(finding.text) ? finding.text : `${finding.severity}: ${finding.text}`;
+  if (test === undefined) return { text };
+  if (!test || typeof test !== 'object') return { text };
+  const { path, content } = test as Record<string, unknown>;
+  return typeof path === 'string' && typeof content === 'string' ? { text, test: { path, content } } : { text };
 }
 
 const git = (worktree: string, args: string[]) =>
   spawnSync('git', args, { cwd: worktree, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
 
-/** Former reviews of the same task are the sibling directories of this one. */
-export function earlierReviews(directory: string): EarlierReviews | undefined {
-  const parent = dirname(directory);
-  const stamp = (name: string) => Number(name.split('-')[1]);
-  const names = existsSync(parent)
-    ? readdirSync(parent).filter(name => /^review-\d+-/.test(name) && name !== basename(directory)).sort((a, b) => stamp(a) - stamp(b))
-    : [];
-  const findings = new Set<string>();
-  let last: { base: string; head: string } | undefined;
-  for (const name of names) {
-    const read = (file: string) => { try { return readFileSync(join(parent, name, file), 'utf8'); } catch { return undefined; } };
-    const reported = read('findings.json');
-    if (reported === undefined) continue;
-    try {
-      for (const item of (JSON.parse(reported) as { findings?: unknown[] }).findings ?? []) {
-        if (typeof item === 'string' && item.trim()) findings.add(item);
-      }
-    } catch { continue; }
-    // Reviews made before the request was recorded name their commits in the prompt.
-    const range = /Inspect git diff ([0-9a-f]{7,40})\.\.([0-9a-f]{7,40})/.exec(read('prompt.md') ?? '');
-    try { last = JSON.parse(read('request.json') ?? '') as { base: string; head: string }; }
-    catch { if (range) last = { base: range[1]!, head: range[2]! }; }
-  }
-  return last ? { findings: [...findings], base: last.base, head: last.head } : undefined;
-}
-
-const patchLines = (worktree: string, base: string, head: string) =>
-  git(worktree, ['diff', `${base}..${head}`]).stdout.split('\n').filter(line => /^[+-](?![+-]{2} )/.test(line));
-
-/** What a later review reads, or nothing when the change must be read from the start: the last reviewed
- * commit is gone, or more than half of the change (and over 400 lines) is new since then, as after a
- * fresh implementation. Comparing the two patches line by line survives a rebase onto a newer main. */
-export function changesSinceReview(request: LandReview, earlier: EarlierReviews): string | undefined {
-  if (git(request.worktree, ['cat-file', '-e', `${earlier.head}^{commit}`]).status !== 0) return undefined;
-  const before = new Set(patchLines(request.worktree, earlier.base, earlier.head));
-  const now = patchLines(request.worktree, request.base, request.head);
-  const fresh = now.filter(line => !before.has(line)).length;
-  if (fresh > Math.max(400, now.length / 2)) return undefined;
-  const ancestor = git(request.worktree, ['merge-base', '--is-ancestor', earlier.head, request.head]).status === 0;
-  const args = ancestor ? ['diff', `${earlier.head}..${request.head}`]
-    : ['range-diff', `${earlier.base}..${earlier.head}`, `${request.base}..${request.head}`];
-  const shown = git(request.worktree, args);
-  if (shown.status !== 0) return undefined;
-  const limit = EMBEDDED_DIFF_LIMIT / 2;
-  return `$ git ${args.join(' ')}\n${shown.stdout.length > limit
-    ? `${shown.stdout.slice(0, limit)}\n[truncated at ${limit} characters; run the command for the rest]`
-    : shown.stdout}`;
-}
-
 const FINDINGS_SCHEMA = { type: 'object', additionalProperties: false, required: ['findings'],
   properties: { findings: { type: 'array', items: { type: 'object', additionalProperties: false,
-    required: ['text', 'severity', 'origin'], properties: { text: { type: 'string' },
-      severity: { type: 'string', enum: ['P1', 'P2', 'P3'] },
-      origin: { type: 'string', enum: ['first', 'earlier', 'fix', 'old'] } } } } } };
+    required: ['text'], properties: { text: { type: 'string' }, test: { type: 'object', additionalProperties: false,
+      required: ['path', 'content'], properties: { path: { type: 'string' }, content: { type: 'string' } } } } } } } };
 
 /** Waits before a refused pass runs again; `GOAL_REVIEW_RETRY_MS` overrides them (tests use 1). */
 function reviewRetryDelayMs(attempt: number, env: NodeJS.ProcessEnv = process.env): number {
@@ -281,7 +196,7 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
   } else {
     writeFileSync(join(request.directory, 'prompt.md'), prompt);
     // The service refuses a request now and then ("Selected model is at capacity" stopped a landing on
-    // 2026-10-12), and one refused pass of several must not cost the whole review: the same account is
+    // 2026-10-12), and a refused launch must not cost the review: the same account is
     // tried again, then the other one. A reviewer needs no MCP server; an unreachable one only adds errors.
     const accounts: ReviewEngine[] = [engine, engine, engine === 'codex' ? 'codex-1' : 'codex'];
     for (const [attempt, account] of accounts.entries()) {
@@ -303,41 +218,62 @@ async function reviewPass(request: LandReview, engine: ReviewEngine, prompt: str
   return items as ReviewFinding[];
 }
 
-/** Keep the review independent of worker instructions and fail closed on malformed output. Returns the
- * findings that block; the rest are written to recorded.json for the manager to class. */
-export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<string[]> {
-  const earlier = earlierReviews(request.directory);
-  const changes = earlier && changesSinceReview(request, earlier);
-  let found: ReviewFinding[];
-  if (earlier && changes !== undefined) {
-    found = await reviewPass(request, engine, verifyPrompt(request, earlier, changes));
-  } else if (engine === 'sonnet') {
-    found = await reviewPass(request, engine, reviewPrompt(request,
-      REVIEW_LENSES.map(lens => lens.question).join('\n'), earlier?.findings));
-  } else {
-    const passes = await Promise.all(REVIEW_LENSES.map(lens => reviewPass(
-      { ...request, directory: join(request.directory, lens.name) }, engine,
-      reviewPrompt(request, lens.question, earlier?.findings))));
-    found = passes.flat();
-    if (found.length > 1) {
-      // Without the merge the union still stands: it only costs the worker reading a defect twice.
-      found = await reviewPass({ ...request, directory: join(request.directory, 'merge') }, engine, mergePrompt(request, found))
-        .catch(error => { console.log(`review merge pass failed, keeping every candidate: ${String(error)}`); return found; });
+export async function reviewBranch(request: LandReview, engine: ReviewEngine = reviewEngine()): Promise<ReviewFinding[]> {
+  return reviewPass(request, engine, reviewPrompt(request));
+}
+
+/** Only completed, stable harness reports containing an assertion failure establish a reproduction. */
+export async function runReviewTests(worktree: string, files: string[], directory: string): Promise<Map<string, ReviewTestResult>> {
+  const resultFile = join(directory, 'test-result.json');
+  const stdout = openSync(join(directory, 'test-stdout.log'), 'w');
+  const stderr = openSync(join(directory, 'test-stderr.log'), 'w');
+  try {
+    const child = spawn('task', ['goal', '--', 'test', '--result-file', resultFile, ...files],
+      { cwd: worktree, stdio: ['ignore', stdout, stderr] });
+    await new Promise<void>((resolve, reject) => { child.once('error', reject); child.once('exit', () => resolve()); });
+  } catch { /* Launch and stack errors record the finding; they are not evidence of a defect. */ }
+  finally { closeSync(stdout); closeSync(stderr); }
+  const results = new Map<string, ReviewTestResult>(files.map(file => [file, 'unavailable']));
+  try {
+    const result = JSON.parse(readFileSync(resultFile, 'utf8')) as { artifactPaths: string[] };
+    for (const artifact of result.artifactPaths) {
+      const report = JSON.parse(readFileSync(join(artifact, 'acceptance.json'), 'utf8')) as {
+        sourceStable: boolean; tests: { file: string; name: string; failed: boolean; skipped: boolean; detail?: string; timeout?: boolean; preparationFailure?: boolean }[];
+      };
+      if (!report.sourceStable) continue;
+      for (const file of files) {
+        const tests = report.tests.filter(test => test.file === file);
+        // A harness/load failure has no named assertion. A timeout or connection error is not a reproduction.
+        const failures = tests.filter(test => test.failed);
+        if (failures.some(test => !test.timeout && !test.preparationFailure && /expect\(|AssertionError|Expected:|Received:/.test(test.detail ?? '')
+          && !/ECONNREFUSED|ETIMEDOUT|timed out|timeout|stack startup|bootstrap failed/i.test(test.detail ?? ''))) {
+          results.set(file, 'failed');
+        } else if (tests.length && tests.every(test => !test.failed && !test.skipped)) results.set(file, 'passed');
+      }
     }
-    // The landing's own prompt.md names the reviewed range for the next round and for readers of the run.
-    writeFileSync(join(request.directory, 'prompt.md'), reviewPrompt(request, undefined, earlier?.findings));
-    writeFileSync(join(request.directory, 'review.json'), JSON.stringify({ findings: found }));
+  } catch { /* Missing or malformed reports cannot establish a failing public API test. */ }
+  return results;
+}
+
+function testPathAllowed(worktree: string, test: NonNullable<ReviewFinding['test']>): boolean {
+  if (/mock\.module|(?:vi|jest)\.mock|\.handle\(|[\'"](?:[^\'"]*\/)?services\//.test(test.content)) return false;
+  if (!/^tests\/qa\/integration\/review\/[a-z0-9][a-z0-9-]*\.test\.ts$/.test(test.path) || !test.content.trim()) return false;
+  // A new review test must not overwrite tracked files or escape through an existing symlink.
+  if (existsSync(join(worktree, test.path))) return false;
+  let parent = dirname(join(worktree, test.path));
+  while (!existsSync(parent)) parent = dirname(parent);
+  const path = relative(realpathSync(worktree), realpathSync(parent));
+  return path !== '..' && !path.startsWith('../') && realpathSync(parent) === resolve(parent);
+}
+
+/** Existing reports are the record of the task's one review, including the committed fix targets. */
+function priorReview(runDir: string): { findings: ReviewFinding[]; tests?: string[] } | undefined {
+  for (const name of (existsSync(runDir) ? readdirSync(runDir) : []).filter(name => name.startsWith('review-')).sort()) {
+    const file = join(runDir, name, 'findings.json');
+    if (!existsSync(file)) continue;
+    return JSON.parse(readFileSync(file, 'utf8')) as { findings: ReviewFinding[]; tests?: string[] };
   }
-  writeFileSync(join(request.directory, 'request.json'), JSON.stringify({ base: request.base, head: request.head,
-    mode: earlier && changes !== undefined ? 'verify' : 'whole' }));
-  const distinct = [...new Map(found.map(finding => [finding.text, finding])).values()];
-  const recorded = distinct.filter(finding => !blocksLanding(finding));
-  if (recorded.length) {
-    writeFileSync(join(request.directory, 'recorded.json'), `${JSON.stringify({ findings: recorded }, null, 2)}\n`);
-    console.log(`review recorded ${recorded.length} finding(s) that do not block; class each and brief what is owed:\n  ${
-      recorded.map(describeFinding).join('\n  ')}`);
-  }
-  return distinct.filter(blocksLanding).map(describeFinding);
+  return undefined;
 }
 
 /** Keep landing on the shared merge path; merge receives only the revalidated owner-change list. */
@@ -346,26 +282,85 @@ export async function land(options: LandOptions): Promise<void> {
   if (result !== 'done' && !(options.step && result === 'partial')) {
     throw new Error(`${options.id}: land stopped: handoff RESULT is ${result ?? 'missing or ambiguous'}, expected done${options.step ? ' or partial' : ''}`);
   }
+  const previous = priorReview(options.runDir);
   const directory = join(options.runDir, `review-${Date.now()}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
-  console.log(`${options.id}: reviewing ${options.head.slice(0, 12)}; report ${directory}`);
+  console.log(`${options.id}: landing ${options.head.slice(0, 12)}; report ${directory}`);
   try {
     const readScope = async () => classifyScope(options.scope ? await options.scope() : { outOfClaim: [], claimedByOthers: [] });
     const beforeReview = await readScope();
     if (beforeReview.claimed.length) {
       throw new Error(`out-of-claim files are claimed by another task:\n  ${beforeReview.claimed.join('\n  ')}`);
     }
-    const findings = await (options.review ?? reviewBranch)({ ...options, permittedFiles: beforeReview.permitted, directory });
-    writeFileSync(join(directory, 'findings.json'), `${JSON.stringify({ findings }, null, 2)}\n`);
-    if (findings.length) throw new Error(`blocking review findings:\n  ${findings.join('\n  ')}`);
+    let head = options.head;
+    const test = options.test ?? ((files, directory) => runReviewTests(options.worktree, files, directory));
+    const targets = previous?.tests ?? [];
+    if (previous?.tests !== undefined) {
+      if (targets.length) {
+        for (const file of targets) {
+          const committed = git(options.worktree, ['show', `${head}:${file}`]);
+          if (committed.status !== 0) throw new Error(`committed review test is missing: ${file}`);
+          const original = previous.findings.find(finding => finding.test?.path === file)?.test?.content;
+          if (original === undefined || committed.stdout !== original) throw new Error(`committed review test was edited: ${file}`);
+        }
+        const results = await test(targets, directory);
+        if (targets.some(file => results.get(file) !== 'passed')) throw new Error('committed review tests did not pass');
+      }
+    } else if (previous || needsReview(options.kind, options.changedFiles ?? [])) {
+      const findings = previous?.findings ?? await (options.review ?? reviewBranch)({ ...options, permittedFiles: beforeReview.permitted, directory });
+      // The report records the one completed reviewer pass even if validation or QA is interrupted.
+      const reportFile = previous ? readdirSync(options.runDir).filter(name => name.startsWith('review-')).sort()
+        .map(name => join(options.runDir, name, 'findings.json')).find(existsSync)! : join(directory, 'findings.json');
+      writeFileSync(reportFile, JSON.stringify({ findings }, null, 2));
+      options.checkpoint?.();
+      if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head
+        || git(options.worktree, ['status', '--porcelain']).stdout.trim()) throw new Error('branch changed during review');
+      const recorded: { text: string; reason: string }[] = [];
+      const candidates: ReviewFinding[] = [];
+      for (const finding of findings) {
+        if (!finding.test || !testPathAllowed(options.worktree, finding.test)
+          || candidates.some(candidate => candidate.test?.path === finding.test!.path)) {
+          recorded.push({ text: finding.text, reason: 'no new runnable public API test' });
+        } else candidates.push(finding);
+      }
+      options.checkTargets?.(candidates.map(finding => finding.test!.path));
+      try {
+        for (const finding of candidates) {
+          const target = finding.test!;
+          mkdirSync(dirname(join(options.worktree, target.path)), { recursive: true });
+          writeFileSync(join(options.worktree, target.path), target.content);
+        }
+        const results = candidates.length ? await test(candidates.map(finding => finding.test!.path), directory).catch(() => new Map<string, ReviewTestResult>()) : new Map<string, ReviewTestResult>();
+        for (const finding of candidates) {
+          const target = finding.test!;
+          if (results.get(target.path) === 'failed') targets.push(target.path);
+          else recorded.push({ text: finding.text, reason: results.get(target.path) ?? 'unavailable' });
+        }
+        if (targets.length) {
+          options.checkpoint?.();
+          if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head) throw new Error('branch changed during review tests');
+          const added = git(options.worktree, ['add', '--', ...targets]);
+          if (added.status !== 0) throw new Error(added.stderr);
+          const committed = git(options.worktree, ['commit', '--only', '-m', 'Add failing public API review tests', '--', ...targets]);
+          if (committed.status !== 0) throw new Error(committed.stderr);
+          head = git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim();
+
+        }
+      } finally {
+        for (const finding of candidates) if (!targets.includes(finding.test!.path)) rmSync(join(options.worktree, finding.test!.path), { force: true });
+        writeFileSync(join(directory, 'recorded.json'), JSON.stringify({ findings: recorded }, null, 2));
+      }
+      writeFileSync(reportFile, JSON.stringify({ findings, tests: targets }, null, 2));
+      if (targets.length) throw new Error(`blocking review tests committed for the fix:\n  ${targets.join('\n  ')}`);
+    }
     const afterReview = await readScope();
     if (afterReview.claimed.length) {
       throw new Error(`out-of-claim files are claimed by another task:\n  ${afterReview.claimed.join('\n  ')}`);
     }
-    if (JSON.stringify(afterReview.permitted) !== JSON.stringify(beforeReview.permitted)) {
+    if (JSON.stringify(afterReview.permitted.filter(file => !targets.includes(file))) !== JSON.stringify(beforeReview.permitted.filter(file => !targets.includes(file)))) {
       throw new Error('scope changed during review; review again');
     }
-    await options.merge(afterReview.permitted);
+    await options.merge(afterReview.permitted, head);
     if (afterReview.permitted.length) {
       console.log(`${options.id}: permitted unclaimed files:\n  ${afterReview.permitted.join('\n  ')}`);
     }

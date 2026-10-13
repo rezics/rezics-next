@@ -16,7 +16,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   addGateWorktree, branchOnlyRefusal, classifyBranchOnlyFailures, codexHoursUntil100, coordinatorEnrollmentOptions, failingTestFiles, gateTreeRefusal, infrastructureStep, introducedUnitFailureFiles, introducedUnitFailures, landClaimScope, loadCodexResetStatus, markHeavyCommandStarted, memoryFloorRefusal, REGENERATION_COMMIT_SUBJECT,
   planUnitGateShards, qaWaitStatusLines, sharedLifecycleEnvironment, sharedLifecycleStatus, sharedLifecycleWaiters, runOwnerShard, runUnitGate as measuredUnitGate, runUnitSide as measuredUnitSide, shardTimeoutFiles, streamSelectionFiles, streamUnitBaseline, timedOutTestFiles, transferSharedLifecycleOwnership, UNIT_GATE_FILE_CAP, UNIT_JUNIT_MARKER, unitFailureDetails, unitFileErrorDetails, unitFileEvidence, unitGateRefusal, writeUnitEvidence, withRecovery, withSlot,
   dependencyInstallIsStale, missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
-  mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
+  resumeDecisionError, mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
 import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
@@ -71,6 +71,7 @@ async function waitUntil(check: () => boolean): Promise<void> {
 
 const brief = `---
 id: G-040
+kind: tooling
 title: Poll ballot owner schema  # comment
 effort: xhigh
 cases: [GOV11, GOV12]
@@ -95,6 +96,36 @@ describe('goalctl briefs', () => {
     expect(validateBrief(parsed)).toEqual([]);
   });
 
+  test('requires a kind and parses optional outcome row references', () => {
+    expect(parseBrief(brief.replace('kind: tooling', 'kind: implementation\nrows: [work/reading, realm/decisions]')))
+      .toMatchObject({ kind: 'implementation', rows: ['work/reading', 'realm/decisions'] });
+    for (const kind of ['outcome', 'implementation', 'surface', 'mechanism', 'tooling']) {
+      expect(validateBrief({ ...parseBrief(brief), kind: kind as Task['kind'] })).toEqual([]);
+    }
+    expect(validateBrief(parseBrief(brief.replace('kind: tooling\n', ''))).join()).toContain('(missing)');
+    expect(validateBrief(parseBrief(brief.replace('kind: tooling', 'kind: unknown'))).join()).toContain('kind must be one of');
+    expect(validateBrief({ ...parseBrief(brief), rows: ['bad'] })).toContain('bad outcome row: bad');
+  });
+
+  test('two fix rounds require a fresh UTC decision naming the change of course', () => {
+    const attempt = { n: 1, effort: 'high', pid: 0, session: '', output: '', startedAt: '2026-10-13T10:00:00Z' };
+    const attempts = [attempt, { ...attempt, n: 2 }, { ...attempt, n: 3 }];
+    expect(resumeDecisionError(attempts.slice(0, 2), '')).toBeUndefined();
+    expect(resumeDecisionError(attempts, '')).toContain('two fix rounds exhausted');
+    for (const action of ['cut the row scope', 'split the task', 'write a design note']) {
+      expect(resumeDecisionError(attempts, `## Decision\n\n2026-10-13T10:00:01Z: ${action}.\n`)).toBeUndefined();
+      expect(resumeDecisionError(attempts, `## Decision\n\n2026-10-13 10:00:01 UTC: ${action}.\n`)).toBeUndefined();
+    }
+    for (const decision of ['2026-10-13T10:00:00Z: split', '2026-10-12 UTC: cut',
+      '2026-10-13T10:00:01Z: continue', 'split the task']) {
+      expect(resumeDecisionError(attempts, `## Decision\n${decision}\n## Other\n2026-10-14T00:00:00Z split`)).toBeDefined();
+    }
+    expect(resumeDecisionError([attempts[0]!, { ...attempt, continuedFor: 'capacity' },
+      { ...attempt, continuedFor: 'transport' }, attempts[1]!], '')).toBeUndefined();
+    expect(resumeDecisionError([...attempts, { ...attempt, startedAt: '2026-10-14T10:00:00Z' }],
+      '## Decision\n2026-10-13T10:00:01Z: split')).toBeDefined();
+  });
+
   test('rejects efforts the engine does not accept, absolute or .temp paths and malformed ranges', () => {
     const parsed = parseBrief(brief.replace('xhigh', 'ultra').replace('services/main/src/modules/poll/**', '/etc/**')
       .replace('040-044', '044-040'));
@@ -103,12 +134,12 @@ describe('goalctl briefs', () => {
   });
 
   test('selects mapped mechanisms, or none when the task touches none', () => {
-    const body = (mechanisms: string) => `---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n\n## Mechanisms\n\n${mechanisms}\n\n## Checks\n`;
+    const body = (mechanisms: string) => `---\nkind: tooling\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n\n## Mechanisms\n\n${mechanisms}\n\n## Checks\n`;
     expect(mechanismSectionErrors(body('none'))).toEqual([]);
     expect(mechanismSectionErrors(body('- rights-evaluation: consume\n- language-parsing: configure'))).toEqual([]);
     expect(mechanismSectionErrors(body('- private-instrument: new — no owner evaluates this private instrument'))).toEqual([]);
     expect(mechanismSectionErrors(body('- rights-evaluation: new — another evaluator'))).toContain('mechanism rights-evaluation is mapped: consume, configure or extend it');
-    expect(mechanismSectionErrors('---\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n')).toContain('brief needs a ## Mechanisms section');
+    expect(mechanismSectionErrors('---\nkind: tooling\nid: G-040\ntitle: t\neffort: high\n---\n## Outcome\n')).toContain('brief needs a ## Mechanisms section');
     expect(mechanismSectionErrors(body('- not-a-mechanism: consume'))).toContain('unknown mechanism: not-a-mechanism');
     expect(mechanismSectionErrors(body('- rights-evaluation: new'))).toContain('mechanism rights-evaluation: new needs the reason no owner fits');
     expect(mechanismSectionErrors(body('none\n- rights-evaluation: consume'))).toContain('mechanism section is none or a list, not both');
@@ -144,7 +175,7 @@ describe('goalctl claims', () => {
   });
 
   test('a brief may name a shared worktree; its brief file is per task', () => {
-    const brief = parseBrief('---\nid: G-950\ntitle: t\neffort: high\nengine: codex\nworktree: wave-9\npaths: [a/**]\n---\n');
+    const brief = parseBrief('---\nkind: tooling\nid: G-950\ntitle: t\neffort: high\nengine: codex\nworktree: wave-9\npaths: [a/**]\n---\n');
     expect(brief.worktree).toBe('wave-9');
     expect(validateBrief(brief)).toEqual([]);
     expect(validateBrief({ ...brief, worktree: '../x' })).toContain('worktree must be a lower-case name: ../x');
@@ -1941,11 +1972,11 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
     const [program, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt: 'p', engine: 'haiku', resume: false });
     expect(program).toBe('claude');
     expect(args.slice(0, 5)).toEqual(['-p', '--model', 'claude-haiku-5-5', '--effort', 'high']);
-    expect(validateBrief(parseBrief('---\nid: G-041\ntitle: t\nengine: haiku\neffort: max\n---\n'))).toEqual([]);
+    expect(validateBrief(parseBrief('---\nkind: tooling\nid: G-041\ntitle: t\nengine: haiku\neffort: max\n---\n'))).toEqual([]);
   });
 
   test('a prompt that starts like an option stays a prompt (brief frontmatter) on every engine', () => {
-    const prompt = '---\nid: G-041\n---';
+    const prompt = '---\nkind: tooling\nid: G-041\n---';
     for (const resume of [false, true]) {
       for (const engine of ['claude', 'sonnet', 'haiku', 'codex', 'luna', 'cursor'] as const) {
         const [, args] = launchCommand({ id: 'G-041', effort: 'high', session: 's', prompt, engine, resume });
@@ -2054,7 +2085,7 @@ console.log(JSON.stringify(await usageReport({ cacheFile: ${JSON.stringify(join(
 
   test('accepts the efforts each engine supports and rejects unknown engines', () => {
     const brief = (engine: string, effort: string) =>
-      parseBrief(`---\nid: G-081\ntitle: t\neffort: ${effort}\nengine: ${engine}\n---\n`);
+      parseBrief(`---\nkind: tooling\nid: G-081\ntitle: t\neffort: ${effort}\nengine: ${engine}\n---\n`);
     expect(validateBrief(brief('codex', 'ultra'))).toEqual([]);
     expect(validateBrief(brief('claude', 'max'))).toEqual([]);
     expect(validateBrief(brief('fable', 'max'))).toEqual([]);
@@ -2259,7 +2290,7 @@ describe('goalctl reclaim', () => {
 
   function writeBrief(dir: string, paths: string): string {
     const path = join(dir, 'brief.md');
-    writeFileSync(path, ['---', 'id: G-010', 'title: Alpha work', 'effort: high', 'engine: grok', 'cases: []',
+    writeFileSync(path, ['---', 'kind: tooling', 'id: G-010', 'title: Alpha work', 'effort: high', 'engine: grok', 'cases: []',
       `paths: [${paths}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '', '## Outcome', '', 'Outcome.', '',
       '## Mechanisms', '', 'none', ''].join('\n'));
     return path;
@@ -2337,7 +2368,7 @@ describe('goalctl reclaim', () => {
       { cwd: dir, encoding: 'utf8', env });
     const writeBrief = (id: string, paths: string[]) => {
       const path = join(dir, `${id}.md`);
-      writeFileSync(path, ['---', `id: ${id}`, 'title: Claim a path', 'effort: high', 'engine: grok', 'cases: []',
+      writeFileSync(path, ['---', 'kind: tooling', `id: ${id}`, 'title: Claim a path', 'effort: high', 'engine: grok', 'cases: []',
         `paths: [${paths.join(', ')}]`, 'migrations: []', 'shared: []', 'depends: []', '---', '',
         '## Mechanisms', '', 'none', ''].join('\n'));
       return path;
@@ -2592,7 +2623,7 @@ child.on('close', code => process.exit(code ?? 1));
     git('commit', '-qm', 'Goals');
     const brief = (id: string, options: { worktree?: string; depends?: string; engine?: string } = {}) => {
       const path = join(dir, '.temp', `${id}.md`);
-      writeFileSync(path, ['---', `id: ${id}`, 'title: Sleeping test worker', 'effort: high',
+      writeFileSync(path, ['---', 'kind: tooling', `id: ${id}`, 'title: Sleeping test worker', 'effort: high',
         `engine: ${options.engine ?? 'grok'}`, `paths: [worker-${id.slice(2)}.ts]`, `depends: [${options.depends ?? ''}]`,
         ...options.worktree ? [`worktree: ${options.worktree}`] : [], '---', '', '## Mechanisms', '', 'none', ''].join('\n'));
       return path;
@@ -4142,18 +4173,34 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('dispatch dry-run and reclaim refuse a brief without kind', async () => {
+    const r = repo();
+    try {
+      const brief = r.brief('G-001');
+      writeFileSync(brief, readFileSync(brief, 'utf8').replace('kind: tooling\n', ''));
+      const dispatch = r.run(['dispatch', brief, '--dry-run']);
+      expect(dispatch.status).toBe(1);
+      expect(dispatch.stderr).toContain('kind must be one of outcome, implementation, surface, mechanism, tooling: (missing)');
+      await r.start('G-002'); await r.stopFixture('G-002');
+      const updated = r.brief('G-002');
+      writeFileSync(updated, readFileSync(updated, 'utf8').replace('kind: tooling\n', ''));
+      const reclaim = r.run(['reclaim', 'G-002', updated]);
+      expect(reclaim.status).toBe(1); expect(reclaim.stderr).toContain('kind must be one of');
+    } finally { r.cleanup(); }
+  });
+
   test('dispatch dry-run refuses a brief without Mechanisms or with an unknown id', () => {
     const r = repo();
     try {
       const missing = join(r.dir, '.temp/no-mechanisms.md');
-      writeFileSync(missing, ['---', 'id: G-070', 'title: No mechanisms', 'effort: high', 'engine: grok',
+      writeFileSync(missing, ['---', 'kind: tooling', 'id: G-070', 'title: No mechanisms', 'effort: high', 'engine: grok',
         'paths: [worker-070.ts]', '---', '', '## Outcome', '', 'Do the thing.', ''].join('\n'));
       const refused = r.run(['dispatch', missing, '--dry-run']);
       expect(refused.status).toBe(1);
       expect(refused.stderr).toContain('## Mechanisms');
       expect(r.ledger().tasks['G-070']).toBeUndefined();
       const unknown = join(r.dir, '.temp/unknown-mechanism.md');
-      writeFileSync(unknown, ['---', 'id: G-071', 'title: Unknown mechanism', 'effort: high', 'engine: grok',
+      writeFileSync(unknown, ['---', 'kind: tooling', 'id: G-071', 'title: Unknown mechanism', 'effort: high', 'engine: grok',
         'paths: [worker-071.ts]', '---', '', '## Mechanisms', '', '- not-a-mechanism: consume', ''].join('\n'));
       const named = r.run(['dispatch', unknown, '--dry-run']);
       expect(named.status).toBe(1);
@@ -4262,6 +4309,23 @@ process.exit(0);
       const dispatch = r.run(['dispatch', brief, '--dry-run']);
       expect(dispatch.status).toBe(1);
       expect(dispatch.stderr).toContain('7d projected');
+    } finally { r.cleanup(); }
+  });
+
+  test('resume refuses a third fix round even with fresh engine and usage flags', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001'); await r.stopFixture('G-001');
+      const ledger = r.ledger(); const task = ledger.tasks['G-001']!;
+      task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
+      r.save(ledger);
+      for (const flags of [[], ['--fresh', '--engine', 'codex', '--force-usage']]) {
+        const result = r.run(['resume', task.id, '-m', 'try again', ...flags]);
+        expect(result.status).toBe(1); expect(result.stderr).toContain('two fix rounds exhausted');
+        expect(r.ledger().tasks[task.id]!.attempts).toHaveLength(3);
+      }
+      writeFileSync(task.brief, readFileSync(task.brief, 'utf8') + '\n## Decision\n\n2099-01-01T00:00:00Z: split the task.\n');
+      expect(r.run(['resume', task.id, '-m', 'continue']).status).toBe(0);
     } finally { r.cleanup(); }
   });
 
