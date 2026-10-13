@@ -197,7 +197,11 @@ for (const persona of signedIn) {
 
     const labels = (
       recordedSample(persona, 'episode-structure').answer as StructureAnswer
-    ).occurrences.map((item) => item.qualifier?.displayLabel);
+    ).occurrences.map((item) => {
+      const label = item.qualifier?.displayLabel;
+      if (!label) throw new Error(`Recorded episode has no display label for ${persona}`);
+      return label;
+    });
     const first = open(persona, animeTwoDeviceSelections(persona, 'first'));
     const firstApi = animeTwoDeviceEpisodes(actingSubject, first);
     const firstStanding = await standingOf(firstApi, id);
@@ -222,9 +226,13 @@ for (const persona of signedIn) {
     const secondApi = animeTwoDeviceEpisodes(actingSubject, second);
     const secondStanding = await standingOf(secondApi, id);
     const resume = recordedSample(persona, 'second-device-resume').answer as ResumeAnswer;
+    const resumeItem = resume.items?.[0];
+    if (!resumeItem?.occurrence || !resumeItem.displayLabel) {
+      throw new Error(`Recorded resume has no place for ${persona}`);
+    }
     expect(secondStanding.ok && secondStanding.data?.furthest).toEqual({
-      occurrence: resume.items?.[0]?.occurrence,
-      label: resume.items?.[0]?.displayLabel,
+      occurrence: resumeItem.occurrence,
+      label: resumeItem.displayLabel,
     });
     const watched = await secondApi.progress(episode!);
     const watchedAnswer = recordedSample(persona, 'second-device-watched').answer as ProgressAnswer;

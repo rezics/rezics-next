@@ -8,8 +8,8 @@ import { recordedSample } from './anime-two-device-recorded-page.ts';
 
 interface Props {
   persona: AnswerPersona;
-  locale: UiLocale;
-  hold: boolean;
+  locale?: UiLocale;
+  hold?: boolean;
 }
 
 const meta = {
@@ -85,7 +85,8 @@ async function playVisitor({ canvasElement, args }: { canvasElement: HTMLElement
 
 async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement; args: Props }) {
   const canvas = within(canvasElement);
-  const copy = copyOf(args.locale);
+  const locale = args.locale ?? 'en';
+  const copy = copyOf(locale);
   const persona = args.persona;
   if (persona === 'visitor') return playVisitor({ canvasElement, args });
   const title = (recordedSample(persona, 'work-header').answer as { title: { value: string } })
@@ -108,7 +109,7 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
   await firstCanvas.findByRole('textbox', { name: copy.jumpTo });
   await expect(firstCanvas.getByText(copy.unknown)).toBeVisible();
   const later = recordedSample(persona, 'first-device-next-version').answer as ProgressAnswer;
-  await jump(first, args.locale, '1');
+  await jump(first, locale, '1');
   await expectSelected(
     first,
     labelAt(persona, 0),
@@ -131,7 +132,7 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
     ?.displayLabel;
   if (!place) throw new Error('Recorded resume has no display label');
   await expect(secondCanvas.findByText(copy.lastWatched({ place }))).resolves.toBeVisible();
-  await jump(second, args.locale, '1');
+  await jump(second, locale, '1');
   await expectSelected(second, labelAt(persona, 0), 'done', copy.watched);
   await userEvent.click(secondCanvas.getByRole('button', { name: copy.markNotWatched }));
   const race = recordedSample(persona, 'first-device-race');
@@ -141,7 +142,7 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
     await expect(secondCanvas.findByText(copy.saveFailed)).resolves.toBeVisible();
     await expectSelected(second, labelAt(persona, 0), 'done', copy.watched);
   }
-  await jump(second, args.locale, '3');
+  await jump(second, locale, '3');
   await expectSelected(second, labelAt(persona, 2), 'open', copy.notWatched);
   await expectNoOverflow(canvasElement);
 }

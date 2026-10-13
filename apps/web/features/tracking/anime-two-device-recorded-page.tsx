@@ -5,12 +5,16 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import progressRecord from '../../../../tests/qa/fixtures/outcomes/anime/continue-progress-across-devices-two-device-progress.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
-import type { Loaded } from '../feed/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { WorkCredits } from '../work-page/credits.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
 import { WorkHeader } from '../work-page/work-header.tsx';
-import type { AgentCreditPage, CreditPage, WorkHeader as Header } from '../work-page/types.ts';
+import type {
+  AgentCreditPage,
+  CreditPage,
+  Loaded,
+  WorkHeader as Header,
+} from '../work-page/types.ts';
 import {
   animeTwoDeviceClient,
   animeTwoDeviceEpisodes,
