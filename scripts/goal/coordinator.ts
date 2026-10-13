@@ -6,6 +6,7 @@ import { homedir } from 'node:os';
 import { basename, join } from 'node:path';
 import { processIdentity, processParent, sameProcess, type ProcessIdentity } from '../qa/process/identity.ts';
 import { GoalMailStore } from './mail.ts';
+import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, termspacesTarget, goalWindows, newGoalWindow, turnWindowName, windowTurns, windowTmux, followTurn } from './windows.ts';
 
 export { processIdentity, sameProcess, type ProcessIdentity };
 
@@ -242,13 +243,11 @@ export function tmuxServer(socket: string): ProcessIdentity {
   if (!identity) throw new Error('Cannot identify independent tmux server');
   return identity;
 }
-const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;
 export class TmuxLauncher implements IndependentLauncher {
   constructor(private readonly stateDir: string, private readonly modulePath = import.meta.filename) {}
-  verify(descriptor: LaunchDescriptor): void {
-    const current = tmuxServer(descriptor.socket);
-    if (!sameProcess(descriptor.server) || current.pid !== descriptor.server.pid
-      || current.cgroup !== descriptor.server.cgroup) throw new Error('Independent tmux server generation changed; handover required');
+  verify(_descriptor: LaunchDescriptor): void {
+    if (!termspacesSession()) throw new Error(missingTermspacesReason());
+    const current = tmuxServer(termspacesTarget().socket);
     let own = processIdentity(process.pid)!;
     const file = join(this.stateDir,'coordinator.sqlite');
     if (existsSync(file)) {
@@ -272,21 +271,23 @@ export class TmuxLauncher implements IndependentLauncher {
   }
   live(token: string, descriptor: LaunchDescriptor): boolean {
     this.verify(descriptor);
-    return spawnSync('tmux', ['-S', descriptor.socket, 'has-session', '-t', `goal-wake-${token}`]).status === 0;
+    return goalWindows(ensureTermspacesSession()).some(window=>window.turn === token && !window.dead);
   }
   launch(token: string, descriptor: LaunchDescriptor): void {
     this.verify(descriptor);
-    const command = [process.execPath, this.modulePath, 'attempt', this.stateDir, token].map(quote).join(' ');
-    // The token is also the tmux session name: replay of an uncertain request cannot create a second window.
-    const result = spawnSync('tmux', ['-S', descriptor.socket, 'new-session', '-d', '-s', `goal-wake-${token}`,
-      '-c', descriptor.cwd, command], {encoding:'utf8'});
-    if (result.status !== 0 && !this.live(token, descriptor)) throw new Error(`tmux launch failed: ${result.stderr.trim()}`);
+    const turn = windowTurns(this.stateDir).find(turn=>turn.token === token);
+    if (!turn) throw new Error('Unknown manager turn');
+    const session = ensureTermspacesSession();
+    const name = turnWindowName(turn);
+    if (goalWindows(session).some(window=>window.name === name)) return;
+    // The durable attempt CAS prevents a replay from running the native engine twice.
+    const id = newGoalWindow(session,name,['sh','-c','trap "" HUP; exec "$@"','goal-turn',
+      process.execPath,this.modulePath,'attempt',this.stateDir,token],descriptor.cwd);
+    windowTmux(['set-option','-w','-t',id,'@goal-turn-token',token]);
   }
-  stop(token: string, descriptor: LaunchDescriptor, child?: ProcessIdentity): void {
+  stop(token: string, _descriptor: LaunchDescriptor, child?: ProcessIdentity): void {
     stopTurnProcesses(token,child);
-    // A lost launcher must not prevent bounding the independently registered process group.
-    try { this.verify(descriptor); } catch { return; }
-    if (this.live(token,descriptor)) tmux(descriptor.socket,['kill-session','-t',`goal-wake-${token}`]);
+    // Reconciliation removes the view after the cut's durable record is written.
   }
 }
 function openStore(stateDir: string): Database {
@@ -664,7 +665,7 @@ export class GoalCoordinator {
 }
 
 /** Runs in the independent server's cgroup; the durable CAS happens before any native resume. */
-export async function runAttempt(stateDir: string, token: string): Promise<void> {
+export async function runAttempt(stateDir: string, token: string, display = false): Promise<void> {
   const db = openStore(stateDir);
   let attempt: Attempt | undefined;
   db.transaction(() => {
@@ -675,6 +676,14 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
     attempt = row;
   }).immediate();
   if (!attempt) { db.close(); return; }
+  // tmux closes the terminal with SIGHUP. The wrapper must still record the
+  // detached engine's outcome when its view is closed or termspaces is reset.
+  const ignoreHangup = () => {};
+  if (display) {
+    process.on('SIGHUP',ignoreHangup);
+    process.stdout.on('error',ignoreHangup);
+  }
+  const viewing = display ? followTurn(stateDir,token) : undefined;
   const descriptor = JSON.parse(attempt.descriptor) as LaunchDescriptor;
   const directory = join(stateDir,'manager-runs',token);
   mkdirSync(directory,{recursive:true});
@@ -703,7 +712,7 @@ export async function runAttempt(stateDir: string, token: string): Promise<void>
   } catch (error) {
     writeSync(stderr, `${String(error)}\n`);
     finishTurn(db,stateDir,token,'crash',127,Date.now());
-  } finally { closeSync(stdout); closeSync(stderr); db.close(); }
+  } finally { closeSync(stdout); closeSync(stderr); db.close(); await viewing; }
 }
 function sessionRecordMatches(line: string, session: string, cwd: string): boolean {
   if (!line.includes('"cwd"')) return false;
@@ -739,5 +748,5 @@ export function nativeSession(home: string, session: string, cwd: string): void 
 }
 if (import.meta.main) {
   if (process.argv[2] !== 'attempt' || !process.argv[3] || !process.argv[4]) throw new Error('Internal attempt requires stateDir and token');
-  await runAttempt(process.argv[3],process.argv[4]);
+  await runAttempt(process.argv[3],process.argv[4],true);
 }

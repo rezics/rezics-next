@@ -7,6 +7,7 @@ import { GoalCoordinator, TmuxLauncher, WAKE_LAST_MESSAGE, WAKE_PROMPT, claudeNa
   type CoordinatorOptions, type IndependentLauncher, type LaunchDescriptor, type WakeEvent } from './coordinator.ts';
 import { GoalMailStore } from './mail.ts';
 import { coordinatorStartDescriptor, coordinatorStartOptions, managerEvents } from './goalctl.ts';
+import { goalWindows, termspacesSession, turnWindowName, windowTurns, reconcileWindows } from './windows.ts';
 
 class RecordingLauncher implements IndependentLauncher {
   readonly launches: string[] = [];
@@ -1222,21 +1223,82 @@ describe('durable Goal wake coordinator', () => {
   });
 });
 
-const socket = process.env.GOAL_TEST_TMUX_SOCKET ?? `/tmp/tmux-${process.getuid?.()}/default`;
-let independentServer: ReturnType<typeof tmuxServer> | undefined;
-try {
-  const server = tmuxServer(socket);
-  const ownGroup = processIdentity(process.pid)!.cgroup;
-  if (server.cgroup !== ownGroup) independentServer = server;
-} catch { /* Hosts without an independent tmux server exercise the injected launcher above. */ }
+const independentServerAvailable = spawnSync('systemctl',['--user','show-environment'],{stdio:'ignore'}).status === 0;
+function tmuxFixture(independent = true) {
+  const f = fixture();
+  const prior = {...process.env};
+  const socketDirectory = mkdtempSync('/tmp/goal-turn-');
+  const socket = join(socketDirectory,'s');
+  const unit = `goal-turn-test-${crypto.randomUUID()}`;
+  process.env.GOAL_TERMSPACES_SOCKET = socket;
+  process.env.GOAL_TERMSPACES_SESSION = 'test-agents';
+  const args = ['tmux','-S',socket,'new-session','-d','-s','test-agents','-n','maintainer','sleep 300'];
+  const started = independent
+    ? spawnSync('systemd-run',['--user',`--unit=${unit}`,'--property=Type=forking',...args],{encoding:'utf8'})
+    : spawnSync(args[0]!,args.slice(1),{encoding:'utf8'});
+  expect(started.status,started.stderr).toBe(0);
+  // The service starts asynchronously; each test owns this socket and unit.
+  let server: ReturnType<typeof tmuxServer> | undefined;
+  for (let attempt = 0; attempt < 100 && !server; attempt++) {
+    try { server = tmuxServer(socket); }
+    catch { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,20); }
+  }
+  expect(server).toBeDefined();
+  spawnSync('tmux',['-S',socket,'set-option','-t','test-agents','remain-on-exit','on']);
+  for (const [key,value] of Object.entries({GOAL_TERMSPACES_SOCKET:socket,GOAL_TERMSPACES_SESSION:'test-agents'})) {
+    spawnSync('tmux',['-S',socket,'set-environment','-g',key,value]);
+  }
+  return {...f,socket,server:server!,cleanup() {
+    spawnSync('tmux',['-S',socket,'kill-server'],{stdio:'ignore'});
+    if (independent) spawnSync('systemctl',['--user','stop',unit],{stdio:'ignore'});
+    process.env = prior; f.cleanup(); rmSync(socketDirectory,{recursive:true,force:true});
+  }};
+}
 
 describe('independent tmux launcher', () => {
-  test.skipIf(!independentServer)('commands verify against the recorded live pump cgroup across tmux session scopes', async () => {
-    const f = fixture();
+  test.skipIf(!independentServerAvailable)('a turn runs in its named window and is recovered after a coordinator restart', async () => {
+    const f = tmuxFixture();
+    try {
+      const ready = join(f.dir,'ready'), release = join(f.dir,'release');
+      const manager = join(f.dir,'live-turn.ts');
+      writeFileSync(manager,`import { existsSync, writeFileSync } from 'node:fs';
+        writeFileSync(${JSON.stringify(ready)},String(process.pid));
+        console.log(JSON.stringify({type:'item.completed',item:{type:'agent_message',text:'Reviewing the event'}}));
+        while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(20);
+        console.log(JSON.stringify({type:'result',result:'Decided'}));`);
+      const launcher = new TmuxLauncher(f.stateDir);
+      const first = f.open({launcher});
+      // The launch ignores both the caller's and the enrolled server.
+      first.enroll({...f.descriptor,args:[manager,WAKE_PROMPT,WAKE_LAST_MESSAGE],socket:'/old/server'});
+      first.step();
+      await waitFor(()=>existsSync(ready));
+      const turn = windowTurns(f.stateDir)[0]!;
+      expect(goalWindows(termspacesSession()!).map(window=>window.name)).toEqual([turnWindowName(turn)]);
+      expect(launcher.live(turn.token,f.descriptor)).toBe(true);
+      const native = processIdentity(Number(readFileSync(ready,'utf8')))!;
+      first.close();
+      const restarted = f.open({launcher}); restarted.step();
+      expect(restarted.status().attempts).toHaveLength(1);
+      expect(sameProcess(native)).toBe(true);
+      // Closing the view must not turn a successful native result into a lost-wrapper crash.
+      expect(reconcileWindows(f.stateDir,{tasks:{}},true).removed).toEqual([turnWindowName(turn)]);
+      expect(sameProcess(native)).toBe(true);
+      expect(reconcileWindows(f.stateDir,{tasks:{}}).made).toEqual([turnWindowName(turn)]);
+      restarted.step();
+      expect(restarted.status().attempts).toHaveLength(1);
+      writeFileSync(release,'finish');
+      await waitFor(()=>windowTurns(f.stateDir)[0]!.phase === 'done');
+      expect(windowTurns(f.stateDir)[0]!.code).toBe(0);
+      expect(reconcileWindows(f.stateDir,{tasks:{}}).removed).toEqual([turnWindowName(turn)]);
+      expect(readFileSync(join(f.stateDir,'manager-runs',turn.token,'output.jsonl'),'utf8')).toContain('Decided');
+    } finally { f.cleanup(); }
+  },15_000);
+  test.skipIf(!independentServerAvailable)('commands verify against the recorded live pump cgroup across tmux session scopes', async () => {
+    const f = tmuxFixture(); const {socket,server:independentServer} = f;
     const name = `manager-start-check-${crypto.randomUUID()}`;
     try {
       const coordinator = f.open(); coordinator.acquire();
-      const descriptor = {...f.descriptor,socket,server:independentServer!};
+      const descriptor = {...f.descriptor,socket,server:independentServer};
       const output = join(f.dir,'verified.json');
       const script = join(f.dir,'verify.ts');
       writeFileSync(script, `import { writeFileSync } from 'node:fs';
@@ -1266,8 +1328,8 @@ describe('independent tmux launcher', () => {
       spawnSync('tmux',['-S',socket,'kill-session','-t',`${name}-refusal`],{stdio:'ignore'});
     }
   });
-  test.skipIf(!independentServer)('start CLI registers headless managers and wakes their exact native sessions for all engines', async () => {
-    const f = fixture();
+  test.skipIf(!independentServerAvailable)('start CLI registers headless managers and wakes their exact native sessions for all engines', async () => {
+    const f = tmuxFixture(); const {socket} = f;
     const tokens: string[] = [];
     let pump: ChildProcess | undefined;
     try {
@@ -1297,7 +1359,7 @@ describe('independent tmux launcher', () => {
       }
       const homes = {codex:join(f.dir,'first-account'),'codex-1':join(f.dir,'second-account'),claude:join(f.dir,'claude-account')};
       for (const home of Object.values(homes)) mkdirSync(home);
-      const env: NodeJS.ProcessEnv = {...process.env,PATH:`${bin}:${process.env.PATH}`,GOAL_COORDINATOR_TMUX_SOCKET:socket,
+      const env: NodeJS.ProcessEnv = {...process.env,PATH:`${bin}:${process.env.PATH}`,GOAL_TERMSPACES_SOCKET:socket,
         GOAL_CODEX_HOME:homes.codex,GOAL_CODEX_1_HOME:homes['codex-1'],CLAUDE_CONFIG_DIR:homes.claude,
         GOAL_MEMORY_FLOOR_GIB:'0'};
       delete env.GOAL_MAIL_STATE_DIR;
@@ -1353,13 +1415,12 @@ describe('independent tmux launcher', () => {
         pump.kill('SIGTERM');
         await new Promise<void>(resolve=>pump!.once('exit',()=>resolve()));
       }
-      for (const token of tokens) spawnSync('tmux',['-S',socket,'kill-session','-t',`goal-wake-${token}`],{stdio:'ignore'});
       f.cleanup();
     }
   },60_000);
 
-  test.skipIf(!independentServer)('startup descriptors retain the selected account and model without inherited session ownership', () => {
-    const f = fixture();
+  test.skipIf(!independentServerAvailable)('startup descriptors retain the selected account and model without inherited session ownership', () => {
+    const f = tmuxFixture(); const {socket} = f;
     const prior = {...process.env};
     try {
       process.env.GOAL_CODEX_HOME = f.descriptor.home;
@@ -1375,11 +1436,9 @@ describe('independent tmux launcher', () => {
     } finally { process.env = prior; f.cleanup(); }
   });
   test.skipIf(spawnSync('tmux', ['-V']).status !== 0)('refuses a server in the coordinator cgroup', () => {
-    const f = fixture();
-    const ownSocket = join(f.dir, 's');
+    const f = tmuxFixture(false);
+    const ownSocket = f.socket;
     try {
-      const started = spawnSync('tmux', ['-S', ownSocket, 'new-session', '-d', '-s', 'test', 'sleep 30'], { encoding: 'utf8' });
-      expect(started.status, started.stderr).toBe(0);
       const descriptor = { ...f.descriptor, socket: ownSocket, server: tmuxServer(ownSocket) };
       expect(descriptor.server.cgroup).toBe(processIdentity(process.pid)!.cgroup);
       expect(() => new TmuxLauncher(f.stateDir).verify(descriptor)).toThrow('outside the coordinator cgroup');
@@ -1388,22 +1447,21 @@ describe('independent tmux launcher', () => {
     }
   });
 
-  test.skipIf(!independentServer)('rejects stale server identity and a changed cgroup before launch', () => {
-    const f = fixture();
+  test.skipIf(!independentServerAvailable)('the termspaces server replaces the enrolled socket and stale server identity', () => {
+    const f = tmuxFixture(); const {socket,server:independentServer} = f;
     try {
       const launcher = new TmuxLauncher(f.stateDir);
       const descriptor = { ...f.descriptor, socket, server: independentServer! };
       expect(() => launcher.verify(descriptor)).not.toThrow();
-      expect(() => launcher.verify({ ...descriptor, server: { ...descriptor.server, start: 'reused-pid' } })).toThrow('generation changed');
-      expect(() => launcher.verify({ ...descriptor, server: { ...descriptor.server, cgroup: '0::/wrong-group' } })).toThrow('generation changed');
+      expect(() => launcher.verify({ ...descriptor,socket:'/nonexistent/enrolled-server',
+        server: { ...descriptor.server, start: 'reused-pid',cgroup:'0::/wrong-group' } })).not.toThrow();
     } finally { f.cleanup(); }
   });
 
-  test.skipIf(!independentServer)('worker dispatched by an independent manager survives coordinator termination', async () => {
-    const f = fixture();
+  test.skipIf(!independentServerAvailable)('worker dispatched by an independent manager survives coordinator termination', async () => {
+    const f = tmuxFixture(); const {socket,server:independentServer} = f;
     const workerName = `goal-test-worker-${process.pid}-${Date.now()}`;
     let pump: ReturnType<typeof Bun.spawn> | undefined;
-    let token: string | undefined;
     try {
       const worker = join(f.dir, 'worker.ts');
       const ready = join(f.dir, 'worker-ready'); const release = join(f.dir, 'worker-release'); const done = join(f.dir, 'worker-done');
@@ -1432,7 +1490,6 @@ describe('independent tmux launcher', () => {
         while (true) await Bun.sleep(100);`);
       pump = Bun.spawn([process.execPath, source], { stdout: 'ignore', stderr: 'pipe' });
       await waitFor(() => existsSync(pumpReady) && existsSync(ready), 10_000);
-      token = readFileSync(pumpReady, 'utf8');
       const workerIdentity = processIdentity(Number(readFileSync(ready, 'utf8')))!;
       const pumpGroup = processIdentity(pump.pid)!.cgroup.split('\n').find(line => line.startsWith('0::'))!.slice(3);
       const workerGroup = workerIdentity.cgroup.split('\n').find(line => line.startsWith('0::'))!.slice(3);
@@ -1449,7 +1506,6 @@ describe('independent tmux launcher', () => {
     } finally {
       pump?.kill(); if (pump) await pump.exited;
       spawnSync('tmux', ['-S', socket, 'kill-session', '-t', workerName], { stdio: 'ignore' });
-      if (token) spawnSync('tmux', ['-S', socket, 'kill-session', '-t', `goal-wake-${token}`], { stdio: 'ignore' });
       f.cleanup();
     }
   }, 20_000);

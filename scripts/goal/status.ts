@@ -11,6 +11,7 @@ import { existsSync, readdirSync } from 'node:fs';
 import { validGoalSlug } from './briefs.ts';
 import { MAX_TRANSPORT_CONTINUATIONS, engineOf } from './types.ts';
 import { settlementReason } from './settle.ts';
+import { termspacesSession, termspacesTarget, windowTurns, workerWindowName, turnWindowName } from './windows.ts';
 
 export async function status(): Promise<void> {
   await printScopeProgress();
@@ -27,6 +28,12 @@ export async function status(): Promise<void> {
   const tasks = Object.values(ledger.tasks);
   const usage = currentUsage();
   const live = tasks.filter(running);
+  console.log(termspacesSession()
+    ? `Goal windows: ${termspacesTarget().session} on ${termspacesTarget().socket}`
+    : `Goal windows unavailable: termspaces session ${termspacesTarget().session} missing on ${termspacesTarget().socket}; workers run unwatched, manager turns wait`);
+  for (const turn of windowTurns(stateDir).filter(turn=>turn.phase !== 'done')) {
+    console.log(`Goal ${turn.goal}: turn ${turn.n} ${turn.phase}; window ${turnWindowName(turn)}`);
+  }
   console.log(`program elapsed ${ledger.startedAt ? elapsed(ledger.startedAt) : 'not started'}; `
     + `live ${live.length}/${process.env.GOAL_MAX_WORKERS ?? 25}; `
     + `Claude 5h ${usage.used ?? '?'}% ${usage.level}`
@@ -66,6 +73,7 @@ export async function status(): Promise<void> {
     const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;
     console.log(`${task.id} ${task.state.padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
+      + (running(task) ? `; window ${workerWindowName(task)}` : '')
       + (running(task) && continuations > 0 ? `; continued by itself ${continuations}` : '')
       + (repeated ? '\n  stopped after repeated transport errors' : '')
       + (settlementReason(task) ? `\n  ${settlementReason(task)}` : '')

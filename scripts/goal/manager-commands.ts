@@ -8,7 +8,7 @@ import { lastAttempt, running, launchCommand, managerWakeGates } from './launch.
 import { validGoalSlug } from './briefs.ts';
 import { randomUUID } from 'node:crypto';
 import { homedir } from 'node:os';
-import { spawnSync } from 'node:child_process';
+import { ensureTermspacesSession, termspacesTarget, reconcileWindows } from './windows.ts';
 import { startGoal } from './tasks.ts';
 
 /** The override confines disposable mail/pump trials to their own ledger and local state. */
@@ -165,9 +165,8 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
       const options = coordinatorStartOptions(rest);
       // Registration uses goal start's existing ledger and area owner checks.
       if (directory !== stateDir) throw new Error('coordinator start must use the Goal ledger directory');
-      const socket = process.env.GOAL_COORDINATOR_TMUX_SOCKET
-        ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
-      if (!socket) throw new Error('Start needs an independent tmux server; set GOAL_COORDINATOR_TMUX_SOCKET');
+      ensureTermspacesSession();
+      const socket = termspacesTarget().socket;
       const descriptor = coordinatorStartDescriptor(options,realpathSync(root),socket);
       new TmuxLauncher(directory).verify(descriptor);
       coordinator.assertStartable(options.goal);
@@ -195,14 +194,14 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
       return;
     }
     if (action === 'enroll') {
-      const { goal, session, engine, effort, model, cwd: requestedCwd, socket: requestedSocket, previousOwner } = coordinatorEnrollmentOptions(rest);
+      const { goal, session, engine, effort, model, cwd: requestedCwd, previousOwner } = coordinatorEnrollmentOptions(rest);
       if (!activeGoals(eventLedger(directory)).includes(goal)) throw new Error(`Unknown active Goal: ${goal}`);
       const cwd = realpathSync(resolve(requestedCwd));
       if (engine === 'claude') {
         const home = realpathSync(claudeConfigHome());
         claudeNativeSession(home, session, cwd);
-        const socket = requestedSocket ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
-        if (!socket) throw new Error('Enrollment needs an existing independent tmux server');
+        ensureTermspacesSession();
+        const socket = termspacesTarget().socket;
         const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
           program:Bun.which('claude') ?? 'claude',args:claudeWakeArgs(session,model!,effort),socket,server:tmuxServer(socket),
           env:{PATH:process.env.PATH ?? '',HOME:homedir(),GOAL_ID:goal,
@@ -216,8 +215,8 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
       }
       const home = realpathSync(engineEnv(engine).CODEX_HOME!);
       nativeSession(home,session,cwd);
-      const socket = requestedSocket ?? spawnSync('tmux',['display-message','-p','#{socket_path}'],{encoding:'utf8'}).stdout.trim();
-      if (!socket) throw new Error('Enrollment needs an existing independent tmux server');
+      ensureTermspacesSession();
+      const socket = termspacesTarget().socket;
       const [program, launchArgs] = launchCommand({id:goal,engine,effort,session,worktree:cwd,resume:true,
         prompt:WAKE_PROMPT,lastMessage:WAKE_LAST_MESSAGE});
       const descriptor: LaunchDescriptor = {goal,generation:randomUUID(),session,engine,effort,cwd,home,previousOwner,
@@ -245,6 +244,8 @@ export async function coordinatorCommand(args: string[]): Promise<void> {
         const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
         try { mail.notifyOverdue(); } finally { mail.close(); }
         coordinator.step();
+        const windows = reconcileWindows(directory,eventLedger(directory));
+        if (windows.error) console.error(windows.error);
         if (!once && !stopped) await Bun.sleep(interval);
       } while (!once && !stopped);
     } finally { process.off('SIGTERM',stop); process.off('SIGINT',stop); coordinator.release(); }
