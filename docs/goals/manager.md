@@ -90,17 +90,20 @@ wording and directions that later ones replaced are in this file's history.
 10. **Maintainer edits win** (2026-09-27). The maintainer may change any
     document at any time. Detect such changes, adapt, and never revert one
     silently ([documentation changes](README.md#maintainer-documentation-changes)).
-11. **The supermanager decides for managers** (2026-10-07). The maintainer does
-    not see managers' sessions. What a manager would ask him goes to the
-    [program](program/GOAL.md) manager, who decides within this charter and
-    passes on only what needs him.
+11. **Managers are autonomous; the supermanager arbitrates** (2026-10-07,
+    2026-10-13). "各个 manager 自治，互相监督." The maintainer does not see
+    managers' sessions. A manager settles a cross-Goal matter with the other
+    manager, and they check each other by what the tool can check. What two
+    managers cannot settle, a scope promotion and what a manager would ask the
+    maintainer go to the [program](program/GOAL.md)'s supermanager, who decides
+    within this charter and passes on only what needs him.
 12. **Context length is the cost** (2026-10-13). "opus 用量到不是不够，主要是 token
     效率 … 就是上下文太长." A manager's state lives in the repository and the
-    ledger, and a session is short and starts from them; the supermanager may be
-    split. The [program](program/GOAL.md#how-managers-run-from-now-on) says how.
+    ledger, and a session is short and starts from them. Manager and researcher
+    are identities; the resident supermanager is one and is not split. The [program](program/GOAL.md#how-managers-run-from-now-on) says how.
 13. **Agents maintain termspaces** (2026-10-13). `goalctl` registers and removes
-    every agent's window there. The maintainer starts only the supermanager's
-    desk in it.
+    every agent's window there. The maintainer starts only the supermanager in
+    it.
 14. **Reports are references** (2026-10-13). An analysis the maintainer passes on
     informs the manager. What is best practice is the manager's to work out and
     decide, and it is judged by measured efficiency.

@@ -28,7 +28,7 @@ areas:
 
 Status: paused on 2026-10-13; this page is the plan the next start works from,
 and [state.md](state.md) is the checkpoint. The maintainer starts the
-supermanager's desk himself, in termspaces ([Starting](#starting)).
+supermanager himself, in termspaces ([Starting](#starting)).
 
 The program's manager is the **supermanager**. It runs no product work. It owns
 what decides whether the delivery Goals are efficient: the scope, the
@@ -77,13 +77,19 @@ never run together.
 ## How managers run from now on
 
 Decided on 2026-10-13 by the supermanager at the maintainer's request (context
-length is the cost; the supermanager may be split; agents maintain termspaces).
+length is the cost; managers are autonomous and supervise each other; agents
+maintain termspaces).
 The [next tasks](#next-tasks) build what is not yet in the tool; until one
 lands, a manager applies its rule by hand and says so.
 
 - **State lives in the repository and the ledger, never in a session.** A Goal's
   `state.md`, its briefs, the ledger and Goal mail are enough to continue from;
   the pause of 2026-10-13 was written from them alone.
+- **Manager, researcher, implementer and reviewer are identities.** An identity
+  is a role card, its permissions and where its state lives; the session that
+  carries it is disposable. A researcher is read-only and hands off a matrix, a
+  measurement or a design note; an implementer changes its claimed files; a
+  reviewer makes the one pass the method allows.
 - **A manager is a role, not a session.** The coordinator starts one short turn
   for an event, in a fresh session whose context is the Goal's `state.md`, the
   event and what the event points to: 20,000 tokens or fewer at its start. Turns
@@ -101,13 +107,24 @@ lands, a manager applies its rule by hand and says so.
   starts one with that mail first. Half of the supermanager's mail on
   2026-10-13 said "no reply needed" and still cost a turn of over 100,000
   tokens each.
-- **The supermanager is a desk and events.** The desk is the interactive session
-  the maintainer talks to. It decides scope, method and design notes, and holds
-  no wait on any task; when its context passes 150,000 tokens it writes
-  `state.md` and starts a fresh session. Program events are short turns like
-  any Goal's: the program's own tooling tasks and what managers ask within the
-  [charter](../manager.md). What needs the desk or the maintainer reaches the
-  desk as mail.
+- **Managers are autonomous and supervise each other.** A manager decides
+  everything inside its Goal and settles a cross-Goal matter with the other
+  manager by mail, without the supermanager; on 2026-10-13 every such matter
+  went through the supermanager and cost it a turn. They supervise each other
+  by what can be checked: the consumer's tests and guards on the producer's
+  contract, the nightly regression that routes a failure to its owner, the
+  measures `status` prints for every Goal, and a design note for a shared
+  mechanism read by the manager whose callers it touches. Supervision is not
+  one manager reading another's diffs: that is the review without a limit that
+  the method ended.
+- **One resident supermanager, not split.** It is the session the maintainer
+  talks to, in its own window. It owns the scope and the method, arbitrates
+  what two managers cannot settle, reads the measures, and brings the
+  maintainer what needs him. It holds no wait on any task and relays no mail.
+  Resident means the identity and the window, not one growing session: when
+  its context passes 150,000 tokens it writes `state.md` and starts fresh. The
+  program's own tooling tasks are run by a program manager role in short turns,
+  like any Goal's.
 - **termspaces is the agents' terminal, and `goalctl` maintains it.** `goalctl`
   registers a window when a turn or a worker starts and removes it when it
   ends: windows named `goal-…` in the session `rezics-agents`, and no other
@@ -149,12 +166,13 @@ at run time.
 5. **Main-wide regression.** `task goal -- regress --nightly` on a pinned commit
    each night, with one browser journey for each vertical.
 6. **Managers.** Configure each delivery Goal's manager role when its row in the
-   table above says so. Managers bring the supermanager only what the method
-   cannot decide: a scope promotion, a design note for a shared mechanism, a
-   stop at the attempt cap.
-7. **Mechanism design notes.** Read every design note for a shared mechanism
-   before its code is written, and refuse one that names a mechanism to build
-   instead of an observable outcome.
+   table above says so, and arbitrate what two managers cannot settle. A
+   manager brings the supermanager a scope promotion, a disagreement with
+   another manager, and what it would ask the maintainer; nothing else.
+7. **Mechanism design notes.** A design note for a shared mechanism is read
+   before its code is written by the manager whose callers it touches, and by
+   the supermanager when it touches several Goals or the two disagree. A note
+   that names a mechanism to build instead of an observable outcome is refused.
 8. **One row first.** Before a Goal writes tests against new tooling, the
    program proves one row with it from end to end.
 
@@ -181,20 +199,20 @@ window; until it has it, `goalctl` removes the window on termspaces' socket.
 
 ## Starting
 
-The maintainer starts the desk in termspaces, window `super-manager` of the
+The maintainer starts the supermanager in termspaces, window `super-manager` of the
 session `rezics-agents` (`termspaces attach rezics-agents`):
 
 ```sh
 GOAL_ID=program claude --model <model> --effort xhigh --dangerously-skip-permissions
 ```
 
-and sends: `You are the REZICS supermanager's desk. Read
+and sends: `You are the REZICS supermanager. Read
 docs/goals/program/GOAL.md, its state.md, docs/goals/method.md and
 docs/goals/manager.md, register with task goal -- goal start program --manager
-desk, and run the Goal from its next tasks.`
+supermanager, and run the Goal from its next tasks.`
 
-Until N3 is on `main` the desk also handles the program's own task exits, with
-one background wait for each task, and keeps to the 150,000-token limit by
+Until N3 is on `main` the supermanager runs the program's tooling tasks itself,
+with one background wait for each task, and keeps to the 150,000-token limit by
 starting fresh from `state.md`.
 
 ## Completion
