@@ -242,6 +242,7 @@ test('the repository declarations load and register every proof title exactly on
       const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true);
       const helpers = new Set<string>();
       const tests = new Set<string>();
+      const suites = new Set<string>();
       const titles = new Set<string>();
       const rows = new Set<string>();
       for (const statement of source.statements) {
@@ -260,18 +261,30 @@ test('the repository declarations load and register every proof title exactly on
           if (name === 'outcomeTest' && resolve(dirname(file), statement.moduleSpecifier.text) === helperFile)
             helpers.add(binding.name.text);
           if (name === 'test' && statement.moduleSpecifier.text === 'bun:test') tests.add(binding.name.text);
+          if (name === 'describe' && statement.moduleSpecifier.text === 'bun:test') suites.add(binding.name.text);
           if (name === 'outcomeTitle' && [moduleFile, cellsModuleFile].includes(importedFile)) titles.add(binding.name.text);
         }
       }
       const title = outcomeTitle(declaration, persona);
       let registrations = 0;
       let proofRegistrations = 0;
+      const registered = (call: ts.CallExpression): boolean => {
+        if (!ts.isExpressionStatement(call.parent)) return false;
+        const scope = call.parent.parent;
+        if (ts.isSourceFile(scope)) return true;
+        if (!ts.isBlock(scope)) return false;
+        const callback = scope.parent;
+        if (!ts.isArrowFunction(callback) && !ts.isFunctionExpression(callback)) return false;
+        const suite = callback.parent;
+        return ts.isCallExpression(suite) && ts.isIdentifier(suite.expression) &&
+          suites.has(suite.expression.text) && suite.arguments.includes(callback) && registered(suite);
+      };
       const visit = (node: ts.Node): void => {
-        if (ts.isCallExpression(node)) {
+        if (ts.isCallExpression(node) && registered(node)) {
           const [first, second] = node.arguments;
           const expression = ts.isPropertyAccessExpression(node.expression) ? node.expression.expression : node.expression;
           if (ts.isIdentifier(expression)) {
-            if (helpers.has(expression.text) && first && ts.isIdentifier(first) && rows.has(first.text) &&
+            if (ts.isIdentifier(node.expression) && helpers.has(expression.text) && first && ts.isIdentifier(first) && rows.has(first.text) &&
               second && ts.isStringLiteral(second) && second.text === persona) {
               registrations++;
               proofRegistrations++;
@@ -280,7 +293,8 @@ test('the repository declarations load and register every proof title exactly on
               titles.has(first.expression.text) && first.arguments[0] && ts.isIdentifier(first.arguments[0]) &&
               rows.has(first.arguments[0].text) && first.arguments[1] && ts.isStringLiteral(first.arguments[1]) &&
               first.arguments[1].text === persona;
-            if (tests.has(expression.text) && first && (titleCall || (ts.isStringLiteralLike(first) && first.text === title)))
+            if ((ts.isIdentifier(node.expression) || (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'failing')) &&
+              tests.has(expression.text) && first && (titleCall || (ts.isStringLiteralLike(first) && first.text === title)))
               registrations++;
           }
         }
