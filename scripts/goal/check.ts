@@ -9,9 +9,10 @@ import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaMode
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions } from './qa-slots.ts';
 import { selectSurface, runSurfaceGate } from './surface-gate.ts';
+import { prepareCheckTree } from './tree-currency.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
-export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection';
+export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection' | 'currency';
 const GROUPS: CheckGroup[] = ['types', 'lint', 'tests', 'guards'];
 
 export function parseCheckArgs(args: readonly string[]): CheckGroup[] {
@@ -79,6 +80,8 @@ export function checkFailureLines(output: string): string[] {
 
 export interface CheckOptions {
   cwd?: string;
+  /** The CLI prepares and restarts before loading the updated harness. */
+  treePrepared?: boolean;
   only?: readonly CheckGroup[];
   changed?: readonly string[];
   tests?: readonly string[];
@@ -123,6 +126,14 @@ function checkTestTier(file: string): TierTestTimeout | undefined {
 
 export async function workerCheck(options: CheckOptions = {}): Promise<{ code: number; log: string; checks: CheckResult[] }> {
   const cwd = resolve(options.cwd ?? process.cwd());
+  const currency = options.treePrepared ? undefined : prepareCheckTree(cwd, options.print ?? console.log);
+  if (currency?.failed) {
+    const root = join(cwd, '.temp/goal/check');
+    mkdirSync(root, { recursive: true });
+    const log = join(mkdtempSync(join(root, 'run-')), 'output.log');
+    writeFileSync(log, `${currency.line}\n`);
+    return { code: 1, log, checks: [{ name: 'currency', code: 1, seconds: 0 }] };
+  }
   const changed = options.changed ?? checkChangedFiles(cwd);
   const briefPath = join(cwd, '.temp/goal/brief.md');
   const brief = existsSync(briefPath) ? parseBrief(readFileSync(briefPath, 'utf8')) : undefined;
@@ -147,7 +158,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     }
   }
   const only = options.only ?? GROUPS;
-  const workspaces = typecheckWorkspaces(changed);
+  const workspaces = typecheckWorkspaces(changed, cwd);
   const files = changed.filter(file => existsSync(join(cwd, file)) && statSync(join(cwd, file)).isFile());
   const directories = [...new Set(files.filter(file => /\.[cm]?[jt]sx?$/.test(file)).map(dirname))].sort();
   const root = join(cwd, '.temp/goal/check');

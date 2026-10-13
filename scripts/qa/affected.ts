@@ -1,4 +1,5 @@
 import { spawnSync, type SpawnSyncReturns } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, posix, resolve } from 'node:path';
 import {
@@ -298,13 +299,35 @@ export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, ro
 
 const TYPECHECK_SOURCE = /\.[cm]?tsx?$|(?:^|\/)(?:tsconfig[^/]*|package)\.json$/;
 
+/** Ask the TypeScript project which files its imports bring in, including transitive and type-only imports. */
+function scriptsProjectFiles(root: string): ReadonlySet<string> {
+  const config = join(root, 'scripts/tsconfig.json');
+  if (!existsSync(config)) return new Set();
+  // Most selections need only directory ownership; load the compiler only for external test sources.
+  const ts = createRequire(import.meta.url)('typescript-6') as typeof import('typescript-6');
+  const loaded = ts.readConfigFile(config, ts.sys.readFile);
+  if (loaded.error) throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, '\n'));
+  const project = ts.parseJsonConfigFileContent(loaded.config, ts.sys, dirname(config));
+  if (project.errors.length) throw new Error(project.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, '\n')).join('\n'));
+  const program = ts.createProgram(project.fileNames, project.options);
+  return new Set(program.getSourceFiles().map(source => resolve(source.fileName)));
+}
+
 /** Each workspace a changed TypeScript source or its config belongs to, once. */
-export function typecheckWorkspaces(files: readonly string[]): string[] {
+export function typecheckWorkspaces(files: readonly string[], root = resolve(import.meta.dir, '../..')): string[] {
+  const selects = typecheckSelector(files, root);
+  return TYPECHECK_WORKSPACES.filter(([workspace, roots]) => files.some(file => selects(file, workspace, roots)))
+    .map(([workspace]) => workspace);
+}
+
+function typecheckSelector(files: readonly string[], root: string) {
   const owned = (file: string, root: string) => file.startsWith(root) && TYPECHECK_WORKSPACES.every(([, roots]) =>
     roots.every(other => other.length <= root.length || !file.startsWith(other)));
-  return TYPECHECK_WORKSPACES
-    .filter(([, roots]) => files.some(file => TYPECHECK_SOURCE.test(file) && roots.some(root => owned(file, root))))
-    .map(([workspace]) => workspace);
+  const external = files.filter(file => file.startsWith('tests/') && TYPECHECK_SOURCE.test(file));
+  const imported = external.length ? scriptsProjectFiles(root) : new Set<string>();
+  return (file: string, workspace: string, roots: readonly string[]) => TYPECHECK_SOURCE.test(file)
+    && ((workspace === 'scripts' && file.startsWith('tests/') && imported.has(resolve(root, file)))
+      || roots.some(root => owned(file, root)));
 }
 
 export function planAffected(input: {
@@ -313,6 +336,7 @@ export function planAffected(input: {
   graph: GraphModule[];
   sources: Map<string, string>;
   exists: (path: string) => boolean;
+  typecheckRoot?: string;
   scriptOnlyManifests?: ReadonlySet<string>;
   /** Dockerfile text. When present, native proofs follow its module-stage COPY inputs. */
   nativeModuleDockerfile?: string;
@@ -367,12 +391,13 @@ export function planAffected(input: {
     }
   }
   const matchedNative = new Set<string>();
+  const selectsTypecheck = typecheckSelector(plan.changed, input.typecheckRoot ?? resolve(import.meta.dir, '../..'));
   for (const path of plan.changed) {
     if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies, runtimeSources)) matchedNative.add(file);
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
       plan.tasks.push({ task: 'jena:check', because: `${path}: pinned Jena CLI input` });
-    for (const workspace of typecheckWorkspaces([path])) {
-      const roots = TYPECHECK_WORKSPACES.find(([name]) => name === workspace)?.[1] ?? [];
+    for (const [workspace, roots] of TYPECHECK_WORKSPACES) {
+      if (!selectsTypecheck(path, workspace, roots)) continue;
       if (!roots.some(root => root.startsWith('scripts/'))) continue;
       const task = `${workspace}:typecheck`;
       if (!plan.tasks.some(check => check.task === task))
@@ -646,6 +671,7 @@ export function affectedPlanForChanges(root: string, base: string, changed: read
     graph,
     sources,
     exists: (path) => existsSync(resolve(root, path)),
+    typecheckRoot: root,
     scriptOnlyManifests: manifests,
     nativeModuleDockerfile: existsSync(dockerfile) ? readFileSync(dockerfile, 'utf8') : '',
   });

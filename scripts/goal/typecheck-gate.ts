@@ -163,7 +163,7 @@ export async function preMergeTypecheckGate(worktree: string, mainRoot: string, 
     console.log('Type check skipped: --skip-type-gate explicitly requested by the manager');
     return;
   }
-  const workspaces = typecheckWorkspaces(files).filter(workspace => !only || only.includes(workspace));
+  const workspaces = typecheckWorkspaces(files, worktree).filter(workspace => !only || only.includes(workspace));
   console.log(`Pre-merge type check: ${workspaces.length ? workspaces.join(', ') : 'no TypeScript workspace touched'} against main ${before.slice(0, 12)}`);
   let baseline: string | undefined;
   try {

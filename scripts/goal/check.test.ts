@@ -380,3 +380,96 @@ test('a worker test that times out again fails after exactly one retry and relea
   expect(f.lines.filter(line => line.startsWith('Timeout retry passed:'))).toHaveLength(0);
   expect(existsSync(join(f.slotOptions.slotDirectory, '0'))).toBe(false);
 }, 65_000);
+
+function currencyFixture() {
+  const f = fixture();
+  const main = f.cwd;
+  const git = (cwd: string, ...args: string[]) => {
+    const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
+    if (result.status !== 0) throw new Error(result.stderr);
+    return result.stdout.trim();
+  };
+  git(main, 'init', '-q', '-b', 'main');
+  git(main, 'config', 'user.email', 'check@example.invalid');
+  git(main, 'config', 'user.name', 'worker check test');
+  writeFileSync(join(main, '.gitignore'), '.temp/\n');
+  git(main, 'add', '.');
+  git(main, 'commit', '-qm', 'Initial tree');
+  const cwd = join(main, '.temp/worker');
+  git(main, 'worktree', 'add', '-qb', 'goal/worker', cwd);
+  const commit = (tree: string, file: string, content: string) => {
+    mkdirSync(join(tree, file, '..'), { recursive: true });
+    writeFileSync(join(tree, file), content);
+    git(tree, 'add', file);
+    git(tree, 'commit', '-qm', `Change ${file}`);
+    return git(tree, 'rev-parse', 'HEAD');
+  };
+  return { ...f, cwd, main, git, commit, changed: undefined, tests: [], only: ['types'] as const };
+}
+
+test.each([false, true])('a clean check updates to main before selecting and running checks (worker commit=%s)', async ownCommit => {
+  const f = currencyFixture();
+  if (ownCommit) f.commit(f.cwd, 'scripts/worker.ts', 'export const worker = true;\n');
+  const before = f.git(f.cwd, 'rev-parse', 'HEAD');
+  const main = f.commit(f.main, 'scripts/qa/fix.ts', 'export const fix = true;\n');
+  const observed: string[] = [];
+  const result = await workerCheck({ ...f, runner: async (command, cwd, log) => {
+    observed.push(f.git(cwd, 'rev-parse', 'HEAD'));
+    expect(readFileSync(join(cwd, 'scripts/qa/fix.ts'), 'utf8')).toContain('fix');
+    return f.runner(command, cwd, log);
+  } });
+  const after = f.git(f.cwd, 'rev-parse', 'HEAD');
+  expect(result.code).toBe(0);
+  expect(after).not.toBe(before);
+  expect(f.lines[0]).toBe(`worker worktree: ${before} -> ${after}; 1 commits behind main; ${ownCommit ? 'rebased' : 'fast-forwarded'}`);
+  expect(observed.every(head => head === after)).toBe(true);
+  if (ownCommit) {
+    expect(f.git(f.cwd, 'rev-parse', 'HEAD^')).toBe(main);
+    expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
+  } else {
+    expect(after).toBe(main);
+    expect(f.commands).toEqual([]);
+  }
+});
+
+test('a conflict is aborted with its files named and no checks run', async () => {
+  const f = currencyFixture();
+  const before = f.commit(f.cwd, 'scripts/example.ts', 'export const worker = true;\n');
+  f.commit(f.main, 'scripts/example.ts', 'export const main = true;\n');
+  const result = await workerCheck(f);
+  expect(result.code).toBe(1);
+  expect(f.commands).toEqual([]);
+  expect(f.lines).toHaveLength(1);
+  expect(f.lines[0]).toContain('rebase undone; conflicts: scripts/example.ts');
+  expect(readFileSync(result.log, 'utf8')).toContain('scripts/example.ts');
+  expect(f.git(f.cwd, 'rev-parse', 'HEAD')).toBe(before);
+  expect(f.git(f.cwd, 'status', '--porcelain')).toBe('');
+  expect(existsSync(f.git(f.cwd, 'rev-parse', '--git-path', 'rebase-merge'))).toBe(false);
+});
+
+test.each(['staged', 'unstaged', 'untracked'])('a check with %s changes stays on its tree and warns about the old harness', async kind => {
+  const f = currencyFixture();
+  const before = f.git(f.cwd, 'rev-parse', 'HEAD');
+  f.commit(f.main, 'scripts/qa/fix.ts', 'export const fix = true;\n');
+  const file = kind === 'untracked' ? 'scripts/untracked.ts' : 'scripts/example.ts';
+  writeFileSync(join(f.cwd, file), 'export const unfinished = true;\n');
+  if (kind === 'staged') f.git(f.cwd, 'add', file);
+  const status = f.git(f.cwd, 'status', '--porcelain');
+  const result = await workerCheck(f);
+  expect(result.code).toBe(0);
+  expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
+  expect(f.lines[0]).toContain('Harness: 1 commits behind main');
+  expect(f.lines.filter(line => line.includes('worktree:'))).toEqual([]);
+  expect(f.git(f.cwd, 'rev-parse', 'HEAD')).toBe(before);
+  expect(f.git(f.cwd, 'status', '--porcelain')).toBe(status);
+});
+
+test('checking the main checkout runs the selected checks without updating or warning', async () => {
+  const f = currencyFixture();
+  const before = f.commit(f.main, 'scripts/example.ts', 'export const main = true;\n');
+  const result = await workerCheck({ ...f, cwd: f.main, changed: ['scripts/example.ts'] });
+  expect(result.code).toBe(0);
+  expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
+  expect(f.lines.filter(line => line.includes('worktree:') || line.startsWith('Harness:'))).toEqual([]);
+  expect(f.git(f.main, 'rev-parse', 'HEAD')).toBe(before);
+});

@@ -17,6 +17,8 @@ import { declaredTestTimeout, planUnitGateShards } from './unit-gate.ts';
 import { heavyQaStatus, qaSlotCount, withSlot, withRecovery } from './qa-slots.ts';
 import { usageReport } from './usage.ts';
 import { goalMeasures } from './measures.ts';
+import { prepareCheckTree, warnHarnessCurrency } from './tree-currency.ts';
+import { spawn } from 'node:child_process';
 
 export { type State, type Engine, BRIEF_KINDS, type BriefKind, type Brief, type Attempt, type Task, type GoalRecord, type Ledger, type UsageWindow, type UsageSnapshot, type UsageSample, type UsageLevel, type UsageReport, type AccountUsage, type CodexResetStatus, type CodexResetLoad, MODEL, FABLE_MODEL, SONNET_MODEL, HAIKU_MODEL, CODEX_MODEL, LUNA_MODEL, GROK_MODEL, DEFAULT_ENGINE, CODEX_HOME, CODEX_1_HOME } from './types.ts';
 export { parseFrontmatter, parseBrief, validateBrief, mechanismSectionErrors, rangesOverlap, pathsOverlap, isGeneratedOutput, claimConflicts, outOfScope, GOALS_DIR, validGoalSlug, goalFile, goalBriefFile, goalOfBriefPath, goalAreas, areaConflicts, nextTaskId, HISTORY_EXEMPT, type ChangedFile, historyIntroductions, ownerRefusal, isHeavyTest } from './briefs.ts';
@@ -153,9 +155,11 @@ async function main(argv: string[]): Promise<number> {
       const resultFile = at < 0 ? undefined : rest[at + 1];
       if (at >= 0 && (!resultFile || resultFile.startsWith('--'))) throw new Error('--result-file needs a path');
       const args = rest.filter((arg, index) => arg !== '--heavy' && (at < 0 || (index !== at && index !== at + 1)));
+      warnHarnessCurrency(process.cwd());
       return withSlot(['bun', 'scripts/qa/test.ts', ...args], isHeavyTest(rest), resultFile);
     }
     case 'slot': {
+      warnHarnessCurrency(process.cwd());
       if (rest[0] === '--recovery') {
         const command = rest.slice(1);
         return withRecovery(command[0] === '--' ? command.slice(1) : command);
@@ -163,6 +167,28 @@ async function main(argv: string[]): Promise<number> {
       const heavy = rest[0] === '--heavy';
       const command = heavy ? rest.slice(1) : rest;
       return withSlot(command[0] === '--' ? command.slice(1) : command, heavy);
+    }
+    case 'check': {
+      const { parseCheckArgs } = await import('./check.ts');
+      const only = parseCheckArgs(rest);
+      const prepared = process.env.GOAL_CHECK_PREPARED_TREE;
+      delete process.env.GOAL_CHECK_PREPARED_TREE;
+      const cwd = process.cwd();
+      const ready = prepared === cwd;
+      const update = ready ? undefined : prepareCheckTree(cwd);
+      if (update?.failed) return 1;
+      if (update && update.before !== update.after) {
+        // Imports already in memory belong to the old tree. Restart from this worktree's updated files.
+        return new Promise<number>(resolveExit => {
+          const child = spawn(process.execPath, [join(cwd, 'scripts/goal/goalctl.ts'), ...argv], {
+            cwd, stdio: 'inherit', env: { ...process.env, GOAL_CHECK_PREPARED_TREE: cwd },
+          });
+          child.once('error', error => { console.error(error.message); resolveExit(1); });
+          child.once('close', code => resolveExit(code ?? 1));
+        });
+      }
+      const { workerCheck } = await import('./check.ts');
+      return (await workerCheck({ only, treePrepared: true })).code;
     }
     default: {
       const commandFiles = await goalCommandFiles();
