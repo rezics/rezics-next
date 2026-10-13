@@ -134,7 +134,8 @@ export function directoryLeaseState(directory: string, options: DirectoryLeaseOp
   const record = readDirectoryLease(directory);
   if (record?.invalid) return 'stale';
   if (record) return ownerAlive(record, options) ? 'held' : 'stale';
-  const age = clock(options) - statSync(directory).mtimeMs;
+  const age = clock(options) - (statSync(directory, { throwIfNoEntry: false })?.mtimeMs ?? Number.NaN);
+  if (Number.isNaN(age)) return 'free'; // released by its holder since the check above
   return age < (options.initializingMs ?? leaseInitializingMs) ? 'initializing' : 'stale';
 }
 
