@@ -3410,7 +3410,8 @@ ${edit}
   test('a later merge inherits a guard failure current main already has', async () => {
     const r = repo();
     try {
-      const guard = repositoryGuards[0].file;
+      const guard = 'scripts/api/answer-records.guard.test.ts';
+      expect(repositoryGuards.some(entry => entry.file === guard)).toBe(true);
       const inventory = 'tests/qa/fixtures/outcomes/inventory.json';
       mkdirSync(join(r.dir, dirname(inventory)), { recursive: true });
       mkdirSync(join(r.dir, guard, '..'), { recursive: true });
@@ -3673,7 +3674,8 @@ process.exit(0);
     test(`a guard absent from the affected plan has its ${outcome} failure compared with committed main`, async () => {
       const r = repo();
       try {
-        const guard = repositoryGuards[0].file;
+        const guard = 'scripts/api/answer-records.guard.test.ts';
+        expect(repositoryGuards.some(entry => entry.file === guard)).toBe(true);
         const inventory = 'tests/qa/fixtures/outcomes/inventory.json';
         mkdirSync(join(r.dir, dirname(inventory)), { recursive: true });
         // The scan input is in the guard's declared inventory, outside its imports.
@@ -4606,7 +4608,7 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
-  test('resume checks the live-worker limit even with --force-usage', async () => {
+  test('resume retains a waiting request at the live-worker limit even with --force-usage', async () => {
     const r = repo();
     try {
       await r.start('G-001');
@@ -4614,14 +4616,16 @@ process.exit(0);
       await r.stopFixture('G-001');
       for (const flags of [[], ['--force-usage']]) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MAX_WORKERS: '1' });
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain('Concurrency limit reached: 1/1 live workers');
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('resume waiting: Concurrency limit reached: 1/1 live workers');
+        expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ message: 'continue',
+          forceUsage: flags.includes('--force-usage'), reason: expect.stringContaining('1/1 live workers') });
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
     } finally { r.cleanup(); }
   });
 
-  test('dispatch and resume refuse below the memory floor even with --force-usage', async () => {
+  test('dispatch refuses and resume queues below the memory floor even with --force-usage', async () => {
     const r = repo();
     try {
       const brief = r.brief('G-001');
@@ -4637,9 +4641,11 @@ process.exit(0);
       await r.stopFixture('G-001');
       for (const flags of [[], ['--force-usage']]) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', ...flags], { GOAL_MEMORY_FLOOR_GIB: '1000000000' });
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain('Memory floor reached: host MemAvailable');
-        expect(result.stderr).toContain('64.00 GiB');
+        expect(result.status).toBe(0);
+        expect(result.stdout).toContain('resume waiting: Memory floor reached: host MemAvailable');
+        expect(result.stdout).toContain('64.00 GiB');
+        expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ message: 'continue',
+          forceUsage: flags.includes('--force-usage'), reason: expect.stringContaining('Memory floor reached:') });
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
     } finally { r.cleanup(); }
@@ -4661,8 +4667,11 @@ process.exit(0);
       }
       for (const engine of ['claude', 'sonnet', 'fable', 'codex', 'codex-1', 'luna']) {
         const result = r.run(['resume', 'G-001', '-m', 'continue', '--engine', engine]);
-        expect(result.status).toBe(1);
-        expect(result.stderr).toContain(engine.startsWith('codex') || engine === 'luna' ? 'EXHAUSTED' : 'Claude usage is critical');
+        const queued = engine.startsWith('codex') || engine === 'luna';
+        expect(result.status).toBe(queued ? 0 : 1);
+        expect(queued ? result.stdout : result.stderr).toContain(queued ? 'EXHAUSTED' : 'Claude usage is critical');
+        if (queued) expect(r.ledger().tasks['G-001']!.waitingResume).toMatchObject({ engine,
+          message: 'continue', forceUsage: false, reason: expect.stringContaining('EXHAUSTED') });
         expect(r.ledger().tasks['G-001']!.attempts).toHaveLength(1);
       }
       // A fake Claude executable proves the escape reaches launch without calling a real engine.

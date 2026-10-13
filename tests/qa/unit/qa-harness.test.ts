@@ -440,7 +440,7 @@ function startupHarness(directory: string) {
             fixture: process.env.QA_HARNESS_PREPARED_FIXTURE ?? 'prepared-source', elapsedMs: 0,
           }));
           writeFileSync(join(process.env.QA_HARNESS_CONTROL, process.env.QA_HARNESS_NAME + '-prepared'), '');
-        }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0,
+        }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0, readLoad: () => 0,
           read: async () => ({ vmTotal: 64 * 1024 ** 3, vmUsed: 0, hostAvailable: 64 * 1024 ** 3 }) });
       }
     } else if (args[0] === 'test') {
@@ -468,7 +468,7 @@ function startupHarness(directory: string) {
         appendFileSync(join(control, name + '-startups'), String(process.pid) + '\\n');
         while (!existsSync(join(control, name + '-finish'))) await Bun.sleep(10);
         throw new Error('Intentional stack startup stub failure');
-      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0,
+      }, { lockFile: ${JSON.stringify(lockFile)}, pollMs: 10, readingMaxAgeMs: 0, readLoad: () => 0,
         announce: message => {
           console.log(message);
           // Captured output can be replayed in the same chunk before reservation finishes.
