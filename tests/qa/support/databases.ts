@@ -98,7 +98,17 @@ async function dropClones(session: QaCloneSession, names: readonly string[]): Pr
   const failures: unknown[] = [];
   for (const name of [...names].reverse()) {
     try {
-      await session.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`);
+      // Stop new clients, then let the file's closing pools/listeners disconnect.
+      // FORCE sends asynchronous backend errors that can escape into the next file.
+      await session.query(`ALTER DATABASE ${name} ALLOW_CONNECTIONS false`);
+      await session.query(`DO $$ DECLARE deadline timestamptz := clock_timestamp() + interval '30 seconds';
+        BEGIN WHILE EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname = '${name}') LOOP
+          IF clock_timestamp() >= deadline THEN
+            RAISE EXCEPTION 'QA database ${name} still has open clients';
+          END IF;
+          PERFORM pg_sleep(0.05);
+        END LOOP; END $$`);
+      await session.query(`DROP DATABASE IF EXISTS ${name}`);
     } catch (error) { failures.push(error); }
   }
   if (failures.length) throw new AggregateError(failures, 'QA database clone cleanup failed');
