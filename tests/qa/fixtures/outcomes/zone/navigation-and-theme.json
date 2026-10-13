@@ -2049,6 +2049,110 @@
         }
       },
       {
+        "label": "draft-navigation-editor",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/a2f43965-27fb-8624-bfc3-84522b35f14b?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2b059cf8-2105-4a86-abc9-a891dc13558e&limit=50",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/a2f43965-27fb-8624-bfc3-84522b35f14b",
+          "navigation": "https://rezics.com/id/3fdafc8d-a0c8-80ee-9981-887d7ee1f4d4",
+          "revision": "https://rezics.com/id/566c7ae3-0e00-8cdd-95db-eb0fd2b90d05",
+          "ownerRevision": "https://rezics.com/id/01a135e6-6cd4-709b-ab65-f03a185f4461",
+          "name": "Published site",
+          "language": "en",
+          "direction": "ltr",
+          "predecessor": "https://rezics.com/id/3bdc1906-197f-897d-a1bd-1ddf5201469d",
+          "mounts": [
+            {
+              "occurrence": "https://rezics.com/id/aee5f1d0-fa58-83b3-a632-7af82dd4e5f1",
+              "state": "active",
+              "parent": "https://rezics.com/id/3fdafc8d-a0c8-80ee-9981-887d7ee1f4d4",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "mount",
+              "target": "https://rezics.com/id/3546ff6e-9ff1-4e4a-be70-fc1fff8639dd",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/a2f43965-27fb-8624-bfc3-84522b35f14b",
+                "routeSegment": "published-link",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/3bdc1906-197f-897d-a1bd-1ddf5201469d"
+            },
+            {
+              "occurrence": "https://rezics.com/id/14f13ebd-c0da-8cee-8d1a-47cba7e9589c",
+              "state": "active",
+              "parent": "https://rezics.com/id/3fdafc8d-a0c8-80ee-9981-887d7ee1f4d4",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "mount",
+              "target": "https://rezics.com/id/3546ff6e-9ff1-4e4a-be70-fc1fff8639dd",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/a2f43965-27fb-8624-bfc3-84522b35f14b",
+                "routeSegment": "draft-link",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/566c7ae3-0e00-8cdd-95db-eb0fd2b90d05"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "ee33b570-90f7-4685-af6d-6d4e789c934d",
+            "sequence": "18"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "mount-target-collection-name",
+        "operationId": "getV1CollectionsByIdName",
+        "method": "GET",
+        "path": "/v1/collections/3546ff6e-9ff1-4e4a-be70-fc1fff8639dd/name",
+        "status": 200,
+        "answer": {
+          "profile": "collection-public-name-v1",
+          "collection": "https://rezics.com/id/3546ff6e-9ff1-4e4a-be70-fc1fff8639dd",
+          "revision": null,
+          "name": {
+            "original": "und",
+            "labels": {
+              "und": "Site references"
+            }
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "mount-target-work",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/3546ff6e-9ff1-4e4a-be70-fc1fff8639dd?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2b059cf8-2105-4a86-abc9-a891dc13558e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "stale-configuration-refused",
         "operationId": "putV1ZonesByIdConfiguration",
         "method": "PUT",

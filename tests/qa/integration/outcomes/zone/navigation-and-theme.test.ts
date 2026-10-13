@@ -181,6 +181,16 @@ outcomeTest(row, 'owner', async () => {
   expect(configuration.configuration.presentation).toEqual(f.draftPresentation);
   const navigation = await answer<{ revision: string; mounts: Array<{ occurrence: string }> }>(
     sample('draft-navigation', 'GET', `${f.path}${query(owner)}`));
+  // Match the editor's page size and both kind-agnostic name reads, including refusals.
+  for (const [label, path] of [
+    ['draft-navigation-editor', `${f.path}${query(owner)}&limit=50`],
+    ['mount-target-collection-name', `/v1/collections/${short(f.collection)}/name`],
+    ['mount-target-work', `/v1/works/${short(f.collection)}${query(owner)}`],
+  ] as const) {
+    const response = await sample(label, 'GET', path);
+    const raw = await response.text();
+    if (response.status >= 500) throw new Error(`GET ${path}: ${response.status}: ${raw}`);
+  }
   expect(navigation.revision).toBe(f.draftNavigation.revision);
   expect(navigation.mounts.map(item => item.occurrence)).toContain(f.draftNavigation.occurrences[0]!);
   const stale = await answer<{ code: string }>(sample('stale-configuration-refused', 'PUT', `${f.path}/configuration`, {
