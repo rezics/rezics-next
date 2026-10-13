@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Four first attempts, no fix rounds or landed tasks; first-attempt share 100% (4/4), attempts per landed task n/a; automated measures pending Program G-2088 |
+| Measures | Four first attempts, no fix rounds; first-attempt share 100% (4/4); one landed task, G-2094, attempt 1 (median/max 1); automated measures pending Program G-2088 |
 
 ## Authorized work now
 
@@ -25,9 +25,9 @@ tier. At most eight live web workers. Briefs are at most forty lines.
 | G-2091 | Accepted commands stay pending; manage/command adapter and its guard |
 | G-2092 | Identity-required reads; realm/client adapters and its guard |
 | G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
-| G-2094 | Two relation browser tests and entity-page story expect canonical suffixes; no e2e execution |
+| G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2090, G-2091, G-2092 and G-2094 are running on first attempts. Program's mail
+G-2090, G-2091 and G-2092 are running on first attempts; G-2094 is landed. Program's mail
 `program-web-guards-registry` directs this manager to append all four inventory
 guard entries in one own-only commit after Program mails G-2071's landing and
 release of `scripts/qa/repository-guards.ts`. Workers do not edit that file;
@@ -64,11 +64,11 @@ dropped.
 
 ## Known on main
 
-- Related-Work links carry canonical addresses with readable suffixes since
-  2026-10-12. Two browser tests (`g-841-q04-reboot-spinoff`, `g-841-q03-identity`)
-  and one story (`entity-page.stories.tsx`) still expect bare-identity hrefs and
-  fail; the anime pointer case runs on a Book-typed fixture, and part and whole
-  links are not clicked in any test.
+- Related-Work links and the two browser tests (`g-841-q04-reboot-spinoff`,
+  `g-841-q03-identity`) plus `entity-page.stories.tsx` now expect canonical
+  addresses with readable suffixes. The story passes; nightly regression will
+  execute both browser tests. The anime pointer case still runs on a Book-typed
+  fixture, and part and whole links are not clicked in any test (outside this task).
 - Anime and manga browse one year at a time through the API; the "all years"
   list still stops after a few pages.
 - Home "Continue" shows six items and followed authors eight, with no "see all".
