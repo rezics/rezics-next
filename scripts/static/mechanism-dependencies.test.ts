@@ -170,6 +170,11 @@ test("the mechanism map's import surface is its entry-point files and named adap
   expect(
     Object.fromEntries(mechanisms.map((entry) => [entry.id, allowedImportFiles(entry, root)])),
   ).toEqual({
+    'api-contract-generation': [
+      'scripts/api/answer-record.ts',
+      'scripts/api/generate.ts',
+      'scripts/api/operation-index.ts',
+    ],
     'rights-evaluation': [
       'services/main/src/modules/rights/schema.ts',
       'services/main/src/modules/rights/store.ts',

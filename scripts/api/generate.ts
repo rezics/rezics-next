@@ -158,15 +158,24 @@ function canonical(value: unknown): unknown {
 }
 
 const schemaValues = new Set(['const', 'default', 'enum', 'example', 'examples']);
+const schemaMaps = new Set(['properties', 'patternProperties', '$defs', 'definitions', 'dependentSchemas']);
 
 /** Translate legacy tuples and Elysia nullable literals to JSON Schema 2020-12.
+ * The OpenAPI adapter labels literal unions as strings, including numeric unions;
+ * retain their exact members and derive a compatible primitive type.
  * Adding null to `type` alone cannot widen an enum or const constraint. */
 export function jsonSchema2020Tuples(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(jsonSchema2020Tuples);
   if (value === null || typeof value !== 'object') return value;
   const { items, additionalItems, ...rest } = value as Record<string, unknown>;
-  const result: Record<string, unknown> = Object.fromEntries(Object.entries(rest).map(([key, item]) =>
-    [key, schemaValues.has(key) ? item : jsonSchema2020Tuples(item)]));
+  const result: Record<string, unknown> = Object.fromEntries(Object.entries(rest).map(([key, item]) => {
+    if (schemaValues.has(key)) return [key, item];
+    // Property and definition names can themselves be literal-payload keywords.
+    if (schemaMaps.has(key) && item !== null && typeof item === 'object' && !Array.isArray(item)) {
+      return [key, Object.fromEntries(Object.entries(item).map(([name, schema]) => [name, jsonSchema2020Tuples(schema)]))];
+    }
+    return [key, jsonSchema2020Tuples(item)];
+  }));
   if (Array.isArray(items)) {
     result.prefixItems = items.map(jsonSchema2020Tuples);
     if (additionalItems !== undefined) result.items = jsonSchema2020Tuples(additionalItems);
@@ -180,6 +189,18 @@ export function jsonSchema2020Tuples(value: unknown): unknown {
       delete result.const;
     } else if (Array.isArray(result.enum) && !result.enum.includes(null)) {
       result.enum = [...result.enum, null];
+    }
+  }
+  const literals = [...(Object.hasOwn(result, 'const') ? [result.const] : []),
+    ...(Array.isArray(result.enum) ? result.enum : [])];
+  if (literals.length && literals.every(item =>
+    item === null || ['string', 'number', 'boolean'].includes(typeof item))) {
+    const types = [...new Set(literals.map(item => item === null ? 'null' : typeof item))];
+    const declared = Array.isArray(result.type) ? result.type : [result.type];
+    if (result.type !== undefined && literals.some(item =>
+      !declared.includes(item === null ? 'null' : typeof item)
+      && !(typeof item === 'number' && Number.isInteger(item) && declared.includes('integer')))) {
+      result.type = types.length === 1 ? types[0] : types;
     }
   }
   return result;

@@ -91,6 +91,15 @@ export const mechanisms = [
       'tests/qa/integration/web-auth-bootstrap.test.ts',
     ],
   },
+  {
+    id: 'api-contract-generation',
+    owner: 'scripts/api',
+    entryPoints: ['generate.ts#buildMainOpenApi', 'generate.ts#generateMainOpenApi', 'generate.ts#jsonSchema2020Tuples'],
+    ownedState: ['generated/openapi/main/public.json', 'generated/openapi/main/exposure.ts'],
+    protectedEffects: ['project installed Main route schemas', 'publish Main OpenAPI artifacts'],
+    allowedAdapters: ['answer-record', 'operation-index', 'typed-web-client'],
+    conformanceTests: ['tests/qa/unit/openapi-primitive-contracts.test.ts', 'scripts/api/answer-records.guard.test.ts'],
+  },
 ] as const satisfies readonly Mechanism[];
 
 export type MechanismId = (typeof mechanisms)[number]['id'];
