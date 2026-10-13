@@ -84,10 +84,10 @@ from the session logs step by step.
 | By engine | Sol: 2.4 million tokens a turn, a median 9.0 million and 5 turns for a task done on it alone. Luna: 7.7 million a turn, 8.0 million and 2 turns. Tasks were not assigned alike, so this compares little |
 | By account | `codex` 6.9 billion, `codex-1` 2.4 billion |
 
-Waiting was 30% of worker tokens in sessions begun on 2026-10-11 and 26% on
-2026-10-12, when the protocol began to ask for one long wait call; in the short
-tasks of 2026-10-13 it was 8% for tooling tasks. Whether that holds for long
-tasks is not measured.
+Waiting was 30% of worker tokens in sessions begun on 2026-10-11, 26% on
+2026-10-12 and 29% on 2026-10-13, by the same count each day. The one long wait
+call the protocol asks for since 2026-10-12 did not lower it: a wait is still a
+model step that carries the whole context.
 
 Three more things happened that day. One api manager read 18 persona matrices
 one after another, so 15 worker sessions stood idle. Mail could not reach that
@@ -225,6 +225,28 @@ product scope for a later row of the api Goal, not for the first public scope.
 Its build-time half, the operation index, is task N5. Nothing becomes a registry
 at run time.
 
+## The efficiency audit
+
+Every three hours while workers run (maintainer, 2026-10-13):
+
+1. A program measures, with no model: the workers' tokens since the last audit
+   by the task's turn, by what a step did, by kind of task, engine and account,
+   as in the table above and by the same definitions; the rows confirmed; the
+   first-attempt share; the managers' share; each account's allowance used.
+   Until task N11 builds it into `goalctl`, the script of 2026-10-13 does it
+   (`.temp/goal-program/efficiency/sessions.py <day> …`).
+2. A researcher on Sol, read-only and in one session, gets those figures, the
+   audit before and the logs of the three dearest tasks, and returns the causes
+   with their evidence and what to change, each change with the figure that
+   would show it worked.
+3. The supermanager decides by itself and adjusts. A change is an experiment:
+   the same kind of task before and after, kept or undone at the next audit.
+
+When the pace is good enough the audit only records and nothing is optimised.
+Good enough is the maintainer's yardstick: at the measured pace the scope is
+done, fit to go live apart from what is not a matter of code, in about twelve
+hours of running, with allowance to spare on both accounts.
+
 ## Asking the maintainer
 
 He may not be watching the supermanager and may not answer soon (2026-10-13).
@@ -266,7 +288,8 @@ host that stopped answering. The token stays in `../.secrets/bots.json`.
 2. **Method in code.** A rule a manager is meant to keep is a check in
    `goalctl`. A rule that lives only in a document is not kept.
 3. **Measures.** Read them at every checkpoint: first-attempt share, attempts
-   for each landed task, the managers' share of tokens. When a Goal's
+   for each landed task, the managers' share of tokens; and run the
+   [efficiency audit](#the-efficiency-audit) every three hours. When a Goal's
    first-attempt share falls under half, its dispatch stops until the cause is
    known.
 4. **Shared host and allowance.** Host memory, QA slots, gate lanes, the shared
@@ -305,11 +328,12 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N6 | The surface gate (types, unit tests, the changed stories fed by recorded responses); the measures read each attempt's recorded round; a cancelled task names its reason and what replaces it; at 150 model steps of one attempt the manager is told and decides (nine sessions in ten were shorter; nothing stops on the count alone); a worker starts no sub-agent; a mechanism brief's note is marked read by its Goal's manager; `dispatch` chooses the Codex account with more of its week left |
 | N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
 | N10 | The harness does what needs no decision in a worker's task. It hands the worker the files, tests and operations the brief names before the first step; `task goal -- check` runs types, lint, the task's tests and the guards in one blocking call and prints only what failed; at a handoff the harness itself commits, rebases onto the current `main` and runs the merge's checks in the gate's environment, and a refusal goes back to the same session as the failure alone. A worker never waits on a command, never commits and never learns of a refusal from a manager. Accepted on a comparison: five landed tasks of one kind done again this way, tokens and steps for each beside the first time. Over 2026-10-11 and 2026-10-12, 39% of worker tokens went to steps with no decision |
+| N11 | The efficiency audit runs by itself: `task goal -- efficiency` prints the measures since the last audit from the session logs and the ledger, keeps each audit's figures, and every three hours while workers run starts the researcher from a standing brief; `status` shows the last audit's pace against the yardstick |
 | N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
-N0 comes first and needs no worker until its clusters are known. N10 follows N2,
-beside N3. N1, N2 and N9
+N0 comes first and needs no worker until its clusters are known. N10 and N11
+follow N2, beside N3; until N11 the supermanager starts the audit by hand. N1, N2 and N9
 start together; they share no file. N3 follows N2, N4 follows N3, N5 and N8 run beside N3,
 N7 follows N1. The
 api Goal resumes its 18 tasks after N4, with its matrices read by turns side by

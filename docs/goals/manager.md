@@ -117,6 +117,13 @@ wording and directions that later ones replaced are in this file's history.
     first where it lacks evidence. What only the maintainer can decide reaches
     him over Telegram, and other work continues meanwhile
     ([program](program/GOAL.md#asking-the-maintainer)).
+16. **Audit efficiency every three hours; adjust by measurement** (2026-10-13).
+    "每 3h 启动一次，派发 6.1 sol 做 token 效率调研，当然包括解决方案和指导意见 …
+    如果调研结果是效率依然很差，那 manager 需要自主判断，进行适当调整，通过实测和
+    持续迭代来找出最优方案." And where to stop: if at the measured pace the
+    product is done and fit to go live, apart from what is not a matter of
+    code, in about twelve hours with allowance to spare, nothing is optimised
+    ([program](program/GOAL.md#the-efficiency-audit)).
 
 ## Resources
 
