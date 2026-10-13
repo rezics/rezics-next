@@ -1,7 +1,15 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { readFileSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  authorize,
+  exchangeCode,
+  LocalOAuthSession,
+  type LocalOAuthClient,
+} from '../../../../../scripts/lib/oauth-client.ts';
 import inventory from '../../../../../scripts/qa/cases/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -165,32 +173,6 @@ beforeAll(async () => {
     );
     occurrences.push(...composition.occurrences);
   }
-  // Ordinary reading sessions follow bulk preparation. The fresh member joins
-  // the affected Realm through its public policy before any reader outcome.
-  const readers = await personaSessions();
-  const member = readers.member;
-  const realm = `/v1/realms/${short(sessions.realm)}`;
-  const policy = await answer<{
-    membershipGeneration: string;
-    policyRevision: string;
-    termsRevision: string;
-  }>(
-    member.main(
-      'GET',
-      `${realm}/joining?actingSubject=${encodeURIComponent(member.actingSubject!)}`,
-    ),
-  );
-  await answer(
-    member.main('POST', `${realm}/join`, {
-      actingSubject: member.actingSubject,
-      expectedMembershipGeneration: policy.membershipGeneration,
-      expectedPolicyRevision: policy.policyRevision,
-      termsRevision: policy.termsRevision,
-      listed: false,
-    }),
-  );
-  sessions.stranger = readers.stranger;
-  sessions.member = member;
   expect(performance.now() - started).toBeLessThan(600_000);
 }, 600_000);
 afterAll(async () => {
@@ -214,8 +196,63 @@ async function credit(person: PersonaSession, work: Work) {
   );
 }
 
+async function readingSession(person: PersonaSession): Promise<PersonaSession> {
+  if (!person.accountId) return person;
+  const stack = resolve('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
+  const directory = readdirSync(stack).find((name) => name.startsWith('g-1005-auth-'));
+  if (!directory) throw new Error('Persona OAuth public configuration is unavailable');
+  const config = JSON.parse(readFileSync(resolve(stack, directory, 'public.json'), 'utf8')) as {
+    clientId: string;
+    redirectUris: string[];
+    scope: string;
+  };
+  const client: LocalOAuthClient = {
+    account: Bun.env.ACCOUNT_BASE_URL!,
+    clientId: config.clientId,
+    redirectUri: config.redirectUris[0]!,
+    scope: config.scope,
+    resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
+    fetch: async (input, init) => {
+      const url = new URL(input);
+      // The existing Account transport carries this person's live session cookie.
+      if (url.pathname === '/api/auth/oauth2/authorize')
+        return person.account('GET', `${url.pathname}${url.search}`);
+      if (url.pathname === '/api/account/consent')
+        return person.account(
+          'POST',
+          `${url.pathname}${url.search}`,
+          JSON.parse(String(init?.body)),
+        );
+      return fetch(input, init);
+    },
+  };
+  const authorized = await authorize(client, '');
+  if (!authorized.ok)
+    throw new Error(`Persona authorization returned HTTP ${authorized.response.status}`);
+  const grant = await exchangeCode(client, authorized);
+  const oauth = new LocalOAuthSession(client, grant, Date.now() + (grant.expires_in ?? 300) * 1000);
+  const sessionKey = randomUUID();
+  return {
+    ...person,
+    main: async (method, path) => {
+      expect(method).toBe('GET');
+      const headers = {
+        authorization: `Bearer ${await oauth.current(Date.now(), 60_000)}`,
+        'x-session-key': sessionKey,
+      };
+      return outcomeResponse((signal) =>
+        fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+          headers,
+          redirect: 'manual',
+          signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
+        }),
+      );
+    },
+  };
+}
+
 async function navigate(name: PersonaName) {
-  const person = sessions[name];
+  const person = await readingSession(sessions[name]);
   const path = `/v1/reading-positions/${short(published.work)}`;
   const read = (fields: Record<string, string> = {}) =>
     answer<Page>(person.main('GET', `${path}?${query(person, fields)}`));
