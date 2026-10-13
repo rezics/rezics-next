@@ -35,6 +35,8 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   git('worktree', 'add', '-qb', 'goal/fixture', worktree);
   const brief = join(directory, '.temp/brief.md');
   writeFileSync(brief, `---\nid: G-001\nkind: ${kind}\ntitle: Deliver a file\neffort: high\npaths: [delivered.txt]\n---\n`);
+  mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
+  copyFileSync(brief, join(worktree, '.temp/goal/brief.md'));
   const output = join(run, 'attempt.json');
   writeFileSync(output, JSON.stringify({ result: `RESULT: ${result}\nNEXT: Inspect the remaining work`, is_error: false }));
   const task: Task = { id: 'G-001', title: 'Deliver a file', kind, effort: 'high', cases: [], paths: ['delivered.txt'],
@@ -104,6 +106,18 @@ async function until(check: () => boolean): Promise<void> {
   }
 }
 
+async function waitForLaunch(f: ReturnType<typeof fixture>): Promise<void> {
+  await until(() => {
+    if (existsSync(f.launches)) return true;
+    const settlement = f.ledger().tasks[f.task.id]!.settlement;
+    if (settlement?.settledAt) {
+      const log = join(f.run, 'settle.log');
+      throw new Error(`${settlement.reason}\n${existsSync(log) ? readFileSync(log, 'utf8') : ''}`);
+    }
+    return false;
+  });
+}
+
 afterEach(() => {
   for (const f of fixtures.splice(0)) {
     for (const attempt of f.ledger().tasks[f.task.id]?.attempts ?? []) {
@@ -135,18 +149,17 @@ test('a unit-gate refusal resumes its own session with only bounded failure evid
   stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery is fixed\n      error: Expected fixed delivery`);
   writeFileSync(f.release, 'release');
   await f.execute(['settle']);
-  await until(() => {
-    const settlement = f.ledger().tasks[f.task.id]!.settlement;
-    if (settlement?.settledAt) throw new Error(`${settlement.reason}\n${readFileSync(join(f.run, 'settle.log'), 'utf8')}`);
-    return existsSync(f.launches);
-  });
+  await waitForLaunch(f);
   const current = f.ledger().tasks[f.task.id]!;
   expect(current.attempts).toHaveLength(2);
   expect(current.attempts[1]!.round).toBe('fix');
   expect(current.attempts[1]!.session).toBe('fixture');
   const args = JSON.parse(readFileSync(f.launches, 'utf8').trim()) as string[];
   expect(args).toContain('--resume');
-  const message = args.at(-1)!;
+  const prompt = args.at(-1)!;
+  expect(prompt).toContain(readFileSync(f.task.brief, 'utf8'));
+  expect(readFileSync(join(f.task.worktree, '.temp/goal/brief.md'), 'utf8')).toBe(readFileSync(f.task.brief, 'utf8'));
+  const message = prompt.split('\n\nManager note:\n').at(-1)!;
   expect(message).toContain('Check: unit gate');
   expect(message).toContain('(fail) delivery is fixed');
   expect(message).toContain('Expected fixed delivery');
@@ -190,7 +203,7 @@ test.each([
 ])('a restarted pass sends the recorded %s failure once', async (check, refusal) => {
   const f = fixture(); stoppedLanding(f, `${f.task.id} ${refusal}`);
   await Promise.all([f.execute(['settle']), f.execute(['settle'])]);
-  await until(() => existsSync(f.launches));
+  await waitForLaunch(f);
   await f.execute(['settle']);
   expect(f.ledger().tasks[f.task.id]!.attempts).toHaveLength(2);
   expect(readFileSync(f.launches, 'utf8').trim().split('\n')).toHaveLength(1);
@@ -202,7 +215,7 @@ test('a review refusal left exited is returned after a restart, without landing 
   const f = fixture();
   stoppedLanding(f, `${f.task.id} introduced unit failures; not merging:\n  value.test.ts\n    (fail) delivery`);
   const ledger = f.ledger(); ledger.tasks[f.task.id]!.state = 'exited'; f.save(ledger);
-  await f.execute(['settle']); await until(() => existsSync(f.launches));
+  await f.execute(['settle']); await waitForLaunch(f);
   expect(f.ledger().tasks[f.task.id]!.attempts).toHaveLength(2);
   expect(existsSync(f.gate)).toBe(false);
 });
@@ -273,7 +286,7 @@ test('review findings return only reproduced failing cases and their first error
       detail: 'Expected: delivered\nReceived: missing\nerror: assertion\nstack detail' },
     { file: 'tests/qa/integration/review/delivery.test.ts', name: 'a passing case', failed: false, skipped: false },
   ] }));
-  await f.execute(['settle']); await until(() => existsSync(f.launches));
+  await f.execute(['settle']); await waitForLaunch(f);
   const args = JSON.parse(readFileSync(f.launches, 'utf8').trim()) as string[];
   expect(args.at(-1)).toContain('Check: review finding with a failing test');
   expect(args.at(-1)).toContain('reader gets delivery');
