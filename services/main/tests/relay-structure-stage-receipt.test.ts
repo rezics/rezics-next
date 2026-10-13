@@ -127,14 +127,14 @@ for (const kind of ['projection', 'cancelled'] as const) {
           authorityEpoch: '7',
           scope: `work:edit:${structure}`,
         });
-        expect(event.data.receipt.systemProof).toBeUndefined();
+        expect(event.data.receipt).not.toHaveProperty('systemProof');
       } else {
         expect(event.data.receipt).toMatchObject({
           action: 'structure.stage-cancel',
           outcome: 'cancelled',
           systemProof: { kind: 'structure-stage-cancelled', stageId, structure, generation },
         });
-        expect(event.data.receipt.admissionId).toBeUndefined();
+        expect(event.data.receipt).not.toHaveProperty('admissionId');
       }
       expect(await readMainOutboxEnvelope(f.graph, batch, eventId)).toEqual(event);
       expect(f.proofReads()).toBe(2);
