@@ -117,6 +117,11 @@ export interface MainSync {
 /** How often one merge may recheck types because main changed a workspace it had checked. */
 const MAX_TYPE_RECHECKS = 5;
 
+/** The one rerun of the unit gate does not spend the type rechecks: main keeps moving in a busy workspace after it. */
+export function typeRechecksSpent(reruns: number): boolean {
+  return reruns >= MAX_TYPE_RECHECKS;
+}
+
 export type FastForward =
   | { kind: 'merged'; prepared: PreparedMerge }
   /** The pre-merge gate passed and main was not fast-forwarded. */
@@ -448,7 +453,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     // A type check takes seconds. A busy workspace may be rechecked several times before the merge gives up;
     // a rerun of the unit gate is still allowed once.
     typeRechecks++;
-    retyped = !outcome.workspaces || typeRechecks >= MAX_TYPE_RECHECKS;
+    retyped = typeRechecksSpent(typeRechecks);
     if (outcome.workspaces && !outcome.rerun.surface) {
       const workspaces = outcome.workspaces;
       const rerun = () => typecheck(outcome.rerun, workspaces);

@@ -19,7 +19,7 @@ import { acquireHeavy, acquireSharedLifecycle, archiveFiles, areaConflicts, bala
   dependencyInstallIsStale, missingPinnedImage, gateLaneStatus, gateLaneWaiters, qaSlotCount, withGateLane,
   dispatchMethodErrors, resumeDecisionError, mailCommand, mechanismSectionErrors, type AccountUsage, type Ledger, type Task, type UnitFailureDetail, type UnitRunEvidence, type UnitShardResult, treeMentions, usageLevel, validateBrief,
   workerSessionEnvironment } from './goalctl.ts';
-import { fastForwardMain, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
+import { fastForwardMain, typeRechecksSpent, introducedTypecheckDiagnostics, typecheckDiagnostics, typecheckGate, typecheckWorkspaces, TYPECHECK_WORKSPACES, unclassifiedTypecheckLines,
   type FastForwardGates, type MainSync, type PreparedMerge, type TypecheckRun } from './goalctl.ts';
 import { reviewPrompt } from './land.ts';
 import { physicalPath, postgresSocketRefusal } from './postgres-socket.ts';
@@ -6591,6 +6591,17 @@ describe('main fast-forward', () => {
       expect(stopped).toMatchObject({ kind: 'stopped', conflict: true });
       expect((stopped as { message: string }).message).toContain('main');
       expect(h.log).toEqual([]);
+    });
+
+    test('the one rerun of the unit gate leaves the type rechecks to a main that keeps moving', () => {
+      // A surface's landing reran its gate once, then met a second change to the web workspace and stopped.
+      expect(typeRechecksSpent(1)).toBe(false);
+      expect(typeRechecksSpent(4)).toBe(false);
+      expect(typeRechecksSpent(5)).toBe(true);
+      const h = move('services/main/src/exported-type.ts');
+      const advance = fastForwardMain(h.sync, prepared('m1', 't1'),
+        gates([], { typechecked: ['main'], regated: true, retyped: typeRechecksSpent(1) }), () => {});
+      expect(advance).toMatchObject({ kind: 'retypecheck', workspaces: ['main'] });
     });
 
     test('changes outside the checked workspaces, or with the type check skipped, fast-forward', () => {
