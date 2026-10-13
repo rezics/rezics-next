@@ -57,8 +57,17 @@ export type RankingMetric = 'reads' | 'finished-chapters';
 /** Text in the language Main returned it in. */
 export interface ZoneText { value: string; lang: string; dir: 'ltr' | 'rtl' }
 
+/** The copyright credit Main returned for an admitted imported cover. */
+export interface ZoneCoverCredit {
+  kind: 'copyright';
+  text: string;
+  holder: string | null;
+  source: { name: string; href: string };
+  permittedRole: 'cover';
+}
+
 /** An image Main serves; `url` is already a path the browser can load. */
-export interface ZoneImage { url: string; width: number; height: number }
+export interface ZoneImage { url: string; width: number; height: number; coverCredit?: ZoneCoverCredit | null }
 
 /** A Work as every module shows it: the cover is the card. */
 export interface ZoneWork {
@@ -651,7 +660,8 @@ export function defineZonePackage<const Package extends ZonePackage>(pkg: Packag
 export function workCoverProps(work: ZoneWork) {
   return { title: work.title?.value ?? '', lang: work.title?.lang, dir: work.title?.dir,
     authors: work.author ? [work.author.value] : [], kind: work.kind, id: work.id,
-    image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height } : null };
+    image: work.cover ? { src: work.cover.url, width: work.cover.width, height: work.cover.height,
+      coverCredit: work.cover.coverCredit ?? null } : null };
 }
 
 /**

@@ -606,9 +606,14 @@ describe('Official Zone packages', () => {
       authors: ['aurora'],
       kind: 'package',
       id,
-      image: { src: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600 },
+      image: { src: '/api/main/v1/media/c?actingSubject=a', width: 600, height: 600, coverCredit: null },
     });
     expect(coverProps(catalogueWork(work), '?actingSubject=a')).toEqual(workCoverProps(work));
+    const coverCredit = { kind: 'copyright' as const, text: 'Lumen Studio', holder: 'Lumen Studio',
+      source: { name: 'Cover archive', href: 'https://example.com/covers/lumen' }, permittedRole: 'cover' as const };
+    const credited = { ...work, cover: { ...work.cover, coverCredit } };
+    expect(workCoverProps(credited).image?.coverCredit).toEqual(coverCredit);
+    expect(coverProps(catalogueWork(credited), '?actingSubject=a')).toEqual(workCoverProps(credited));
     const bare = { ...work, title: null, author: null, cover: null };
     expect(workCoverProps(bare)).toMatchObject({ title: '', authors: [], image: null });
     expect(coverProps(catalogueWork(bare))).toEqual(workCoverProps(bare));

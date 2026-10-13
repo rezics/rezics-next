@@ -47,7 +47,8 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
   return { id: work.id, href: work.href, title: work.title ? name(work.title) : null,
     // Only the fields the catalogue's cover reads; the rest of Main's avatar shape is not needed here.
     cover: media && work.cover ? { kind: 'image', url: media, width: work.cover.width, height: work.cover.height,
-      selection: '', mediaType: '', crop: null, coverCredit: null, basis: { policy: '', context: '' } } : null,
+      selection: '', mediaType: '', crop: null, coverCredit: work.cover.coverCredit ?? null,
+      basis: { policy: '', context: '' } } : null,
     kind: work.kind, authors: work.author ? [{ name: work.author.value, href: work.authorHref ?? null }] : [],
     rating: null,
     tagline: work.tagline ? name(work.tagline) : null, completion: work.status };
