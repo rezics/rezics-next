@@ -147,20 +147,13 @@ async function publishBoundedPages(sample: ReturnType<typeof recording.session>,
   const preparationStarted = performance.now();
   const pages: Page[] = [];
   const drafts = [];
-  for (let index = 0; index < ZONE_SITE_PUBLICATION_COST.maxPages; index++) {
-    const body = { ...f.draftBody(fromPlainText(`Bounded owner page ${index + 1}`, 'blocks'), null),
-      variantId: `urn:rezics:variant:${randomUUID()}` };
-    const key = randomUUID();
-    const saved = await answer<{ revisionId: string; byteDigest: string;
-      sourcePosition: { dataEpoch: string; sequence: string } }>(
-      sample(`save-bounded-page-${index + 1}`, 'POST', '/v1/content-drafts', body, key), 201);
-    const page = { page: f.homeDocument, variantId: body.variantId, revisionId: saved.revisionId,
-      byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
-    expect(page.byteDigest).toMatch(/^[0-9a-f]{64}$/);
-    expect(page.contentEpoch).toMatch(/^[0-9a-f-]{36}$/);
-    pages.push(page);
-    drafts.push({ request: { method: 'POST', path: '/v1/content-drafts', idempotencyKey: key, body },
-      response: { status: 201, body: saved } });
+  // Distinct variants have independent draft heads; bounded concurrency fits the existing proof wall.
+  for (let index = 0; index < ZONE_SITE_PUBLICATION_COST.maxPages; index += 4) {
+    const prepared = await Promise.all(Array.from({
+      length: Math.min(4, ZONE_SITE_PUBLICATION_COST.maxPages - index),
+    }, (_, offset) => saveBoundedPage(sample, f, index + offset)));
+    pages.push(...prepared.map(item => item.page));
+    drafts.push(...prepared.map(item => item.draft));
   }
   expect(pages).toHaveLength(ZONE_SITE_PUBLICATION_COST.maxPages);
   expect(new Set(pages.map(page => page.revisionId)).size).toBe(pages.length);
@@ -183,6 +176,24 @@ async function publishBoundedPages(sample: ReturnType<typeof recording.session>,
     page: page.page, variantId: page.variantId, revisionId: page.revisionId,
   });
   expect(published.pages.map(selected)).toEqual(expect.arrayContaining(pages.map(selected)));
+}
+
+async function saveBoundedPage(sample: ReturnType<typeof recording.session>,
+  f: Awaited<ReturnType<typeof site>>, index: number) {
+  const body = { ...f.draftBody(fromPlainText(`Bounded owner page ${index + 1}`, 'blocks'), null),
+    variantId: `urn:rezics:variant:${randomUUID()}` };
+  const key = randomUUID();
+  const saved = await answer<{ revisionId: string; byteDigest: string;
+    sourcePosition: { dataEpoch: string; sequence: string } }>(
+    sample(`save-bounded-page-${index + 1}`, 'POST', '/v1/content-drafts', body, key), 201);
+  const page = { page: f.homeDocument, variantId: body.variantId, revisionId: saved.revisionId,
+    byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
+  expect(page.byteDigest).toMatch(/^[0-9a-f]{64}$/);
+  expect(page.contentEpoch).toMatch(/^[0-9a-f-]{36}$/);
+  return { page, draft: {
+    request: { method: 'POST', path: '/v1/content-drafts', idempotencyKey: key, body },
+    response: { status: 201, body: saved },
+  } };
 }
 
 async function supportingReads(sample: ReturnType<typeof recording.session>, f: Awaited<ReturnType<typeof site>>) {
