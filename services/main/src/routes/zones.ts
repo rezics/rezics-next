@@ -497,7 +497,7 @@ export function zoneRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               ? variant.languageKind === 'tag' ? { kind: 'tag' as const, tag: variant.languageTag!, originalTag: variant.originalLanguageTag! }
                 : { kind: variant.languageKind }
               : { kind: 'tag' as const, tag: state.language, originalTag: state.language });
-            const again = await content.readDraftHead(zone, variantId);
+            const again = await content.readDraftHead(homeDocument, variantId);
             if (again?.revisionId !== head?.revisionId) throw new WorkReadMoved('Content draft changed');
             if (exact && (await discloseContent(work.environment, [exact], viewer))[0]?.status !== 'available') {
               throw new ZoneUnavailable('Content draft is unavailable');
