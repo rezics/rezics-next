@@ -1,7 +1,9 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { afterAll, beforeAll, expect, onTestFinished, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/site-pages.ts';
+import { outcomeTitle } from '../../../../../scripts/qa/cases/outcome-cells.ts';
+import { ZONE_SITE_PUBLICATION_COST } from '../../../../../services/main/src/modules/zone/config-format.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -108,7 +110,13 @@ outcomeTest(row, 'stranger', () => reads('stranger'), recording);
 outcomeTest(row, 'member', () => reads('member'), recording);
 outcomeTest(row, 'moderator', () => reads('moderator'), recording);
 outcomeTest(row, 'operator', () => reads('operator'), recording);
-outcomeTest(row, 'owner', async () => {
+// The pending declaration retains a required red proof rather than accepting its refusal.
+test(outcomeTitle(row, 'owner'), () => {
+  onTestFinished(() => recording.finish('owner'));
+  return recording.prove('owner', proveOwner);
+});
+
+async function proveOwner() {
   const f = await site();
   const sample = recording.session('owner', sessions.owner);
   await answer(sample('showcase-editor', 'GET', `${f.path}/showcase-editor${query(sessions.owner)}`));
@@ -126,7 +134,56 @@ outcomeTest(row, 'owner', async () => {
     revisionId: f.draft.revisionId, provenance: { rightsBasis: 'original-contribution', author: sessions.owner.actingSubject },
   } });
   await answer(sessions.visitor.main('GET', `/v1/content-revisions/${f.page.revisionId}`), 404);
-}, recording);
+  const replay = await answer<Receipt>(sample('replay-original-publication', 'POST', `${f.path}/site-publications`,
+    f.body, f.key), 201);
+  expect(replay).toEqual({ ...f.receipt, replayed: true });
+  await answer(sample('stale-publication-refused', 'POST', `${f.path}/site-publications`, f.body), 409);
+  expect((await home()).page?.document).toEqual(f.draftDocument);
+  await publishBoundedPages(sample, f, next.revision);
+}
+
+async function publishBoundedPages(sample: ReturnType<typeof recording.session>,
+  f: Awaited<ReturnType<typeof site>>, expectedHead: string) {
+  const preparationStarted = performance.now();
+  const pages: Page[] = [];
+  const drafts = [];
+  for (let index = 0; index < ZONE_SITE_PUBLICATION_COST.maxPages; index++) {
+    const body = { ...f.draftBody(fromPlainText(`Bounded owner page ${index + 1}`, 'blocks'), null),
+      variantId: `urn:rezics:variant:${randomUUID()}` };
+    const key = randomUUID();
+    const saved = await answer<{ revisionId: string; byteDigest: string;
+      sourcePosition: { dataEpoch: string; sequence: string } }>(
+      sample(`save-bounded-page-${index + 1}`, 'POST', '/v1/content-drafts', body, key), 201);
+    const page = { page: f.homeDocument, variantId: body.variantId, revisionId: saved.revisionId,
+      byteDigest: saved.byteDigest, contentEpoch: saved.sourcePosition.dataEpoch };
+    expect(page.byteDigest).toMatch(/^[0-9a-f]{64}$/);
+    expect(page.contentEpoch).toMatch(/^[0-9a-f-]{36}$/);
+    pages.push(page);
+    drafts.push({ request: { method: 'POST', path: '/v1/content-drafts', idempotencyKey: key, body },
+      response: { status: 201, body: saved } });
+  }
+  expect(pages).toHaveLength(ZONE_SITE_PUBLICATION_COST.maxPages);
+  expect(new Set(pages.map(page => page.revisionId)).size).toBe(pages.length);
+  const preparationMs = performance.now() - preparationStarted;
+  const body = { ...f.body, expectedHead, pages };
+  const key = randomUUID();
+  const path = `${f.path}/site-publications`;
+  const response = await sample('publish-full-bounded-page-set', 'POST', path, body, key);
+  const responseBody: unknown = await response.clone().json();
+  await Bun.write(`.temp/site-pages-owner-bound-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({
+    runId: Bun.env.REZICS_QA_RUN_ID, row: row.rowId, persona: 'owner',
+    declaredMaxPages: ZONE_SITE_PUBLICATION_COST.maxPages, preparationMs,
+    homeDocument: f.homeDocument, drafts, selections: pages,
+    request: { method: 'POST', path, idempotencyKey: key, body },
+    response: { status: response.status, body: responseBody },
+  }, null, 2));
+  const published = await answer<Receipt>(Promise.resolve(response), 201);
+  expect(published.pages).toHaveLength(pages.length);
+  const selected = (page: Pick<Page, 'page' | 'variantId' | 'revisionId'>) => ({
+    page: page.page, variantId: page.variantId, revisionId: page.revisionId,
+  });
+  expect(published.pages.map(selected)).toEqual(expect.arrayContaining(pages.map(selected)));
+}
 
 async function supportingReads(sample: ReturnType<typeof recording.session>, f: Awaited<ReturnType<typeof site>>) {
   await answer(sample('space-address', 'GET', `/v1/addresses/resolve?${new URLSearchParams({
