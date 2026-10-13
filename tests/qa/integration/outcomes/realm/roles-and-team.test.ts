@@ -46,7 +46,7 @@ const assignment = (roleId: string, member: string, assigned = true): Change => 
   assigned,
   validUntil: new Date(Date.now() + 3_600_000).toISOString(),
 });
-async function preview(change: Change, person = sessions.owner) {
+async function preview(change: Change, person = sessions.owner, label?: string) {
   const basis = await answer<Roles>(person.main('GET', `${root()}/roles?${acting(person)}`));
   const command = {
     actingSubject: person.actingSubject,
@@ -54,7 +54,8 @@ async function preview(change: Change, person = sessions.owner) {
     reason: 'Review the exact effective Realm permissions',
     change,
   };
-  const impact = await answer<Impact>(person.main('POST', `${root()}/role-impact`, command));
+  const request = label ? recording.session('owner', person).bind(null, label) : person.main;
+  const impact = await answer<Impact>(request('POST', `${root()}/role-impact`, command));
   expect(impact.exact).toBe(true);
   expect(impact.affectedCount).toBe(impact.changes.length);
   return { command: { ...command, impactDigest: impact.digest }, impact };
@@ -103,6 +104,11 @@ async function refused(name: PersonaName) {
     sample('realm-header', 'GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
     ['member', 'moderator'].includes(name) ? 200 : 404,
   );
+  await answer(
+    sample('frame-realm', 'GET', `${root()}?${acting(person)}&language=en`),
+    name === 'visitor' ? 401 : ['member', 'moderator'].includes(name) ? 200 : 404,
+  );
+  await answer(sample('members-invitations', 'GET', `${root()}/invitations?${acting(person)}`), status);
 }
 outcomeTest(team, 'visitor', () => refused('visitor'), recording);
 outcomeTest(team, 'stranger', () => refused('stranger'), recording);
@@ -122,6 +128,7 @@ outcomeTest(team, 'owner', async () => {
   await answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`));
   await answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`));
   await answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`));
+  await answer(recording.session('owner', sessions.visitor)('member-profile', 'GET', `/v1/agents/${sessions.member.actingSubject!.slice(-36)}`));
   await answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`));
   await answer(sample('outgoing-invitations-empty', 'GET', `${root()}/invitations?${acting(owner)}`));
   // The frame can render without a site link; retain the API's refusal too.
@@ -138,7 +145,7 @@ outcomeTest(team, 'owner', async () => {
   });
   expect(created.impact.changes).toEqual([]);
   await answer(sample('roles-unassigned', 'GET', `${root()}/roles?${acting(owner)}`));
-  const intent = await preview(assignment(roleId, stranger.actingSubject!)),
+  const intent = await preview(assignment(roleId, stranger.actingSubject!), owner, 'role-impact-preview'),
     key = randomUUID();
   expect(intent.impact.changes).toEqual([
     { member: stranger.actingSubject, gained: ['realm.roles.manage'], lost: [] },
