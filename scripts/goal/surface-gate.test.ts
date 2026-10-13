@@ -65,7 +65,6 @@ test('surface selection reports every missing requirement on its own line', asyn
   expect(selected?.refusals).toEqual([
     `missing row record: tests/qa/fixtures/outcomes/${f.row}.json`,
     'surface requires tests: naming at least one web *.stories.tsx',
-    'missing changed-file unit test in tests: apps/web/features/zones/catalogue.test.ts',
   ]);
   expect((await selectSurface(f.cwd, { ...f.brief, rows: [] }, f.changed))?.refusals)
     .toContain('surface requires rows: naming outcomes proved on main');
@@ -121,11 +120,10 @@ test('frontend dependency units and widened unit files come from the affected ow
     tests: { unit: ['tests/qa/unit/extra.test.ts'] }, widened: [{ tier: 'unit' }],
     frontend: [{ tests: ['apps/web/features/zones/catalogue.test.ts', 'packages/ui/src/catalogue.test.tsx'] }]
   }; }`);
-  const missing = await selectSurface(f.cwd, f.brief, f.changed);
-  expect(missing?.refusals).toContain('missing changed-file unit test in tests: packages/ui/src/catalogue.test.tsx');
-  expect(missing?.refusals).toContain('missing changed-file unit test in tests: tests/qa/unit/extra.test.ts');
-  const selected = await selectSurface(f.cwd, { ...f.brief, tests: [...f.brief.tests!, 'packages/ui/src/catalogue.test.tsx', 'tests/qa/unit/extra.test.ts'] }, f.changed);
+  const selected = await selectSurface(f.cwd, f.brief, f.changed);
   expect(selected?.refusals).toEqual([]);
+  // A consumer the brief did not name runs once, beside the test it did name.
+  expect(selected?.selection?.units).toEqual(['apps/web/features/zones/catalogue.test.ts', 'packages/ui/src/catalogue.test.tsx', 'tests/qa/unit/extra.test.ts']);
 });
 
 test('units, guards and only named stories run in order in one QA slot, with persisted timings', async () => {

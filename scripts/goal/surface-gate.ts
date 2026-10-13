@@ -115,8 +115,9 @@ export async function selectSurface(cwd: string, brief: Brief, changed: readonly
     const required = 'plan' in affected
       ? [...unitFilesFromPlan(cwd, affected.plan), ...affected.plan.frontend.flatMap(workspace => workspace.tests)]
       : mergeUnitFiles(cwd, affected.text).filter(file => !guards.includes(file));
+    // The change's consumers run beside the named tests: the affected plan knows them, a brief written before the work cannot.
     for (const file of [...new Set(required)].sort()) {
-      if (unitFile.test(file) && !guards.includes(file) && !units.includes(file)) refusals.push(`missing changed-file unit test in tests: ${file}`);
+      if (unitFile.test(file) && !guards.includes(file) && !units.includes(file)) units.push(file);
     }
   } catch (error) { refusals.push(`surface unit selection failed: ${String(error)}`); }
   return { refusals, ...(!refusals.length ? { selection: { main: mainCommit, rows, units, stories, guards, changed: [...changed], proofs: [...new Set(proofs)] } } : {}) };
