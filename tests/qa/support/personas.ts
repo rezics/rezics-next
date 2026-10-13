@@ -10,6 +10,7 @@ import { createAccountAuth } from '../../../services/account/src/auth.ts';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { accountEmailQueue, smtpSender } from '../../../services/account/src/email.ts';
 import { composeMain } from '../../../services/main/src/composition.ts';
+import { mainLifecycle } from '../../../services/main/src/lifecycle.ts';
 import { mainConfig } from '../../../services/main/src/config.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { AccessPlatformAdministrators } from '../../../services/main/src/modules/access/platform-administrator.ts';
@@ -67,7 +68,7 @@ function session(
         throw new Error('A persona request must stay on its service origin');
       const headers = await credentials();
       if (body !== undefined) headers.set('content-type', 'application/json');
-      if (!['GET', 'HEAD'].includes(method.toUpperCase()))
+      if (key !== undefined || !['GET', 'HEAD'].includes(method.toUpperCase()))
         headers.set('idempotency-key', key ?? randomUUID());
       return fetch(url, {
         method,
@@ -94,7 +95,7 @@ function session(
 }
 
 // The integration tier already owns storage, migrations and graph admission.
-// Only production application listeners are composed here; no nested stack or verifier override.
+// Production applications and Main's lifecycle share this isolated storage.
 let firstOperator:
   | { runId: string; email: string; password: string; actingSubject: string }
   | undefined;
@@ -133,6 +134,7 @@ async function applications() {
   );
   let account: ReturnType<typeof createAccountApp> | undefined;
   let main: Awaited<ReturnType<typeof composeMain>>['app'] | undefined;
+  let lifecycle: ReturnType<typeof mainLifecycle> | undefined;
   let closed = false;
   const close = async () => {
     if (closed) return;
@@ -140,7 +142,7 @@ async function applications() {
     active = undefined;
     try {
       try {
-        await main?.stop(true);
+        await lifecycle?.stop();
       } finally {
         await account?.stop(true);
       }
@@ -177,7 +179,11 @@ async function applications() {
       ownerRelayPool: relayPool,
       recommendationRelayPool: relayPool,
     });
-    main = composed.app.listen({ hostname: '127.0.0.1', port: Number(Bun.env.MAIN_PORT) });
+    main = composed.app;
+    lifecycle = mainLifecycle(composed, () => {
+      main!.listen({ hostname: '127.0.0.1', port: Number(Bun.env.MAIN_PORT) });
+    }, () => main!.stop(true));
+    await lifecycle.start();
     const signup = async (name: string): Promise<PersonaSession> => {
       const previous =
         name === 'operator' && firstOperator?.runId === runId ? firstOperator : undefined;
