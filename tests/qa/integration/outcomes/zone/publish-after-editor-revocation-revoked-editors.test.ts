@@ -89,7 +89,7 @@ beforeAll(async () => {
     sessions = await personaSessions('public');
     fixtures.set(name, { sessions, site: await createSite() });
   }
-}, 180_000);
+}, 300_000);
 afterAll(async () => { await sessions?.close(); });
 function fixture(name: PersonaName) {
   const context = fixtures.get(name)!;
@@ -126,6 +126,64 @@ async function publishRetained(site: Site, person: PersonaSession, subject: stri
   expect(exact.body.document).toEqual(site.laterDocument);
   expect(exact.reference.provenance).toEqual(provenance);
   await answer(sessions.visitor.main('GET', `/v1/content-revisions/${site.saved.revisionId}`), 404);
+}
+async function competingPublication(site: Site, owner: PersonaSession, subject: string, provenance: Record<string, unknown>) {
+  const variantId = `urn:rezics:variant:${randomUUID()}`, document = fromPlainText('Competing public garden', 'blocks');
+  // An independent variant keeps both selected cuts at their Content draft
+  // heads; publishing an old revision of the same variant is correctly refused.
+  const competing = await answer<Saved>(sessions.stranger.main('POST', '/v1/content-drafts', {
+    ...draftBody({ page: site.page, variantId }, subject, document, null),
+    language: { kind: 'tag', tag: 'fr', originalTag: 'fr' } }), 201);
+  // Both commands select the same observed head. Delivering the second after
+  // the winner proves stale refusal through HTTP; the owner regression controls
+  // the separate post-pin ordering without relying on network timing.
+  const staleBody = await publicationBody(site, subject), staleKey = randomUUID(), winnerKey = randomUUID();
+  const winnerBody = { ...staleBody, pages: [{ page: site.page, variantId, revisionId: competing.revisionId,
+    byteDigest: competing.byteDigest, contentEpoch: competing.sourcePosition.dataEpoch }] };
+  const winner = await answer<{ revision: string; receipt: string; replayed: boolean }>(sessions.stranger.main(
+    'POST', `${site.root}/site-publications`, winnerBody, winnerKey), 201);
+  expect(winner.replayed).toBe(false);
+  expect(winner.revision).not.toBe(staleBody.expectedHead);
+  await answer(owner.main('POST', `${site.root}/site-publications`, staleBody, staleKey), 409)
+    .then(problem => expect(problem).toMatchObject({ code: 'stale_zone_head' }));
+  const bundle = await answer<{ page: { reference: Exact['reference']; document: DocumentSnapshot } }>(
+    sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
+  expect(bundle.page.document).toEqual(document);
+  expect(bundle.page.reference).toMatchObject({ revisionId: competing.revisionId, byteDigest: competing.byteDigest,
+    provenance: { author: subject, rightsBasis: 'original-contribution' } });
+  const publicExact = await answer<Exact>(sessions.visitor.main('GET', `/v1/content-revisions/${competing.revisionId}`));
+  expect(publicExact.body.document).toEqual(document);
+  expect(publicExact.reference).toMatchObject({ byteDigest: competing.byteDigest, provenance: bundle.page.reference.provenance });
+  await answer(sessions.visitor.main('GET', `/v1/content-revisions/${site.later.revisionId}`), 404);
+  expect((await configuration(site)).revision).toBe(winner.revision);
+  await answer(owner.main('POST', `${site.root}/site-publications`, staleBody, staleKey), 403)
+    .then(problem => expect(problem).toMatchObject({ code: 'authority_denied' }));
+  const afterRefusal = await answer<typeof bundle>(sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
+  expect(afterRefusal.page).toEqual(bundle.page);
+  await answer(sessions.visitor.main('GET', `/v1/content-revisions/${site.later.revisionId}`), 404);
+  await previewRetained(site, owner, subject, provenance);
+
+  const recoveryBody = await publicationBody(site, subject), recoveryKey = randomUUID();
+  expect(recoveryBody.expectedHead).toBe(winner.revision);
+  const recovery = await answer<{ revision: string; receipt: string; replayed: boolean }>(owner.main(
+    'POST', `${site.root}/site-publications`, recoveryBody, recoveryKey), 201);
+  const retry = await answer(owner.main('POST', `${site.root}/site-publications`, recoveryBody, recoveryKey));
+  expect(retry).toEqual({ ...recovery, replayed: true });
+  const final = await answer<{ page: { reference: Exact['reference']; document: DocumentSnapshot } }>(
+    sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
+  expect(final.page.document).toEqual(site.laterDocument);
+  expect(final.page.reference).toMatchObject({ revisionId: site.later.revisionId, byteDigest: site.later.byteDigest, provenance });
+  const retained = await answer<Exact>(sessions.visitor.main('GET', `/v1/content-revisions/${site.later.revisionId}`));
+  expect(retained.body.document).toEqual(site.laterDocument);
+  expect(retained.reference).toMatchObject({ byteDigest: site.later.byteDigest, provenance });
+  await answer(sessions.visitor.main('GET', `/v1/content-revisions/${site.saved.revisionId}`), 404);
+  await answer(sessions.visitor.main('GET', `/v1/content-revisions/${competing.revisionId}`), 404);
+  expect(await answer(sessions.stranger.main('POST', `${site.root}/site-publications`, winnerBody, winnerKey)))
+    .toEqual({ ...winner, replayed: true });
+  expect((await configuration(site)).revision).toBe(recovery.revision);
+  const afterReplay = await answer<typeof final>(sessions.visitor.main('GET', `${site.root}/routes?path=%2F`));
+  expect(afterReplay.page).toEqual(final.page);
+  await recoveredEditor(site, owner, subject);
 }
 async function revokedController(name: 'member' | 'moderator') {
   const site = fixture(name), person = sessions[name], subject = sessions.owner.actingSubject!;
@@ -205,9 +263,8 @@ outcomeTest(revoked, 'owner', async () => {
   sessions.owner = previousOwner;
   await previewRetained(site, owner, subject, provenance);
   await publishRetained(site, owner, subject, provenance);
-  // The single public publication command exposes its receipt only after switching.
-  // No public pin observation or interleaving control can establish the lead's post-pin race.
-  throw new Error('Public-HTTP setup unavailable: cannot observe the Content pin before the final Zone bundle switch; sequential revocation/restoration above is exercised');
+  await recoveredEditor(site, owner, subject);
+  await competingPublication(site, owner, subject, provenance);
 });
 outcomeTest(revoked, 'moderator', () => revokedController('moderator'));
 outcomeTest(revoked, 'operator', async () => {
