@@ -1,4 +1,4 @@
-import { ImportCommands, importReviewedBatch, portableShelfId, type ReviewedImportBatch } from './batch.ts';
+import { ImportCommands, importReviewedBatch, resolvePortableShelf, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
 import { requireImportOwnerAvailable } from './reader-import.ts';
@@ -31,6 +31,19 @@ async function sessionStep(store: ReaderLibraryImportStore, request: Request, ag
   return response.json() as Promise<SessionState>;
 }
 
+async function restoreShelf(store: ReaderLibraryImportStore, request: Request, agent: string,
+  fileKey: string, item: StoredSourceRow, sourceId: string): Promise<{ id: string; state: 'complete' | 'retry' | 'failed' }> {
+  const shelf = await resolvePortableShelf(store,agent,sourceId);
+  if (shelf.exists) return { id: shelf.id,state: 'complete' };
+  const row = item.source;
+  const response = await mainCall(store,request,'POST','/v1/collections', { actingSubject: agent,
+    collection: shelf.id,name: row.shelves[0] ?? row.title,
+    disclosure: row.raw.disclosure === 'public' ? 'public' : 'private' },
+  commandKey(agent,fileKey,item.index,'portable-shelf'));
+  requireImportOwnerAvailable(response);
+  return { id: shelf.id,state: response.status === 202 ? 'retry' : response.ok ? 'complete' : 'failed' };
+}
+
 async function applyRow(store: ReaderLibraryImportStore, request: Request, agent: string,
   fileKey: string, item: StoredSourceRow, intent: ApplyIntent, format: LibraryFileFormat): Promise<NonNullable<StoredSourceRow['outcome']> | null> {
   const row = item.source, choice = item.resolution;
@@ -38,14 +51,9 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
   const work = choice?.work ?? item.match?.work ?? row.work;
   if (row.kind === 'shelf') {
     // Empty shelves are library state too. Ordinary collection writes own their disclosure.
-    const name = row.shelves[0] ?? row.title;
-    const collection = portableShelfId(agent,row.sourceId);
-    const response = await mainCall(store,request,'POST','/v1/collections', { actingSubject: agent,
-      collection, name, disclosure: row.raw.disclosure === 'public' ? 'public' : 'private' },
-    commandKey(agent,fileKey,item.index,'portable-shelf'));
-    requireImportOwnerAvailable(response);
-    if (response.ok && response.status !== 202) return { applied: ['shelf'], issues: [] };
-    return response.status === 202 ? null : { applied: ['private-source'],issues: ['shelf-failed'] };
+    const shelf = await restoreShelf(store,request,agent,fileKey,item,row.sourceId);
+    if (shelf.state === 'complete') return { applied: ['shelf'], issues: [] };
+    return shelf.state === 'retry' ? null : { applied: ['private-source'],issues: ['shelf-failed'] };
   }
   if (!work) return { applied: ['private-source'], issues: ['unresolved-work'] };
   const target = choice?.target ?? item.match?.target ?? row.target ?? work;
@@ -69,7 +77,11 @@ async function applyRow(store: ReaderLibraryImportStore, request: Request, agent
     batch.shelfDisclosures = Object.fromEntries(row.shelves.map(name => [name,'public' as const]));
   }
   if (row.kind === 'entry' && typeof row.raw.shelfId === 'string') {
-    batch.existingShelves = row.shelves.map(name => ({ name,id: portableShelfId(agent,row.raw.shelfId as string) }));
+    // A membership may arrive on a different exported page from its shelf.
+    const shelf = await restoreShelf(store,request,agent,fileKey,item,row.raw.shelfId);
+    if (shelf.state === 'retry') return null;
+    if (shelf.state === 'failed') return { applied: ['private-source'],issues: ['shelf-failed'] };
+    batch.existingShelves = row.shelves.map(name => ({ name,id: shelf.id }));
   }
   const commands = new ImportCommands(store,request,batch,fileKey);
   const inferred = row.kind === 'source' && ['read','reading','paused','dnf'].includes(row.status ?? '')

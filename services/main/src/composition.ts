@@ -437,7 +437,7 @@ export async function composeMain(input: ComposeMainInput) {
   const libraryImport = new ReaderLibraryImportStore(contentPool, {
     sourceSearchesPerDay: config.MAIN_READER_IMPORT_SEARCHES_PER_DAY,
     acquisitionsPerDay: config.MAIN_READER_IMPORT_ACQUISITIONS_PER_DAY,
-  });
+  }, undefined, fuseki);
   const erasureService = erasureRelayPool ? new ErasureService(erasureRelayPool, contentPool, pool) : undefined;
   const dependencies: SearchRouteDependencies = {
     statementSeek: new StatementSeek(pool, environment),

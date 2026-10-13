@@ -1,4 +1,6 @@
 import type { Pool } from 'pg';
+import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { GRAPHS, iri } from '../work/activate.ts';
 import { recordImportJobProgress } from './job-context.ts';
 
 const WORK = /^OL[1-9][0-9]{0,11}W$/;
@@ -38,7 +40,8 @@ export class ReaderLibraryImportStore {
   constructor(readonly pool: Pool, private readonly budgets = {
     sourceSearchesPerDay: READER_IMPORT_COST.sourceSearchesPerDay as number,
     acquisitionsPerDay: READER_IMPORT_COST.acquisitionsPerDay as number,
-  }, private readonly ownerTimeoutMs = OWNER_REQUEST_TIMEOUT_MS) {
+  }, private readonly ownerTimeoutMs = OWNER_REQUEST_TIMEOUT_MS,
+  private readonly graph?: Pick<FusekiClient, 'query'>) {
     if (Object.values(budgets).some(value => !Number.isSafeInteger(value) || value < 1 || value > 1_000_000)) {
       throw new Error('Invalid Library import daily budgets');
     }
@@ -47,6 +50,22 @@ export class ReaderLibraryImportStore {
 
   setDispatch(dispatch: (request: Request) => Promise<Response>): void {
     this.dispatch = dispatch;
+  }
+
+  /** Read access (including public disclosure) is not ownership. Only this
+   * Person's active, unprotected Collection can retain a portable identity. */
+  async ownsShelf(agent: string, shelf: string): Promise<boolean> {
+    if (!AGENT.test(agent) || !AGENT.test(shelf)) throw new ReaderImportInvalid('invalid Library shelf identity');
+    if (!this.graph) throw new ReaderImportUnavailable('Library shelf ownership is unavailable');
+    const result = await this.graph.query(`PREFIX rv: <https://rezics.com/vocab/>
+      SELECT ?id WHERE { GRAPH ${iri(GRAPHS.current)} {
+        VALUES ?id { ${iri(shelf)} }
+        ?id a rv:Collection ; rv:curator ${iri(agent)} ; rv:collectionState rv:Active ;
+          rv:disclosure ?disclosure ; rv:structure ?structure .
+        FILTER(?disclosure IN (rv:Private, rv:Public))
+        FILTER NOT EXISTS { ?id rv:protectionHead ?protection }
+      } } LIMIT 2`);
+    return result.results?.bindings?.length === 1;
   }
 
   async call(request: Request): Promise<Response> {

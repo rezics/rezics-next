@@ -1,10 +1,15 @@
 import { expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { reviewCommand } from '../src/modules/review/contract.ts';
-import { importReviewedBatch, type ReviewedImportBatch }
+import { importReviewedBatch, portableShelfId, type ReviewedImportBatch }
   from '../src/modules/library-import/batch.ts';
-import type { ReaderLibraryImportStore, ImportPlacement }
+import { ReaderLibraryImportStore, ReaderImportUnavailable, type ImportPlacement }
   from '../src/modules/library-import/reader-import.ts';
+import type { Pool } from 'pg';
+import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import { applyLibraryFile } from '../src/modules/library-import/apply.ts';
+import type { LibraryFileStore, StoredSourceRow } from '../src/modules/library-import/file-store.ts';
+import type { CanonicalRow } from '../src/modules/library-import/formats/contract.ts';
 
 const iri = (suffix: string) => `https://rezics.com/id/0194f314-9280-767f-89a6-${suffix}`;
 const agent = iri('000000000099'), work = iri('000000000001');
@@ -118,4 +123,152 @@ test('G-650: public library review import uses the resource read and target comm
   expect(result).toMatchObject({ pending: false, items: [{ result: { issues: [], applied: ['public-review'] } }] });
   expect(await importReviewedBatch(fake, request, input, 'public-review')).toEqual(result);
   expect({ reads, writes }).toEqual({ reads: 1, writes: 1 });
+});
+
+// Exercise the file adapter too: shelf rows and membership rows must make the
+// same ownership decision even when a new upload supplies fresh command keys.
+type PortableShelf = { curator: string; name: string; disclosure: 'private' | 'public'; members: Set<string> };
+function portableLibrary() {
+  const shelves = new Map<string, PortableShelf>();
+  const ownershipReads: string[] = [];
+  const graph = { query: async (query: string) => {
+    ownershipReads.push(query);
+    const id = /VALUES \?id \{ <([^>]+)> \}/.exec(query)![1]!;
+    const curator = /rv:curator <([^>]+)>/.exec(query)![1]!;
+    return { results: { bindings: shelves.get(id)?.curator === curator
+      ? [{ id: { type: 'uri', value: id } }] : [] } };
+  } } as Pick<FusekiClient, 'query'>;
+  const pool = { query: async () => ({ rows: [] }) } as unknown as Pool;
+  const memory = store(null).fake;
+  const owner = Object.assign(new ReaderLibraryImportStore(pool, undefined, undefined, graph), memory);
+  const placements = new Map<string, ImportPlacement>();
+  owner.planPlacement = async (person, shelf, target, structure, expectedHead) => {
+    const id = `${person}:${shelf}:${target}`;
+    if (!placements.has(id)) placements.set(id, { structure, expectedHead, attempt: 0, completed: false });
+    return placements.get(id)!;
+  };
+  owner.completePlacement = async (person, shelf, target) => {
+    placements.get(`${person}:${shelf}:${target}`)!.completed = true;
+  };
+  let creates = 0, inserts = 0, loseCreateResponse = false;
+  const receipts = new Map<string, object>();
+  owner.call = async called => {
+    const url = new URL(called.url);
+    expect(called.headers.get('authorization')).toBe('Bearer reader');
+    if (url.pathname.endsWith('/reader-state')) return Response.json({
+      status: { status: null, startedOn: null, finishedOn: null, version: 0 },
+      rating: { global: null }, customShelves: [...shelves].filter(([, shelf]) =>
+        shelf.curator === url.searchParams.get('actingSubject') && shelf.members.has(work))
+        .map(([id]) => ({ id })) });
+    if (url.pathname === '/v1/collections' && called.method === 'POST') {
+      const body = await called.json() as { collection: string; name: string; disclosure: 'private' | 'public'; actingSubject: string };
+      const key = called.headers.get('idempotency-key')!;
+      if (receipts.has(key)) return Response.json(receipts.get(key));
+      if (shelves.has(body.collection)) return Response.json({ code: 'already_exists' }, { status: 409 });
+      shelves.set(body.collection, { curator: body.actingSubject, name: body.name,
+        disclosure: body.disclosure, members: new Set() });
+      creates++;
+      const result = { collection: body.collection };
+      receipts.set(key, result);
+      if (loseCreateResponse) { loseCreateResponse = false; throw new ReaderImportUnavailable('lost owner response'); }
+      return Response.json(result, { status: 201 });
+    }
+    const id = `https://rezics.com/id/${url.pathname.split('/')[3]}`;
+    const shelf = shelves.get(id);
+    if (!shelf) return Response.json({ code: 'missing' }, { status: 404 });
+    if (called.method === 'GET') return Response.json({ revision: iri('000000000020'), structure: iri('000000000021') });
+    const body = await called.json() as { actingSubject: string; operations: { target: string }[] };
+    if (shelf.curator !== body.actingSubject) return Response.json({ code: 'denied' }, { status: 403 });
+    for (const operation of body.operations) { shelf.members.add(operation.target); inserts++; }
+    return Response.json({ revision: iri('000000000022') });
+  };
+  async function apply(person: string, rows: CanonicalRow[], fileKey: string) {
+    const completed = new Map<number, NonNullable<StoredSourceRow['outcome']>>();
+    const files = {
+      pool, seal: async () => {}, file: async () => ({ import_key: fileKey, format: 'rezics' }),
+      pending: async () => rows.map((source, index) => ({ index, source, resolution: null, match: null })),
+      complete: async (_person: string, _file: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>) => { completed.set(index, outcome); },
+      progress: async () => ({ completed: completed.size }),
+    } as unknown as LibraryFileStore;
+    await applyLibraryFile(files, owner, request, person, fileKey, { context: null, language: 'en' });
+    expect([...completed.values()].map(outcome => outcome.issues)).toEqual(rows.map(() => []));
+  }
+  return { owner, shelves, ownershipReads, apply, counts: () => ({ creates, inserts }),
+    loseNextCreateResponse: () => { loseCreateResponse = true; } };
+}
+function portableRow(kind: 'shelf' | 'entry', shelf: string, name = 'Private shelf'): CanonicalRow {
+  return { kind, sourceId: kind === 'shelf' ? shelf : `member:${shelf}`, title: name, creators: [],
+    work: kind === 'entry' ? work : null, target: null, identifiers: [], status: null,
+    startedOn: null, finishedOn: null, score: null, review: null, shelves: [name], readCount: null,
+    progress: null, session: null, raw: { shelfId: shelf, disclosure: 'private' } };
+}
+
+const emptyShelf = iri('000000000040'), populatedShelf = iri('000000000041');
+const portableRows = () => [portableRow('shelf', emptyShelf), portableRow('shelf', populatedShelf),
+  portableRow('entry', populatedShelf)];
+
+test('portable same-Person reimport preserves empty shelves, independent names and memberships with fresh keys', async () => {
+  const library = portableLibrary();
+  library.shelves.set(emptyShelf, { curator: agent, name: 'Private shelf', disclosure: 'private', members: new Set() });
+  library.shelves.set(populatedShelf, { curator: agent, name: 'Private shelf', disclosure: 'private', members: new Set([work]) });
+  const before = structuredClone(library.shelves);
+  await library.apply(agent, portableRows(), 'same-person-first');
+  await library.apply(agent, portableRows(), 'same-person-fresh-keys');
+  expect(library.shelves).toEqual(before);
+  expect(library.counts()).toEqual({ creates: 0, inserts: 0 });
+  expect(library.ownershipReads.every(query => query.includes('LIMIT 2')
+    && query.includes(`rv:curator <${agent}>`))).toBe(true);
+});
+
+test.each(['private', 'public'] as const)('portable independent-Person restoration never adopts another curator\'s %s shelves', async disclosure => {
+  const library = portableLibrary(), other = iri('000000000098');
+  library.shelves.set(emptyShelf, { curator: other, name: 'Private shelf', disclosure, members: new Set() });
+  library.shelves.set(populatedShelf, { curator: other, name: 'Private shelf', disclosure, members: new Set([work]) });
+  const originals = structuredClone(library.shelves);
+  await library.apply(agent, portableRows(), 'independent-person');
+  const restored = structuredClone(library.shelves);
+  await library.apply(agent, portableRows(), 'independent-person-fresh-key');
+  expect(library.shelves).toEqual(restored);
+  for (const [id, shelf] of originals) expect(library.shelves.get(id)).toEqual(shelf);
+  expect(library.shelves.get(portableShelfId(agent, emptyShelf))).toEqual({
+    curator: agent, name: 'Private shelf', disclosure: 'private', members: new Set() });
+  expect(library.shelves.get(portableShelfId(agent, populatedShelf))).toEqual({
+    curator: agent, name: 'Private shelf', disclosure: 'private', members: new Set([work]) });
+  expect(library.shelves.size).toBe(4);
+  expect(library.counts()).toEqual({ creates: 2, inserts: 1 });
+});
+
+test('portable shelf restoration resumes after a committed create loses its response', async () => {
+  const library = portableLibrary(), rows = [portableRow('shelf', emptyShelf)];
+  library.loseNextCreateResponse();
+  await expect(library.apply(agent, rows, 'lost-create')).rejects.toBeInstanceOf(ReaderImportUnavailable);
+  await library.apply(agent, rows, 'lost-create');
+  await library.apply(agent, rows, 'fresh-create-key');
+  expect(library.counts()).toEqual({ creates: 1, inserts: 0 });
+  expect(library.shelves.size).toBe(1);
+});
+
+test('a portable membership page restores its own shelf before the shelf metadata page arrives', async () => {
+  const library = portableLibrary();
+  await library.apply(agent, [portableRow('entry', populatedShelf)], 'membership-page');
+  await library.apply(agent, [portableRow('shelf', populatedShelf)], 'shelf-page');
+  expect(library.shelves.get(portableShelfId(agent, populatedShelf))).toEqual({
+    curator: agent, name: 'Private shelf', disclosure: 'private', members: new Set([work]) });
+  expect(library.counts()).toEqual({ creates: 1, inserts: 1 });
+});
+
+test.each(['shelf', 'entry'] as const)('a conflicting curator at the derived identity refuses the %s rather than adopting it', async kind => {
+  const library = portableLibrary(), id = portableShelfId(agent, emptyShelf);
+  library.shelves.set(id, { curator: iri('000000000098'), name: 'Private shelf', disclosure: 'public', members: new Set() });
+  const before = structuredClone(library.shelves);
+  const files = { pool: library.owner.pool, seal: async () => {},
+    file: async () => ({ import_key: 'conflict', format: 'rezics' }),
+    pending: async () => [{ index: 0, source: portableRow(kind, emptyShelf), resolution: null, match: null }],
+    complete: async (_person: string, _file: string, _index: number, outcome: unknown) => {
+      expect(outcome).toEqual({ applied: ['private-source'], issues: ['shelf-failed'] });
+    }, progress: async () => ({ completed: 1 }),
+  } as unknown as LibraryFileStore;
+  await applyLibraryFile(files, library.owner, request, agent, 'conflict', { context: null, language: 'en' });
+  expect(library.shelves).toEqual(before);
+  expect(library.counts()).toEqual({ creates: 0, inserts: 0 });
 });

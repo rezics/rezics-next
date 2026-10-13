@@ -40,6 +40,13 @@ export const importShelfId = (agent: string, name: string) => {
 const builtin = new Set(['read', 'to-read', 'currently-reading', 'want-to-read']);
 export const portableShelfId = (agent: string, sourceId: string) => importShelfId(agent,`portable:${sourceId}`);
 
+export async function resolvePortableShelf(store: ReaderLibraryImportStore, agent: string,
+  sourceId: string): Promise<{ id: string; exists: boolean }> {
+  if (ID.test(sourceId) && await store.ownsShelf(agent, sourceId)) return { id: sourceId, exists: true };
+  const id = portableShelfId(agent, sourceId);
+  return { id, exists: await store.ownsShelf(agent, id) };
+}
+
 function validate(batch: ReviewedImportBatch): void {
   if (!ID.test(batch.actingSubject) || batch.context !== null && !ID.test(batch.context)
     || !/^[a-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/.test(batch.language)
