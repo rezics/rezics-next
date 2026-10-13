@@ -1,12 +1,14 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { fromPlainText } from '@rezics/document';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/recipes/catalogue-browse-and-search-in-its-zone.ts';
 import { recipeCatalogue, short } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(catalogue);
 let inventory: Awaited<ReturnType<typeof recipeCatalogue>>;
 const phrase = `Recipegarden${randomUUID().replaceAll('-', '')}`;
 type Page = { items: Array<{ id: string }>; nextCursor: string | null;
@@ -18,23 +20,68 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
+
+  const owner = sessions.owner, actor = owner.actingSubject;
+  const zoneRoot = `/v1/zones/${short(sessions.zone)}`;
+  const configurationHead = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}/configuration?actingSubject=${encodeURIComponent(actor!)}`));
+  await answer(owner.main('PUT', `${zoneRoot}/configuration`, {
+    expectedHead: configurationHead.revision, prepareHomeDocument: true, actingSubject: actor,
+  }));
+  const configuration = await answer<{ revision: string; configuration: { homeDocument: string } }>(
+    owner.main('GET', `${zoneRoot}/configuration?actingSubject=${encodeURIComponent(actor!)}`));
+  const navigation = await answer<{ revision: string }>(owner.main('GET', `${zoneRoot}?actingSubject=${encodeURIComponent(actor!)}`));
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const draft = await answer<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
+    owner.main('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1', resourceId: configuration.configuration.homeDocument, variantId, expectedHead: null,
+      document: fromPlainText('Original Recipe fixture catalogue', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
+    }), 201);
+  await answer(owner.main('POST', `${zoneRoot}/site-publications`, {
+    routesRevision: navigation.revision, navigationRevision: navigation.revision,
+    expectedHead: configuration.revision, actingSubject: actor,
+    pages: [{ page: configuration.configuration.homeDocument, variantId, revisionId: draft.revisionId,
+      byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
+  }), 201);
   inventory = await recipeCatalogue(sessions, phrase);
+  // A cursor pins count precision; wait for fixture writes before starting the proofs.
+  const readyPath = `/v1/realms/${short(sessions.realm)}/modules/browse?${new URLSearchParams({
+    q: `${phrase}Missing`, language: 'en', type: 'https://schema.org/Recipe', limit: '1',
+  })}`;
+  const deadline = AbortSignal.timeout(45_000);
+  let stable = 0;
+  let position: string | undefined;
+  for (;;) {
+    const ready = await answer<Page & { sourcePosition: { dataEpoch: string; sequence: string } }>(owner.main('GET', readyPath));
+    const nextPosition = JSON.stringify(ready.sourcePosition);
+    stable = ready.matches.kind === 'exact' ? (nextPosition === position ? stable + 1 : 1) : 0;
+    position = nextPosition;
+    if (stable === 5) break;
+    deadline.throwIfAborted();
+    await Bun.sleep(500);
+  }
 }, 300_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 async function browse(name: PersonaName) {
   const person = sessions[name];
+  const sample = recording.session(name, person);
   const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
-  const refused = await answer<{ code: string }>(person.main('GET', `${path}?sort=relevance&type=https%3A%2F%2Fschema.org%2FRecipe`), 400);
+  const refused = await answer<{ code: string }>(sample('unsupported-query-shape', 'GET', `${path}?sort=relevance&type=https%3A%2F%2Fschema.org%2FRecipe`), 400);
   expect(refused.code).toBe('unsupported_query_shape');
   for (const sort of ['newest', 'updated', 'relevance']) {
     for (const q of sort === 'relevance' ? [phrase] : ['', phrase]) {
       const query = new URLSearchParams({ sort, limit: '20', language: 'en', type: 'https://schema.org/Recipe', ...(q ? { q } : {}) });
       const seen: string[] = [];
       let page: Page;
+      let pageNumber = 0;
       do {
         expect(seen.length).toBeLessThan(22);
-        page = await answer<Page>(person.main('GET', `${path}?${query}`));
+        page = await answer<Page>(sample(`${q ? 'search' : 'browse'}-${sort}-${pageNumber++}`, 'GET', `${path}?${query}`));
         expect(page.items.some(item => inventory.excluded.includes(item.id))).toBe(false);
         seen.push(...page.items.map(item => item.id));
         if (page.nextCursor) query.set('cursor', page.nextCursor);
@@ -46,14 +93,48 @@ async function browse(name: PersonaName) {
       expect(page.window.complete).toBe(true);
     }
   }
-  const none = await answer<Page>(person.main('GET', `${path}?q=${phrase}Missing&type=https%3A%2F%2Fschema.org%2FRecipe&language=en`));
+  const none = await answer<Page>(sample('search-no-match', 'GET', `${path}?q=${phrase}Missing&type=https%3A%2F%2Fschema.org%2FRecipe&language=en`));
   expect(none.items).toEqual([]);
   expect(none.nextCursor).toBeNull();
   expect(none.matches).toEqual({ value: 0, kind: 'exact' });
+  if (name === 'owner') await supportingReads(sample);
 }
-outcomeTest(catalogue, 'visitor', () => browse('visitor'));
-outcomeTest(catalogue, 'stranger', () => browse('stranger'));
-outcomeTest(catalogue, 'member', () => browse('member'));
-outcomeTest(catalogue, 'owner', () => browse('owner'));
-outcomeTest(catalogue, 'moderator', () => browse('moderator'));
-outcomeTest(catalogue, 'operator', () => browse('operator'));
+// The browse route reads its frame, facet labels and the state of its cards separately.
+async function supportingReads(sample: ReturnType<typeof recording.session>) {
+  const acting = `actingSubject=${encodeURIComponent(sessions.owner.actingSubject!)}`;
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting}`;
+  const realmRoot = `/v1/realms/${short(sessions.realm)}`;
+  const zoneRoot = `/v1/zones/${short(sessions.zone)}`;
+  await answer(sample('realm-context', 'GET', viewer(realmRoot)));
+  await answer(sample('space-address', 'GET', viewer(`/v1/addresses/resolve?scope=space&key=${short(sessions.space)}`)));
+  await answer(sample('zone-presentation', 'GET', viewer(`${zoneRoot}/presentation`)));
+  await answer(sample('browse-route-fallback', 'GET', viewer(`${zoneRoot}/routes?path=browse`)), 404);
+  await answer(sample('facet-labels', 'GET', '/v1/facets'));
+  await answer(sample('joining-context', 'GET', viewer(`${realmRoot}/joining`)));
+  await answer(sample('follow-context', 'GET', viewer(`/v1/follows/${short(sessions.realm)}?kind=realm`)));
+  for (let offset = 0; offset < inventory.matching.length; offset += 20) {
+    await answer(sample(`card-reader-states-${offset / 20}`, 'GET',
+      viewer(`/v1/me/work-states?works=${encodeURIComponent(inventory.matching.slice(offset, offset + 20).join(','))}`)));
+  }
+  // Catalogue cards use each Work's classifications and statement section for their facts.
+  const cardReads = async (work: string, index: number) => {
+    const id = short(work);
+    const projection = await answer<{ sections: { id: string; href: string }[] }>(
+      sample(`card-${index}-projection`, 'GET', viewer(`/v1/resources/${id}/page`)));
+    await answer(sample(`card-${index}-classifications`, 'GET', viewer(`/v1/works/${id}/classifications?scope=global`)));
+    const section = projection.sections.find(item => item.id === 'statements');
+    if (section) await answer(sample(`card-${index}-statements`, 'GET', viewer(section.href)));
+  };
+  for (let offset = 0; offset < inventory.matching.length; offset += 3) {
+    const results = await Promise.allSettled(inventory.matching.slice(offset, offset + 3)
+      .map((work, index) => cardReads(work, offset + index)));
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+  }
+}
+
+outcomeTest(catalogue, 'visitor', () => browse('visitor'), recording);
+outcomeTest(catalogue, 'stranger', () => browse('stranger'), recording);
+outcomeTest(catalogue, 'member', () => browse('member'), recording);
+outcomeTest(catalogue, 'owner', () => browse('owner'), recording);
+outcomeTest(catalogue, 'moderator', () => browse('moderator'), recording);
+outcomeTest(catalogue, 'operator', () => browse('operator'), recording);
