@@ -11,7 +11,7 @@ export async function joiningAuthFixture(runId: string) {
   try {
     const base = Bun.env.ACCOUNT_BASE_URL!;
     const auth = createAccountAuth({ baseURL: base, secret: Bun.env.ACCOUNT_SECRET!,
-      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, pool });
+      resource: Bun.env.ACCOUNT_MAIN_RESOURCE!, pool, operatorUserIds: new Set() });
     const app = createAccountApp(auth, pool);
     const email = `joining-operator-${randomUUID()}@example.test`;
     const password = randomBytes(32).toString('base64url');
