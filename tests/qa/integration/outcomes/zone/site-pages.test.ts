@@ -1,8 +1,7 @@
-import { afterAll, beforeAll, expect, onTestFinished, setDefaultTimeout, test } from 'bun:test';
+import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/site-pages.ts';
-import { outcomeTitle } from '../../../../../scripts/qa/cases/outcome-cells.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -111,11 +110,7 @@ outcomeTest(row, 'stranger', () => reads('stranger'), recording);
 outcomeTest(row, 'member', () => reads('member'), recording);
 outcomeTest(row, 'moderator', () => reads('moderator'), recording);
 outcomeTest(row, 'operator', () => reads('operator'), recording);
-// The pending declaration retains a required red proof rather than accepting its refusal.
-test(outcomeTitle(row, 'owner'), () => {
-  onTestFinished(() => recording.finish('owner'));
-  return recording.prove('owner', proveOwner);
-});
+outcomeTest(row, 'owner', proveOwner, recording);
 
 async function proveOwner() {
   const f = await site();
