@@ -14,7 +14,7 @@ export interface SeedCheckpointPopulation {
   recipe: { work: string; mainVersion: string; structure: string; revision: string; occurrences: string[] };
   collection: { id: string; structure: string; revision: string; members: Array<{ occurrence: string; work: string }> };
   zone: { id: string; navigation: string; revision: string; mounts: Array<{ occurrence: string; segment: string; target: string }> };
-  home: { variantId: string; revisionId: string; byteDigest: string; contentEpoch: string };
+  home: { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string };
   shelfWorks: string[];
 }
 type Grant = (scope: string, action: string) => Promise<unknown>;
@@ -44,6 +44,17 @@ export async function initializeSeedCheckpointPopulation(
       capabilities: ['zone'], actingSubject: actor },
   });
   await grant(`zone:edit:${site.zone}`, 'zone.edit');
+  const configurationPath = `/v1/zones/${short(site.zone)}/configuration` as const;
+  const configurationQuery = queryPath(configurationPath, { actingSubject: actor });
+  const configuration = await api.read<{ revision: string }>(configurationQuery);
+  await api.command('checkpoint:zone-home-document', {
+    method: 'PUT', path: configurationPath, body: {
+      expectedHead: configuration.revision, prepareHomeDocument: true, actingSubject: actor,
+    },
+  });
+  const prepared = await api.read<{ configuration: { homeDocument?: string } }>(configurationQuery);
+  const homeDocument = prepared.configuration.homeDocument;
+  if (!homeDocument) throw new Error('Checkpoint Zone home document was not prepared');
   const collection = `https://rezics.com/id/${randomUUID()}`;
   await grant(`collection:edit:${collection}`, 'collection.edit');
   await grant(`semantic:read:${collection}`, 'semantic.read');
@@ -54,7 +65,7 @@ export async function initializeSeedCheckpointPopulation(
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   const home = await api.command<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
     'checkpoint:zone-home', { method: 'POST', path: '/v1/content-drafts', body: {
-      profile: 'content-text-v1', resourceId: site.zone, variantId, expectedHead: null,
+      profile: 'content-text-v1', resourceId: homeDocument, variantId, expectedHead: null,
       document: fromPlainText('Checkpoint reading site', 'blocks'),
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
     } },
@@ -62,7 +73,7 @@ export async function initializeSeedCheckpointPopulation(
   return { actor, recipe: { ...recipe, ...composition, occurrences: [] },
     collection: { id: collection, ...curated, members: [] },
     zone: { id: site.zone, navigation: site.navigation, revision: site.navigationRevision, mounts: [] },
-    home: { variantId, revisionId: home.revisionId, byteDigest: home.byteDigest, contentEpoch: home.sourcePosition.dataEpoch },
+    home: { page: homeDocument, variantId, revisionId: home.revisionId, byteDigest: home.byteDigest, contentEpoch: home.sourcePosition.dataEpoch },
     shelfWorks: [] };
 }
 
@@ -132,7 +143,7 @@ export async function growSeedCheckpointPopulation(
   await api.command(`checkpoint:site-publication:${zone.mounts.length}:${collection.members.length}`, {
     method: 'POST', path: `/v1/zones/${short(zone.id)}/site-publications`, body: {
       routesRevision: zone.revision, navigationRevision: zone.revision, expectedHead: configuration.revision,
-      actingSubject: actor, pages: [{ page: zone.id, ...handles.home }],
+      actingSubject: actor, pages: [handles.home],
     },
   });
 }
