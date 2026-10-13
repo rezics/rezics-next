@@ -220,7 +220,7 @@ async function deniedLoans(name: PersonaName) {
   const person = people[name], expected = name === 'visitor' ? 401 : 403;
   const sample = recordings.loans.session(name, person);
   await privateReply(await sample('copies-refused', 'GET', `/v1/works/${short(book.work)}/copies?${query()}`), expected);
-  await privateReply(await sample('active-loans-refused', 'GET', loanPage('active')), expected);
+  await privateReply(await sample('active-loans-refused', 'GET', `${loanPage('active')}&limit=20`), expected);
   await privateReply(await sample('open-loan-refused', 'POST', '/v1/me/library-loans', openBody(privateCopy.id)), expected);
   await privateReply(await sample('extend-loan-refused', 'POST', `/v1/me/library-loans/${short(privateLoan.id)}/extend`, {
     ...own(), expectedVersion: 1, dueAt: new Date(Date.now() + 10 * 86_400_000).toISOString(),

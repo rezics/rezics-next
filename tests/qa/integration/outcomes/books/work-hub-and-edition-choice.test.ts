@@ -172,6 +172,9 @@ async function editions(name: PersonaName, mode: 'hub' | 'ambiguous' | 'formats'
   );
   expect(credits.items.some(credit =>
     credit.agent === sessions.owner.actingSubject && credit.role === 'author')).toBe(true);
+  if (mode === 'hub' && name === 'visitor') {
+    await answer(() => sample('availability-releases', 'GET', `${workPath}/releases?limit=20`));
+  }
   const page = await answer<Page<Release>>(
     () => sample('release-choices', 'GET', `${workPath}/releases?${acting(person)}&limit=${mode === 'hub' ? 2 : 20}`),
   );
