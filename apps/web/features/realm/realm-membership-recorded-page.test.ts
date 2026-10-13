@@ -21,7 +21,7 @@ function answerOf<T>(persona: AnswerPersona, label: string): T {
 }
 
 async function withReplay<T>(persona: AnswerPersona, selections: readonly RecordedSelection[],
-  run: (main: MainClient, read: (path: string) => Promise<Response>) => Promise<T>): Promise<T> {
+  run: (main: MainClient, read: (path: string) => Promise<Response>, fetcher: typeof fetch) => Promise<T>): Promise<T> {
   let missed: string | null = null;
   const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -34,7 +34,7 @@ async function withReplay<T>(persona: AnswerPersona, selections: readonly Record
   try {
     const main = browserMainApi('https://recorded.invalid', { fetcher });
     const read = (path: string) => fetcher(new URL(`${BFF_PREFIX}${path}`, 'https://recorded.invalid'));
-    const result = await run(main, read);
+    const result = await run(main, read, fetcher);
     if (missed) throw new Error(missed);
     return result;
   } finally {
@@ -44,7 +44,8 @@ async function withReplay<T>(persona: AnswerPersona, selections: readonly Record
 
 function load(persona: AnswerPersona, selections: readonly RecordedSelection[], surface: MembershipSurface) {
   const identity = recordedIdentity(record, persona, selections);
-  return withReplay(persona, selections, main => loadRecordedMembership(main, { surface, ...identity, locale: 'en' }));
+  return withReplay(persona, selections, (main, _read, fetcher) =>
+    loadRecordedMembership(main, { surface, ...identity, locale: 'en', fetcher }));
 }
 
 const visitorLanding = [

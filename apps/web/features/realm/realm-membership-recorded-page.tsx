@@ -50,7 +50,7 @@ export function RecordedMembershipPage({ persona, selections, surface }: {
     const main = browserMainApi(window.location.origin, { fetcher });
     const identity = recordedIdentity(record, persona, selections);
     let mounted = true;
-    void loadRecordedMembership(main, { surface, ...identity, locale }, () => missed.current).then(view => {
+    void loadRecordedMembership(main, { surface, ...identity, locale, fetcher }, () => missed.current).then(view => {
       if (mounted) setReady({ view, main, fetcher });
     }).catch((error: unknown) => {
       if (!mounted) return;

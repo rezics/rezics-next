@@ -1,12 +1,13 @@
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { classifyRealmSpacePage } from '../address/space-page.ts';
+import { browserMainApi } from '../api/browser.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandFailure, type CommandFailure } from '../manage/commands.ts';
 import { readAgents, readRealmHeader, settle } from '../manage/read.ts';
 import { realmEditSite } from '../manage/realm-site.ts';
-import { readPrivateSpaceJoinPage, readRequestsAtAddress, type JoinBasis, type RequestPage } from '../manage/settings-api.ts';
+import { readRequestsAtAddress, type JoinBasis, type RequestPage } from '../manage/settings-api.ts';
 import { problemCode, uuidOf, type RealmHeader as ManageRealmHeader } from '../manage/types.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { readMembership, type Membership } from './membership-state.ts';
@@ -85,6 +86,8 @@ export async function readAdmissionBasis(main: MainClient, realm: string, acting
  */
 export async function loadRecordedMembership(main: MainClient, input: {
   surface: MembershipSurface; realm: string; actingSubject: string | null; locale: UiLocale;
+  /** Replaying fetch for the unsigned landing. A signed client with no acting Person is not a public read. */
+  fetcher?: typeof fetch;
 }, probe: () => string | null = () => null): Promise<RecordedMembershipView> {
   if (input.surface === 'basis') {
     if (!input.actingSubject) throw new Error('Recorded admission basis names no acting Person');
@@ -94,13 +97,14 @@ export async function loadRecordedMembership(main: MainClient, input: {
     return basis;
   }
   if (input.surface === 'landing') {
-    const header = headerOf(await main.v1.realms({ realm: input.realm }).get({ query: {} }));
+    if (!input.fetcher) throw new Error('Recorded join landing has no public reader');
+    const publicRealm = browserMainApi(recordedOrigin, { anonymous: true, fetcher: input.fetcher });
+    const header = headerOf(await publicRealm.v1.realms({ realm: input.realm }).get({ query: {} }));
     raise(probe);
     const landing = !header.ok && [401, 403, 404].includes(header.status)
-      ? await readPrivateSpaceJoinPage(main, input.realm) : null;
+      ? headerOf(await publicRealm.v1.realms({ realm: uuidOf(input.realm) })['join-page'].get({ query: {} })) : null;
     raise(probe);
-    const classified = classifyRealmSpacePage(input.realm, header, landing
-      ? { ok: landing.ok, status: landing.ok ? 200 : 0, body: landing.ok ? landing.data : null } : null);
+    const classified = classifyRealmSpacePage(input.realm, header, landing);
     if (classified.kind !== 'join') throw new Error(`Recorded join landing resolved to ${classified.kind}`);
     return { kind: 'join', page: classified.page };
   }
