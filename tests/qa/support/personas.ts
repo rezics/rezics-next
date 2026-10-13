@@ -83,7 +83,7 @@ function session(
         headers,
         redirect: 'manual',
         signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-        ...(options?.bytes ? { body: new Blob([options.bytes]) }
+        ...(options?.bytes ? { body: new Blob([new Uint8Array(options.bytes)]) }
           : body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       return ['GET', 'HEAD'].includes(method.toUpperCase())
