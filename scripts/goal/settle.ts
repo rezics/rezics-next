@@ -1,16 +1,71 @@
 import { randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { closeSync, mkdirSync, openSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { activeGoals, pidAlive, readLedger, root, stateDir, withLedger } from './ledger.ts';
+import { activeGoals, briefPathOf, pidAlive, readLedger, root, stateDir, withLedger } from './ledger.ts';
 import { capacityRefusal, lastAttempt, readResult, taskOf } from './launch.ts';
 import { handoffResult } from './land.ts';
-import { finishAttempt, landTask, closeTasks, canVerifyReadOnly } from './tasks.ts';
+import { finishAttempt, landTask, closeTasks, canVerifyReadOnly, resumeTask } from './tasks.ts';
 import { CAPACITY_WAIT_MS, engineOf, programOf, type Task } from './types.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
+import { directoryLeaseHeld } from '../qa/process/lease.ts';
+import { classifyLandingRefusal } from './refusal.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
+
+interface AutomaticLanding {
+  reportsBefore: string[];
+  brief: string;
+  branch: string;
+  worktree: string;
+  handoff: string;
+  check?: string;
+  output?: string;
+  resumedAttempt?: number;
+}
+
+const runDirectory = (id: string) => join(stateDir, 'runs', id);
+const landingRecord = (id: string, attempt: number) => join(runDirectory(id), `settle-${attempt}.json`);
+const reviewDirectories = (id: string) => readdirSync(runDirectory(id)).filter(name => name.startsWith('review-')).sort();
+
+function landingStop(id: string, record: AutomaticLanding): string | undefined {
+  return reviewDirectories(id).filter(name => !record.reportsBefore.includes(name))
+    .map(name => join(runDirectory(id), name, 'stop.txt')).find(existsSync);
+}
+
+function readLanding(id: string, attempt: number): AutomaticLanding | undefined {
+  const file = landingRecord(id, attempt);
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as AutomaticLanding : undefined;
+}
+
+function writeLanding(id: string, attempt: number, record: AutomaticLanding): void {
+  const file = landingRecord(id, attempt);
+  writeFileSync(`${file}.tmp`, JSON.stringify(record));
+  renameSync(`${file}.tmp`, file);
+}
+
+async function returnRefusal(task: Task, attempt: number): Promise<string | undefined> {
+  const record = readLanding(task.id, attempt);
+  if (!record) return;
+  const output = landingStop(task.id, record);
+  if (!output) return;
+  const refusal = classifyLandingRefusal(output);
+  if (refusal.kind === 'manager') return refusal.reason;
+  if (task.branch !== record.branch || task.worktree !== record.worktree
+    || readFileSync(briefPathOf(task) ?? '', 'utf8') !== record.brief
+    || readResult(lastAttempt(task)).text !== record.handoff) return 'task or brief changed after landing stopped';
+  record.check = refusal.check;
+  record.output = output;
+  // Publish intent before resume. resumeTask publishes the new attempt under the ledger lock;
+  // after a crash that attempt is enough to prevent a second send and to recover status.
+  writeLanding(task.id, attempt, record);
+  try { await resumeTask(task.id, ['-m', refusal.message]); }
+  catch (error) { return `${firstLine(error)}\n${refusal.message}`; }
+  record.resumedAttempt = attempt + 1;
+  writeLanding(task.id, attempt, record);
+  return;
+}
 
 function spawnSettlement(task: Task, token: string): Settlement['owner'] {
   const directory = join(stateDir, 'runs', task.id);
@@ -58,7 +113,12 @@ function firstLine(error: unknown): string {
 
 export function settlementReason(task: Task): string | undefined {
   const settlement = task.settlement;
-  return settlement?.attempt === lastAttempt(task).n && settlement.settledAt ? settlement.reason : undefined;
+  const attempt = lastAttempt(task);
+  const record = attempt.n > 1 && attempt.round === 'fix' ? readLanding(task.id, attempt.n - 1) : undefined;
+  const sent = record?.check && (!record.resumedAttempt || record.resumedAttempt === attempt.n)
+    ? `fix round sent by tool for ${record.check}; whole output: ${record.output}` : undefined;
+  const reason = settlement?.attempt === attempt.n && settlement.settledAt ? settlement.reason : undefined;
+  return [sent, reason].filter(Boolean).join('\n  ') || undefined;
 }
 
 export async function runSettlement(id: string, attemptNumber: number, token: string,
@@ -88,10 +148,27 @@ export async function runSettlement(id: string, attemptNumber: number, token: st
       reason = `${task.kind ?? 'implementation'} task needs a manager landing decision (land: auto is absent)`;
     } else {
       if (task.state === 'merged' || canVerifyReadOnly(task)) await closeTasks([id], 'verified');
-      else await landTask(id);
+      else {
+        const record = readLanding(id, attemptNumber);
+        if (record && landingStop(id, record)) throw new Error('landing stopped');
+        if (!record) {
+          const managerStop = reviewDirectories(id).map(name => join(runDirectory(id), name, 'stop.txt'))
+            .find(file => existsSync(file) && statSync(file).mtimeMs >= Date.parse(attempt.startedAt));
+          if (managerStop) throw new Error(readFileSync(managerStop, 'utf8'));
+        }
+        if (directoryLeaseHeld(join(runDirectory(id), 'land.lock'))) throw new Error('landing is already being watched by its caller');
+        writeLanding(id, attemptNumber, { reportsBefore: reviewDirectories(id), brief: readFileSync(briefPathOf(task) ?? '', 'utf8'),
+          branch: task.branch, worktree: task.worktree, handoff: result.text });
+        await landTask(id);
+      }
       reason = 'landed and verified';
     }
   } catch (error) { reason = firstLine(error); }
+  task = taskOf(readLedger(), id);
+  if (lastAttempt(task).n === attemptNumber) {
+    try { reason = await returnRefusal(task, attemptNumber) ?? reason; }
+    catch (error) { reason = `${firstLine(error)}; ${reason}`; }
+  }
   await withLedger(ledger => {
     const current = taskOf(ledger, id);
     if (lastAttempt(current).n !== attemptNumber || current.settlement?.token !== token) return;
