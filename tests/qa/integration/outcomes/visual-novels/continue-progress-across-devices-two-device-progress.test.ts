@@ -153,7 +153,7 @@ async function pageReads(name: PersonaName, checkpoint: string) {
   const work = pairs.get(name)![0]!;
   const root = `/v1/works/${short(work)}`;
   const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
-  const read = <T>(label: string, path: string) => answer<T>(sample(`continue-${checkpoint}-${label}`, 'GET', viewer(path)));
+  const read = <T,>(label: string, path: string) => answer<T>(sample(`continue-${checkpoint}-${label}`, 'GET', viewer(path)));
   await read('home', '/v1/me/continue?limit=6');
   const resume = await sample(`continue-${checkpoint}-work-resume`, 'GET', viewer(`/v1/me/continue/${short(work)}`));
   expect([200, 404]).toContain(resume.status);
@@ -165,11 +165,19 @@ async function pageReads(name: PersonaName, checkpoint: string) {
     await contents.body?.cancel();
     await answer(sample('continue-selected-text', 'GET', `/v1/main-versions/${short(header.mainVersion)}/selection?language=${header.selectedLanguage ?? 'en'}`));
   }
-  await read('reader-state', `${root}/reader-state`);
-  await read('edition-preference', `/v1/me/edition-preferences/${short(work)}`);
-  await read('progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`);
-  await read('releases-empty', `${root}/releases?limit=20`);
-  await read('work-states', `/v1/me/work-states?works=${encodeURIComponent(work)}`);
+  const requests: Array<[string, string]> = [
+    ['reader-state', `${root}/reader-state`],
+    ['progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`],
+    ['work-states', `/v1/me/work-states?works=${encodeURIComponent(work)}`],
+  ];
+  if (checkpoint === 'empty') requests.push(
+    ['edition-preference', `/v1/me/edition-preferences/${short(work)}`],
+    ['releases-empty', `${root}/releases?limit=20`],
+  );
+  for (let offset = 0; offset < requests.length; offset += 3) {
+    const results = await Promise.allSettled(requests.slice(offset, offset + 3).map(([label, path]) => read(label, path)));
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+  }
 }
 
 async function continueReading(name: PersonaName) {

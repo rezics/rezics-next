@@ -90,7 +90,13 @@ async function pageReads(name: PersonaName) {
   const sample = recording.session(name, person);
   const id = short(work.work);
   const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
-  const read = <T>(label: string, path: string) => answer<T>(sample(label, 'GET', viewer(path)));
+  const read = <T,>(label: string, path: string) => answer<T>(sample(label, 'GET', viewer(path)));
+  const readBatch = async (requests: Array<[string, string]>) => {
+    for (let offset = 0; offset < requests.length; offset += 3) {
+      const results = await Promise.allSettled(requests.slice(offset, offset + 3).map(([label, path]) => read(label, path)));
+      for (const result of results) if (result.status === 'rejected') throw result.reason;
+    }
+  };
   const projection = await read<{ sections: Array<{ id: string; href: string }> }>('hub-projection', `/v1/resources/${id}/page`);
   for (const section of projection.sections.filter(section => ['statements', 'relations', 'discussion', 'lists'].includes(section.id))) {
     await read(`hub-${section.id}`, section.href);
@@ -102,22 +108,26 @@ async function pageReads(name: PersonaName) {
       presentation: { actingSubject: person.actingSubject },
     }));
   }
-  await read('hub-agent-credits', `/v1/works/${id}/agent-credits`);
-  await read('hub-author-profile', `/v1/agents/${short(sessions.owner.actingSubject!)}`);
-  await read('hub-author-works', `/v1/agents/${short(sessions.owner.actingSubject!)}/works?limit=12`);
-  await read('hub-classifications', `/v1/works/${id}/classifications?scope=global`);
+  await readBatch([
+    ['hub-agent-credits', `/v1/works/${id}/agent-credits`],
+    ['hub-author-profile', `/v1/agents/${short(sessions.owner.actingSubject!)}`],
+    ['hub-author-works', `/v1/agents/${short(sessions.owner.actingSubject!)}/works?limit=12`],
+    ['hub-classifications', `/v1/works/${id}/classifications?scope=global`],
+  ]);
   await answer(sample('hub-facet-labels', 'GET', '/v1/facets'));
   await answer(sample('hub-platform-access', 'GET', '/v1/me/platform-access'));
   const contexts = await read<{ items: Array<{ context: string }> }>('hub-rating-contexts', `/v1/resources/${id}/rating-contexts?scope=global`);
   const context = contexts.items[0]?.context;
   const contextQuery = context ? `&context=${encodeURIComponent(context)}` : '';
-  await read('hub-ratings', `/v1/resources/${id}/ratings?scope=global${contextQuery}`);
-  await read('hub-reader-stats', `/v1/works/${id}/reader-stats?${contextQuery.slice(1)}`);
-  await read('hub-rating-populations', `/v1/rating-populations?target=${encodeURIComponent(work.work)}&limit=20`);
+  await readBatch([
+    ['hub-ratings', `/v1/resources/${id}/ratings?scope=global${contextQuery}`],
+    ['hub-reader-stats', `/v1/works/${id}/reader-stats?${contextQuery.slice(1)}`],
+    ['hub-rating-populations', `/v1/rating-populations?target=${encodeURIComponent(work.work)}&limit=20`],
+    ['hub-also-enjoyed', `/v1/works/${id}/also-enjoyed?limit=12`],
+    ['hub-realizations', `/v1/works/${id}/realizations?limit=20`],
+    ['hub-releases', `/v1/works/${id}/releases?limit=20`],
+  ]);
   if (context) await read('hub-reviews-empty', `/v1/resources/${id}/reviews?context=${encodeURIComponent(context)}&sort=helpful&limit=10`);
-  await read('hub-also-enjoyed', `/v1/works/${id}/also-enjoyed?limit=12`);
-  await read('hub-realizations', `/v1/works/${id}/realizations?limit=20`);
-  await read('hub-releases', `/v1/works/${id}/releases?limit=20`);
   await answer(sample('hub-parts-unavailable', 'GET', viewer(`/v1/resources/${id}/parts?limit=1`)), 404);
   await answer(sample('hub-parts-preview-unavailable', 'GET', viewer(`/v1/resources/${id}/parts?limit=7`)), 404);
   const wholes = await sample('hub-wholes-empty', 'GET', viewer(`/v1/resources/${id}/wholes?limit=3`));

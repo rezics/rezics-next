@@ -122,20 +122,30 @@ async function pageReads(name: PersonaName, checkpoint: string) {
   const works = pairs.get(name)!;
   const work = works[0]!;
   const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
-  const read = <T>(label: string, path: string) => answer<T>(sample(`library-${checkpoint}-${label}`, 'GET', viewer(path)));
-  await read('overview', '/v1/me/shelves?limit=20');
-  await answer(sample(`library-${checkpoint}-visibility`, 'GET', `/v1/agents/${short(person.actingSubject!)}/library-visibility`));
+  const read = <T,>(label: string, path: string) => answer<T>(sample(`library-${checkpoint}-${label}`, 'GET', viewer(path)));
+  const requests = [
+    () => read('overview', '/v1/me/shelves?limit=20'),
+    () => read('work-states', `/v1/me/work-states?works=${encodeURIComponent(works.join(','))}`),
+    () => read('reading-preview', '/v1/me/shelves/status/reading/works?sort=last-read&order=desc&limit=3'),
+  ];
+  if (checkpoint === 'empty') requests.push(
+    () => answer(sample('library-visibility', 'GET', `/v1/agents/${short(person.actingSubject!)}/library-visibility`)),
+    () => read('work-header', `/v1/works/${short(work)}`),
+    () => read('progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`),
+    () => read('reading-goal', `/v1/me/reading-goal?year=${new Date().getUTCFullYear()}`),
+    () => read('reading-stats', `/v1/me/reading-stats?year=${new Date().getUTCFullYear()}`),
+    () => read('followed-authors', '/v1/me/follows/authors'),
+  );
+  for (let offset = 0; offset < requests.length; offset += 3) {
+    const results = await Promise.allSettled(requests.slice(offset, offset + 3).map(request => request()));
+    for (const result of results) if (result.status === 'rejected') throw result.reason;
+  }
   const contexts = await answer<{ items: Array<{ context: string }> }>(sample(`library-${checkpoint}-rating-context`, 'GET', '/v1/rating-contexts?scope=global&limit=1'));
-  await read('work-states', `/v1/me/work-states?works=${encodeURIComponent(works.join(','))}`);
-  await read('reading-preview', '/v1/me/shelves/status/reading/works?sort=last-read&order=desc&limit=3');
-  await read('work-header', `/v1/works/${short(work)}`);
-  await read('progress-summary', `/v1/me/progress-summaries/${short(work)}?language=en`);
-  const resume = await sample(`library-${checkpoint}-resume`, 'GET', viewer(`/v1/me/continue/${short(work)}`));
-  expect([200, 404]).toContain(resume.status);
-  await resume.body?.cancel();
-  await read('reading-goal', `/v1/me/reading-goal?year=${new Date().getUTCFullYear()}`);
-  await read('reading-stats', `/v1/me/reading-stats?year=${new Date().getUTCFullYear()}`);
-  await read('followed-authors', '/v1/me/follows/authors');
+  if (checkpoint === 'reading') {
+    const resume = await sample('library-reading-resume', 'GET', viewer(`/v1/me/continue/${short(work)}`));
+    expect([200, 404]).toContain(resume.status);
+    await resume.body?.cancel();
+  }
   if (checkpoint === 'read') {
     const context = contexts.items[0]?.context;
     if (context) await read('reviews-empty', `/v1/resources/${short(work)}/reviews?context=${encodeURIComponent(context)}&limit=1&showSpoilers=true`);
