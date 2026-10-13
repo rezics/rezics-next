@@ -36,6 +36,22 @@ function recordWith(...samples: AnswerSample[]): AnswerRecord {
   } };
 }
 
+test('bare paths and empty queries match in both directions and cannot supply separate samples', async () => {
+  const path = '/v1/zones/opaque/presentation';
+  const sample: AnswerSample = { label: 'presentation', operationId: 'transport', method: 'GET',
+    path, status: 200, headers: { 'content-type': 'application/json' }, answer: { title: 'Zone' } };
+  for (const [recorded, requested] of [[path, `${path}?`], [`${path}?`, path]] as const) {
+    const { fetcher } = replay(recordWith({ ...sample, path: recorded }),
+      [{ label: sample.label, state: 'populated' }]);
+    expect(await (await fetcher(`https://offline.invalid${requested}`)).json()).toEqual(sample.answer);
+    await expect(fetcher(`https://offline.invalid${path}?extra=1`)).rejects.toThrow('Unmatched recorded request');
+    expect(() => replay(recordWith({ ...sample, path: recorded },
+      { ...sample, label: 'again', path: requested }),
+    [{ label: sample.label, state: 'populated' }, { label: 'again', state: 'populated' }]))
+      .toThrow('Ambiguous recorded request');
+  }
+});
+
 test('a query matches by its parameters in any order; one name\'s repeated values keep theirs', async () => {
   const sample: AnswerSample = { label: 'list', operationId: 'transport', method: 'GET',
     path: '/v1/transport?limit=20&type=a&type=b&actingSubject=person%3A1',
