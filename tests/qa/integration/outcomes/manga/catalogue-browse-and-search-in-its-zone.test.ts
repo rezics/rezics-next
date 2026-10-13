@@ -7,6 +7,7 @@ import { classificationContextBody, classifiedStatementBody, discloseClassificat
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
 import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string; contribution: string; publicationDecision: string; concept: string | null; year: number | null; status: string };
@@ -158,6 +159,8 @@ afterAll(async () => {
 
 async function browse(name: PersonaName) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}/modules/browse`;
+  await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
+    'space', short(sessions.zone), 'browse');
   const sample = recording.session(name, person), sampledCards = new Set<string>();
   const filters = [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
     { publicationYear: '1995' }, { publicationYear: '1995-2001', concept: manga },
