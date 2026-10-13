@@ -244,6 +244,7 @@ test(
             samples: manifest.samples.length,
             generation: manifest.build.textIndexGeneration,
             sequence: manifest.importSequence,
+            modelGeneration: manifest.modelGeneration,
           }),
         );
         restores.push(restore);
@@ -821,6 +822,7 @@ function validateRestorePreparation(
     samples: number;
     generation: string;
     sequence: string;
+    modelGeneration?: string;
   },
 ): RestorePreparationTiming {
   if (
@@ -859,6 +861,7 @@ function validateRestorePreparation(
   )
     throw new Error('Restore active/admission/wall evidence does not reconcile');
   const phaseNames = ['compatibility', 'configure', 'copy', 'start', 'migrate', 'ready', 'smoke'];
+  if (restore.modelAlignment) phaseNames.push('align-model');
   if (
     !restore.phases ||
     typeof restore.phases !== 'object' ||
@@ -874,6 +877,29 @@ function validateRestorePreparation(
   for (const kind of ['postgres_data', 'fuseki_data', 'rustfs_data'])
     if (evidenceMilliseconds(restore.copyMs[kind]) > restore.phases.copy! + 1)
       throw new Error('Restore copy measurement exceeds its phase');
+  let sequence = expected.sequence;
+  const alignment = restore.modelAlignment;
+  const installation = alignment?.installation;
+  if (installation?.bootstrapped === true) {
+    // Bulk-built backups have no model head. The restore tool installs generation
+    // 1 through ensureModelGeneration, whose exact receipt advances the control
+    // sequence once without changing the imported records or text generation.
+    if (
+      !expected.modelGeneration ||
+      !/^urn:rezics:model-generation:[a-f0-9]{64}$/.test(expected.modelGeneration) ||
+      !/^(0|[1-9][0-9]*)$/.test(sequence) ||
+      restore.compatibility?.pendingModelAlignment !== false ||
+      alignment?.backupGeneration !== expected.modelGeneration ||
+      alignment.currentGeneration !== expected.modelGeneration ||
+      installation.state !== 'current' ||
+      installation.generation !== expected.modelGeneration ||
+      installation.generationNumber !== '1' ||
+      installation.receipt !==
+        `urn:rezics:receipt:${digest(`${expected.modelGeneration}\0model-generation`)}`
+    )
+      throw new Error('Incomplete restore model bootstrap evidence');
+    sequence = (BigInt(sequence) + 1n).toString();
+  }
   const ready = evidenceStrings(restore.ready).sort();
   if (
     JSON.stringify(ready) !==
@@ -882,7 +908,7 @@ function validateRestorePreparation(
       ) ||
     restore.samples !== expected.samples ||
     restore.graph?.generation !== expected.generation ||
-    restore.graph?.sequence !== expected.sequence ||
+    restore.graph?.sequence !== sequence ||
     restore.compatibility?.compatible !== true ||
     typeof restore.compatibility.engineChanged !== 'boolean' ||
     evidenceStrings(restore.compatibility.reasons).length !== 0 ||
@@ -1506,6 +1532,100 @@ test('OPS10: campaign preparation qualifies each literal restore independently a
     budgetScope: 'reported-only',
   });
   expect(JSON.stringify(recordedCampaignRestores)).toBe(original);
+});
+
+function bootstrapRestoreExample() {
+  const restore = structuredClone(recordedCampaignRestores[0]!);
+  const modelDigest = digest('validator model fixture');
+  const modelGeneration = `urn:rezics:model-generation:${modelDigest}`;
+  const artifacts = [{ name: 'manifest.json', sha256: modelDigest }];
+  restore.phases['align-model'] = 100;
+  restore.compatibility!.pendingModelAlignment = false;
+  restore.modelAlignment = {
+    backupGeneration: modelGeneration,
+    currentGeneration: modelGeneration,
+    artifacts,
+    artifactCount: artifacts.length,
+    installation: {
+      state: 'current',
+      generation: modelGeneration,
+      generationNumber: '1',
+      artifacts,
+      artifactCount: artifacts.length,
+      bootstrapped: true,
+      receipt: `urn:rezics:receipt:${digest(`${modelGeneration}\0model-generation`)}`,
+    },
+  };
+  restore.graph!.sequence = '1';
+  return {
+    restore,
+    expected: { ...recordedRestoreExpectation(restore.target), modelGeneration },
+  };
+}
+
+test('OPS10: campaign preparation accounts for the exact recorded initial model bootstrap', () => {
+  const { restore, expected } = bootstrapRestoreExample();
+  const original = JSON.stringify(restore);
+  expect(validateRestorePreparation(restore, expected).activeMs).toBe(273_668);
+  expect(expected.sequence).toBe('0');
+  expect(JSON.stringify(restore)).toBe(original);
+});
+
+test('OPS10: campaign preparation refuses unexplained or malformed model bootstrap sequence advances', () => {
+  const changes: ((restore: FixtureRestoreEvidence) => void)[] = [
+    (restore) => {
+      delete restore.modelAlignment;
+    },
+    (restore) => {
+      delete restore.phases['align-model'];
+    },
+    (restore) => {
+      restore.phases['align-model'] = 600_000;
+    },
+    (restore) => {
+      restore.compatibility!.pendingModelAlignment = true;
+    },
+    (restore) => {
+      restore.modelAlignment!.backupGeneration = 'urn:rezics:model-generation:foreign';
+    },
+    (restore) => {
+      restore.modelAlignment!.currentGeneration = 'urn:rezics:model-generation:foreign';
+    },
+    (restore) => {
+      restore.modelAlignment!.installation.state = 'completed';
+    },
+    (restore) => {
+      restore.modelAlignment!.installation.generation = 'urn:rezics:model-generation:foreign';
+    },
+    (restore) => {
+      restore.modelAlignment!.installation.generationNumber = '2';
+    },
+    (restore) => {
+      delete restore.modelAlignment!.installation.receipt;
+    },
+    (restore) => {
+      restore.modelAlignment!.installation.receipt = 'urn:rezics:receipt:foreign';
+    },
+    (restore) => {
+      restore.modelAlignment!.installation.bootstrapped = false;
+    },
+    (restore) => {
+      restore.graph!.sequence = '0';
+    },
+    (restore) => {
+      restore.graph!.sequence = '2';
+    },
+  ];
+  for (const change of changes) {
+    const { restore, expected } = bootstrapRestoreExample();
+    change(restore);
+    expect(() => validateRestorePreparation(restore, expected)).toThrow();
+  }
+  const { restore, expected } = bootstrapRestoreExample();
+  expect(() =>
+    validateRestorePreparation(restore, { ...expected, modelGeneration: undefined }),
+  ).toThrow();
+  expect(() => validateRestorePreparation(restore, { ...expected, sequence: 'invalid' })).toThrow();
 });
 
 test('OPS10: campaign preparation rejects failed, malformed, incomplete and individually over-budget restore evidence', () => {
