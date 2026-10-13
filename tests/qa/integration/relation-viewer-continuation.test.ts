@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import type { VerifiedAccountAssertion } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { setFixtureMandateState } from '../../../services/main/src/modules/access/fixture-authority-scenario.ts';
 import { startMediaStack, type MediaStack } from './media-support.ts';
 
 type Member = Awaited<ReturnType<MediaStack['member']>>;
@@ -13,7 +14,7 @@ type Page = {
 const short = (ref: string) => ref.slice(-36);
 let stack: MediaStack, owner: Member, reader: Member;
 let app: ReturnType<typeof createMainApp>;
-let hub: string, other: string, hidden: string, hiddenRead: string;
+let hub: string, other: string, hidden: string;
 let definition: string;
 const relations: string[] = [], hiddenRelations: string[] = [];
 let expiry = Math.floor(Date.now() / 1000) + 300;
@@ -67,7 +68,7 @@ beforeAll(async () => {
   definition = meaning.revision;
   await owner.grant(`semantic:read:${meaning.component}`, 'semantic.read');
   await reader.grant(`semantic:read:${meaning.component}`, 'semantic.read');
-  hiddenRead = await reader.grant(`work:read:${hidden}`, 'work.read');
+  await reader.grant(`work:read:${hidden}`, 'work.read');
   for (const target of [other, other, hidden, hidden]) {
     const relation = await relate(target);
     relations.push(relation);
@@ -121,13 +122,16 @@ test('continuation refuses another resource, effective query, principal, Agent o
   finally { country = null; }
 }, 120_000);
 
-test('a cursor retains its source position but never retains a revoked private participant grant', async () => {
+test('a cursor retains its source position but never retains revoked private participant authority', async () => {
   const before = await json<Page>(read(hub, { limit: '32' }));
   expect(before.items.map(item => item.relation)).toEqual(relations.toSorted());
   expect(before.items.some(item => item.counterparts.some(ref => ref.reference === hidden))).toBe(true);
   const first = await json<Page>(read());
   expect(first.next).toBeString();
-  await stack.accessPool.query('UPDATE access.permission_grant SET active=false WHERE id=$1', [hiddenRead]);
+  const mandate = (await stack.accessPool.query<{ id: string }>(`SELECT id FROM access.representation
+    WHERE principal_id=$1 AND represented_subject=$2 AND action='work.read' AND active`,
+  [reader.principalId, reader.actor])).rows[0]!;
+  await setFixtureMandateState(stack.accessPool, mandate.id, 'revoked');
   const seen: string[] = [];
   let after = first.next;
   for (let count = 0; after; count++) {
