@@ -15,3 +15,4 @@ sweep and audit reports beside them.
 - VNDB release dates show the year only.
 - The release filter broadens for visual novels and games.
 - Three test expectations of the single-year browse: an owner regression a mock cannot falsify, a string-date fixture swallowed into an undated Work, facet counts no longer asserted.
+- Zone withdrawal attempts survive only for the component lifetime; reload persistence needs a row's stated persona outcome before it is built.

@@ -10,7 +10,7 @@ launch manager's 2026-10-12 table, archived at
 | Manager | web; no watcher, polling or held task wait; coordinator wakes on mail/task exits |
 | Rows | 0 of 67 proved through persona API outcomes; old browser proofs do not prove rows under today's method |
 | Shared stack | Cold-started today, serving main; Account 3002, Main 3001, web 3000 and Storybook 6006 healthy (`task urls`) |
-| Measures | Status reports 100% (4/4), 4 first + 1 step; manager conservatively counts G-2090's conformance repair as a fix: 80% (4/5). Landed median/max 1 (G-2094); 12.8M input / 85.3k output tokens; tokens/proved row n/a |
+| Measures | Status reports 100% (4/4), 4 first + 2 steps; manager counts both guard conformance repairs as fixes: 67% (4/6). Landed median/max 1 (G-2094); 19.3M input / 132.9k output tokens, one session unavailable; tokens/proved row n/a |
 
 ## Authorized work now
 
@@ -25,12 +25,12 @@ work and the measures; no task is added to spend allowance.
 | Task | Claim and next action |
 | --- | --- |
 | G-2090 | First handoff partial: bounded Library read fixes and twelve-instance inventory, unlanded. Fresh attempt 2 is fix round 1: replace the whole-source hash review gate; benign-comment fixture fails in QA `20261013t050302-bdbdd8` |
-| G-2091 | Accepted commands stay pending; manage/command adapter and its guard |
+| G-2091 | First handoff partial, unlanded; pending key/Manage/Zone/proposal fixes preserved. Fresh attempt 2 is fix round 1: replace adapter hash reviews; comment-only fixture fails in QA `20261013t051545-d31a21`. Minimal proposal file added to claim via reclaim |
 | G-2092 | Identity-required reads; realm/client adapters and its guard |
 | G-2093 | Capped-page filtering; brief ready, dispatch after G-2090 closes because zones claims overlap |
 | G-2094 | Landed at `775d67f79132` on attempt 1; canonical suffix expectations in both tests/story; 16 story cases, web types and all 31 merge unit/guard files pass; e2e execution stays with nightly regression |
 
-G-2090 runs fresh fix round 1; G-2091 and G-2092 run first attempts. G-2094 is
+G-2090 and G-2091 run fresh fix round 1; G-2092 runs its first attempt. G-2094 is
 landed and closed. Program's mail `program-web-guards-released` confirmed G-2071 landed
 and released `scripts/qa/repository-guards.ts`. This manager appended all four
 inventory guard entries there; existing absent-file filtering allows each guard
@@ -41,6 +41,11 @@ ranked Home candidates, Realm/Conditions-constrained year paging, and a writer's
 contributions/submissions for one Work. The exact twelve remaining instances
 are retained in G-2090's inventory; no further surface work in this fix round.
 Program forwarded all three gaps to api to check against each row's matrix.
+G-2091's exact remaining client instances are Library collection/change/rating
+commands, scoped-rating projection/observation keys and Studio metadata/create
+keys. No extra work on them in this guard fix round; Library remains claimed by
+G-2090. The worker's reload-persistence proposal has no proved persona outcome
+and is recorded in later.md rather than dispatched.
 
 G-2072 step 1 is on main (kind validation, landing rules and attempt cap). The
 manager continues to enforce the web rules in every brief: merge
