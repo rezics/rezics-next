@@ -82,7 +82,7 @@ function recordedReplayGap(error: unknown): boolean {
     && /Unmatched recorded request|Recorded sample|Ambiguous recorded request|cannot supply/.test(error.message);
 }
 
-async function settleFrame<T>(call: () => Promise<FrameAnswer<T>>, cursor?: string): Promise<RealmFrameRead<T>> {
+async function settleFrame<T>(call: () => Promise<FrameAnswer<T>>, cursor?: string, keepProblem = true): Promise<RealmFrameRead<T>> {
   const recorded: { problem: FrameAnswer<T>['error']; gap?: unknown } = { problem: null };
   const result = await settle(async () => {
     try {
@@ -98,13 +98,13 @@ async function settleFrame<T>(call: () => Promise<FrameAnswer<T>>, cursor?: stri
   }, cursor);
   if (recorded.gap) throw recorded.gap;
   const { problem } = recorded;
-  return !result.ok && problem ? { ...result, status: problem.status,
+  return !result.ok && problem && keepProblem ? { ...result, status: problem.status,
     ...(problem.value !== undefined ? { problem: problem.value } : {}) } : result;
 }
 
 /** Public header adapter retained for rules readers and their recorded surfaces. */
-export function readPublishedRealmHeader(client: MainClient, realm: string): Promise<RealmFrameRead<RealmHeader>> {
-  return settleFrame(() => client.v1.realms({ realm }).get({ query: {} }));
+export function readPublishedRealmHeader(client: MainClient, realm: string, keepProblem = false): Promise<RealmFrameRead<RealmHeader>> {
+  return realmFrameReads({ main: client, keepProblem }).readRealmHeader(realm);
 }
 
 export type SiteResolution =
@@ -115,14 +115,16 @@ export type SiteResolution =
 
 /**
  * The shared frame reader. Public reads use main; member-readable presentation,
- * routes and private fallback use personal with the eligible acting subject.
+ * and routes use personal with the eligible acting subject.
  * Host address admission and private landing adapters retain their request caches,
  * language headers and conditional requests at the production boundary.
  */
-export function realmFrameReads({ main, personal = main, actingSubject, resolution }: {
+export function realmFrameReads({ main, personal = main, actingSubject, resolution, keepProblem = true }: {
   main: MainClient;
   personal?: MainClient;
   actingSubject?: string;
+  /** Production keeps its existing Loaded contract; recorded frames retain the HTTP problem. */
+  keepProblem?: boolean;
   resolution?: {
     resolveAddress?: typeof resolveAddress;
     readPrivateRealm?: typeof readPrivateRealm;
@@ -130,14 +132,16 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
   };
 }) {
   const readPresentation = (zone: string, after?: string): Promise<RealmFrameRead<ZonePresentationRead>> =>
-    settleFrame(() => personal.v1.zones({ id: zone }).presentation.get({ query: { actingSubject, after } }), after);
-  const readHeader = resolution?.readRealmHeader ?? ((realm: string, _locale: UiLocale) => readPublishedRealmHeader(main, realm));
-  const resolve = resolution?.resolveAddress ?? (async (_scope: 'space', key: string, _locale: UiLocale): Promise<AddressRead> => {
+    settleFrame(() => personal.v1.zones({ id: zone }).presentation.get({ query: { actingSubject, after } }), after, keepProblem);
+  const readRealmHeader = (realm: string): Promise<RealmFrameRead<RealmHeader>> =>
+    settleFrame(() => main.v1.realms({ realm }).get({ query: {} }), undefined, keepProblem);
+  const readHeader = resolution?.readRealmHeader ?? ((realm: string, _locale: UiLocale) => readRealmHeader(realm));
+  const resolve = resolution?.resolveAddress ?? (async (_scope: 'space', key: string, _locale: UiLocale, _fresh = false): Promise<AddressRead> => {
     try {
       const answer = await main.v1.addresses.resolve.get({ query: { scope: 'space', key } });
       if (answer.error) {
         if (!answer.response && answer.error.value instanceof Error) throw answer.error.value;
-        const status = answer.error.status;
+        const status = Number(answer.error.status);
         if ([400, 404, 422].includes(status)) return { kind: 'missing' };
         if (status === 410) return { kind: 'retired' };
         if (status === 429) {
@@ -160,14 +164,14 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
     throw new Error(`Missing supporting Realm frame private-resolution reader: ${ref}`);
   });
   return {
-    readRealmHeader: (realm: string) => readPublishedRealmHeader(main, realm),
-    readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get()),
+    readRealmHeader,
+    readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get(), undefined, keepProblem),
     readAddress: (ref: string, locale: UiLocale, fresh = false) => resolve('space', ref, locale, fresh),
     readPresentation,
     readCompletePresentation: (zone: string, readPage = readPresentation): Promise<RealmFrameRead<ZonePresentationRead>> =>
       completePublicNavigation(after => readPage(zone, after)),
     readZoneRoute: (zone: string, path: string, cursor?: string): Promise<RealmFrameRead<ZoneRouteRead>> =>
-      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor),
+      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor, keepProblem),
     resolveRealm: async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
       const resolved = await resolve('space', ref, locale);
       if (resolved.kind !== 'resolved') {
@@ -228,7 +232,7 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
 
 export const readRealmHeader = cache(
   async (realm: string, _locale: UiLocale): Promise<RealmFrameRead<RealmHeader>> =>
-    realmFrameReads({ main: main() }).readRealmHeader(realm),
+    realmFrameReads({ keepProblem: false, main: main() }).readRealmHeader(realm),
 );
 
 const readPrivateRealm = cache(async (ref: string, locale: UiLocale, address?: ResolvedAddress) => {
@@ -250,20 +254,20 @@ const readPrivateRealm = cache(async (ref: string, locale: UiLocale, address?: R
 
 const frameReader = cache(async () => {
   const { main: personal, actingSubject } = await readerMain();
-  return realmFrameReads({ main: main(), personal, actingSubject,
+  return realmFrameReads({ keepProblem: false, main: main(), personal, actingSubject,
     resolution: { resolveAddress, readPrivateRealm, readRealmHeader } });
 });
 
 /** Main's shared Space resolver, retaining the proxy's concealed-address shortcut. */
 export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
   if ((await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
-  return realmFrameReads({ main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveRealm(ref, locale);
+  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveRealm(ref, locale);
 });
 
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
 export const resolveSite = cache(async (ref: string, locale: UiLocale, fresh = false): Promise<SiteResolution> => {
   if (!fresh && (await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
-  return realmFrameReads({ main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveSite(ref, locale, fresh);
+  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveSite(ref, locale, fresh);
 });
 
 export const readPresentation = cache(async (zone: string, after?: string): Promise<RealmFrameRead<ZonePresentationRead>> => {
@@ -275,7 +279,7 @@ export const readPresentation = cache(async (zone: string, after?: string): Prom
 });
 
 export const readCompletePresentation = cache(async (zone: string): Promise<RealmFrameRead<ZonePresentationRead>> =>
-  realmFrameReads({ main: main() }).readCompletePresentation(zone, readPresentation),
+  realmFrameReads({ keepProblem: false, main: main() }).readCompletePresentation(zone, readPresentation),
 );
 
 /** Main conceals private routes from readers without live membership or Zone authority. */
@@ -390,7 +394,7 @@ export const readZoneBrowse = (realm: string, locale: UiLocale, query: ZoneBrows
 
 /** Main's admitted Facets, for the labels of the Facets a browse page shows. */
 export const readFacets = cache(async (): Promise<RealmFrameRead<FacetList>> =>
-  realmFrameReads({ main: main() }).readFacets(),
+  realmFrameReads({ keepProblem: false, main: main() }).readFacets(),
 );
 
 /** A mod Work's disclosed releases, newest first; `closed` while the platform has not opened the read. */

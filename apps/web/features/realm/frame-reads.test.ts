@@ -45,9 +45,10 @@ const personalSelections: RecordedSelection[] = [
 
 for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
   test(`${persona}: the shared production factory uses exact public and personal frame reads`, async () => {
-    const escaped = spyOn(globalThis, 'fetch').mockImplementation(() => {
+    const escapedFetch = Object.assign(async () => {
       throw new Error('A frame read escaped its supplied client');
-    });
+    }, { preconnect: globalThis.fetch.preconnect });
+    const escaped = spyOn(globalThis, 'fetch').mockImplementation(escapedFetch);
     disposals.push(() => escaped.mockRestore());
     const actor = persona === 'visitor' ? undefined : (sample(persona, 'frame-session-agent').answer as {
       sessionAgent: { actingSubject: string };
