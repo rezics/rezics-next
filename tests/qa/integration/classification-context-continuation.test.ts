@@ -37,9 +37,9 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
     expect(await json<Page>(await stack.call('GET', `/v1/classification-vocabulary?${new URLSearchParams({
       context: firstContext, limit: '1' })}`)))
       .toMatchObject({ items: [], nextCursor: null, count: { value: 0 }, hasMore: false });
-    const define = async (value: string, prior?: Definition) => json<Definition>(await editor.send('POST', '/v1/classification-vocabulary', {
+    const define = async (value: string, prior?: Definition, bilingual = true) => json<Definition>(await editor.send('POST', '/v1/classification-vocabulary', {
       profile: 'classification-proposition-v2', scheme: prior ? { id: prior.scheme, expectedHead: prior.schemeHead } : null,
-      labels: [{ language: 'en', value }, { language: 'zh-Hans', value: `分类 ${value}` }],
+      labels: [{ language: 'en', value }, ...(bilingual ? [{ language: 'zh-Hans', value: `分类 ${value}` }] : [])],
       alternativeLabels: [], broader: [], narrower: [], actingSubject: editor.actor,
     }), 201);
     const root = await define(`Selected root ${randomUUID()}`), child = await define('Selected child', root),
@@ -131,8 +131,8 @@ test('Selected context vocabulary traverses disclosed Concepts with exact query 
         ${iri(root.scheme)} rv:schemeRevisionHead ?head } } LIMIT 2`)).results?.bindings.map(row => row.head?.value);
     for (const size of [128, 512]) {
       while (population < size) {
-        await Promise.all([define(`Population ${population}`), define(`Population ${population + 1}`)]);
-        population += 2;
+        await Promise.all([0, 1, 2, 3].map(offset => define(`Population ${population + offset}`, undefined, false)));
+        population += 4;
       }
       expect(await schemeHead(), 'The prepared scheme head matches the last command receipt').toEqual([hidden.schemeHead]);
       const contextPath = `/v1/classification-vocabulary?${new URLSearchParams({ context: firstContext, language: 'en', limit: '1' })}`;
