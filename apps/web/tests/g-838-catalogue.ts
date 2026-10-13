@@ -137,7 +137,7 @@ export async function seedCatalogue(stack: MediaStack, reader: SeedReader, scrat
   const send: CataloguePort['send'] = async (method, path, body, key = randomUUID()) => {
     for (let attempt = 0; attempt < 64; attempt++) {
       const response = await fetch(new URL(path, session.mainOrigin), {
-        method, headers: { authorization: `Bearer ${session.token}`, 'idempotency-key': key,
+        method, headers: { authorization: `Bearer ${await session.session.current()}`, 'idempotency-key': key,
           ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });

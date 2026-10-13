@@ -179,7 +179,7 @@ try {
     // Discovery routes admit the platform administrator. A realm generation also
     // requires the recommendation-management grant on that same Agent.
     await grantRecommendationManagement(admin.principalId, admin.actingSubject);
-    for (const zone of created.zones) await buildRealmDiscovery(admin.mainOrigin, admin.token, admin.actingSubject, zone.realm);
+    for (const zone of created.zones) await buildRealmDiscovery(admin.mainOrigin, await admin.session.current(), admin.actingSubject, zone.realm);
     await expectYear(admin.mainOrigin, 1980, longTv.work);
     await expectYear(admin.mainOrigin, 1995, longManga.work);
     // Cards read accepted statements. That read stays unavailable until the statement index

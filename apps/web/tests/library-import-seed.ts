@@ -16,7 +16,7 @@ const session = await platformAdministratorSession(process.env,
 const post = async <T>(path: string, body: object, key: string): Promise<T> => {
   const response = await fetch(new URL(path, session.mainOrigin), {
     method: 'POST',
-    headers: { authorization: `Bearer ${session.token}`, 'content-type': 'application/json',
+    headers: { authorization: `Bearer ${await session.session.current()}`, 'content-type': 'application/json',
       'idempotency-key': key },
     body: JSON.stringify(body),
   });
