@@ -280,6 +280,31 @@ describe('durable Goal wake coordinator', () => {
       expect(coordinator.turns().turns[0]).toMatchObject({ending:'crash',code:128,input_tokens:90,cached_tokens:40,output_tokens:3});
     } finally { f.cleanup(); }
   });
+  test('a turn starts one session when a reader of the event store makes its record wait', async () => {
+    const f = fixture();
+    let reader: ReturnType<typeof Bun.spawn> | undefined;
+    try {
+      const coordinator = f.open(); coordinator.enroll(f.descriptor); coordinator.step();
+      const token = coordinator.status().attempts[0]!.token;
+      const ready = join(f.dir, 'reader-ready');
+      // A reader's shared lock refuses the commit, and the store then runs the whole transaction again.
+      const source = `import { Database } from 'bun:sqlite'; import { writeFileSync } from 'node:fs';
+        const db = new Database(${JSON.stringify(join(f.stateDir, 'coordinator.sqlite'))}, {readonly:true});
+        db.exec('PRAGMA busy_timeout=2000');
+        const phase = db.query('SELECT phase FROM attempts WHERE token=?');
+        writeFileSync(${JSON.stringify(ready)}, 'watching');
+        while ((phase.get(${JSON.stringify(token)})).phase !== 'claimed') await Bun.sleep(1);
+        db.exec('BEGIN'); db.query('SELECT count(*) FROM events').get();
+        await Bun.sleep(250); db.exec('COMMIT'); db.close();`;
+      reader = Bun.spawn([process.execPath, '-e', source], {stdout:'ignore',stderr:'inherit'});
+      await waitFor(() => existsSync(ready));
+      await runAttempt(f.stateDir,token);
+      expect(await reader.exited).toBe(0);
+      await Bun.sleep(300);
+      expect(readFileSync(join(f.dir,'calls.jsonl'),'utf8').trim().split('\n')).toHaveLength(1);
+      expect(coordinator.turns().turns[0]).toMatchObject({ending:'exit',code:0});
+    } finally { reader?.kill(); f.cleanup(); }
+  });
   test('task exclusions recognize brief filenames and mixed case without treating engine names as tasks', () => {
     expect(eventTasks({key:'task:G-42:1',body:'See brief-g-42.md and G-43; engine codex-1'})).toEqual(['G-42','G-43']);
   });

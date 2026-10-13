@@ -696,16 +696,21 @@ export async function runAttempt(stateDir: string, token: string, display = fals
   try {
     const owner = nativeOwner(descriptor.home,descriptor.session,descriptor.previousOwner,'/proc',descriptor.engine);
     if (owner) throw new Error(owner);
+    // The store runs this transaction again when its commit meets a reader; the engine starts once.
+    let spawned: ReturnType<typeof spawn> | undefined;
     const child = db.transaction(()=>{
       const current = db.query('SELECT phase FROM attempts WHERE token=?').get(token) as {phase:string};
       if (current.phase !== 'claimed') return undefined;
-      const spawned = spawn(descriptor.program,args,{cwd:descriptor.cwd,detached:true,
+      spawned ??= spawn(descriptor.program,args,{cwd:descriptor.cwd,detached:true,
         env:{...descriptor.env,GOAL_TURN_TOKEN:token,GOAL_TURN_STATE_DIR:stateDir},stdio:['ignore',stdout,stderr]});
       if (!spawned.pid) throw new Error('Native turn failed to spawn');
       db.query('UPDATE attempts SET child=? WHERE token=?').run(JSON.stringify(processIdentity(spawned.pid)),token);
       return spawned;
     }).immediate();
-    if (!child) return;
+    if (!child) {
+      if (spawned?.pid) try { process.kill(-spawned.pid,'SIGTERM'); } catch { /* already gone */ }
+      return;
+    }
     const result = await new Promise<{code:number;ending:'exit'|'crash'}>(resolveExit => {
       child.on('error',()=>resolveExit({code:127,ending:'crash'}));
       child.on('close',code=>resolveExit({code:code ?? 128,ending:code === null ? 'crash' : 'exit'}));
