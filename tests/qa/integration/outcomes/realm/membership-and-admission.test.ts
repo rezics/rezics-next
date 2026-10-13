@@ -77,6 +77,41 @@ async function submit(person: PersonaSession, root = rootOf(sessions.realm), key
   );
   return { input, receipt, key };
 }
+// The signed-in shell and authenticated Eden reads share these session reads.
+async function pageSession(name: PersonaName, prefix: string) {
+  const person = sessions[name], sample = recording.session(name, person);
+  for (const [label, path] of [
+    ['session-agent', '/v1/me/session-agent'],
+    ['person-preferences', `/v1/me/person-preferences?${acting(person)}`],
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`],
+  ] as const) await answer(sample(`${prefix}-${label}`, 'GET', path));
+}
+// readRequestsAtAddress tries the legacy Realm address as a Space, then
+// readManagementAccess resolves the settings only if the Realm header opens.
+async function refusedInboxReads(name: 'stranger' | 'member' | 'moderator' | 'operator') {
+  const person = sessions[name], sample = recording.session(name, person);
+  const root = rootOf(sessions.realm), id = sessions.realm.slice(-36);
+  await answer(sample('requests-address-space-missing', 'GET', `/v1/spaces/${id}`), 404);
+  await answer(sample('requests-address-settings-refused', 'GET', `/v1/spaces/${id}/settings?${acting(person)}`), 403);
+  await answer(sample('requests-access-realm', 'GET', `${root}?${acting(person)}`),
+    name === 'member' || name === 'moderator' ? 200 : 404);
+  if (name === 'member' || name === 'moderator')
+    await answer(sample('requests-access-settings-refused', 'GET', `/v1/spaces/${sessions.space.slice(-36)}/settings?${acting(person)}`), 403);
+}
+async function joinReads(name: 'stranger' | 'operator') {
+  const person = sessions[name], sample = recording.session(name, person);
+  const root = rootOf(sessions.realm);
+  await pageSession(name, 'join');
+  await answer(recording.session(name, sessions.visitor)(
+    'join-address', 'GET', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`,
+  ));
+  await answer(recording.session(name, sessions.visitor)('join-public-realm', 'GET', root), 404);
+  await answer(sample('join-realm', 'GET', `${root}?${acting(person)}`), 404);
+  await answer(recording.session(name, sessions.visitor)('join-landing', 'GET', `${root}/join-page`));
+  await answer(sample('join-own-requests-before-request', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`), 404);
+}
 beforeAll(async () => {
   sessions = await personaSessions('private');
   await recording.prepare();
@@ -117,6 +152,8 @@ outcomeTest(admission, 'stranger', async () => {
   await answer(recording.session('stranger', sessions.visitor)('request-landing', 'GET', `${root}/join-page`));
   await (await sample('own-requests-before-request', 'GET', `${path}/mine?${acting(person)}&limit=50`)).body?.cancel();
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
+  await joinReads('stranger');
+  await refusedInboxReads('stranger');
   const first = await submit(person, root, randomUUID(), sample);
   expect(await answer(person.main('POST', path, first.input, first.key))).toMatchObject({
     requestId: first.receipt.requestId,
@@ -129,6 +166,8 @@ outcomeTest(admission, 'stranger', async () => {
   );
   await answer(person.main('POST', path, first.input), 409);
   await answer(sample('request-inbox-denied', 'GET', `${path}?${acting(person)}`), 403);
+  await answer(sample('requests-refused', 'GET', `${path}?${acting(person)}&limit=50&q=`), 403);
+  await answer(sample('join-own-request-pending', 'GET', `${path}/mine?${acting(person)}&limit=50`));
   const mine = await answer<RequestPage>(sample('own-request-pending', 'GET', `${path}/mine?${acting(person)}`));
   expect(mine.items).toMatchObject([
     {
@@ -153,7 +192,7 @@ outcomeTest(admission, 'stranger', async () => {
   const key = randomUUID();
   expect(
     await answer(
-      person.main('POST', `${path}/${first.receipt.requestId}/withdraw`, input, key),
+      sample('request-withdrawn', 'POST', `${path}/${first.receipt.requestId}/withdraw`, input, key),
       201,
     ),
   ).toMatchObject({ state: 'withdrawn' });
@@ -164,10 +203,11 @@ outcomeTest(admission, 'stranger', async () => {
   expect(
     (await answer<RequestPage>(sample('own-request-withdrawn', 'GET', `${path}/mine?${acting(person)}`))).items[0],
   ).toMatchObject({ state: 'withdrawn', reason: first.input.reason });
+  await answer(sample('join-own-request-withdrawn', 'GET', `${path}/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
 }, recording);
 
-async function joined(name: PersonaName) {
+async function joined(name: 'member' | 'moderator') {
   const person = sessions[name], sample = recording.session(name, person);
   const root = rootOf(sessions.realm);
   expect(await answer(sample('joined-realm-header', 'GET', `${root}?${acting(person)}`))).toMatchObject({
@@ -177,10 +217,22 @@ async function joined(name: PersonaName) {
     await answer<Basis>(sample('joined-request-basis', 'GET', `${root}/join-requests/basis?${acting(person)}`)),
   ).toMatchObject({ state: 'joined' });
   await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
+  await answer(sample('requests-refused', 'GET', `${root}/join-requests?${acting(person)}&limit=50&q=`), 403);
   await answer(sample('joining-policy', 'GET', `${root}/joining?${acting(person)}`));
   await answer(sample('realm-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
   await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
   await answer(sample('own-ban-absent', 'GET', `${root}/member-ban?${acting(person)}`), 404);
+  await refusedInboxReads(name);
+  await pageSession(name, 'frame');
+  const publicSample = recording.session(name, sessions.visitor);
+  await answer(publicSample('frame-address', 'GET', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`));
+  await answer(publicSample('frame-public-realm', 'GET', root), 404);
+  await answer(sample('frame-realm', 'GET', `${root}?${acting(person)}`));
+  await answer(sample('frame-joining', 'GET', `${root}/joining?${acting(person)}`));
+  await answer(sample('frame-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
+  await answer(sample('frame-platform-access', 'GET', '/v1/me/platform-access'));
+  await answer(sample('frame-own-ban', 'GET', `${root}/member-ban?${acting(person)}`), 404);
+  await answer(sample('frame-presentation', 'GET', `/v1/zones/${sessions.zone.slice(-36)}/presentation?${acting(person)}`));
   await answer(
     person.main('POST', `${root}/join-requests/${randomUUID()}/decisions`, {
       actingSubject: person.actingSubject,
@@ -240,6 +292,7 @@ outcomeTest(admission, 'owner', async () => {
   const first = await submit(sessions.stranger, root),
     second = await submit(sessions.operator, root);
   await answer(sample('request-inbox', 'GET', `${path}?${acting(owner)}&limit=50&q=`));
+  await answer(sample('requests-first-page', 'GET', `${path}?${acting(owner)}&limit=50&q=`));
   await answer(sample('request-inbox-search-empty', 'GET', `${path}?${acting(owner)}&limit=50&q=nomatch${randomUUID().replaceAll('-', '')}`));
   for (const name of ['stranger', 'operator'] as const)
     await answer(sample(`requester-name-${name}`, 'GET', `/v1/agents/${sessions[name].actingSubject!.slice(-36)}?${acting(owner)}`));
@@ -275,7 +328,7 @@ outcomeTest(admission, 'owner', async () => {
     );
     const keys = [randomUUID(), randomUUID()];
     const replies = await Promise.all(
-      keys.map((key) => owner.main('POST', `${path}/${id}/decisions`, input, key)),
+      keys.map((key, index) => sample(`request-decision-${decision}-${index}`, 'POST', `${path}/${id}/decisions`, input, key)),
     );
     expect(replies.map((reply) => reply.status).sort()).toEqual([201, 409]);
     const index = replies.findIndex((reply) => reply.status === 201);
@@ -304,6 +357,7 @@ outcomeTest(admission, 'owner', async () => {
   expect((await answer<RequestPage>(sample('request-inbox-after-decisions', 'GET', `${path}?${acting(owner)}`))).items).toEqual(
     [],
   );
+  await answer(sample('requests-after-decisions', 'GET', `${path}?${acting(owner)}&limit=50&q=`));
   expect(await answer(owner.main('GET', `${settingsPath}?${acting(owner)}`))).toMatchObject({
     settings: { history: 'from-admission' },
   });
@@ -327,7 +381,11 @@ outcomeTest(admission, 'operator', async () => {
   });
   await answer(sample('private-realm-hidden', 'GET', `${root}?${acting(person)}`), 404);
   await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
+  await answer(sample('requests-refused', 'GET', `${root}/join-requests?${acting(person)}&limit=50&q=`), 403);
+  await joinReads('operator');
+  await refusedInboxReads('operator');
   const request = await submit(person, root, randomUUID(), sample);
+  await answer(sample('own-request-pending', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`));
   await answer(
     person.main('POST', `${root}/join-requests/${request.receipt.requestId}/decisions`, {
       actingSubject: person.actingSubject,
@@ -339,12 +397,13 @@ outcomeTest(admission, 'operator', async () => {
     403,
   );
   await answer(
-    person.main('POST', `${root}/join-requests/${request.receipt.requestId}/withdraw`, {
+    sample('request-withdrawn', 'POST', `${root}/join-requests/${request.receipt.requestId}/withdraw`, {
       actingSubject: person.actingSubject,
       expectedRequestGeneration: '0',
       reason: 'Withdraw operator request',
     }),
     201,
   );
+  await answer(sample('own-request-withdrawn', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
 }, recording);
