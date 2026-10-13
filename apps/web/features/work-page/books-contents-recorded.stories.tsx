@@ -110,11 +110,11 @@ async function expectPage(canvasElement: HTMLElement, persona: AnswerPersona, la
     await expect(within(region).getByRole('link', { name: 'Next page' })).toHaveAttribute('href',
       localizedPath(workHref(work, 'contents', null, { language, cursor: answer.nextCursor }), 'en'));
   } else {
-    expect(within(region).queryByRole('link', { name: 'Next page' })).toBeNull();
+    await expect(within(region).queryByRole('link', { name: 'Next page' })).toBeNull();
   }
-  expect(answer.count.total).toBeNull();
-  expect(answer.complete).toBe(answer.nextCursor === null);
-  if (phoneWidth) expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  await expect(answer.count.total).toBeNull();
+  await expect(answer.complete).toBe(answer.nextCursor === null);
+  if (phoneWidth) await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 }
 
 function populatedPlay(phoneWidth: boolean): NonNullable<Story['play']> {
@@ -139,8 +139,8 @@ function refusalPlay(phoneWidth: boolean): NonNullable<Story['play']> {
     const alert = await canvas.findByRole('alert');
     await expect(alert).toHaveTextContent(problem.title);
     await expect(within(alert).getByRole('link', { name: 'First page' })).toBeVisible();
-    expect(canvas.queryByRole('list')).toBeNull();
-    if (phoneWidth) expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await expect(canvas.queryByRole('list')).toBeNull();
+    if (phoneWidth) await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   };
 }
 
@@ -148,9 +148,9 @@ function loadingPlay(phoneWidth: boolean): NonNullable<Story['play']> {
   return async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status', { name: 'Loading…' })).toBeVisible();
-    expect(canvas.queryByRole('list')).toBeNull();
-    expect(canvas.queryByRole('alert')).toBeNull();
-    if (phoneWidth) expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await expect(canvas.queryByRole('list')).toBeNull();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    if (phoneWidth) await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   };
 }
 
