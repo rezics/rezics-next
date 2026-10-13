@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { activeGoals, briefPathOf, pidAlive, readLedger, root, stateDir, withLedger } from './ledger.ts';
 import { capacityRefusal, lastAttempt, readResult, taskOf } from './launch.ts';
 import { handoffResult } from './land.ts';
+import { landingEnv } from './land-outside-turn.ts';
 import { finishAttempt, landTask, closeTasks, canVerifyReadOnly, resumeTask } from './tasks.ts';
 import { CAPACITY_WAIT_MS, engineOf, programOf, type Task } from './types.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
@@ -72,14 +73,15 @@ async function returnRefusal(task: Task, attempt: number): Promise<string | unde
   return;
 }
 
-function spawnSettlement(task: Task, token: string): Settlement['owner'] {
-  const directory = join(stateDir, 'runs', task.id);
+export function spawnSettlement(task: Task, token: string,
+  options: { start?: typeof spawn; directory?: string } = {}): Settlement['owner'] {
+  const directory = options.directory ?? join(stateDir, 'runs', task.id);
   mkdirSync(directory, { recursive: true });
   const log = openSync(join(directory, 'settle.log'), 'a');
   try {
-    const child = spawn(process.execPath, [import.meta.filename, task.id, String(lastAttempt(task).n), token], {
+    const child = (options.start ?? spawn)(process.execPath, [import.meta.filename, task.id, String(lastAttempt(task).n), token], {
       cwd: root, detached: true, stdio: ['ignore', log, log],
-      env: { ...process.env, GOAL_ID: task.goal ?? '' },
+      env: landingEnv({ ...process.env, GOAL_ID: task.goal ?? '' }),
     });
     child.on('error', error => console.error(`${task.id}: settlement start failed: ${error.message}`));
     if (!child.pid) throw new Error(`${task.id}: settlement process did not start`);

@@ -4,9 +4,36 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { landingEnv, landsOutsideTurn, reportLanding, startLandingOutsideTurn } from './land-outside-turn.ts';
+import { spawnSettlement } from './settle.ts';
+import type { Task } from './types.ts';
 
 const scratch = mkdtempSync(join(tmpdir(), 'land-outside-turn-'));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+test('the detached settlement child carries the landing environment without the manager turn', () => {
+  const calls: Record<string, unknown>[] = [];
+  let unreferenced = false;
+  const start = ((_program: string, _args: readonly string[], options: Record<string, unknown>) => {
+    calls.push(options);
+    return { pid: 42424242, on: () => {}, unref: () => { unreferenced = true; } };
+  }) as unknown as typeof spawn;
+  const token = process.env.GOAL_TURN_TOKEN;
+  const state = process.env.GOAL_TURN_STATE_DIR;
+  process.env.GOAL_TURN_TOKEN = 'manager-turn';
+  process.env.GOAL_TURN_STATE_DIR = '/manager-turn';
+  try {
+    spawnSettlement({ id: 'task', goal: 'alpha', attempts: [{ n: 1 }] } as Task, 'claim',
+      { start, directory: join(scratch, 'settlement') });
+    expect(calls[0]).toMatchObject({ detached: true, env: { GOAL_ID: 'alpha' } });
+    const env = calls[0]!.env as NodeJS.ProcessEnv;
+    expect(env.GOAL_TURN_TOKEN).toBeUndefined();
+    expect(env.GOAL_TURN_STATE_DIR).toBeUndefined();
+    expect(unreferenced).toBe(true);
+  } finally {
+    if (token === undefined) delete process.env.GOAL_TURN_TOKEN; else process.env.GOAL_TURN_TOKEN = token;
+    if (state === undefined) delete process.env.GOAL_TURN_STATE_DIR; else process.env.GOAL_TURN_STATE_DIR = state;
+  }
+});
 
 test('only a manager turn lands outside itself; a worker and a terminal land in place', () => {
   expect(landsOutsideTurn({ GOAL_TURN_TOKEN: 'turn' })).toBe(true);

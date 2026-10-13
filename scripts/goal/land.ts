@@ -1,7 +1,150 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readlinkSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
+import { processAlive, processIdentity } from '../qa/process/identity.ts';
+
+interface LandingState {
+  accepted?: { head: string; brief: string; directory: string };
+  rebase?: { id: string; worktree: string; branch: string; head: string; target: string;
+    owner: { pid: number; start?: string; boot?: string } };
+}
+
+function landingState(runDir: string): LandingState {
+  const file = join(runDir, 'landing.json');
+  return existsSync(file) ? JSON.parse(readFileSync(file, 'utf8')) as LandingState : {};
+}
+
+function saveLandingState(runDir: string, state: LandingState): void {
+  mkdirSync(runDir, { recursive: true });
+  const file = join(runDir, 'landing.json');
+  writeFileSync(`${file}.tmp`, JSON.stringify(state));
+  renameSync(`${file}.tmp`, file);
+}
+
+function landingGit(worktree: string, args: string[]): string {
+  const result = spawnSync('git', args, { cwd: worktree, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed: ${result.stderr}`);
+  return result.stdout.trim();
+}
+
+/** Write before Git starts: a killed synchronous rebase cannot publish ledger changes. */
+export function startLandingRebase(runDir: string, task: { id: string; worktree: string; branch: string }, target: string): void {
+  const state = landingState(runDir);
+  const head = landingGit(task.worktree, ['rev-parse', 'HEAD']);
+  landingGit(task.worktree, ['update-ref', `refs/goal-land/${task.id}/original`, head]);
+  landingGit(task.worktree, ['update-ref', `refs/goal-land/${task.id}/retained/${head}`, head]);
+  state.rebase = { id: task.id, worktree: task.worktree, branch: task.branch, head, target,
+    owner: processIdentity(process.pid) ?? { pid: process.pid } };
+  saveLandingState(runDir, state);
+}
+
+export function finishLandingRebase(runDir: string): void {
+  const state = landingState(runDir);
+  delete state.rebase;
+  saveLandingState(runDir, state);
+}
+
+/** Only landing's own rewrites may advance the head covered by the accepted review. */
+export function advanceLandingReview(runDir: string, head: string): void {
+  const state = landingState(runDir);
+  if (state.accepted) { state.accepted.head = head; saveLandingState(runDir, state); }
+}
+
+type TreeEntry = { mode: string; object: string };
+function landingTree(worktree: string, head: string): Map<string, TreeEntry> {
+  const result = spawnSync('git', ['ls-tree', '-rz', head], { cwd: worktree, encoding: 'utf8' });
+  if (result.status !== 0) throw new Error(result.stderr);
+  return new Map(result.stdout.split('\0').filter(Boolean).map(line => {
+    const separator = line.indexOf('\t');
+    const [mode, , object] = line.slice(0, separator).split(' ');
+    return [line.slice(separator + 1), { mode: mode!, object: object! }];
+  }));
+}
+
+/** Abort only a dead landing's matching rebase. Preserve both original and interrupted heads as refs. */
+export function restoreLandingRebase(runDir: string, task: { id: string; worktree: string; branch: string }): void {
+  const worktree = task.worktree;
+  const gitDir = landingGit(worktree, ['rev-parse', '--absolute-git-dir']);
+  for (const [marker, operation] of [['MERGE_HEAD', 'merge'], ['CHERRY_PICK_HEAD', 'cherry-pick'], ['REVERT_HEAD', 'revert'], ['sequencer', 'sequencer']]) {
+    if (existsSync(join(gitDir, marker!))) throw new Error(`${task.id}: a ${operation} in progress`);
+  }
+  const rebaseDir = ['rebase-merge', 'rebase-apply'].map(name => join(gitDir, name)).find(existsSync);
+  if (!rebaseDir) return;
+  const record = landingState(runDir).rebase;
+  const matches = record && record.id === task.id && record.worktree === worktree && record.branch === task.branch
+    && ['orig-head', 'onto', 'head-name'].every(name => existsSync(join(rebaseDir, name)))
+    && readFileSync(join(rebaseDir, 'orig-head'), 'utf8').trim() === record.head
+    && readFileSync(join(rebaseDir, 'onto'), 'utf8').trim() === record.target
+    && readFileSync(join(rebaseDir, 'head-name'), 'utf8').trim() === `refs/heads/${task.branch}`;
+  if (!matches) throw new Error(`${task.id}: a rebase the landing did not start`);
+  if (processAlive(record.owner)) throw new Error(`${task.id}: landing rebase owner is still running`);
+  // Include Git children that outlived their parent, and any process holding the index lock.
+  const lock = join(gitDir, 'index.lock');
+  for (const pid of readdirSync('/proc').filter(name => /^\d+$/.test(name))) {
+    if (!processAlive({ pid: Number(pid) })) continue;
+    try {
+      const cwd = readlinkSync(`/proc/${pid}/cwd`);
+      const command = readFileSync(`/proc/${pid}/cmdline`, 'utf8').split('\0');
+      if (cwd === worktree && /(?:^|\/)git$/.test(command[0] ?? '')) {
+        throw new Error(`${task.id}: Git still owns the landing rebase`);
+      }
+    } catch (error) { if (error instanceof Error && error.message.includes('still owns')) throw error; }
+    let descriptors: string[];
+    try { descriptors = readdirSync(`/proc/${pid}/fd`); } catch { continue; }
+    for (const descriptor of descriptors) {
+      let path: string;
+      try { path = readlinkSync(`/proc/${pid}/fd/${descriptor}`); } catch { continue; }
+      if (path === lock) throw new Error(`${task.id}: index.lock is held by a live process`);
+    }
+  }
+  if (landingGit(worktree, ['rev-parse', task.branch]) !== record.head
+    || landingGit(worktree, ['rev-parse', `refs/goal-land/${task.id}/original`]) !== record.head) {
+    throw new Error(`${task.id}: landing rebase recorded head is no longer the task head`);
+  }
+  const original = landingTree(worktree, record.head);
+  const target = landingTree(worktree, record.target);
+  const current = landingTree(worktree, 'HEAD');
+  const indexed = spawnSync('git', ['ls-files', '-z'], { cwd: worktree, encoding: 'utf8' });
+  if (indexed.status !== 0) throw new Error(indexed.stderr);
+  const files = new Set([...original.keys(), ...current.keys(), ...indexed.stdout.split('\0').filter(Boolean)]);
+  for (const file of files) {
+    const path = join(worktree, file);
+    for (let parent = dirname(path); parent !== worktree; parent = dirname(parent)) {
+      try {
+        if (lstatSync(parent).isSymbolicLink()) throw new Error(`${task.id}: landing rebase would overwrite worker symlink ${relative(worktree, parent)}`);
+      } catch (error) {
+        if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+      }
+    }
+    let actual: TreeEntry | undefined;
+    try {
+      const stat = lstatSync(path);
+      if (stat.isSymbolicLink()) {
+        const hash = spawnSync('git', ['hash-object', '--stdin'], { cwd: worktree, encoding: 'utf8', input: readlinkSync(path) });
+        if (hash.status !== 0) throw new Error(hash.stderr);
+        actual = { mode: '120000', object: hash.stdout.trim() };
+      } else if (stat.isFile()) {
+        actual = { mode: stat.mode & 0o111 ? '100755' : '100644', object: landingGit(worktree, ['hash-object', '--no-filters', '--', file]) };
+      } else throw new Error(`${task.id}: landing rebase would overwrite ${file}`);
+    } catch (error) {
+      if (!(error instanceof Error && 'code' in error && error.code === 'ENOENT')) throw error;
+    }
+    const equal = (entry: TreeEntry | undefined) => actual?.object === entry?.object && actual?.mode === entry?.mode;
+    // A file already identical to the original survives. Every file replaced or removed must be target bytes.
+    if (!equal(original.get(file)) && !equal(target.get(file))) {
+      throw new Error(`${task.id}: landing rebase would overwrite or remove worker file ${file}`);
+    }
+  }
+  const interrupted = landingGit(worktree, ['rev-parse', 'HEAD']);
+  landingGit(worktree, ['update-ref', `refs/goal-land/${task.id}/interrupted`, interrupted]);
+  landingGit(worktree, ['update-ref', `refs/goal-land/${task.id}/retained/${interrupted}`, interrupted]);
+  if (existsSync(lock)) rmSync(lock);
+  landingGit(worktree, ['rebase', '--abort']);
+  if (landingGit(worktree, ['rev-parse', 'HEAD']) !== record.head
+    || landingGit(worktree, ['symbolic-ref', '--short', 'HEAD']) !== task.branch) throw new Error(`${task.id}: landing rebase did not restore its head`);
+  finishLandingRebase(runDir);
+}
 
 export interface LandReview {
   worktree: string; base: string; head: string; brief: string; handoff: string; directory: string;
@@ -267,8 +410,8 @@ function testPathAllowed(worktree: string, test: NonNullable<ReviewFinding['test
 }
 
 /** Existing reports are the record of the task's one review, including the committed fix targets. */
-function priorReview(runDir: string): { findings: ReviewFinding[]; tests?: string[] } | undefined {
-  for (const name of (existsSync(runDir) ? readdirSync(runDir) : []).filter(name => name.startsWith('review-')).sort()) {
+function priorReview(runDir: string, directory?: string): { findings: ReviewFinding[]; tests?: string[] } | undefined {
+  for (const name of directory ? [relative(runDir, directory)] : (existsSync(runDir) ? readdirSync(runDir) : []).filter(name => name.startsWith('review-')).sort()) {
     const file = join(runDir, name, 'findings.json');
     if (!existsSync(file)) continue;
     return JSON.parse(readFileSync(file, 'utf8')) as { findings: ReviewFinding[]; tests?: string[] };
@@ -282,7 +425,11 @@ export async function land(options: LandOptions): Promise<void> {
   if (result !== 'done' && !(options.step && result === 'partial')) {
     throw new Error(`${options.id}: land stopped: handoff RESULT is ${result ?? 'missing or ambiguous'}, expected done${options.step ? ' or partial' : ''}`);
   }
-  const previous = priorReview(options.runDir);
+  const accepted = landingState(options.runDir).accepted;
+  const previous = accepted && (accepted.head !== options.head || accepted.brief !== options.brief)
+    ? undefined : accepted ? priorReview(dirname(accepted.directory), accepted.directory) : priorReview(options.runDir);
+  const previousDirectory = previous ? accepted?.directory ?? readdirSync(options.runDir).filter(name => name.startsWith('review-')).sort()
+    .map(name => join(options.runDir, name)).find(path => existsSync(join(path, 'findings.json'))) : undefined;
   const directory = join(options.runDir, `review-${Date.now()}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
   console.log(`${options.id}: landing ${options.head.slice(0, 12)}; report ${directory}`);
@@ -306,11 +453,10 @@ export async function land(options: LandOptions): Promise<void> {
         const results = await test(targets, directory);
         if (targets.some(file => results.get(file) !== 'passed')) throw new Error('committed review tests did not pass');
       }
-    } else if (previous || needsReview(options.kind, options.changedFiles ?? [])) {
+    } else if (previous || accepted || needsReview(options.kind, options.changedFiles ?? [])) {
       const findings = previous?.findings ?? await (options.review ?? reviewBranch)({ ...options, permittedFiles: beforeReview.permitted, directory });
       // The report records the one completed reviewer pass even if validation or QA is interrupted.
-      const reportFile = previous ? readdirSync(options.runDir).filter(name => name.startsWith('review-')).sort()
-        .map(name => join(options.runDir, name, 'findings.json')).find(existsSync)! : join(directory, 'findings.json');
+      const reportFile = join(previousDirectory ?? directory, 'findings.json');
       writeFileSync(reportFile, JSON.stringify({ findings }, null, 2));
       options.checkpoint?.();
       if (git(options.worktree, ['rev-parse', 'HEAD']).stdout.trim() !== head
@@ -360,6 +506,9 @@ export async function land(options: LandOptions): Promise<void> {
     if (JSON.stringify(afterReview.permitted.filter(file => !targets.includes(file))) !== JSON.stringify(beforeReview.permitted.filter(file => !targets.includes(file)))) {
       throw new Error('scope changed during review; review again');
     }
+    const state = landingState(options.runDir);
+    state.accepted = { head, brief: options.brief, directory: previousDirectory ?? directory };
+    saveLandingState(options.runDir, state);
     await options.merge(afterReview.permitted, head);
     if (afterReview.permitted.length) {
       console.log(`${options.id}: permitted unclaimed files:\n  ${afterReview.permitted.join('\n  ')}`);

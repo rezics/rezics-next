@@ -12,7 +12,8 @@ import { landedBoundary, prepareCompositionMerge, compositionSyntaxFailure, type
 import { historyIntroductions, parseBrief, parseFrontmatter } from './briefs.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { preMergeTypecheckGate, reinstallStaleDependencies, missingPinnedImage } from './typecheck-gate.ts';
-import { withGateLane } from './qa-slots.ts';
+import { withGateLane, type GateLaneOptions } from './qa-slots.ts';
+import { advanceLandingReview, finishLandingRebase, startLandingRebase } from './land.ts';
 
 export function readMergeEvents(): RecordedMerge[] {
   const eventPath = join(stateDir, 'merges.jsonl');
@@ -187,23 +188,31 @@ function refusalLine(message: string): string {
   return message.split('\n').map(line => line.trim()).find(Boolean) ?? message.trim();
 }
 
-function markConflict(task: Task, message: string): void {
+function markConflict(task: Task, message: string, kind: NonNullable<Task['mergeStop']>['kind'], landing: boolean): void {
   task.state = 'conflict';
   task.refusal = refusalLine(message);
+  task.mergeStop = { kind, message, landing };
 }
 
 /** Merge records a refusal on the task. A gate only prints it. */
-function recordRefusal(task: Task, message: string, gateOnly: boolean): string {
-  if (!gateOnly) markConflict(task, message);
+function recordRefusal(task: Task, message: string, gateOnly: boolean,
+  kind: NonNullable<Task['mergeStop']>['kind'] = 'task', landing = false): string {
+  if (!gateOnly) markConflict(task, message, kind, landing);
   return message;
 }
 
 export function clearRefusal(task: Task): void {
   delete task.refusal;
+  delete task.mergeStop;
 }
 
 export async function mergeTask(id: string, flags: Set<string>, expectedHead?: string,
-  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false): Promise<void> {
+  reviewGuard?: (task: Task) => void, landPermittedFiles?: readonly string[], gateOnly = false,
+  gateLane: GateLaneOptions = {}): Promise<void> {
+  const landing = landPermittedFiles !== undefined;
+  const runDir = join(stateDir, 'runs', id);
+  const refuse = (task: Task, message: string, kind: NonNullable<Task['mergeStop']>['kind'] = 'task') =>
+    recordRefusal(task, message, gateOnly, kind, landing);
   // Return the refusal so withLedger writes `conflict` before the error is thrown. A throw inside the
   // callback would discard the state change, and main would stay eligible for a fast-forward retry.
   const prepareMerge = (ledger: Ledger): string | PreparedMerge | undefined => {
@@ -271,12 +280,22 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     if (history.length) {
       throw new Error(`${task.id} names tasks in the tree; task IDs belong in commit messages:\n  ${history.join('\n  ')}`);
     }
+    if (landing) startLandingRebase(runDir, task, git(root, ['rev-parse', 'main']));
     const rebase = spawnSync('git', ['rebase', 'main'], { cwd: task.worktree, encoding: 'utf8' });
     if (rebase.status !== 0) {
       const conflicted = git(task.worktree, ['diff', '--name-only', '--diff-filter=U'], true);
       git(task.worktree, ['rebase', '--abort'], true);
+      if (landing && !existsSync(join(git(task.worktree, ['rev-parse', '--absolute-git-dir']), 'rebase-merge'))
+        && !existsSync(join(git(task.worktree, ['rev-parse', '--absolute-git-dir']), 'rebase-apply'))) finishLandingRebase(runDir);
       const message = `${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').filter(Boolean).join('\n  ')}`;
-      return recordRefusal(task, message, gateOnly);
+      if (!conflicted && /index\.lock['"]?:\s*File exists/i.test(rebase.stderr)) {
+        return refuse(task, `${task.id} rebase stopped waiting for index.lock:\n${rebase.stderr}`, 'wait');
+      }
+      return refuse(task, message);
+    }
+    if (landing) {
+      advanceLandingReview(runDir, git(task.worktree, ['rev-parse', 'HEAD']));
+      finishLandingRebase(runDir);
     }
     // Union merge concatenates both sides. Drop duplicate `.use()` lines and a mid-chain `;` on the task
     // branch, then parse. A composition root that still does not parse is `conflict` and is not merged.
@@ -288,7 +307,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     const prepared = prepareCompositionMerge([...originals].map(([file, source]) => ({ file, source })));
     if (!prepared.fastForward) {
       const message = `${task.id} composition root does not parse; not merging:\n  ${prepared.error}`;
-      return recordRefusal(task, message, gateOnly);
+      return refuse(task, message);
     }
     for (const file of prepared.files) {
       const path = join(task.worktree, file.file);
@@ -309,7 +328,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     if (failures.length) {
       for (const [file, source] of originals) writeFileSync(join(task.worktree, file), source);
       const message = `${task.id} composition root does not parse; not merging:\n  ${failures.join('\n  ')}`;
-      return recordRefusal(task, message, gateOnly);
+      return refuse(task, message);
     }
     if (git(task.worktree, ['status', '--porcelain', '--', 'services/main/src'], true)) {
       git(task.worktree, ['commit', '-q', '-am', 'Normalize Main composition roots after rebase (goalctl)']);
@@ -319,7 +338,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     catch (error) { normalization = error instanceof Error ? error.message : String(error); }
     if (typeof normalization === 'string') {
       const message = `${task.id} migration normalization refused; not merging:\n  ${normalization}`;
-      return recordRefusal(task, message, gateOnly);
+      return refuse(task, message);
     }
     if (normalization.length) {
       for (const rename of normalization) {
@@ -330,6 +349,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     }
     const before = git(root, ['rev-parse', 'HEAD']);
     const after = git(root, ['rev-parse', task.branch]);
+    if (landing) advanceLandingReview(runDir, after);
     const eventPath = join(stateDir, 'merges.jsonl');
     const events = existsSync(eventPath) ? readFileSync(eventPath, 'utf8').split('\n').filter(Boolean)
       .map(line => JSON.parse(line) as MergeEvent) : [];
@@ -367,17 +387,31 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     preMergeUnitGate(merge.worktree, root, merge.before, merge.sharers, skipUnits, gatedFiles);
   // Regeneration stays outside the lane. Type check and unit work share one lease, and each side's
   // budget starts inside that work, after the wait.
-  const onLane = <T>(work: () => Promise<T>): Promise<T> => withGateLane(() => work(), { command: laneCommand });
+  const onLane = async <T>(work: () => Promise<T>): Promise<T> => {
+    let entered = false;
+    try {
+      return await withGateLane(() => { entered = true; return work(); }, { ...gateLane, command: laneCommand });
+    } catch (error) {
+      if (!entered && landing) await withLedger(ledger => refuse(taskOf(ledger, id),
+        error instanceof Error ? error.message : String(error), 'wait'));
+      throw error;
+    }
+  };
   const gate = async (merge: PreparedMerge): Promise<string | undefined> => {
+    const regenerate = () => {
+      const failure = regenerateGeneratedOutputs(merge);
+      if (!failure && landing) advanceLandingReview(runDir, merge.after);
+      return failure;
+    };
     const installed = reinstallStaleDependencies(merge.worktree);
     if (installed) return installed;
     const unbuilt = missingPinnedImage(merge.worktree, root);
     if (unbuilt) return unbuilt;
     if (merge.surface) return preMergeSurfaceGate(merge.worktree, merge.before, merge.surface, merge.committed, gatedFiles, {
-      generate: async () => regenerateGeneratedOutputs(merge) ?? missingPinnedImage(merge.worktree, root),
+      generate: async () => regenerate() ?? missingPinnedImage(merge.worktree, root),
       evidenceDirectory: join(stateDir, 'merges/surface-gate'),
     });
-    const generated = regenerateGeneratedOutputs(merge);
+    const generated = regenerate();
     if (generated) return generated;
     // Again after the regeneration: the pin is derived from the generated model, so a shape change moves it
     // in that commit and not in the worker's. Checked only before it, a recipe shape change put a pin
@@ -395,7 +429,9 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
       assertOwner(task);
       reviewGuard?.(task);
       const sharers = Object.values(ledger.tasks).filter(other => other.worktree === task.worktree && HOLDING.includes(other.state));
-      if (gateFailure) return recordRefusal(task, `${task.id} ${gateFailure}`, gateOnly);
+      // Classify the gate's result when recording the stop, never on a later land command.
+      if (gateFailure) return refuse(task, `${task.id} ${gateFailure}`,
+        gateFailure.startsWith('unit gate remains inconclusive') && !gateFailure.includes('introduced unit failures; not merging:') ? 'inconclusive' : 'task');
       const drifted = task.worktree !== current.worktree || task.branch !== current.branch
         || git(root, ['symbolic-ref', '--short', 'HEAD']) !== 'main'
         || git(root, ['rev-parse', task.branch]) !== current.after
@@ -405,12 +441,12 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
         || sharers.some(sharer => sharer.state === 'starting' || sharer.goal !== task.goal || sharer.branch !== task.branch || (!gateOnly && running(sharer)))
         || (!gateOnly && !['exited', 'conflict', 'stopped', 'merged'].includes(task.state));
       if (drifted) {
-        return recordRefusal(task, `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`, gateOnly);
+        return refuse(task, `${task.id} main, task branch or sharers changed during the unit gate; retry merge to rebase, normalize and test again`, 'main-moved');
       }
       if (landPermittedFiles !== undefined) {
         const refusal = landScopeRefusal(ledger, task, sharers, current.scopeFiles ?? changedFiles(task).committed,
           landPermittedFiles, regenerationOnlyFiles(task.worktree));
-        if (refusal) return recordRefusal(task, refusal, gateOnly);
+        if (refusal) return refuse(task, refusal);
       }
       const advance = fastForwardMain({
         head: () => git(root, ['rev-parse', 'HEAD']),
@@ -423,7 +459,7 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
       }, current, { gatedFiles, regated, retyped, typechecked: current.surface ? ['web'] : skipTypes ? [] : typecheckWorkspaces(current.committed) }, console.log, gateOnly);
       if (advance.kind === 'stopped') {
         if (advance.conflict && advance.message) {
-          return recordRefusal(task, `${task.id} ${advance.message}`, gateOnly);
+          return refuse(task, `${task.id} ${advance.message}`, 'main-moved');
         }
         if (advance.conflict && !gateOnly) task.state = 'conflict';
         return advance.message;

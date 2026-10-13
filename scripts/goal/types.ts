@@ -46,6 +46,8 @@ export interface Task extends Omit<Brief, 'worktree'> {
   loans?: string[];
   /** First line of the message that put the task in `conflict`. Absent in every other state. */
   refusal?: string;
+  /** Recorded at the stop, so land never guesses retry eligibility from a human message. */
+  mergeStop?: { kind: 'task' | 'inconclusive' | 'main-moved' | 'wait'; message: string; landing: boolean };
   /** One durable settlement claim for the latest worker attempt. */
   settlement?: {
     attempt: number; token: string;

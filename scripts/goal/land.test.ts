@@ -9,7 +9,7 @@ import { parseBrief, validateBrief, type Ledger, type Task } from './goalctl.ts'
 // A refused review pass is run again after a wait; the tests do not wait.
 process.env.GOAL_REVIEW_RETRY_MS = '1';
 
-function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[]; surface?: boolean } = {}) {
+export function repo(options: { result?: string; auto?: boolean; files?: Record<string, string>; paths?: string[]; surface?: boolean } = {}) {
   const dir = mkdtempSync(join(tmpdir(), 'goal-land-'));
   const git = (cwd: string, ...args: string[]) => {
     const result = spawnSync('git', args, { cwd, encoding: 'utf8' });
@@ -123,6 +123,11 @@ if (args.includes('--list')) {
 if (process.env.GOAL_TEST_LOG) appendFileSync(process.env.GOAL_TEST_LOG, JSON.stringify({ cwd: process.cwd(), args }) + '\\n');
 const phase = 'gate';
 ${drift}
+if (process.env.GATE_MAIN_ADVANCE) {
+  appendFileSync(process.env.LAND_MAIN + '/value.test.ts', '// main advances\\n');
+  const committed = Bun.spawnSync(['/usr/bin/git', 'commit', '-qam', 'Main advances during gate'], { cwd: process.env.LAND_MAIN });
+  if (committed.exitCode !== 0) throw new Error('fixture main commit failed');
+}
 const child = Bun.spawn(['bun', 'test', ...args.slice(2)], { stdout: 'inherit', stderr: 'inherit', env: testLogEnvironment(process.env) });
 process.exit(await child.exited);
 `);
@@ -130,11 +135,27 @@ process.exit(await child.exited);
   writeFileSync(join(dir, '.temp/bin/codex-1'), readFileSync(join(dir, '.temp/bin/codex')));
   for (const binary of ['codex', 'codex-1', 'task']) chmodSync(join(dir, '.temp/bin', binary), 0o755);
   const log = join(dir, '.temp/reviewer.log');
-  const run = (command = 'land', overrides: NodeJS.ProcessEnv = {}) => {
+  write('.temp/land-lane.ts', `import { landTask } from ${JSON.stringify(join(import.meta.dir, 'tasks.ts'))};
+let clock = 0;
+try { await landTask(process.argv[2]!, false, { lanes: 0, timeoutMs: 0, now: () => clock++ }); }
+catch (error) { console.error(error instanceof Error ? error.message : String(error)); process.exit(1); }`);
+  write('.temp/bin/git', `#!/usr/bin/env bun
+const args = process.argv.slice(2);
+if (process.env.INTERRUPT_REBASE && args[0] === 'rebase' && args[1] === 'main') {
+  const stopped = Bun.spawnSync(['/usr/bin/git', 'rebase', '--exec', 'false', 'main'], { cwd: process.cwd() });
+  if (stopped.exitCode !== 1) throw new Error('fixture did not stop inside a rebase');
+  process.kill(process.ppid, 'SIGKILL');
+  process.exit(0);
+}
+const result = Bun.spawnSync(['/usr/bin/git', ...args], { cwd: process.cwd(), stdout: 'inherit', stderr: 'inherit' });
+process.exit(result.exitCode);`);
+  chmodSync(join(dir, '.temp/bin/git'), 0o755);
+  const run = (command = 'land', overrides: NodeJS.ProcessEnv = {}, extraArgs: string[] = []) => {
     const env: NodeJS.ProcessEnv = { ...process.env, GOAL_ID: 'alpha', REVIEW_LOG: log, LEDGER_PATH: ledgerPath,
-      PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}`, ...overrides };
+      LAND_MAIN: dir, PATH: `${join(dir, '.temp/bin')}:${process.env.PATH}`, ...overrides };
     for (const key of ['GIT_DIR', 'GIT_WORK_TREE', 'GIT_COMMON_DIR', 'GIT_INDEX_FILE']) delete env[key];
-    return spawnSync('bun', [join(import.meta.dir, 'goalctl.ts'), command, task.id],
+    return spawnSync('bun', overrides.LANE_TIMEOUT ? [join(dir, '.temp/land-lane.ts'), task.id]
+      : [join(import.meta.dir, 'goalctl.ts'), command, task.id, ...extraArgs],
       { cwd: dir, env, encoding: 'utf8', timeout: 30_000 });
   };
   return { dir, worktree, runDir, log, base, task, run, git,

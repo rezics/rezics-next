@@ -11,10 +11,11 @@ import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { clearRefusal, mergeTask } from './merge.ts';
 import { cellReading, latestConfirmation, type ConfirmationRecord } from './confirmed.ts';
-import { land, handoffResult } from './land.ts';
+import { land, handoffResult, restoreLandingRebase } from './land.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFiles } from './handover.ts';
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
+import type { GateLaneOptions } from './qa-slots.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root,
@@ -350,7 +351,7 @@ export function landingAttempt(task: Task, read: (attempt: Attempt) => { text: s
   return task.attempts[at] ?? lastAttempt(task);
 }
 
-export async function landTask(id: string, step = false): Promise<void> {
+export async function landTask(id: string, step = false, gateLane: GateLaneOptions = {}): Promise<void> {
   const initial = taskOf(readLedger(), id);
   assertOwner(initial);
   const runDir = join(stateDir, 'runs', initial.id);
@@ -362,10 +363,14 @@ export async function landTask(id: string, step = false): Promise<void> {
       const task = taskOf(ledger, id);
       assertOwner(task);
       assertPrepared(task);
-      if (running(task) || task.state !== 'exited') throw new Error(`${task.id}: land requires an exited task (${task.state})`);
+      const retry = task.state === 'conflict' && task.mergeStop?.landing && task.mergeStop.kind !== 'task';
+      if (running(task) || (task.state !== 'exited' && !retry)) {
+        throw new Error(`${task.id}: land requires an exited task (${task.state})${task.mergeStop ? `\n${task.mergeStop.message}` : task.refusal ? `\n${task.refusal}` : ''}`);
+      }
       const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
         && other.worktree === task.worktree && HOLDING.includes(other.state));
       if (sharers.length) throw new Error(`${task.id}: land requires a task with its own branch; open sharers: ${sharers.map(other => other.id).join(', ')}`);
+      restoreLandingRebase(runDir, task);
       if (changedFiles(task).dirty.length) throw new Error(`${task.id}: land requires a clean worktree`);
       const attempt = landingAttempt(task);
       const result = readResult(attempt);
@@ -377,6 +382,7 @@ export async function landTask(id: string, step = false): Promise<void> {
         || git(task.worktree, ['symbolic-ref', '--short', 'HEAD']) !== task.branch) {
         throw new Error(`${task.id}: land stopped: worktree is not on the task branch`);
       }
+      if (retry) { task.state = 'exited'; clearRefusal(task); }
       return { task, attempt: attempt.n, handoff: result.text, brief: readFileSync(brief, 'utf8'),
         head, base: git(root, ['merge-base', 'main', task.branch]) };
     });
@@ -401,7 +407,7 @@ export async function landTask(id: string, step = false): Promise<void> {
           || readFileSync(briefPathOf(current) ?? '', 'utf8') !== snapshot.brief) {
           throw new Error(`${current.id}: task or brief changed during review; review again`);
         }
-      }, permittedFiles), close: () => closeTasks([id], 'verified') });
+      }, permittedFiles, false, gateLane), close: () => closeTasks([id], 'verified') });
   } finally {
     landingLease.release();
   }
