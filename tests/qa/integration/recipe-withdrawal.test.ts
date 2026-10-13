@@ -1,11 +1,12 @@
 import { expect, test } from 'bun:test';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { sourceFieldOccurrence } from '../../../services/main/src/modules/source/support-attach.ts';
+import type { FieldSupportResult } from '../../../services/main/src/modules/source/withdrawal.ts';
 
 test('RECIPE06: confirmed source withdrawal leaves independent support on imported Recipe occurrence', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through the isolated integration tier');
@@ -159,13 +160,170 @@ test('RECIPE06: confirmed source withdrawal leaves independent support on import
 
     const partial = await intake(['herbs', { '@type': 'PropertyValue',
       value: '1/2', name: 'flour', unitText: 'cup' }], `partial-${randomUUID()}`);
-    const partialImport = await h.json<{ supports: string[]; unboundSourceKeys: string[] }>(await h.call('POST',
-      `${recipePath}/imports`, { sourceObservation: partial.observation.observation,
-        expectedHead: second.revision, actingSubject: h.actor },
-      `recipe-import-${randomUUID()}`), 200);
-    expect(partialImport.supports).toHaveLength(1);
-    expect(partialImport.unboundSourceKeys).toEqual([
-      `${partial.observation.observation}#/recipeIngredient/1`,
-    ]);
+    const partialBody = { sourceObservation: partial.observation.observation,
+      expectedHead: second.revision, actingSubject: h.actor };
+    const partialKey = `recipe-import-${randomUUID()}`;
+    const partialImport = await h.json<{ revision: string; conversion: string;
+      sourceObservation: string; residualDigest: string; supports: string[];
+      unboundSourceKeys: string[] }>(await h.call('POST', `${recipePath}/imports`,
+      partialBody, partialKey), 200);
+    const retained = { recipeIngredient: ['herbs', { '@type': 'PropertyValue',
+      value: '1/2', name: 'flour', unitText: 'cup' }] };
+    const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
+    const residualDigest = digest(retained);
+    const observation = await h.json<{ observation: string; record: string;
+      rawBytesBase64: string; byteDigest: string; byteLength: number }>(await h.call('GET',
+      `/v1/sources/observations/${shortId(partial.observation.observation)}`), 200);
+    const bytes = Buffer.from(observation.rawBytesBase64, 'base64');
+    expect(observation).toMatchObject({ observation: partial.observation.observation,
+      record: partial.observation.record, byteDigest: residualDigest, byteLength: 102 });
+    expect(bytes.toString('utf8')).toBe(JSON.stringify(retained));
+    const resolved = JSON.parse(bytes.toString('utf8')) as {
+      recipeIngredient: [string, { '@type': string; value: string; name: string; unitText: string }] };
+    expect(resolved.recipeIngredient[0]).toBe('herbs');
+    expect(resolved.recipeIngredient[1].name).toBe('flour');
+    expect(resolved.recipeIngredient[1].value).toBe('1/2');
+    expect(resolved.recipeIngredient[1].unitText).toBe('cup');
+    expect(createHash('sha256').update(bytes).digest('hex')).toBe(residualDigest);
+    expect(partialImport).toMatchObject({ sourceObservation: observation.observation,
+      residualDigest, unboundSourceKeys: [] });
+    expect(partialImport.supports).toHaveLength(2);
+    type RecipePage = { revision: string; occurrences: Array<{ occurrence: string;
+      sourceKey?: string; qualifier: { type: string; originalText: { value: string; language: string };
+        name?: string; amount?: { numerator: number; denominator: number }; unitText?: string;
+        amountLexical?: string; textParts?: unknown; residual?: string } }> };
+    const compositionPath = `/v1/compositions/${shortId(created.structure)}`;
+    const acting = `?actingSubject=${encodeURIComponent(h.actor)}`;
+    const imported = await h.json<RecipePage>(await h.call('GET',
+      `${compositionPath}/revisions/${shortId(partialImport.revision)}${acting}`), 200);
+    expect(imported.revision).toBe(partialImport.revision);
+    const herbs = imported.occurrences.filter(row =>
+      row.sourceKey === `${observation.observation}#/recipeIngredient/0`);
+    const flour = imported.occurrences.filter(row =>
+      row.sourceKey === `${observation.observation}#/recipeIngredient/1`);
+    expect(herbs).toHaveLength(1);
+    expect(flour).toHaveLength(1);
+    const herbsOccurrence = herbs[0]!, flourOccurrence = flour[0]!;
+    expect(herbsOccurrence.occurrence).not.toBe(flourOccurrence.occurrence);
+    expect(herbsOccurrence.sourceKey).not.toBe(flourOccurrence.sourceKey);
+    expect(herbsOccurrence.qualifier.originalText).toEqual({ value: 'herbs', language: 'en' });
+    expect(herbsOccurrence.qualifier.residual).toBe(`sha256:${residualDigest}`);
+    expect(flourOccurrence.qualifier.originalText).toEqual({ value: 'flour', language: 'en' });
+    expect(flourOccurrence.qualifier.residual).toBe(`sha256:${residualDigest}`);
+    expect(flourOccurrence.qualifier).toMatchObject({ type: 'ingredient-line', name: 'flour',
+      amount: { numerator: 1, denominator: 2 }, unitText: 'cup' });
+    expect(flourOccurrence.qualifier).not.toHaveProperty('amountLexical');
+    expect(flourOccurrence.qualifier).not.toHaveProperty('textParts');
+    const supports = await Promise.all(partialImport.supports.map(async support =>
+      h.json<FieldSupportResult>(await h.call('GET',
+        `/v1/sources/field-supports/${shortId(support)}`), 200)));
+    expect(supports.map(support => support.support)).toEqual(partialImport.supports);
+    expect(new Set(partialImport.supports).size).toBe(2);
+    for (const [occurrence, pointer, scalar] of [
+      [herbsOccurrence, '/recipeIngredient/0', resolved.recipeIngredient[0]],
+      [flourOccurrence, '/recipeIngredient/1/name', resolved.recipeIngredient[1].name],
+    ] as const) {
+      const matching = supports.filter(support => support.occurrence === occurrence.occurrence);
+      expect(matching).toHaveLength(1);
+      expect(matching[0]).toMatchObject({ state: 'recorded', target: work.work,
+        context: created.structure, occurrence: occurrence.occurrence,
+        nativeRevision: partialImport.revision, sourceRecord: observation.record,
+        conversion: partialImport.conversion, grain: 'recipe', sourceField: 'recipeIngredient',
+        slot: 'structure-occurrence-v1#qualifier.originalText.value', valueDigest: digest(scalar),
+        sourceOccurrence: sourceFieldOccurrence(observation.observation, 'recipe', 'recipeIngredient', pointer) });
+    }
+    const flourSupport = supports.find(support => support.occurrence === flourOccurrence.occurrence)!;
+    expect(flourSupport.sourceOccurrence).not.toBe(sourceFieldOccurrence(observation.observation,
+      'recipe', 'recipeIngredient', '/recipeIngredient/1'));
+
+    // A fresh occurrence prevents a settled-support conflict from masking scalar equality.
+    const controlWork = await h.json<{ work: string; mainVersion: string }>(await h.call('POST',
+      '/v1/works', await h.authoredBody({ language: 'en', profile: 'metadata-only-v1',
+        title: 'Recipe lexical attachment control', semanticTypes: ['https://schema.org/Recipe'],
+        actingSubject: h.actor })), 201);
+    await h.grant(`work:edit:${controlWork.work}`, 'recipe.edit');
+    await h.grant(`work:edit:${controlWork.work}`, 'work.edit');
+    await h.grant(`work:read:${controlWork.work}`, 'work.read');
+    const control = await h.json<{ structure: string; revision: string }>(await h.call('POST',
+      '/v1/compositions', { profile: 'recipe-composition', work: controlWork.work,
+        mainVersion: controlWork.mainVersion, actingSubject: h.actor }, `recipe-${randomUUID()}`), 201);
+    const controlPath = `/v1/compositions/${shortId(control.structure)}`;
+    const controlInsert = await h.json<{ revision: string; occurrences: string[] }>(await h.call('POST',
+      `${controlPath}/changes`, { profile: 'recipe-composition', expectedHead: control.revision,
+        actingSubject: h.actor, operations: [{ op: 'insert', parent: control.structure,
+          position: 'last', role: 'ingredient', qualifier: flourOccurrence.qualifier,
+          sourceKey: flourOccurrence.sourceKey }] }, `recipe-control-${randomUUID()}`), 200);
+    const controlBefore = await h.json<RecipePage>(await h.call('GET', `${controlPath}${acting}`), 200);
+    expect(controlBefore.revision).toBe(controlInsert.revision);
+    expect(controlBefore.occurrences).toHaveLength(1);
+    expect(controlBefore.occurrences[0]!.occurrence).toBe(controlInsert.occurrences[0]!);
+    const attachKey = `recipe-support-${randomUUID()}`;
+    const attachBody = { profile: 'source-field-support-attachment-v1', target: controlWork.work,
+      slot: 'structure-occurrence-v1#qualifier.originalText.value',
+      occurrence: controlInsert.occurrences[0]!, context: control.structure,
+      sourceRecord: observation.record, conversion: partialImport.conversion,
+      grain: 'recipe', sourceField: 'recipeIngredient', expectedHead: controlInsert.revision,
+      actingSubject: h.actor };
+    expect(digest(resolved.recipeIngredient[1])).not.toBe(digest(resolved.recipeIngredient[1].name));
+    const rejected = await h.json<{ code: string; support?: unknown }>(await h.call('POST',
+      '/v1/sources/field-supports', { ...attachBody, sourcePointer: '/recipeIngredient/1',
+        sourceOccurrence: sourceFieldOccurrence(observation.observation, 'recipe',
+          'recipeIngredient', '/recipeIngredient/1') }, attachKey), 409);
+    expect(rejected.code).toBe('source_support_changed');
+    expect(rejected).not.toHaveProperty('support');
+    const controlAfter = await h.json<RecipePage>(await h.call('GET', `${controlPath}${acting}`), 200);
+    expect(controlAfter.revision).toBe(controlBefore.revision);
+    expect(controlAfter.occurrences).toEqual(controlBefore.occurrences);
+    // Reusing the failed key for a fresh scalar attachment proves no support was settled.
+    const validControl = await h.json<{ support: FieldSupportResult; replayed: boolean }>(await h.call('POST',
+      '/v1/sources/field-supports', { ...attachBody, sourcePointer: '/recipeIngredient/1/name',
+        sourceOccurrence: flourSupport.sourceOccurrence }, attachKey), 201);
+    expect(validControl.replayed).toBe(false);
+    expect(validControl.support).toMatchObject({ state: 'recorded',
+      occurrence: controlInsert.occurrences[0]!, valueDigest: digest('flour'),
+      nativeRevision: controlInsert.revision, sourceOccurrence: flourSupport.sourceOccurrence });
+
+    const replay = await h.json<typeof partialImport>(await h.call('POST', `${recipePath}/imports`,
+      partialBody, partialKey), 200);
+    expect(replay).toMatchObject({ revision: partialImport.revision,
+      conversion: partialImport.conversion, supports: partialImport.supports,
+      sourceObservation: observation.observation, residualDigest });
+    const flourWithdrawal = await h.json<{ support: FieldSupportResult }>(await h.call('POST',
+      '/v1/sources/withdrawals', { profile: 'source-support-withdrawal-v1',
+        support: flourSupport.support, expectedSupport: flourSupport.supportIdentity,
+        reason: 'Human confirmed the retained flour name is withdrawn' },
+      `recipe-withdraw-${randomUUID()}`), 201);
+    expect(flourWithdrawal.support).toMatchObject({ state: 'withdrawn',
+      support: flourSupport.support, supportIdentity: flourSupport.supportIdentity,
+      occurrence: flourOccurrence.occurrence, withdrawal: { nativeEffect: 'none' } });
+    for (const support of supports) {
+      const current = await h.json<FieldSupportResult>(await h.call('GET',
+        `/v1/sources/field-supports/${shortId(support.support)}`), 200);
+      expect(current).toMatchObject({ ...support,
+        state: support.support === flourSupport.support ? 'withdrawn' : 'recorded',
+        withdrawal: support.support === flourSupport.support
+          ? flourWithdrawal.support.withdrawal : null });
+    }
+    expect(await h.json<{ state: string; occurrence: string }>(await h.call('GET',
+      `/v1/sources/field-supports/${shortId(independent.support.support)}`), 200))
+      .toMatchObject({ state: 'recorded', occurrence: salt!.occurrence });
+    const currentNative = await h.json<RecipePage>(await h.call('GET', `${compositionPath}${acting}`), 200);
+    expect(currentNative.revision).toBe(partialImport.revision);
+    expect(currentNative.occurrences).toEqual(imported.occurrences);
+    const reader = await h.json<RecipePage & { structure: string }>(await h.call('GET',
+      `/v1/recipes/works/${shortId(work.work)}${acting}`), 200);
+    expect(reader.structure).toBe(created.structure);
+    expect(reader.revision).toBe(partialImport.revision);
+    expect(reader.occurrences.find(row => row.occurrence === flourOccurrence.occurrence))
+      .toEqual(flourOccurrence);
+    const prior = await h.json<RecipePage>(await h.call('GET',
+      `${compositionPath}/revisions/${shortId(second.revision)}${acting}`), 200);
+    expect(prior.revision).toBe(second.revision);
+    expect(prior.occurrences).toEqual(after.occurrences);
+    const importedAgain = await h.json<RecipePage>(await h.call('GET',
+      `${compositionPath}/revisions/${shortId(partialImport.revision)}${acting}`), 200);
+    expect(importedAgain.occurrences).toEqual(imported.occurrences);
+    expect(await h.json<typeof observation>(await h.call('GET',
+      `/v1/sources/observations/${shortId(observation.observation)}`), 200)).toEqual(observation);
   } finally { await h.close(); }
 }, 180_000);
