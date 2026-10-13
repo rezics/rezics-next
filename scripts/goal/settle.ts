@@ -6,12 +6,12 @@ import { activeGoals, briefPathOf, pidAlive, readLedger, root, stateDir, withLed
 import { capacityRefusal, lastAttempt, readResult, taskOf } from './launch.ts';
 import { handoffResult } from './land.ts';
 import { landingEnv } from './land-outside-turn.ts';
-import { finishAttempt, landTask, closeTasks, canVerifyReadOnly, resumeTask } from './tasks.ts';
+import { finishAttempt, landTask, closeTasks, canVerifyReadOnly, removeDispatchLeftover, resumeTask } from './tasks.ts';
 import { CAPACITY_WAIT_MS, engineOf, programOf, type Task } from './types.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { directoryLeaseHeld } from '../qa/process/lease.ts';
 import { classifyLandingRefusal } from './refusal.ts';
-import { pumpQueue } from './queue.ts';
+import { pumpQueue, type QueueLedger } from './queue.ts';
 import { scheduleConfirmation, type ScheduleConfirmationOptions } from './confirm.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
@@ -90,15 +90,37 @@ export function spawnSettlement(task: Task, token: string,
   } finally { closeSync(log); }
 }
 
+/** Whether the task's last attempt has ended with nobody settling it. A pass asks without the ledger lock, so
+ * that it takes the lock only for a task that needs it; `claim` asks again under the lock. */
+export function settlementOwed(task: Task): boolean {
+  if (!task.attempts.length || task.waitingResume || ['verified', 'cancelled'].includes(task.state)) return false;
+  const attempt = lastAttempt(task);
+  if (pidAlive(attempt.pid, programOf(engineOf(attempt)))) return false;
+  const previous = task.settlement;
+  return !(previous?.attempt === attempt.n && (previous.settledAt || processAlive(previous.owner)));
+}
+
+/** A preparation whose process died leaves a `starting` task that holds its claims and a worker's place for
+ * good. It is removed and its brief queued again; the reservation had already passed admission. */
+export function recoverDiedPreparations(ledger: QueueLedger,
+  alive: (owner: NonNullable<Task['preparer']>) => boolean = processAlive): Task[] {
+  const died = Object.values(ledger.tasks).filter(task => task.state === 'starting' && task.preparer && !alive(task.preparer));
+  for (const task of died) {
+    delete ledger.tasks[task.id];
+    const entry = (ledger.queue ??= {})[task.id];
+    if (entry) delete entry.owner;
+    else ledger.queue[task.id] = { id: task.id, brief: task.brief, ...task.goal ? { goal: task.goal } : {},
+      queuedAt: new Date().toISOString(), waits: [], allowArea: true };
+  }
+  return died;
+}
+
 /** The ledger lock publishes ownership before a child can inspect its token. */
 async function claim(id: string, detached: boolean, start: SpawnSettlement): Promise<Settlement | undefined> {
   return withLedger(ledger => {
     const task = taskOf(ledger, id);
-    if (!task.attempts.length || task.waitingResume || ['verified', 'cancelled'].includes(task.state)) return;
+    if (!settlementOwed(task)) return;
     const attempt = lastAttempt(task);
-    if (pidAlive(attempt.pid, programOf(engineOf(attempt)))) return;
-    const previous = task.settlement;
-    if (previous?.attempt === attempt.n && (previous.settledAt || processAlive(previous.owner))) return;
     attempt.endedAt ??= new Date().toISOString();
     if (task.state === 'running') task.state = 'exited';
     const token = randomUUID();
@@ -194,8 +216,15 @@ export async function settleTask(id: string, options: { capacityWaitMs?: number 
 export async function settlePass(options: { spawn?: SpawnSettlement; confirmation?: ScheduleConfirmationOptions } = {}): Promise<void> {
   const ledger = readLedger();
   const goals = activeGoals(ledger);
+  if (recoverDiedPreparations(structuredClone(ledger) as QueueLedger).length) {
+    for (const task of await withLedger((current: QueueLedger) => recoverDiedPreparations(current))) {
+      // An unshared half-prepared worktree is removed; one that other tasks use stays as it is.
+      try { removeDispatchLeftover(readLedger(), task.id, task.worktree, task.branch); } catch { /* still in use */ }
+      console.log(`${task.id}: its preparation died; queued again`);
+    }
+  }
   for (const task of Object.values(ledger.tasks)) {
-    if (task.goal && goals.includes(task.goal)) await claim(task.id, true, options.spawn ?? spawnSettlement);
+    if (task.goal && goals.includes(task.goal) && settlementOwed(task)) await claim(task.id, true, options.spawn ?? spawnSettlement);
   }
   await pumpQueue();
   scheduleConfirmation(options.confirmation ?? { repo: root, stateDir });

@@ -53,6 +53,8 @@ export interface Task extends Omit<Brief, 'worktree'> {
   refusal?: string;
   /** Recorded at the stop, so land never guesses retry eligibility from a human message. */
   mergeStop?: { kind: 'task' | 'inconclusive' | 'main-moved' | 'wait'; message: string; landing: boolean };
+  /** The process preparing a `starting` task. When it has died, a pass queues the brief again. */
+  preparer?: { pid: number; start?: string; boot?: string };
   /** One durable settlement claim for the latest worker attempt. */
   settlement?: {
     attempt: number; token: string;

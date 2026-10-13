@@ -17,6 +17,7 @@ import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFi
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 import type { GateLaneOptions } from './qa-slots.ts';
 import { gateRefusal } from './queue.ts';
+import { processIdentity } from '../qa/process/identity.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root,
@@ -122,7 +123,8 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
     const cleanupLedger = { ...ledger, tasks: { ...ledger.tasks } };
     const { worktree: _shared, ...claims } = brief;
     const task: Task = { ...claims, engine, brief: absolute, worktree, branch, base: '',
-      state: 'starting', attempts: [], ...brief.worktree ? { worktreeName: brief.worktree } : {},
+      state: 'starting', attempts: [], preparer: processIdentity(process.pid) ?? { pid: process.pid },
+      ...brief.worktree ? { worktreeName: brief.worktree } : {},
       ...goal ? { goal } : {}, historyGate: true };
     ledger.tasks[brief.id] = task;
     ledger.lastId = Math.max(ledger.lastId ?? 0, Number(brief.id.slice(2)));
@@ -157,6 +159,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
       current.attempts.push(launch(current, brief.effort, isClaudeCode(engine) ? randomUUID() : '',
         await workerPrompt(current, manager, engine, current.effort, handover), false, manager, engine));
       current.state = 'running';
+      delete current.preparer;
       if (ledger.reserved) delete ledger.reserved[brief.id];
       console.log(`${brief.id} started: ${modelOf(engine)}/${brief.effort} pid ${lastAttempt(current).pid} in ${worktree}`);
       console.log(`Next: run \`bun scripts/goal/goalctl.ts wait ${brief.id}\` in the background.`);
