@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { BRIEF_KINDS, type Ledger } from './types.ts';
+import { BRIEF_KINDS, type Ledger, type Task } from './types.ts';
 import { mechanismSectionErrors, parseBrief, parseFrontmatter, validateBrief } from './briefs.ts';
 import { fixtureSpawns } from './fixtures/spawn-deadline.ts';
 
@@ -25,6 +25,7 @@ function repository() {
   git('init', '-q', '-b', 'main');
   git('config', 'user.email', 'brief-lifecycle@example.test');
   git('config', 'user.name', 'Brief lifecycle test');
+  write('.gitignore', '.temp/\n');
   write('docs/goals/alpha/GOAL.md', '# Alpha\n');
   git('add', '.');
   git('commit', '-qm', 'Initial Goal');
@@ -97,6 +98,115 @@ console.log(JSON.stringify({ defaultEngine: DEFAULT_ENGINE, implicit: parseBrief
         expect(result.status, result.stderr).toBe(0);
         expect(JSON.parse(result.stdout)).toEqual({ defaultEngine: engine ?? 'sol', implicit: engine ?? 'sol', explicit: 'claude', errors: [] });
       }
+    } finally { repo.cleanup(); }
+  });
+});
+
+function closedBrief(repo: ReturnType<typeof repository>): Task {
+  const path = 'docs/goals/alpha/tasks/G-001.md';
+  repo.write(path, '---\nid: G-001\ntitle: Example\nkind: tooling\nengine: sol\neffort: high\n---\n\n## Outcome\n\nDelivered.\n');
+  const task: Task = { ...parseBrief(readFileSync(join(repo.dir, path), 'utf8')), goal: 'alpha',
+    brief: join(repo.dir, path), worktree: join(repo.dir, '.temp/absent-worker'), branch: 'goal/example',
+    base: repo.git('rev-parse', 'HEAD'), state: 'merged', attempts: [] };
+  repo.ledger.tasks[task.id] = task;
+  repo.save();
+  return task;
+}
+
+function documentationLinks(repo: ReturnType<typeof repository>) {
+  const checker = join(import.meta.dir, '../documentation');
+  return spawnSync('python3', ['-B', '-c',
+    'import sys; from pathlib import Path; sys.path.insert(0, sys.argv[1]); from check_docs import check; '
+      + 'root = Path(sys.argv[2]); errors = check(root, list((root / "docs").rglob("*.md")), navigation=False); '
+      + 'print("\\n".join(errors)); sys.exit(bool(errors))', checker, repo.dir],
+  { cwd: repo.dir, env: { PATH: process.env.PATH }, encoding: 'utf8' });
+}
+
+describe('brief archive links', () => {
+  test('reference links and multiline destinations become text, including links in a kept brief', () => {
+    const repo = repository();
+    try {
+      const task = closedBrief(repo);
+      const kept = 'docs/goals/beta/tasks/G-002.md';
+      repo.write(kept, '# Kept brief\n[Delivered](../../alpha/tasks/G-001.md)\n');
+      task.state = 'verified';
+      repo.ledger.tasks['G-002'] = { ...task, id: 'G-002', goal: 'beta', brief: join(repo.dir, kept) };
+      repo.ledger.goals!.beta = { manager: 'fixture', startedAt: '2026-10-13T00:00:00Z' };
+      repo.save();
+      repo.write('README.md', `[Kept](${kept})\n`);
+      const before = '# State\n[Explicit][done], [Done][] and [done].\n'
+        + '[done]: <tasks/G-%30%30%31.md#outcome> "Delivered"\n'
+        + '[line\nbreak](\n  tasks/G-001.md\n)\n[**work [label]**](tasks/G-001.md)\n';
+      const after = '# State\nExplicit, Done and done.\nline\nbreak\n**work [label]**\n';
+      repo.write('docs/goals/alpha/state.md', before);
+      repo.git('add', '.'); repo.git('commit', '-qm', 'Link to closed work');
+      const result = repo.run(['tidy']);
+      expect(result.status, result.stderr).toBe(0);
+      expect(existsSync(task.brief)).toBe(false);
+      expect(readFileSync(join(repo.dir, kept), 'utf8')).toBe('# Kept brief\nDelivered\n');
+      expect(readFileSync(join(repo.dir, 'docs/goals/alpha/state.md'), 'utf8')).toBe(after);
+      const links = documentationLinks(repo);
+      expect(links.status, links.stdout + links.stderr).toBe(0);
+    } finally { repo.cleanup(); }
+  });
+
+  test('close flattens links across Goals in the removal commit and preserves prose and examples', () => {
+    const repo = repository();
+    try {
+      const task = closedBrief(repo);
+      const before = '# State\n[G-001](tasks/G-001.md) and [delivered **work**](./tasks/G-001.md#outcome "Result").\n'
+        + '[root](</docs/goals/alpha/tasks/G-001.md?view=closed#outcome>)\n'
+        + 'Plain tasks/G-001.md and G-001 stay.\n'
+        + '`[example](tasks/G-001.md)`\n```md\n[example](tasks/G-001.md)\n```\n'
+        + '\\[escaped](GOAL.md)\n[Goal](GOAL.md)\n';
+      const after = '# State\nG-001 and delivered **work**.\nroot\n'
+        + 'Plain tasks/G-001.md and G-001 stay.\n'
+        + '`[example](tasks/G-001.md)`\n```md\n[example](tasks/G-001.md)\n```\n'
+        + '\\[escaped](GOAL.md)\n[Goal](GOAL.md)\n';
+      repo.write('docs/goals/alpha/state.md', before);
+      repo.write('docs/goals/beta/notes.md', '[Other Goal](../alpha/tasks/G-001.md)\n');
+      repo.git('add', 'docs'); repo.git('commit', '-qm', 'Record delivered work');
+      const original = repo.git('show', `HEAD:${task.brief.slice(repo.dir.length + 1)}`);
+      repo.write('peer.txt', 'Another change\n'); repo.git('add', 'peer.txt');
+      const closed = repo.run(['close', task.id, 'verified']);
+      expect(closed.status, closed.stderr).toBe(0);
+      expect(existsSync(task.brief)).toBe(false);
+      expect(readFileSync(join(repo.dir, 'docs/goals/alpha/state.md'), 'utf8')).toBe(after);
+      expect(readFileSync(join(repo.dir, 'docs/goals/beta/notes.md'), 'utf8')).toBe('Other Goal\n');
+      expect(repo.git('show', '--format=', '--name-status', 'HEAD').split('\n')).toEqual([
+        'M\tdocs/goals/alpha/state.md', 'D\tdocs/goals/alpha/tasks/G-001.md', 'M\tdocs/goals/beta/notes.md',
+      ]);
+      expect(repo.git('show', 'HEAD:docs/goals/alpha/state.md')).toBe(after.trim());
+      expect(repo.git('show', 'archive/goals:alpha-2026-10-13/tasks/G-001.md')).toBe(original);
+      expect(repo.git('diff', '--cached', '--name-only')).toBe('peer.txt');
+      const links = documentationLinks(repo);
+      expect(links.status, links.stdout + links.stderr).toBe(0);
+      const head = repo.git('rev-parse', 'HEAD');
+      expect(repo.run(['tidy']).status).toBe(0);
+      expect(repo.git('rev-parse', 'HEAD')).toBe(head);
+    } finally { repo.cleanup(); }
+  });
+
+  for (const [path, link] of [
+    ['README.md', '[Needed brief](docs/goals/alpha/tasks/G-001.md)\n'],
+    ['docs/guide.md', '[Needed brief](goals/alpha/tasks/G-001.md)\n'],
+  ]) test(`a link from ${path} keeps the brief and its Goal links`, () => {
+    const repo = repository();
+    try {
+      const task = closedBrief(repo);
+      repo.write(path!, link!);
+      repo.write('docs/goals/alpha/state.md', '[G-001](tasks/G-001.md)\n');
+      repo.git('add', '.'); repo.git('commit', '-qm', 'Keep an external citation');
+      const head = repo.git('rev-parse', 'HEAD');
+      const closed = repo.run(['close', task.id, 'verified']);
+      expect(closed.status, closed.stderr).toBe(0);
+      expect(closed.stdout).toContain('kept; cited by');
+      expect(existsSync(task.brief)).toBe(true);
+      expect(readFileSync(join(repo.dir, 'docs/goals/alpha/state.md'), 'utf8')).toBe('[G-001](tasks/G-001.md)\n');
+      expect(repo.git('rev-parse', 'HEAD')).toBe(head);
+      expect(repo.git('status', '--porcelain')).toBe('');
+      const links = documentationLinks(repo);
+      expect(links.status, links.stdout + links.stderr).toBe(0);
     } finally { repo.cleanup(); }
   });
 });

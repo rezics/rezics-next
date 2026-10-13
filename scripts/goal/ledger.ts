@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, existsSync, readdirSync, readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
-import { join, dirname, relative, basename } from 'node:path';
+import { join, dirname, relative, basename, resolve } from 'node:path';
 import { tmpdir, homedir } from 'node:os';
 import { HISTORY_EXEMPT, goalOfBriefPath, GOALS_DIR, goalFile, goalAreas, ownerRefusal, goalBriefFile, isGeneratedOutput, outOfScope, pathsOverlap } from './briefs.ts';
 import { type Ledger, type Task, modelOf, engineOf, type Brief, UNLANDED, HOLDING } from './types.ts';
@@ -56,8 +56,9 @@ export function archiveFiles(repo: string, files: readonly { path: string; conte
   }
 }
 
-/** Deletes files from the working tree and commits only their removal, leaving whatever else peers have staged. */
-export function removeFromTree(repo: string, paths: readonly string[], message: string): string | undefined {
+/** Deletes files and commits their removal with any accompanying link edits, leaving whatever else peers have staged. */
+export function removeFromTree(repo: string, paths: readonly string[], message: string,
+  edited: readonly string[] = []): string | undefined {
   const tracked = paths.filter(path => git(repo, ['ls-files', '--', path], true) !== '');
   for (const path of paths) {
     rmSync(join(repo, path), { force: true });
@@ -67,7 +68,7 @@ export function removeFromTree(repo: string, paths: readonly string[], message: 
     }
   }
   if (!tracked.length) return undefined;
-  git(repo, ['commit', '-q', '--only', '-m', message, '--', ...tracked]);
+  git(repo, ['commit', '-q', '--only', '-m', message, '--', ...tracked, ...edited]);
   return git(repo, ['rev-parse', 'HEAD']);
 }
 
@@ -302,6 +303,57 @@ export function landScopeRefusal(ledger: Ledger, task: Task, sharers: Task[], co
   return undefined;
 }
 
+/** Flatten authored Markdown links to the selected briefs; examples and non-link mentions keep their source text. */
+function withoutBriefLinks(repo: string, source: string, text: string, briefs: ReadonlySet<string>): string {
+  const pointsAtBrief = (destination: string): boolean => {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/|#)/i.test(destination)) return false;
+    try {
+      const path = decodeURIComponent(destination.split(/[?#]/, 1)[0]!.replace(/\\([()])/g, '$1'));
+      return briefs.has(path.startsWith('/') ? resolve(repo, path.slice(1)) : resolve(repo, dirname(source), path));
+    } catch { return false; } // A malformed escape cannot name a repository path.
+  };
+  // Fences are block syntax; keep whole prose runs so a link or code span can cross a line.
+  const runs: { prose: boolean; text: string }[] = [];
+  let fence: string | undefined;
+  for (const line of text.match(/[^\n]*\n|[^\n]+$/g) ?? []) {
+    const marker = /^ {0,3}(`{3,}|~{3,})/.exec(line)?.[1];
+    const prose = !fence && !marker;
+    if (marker && !fence) fence = marker;
+    else if (marker && fence && marker[0] === fence[0] && marker.length >= fence.length) fence = undefined;
+    const last = runs.at(-1);
+    if (last?.prose === prose) last.text += line;
+    else runs.push({ prose, text: line });
+  }
+  const references = new Set<string>();
+  const referenceKey = (label: string) => label.trim().replace(/\s+/g, ' ').toLowerCase();
+  const definition = /^ {0,3}\[([^\]\n]+)\]:[ \t]*(?:<([^>]+)>|(\S+))(?:[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\)))?[ \t]*\r?(?:\n|$)/gm;
+  const code = /(?<!`)(`+)(?!`)[\s\S]*?(?<!`)\1(?!`)/g;
+  const proseParts = (body: string, transform: (part: string) => string): string => {
+    let end = 0;
+    let result = '';
+    for (const match of body.matchAll(code)) {
+      result += transform(body.slice(end, match.index)) + match[0];
+      end = match.index + match[0].length;
+    }
+    return result + transform(body.slice(end));
+  };
+  for (const run of runs.filter(run => run.prose)) proseParts(run.text, part => {
+    for (const match of part.matchAll(definition)) {
+      if (pointsAtBrief(match[2] ?? match[3]!)) references.add(referenceKey(match[1]!));
+    }
+    return part;
+  });
+  // Include nested label brackets, escaped punctuation, angle destinations and optional titles.
+  const inline = /(?<![\\!])\[((?:\\.|[^\[\]\\]|\[[^\[\]]*\])*)\]\(\s*(?:<([^>]+)>|((?:\\.|[^\s()\\]|\([^()]*\))+))(?:\s+(?:"[^"]*"|'[^']*'|\([^)]*\)))?\s*\)/g;
+  const reference = /(?<![\\!])\[((?:\\.|[^\[\]\\]|\[[^\[\]]*\])*)\](?:\[([^\]]*)\])?(?![\[(])/g;
+  return runs.map(run => !run.prose ? run.text : proseParts(run.text, part => part
+    .replace(definition, (whole: string, label: string) => references.has(referenceKey(label)) ? '' : whole)
+    .replace(inline, (whole: string, label: string, angle: string | undefined, path: string | undefined) =>
+      pointsAtBrief(angle ?? path!) ? label : whole)
+    .replace(reference, (whole: string, label: string, id: string | undefined) =>
+      references.has(referenceKey(id || label)) ? label : whole))).join('');
+}
+
 /** Moves the briefs and handoffs of closed tasks to archive/goals and removes the briefs from the tree in one commit.
  * Briefs that tracked files still cite are kept and reported: the citing file must point at an owner first.
  * Idempotent, so `tidy` repairs a close that stopped part-way. */
@@ -316,6 +368,17 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
   });
   // One search for every candidate: the cost follows the tree once, not once per brief.
   const citations = treeMentions(root, candidates.map(item => item.relativePath), { exclude: [`${GOALS_DIR}/**`, 'scripts/goal/**'] });
+  const documents = candidates.length ? git(root, ['ls-files', '-z', '--', '*.md']).split('\0').filter(Boolean)
+    .filter(path => !path.startsWith('scripts/goal/'))
+    .map(path => ({ path, text: readFileSync(join(root, path), 'utf8') })) : [];
+  // Relative Markdown destinations outside the Goal tree can cite the same brief without spelling its root path.
+  for (const document of documents.filter(document => !document.path.startsWith(`${GOALS_DIR}/`))) {
+    for (const candidate of candidates) {
+      if (withoutBriefLinks(root, document.path, document.text, new Set([candidate.path])) !== document.text) {
+        citations.push(`${document.path}: links to ${candidate.relativePath}`);
+      }
+    }
+  }
   for (const { task, path, relativePath } of candidates) {
     const dir = task.goal ? archiveDirOf(ledger, task.goal) : legacyDir;
     if (!dir) { notes.push(`${task.id}: no Goal; pass tidy --legacy <archive directory>`); continue; }
@@ -332,7 +395,16 @@ export function archiveClosedBriefs(ledger: Ledger, tasks: readonly Task[], lega
     : `Archive ${removed.length} closed briefs`;
   const trailer = goals.size ? `\n\n${[...goals].map(goal => `Goal: ${goal}`).join('\n')}` : '';
   archiveFiles(root, files, `${subject}${trailer}`);
-  removeFromTree(root, removed, `${subject}\n\nThey are on ${ARCHIVE_BRANCH}.${trailer}`);
+  const removedTargets = new Set(removed.map(path => join(root, path)));
+  const edited: string[] = [];
+  for (const document of documents.filter(document => document.path.startsWith(`${GOALS_DIR}/`))) {
+    if (removedTargets.has(join(root, document.path))) continue;
+    const rewritten = withoutBriefLinks(root, document.path, document.text, removedTargets);
+    if (rewritten === document.text) continue;
+    writeFileSync(join(root, document.path), rewritten);
+    edited.push(document.path);
+  }
+  removeFromTree(root, removed, `${subject}\n\nThey are on ${ARCHIVE_BRANCH}.${trailer}`, edited);
   notes.push(`${subject} (on ${ARCHIVE_BRANCH}, removed from the tree)`);
   return notes;
 }
