@@ -1082,7 +1082,15 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     // Reuse the owner-cut drill's physical backup mechanism. The graph cut is
     // copied separately, so its original live graph can produce genuine later proof.
     const remote = `/tmp/rezics-owner-erasure-${suffix}`;
-    await timing.phase('source.pg-basebackup-export-verification', async () => {
+    const postgresRecoveryMaxLocks = await timing.phase('source.pg-basebackup-export-verification', async () => {
+      // Command-line settings are absent from the backup's configuration, but WAL
+      // recovery requires at least the primary's lock-table capacity in every copy.
+      const { rows } = await source.account.query<{ maxLocks: number }>(
+        `SELECT current_setting('max_locks_per_transaction')::integer AS "maxLocks"`,
+      );
+      const maxLocks = rows[0]?.maxLocks;
+      if (typeof maxLocks !== 'number' || !Number.isSafeInteger(maxLocks) || maxLocks < 1)
+        throw new Error('physical fixture backup has no valid PostgreSQL recovery lock capacity');
       try {
         const copied = qa.compose(
           [
@@ -1111,6 +1119,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         );
         if (removed.status !== 0) throw new Error('physical fixture backup cleanup failed');
       }
+      return maxLocks;
     });
     sourceProofPhase = timing.begin('source.erasure-proof-and-retained-authority');
     let laterAdmission: LaterAdmissionEvidence | undefined;
@@ -1411,7 +1420,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
                 '-l',
                 logFile,
                 '-o',
-                `-h 127.0.0.1 -p ${port} -k ${socketDirectory}`,
+                `-h 127.0.0.1 -p ${port} -k ${socketDirectory} -c max_locks_per_transaction=${postgresRecoveryMaxLocks}`,
                 '-t',
                 '60',
                 '-w',
