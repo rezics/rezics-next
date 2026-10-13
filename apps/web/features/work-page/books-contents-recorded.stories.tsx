@@ -93,12 +93,13 @@ function pageAnswer(persona: AnswerPersona, label: string): ChapterAnswer {
 async function expectPage(canvasElement: HTMLElement, persona: AnswerPersona, label: string, phoneWidth: boolean) {
   const canvas = within(canvasElement);
   const answer = pageAnswer(persona, label);
-  const region = canvas.getByRole('region', { name: 'Contents' });
   const first = answer.items[0]!;
   const last = answer.items.at(-1)!;
   const firstLabel = first.labels?.[0]?.value ?? '';
   const lastLabel = last.labels?.[0]?.value ?? '';
+  // The loading region is a different node. Query Contents only after its first chapter is shown.
   await expect(canvas.findByText(firstLabel, { exact: true })).resolves.toBeVisible();
+  const region = canvas.getByRole('region', { name: 'Contents' });
   await expect(within(region).getByText(`${answer.count.value} on this page`)).toBeVisible();
   await expect(within(region).getAllByRole('listitem')).toHaveLength(answer.items.length);
   await expect(within(region).getByText(lastLabel, { exact: true })).toBeVisible();
