@@ -380,6 +380,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/classification-vocabulary",
+    "ids": [
+      "query:context",
+      "query:scheme"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/collection-definitions/{id}",
     "ids": [
       "path:id",

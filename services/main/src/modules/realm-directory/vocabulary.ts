@@ -7,6 +7,7 @@ import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_ISOLATE_POLICY,
   CLASSIFICATION_INHERIT_POLICY } from '../classification/context.ts';
 import { publicNamePage, type DirectoryAfter } from '../search/labels.ts';
 import { namePolicyPrincipal } from '../disclosure/viewer.ts';
+import { readRealmPolicy } from '../space/policy.ts';
 
 /** One bounded scan of active shared vocabulary labels and their definition heads. */
 export const SHARED_VOCABULARY_COST = { concepts: 256, labels: 2048, page: 20 } as const;
@@ -55,20 +56,28 @@ export async function readContextVocabulary(session: WorkReadSession,
     scheme: input.scheme ?? null, items: [] as { id: string; label: string }[], hasMore: false,
     nextCursor: null as string | null, sourcePosition: session.position,
     count: { value: 0, kind: 'exact-page' as const, total: null } });
-  if (!context) return empty();
-  if (!context.scope?.value || !context.head?.value) throw new WorkReadUnavailable('Classification context is incomplete');
+  if (context && (!context.scope?.value || !context.head?.value))
+    throw new WorkReadUnavailable('Classification context is incomplete');
+  // Probe the same bounded owner reads before distinguishing an absent context
+  // from a withheld one. A missing context never authorizes vocabulary hydration.
   const contextTargets: DisclosureTarget[] = [{ owner: 'graph', resource: input.context,
-    revision: context.head.value, component: 'record' }];
-  if (context.realm?.value) {
-    const realm = await session.realm(context.realm.value);
-    if (!realm.realmRevision) throw new WorkReadUnavailable('Context Realm revision is unavailable');
-    contextTargets.push({ owner: 'graph', resource: context.realm.value,
-      revision: realm.realmRevision, component: 'record' });
+    revision: context?.head?.value, component: 'record' }];
+  if (input.context !== GLOBAL_CLASSIFICATION_CONTEXT) {
+    const realmId = context?.realm?.value ?? input.context;
+    const read = () => readRealmPolicy(session.deps.environment, realmId);
+    const realm = await read();
+    session.observeDependency(`realm-policy:${realmId}`, realm, read);
+    if (context) {
+      if (!realm?.realmRevision) throw new WorkReadUnavailable('Context Realm revision is unavailable');
+      if (realm.visibility === 'private') return empty();
+      contextTargets.push({ owner: 'graph', resource: realmId,
+        revision: realm.realmRevision, component: 'record' });
+    }
   }
   const contextDecisions = await session.disclosure(contextTargets, 'search');
   if (contextDecisions.length !== contextTargets.length)
     throw new WorkReadUnavailable('Context disclosure is incomplete');
-  if (contextDecisions.some(decision => decision !== 'visible')) return empty();
+  if (!context || contextDecisions.some(decision => decision !== 'visible')) return empty();
   const page = await publicNamePage(session, 'concept', 'identity', CONTEXT_VOCABULARY_COST.candidates, after);
   const candidates = page.rows.filter(row => row.available);
   const rows = candidates.length ? await session.query(`SELECT ?concept ?head ?label WHERE {

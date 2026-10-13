@@ -10,6 +10,7 @@ const openApiPath = 'generated/openapi/main/public.json';
 
 /** Equality coverage. A row is `registered` only while it stays in this list. */
 export const registeredHiddenIdReads = [
+  'GET /v1/classification-vocabulary',
   'GET /v1/concepts/{id}',
   'GET /v1/exports/{export}',
   // Only the thread hidden/absent case is proved by realm-about-thread-read.test.ts;

@@ -211,6 +211,13 @@ test('a hidden id and an absent id get the same answer on the registered reads',
       reason: 'Set public discussion admission', settings: { visibility: 'public', reviewMode: 'open',
         reviewRequired: false, whoMaySubmit: 'granted', rules: [] },
     }));
+    await owner.grant(`classification:context:${threadRealm.realm}`, 'classification.context.configure');
+    const vocabularyContext = await createdJson<{ context: string; contextRevision: string }>(
+      await owner.send('POST', '/v1/classification-contexts', {
+        profile: 'classification-context-v1', realm: threadRealm.realm, actingSubject: owner.actor,
+      }));
+    const vocabularyPath = (context: string) => `/v1/classification-vocabulary?${new URLSearchParams({ context, limit: '1' })}`;
+    expect((await stack.call('GET', vocabularyPath(vocabularyContext.context))).status).toBe(200);
     const [threadTarget] = await targetRead(stack.env, { access: stack.access },
       session => resolveTargets(session, [threadAbout.work], 'discussion'));
     const aboutThreads = new RealmAboutThreadStore(stack.contentPool);
@@ -284,6 +291,14 @@ test('a hidden id and an absent id get the same answer on the registered reads',
         (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
         VALUES ($1,'governance:platform','urn:rezics:context:global','content',$2,'body',$3,'disclosure',$4,1,'restricted',1)`,
       [fenceId, selected.reply, replyDraft.revisionId, decisionId]);
+      await disclosureClient.query(`INSERT INTO access.moderation_decision_target
+        (decision_id,ordinal,owner,resource,component,scope_kind,revision,expected_head,effect)
+        VALUES ($1,2,'graph',$2,'record','exact_revision',$3,$3,'disclosure')`,
+      [decisionId, vocabularyContext.context, vocabularyContext.contextRevision]);
+      await disclosureClient.query(`INSERT INTO access.governance_enforcement
+        (id,authority_scope_id,context,owner,resource,component,revision,effect,decision_id,decision_ordinal,state,fence_epoch)
+        VALUES ($1,'governance:platform','urn:rezics:context:global','graph',$2,'record',$3,'disclosure',$4,2,'restricted',1)`,
+      [randomUUID(), vocabularyContext.context, vocabularyContext.contextRevision, decisionId]);
       await disclosureClient.query('UPDATE access.governance_case SET decision_head=$2,generation=1 WHERE id=$1', [caseId, decisionId]);
       await disclosureClient.query('COMMIT');
     } catch (error) {
@@ -294,6 +309,10 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     expect(hiddenThread.status).toBe(200);
     expect(await hiddenThread.json()).toEqual({ realm: threadRealm.realm, about: threadAbout.work, thread: null });
     expect(await aboutThreads.readThread(threadRealm.realm, noThreadAbout.work)).toBeNull();
+    const hiddenVocabulary = await stack.call('GET', vocabularyPath(vocabularyContext.context));
+    expect(hiddenVocabulary.status).toBe(200);
+    expect(await hiddenVocabulary.json()).toMatchObject({ context: vocabularyContext.context,
+      items: [], hasMore: false, nextCursor: null, count: { value: 0, kind: 'exact-page', total: null } });
 
     const http = async (method: string, path: string, body?: unknown, token?: string) => {
       const response = await stack.call(method, path, { token, body, ...(body ? { key: randomUUID() } : {}) });
@@ -322,6 +341,10 @@ test('a hidden id and an absent id get the same answer on the registered reads',
     const workId = local(hiddenWork.work);
     const realmId = local(realm.realm);
     const calls = new Map<string, { hidden: string; absent: string; call: (id: string) => Promise<Response> }>();
+    calls.set('GET /v1/classification-vocabulary', {
+      hidden: vocabularyContext.context, absent: `${ID}${absent}`,
+      call: (context) => http('GET', vocabularyPath(context)),
+    });
     for (const operation of registeredHiddenIdReads) {
       if (operation.startsWith('GET /v1/works/')) {
         const path = operation.slice('GET '.length);
