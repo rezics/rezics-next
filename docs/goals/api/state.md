@@ -23,13 +23,13 @@ G-2077 proves import, export and interrupted export through HTTP, including rest
 | --- | --- |
 | G-2076 / G-2077 | Verified and archived; leave both closed. Their initial refusal decisions are preserved by commits `c9c71d941` / `d818ba0bd`; archive removals `cf22444b9` / `798198d76` are authoritative |
 | G-2133 | Progress authority implementation landed (`895f84888`), foreign-Person denial proofs landed (`d70dbfaba`), and closed brief archived (`912680676`) during this checkpoint. Its decision remains in `9599d92d8:docs/goals/api/tasks/G-2133.md`; leave it closed |
-| [G-2134](tasks/G-2134.md) | Held continuation repair brief; dispatch belongs to G-2133's landing event because the declarations overlap |
+| G-2134 | Held continuation repair brief; dispatch belongs to G-2133's landing event because the declarations overlap |
 | G-2135 (landed, brief archived) | Dispatched outcome follow-up for same-Person reimport; no product code before the failure is qualified |
-| [G-2138](tasks/G-2138.md) | Dispatched single outcome prerequisite for ten Realm closure rows / 59 pending cells. Complete the public closure journey and all six-persona delivery assertions before a separate implementation worker repairs product code |
-| [G-2139](tasks/G-2139.md) | Dispatched independent Realm creation implementation: existing owner founding another Realm receives 403 instead of 201. Preserve unchanged six-persona tests, private settings, replay, enrolment and concurrent handle winner; one authority review |
+| G-2138 | Dispatched single outcome prerequisite for ten Realm closure rows / 59 pending cells. Complete the public closure journey and all six-persona delivery assertions before a separate implementation worker repairs product code |
+| G-2139 | Dispatched independent Realm creation implementation: existing owner founding another Realm receives 403 instead of 201. Preserve unchanged six-persona tests, private settings, replay, enrolment and concurrent handle winner; one authority review |
 | Other outcome work | Other landings account for the newer scope snapshot; their decisions and pending causes belong to separate events. Full task states were unavailable because of the ledger lock |
-| [G-2074](tasks/G-2074.md) | Merged/open after three attempts. Retained backup destination/compatibility remains unproved; final cap decision splits the remaining boundary. Gates no ordinary outcome row |
-| [G-2109](tasks/G-2109.md), [G-2110](tasks/G-2110.md), [G-2111](tasks/G-2111.md) | Exited design notes with Program rulings retained; no mechanism code dispatched by this checkpoint |
+| G-2074 | Merged/open after three attempts. Retained backup destination/compatibility remains unproved; final cap decision splits the remaining boundary. Gates no ordinary outcome row |
+| G-2109, G-2110, G-2111 | Exited design notes with Program rulings retained; no mechanism code dispatched by this checkpoint |
 
 Program's first covered mail and decision commit `9599d92d8` own the Books follow-up plan above. They supersede the two initial landing holds after fixing the gate. For a later inconclusive gate in an unchanged file, the recorded policy is one merge retry; close verified only on success, otherwise mail Program the filename without a worker round. That policy authorizes no action in this checkpoint.
 
