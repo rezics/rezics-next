@@ -26,9 +26,9 @@ areas:
 
 # Program
 
-Status: paused on 2026-10-13; this page is the plan the next start works from,
-and [state.md](state.md) is the checkpoint. The maintainer starts the
-supermanager himself, in termspaces ([Starting](#starting)).
+Status: running since 2026-10-13 09:39 UTC from this plan; [state.md](state.md)
+is the checkpoint. The maintainer started the supermanager in termspaces
+([Starting](#starting)).
 
 The program's manager is the **supermanager**. It runs no product work. It owns
 what decides whether the delivery Goals are efficient: the scope, the
@@ -320,7 +320,7 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | Task | Outcome |
 | --- | --- |
 | N0 | The regression of 2026-10-13 on `main` is read: its failures are clustered by first error line with no model, the clusters the run caused itself (a host shared with workers, an agent's environment) are rerun alone, and each cluster that remains is a pending cell of a row or one task of the Goal that owns it. [state.md](state.md) has the counts |
-| N1 | One Books row is proved from end to end by the program: its declaration, its six outcome tests through the persona harness, landed through the gates, and `status` shows 1 of 67. It removes what stopped the pilots (the guard that cannot follow the loader's import, the harness's missing read) |
+| N1 | One Books row is proved from end to end by the program: its declaration, its six outcome tests through the persona harness, landed through the gates, and `status` shows 1 of 67. It removes what stopped the pilots: the guard that cannot follow the loader's import. The harness's missing read (`idempotency-key` on a GET) lands with the api row that needs it, because the api draft holds that change unlanded and `dispatch` refuses a second task on the file |
 | N2 | `scripts/goal/goalctl.ts` is split along its commands, with no change of behaviour, so that tooling tasks stop sharing one file of 6,300 lines |
 | N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions). A manager session that is still resumed compacts at 300,000 |
 | N4 | `goalctl` maintains termspaces: it registers and removes the window of every turn and worker, `status` names each one's window, and nothing of a Goal runs on another tmux server |
@@ -329,7 +329,7 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N7 | Main's scheduled run is the judge: `status` prints the rows the last run on `main` confirmed beside the rows declared; a bounded audit tries each newly proved row as its personas and reports only with a failing test; a fault reopens the cell for its owner, who can acknowledge it and cannot clear it |
 | N10 | The harness does what needs no decision in a worker's task. It hands the worker the files, tests and operations the brief names before the first step; `task goal -- check` runs types, lint, the task's tests and the guards in one blocking call and prints only what failed; at a handoff the harness itself commits, rebases onto the current `main` and runs the merge's checks in the gate's environment, and a refusal goes back to the same session as the failure alone. A worker never waits on a command, never commits and never learns of a refusal from a manager. Accepted on a comparison: five landed tasks of one kind done again this way, tokens and steps for each beside the first time. Over 2026-10-11 and 2026-10-12, 39% of worker tokens went to steps with no decision |
 | N11 | The efficiency audit runs by itself: `task goal -- efficiency` prints the measures since the last audit from the session logs and the ledger, keeps each audit's figures, and every three hours while workers run starts the researcher from a standing brief; `status` shows the last audit's pace against the yardstick |
-| N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
+| N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API. The module is built beside N2 and run as `bun scripts/goal/notify.ts`; its commands are wired into `task goal --` by the first task that changes the command switch after N2 |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
 N0 comes first and needs no worker until its clusters are known. N10 and N11
