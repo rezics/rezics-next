@@ -1,41 +1,52 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md). Started by the program on 2026-10-13 15:34 UTC
-with the work that does not wait for the erasure contract; the carried table below
-was written on 2026-10-12 from the trust-ops manager's end-of-run table, archived at
-`archive/goals:program-2026-10-06/study-2026-10-12/`.
+The checkpoint for [this Goal](GOAL.md), recording decisions for
+`start:961009ed-8838-4fb1-af46-04f649cb4562`,
+`mail:e5a72312-a305-476b-b480-a6709559c8dc` and
+`mail:40fb4148-0a07-41a7-b296-d94df3ce4daa` under
+`checkpoint:ac46ef98-145e-4db4-b270-4fa7ba3e4884`.
 
 | Field | State |
 | --- | --- |
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | Nothing yet |
 | Fixture | The small physical fixture `fx-small-a3a906c1c1b7`, built at `main` 1e05bf2d4 |
+| Measures (`task goal -- status`) | First-attempt share 100% (2/2); no landed-task median yet; 2.3M input / 10.2k output tokens; tokens per proved row unavailable; no recorded refusals |
 
-**Direction from the program.** Start with what is independent of the erasure
-service: (1) the release payload and image start Main (D026, the Release image
-row); (2) the fault-recovery drills get the Fuseki they ask for (D016, D075,
-D109) and the campaign fixture's evidence (D108); (3) the Access recovery
-classification (`g-2025`) is reviewed and landed, since it gates the restore
-drills, then the independent physical restore (`g-1776`) and the drill schedule
-(`g-1775`). The erasure rows wait for the api Goal's composition hunk; ask the
-api manager by mail when it lands. One brief for each cause, the drill written
-first; heavy drills are bounded by the QA slots, so brief freely. A brief that
-the tool refuses is corrected in the same turn.
+## Work in progress
+
+| Work | Decision and next action |
+| --- | --- |
+| G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
+| G-2203, disposable Fuseki support (D016, D075, D109) | Running, first attempt. Capture container logs and failing startup/restart, then prove readiness and explicit restart with the selected content-addressed image; keep erasure assertions intact |
+| G-2205, campaign fixture evidence (D108) | Queued behind G-2203. Capture the actual readiness/compatibility mismatch on the retained small fixture and fix only fixture consumption. Missing producer evidence or API composition is a partial handoff |
+| Access recovery classification | API owns the sole review and landing through `5bb07365f` in G-2214, including owner operations. The handled status mail reports admission refused pending Program's dated Design-note reading; API already requested that reading. No accepted landing revision is recorded |
+| Erasure composition | API owns the composition area; the handled owner queries found no live file claimant. API was sent the archived G-2062 Outcome item 4 source and real-composition Media case: the production constructor must receive `mediaObjects`. This was never implemented in the archived run; no accepted revision is recorded |
+
+**Next action.** Decide G-2202 and G-2203 on their handoffs; G-2205 follows
+G-2203. Independent physical restore and scheduling start only from API's
+actual accepted Access main revision. Full erasure proofs also require API's
+separate accepted composition revision. API retains both notifications;
+operations creates no competing adoption or review. This checkpoint grants no
+new worker work or proof. The measured first-attempt share does not trigger
+the below-half dispatch stop.
 
 ## Carried work
 
-Unmerged work is kept as commits under `refs/archive/2026-10-12/goal/<task>`.
-Each item becomes a drill written first, or is dropped.
+Carried from the trust-ops end-of-run table at
+`archive/goals:program-2026-10-06/study-2026-10-12/`; unmerged commits are under
+`refs/archive/2026-10-12/goal/<task>`. Each item becomes a drill written first,
+or is dropped.
 
 | Work | Where it stands | What is left |
 | --- | --- | --- |
-| Access recovery classification (`g-2025`) | 390 tables classed; the last review (four P1, sixteen P2) predates two further rounds that report every finding fixed; no review ran after them | Review and land; then let journal-bound custody transitions compare as base plus authenticated transition. This gates everything below |
+| Access recovery classification (`g-2025`) | 390 tables classed; last review predates two reported fix rounds | API's G-2214 reviews and lands; wait for its accepted revision |
 | Erasure reconcile and operator step (`g-1793`) | Blocked on the row above; no commits | Start after it |
 | Erasure proofs on live storage, backup and replay (`g-1794` to `g-1797`) | Test files written before the erasure core was on `main`; last runs red, not re-run | Rebase and run once each; they also wait for the erasure service's composition hunk in the [api](../api/state.md) Goal |
 | Independent physical restore (`g-1776`) | Both drills stop before child restore on "base Access row changed", the class the first row fixes | Rebase and run on the small fixture after the first row lands |
 | Drill scheduling (`g-1775`) and the restore drill chain | One commit on a branch; three further steps were briefed and never started | Register the drills and run them serially |
 | Physical erasure of a deleted person | The tombstone owner is on `main`; two native gaps are named expected failures (the SHA-256 form of an operation id, author-prefix entries on surviving Works); the candidate Java is on tag `g1980-java-image-d-candidate` | The native purge and its proof, inside the 30-day retention window |
-| Release image | Governance imports the model registry at runtime; whether `infra/release/Dockerfile` copies the model tree was raised in a review and not verified | Build the release image and start Main from it |
+| Release image | Governance imports the model registry at runtime; Dockerfile model-tree inclusion was not verified | G-2202 proves the payload and actual release image startup |
 
 ## From the regression of 2026-10-13
 
