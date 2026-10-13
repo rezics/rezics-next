@@ -265,6 +265,10 @@ export interface ZoneSitePublicationReceipt extends ZoneSitePublicationSelection
   publishedThemeRevision?: string; publishedThemeActivation?: string;
 }
 
+const siteReceiptMetadata = ['zone', 'revision', 'routesRevision', 'navigationRevision', 'themeRevision',
+  'count', 'admissionId', 'digest', 'authorityEpoch', 'scope', 'dataEpoch', 'sequence',
+  'publishedThemeRevision', 'publishedThemeActivation', 'homeDocument', 'homeRevision', 'homeErased'] as const;
+
 /** Exact historical proof for Content settlement, independent of later republishing
  * or retirement. O(pages), one bounded receipt lookup, no Content body reads. */
 export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironment,
@@ -273,6 +277,8 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
     SELECT ?zone ?revision ?routesRevision ?navigationRevision ?themeRevision ?count
       ?admissionId ?digest ?authorityEpoch ?scope ?dataEpoch ?sequence ?binding ?page ?variant ?contentRevision ?language
       ?publishedThemeRevision ?publishedThemeActivation ?homeDocument ?homeRevision ?byteDigest ?homeErased WHERE {
+      { SELECT ${siteReceiptMetadata.map(field => `(?${field} AS ?receipt_${field})`).join(' ')}
+          ?binding ?page ?variant ?contentRevision ?language ?byteDigest WHERE {
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ;
         rv:outcome rv:Succeeded ; rv:structureOwner ?zone ; rv:structureRevision ?revision ;
         rv:sitePublicationRevision ?revision ; rv:routesRevision ?routesRevision ;
@@ -305,10 +311,22 @@ export async function readZoneSitePublicationReceipt(env: WorkActivationEnvironm
         FILTER NOT EXISTS { ?homeRevision rv:publishedPage ?foreignBinding .
           FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?foreignBinding } } }
         } })
+      } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows} }
+      OPTIONAL { SELECT ?firstBinding WHERE {
+        GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} rv:publishedPage ?firstBinding }
+      } ORDER BY STR(?firstBinding) LIMIT 1 }
+      BIND(!BOUND(?binding) || ?binding = ?firstBinding AS ?receiptMetadata)
+      ${siteReceiptMetadata.map(field =>
+        `BIND(IF(?receiptMetadata, ?receipt_${field}, ?receiptAbsent) AS ?${field})`).join('\n      ')}
     } ORDER BY STR(?binding) LIMIT ${ZONE_SITE_PUBLICATION_COST.receiptRows}`, ZONE_SITE_PUBLICATION_COST.receiptResponseBytes);
-  const rows = result.results?.bindings ?? [];
-  if (!rows.length) return null;
-  const first = rows[0]!;
+  const wireRows = result.results?.bindings ?? [];
+  if (!wireRows.length) return null;
+  const first = wireRows[0]!;
+  // Campaign metadata is emitted once, keeping all 32 exact selections under
+  // the same byte budget. Retain per-row overrides so ambiguous proof still fails.
+  const campaign = Object.fromEntries(siteReceiptMetadata.filter(field => first[field] !== undefined)
+    .map(field => [field, first[field]!]));
+  const rows = wireRows.map(row => ({ ...campaign, ...row }));
   const get = (key: string) => first[key]?.value;
   const homeErased = allowErasedHome && get('homeErased') === 'true';
   const metadata = ['zone', 'revision', 'routesRevision', 'navigationRevision', 'themeRevision',
