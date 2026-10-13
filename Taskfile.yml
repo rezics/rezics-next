@@ -417,6 +417,11 @@ tasks:
     cmds:
       - bun scripts/generate.ts --check
 
+  operation:
+    desc: Find Main API operation declarations, handlers and calling tests.
+    cmds:
+      - bun scripts/api/operation-index.ts {{.CLI_ARGS}}
+
   jena:check:
     desc: Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI.
     cmds:
