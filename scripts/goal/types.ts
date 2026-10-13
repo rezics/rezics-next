@@ -9,6 +9,8 @@ export interface Brief {
   id: string; title: string; effort: string; engine?: Engine; cases: string[]; paths: string[];
   migrations: string[]; shared: string[]; depends: string[];
   kind?: BriefKind; rows?: string[];
+  /** Explicit proofs run together by the worker check command. */
+  tests?: string[];
   /** A shared worktree name within a Goal: its tasks work concurrently in one tree and branch. */
   worktree?: string;
   /** Opt in to review, merge and close when the worker's waiter sees a done handoff. */
