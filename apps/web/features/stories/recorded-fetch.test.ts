@@ -91,6 +91,26 @@ test('pending is a recorded 202, including its headers and answer', async () => 
   await expect(fetcher(`https://offline.invalid${sample.path}`, { method: 'POST' })).rejects.toThrow('Unmatched');
 });
 
+test('a completed create or removal supplies a populated state, never a pending one', async () => {
+  const created: AnswerSample = { label: 'created', operationId: 'transport', method: 'POST',
+    path: '/v1/transport', body: { title: 'one' }, status: 201,
+    headers: { 'content-type': 'application/json', location: '/v1/transport/opaque' }, answer: { id: 'opaque' } };
+  const removed: AnswerSample = { label: 'removed', operationId: 'transport', method: 'DELETE',
+    path: '/v1/transport/opaque', status: 204, headers: {}, answer: null };
+  const record = recordWith(created, removed);
+  const { fetcher } = replay(record, [{ label: 'created', state: 'populated' }, { label: 'removed', state: 'empty' }]);
+  const response = await fetcher(`https://offline.invalid${created.path}`, { method: 'POST', body: JSON.stringify(created.body) });
+  expect(response.status).toBe(201);
+  expect(response.headers.get('location')).toBe('/v1/transport/opaque');
+  expect(await response.json()).toEqual(created.answer);
+  const gone = await fetcher(`https://offline.invalid${removed.path}`, { method: 'DELETE' });
+  expect(gone.status).toBe(204);
+  expect(await gone.text()).toBe('');
+  for (const label of ['created', 'removed']) {
+    expect(() => recordedFetch(record, 'visitor', [{ label, state: 'pending' }])).toThrow('cannot supply');
+  }
+});
+
 test('an unrecorded state, label, persona or ambiguous request cannot be selected', () => {
   for (const state of ['pending', 'error'] as const) {
     expect(() => recordedFetch(bookRecord, 'visitor', [{ label: populated.label, state }])).toThrow('cannot supply');

@@ -26,7 +26,7 @@ function requestKey(path: string): string {
 }
 
 /** Each mount owns a transport and disposes it at teardown. Labels choose answers;
- * the caller knows which 200 sample is empty. No domain rules run in this fetch.
+ * the caller knows which completed sample is empty. No domain rules run in this fetch.
  * JSON bodies and query parameters match by value; the path retains its exact wire spelling. */
 export function recordedFetch(
   record: AnswerRecord,
@@ -41,8 +41,9 @@ export function recordedFetch(
     const found = record.personas[persona].filter(sample => sample.label === label);
     if (found.length !== 1) throw new Error(`Expected one recorded sample: ${record.row}/${persona}/${label}`);
     const sample = found[0]!;
+    // A create answers 201 and a removal 204: both are complete, unlike the 202 of a command still running.
     const admitted = state === 'loading' ||
-      ((state === 'populated' || state === 'empty') && sample.status === 200) ||
+      ((state === 'populated' || state === 'empty') && [200, 201, 204].includes(sample.status)) ||
       (state === 'pending' && sample.status === 202) ||
       (state === 'error' && sample.status >= 400 && sample.status <= 599);
     if (!admitted) throw new Error(`Recorded sample ${label} (${sample.status}) cannot supply ${state}`);
