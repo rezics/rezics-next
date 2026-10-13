@@ -172,6 +172,19 @@ describe('durable Goal mail', () => {
       }
     } finally { f.cleanup(); }
   });
+  test('mail CLI inbox lists what still waits and a Goal\'s acknowledged mail only with --all', () => {
+    const f = fixture();
+    const file = join(f.dir,'request.md'); writeFileSync(file,'Please act');
+    const options = {...f.options,callerGoal:'launch'};
+    try {
+      const sent = JSON.parse(mailCommand(['send','program','--file',file,'--key','waits'],options)[0]!);
+      expect(mailCommand(['inbox','program'],options)).toHaveLength(1);
+      mailCommand(['ack',sent.id,'--goal','program'],options);
+      expect(mailCommand(['inbox','program'],options)).toEqual([]);
+      expect(JSON.parse(mailCommand(['inbox','--all','program'],options)[0]!)).toMatchObject({id:sent.id,acknowledged:true});
+      expect(()=>mailCommand(['inbox','program','kernel','--all'],options)).toThrow('one Goal');
+    } finally { f.cleanup(); }
+  });
   test('committed mail survives closing the sender; each Goal acknowledges separately and retries preserve the receipt', () => {
     const f = fixture();
     try {

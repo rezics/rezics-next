@@ -47,10 +47,14 @@ export function mailCommand(args: string[], options: {stateDir: string; goals: s
         flags['--deadline'] === undefined ? undefined : Number(flags['--deadline'])))];
     }
     if (action === 'inbox') {
-      if (rest.length > 1) throw new Error('mail inbox accepts one Goal');
-      const goal = rest[0] ?? options.callerGoal;
+      // A turn reads what still waits; a Goal's acknowledged mail is its history, asked for by name.
+      const all = rest.includes('--all');
+      const goals = rest.filter(argument => argument !== '--all');
+      if (goals.length > 1) throw new Error('mail inbox accepts one Goal');
+      const goal = goals[0] ?? options.callerGoal;
       if (!goal) throw new Error('mail inbox needs <goal> or GOAL_ID');
-      return store.inbox(goal).map(entry => JSON.stringify(entry));
+      return store.inbox(goal).filter(entry => all || (entry as { acknowledged?: boolean }).acknowledged !== true)
+        .map(entry => JSON.stringify(entry));
     }
     if (action === 'ack') {
       const flags = namedOptions(rest.slice(1), ['--goal']);
@@ -58,7 +62,7 @@ export function mailCommand(args: string[], options: {stateDir: string; goals: s
       if (!goal || !rest[0]) throw new Error('mail ack <id> needs GOAL_ID or --goal <goal>');
       return [JSON.stringify(store.ack(goal, rest[0]))];
     }
-    throw new Error('mail needs send <goal> --file <path> --key <retry-key> [--deadline <minutes>] | inbox [goal] | ack <id> [--goal <goal>]');
+    throw new Error('mail needs send <goal> --file <path> --key <retry-key> [--deadline <minutes>] | inbox [goal] [--all] | ack <id> [--goal <goal>]');
   } finally { store.close(); }
 }
 export function managerEvents(directory: string, goal: string, mail: GoalMailStore, repo = root): WakeEvent[] {

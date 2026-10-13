@@ -225,7 +225,7 @@ same native session when mail or a task exit arrives.
 Managers message each other through durable Goal mail:
 `task goal -- mail send <goal> --file <path> --key <unique-key> [--deadline <minutes>]`.
 Sending requires the caller's `GOAL_ID`, recorded as the sender. The same key
-never sends twice or extends its deadline. Read with `task goal -- mail inbox <goal>` and acknowledge
+never sends twice or extends its deadline. Read what still waits with `task goal -- mail inbox <goal>` (`--all` adds the acknowledged history) and acknowledge
 each message after acting on it with `task goal -- mail ack <id>`. The old
 `messages/<goal>.md` files are read-only history and still appear in the inbox
 view. Keep the same reserve as any manager: if its account nears its limit,

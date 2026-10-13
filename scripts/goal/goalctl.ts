@@ -204,7 +204,7 @@ async function main(argv: string[]): Promise<number> {
         + ' | gate <id> [--skip-unit-gate] [--skip-type-gate]'
         + ' | close <id>... verified|cancelled | tidy [--legacy <archive directory>]'
         + ' | status | usage | regress [--at <rev>] [--resume <run-id>] [--only <tiers>] [--integration-batches <n>]'
-        + ' | mail send <goal> --file <path> --key <key> [--deadline <minutes>] | mail inbox [goal] | mail ack <id> [--goal <goal>]'
+        + ' | mail send <goal> --file <path> --key <key> [--deadline <minutes>] | mail inbox [goal] [--all] | mail ack <id> [--goal <goal>]'
         + ' | coordinator [start <goal> --engine <codex|codex-1|claude> --effort <effort> [--model <id>]|enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <dir> --previous-owner-pid <pid> [--model <id>] [--tmux-socket <path>]|status|unenroll <goal>]'
         + ' | inbox [--ack <n>] | test [--heavy] <task test args> | slot [--heavy|--recovery] -- <command>');
       for (const fileName of commandFiles) {
