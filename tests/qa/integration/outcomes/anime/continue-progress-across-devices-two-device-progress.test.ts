@@ -7,12 +7,20 @@ import { personaSessions, type PersonaName, type PersonaSession, type PersonaSes
 
 setDefaultTimeout(90_000);
 let sessions: PersonaSessions;
+const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string }>();
+const failures: { request: unknown; status: number; answer: string }[] = [];
+const preparation = { durationMs: 0 };
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 type Work = { work: string; mainVersion: string };
 async function answer<T>(pending: Promise<Response>, status = 200): Promise<T> {
   const response = await pending;
   const raw = await response.text();
+  if (response.status !== status) {
+    failures.push({ request: requests.get(response), status: response.status, answer: raw });
+    await Bun.write(`.temp/anime-continue-progress-across-devices-two-device-progress-failures-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify({ preparation, failures }, null, 2));
+  }
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
 }
@@ -54,7 +62,18 @@ type Progress = { completed: boolean; version: number; position: string | null; 
 let show: Work, structure: string;
 const occurrences: string[] = [], targets: string[] = [];
 beforeAll(async () => {
+  const started = Date.now();
+  try {
   sessions = await personaSessions();
+  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const person = sessions[name], main = person.main;
+    person.main = async (method, path, body, key, options) => {
+      key ??= method === 'GET' ? undefined : randomUUID();
+      const response = await main(method, path, body, key, options);
+      requests.set(response, { method, path, body, key });
+      return response;
+    };
+  }
   const owner = sessions.owner;
   show = await publish('Original animation: Three lantern episodes');
   await grant(owner, 'semantic:create:root', 'semantic.change');
@@ -81,6 +100,11 @@ beforeAll(async () => {
     }));
   occurrences.push(...changed.occurrences);
   expect(occurrences).toHaveLength(3);
+  } finally {
+    preparation.durationMs = Date.now() - started;
+    await Bun.write(`.temp/anime-continue-progress-across-devices-two-device-progress-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify(preparation, null, 2));
+  }
 }, 180_000);
 const progressPath = (index = 0) => `/v1/compositions/${short(structure)}/occurrences/${short(occurrences[index]!)}/progress`;
 const read = (person: PersonaSession, index = 0) => answer<Progress>(person.main('GET', `${progressPath(index)}?${acting(person)}`));
@@ -100,23 +124,25 @@ async function isolated(person: PersonaSession, affected: PersonaSession) {
   await answer(person.main('PUT', `${path}/reader-status`, {
     actingSubject: affected.actingSubject, expectedVersion: 0, status: 'reading',
   }), 403);
-  // Progress reads select the caller Account; supplying another Person never selects their watched rows.
-  expect(await answer(person.main('GET', `${progressPath(2)}?${acting(affected)}`)))
-    .toMatchObject({ completed: false, version: 0 });
+  expect(await read(person, 2)).toMatchObject({ completed: false, version: 0, position: null });
+  const foreignPath = `${progressPath(2)}?${acting(affected)}`;
+  const foreign = await person.main('GET', foreignPath);
   const before = await answer(affected.main('GET', `${progressPath(2)}?${acting(affected)}`));
   const body = { actingSubject: affected.actingSubject, completed: true, expectedVersion: 0, position: null };
   const response = await person.main('PUT', progressPath(2), body);
-  if (response.status !== 403) {
     const persona = (['stranger', 'member', 'owner', 'moderator', 'operator'] as const)
       .find(name => sessions[name] === person)!;
     await Bun.write(`.temp/anime-continue-progress-across-devices-two-device-progress-${Bun.env.REZICS_QA_RUN_ID}-${persona}.json`,
-      JSON.stringify({ persona, request: { method: 'PUT', path: progressPath(2), body },
-        status: response.status, answer: await response.clone().json() }, null, 2));
-  }
-  await answer(Promise.resolve(response), 403);
+      JSON.stringify({ persona, get: { request: { method: 'GET', path: foreignPath },
+        status: foreign.status, answer: await foreign.clone().text() },
+        put: { request: requests.get(response),
+          status: response.status, answer: await response.clone().text() } }, null, 2));
   const after = await answer(affected.main('GET', `${progressPath(2)}?${acting(affected)}`));
   // The caller's Account progress must not project a last-read timestamp onto an uncontrolled Person.
   expect(after).toEqual(before);
+  await answer(Promise.resolve(response), 403);
+  // Retain the old expectation until the live uncontrolled-Person answer is qualified.
+  expect(await answer(Promise.resolve(foreign))).toMatchObject({ completed: false, version: 0 });
 }
 
 import { readFileSync } from 'node:fs';
@@ -150,7 +176,9 @@ async function secondDevice(person: PersonaSession): Promise<PersonaSession> {
       if (method !== 'GET') headers.set('idempotency-key', key ?? randomUUID());
       const request = (signal: AbortSignal) => fetch(`http://127.0.0.1:${Bun.env.MAIN_PORT}${path}`,
         { method, headers, signal, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-      return method === 'GET' ? outcomeResponse(request) : request(AbortSignal.timeout(30_000));
+      const response = await (method === 'GET' ? outcomeResponse(request) : request(AbortSignal.timeout(30_000)));
+      requests.set(response, { method, path, body, key: headers.get('idempotency-key') ?? undefined });
+      return response;
     } };
 }
 async function journey(name: PersonaName) {
@@ -188,10 +216,23 @@ async function journey(name: PersonaName) {
   await isolated(person, name === 'owner' ? sessions.member : sessions.owner);
 }
 
-outcomeTest(row, 'visitor', () => journey('visitor'));
-outcomeTest(row, 'stranger', () => journey('stranger'));
-outcomeTest(row, 'member', () => journey('member'));
-outcomeTest(row, 'owner', () => journey('owner'));
-outcomeTest(row, 'moderator', () => journey('moderator'));
-outcomeTest(row, 'operator', () => journey('operator'));
+const qualification: { persona: string; passed: boolean; error?: string }[] = [];
+async function qualify(name: PersonaName) {
+  try {
+    await journey(name);
+    qualification.push({ persona: name, passed: true });
+  } catch (error) {
+    qualification.push({ persona: name, passed: false, error: String(error) });
+    throw error;
+  } finally {
+    await Bun.write(`.temp/anime-continue-progress-across-devices-two-device-progress-qualification-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify({ preparation, qualification, failures }, null, 2));
+  }
+}
+outcomeTest(row, 'visitor', () => qualify('visitor'));
+outcomeTest(row, 'stranger', () => qualify('stranger'));
+outcomeTest(row, 'member', () => qualify('member'));
+outcomeTest(row, 'owner', () => qualify('owner'));
+outcomeTest(row, 'moderator', () => qualify('moderator'));
+outcomeTest(row, 'operator', () => qualify('operator'));
 

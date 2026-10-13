@@ -62,8 +62,26 @@ let tv: string, movie: string, draft: Work;
 const phrase = `Lanternanime${randomUUID().replaceAll('-', '')}`;
 const credentials = new Map<PersonaSession, Headers>();
 const formatAnswers: { persona: string; request: string; status: number; answer: string }[] = [];
+let preparationPopulation = 12;
+const preparationAnswers: { population: number; request: { method: string; path: string; body: unknown; key?: string }; status: number; answer: string }[] = [];
 beforeAll(async () => {
+  const started = Date.now();
+  try {
   sessions = await personaSessions();
+  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const person = sessions[name], main = person.main;
+    person.main = async (method, path, body, key, options) => {
+      key ??= method === 'GET' ? undefined : randomUUID();
+      const response = await main(method, path, body, key, options);
+      if (response.status >= 400 || (method === 'POST' && path === '/v1/contributions')) {
+        preparationAnswers.push({ population: preparationPopulation, request: { method, path, body, key }, status: response.status,
+          answer: await response.clone().text() });
+        await Bun.write(`.temp/anime-catalogue-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
+          JSON.stringify({ durationMs: Date.now() - started, preparationAnswers }, null, 2));
+      }
+      return response;
+    };
+  }
   const owner = sessions.owner, actor = owner.actingSubject!;
   const root = `/v1/realms/${short(sessions.realm)}`;
   const roleId = randomUUID();
@@ -160,6 +178,7 @@ beforeAll(async () => {
   }
   // The lifecycle owns shared Discovery refresh; readers never start a competing generation.
   for (const population of [33, 65]) {
+    preparationPopulation = population;
     for (let first = works.length; first < population; first += 4) {
       await Promise.all(Array.from({ length: Math.min(4, population - first) }, (_, offset) => prepare(first + offset)));
     }
@@ -168,6 +187,10 @@ beforeAll(async () => {
   draft = await answer<Work>(owner.main('POST', '/v1/works', { profile: 'metadata-only-v1',
     title: `${phrase} unpublished original animation`, language: 'en', semanticTypes: ['https://schema.org/TVSeries'],
     authoring: 'own-work', actingSubject: actor }), 201);
+  } finally {
+    await Bun.write(`.temp/anime-catalogue-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify({ durationMs: Date.now() - started, preparationAnswers }, null, 2));
+  }
 }, 360_000);
 
 async function traverse(person: PersonaSession, values: Record<string, string>, expected: Work[]) {
@@ -244,12 +267,25 @@ async function journey(name: PersonaName) {
   expect(credit.status).toBe(200);
   expect(await credit.text()).toContain(sessions.owner.actingSubject!);
 }
-outcomeTest(catalogue, 'visitor', () => journey('visitor'));
-outcomeTest(catalogue, 'stranger', () => journey('stranger'));
-outcomeTest(catalogue, 'member', () => journey('member'));
-outcomeTest(catalogue, 'owner', () => journey('owner'));
-outcomeTest(catalogue, 'moderator', () => journey('moderator'));
-outcomeTest(catalogue, 'operator', () => journey('operator'));
+const qualification: { persona: string; passed: boolean; error?: string }[] = [];
+async function qualify(name: PersonaName) {
+  try {
+    await journey(name);
+    qualification.push({ persona: name, passed: true });
+  } catch (error) {
+    qualification.push({ persona: name, passed: false, error: String(error) });
+    throw error;
+  } finally {
+    await Bun.write(`.temp/anime-catalogue-qualification-${Bun.env.REZICS_QA_RUN_ID}.json`,
+      JSON.stringify(qualification, null, 2));
+  }
+}
+outcomeTest(catalogue, 'visitor', () => qualify('visitor'));
+outcomeTest(catalogue, 'stranger', () => qualify('stranger'));
+outcomeTest(catalogue, 'member', () => qualify('member'));
+outcomeTest(catalogue, 'owner', () => qualify('owner'));
+outcomeTest(catalogue, 'moderator', () => qualify('moderator'));
+outcomeTest(catalogue, 'operator', () => qualify('operator'));
 
 import { meterStatements } from '../../feed-read-support.ts';
 import { foregroundCounted } from '../../support/operation-cost.ts';
