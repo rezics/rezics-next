@@ -3,16 +3,16 @@
 The supermanager's checkpoint for [this Goal](GOAL.md); live tasks:
 `task goal -- status`.
 
-| Field | State (2026-10-13 04:35 UTC) |
+| Field | State (2026-10-13 05:05 UTC) |
 | --- | --- |
 | Manager | `program`, an interactive Claude session started by the maintainer on 2026-10-13. It wakes on its own background waits and on Goal mail (`scripts/goal/next-event.sh program`) |
-| Delivery Goals | `api`: manager `api`, GPT-6.1 Sol on `codex-1`, headless and enrolled with the coordinator from its first turn (start message kept at `.temp/goal-orchestration/managers/api-start.md`). `web` and `operations`: not started; their start conditions in [GOAL.md](GOAL.md) hold |
-| First tasks | P1 (G-2070), P2 (G-2071), P4 then P3 (G-2072) and P7 (G-2073) dispatched at 04:32 UTC, two on each Codex account. The api Goal dispatches no outcome task before P1 and P2 are on `main`; then one pilot row, then wide |
+| Delivery Goals | `api`: manager `api`, GPT-6.1 Sol on `codex-1`; 18 outcome tasks cover all 67 rows in two steps (the persona matrix, read by the manager, then the declaration and tests), plus three design analyses and the load-set rebuild. `web`: manager `web`, Sol on `codex`, started for the four client-contract guards and the tests red on `main`; no surface task before a vertical is proved. Both are headless and enrolled with the coordinator (start messages in `.temp/goal-orchestration/managers/`). `operations`: not started |
+| First tasks | On `main`: P1 (G-2070, 04:50 UTC), P2 (G-2071, 04:58), P4 (G-2072 step 1, 05:01), P6 (G-2088, 05:03). In work: P3 (G-2072 step 2), P7 (G-2073), P8 (G-2089). The tool now refuses a brief without `kind:`, reviews only implementation and mechanism tasks in sensitive paths, and refuses a third fix round without a dated decision |
 | Decided for P1 to P3 | A row's proofs are one declaration file, `scripts/qa/cases/outcomes/<kind>/<slug>.ts`, with a cell for each persona: `proved`, `pending`, `notApplicable` or missing. `outcomeTest` runs a pending cell as an expected failure, so a test that starts passing is red until its cell says `proved`. That is how "fails on `main`" is checked without a run at dispatch, and why no two tasks share a registry file. Delivery Goals file each row's existing proofs under their personas; the program does not |
 | Host | Cold-started on 2026-10-13: Docker, the storage stack, `task dev`, the third swap device and the coordinator service are up. tmux for manager wakes is its own server and scope: `tmux -L goal` (`goal-tmux.scope`) |
 | Verified | One integration file passed on `main` d2a2e3166 in 11.9 s on a pooled stack, so the tier outcome tests run in works. `task goal -- regress` started at 04:35 UTC in `tmux -L goal`, window `regress` (log `.temp/program-regress.log`); the first main-wide run on the final `main` |
 | Tree | `main` and the archive (`archive/goals`); 55 unmerged branch tips of the stopped run under `refs/archive/2026-10-12/` |
-| Allowances | Claude: managers only. Codex: a regular global reset is scheduled for 2026-10-13 07:00 UTC (codex-resets.com); before it `codex` had 14% of its week left and `codex-1` 18%. Service tier `default`. No top-up, no reset credits |
+| Allowances | Claude: managers only. Codex: both accounts reset on 2026-10-13 at about 04:58 UTC (0% of a new 7-day window, next reset about 2026-10-20 05:00 UTC), two hours before the time codex-resets.com listed. Service tier `default`. Width is set by settled work and the measures, not by spending. No top-up, no reset credits |
 | Capacity settings | `.temp/goal-orchestration/`: QA slots 8, gate lanes 4, regress lanes 3, review engine `codex-1` |
 
 ## After a cold start of the host
