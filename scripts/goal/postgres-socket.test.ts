@@ -40,7 +40,7 @@ test('deep sockets live inside their worktree and unused aliases are cleaned up'
   const directory = ensurePostgresSocketDirectory(fixture.checkout);
   try {
     expect(ensurePostgresSocketDirectory(fixture.checkout)).toBe(directory);
-    expect(physicalPath(directory)).toBe(join(fixture.checkout, '.temp/pg-sock'));
+    expect(physicalPath(directory)).toBe(join(fixture.checkout, '.temp/pg-sock/65535'));
     const socket = join(directory, '.s.PGSQL.65535');
     writeFileSync(socket, 'active socket');
     releasePostgresSocketDirectory(fixture.checkout);
@@ -55,7 +55,7 @@ test('deep sockets live inside their worktree and unused aliases are cleaned up'
 test('cluster startup uses the selected short socket and shutdown removes its alias', async () => {
   const checkout = resolve(import.meta.dir, '../..');
   const cluster = await startPostgresCluster();
-  const directory = postgresSocketDirectory(checkout);
+  const directory = postgresSocketDirectory(checkout, '/tmp', cluster.port);
   const socket = join(directory, `.s.PGSQL.${cluster.port}`);
   const client = new Client({ ...cluster.connection, host: directory });
   try {
@@ -64,6 +64,24 @@ test('cluster startup uses the selected short socket and shutdown removes its al
     expect((await client.query('SELECT 1 AS n')).rows[0].n).toBe(1);
   } finally { await client.end(); cluster.remove(); }
   expect(existsSync(socket)).toBe(false);
-  if (directory.startsWith('/tmp/rezics-pg-') && !readdirSync(join(checkout, '.temp/pg-sock')).length)
+  if (directory.startsWith('/tmp/rezics-pg-') && !readdirSync(join(checkout, `.temp/pg-sock/${cluster.port}`)).length)
     expect(() => lstatSync(directory)).toThrow();
 }, 30_000);
+
+test('one cluster cannot remove a neighbouring cluster socket alias during startup', () => {
+  const fixture = deepCheckout();
+  const first = ensurePostgresSocketDirectory(fixture.checkout, '/tmp', 10001);
+  const second = ensurePostgresSocketDirectory(fixture.checkout, '/tmp', 10002);
+  try {
+    expect(first).not.toBe(second);
+    releasePostgresSocketDirectory(fixture.checkout, '/tmp', 10001);
+    expect(() => lstatSync(first)).toThrow();
+    expect(existsSync(second)).toBe(true);
+    writeFileSync(join(second, '.s.PGSQL.10002'), 'neighbour socket');
+    expect(existsSync(join(fixture.checkout, '.temp/pg-sock/10002/.s.PGSQL.10002'))).toBe(true);
+  } finally {
+    rmSync(fixture.parent, { recursive: true, force: true });
+    releasePostgresSocketDirectory(fixture.checkout, '/tmp', 10001);
+    releasePostgresSocketDirectory(fixture.checkout, '/tmp', 10002);
+  }
+});

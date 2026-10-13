@@ -17,11 +17,18 @@ export function physicalPath(path: string): string {
 
 /** A short alias points into the worktree: removing the worktree also removes
  * the actual socket directory. Cluster shutdown removes the now-unused alias. */
-export function postgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): string {
+function ownedSocketDirectory(checkout: string, port: number): string {
   const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
   if (Buffer.byteLength(join(owned, '.s.PGSQL.65535')) <= POSTGRES_SOCKET_LIMIT) return owned;
+  return join(owned, String(port));
+}
+
+export function postgresSocketDirectory(checkout: string, aliasRoot = '/tmp', port = 65535): string {
+  const owned = ownedSocketDirectory(checkout, port);
+  if (Buffer.byteLength(join(owned, '.s.PGSQL.65535')) <= POSTGRES_SOCKET_LIMIT) return owned;
   const key = createHash('sha256').update(physicalPath(checkout)).digest('hex').slice(0, 24);
-  return join(physicalPath(aliasRoot), `rezics-pg-${key}`);
+  // Each cluster removes only its alias, even while another is starting.
+  return join(physicalPath(aliasRoot), `rezics-pg-${key}-${port}`);
 }
 
 export function postgresSocketPath(checkout: string, aliasRoot = '/tmp'): string {
@@ -40,11 +47,11 @@ export function postgresSocketRefusal(checkout: string, aliasRoot = '/tmp'): str
   return `runner configuration: PostgreSQL socket path is ${bytes} bytes, above the ${POSTGRES_SOCKET_LIMIT}-byte limit: ${path}`;
 }
 
-export function ensurePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): string {
+export function ensurePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp', port = 65535): string {
   const refusal = postgresSocketRefusal(checkout, aliasRoot);
   if (refusal) throw new Error(refusal);
-  const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
-  const directory = postgresSocketDirectory(checkout, aliasRoot);
+  const owned = ownedSocketDirectory(checkout, port);
+  const directory = postgresSocketDirectory(checkout, aliasRoot, port);
   mkdirSync(owned, { recursive: true, mode: 0o700 });
   if (directory !== owned) {
     try { symlinkSync(owned, directory); }
@@ -56,9 +63,9 @@ export function ensurePostgresSocketDirectory(checkout: string, aliasRoot = '/tm
   return directory;
 }
 
-export function releasePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp'): void {
-  const owned = join(physicalPath(checkout), '.temp', 'pg-sock');
-  const directory = postgresSocketDirectory(checkout, aliasRoot);
+export function releasePostgresSocketDirectory(checkout: string, aliasRoot = '/tmp', port = 65535): void {
+  const owned = ownedSocketDirectory(checkout, port);
+  const directory = postgresSocketDirectory(checkout, aliasRoot, port);
   if (directory === owned || (existsSync(owned) && readdirSync(owned).length)) return;
   try {
     if (lstatSync(directory).isSymbolicLink() && readlinkSync(directory) === owned) unlinkSync(directory);

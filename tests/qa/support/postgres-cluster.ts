@@ -73,8 +73,8 @@ function clusterUser(role: string | undefined): string {
 }
 
 /** TCP and a Unix socket remain available even under a deeply nested checkout. */
-function socketArgument(): string {
-  const directory = ensurePostgresSocketDirectory(root);
+function socketArgument(port: number): string {
+  const directory = ensurePostgresSocketDirectory(root, '/tmp', port);
   chmodSync(directory, 0o700);
   return `-k ${directory}`;
 }
@@ -113,7 +113,7 @@ function killPid(pid: number): void {
 }
 
 /** pg_ctl first, then the postmaster process group, so a failed start cannot keep running. */
-function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate'): void {
+function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate', port: number): void {
   const pid = postmasterPid(dataDirectory);
   try {
     execFileSync('pg_ctl', ['-D', dataDirectory, '-m', mode, '-t', '30', '-w', 'stop'],
@@ -127,7 +127,7 @@ function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate'): void 
       ...(pid !== undefined && processRunning(pid) ? [pid] : []),
       ...pidsUsing(dataDirectory).filter(candidate => processRunning(candidate)),
     ];
-    if (!alive.length) { releasePostgresSocketDirectory(root); return; }
+    if (!alive.length) { releasePostgresSocketDirectory(root, '/tmp', port); return; }
     pause(20);
   }
   throw new Error(`PostgreSQL is still running in ${dataDirectory}`);
@@ -136,7 +136,7 @@ function ensureStopped(dataDirectory: string, mode: 'fast' | 'immediate'): void 
 function launch(dataDirectory: string, log: string, port: number): void {
   execFileSync('pg_ctl', [
     '-D', dataDirectory, '-l', log,
-    '-o', `-h 127.0.0.1 -p ${port} ${socketArgument()}`,
+    '-o', `-h 127.0.0.1 -p ${port} ${socketArgument(port)}`,
     '-t', '60', '-w', 'start',
   ], { stdio: 'pipe', timeout: 90_000 });
 }
@@ -157,7 +157,7 @@ function openCluster(input: {
   let removed = false;
   const stop = (mode: 'fast' | 'immediate' = 'fast') => {
     if (!running) return;
-    ensureStopped(input.dataDirectory, mode);
+    ensureStopped(input.dataDirectory, mode, input.port);
     running = false;
   };
   return {
@@ -207,10 +207,12 @@ export async function startPostgresCluster(options: PostgresClusterOptions = {},
   const log = join(directory, 'postgres.log');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   let started = false;
+  let port: number | undefined;
   const discard = () => {
     if (started || postmasterPid(dataDirectory) !== undefined || pidsUsing(dataDirectory).length) {
-      ensureStopped(dataDirectory, 'immediate');
+      ensureStopped(dataDirectory, 'immediate', port!);
     }
+    if (port !== undefined) releasePostgresSocketDirectory(root, '/tmp', port);
     rmSync(directory, { recursive: true, force: true });
   };
   try {
@@ -223,7 +225,7 @@ export async function startPostgresCluster(options: PostgresClusterOptions = {},
       appendFileSync(join(dataDirectory, 'postgresql.conf'), `\n${options.serverSettings.trim()}\n`);
     }
     probe.afterInitdb?.({ directory, dataDirectory });
-    const port = await freePort();
+    port = await freePort();
     launch(dataDirectory, log, port);
     started = true;
     probe.afterStart?.({ directory, dataDirectory, port });
@@ -249,8 +251,9 @@ export async function startPreparedPostgresCluster(dataDirectory: string,
     launch(dataDirectory, log, port);
   } catch (error) {
     if (postmasterPid(dataDirectory) !== undefined || pidsUsing(dataDirectory).length) {
-      ensureStopped(dataDirectory, 'immediate');
+      ensureStopped(dataDirectory, 'immediate', port);
     }
+    releasePostgresSocketDirectory(root, '/tmp', port);
     throw error;
   }
   return openCluster({ directory, dataDirectory, port, user, log, ownsDirectory: false });
