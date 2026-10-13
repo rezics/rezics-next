@@ -16,9 +16,23 @@ areas:
 
 # API
 
-Status: paused on 2026-10-13 after ninety minutes. Every row has a persona
-matrix and none is proved; [state.md](state.md) is the checkpoint. It resumes
-when the [program](../program/GOAL.md#next-tasks)'s tasks N1 to N4 are on `main`.
+Status: resumed by Program on 2026-10-13 after N1 to N4 landed. One of 67
+rows is proved; all 18 outcome tasks are running step two. [state.md](state.md)
+preserves the wrap-up checkpoint and Program's subsequent resume decision.
+
+## Decision — start event, 2026-10-13
+
+Acknowledged `start:6b527ce2-32fc-4e9f-854c-66bb51e33bd6`. The registered
+manager role is enrolled and this turn is claimed. Program's 11:10 UTC resume
+decision supersedes the earlier pause: the live ledger confirms all 18 outcome
+tasks already running with the updated step-two briefs. Continue that work;
+this start event needs no additional dispatch or resume. Task exits and mail
+are decided in their own events, in the affected brief; automatic landings
+remain subject to the tool's gates. Demonstrated pending cells lead to
+implementation only after their evidence and intended persona answers are read.
+
+The inbox has no unacknowledged mail. This event leaves `state.md` for a
+checkpoint turn, starts no watcher and waits for no worker.
 
 The [retained checkpoint rebuild](seed-rebuild.md) records preparation evidence
 for growth checks.
