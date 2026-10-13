@@ -17,7 +17,7 @@ import { journalErasure } from '../src/modules/erasure/journal.ts';
 import { assertCurrentRecoveryCoverageHead, RecoveryCoverageHeadConflict,
   retainRecoveryCoverageHead } from '../src/modules/outbox/recovery-coverage-head.ts';
 import { initializeRelayCheckpoint } from '../src/modules/outbox/relay.ts';
-import { hash, initializeFreshGraph } from '../src/modules/work/activate.ts';
+import { hash } from '../src/modules/work/activate.ts';
 import { assertRecoveryCoverage, captureGraphRecoveryCoverage, type RecoveryCoverage } from
   '../src/modules/work/restore-lineage.ts';
 
@@ -46,10 +46,8 @@ beforeAll(async () => {
   content = pool(databases.urls.content); sourceRelay = pool(databases.urls.relay);
   await migrateContent(content);
   fuseki = qa.fuseki;
-  const lineage = { dataEpoch: randomUUID(), routingEpoch: '1' };
-  await initializeFreshGraph(fuseki, lineage);
   consumer = `coverage-epoch:${randomUUID()}`;
-  await initializeRelayCheckpoint(sourceRelay, consumer, lineage.dataEpoch);
+  await initializeRelayCheckpoint(sourceRelay, consumer, staged.apps.MAIN_DATA_EPOCH!);
   generation = await engageAccessRecoveryFence(access);
   const preparationMs = Date.now() - started - startup.admissionWaitMs;
   expect(preparationMs).toBeLessThan(600_000);
@@ -61,7 +59,7 @@ afterAll(async () => {
   try { await databases?.close(); }
   finally {
     const disposal = await runQaAdmissionChildAsync(root, 'bun',
-      ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs, '--yes'], 60_000);
+      ['scripts/dev/cli.ts', 'stack:reset', ...stackArgs], 60_000);
     if (!disposal.ok) throw new Error(`Coverage qualification disposal failed: ${disposal.output.slice(-4000)}`);
   }
 }, qaStartupTestTimeout(60_000));
@@ -118,6 +116,18 @@ test('signed current coverage publishes at the retained journal epoch; historica
   expect((await account.query('SELECT $2::pg_lsn > $1::pg_lsn AS advanced',
     [firstPg.flushedLsn, newerPg.flushedLsn])).rows).toEqual([{ advanced: true }]);
   expect(historicalNewer.sealedCoverage).not.toBe(historical.sealedCoverage);
+
+  const historicalPublisher = await sourceRelay.connect();
+  try {
+    await historicalPublisher.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+    await retainRecoveryCoverageHead(historicalPublisher, historicalNewer.sealedCoverage, hmacKey);
+    await assertCurrentRecoveryCoverageHead(historicalPublisher, historicalNewer.coverage);
+    await expect(assertCurrentRecoveryCoverageHead(historicalPublisher, historical.coverage))
+      .rejects.toThrow('signed recovery coverage is not the retained current capture');
+    // Preserve the base retained head for the independently cloned, later-journal case below.
+    await historicalPublisher.query('ROLLBACK');
+  } finally { await historicalPublisher.query('ROLLBACK'); historicalPublisher.release(); }
+  await assertCurrentRecoveryCoverageHead(sourceRelay, historical.coverage);
 
   const firstErasure = await erase(sourceRelay);
   const current = await capture(sourceRelay);
