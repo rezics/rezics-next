@@ -5,7 +5,7 @@ import { attachCallingTests, buildOperationIndex, formatHumanResult, searchOpera
 import { outOfScope } from './briefs.ts';
 import { root } from './ledger.ts';
 import { codexAccounts } from './usage.ts';
-import type { AccountUsage, Brief, Engine, Task } from './types.ts';
+import type { AccountUsage, Brief, Engine, Ledger, Task } from './types.ts';
 
 export interface WorkerHandover {
   brief: string;
@@ -13,11 +13,23 @@ export interface WorkerHandover {
   operations: string;
 }
 
+function closedReference(repository: string, location: string): string | undefined {
+  const brief = /^docs\/goals\/([^/]+)\/tasks\/(G-\d+)\.md$/.exec(location);
+  const artifact = /^\.temp\/worktrees\/(g-\d+)\/\.temp\/goal\/(.+)$/.exec(location);
+  const id = brief?.[2] ?? artifact?.[1]?.toUpperCase();
+  if (!id) return;
+  const ledgerFile = join(repository, '.temp/goal-orchestration/ledger.json');
+  if (!statSync(ledgerFile, { throwIfNoEntry: false })?.isFile()) return;
+  const task = (JSON.parse(readFileSync(ledgerFile, 'utf8')) as Ledger).tasks[id];
+  if (!task || !['verified', 'cancelled'].includes(task.state) || (brief && task.goal !== brief[1])) return;
+  return join(repository, '.temp/goal-orchestration/runs', id, 'worktree-temp/goal', artifact?.[2] ?? 'brief.md');
+}
+
 /** Resolve and read references before creating a worktree, so a bad brief leaves no partial dispatch. */
 export async function prepareHandover(brief: Brief, text: string, repository = root): Promise<WorkerHandover> {
   const names = new Set<string>();
   const refs = (brief.refs ?? []).map(file => {
-    const source = resolve(repository, file);
+    let source = resolve(repository, file);
     const location = relative(repository, source);
     if (isAbsolute(location) || location === '..' || location.startsWith('../')) {
       throw new Error(`Reference must be in the main checkout: ${file}`);
@@ -25,6 +37,7 @@ export async function prepareHandover(brief: Brief, text: string, repository = r
     const name = basename(source);
     if (names.has(name)) throw new Error(`References have the same file name: ${name}`);
     names.add(name);
+    if (!statSync(source, { throwIfNoEntry: false })) source = closedReference(repository, location) ?? source;
     if (!statSync(source, { throwIfNoEntry: false })?.isFile()) throw new Error(`Reference does not exist or is not a file: ${file}`);
     return { path: `.temp/ref/${name}`, bytes: readFileSync(source) };
   });

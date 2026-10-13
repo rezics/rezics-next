@@ -1,4 +1,4 @@
-import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
+import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledger, isClaudeCode, modelOf, programOf, engineOf, MAX_CAPACITY_CONTINUATIONS, MAX_TRANSPORT_CONTINUATIONS, type Attempt, type Engine, effortsOf } from './types.ts';
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname } from 'node:path';
@@ -47,6 +47,18 @@ export async function dispatchMethodErrors(brief: Brief, markdown: string, outco
   return [];
 }
 
+/** A dispatch interrupted before publishing its task may leave only a clean checkout of main. */
+export function removeDispatchLeftover(ledger: Ledger, id: string, worktree: string, branch: string): void {
+  if (!existsSync(worktree)) return;
+  const refusal = `${worktree} already exists; remove it or use another ID`;
+  if (ledger.tasks[id] || Object.values(ledger.tasks).some(task => task.worktree === worktree || task.branch === branch)
+    || git(worktree, ['symbolic-ref', '--quiet', 'HEAD'], true) !== `refs/heads/${branch}`
+    || git(root, ['rev-list', '--count', `main..${branch}`], true) !== '0'
+    || git(worktree, ['status', '--porcelain=v1', '--untracked-files=all']) !== '') throw new Error(refusal);
+  git(root, ['worktree', 'remove', worktree]);
+  git(root, ['branch', '-D', branch]);
+}
+
 export async function dispatch(briefPath: string, flags: Set<string>): Promise<void> {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
@@ -91,7 +103,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
       return;
     }
     const reuse = brief.worktree !== undefined && existsSync(worktree);
-    if (existsSync(worktree) && !reuse) throw new Error(`${worktree} already exists; remove it or use another ID`);
+    if (!reuse) removeDispatchLeftover(ledger, brief.id, worktree, branch);
     mkdirSync(join(stateDir, 'runs', brief.id), { recursive: true });
     if (!reuse) {
       // A shared branch outlives its worktree once its last task closes; reattach to it.
@@ -370,6 +382,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     const previous = lastAttempt(task);
     let round: 'step' | 'fix' = 'fix';
     const result = readResult(previous);
+    if (task.state === 'stopped' && previous.endedAt && !hasHandoff(result.text)) round = 'step';
     if (!result.error && handoffResult(result.text) === 'partial') {
       const changes = changedFiles(task);
       if (task.state === 'merged' || (changes.ahead === 0 && changes.dirty.length === 0)) round = 'step';

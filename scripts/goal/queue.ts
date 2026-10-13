@@ -1,9 +1,9 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { activeGoals, areasOf, briefGoal, readLedger, root, stateDir, unlandedChangeConflicts, withLedger } from './ledger.ts';
 import { areaConflicts, claimConflicts, goalOfBriefPath, mechanismSectionErrors, parseBrief, validateBrief } from './briefs.ts';
-import { dispatchMethodErrors } from './tasks.ts';
+import { dispatchMethodErrors, removeDispatchLeftover } from './tasks.ts';
 import { prepareHandover } from './handover.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
@@ -37,7 +37,7 @@ async function validatedBrief(path: string): Promise<Brief> {
   return brief;
 }
 
-function waitsFor(ledger: Ledger, brief: Brief, entry?: QueuedBrief): string[] {
+function waitsFor(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): string[] {
   const tasks = Object.values(ledger.tasks);
   const waits = [...claimConflicts(brief, tasks), ...unlandedChangeConflicts(brief, tasks)];
   if (entry) {
@@ -48,7 +48,10 @@ function waitsFor(ledger: Ledger, brief: Brief, entry?: QueuedBrief): string[] {
   }
   for (const id of brief.depends) {
     const dependency = ledger.tasks[id];
-    if (!dependency) throw new Error(`Unknown dependency ${id}; cross-Goal dependencies are contracts on the program's board (docs/goals/program/state.md), not task IDs`);
+    const queued = ledger.queue?.[id];
+    if (!dependency && !queued) throw new Error(`Unknown dependency ${id}; cross-Goal dependencies are contracts on the program's board (docs/goals/program/state.md), not task IDs`);
+    if ((dependency ? dependency.goal : queued?.goal) !== entry?.goal) throw new Error(`Dependency ${id} belongs to another Goal; cross-Goal dependencies are contracts on the program's board (docs/goals/program/state.md), not task IDs`);
+    if (!dependency) { waits.push(`${brief.id} depends on ${id}, which is queued`); continue; }
     if (!['merged', 'verified'].includes(dependency.state)) waits.push(`${brief.id} depends on ${id}, which is ${dependency.state}`);
   }
   for (const id of entry?.waitedFor ?? []) {
@@ -66,7 +69,7 @@ function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefin
   const worktree = join(root, '.temp/worktrees', brief.worktree ? `${goal ?? 'legacy'}-${brief.worktree}` : brief.id.toLowerCase());
   const socket = postgresSocketRefusal(physicalPath(worktree));
   if (socket) throw new Error(socket);
-  if (!brief.worktree && existsSync(worktree)) throw new Error(`${worktree} already exists; remove it or use another ID`);
+  if (!brief.worktree) removeDispatchLeftover(ledger, brief.id, worktree, `goal/${brief.id.toLowerCase()}`);
   if (brief.worktree && Object.values(ledger.tasks).some(task => task.worktree === worktree
     && HOLDING.includes(task.state) && task.goal !== goal)) throw new Error(`${worktree} has open tasks belonging to another Goal; use a different shared worktree`);
 }

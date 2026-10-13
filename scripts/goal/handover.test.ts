@@ -98,6 +98,119 @@ function weeklyUsage(home: string, week: number, fiveHour = 5): void {
 }
 
 describe('worker handover', () => {
+  test.each(['verified', 'cancelled'] as const)('dispatch and resume read %s task references from retained artifacts', async outcome => {
+    const repo = repository();
+    try {
+      const ledger = repo.ledger();
+      ledger.goals = { program: { manager: 'recording-manager', startedAt: new Date().toISOString() } };
+      repo.save(ledger);
+      const source = join(repo.dir, 'docs/goals/program/tasks/G-001.md');
+      mkdirSync(join(source, '..'), { recursive: true });
+      const text = readFileSync(repo.brief(), 'utf8');
+      writeFileSync(source, text);
+      expect(repo.run('dispatch', source).status).toBe(0);
+      const first = repo.ledger().tasks['G-001']!;
+      await repo.record(first);
+      const evidence = join(first.worktree, '.temp/goal/evidence.txt');
+      writeFileSync(evidence, 'retained evidence');
+      const closing = repo.ledger();
+      closing.tasks['G-001']!.state = outcome === 'verified' ? 'merged' : 'exited';
+      closing.tasks['G-001']!.attempts[0]!.pid = 0;
+      repo.save(closing);
+      const closed = repo.run('close', 'G-001', outcome);
+      expect(closed.status, closed.stderr).toBe(0);
+      expect(existsSync(source)).toBe(false);
+      expect(existsSync(first.worktree)).toBe(false);
+      const file = repo.brief([`refs: [${source}]`]);
+      writeFileSync(file, readFileSync(file, 'utf8').replace('id: G-001', 'id: G-002'));
+      const dispatched = repo.run('dispatch', file);
+      expect(dispatched.status, dispatched.stderr).toBe(0);
+      const next = repo.ledger().tasks['G-002']!;
+      expect((await repo.record(next)).refs).toEqual({ 'G-001.md': text });
+      const current = repo.ledger();
+      current.tasks['G-002']!.state = 'exited';
+      current.tasks['G-002']!.attempts[0]!.pid = 0;
+      repo.save(current);
+      writeFileSync(file, readFileSync(file, 'utf8').replace(`refs: [${source}]`, `refs: [${source}, ${evidence}]`));
+      expect(repo.run('reclaim', 'G-002', file).status).toBe(0);
+      rmSync(join(next.worktree, '.temp/record.json'));
+      const resumed = repo.run('resume', 'G-002', '-m', 'Use the retained evidence.');
+      expect(resumed.status, resumed.stderr).toBe(0);
+      expect((await repo.record(repo.ledger().tasks['G-002']!)).refs).toEqual({ 'G-001.md': text, 'evidence.txt': 'retained evidence' });
+    } finally { repo.dispose(); }
+  });
+
+  test.each(['open task', 'unknown task', 'wrong Goal', 'unrelated path', 'missing artifact'])('a missing reference to %s still refuses', async kind => {
+    const repo = repository();
+    try {
+      const ledger = repo.ledger();
+      ledger.tasks['G-009'] = { id: 'G-009', title: 'Reference owner', effort: 'high', cases: [], paths: [],
+        shared: [], depends: [], migrations: [], worktree: join(repo.local, 'worktrees/g-009'), branch: 'goal/g-009',
+        base: repo.git('rev-parse', 'HEAD'), brief: '', state: kind === 'open task' ? 'stopped' : 'verified', goal: 'program', attempts: [] };
+      repo.save(ledger);
+      const retained = join(repo.local, 'goal-orchestration/runs/G-009/worktree-temp/goal');
+      mkdirSync(retained, { recursive: true });
+      if (kind !== 'missing artifact') writeFileSync(join(retained, 'brief.md'), 'kept copy');
+      const ref = kind === 'unknown task' ? 'docs/goals/program/tasks/G-008.md'
+        : kind === 'wrong Goal' ? 'docs/goals/api/tasks/G-009.md'
+          : kind === 'unrelated path' ? '.temp/brief.md' : 'docs/goals/program/tasks/G-009.md';
+      const brief = parseBrief(readFileSync(repo.brief(), 'utf8'));
+      brief.refs = [ref];
+      // Remove the ordinary brief for the unrelated-path check; the retained copy must not hide it.
+      if (kind === 'unrelated path') rmSync(join(repo.local, 'brief.md'));
+      await expect(prepareHandover(brief, 'brief text', repo.dir)).rejects.toThrow('Reference does not exist');
+    } finally { repo.dispose(); }
+  });
+
+  test('stopping and extending a brief uses steps without exhausting fix rounds', async () => {
+    const repo = repository();
+    try {
+      const file = repo.brief();
+      expect(repo.run('dispatch', file).status).toBe(0);
+      for (let n = 0; n < 3; n++) {
+        const task = repo.ledger().tasks['G-001']!;
+        await repo.record(task);
+        rmSync(task.attempts.at(-1)!.lastMessage!);
+        const ledger = repo.ledger();
+        ledger.tasks['G-001']!.attempts.at(-1)!.pid = 0;
+        repo.save(ledger);
+        expect(repo.run('stop', 'G-001').status).toBe(0);
+        writeFileSync(file, readFileSync(file, 'utf8').replace('## Mechanisms', `Extended step ${n + 1}.\n\n## Mechanisms`));
+        const reclaimed = repo.run('reclaim', 'G-001', file);
+        expect(reclaimed.status, reclaimed.stderr).toBe(0);
+        rmSync(join(task.worktree, '.temp/record.json'));
+        const result = repo.run('resume', 'G-001', '-m', 'Continue with the extended brief.');
+        expect(result.status, result.stderr).toBe(0);
+        expect(repo.ledger().tasks['G-001']!.attempts.at(-1)!.round).toBe('step');
+      }
+      await repo.record(repo.ledger().tasks['G-001']!);
+      expect(repo.ledger().tasks['G-001']!.attempts.map(attempt => attempt.round)).toEqual(['initial', 'step', 'step', 'step']);
+    } finally { repo.dispose(); }
+  });
+
+  test.each(['conflict', 'stopped'] as const)('a refused landing with a handoff still uses a fix round (%s)', async state => {
+    const repo = repository();
+    try {
+      expect(repo.run('dispatch', repo.brief()).status).toBe(0);
+      const task = repo.ledger().tasks['G-001']!;
+      await repo.record(task);
+      const ledger = repo.ledger();
+      const current = ledger.tasks['G-001']!;
+      current.state = state;
+      current.refusal = 'Review found a blocking defect';
+      current.attempts[0]!.pid = 0;
+      current.attempts[0]!.endedAt = new Date().toISOString();
+      writeFileSync(current.attempts[0]!.lastMessage!, 'RESULT: done\nNEXT: land\n');
+      repo.save(ledger);
+      rmSync(join(task.worktree, '.temp/record.json'));
+      const result = repo.run('resume', 'G-001', '-m', 'Fix the review finding.');
+      expect(result.status, result.stderr).toBe(0);
+      const resumed = repo.ledger().tasks['G-001']!;
+      await repo.record(resumed);
+      expect(resumed.attempts.at(-1)!.round).toBe('fix');
+    } finally { repo.dispose(); }
+  });
+
   test('dispatch stages references and carries the brief, test files and indexed operations before launch', async () => {
     const repo = repository();
     try {
