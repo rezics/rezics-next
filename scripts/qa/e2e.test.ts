@@ -2,13 +2,21 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { join, resolve } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 import { e2eArgs, failedSelection, parseJUnit, selectedTestExecuted } from './acceptance.ts';
-import { browserStackEnvironment, measuredBrowserStep, runPreparedJourneys, startBrowserStack,
+import { browserSafetyEnvironment, browserStackEnvironment, measuredBrowserStep, runPreparedJourneys, startBrowserStack,
   type BrowserStack, type BrowserStepResult } from './e2e.ts';
 import { discoverJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
 
 const preparation = (name: string): JourneyPreparation => ({
   journey: `apps/web/tests/${name}.e2e.ts`, command: ['bun', 'prepare.ts'],
   step: `Prepare ${name}`, slug: name, budgetMs: 1_000,
+});
+
+test('browser safety uses distinct existing fixture Accounts and never inherits another stack roster', () => {
+  const roster = browserSafetyEnvironment({ member: { id: 'member' }, operator: { id: 'operator' } });
+  expect(roster).toEqual({ SAFETY_PRIMARY_ACCOUNT: 'member', SAFETY_BACKUP_ACCOUNT: 'operator' });
+  expect(browserStackEnvironment({ SAFETY_PRIMARY_ACCOUNT: 'old-member', SAFETY_BACKUP_ACCOUNT: 'old-operator' }, {})).toEqual({});
+  expect(browserStackEnvironment({ SAFETY_PRIMARY_ACCOUNT: 'old-member' }, roster)).toEqual(roster);
+  expect(() => browserSafetyEnvironment({ member: { id: 'same' }, operator: { id: 'same' } })).toThrow('distinct');
 });
 
 function fixture() {

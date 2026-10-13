@@ -16,12 +16,13 @@ import { admittedCommandBudgetEnv, BUILD_ADMISSION_GIB } from '../qa/host-admiss
 import { qaMemoryDeadline } from '../qa/memory-admission.ts';
 import type { DeclaredTestTimeout } from './goalctl.ts';
 import { physicalPath, POSTGRES_SOCKET_LIMIT, postgresSocketByteLength } from './postgres-socket.ts';
+import { verticalJourneyFilter, type VerticalJourney } from '../qa/cases/vertical-journeys.ts';
 
 export type RegressionTier = 'unit' | 'owner' | 'model' | 'integration' | 'fault/recovery' | 'e2e' | 'accounts:storybook' | 'jena:check';
 export type Classification = 'infrastructure' | 'resource' | 'deadline' | 'order-dependent' | 'flaky' | 'deterministic';
 type Outcome = 'pending' | 'passed' | 'failed' | 'missing' | 'void' | 'excluded' | 'deferred';
 export interface MergeEvent { before: string; after: string; goal: string; taskIds: string[]; at: string }
-export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy' | 'external'; outcome: Outcome; reason?: string }
+export interface ExpectedFile { file: string; tier: RegressionTier | 'live' | 'load' | 'legacy' | 'external'; outcome: Outcome; reason?: string; tests?: string[] }
 export interface Execution {
   code: number; outcomes: Record<string, 'passed' | 'failed' | 'missing'>; artifactPaths: string[];
   queueMs: number; testMs: number; totalMs: number; evidence?: string; classification?: Classification;
@@ -34,6 +35,8 @@ export interface Batch {
   id: string; tier: RegressionTier; files: string[]; state: 'pending' | 'running' | 'done'; attempts: Execution[];
   /** Per-file deadline, including the gate's margin for declared test timeouts. */
   budgetMs?: number;
+  /** Exact titles for a singleton nightly journey file. */
+  tests?: string[];
 }
 /** The diagnosis fields worth carrying from an earlier run, without its probe log. */
 export interface RecordedDiagnosis {
@@ -72,12 +75,15 @@ export interface Manifest {
   /** New, inherited and fixed failures versus that baseline. */
   comparison?: RegressionComparison;
   /** Browser tiers are inventoried but excluded from routine runs; older manifests included them. */
-  selection?: 'routine' | 'explicit';
+  selection?: 'routine' | 'explicit' | 'nightly';
+  verticalJourneys?: readonly VerticalJourney[];
 }
 export interface RegressionOptions {
   repo: string; stateDir: string; at?: string; resume?: string; only?: RegressionTier[]; integrationBatches?: number;
   shards?: number; slots?: number; runId?: string; checkoutRoot?: string; legacyRoot?: string;
   registry?: (checkout: string) => Promise<ExpectedFile[]>;
+  nightly?: boolean;
+  journeyRegistry?: (checkout: string) => Promise<readonly VerticalJourney[]>;
   prepare?: (checkout: string) => Promise<{ ok: boolean; artifactPaths: string[]; reason?: string }>;
   runner?: (checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number, artifactRoot?: string) => Promise<Execution>;
   waitForTurn?: typeof waitForRegressionTurn;
@@ -140,6 +146,7 @@ export function regressionLaneLimit(stateDir: string, fallback: number): number 
 const tiers: RegressionTier[] = ['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'accounts:storybook', 'jena:check'];
 const browserTier = (tier: RegressionTier): boolean => tier === 'e2e' || tier === 'accounts:storybook';
 const routineBrowserReason = 'Browser journeys and Storybook run in the nightly full regression';
+const nightlyBrowserReason = 'Nightly regression runs only the named vertical journeys';
 const batchSize = (tier: RegressionTier, files: number): number =>
   tier === 'integration' || tier === 'e2e' ? 5 : tier === 'unit' || tier === 'owner' || tier === 'fault/recovery' ? 15
     : tier === 'jena:check' ? 1 : files;
@@ -197,10 +204,11 @@ export function checkoutNameLength(checkoutRoot: string): number {
   return length;
 }
 
-export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches'> {
+export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' | 'resume' | 'only' | 'integrationBatches' | 'nightly'> {
   const options: ReturnType<typeof parseRegressArgs> = {};
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
+    if (flag === '--nightly') { options.nightly = true; continue; }
     const value = args[++index];
     if (!value || value.startsWith('--')) throw new Error(`${flag} needs a value`);
     if (flag === '--at' && /^[A-Za-z0-9._/@^~-]+$/.test(value)) options.at = value;
@@ -210,7 +218,8 @@ export function parseRegressArgs(args: string[]): Pick<RegressionOptions, 'at' |
     } else if (flag === '--integration-batches' && /^\d+$/.test(value)) options.integrationBatches = Number(value);
     else throw new Error(`Invalid regress option: ${flag} ${value}`);
   }
-  if (options.resume && (options.only || options.integrationBatches !== undefined)) throw new Error('Resume keeps the original selection');
+  if (options.resume && (options.only || options.nightly || options.integrationBatches !== undefined)) throw new Error('Resume keeps the original selection');
+  if (options.nightly && (options.only || options.integrationBatches !== undefined)) throw new Error('--nightly runs all non-browser tiers and cannot restrict tiers or batches');
   return options;
 }
 
@@ -517,12 +526,29 @@ async function ownerFileBudgets(checkout: string, files: readonly string[], defa
   }));
 }
 
+async function nightlySelection(checkout: string, files: ExpectedFile[], options: RegressionOptions): Promise<readonly VerticalJourney[]> {
+  const journeys = await (options.journeyRegistry ?? (async tree =>
+    (await import(pathToFileURL(join(tree, 'scripts/qa/cases/vertical-journeys.ts')).href)).verticalJourneys as readonly VerticalJourney[]))(checkout);
+  for (const journey of journeys) if ('file' in journey
+    && !files.some(file => file.tier === 'e2e' && file.file === journey.file && file.outcome !== 'excluded')) {
+    throw new Error(`Nightly journey is absent from the runnable registry: ${journey.kind}: ${journey.file}`);
+  }
+  for (const file of files) {
+    if (!tiers.includes(file.tier as RegressionTier) || !browserTier(file.tier as RegressionTier) || file.outcome === 'excluded') continue;
+    const titles = journeys.flatMap(journey => 'file' in journey && journey.file === file.file ? [journey.test] : []);
+    if (file.tier === 'e2e' && titles.length) file.tests = titles;
+    else { file.outcome = 'excluded'; file.reason = nightlyBrowserReason; }
+  }
+  return journeys;
+}
+
 async function batchesFor(checkout: string, files: ExpectedFile[], options: RegressionOptions): Promise<Batch[]> {
   const batches: Batch[] = [];
   for (const tier of tiers) {
     const expected = files.filter(file => file.tier === tier && file.outcome !== 'excluded');
+    if (!expected.length && options.nightly && browserTier(tier)) continue;
     if (!expected.length) throw new Error(`Zero-match regression tier: ${tier}`);
-    if (!options.only && browserTier(tier)) {
+    if (!options.only && !options.nightly && browserTier(tier)) {
       for (const file of expected) { file.outcome = 'excluded'; file.reason = routineBrowserReason; }
       continue;
     }
@@ -539,8 +565,9 @@ async function batchesFor(checkout: string, files: ExpectedFile[], options: Regr
       : new Map<string, number>();
     const long = expected.filter(file => (budgets.get(file.file) ?? 0) > (defaultBudgetMs ?? Infinity));
     const rest = expected.filter(file => (budgets.get(file.file) ?? 0) <= (defaultBudgetMs ?? Infinity));
-    const groups = tier === 'jena:check' ? expected.map(file => [file]) : long.map(file => [file]);
-    if (tier !== 'jena:check')
+    const singleton = tier === 'jena:check' || (options.nightly && tier === 'e2e');
+    const groups = singleton ? expected.map(file => [file]) : long.map(file => [file]);
+    if (!singleton)
       for (let index = 0; index < rest.length; index += size) groups.push(rest.slice(index, index + size));
     for (const [index, group] of groups.entries()) {
       const deferredNativeProof = tier === 'jena:check' && group.some(file => nativeImageProofs.has(file.file))
@@ -554,6 +581,7 @@ async function batchesFor(checkout: string, files: ExpectedFile[], options: Regr
           : group.length === 1 ? nativeBudgets.get(group[0]!.file) : undefined;
         batches.push({ id: `${tier.replaceAll(/[:/]/g, '-')}-${index + 1}`, tier,
           files: group.map(file => file.file), state: 'pending', attempts: [],
+          ...(group[0]?.tests ? { tests: group[0].tests } : {}),
           ...(budgetMs === undefined ? {} : { budgetMs }) });
       }
     }
@@ -697,6 +725,11 @@ function normalizedFile(checkout: string, workspace: string, file: string): stri
 export function executionOutcomes(checkout: string, batch: Batch, tests: TestResult[], storyXml = '', storyLog = '', commandCode?: number): Execution['outcomes'] {
   const testOutcome = (file: string): 'passed' | 'failed' | 'missing' => {
     const found = tests.filter(test => test.file.replace(/^\.\//, '') === file);
+    if (batch.tests) {
+      const named = batch.tests.map(title => found.filter(test => test.name === title || test.name.endsWith(` › ${title}`)));
+      if (named.some(results => results.some(test => test.failed))) return 'failed';
+      return found.length === batch.tests.length && named.every(results => results.length === 1 && !results[0]!.skipped) ? 'passed' : 'missing';
+    }
     return found.some(test => test.name === UNEXECUTED_FILE_TEST) ? 'missing'
       : found.some(test => test.failed) ? 'failed'
       : found.some(test => !test.skipped) ? 'passed' : 'missing';
@@ -744,8 +777,10 @@ export function regressionBatchCommand(batch: Batch, report: string, junitXmlPat
     '--result-file', report, ...args];
 }
 
-export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number, artifactRoot?: string, ownerBudgetMs?: number): NodeJS.ProcessEnv {
+export function regressionBatchEnvironment(env: NodeJS.ProcessEnv, shards: number, slotLimit: number, artifactRoot?: string, ownerBudgetMs?: number,
+  tests?: readonly string[]): NodeJS.ProcessEnv {
   return { ...env, REZICS_QA_SHARDS: String(shards), GOAL_QA_SLOTS: String(slotLimit),
+    ...(tests ? { REZICS_E2E_GREP: verticalJourneyFilter(tests), REZICS_E2E_PROJECTS: 'desktop-chrome' } : {}),
     ...(ownerBudgetMs === undefined ? {} : { REZICS_QA_OWNER_BUDGET_MS: String(ownerBudgetMs) }),
     ...(artifactRoot ? { REZICS_QA_ARTIFACT_ROOT: artifactRoot } : {}) };
 }
@@ -805,7 +840,7 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   // Slot acquisition has one hour; memory admission has its own bounded wait. Neither is proof time.
   const outerDeadlineMs = nativeProof ? effectiveDeadlineMs + 3_600_000
     + Math.max(0, qaMemoryDeadline(process.env) - started) + defaultStopGraceMs : effectiveDeadlineMs;
-  const env = regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs);
+  const env = regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs, batch.tests);
   if (nativeProof) env[admittedCommandBudgetEnv] = String(effectiveDeadlineMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
     outerDeadlineMs, env);
@@ -1106,6 +1141,15 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       manifest.checkout = checkout;
       // Validate the persisted plan against the same pinned registry; a deleted row cannot turn an incomplete run green.
       const expected = await (options.registry ?? regressionRegistry)(checkout);
+      if (manifest.selection === 'nightly') {
+        const journeys = await nightlySelection(checkout, expected, options);
+        if (JSON.stringify(journeys) !== JSON.stringify(manifest.verticalJourneys)
+          || manifest.files.some(file => JSON.stringify(file.tests) !== JSON.stringify(expected.find(item => item.tier === file.tier && item.file === file.file)?.tests))
+          || manifest.batches.some(batch => batch.tier === 'e2e' && (batch.files.length !== 1
+            || JSON.stringify(batch.tests) !== JSON.stringify(expected.find(file => file.tier === 'e2e' && file.file === batch.files[0])?.tests)))) {
+          rejectResume('Incomplete or changed nightly journey selection');
+        }
+      }
       const identities = (files: ExpectedFile[]) => files.map(file => `${file.tier}:${file.file}`).sort().join('\n');
       if (identities(expected) !== identities(manifest.files)) rejectResume('Incomplete or changed regression manifest');
       const exclusions = new Map(expected.filter(file => file.outcome === 'excluded').map(file => [`${file.tier}:${file.file}`, file.reason]));
@@ -1129,12 +1173,14 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     } else {
       if (existsSync(path)) throw new Error(`Regression ${runId} already exists; use --resume`);
       const files = await (options.registry ?? regressionRegistry)(checkout);
+      const journeys = options.nightly ? await nightlySelection(checkout, files, options) : undefined;
       if (new Set(files.map(file => `${file.tier}:${file.file}`)).size !== files.length) throw new Error('Duplicate regression manifest files');
       const batches = await batchesFor(checkout, files, options);
       const shards = options.shards ?? Number(process.env.REZICS_QA_SHARDS ?? 1);
       if (!Number.isSafeInteger(shards) || shards < 1) throw new Error('REZICS_QA_SHARDS must be a positive integer');
       manifest = { version: 1, runId, atCommit: pinned, checkout, startedAt: new Date().toISOString(), shards,
-        selection: options.only ? 'explicit' : 'routine',
+        selection: options.nightly ? 'nightly' : options.only ? 'explicit' : 'routine',
+        ...(journeys ? { verticalJourneys: journeys } : {}),
         partial: files.some(file => file.outcome === 'deferred'), status: 'running', files, batches,
         preflight: { commit: pinned, ok: false, artifactPaths: [], reason: 'Pinned preflight pending' }, diagnoses: [] };
     }
@@ -1388,7 +1434,8 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
     chargeDiagnosis();
     if (earlierRun) runManifest.comparison = compareWithEarlierRun(runManifest, earlierRun);
     const comparisonText = runManifest.comparison ? comparisonReport(runManifest.comparison) : [];
-    const complete = !runManifest.partial && runManifest.batches.every(batch => batch.state === 'done' && batch.attempts.length > 0)
+    const complete = !runManifest.partial && !runManifest.verticalJourneys?.some(journey => 'missing' in journey)
+      && runManifest.batches.every(batch => batch.state === 'done' && batch.attempts.length > 0)
       && runManifest.files.every(file => file.outcome === 'passed' || file.outcome === 'excluded');
     runManifest.status = complete && runManifest.preflight.ok && !runManifest.batches.some(batch => batch.attempts.at(-1)?.code)
       ? 'passed' : runManifest.files.some(file => file.outcome === 'failed') || !runManifest.preflight.ok ? 'failed' : 'incomplete';
@@ -1397,6 +1444,7 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       `Result: ${runManifest.status}; complete execution: ${complete}; shards: ${runManifest.shards}`,
       `Preflight: ${runManifest.preflight.ok ? 'passed' : runManifest.preflight.reason}`, '',
       ...comparisonText, ...(comparisonText.length ? [''] : []),
+      ...runManifest.verticalJourneys?.map(journey => `${journey.kind}: ${'missing' in journey ? `missing; ${journey.missing}` : `${journey.file}: ${journey.test}`}`) ?? [],
       ...runManifest.batches.map(batch => `${batch.id}: ${batch.state}; ${batch.files.length} files; `
         + batch.attempts.map(result => `queue ${result.queueMs}ms, test ${result.testMs}ms, total ${result.totalMs}ms (${result.classification ?? 'passed'})`
           + (result.hang ? `; hung ${result.hang.file}; ${result.hang.log}` : '')).join('; ')), '',

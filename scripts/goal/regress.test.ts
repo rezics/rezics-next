@@ -10,6 +10,7 @@ import { artifactRoots, parseArgs } from '../qa/core.ts';
 import { inputSelectedNativeTests, parseJUnit, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { e2eBrowserPlan, storybookCommands } from '../qa/browser-budget.ts';
 import { isHeavyTest } from './goalctl.ts';
+import { verticalJourneys, verticalJourneyFilter, type VerticalJourney } from '../qa/cases/vertical-journeys.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import { reapScopeLabel } from '../qa/container-reaper.ts';
@@ -836,6 +837,61 @@ test('native container work hangs until its batch deadline', async () => {
       expect(result.files.find(file => file.file === 'apps/web/tests/example.e2e.ts')!.reason)
         .toBe('Provider evidence requires separate credentials');
       expect((await r.run({ resume: 'browser-exclusion' })).status).toBe('passed');
+    } finally { r.cleanup(); }
+  });
+
+  test('nightly runs all non-browser tiers and only one exact journey per vertical, preserving resume', async () => {
+    const r = repo();
+    try {
+      for (const journey of verticalJourneys) if ('file' in journey && !r.files.some(file => file.file === journey.file)) {
+        r.files.push({ file: journey.file, tier: 'e2e', outcome: 'pending' }); r.write(journey.file, 'pass\n');
+      }
+      r.commit();
+      const options = { nightly: true, journeyRegistry: async () => verticalJourneys };
+      const result = await r.run({ runId: 'vertical-nightly', ...options });
+      expect(result.selection).toBe('nightly');
+      expect(result.status).toBe('passed');
+      expect(result.partial).toBe(false);
+      expect(result.verticalJourneys).toEqual(verticalJourneys);
+      expect(new Set(r.calls.map(call => call.batch.tier))).toEqual(new Set(['unit', 'owner', 'model', 'integration', 'fault/recovery', 'e2e', 'jena:check']));
+      const browser = r.calls.filter(call => call.batch.tier === 'e2e');
+      expect(browser).toHaveLength(6);
+      expect(browser.flatMap(call => call.batch.tests ?? []).sort())
+        .toEqual(verticalJourneys.flatMap(journey => 'test' in journey ? [journey.test] : []).sort());
+      for (const { batch } of browser) {
+        expect(batch.files).toHaveLength(1);
+        const command = regressionBatchCommand(batch, '/disk/report.json', '/disk/tests.xml');
+        expect(command).toContain('--heavy');
+        expect(command).not.toContain('--storybook');
+        const [, args] = selectTestCommand(command.slice(command.indexOf('--tier')));
+        const parsed = parseArgs(args.slice(1));
+        expect(storybookCommands(e2eBrowserPlan(parsed.files ?? [], parsed.storybook))).toEqual([]);
+        const filter = new RegExp(verticalJourneyFilter(batch.tests!));
+        const env = regressionBatchEnvironment({ REZICS_E2E_GREP: '.*', REZICS_E2E_PROJECTS: 'all' }, 1, 1, undefined, undefined, batch.tests);
+        expect(env.REZICS_E2E_GREP).toBe(filter.source);
+        expect(env.REZICS_E2E_PROJECTS).toBe('desktop-chrome');
+        expect(batch.tests!.every(title => filter.test(`desktop-chrome file ${title}`))).toBe(true);
+        expect(filter.test('an unselected journey')).toBe(false);
+      }
+      const resumed = await r.run({ resume: 'vertical-nightly', journeyRegistry: options.journeyRegistry });
+      expect(resumed.status).toBe('passed');
+      const corrupt = r.manifest('vertical-nightly');
+      corrupt.batches.find(batch => batch.tier === 'e2e')!.tests = ['another test'];
+      writeFileSync(join(r.options.stateDir, 'regress/vertical-nightly/manifest.json'), JSON.stringify(corrupt));
+      await expect(r.run({ resume: 'vertical-nightly', journeyRegistry: options.journeyRegistry })).rejects.toThrow('nightly journey selection');
+    } finally { r.cleanup(); }
+  });
+
+  test('nightly reports a missing vertical instead of silently completing its coverage', async () => {
+    const r = repo();
+    const journeys: VerticalJourney[] = [{ kind: 'books', file: 'apps/web/tests/example.e2e.ts', test: 'reader saves' },
+      { kind: 'games', missing: 'No passing signed-in journey on the clean QA profile' }];
+    try {
+      const result = await r.run({ runId: 'missing-vertical', nightly: true, journeyRegistry: async () => journeys });
+      expect(result.status).toBe('incomplete');
+      expect(result.verticalJourneys).toEqual(journeys);
+      expect(readFileSync(join(r.options.stateDir, 'regress/missing-vertical/summary.md'), 'utf8'))
+        .toContain('games: missing; No passing signed-in journey');
     } finally { r.cleanup(); }
   });
 
@@ -1769,6 +1825,10 @@ test('inbox delivery is idempotent, acknowledgements are per line and infrastruc
 });
 
 test('bounded CLI selections preserve the resume configuration', () => {
+  expect(parseRegressArgs(['--nightly', '--at', 'main'])).toEqual({ nightly: true, at: 'main' });
+  expect(() => parseRegressArgs(['--nightly', '--only', 'e2e'])).toThrow('cannot restrict');
+  expect(() => parseRegressArgs(['--nightly', '--integration-batches', '1'])).toThrow('cannot restrict');
+  expect(() => parseRegressArgs(['--resume', 'run', '--nightly'])).toThrow('original selection');
   expect(parseRegressArgs(['--at', 'main', '--only', 'unit,model', '--integration-batches', '2']))
     .toEqual({ at: 'main', only: ['unit', 'model'], integrationBatches: 2 });
   expect(() => parseRegressArgs(['--resume', 'run', '--only', 'unit'])).toThrow('original selection');
@@ -1782,6 +1842,17 @@ test('bounded CLI selections preserve the resume configuration', () => {
     if (previous === undefined) delete process.env.REZICS_QA_ARTIFACT_ROOT;
     else process.env.REZICS_QA_ARTIFACT_ROOT = previous;
   }
+});
+
+test('nightly file evidence requires every selected title exactly once', () => {
+  const batch: Batch = { id: 'vertical', tier: 'e2e', files: ['apps/web/tests/media.e2e.ts'], tests: ['anime', 'manga'], state: 'pending', attempts: [] };
+  const evidence = (name: string, extra = {}) => ({ file: batch.files[0]!, name, tier: 'e2e' as const, failed: false, skipped: false, ...extra });
+  expect(executionOutcomes('/repo', batch, [evidence('anime'), evidence('manga')])[batch.files[0]!]).toBe('passed');
+  expect(executionOutcomes('/repo', batch, [evidence('anime')])[batch.files[0]!]).toBe('missing');
+  expect(executionOutcomes('/repo', batch, [evidence('anime'), evidence('manga', { skipped: true })])[batch.files[0]!]).toBe('missing');
+  expect(executionOutcomes('/repo', batch, [evidence('anime'), evidence('manga', { failed: true })])[batch.files[0]!]).toBe('failed');
+  expect(executionOutcomes('/repo', batch, [evidence('anime'), evidence('anime'), evidence('manga')])[batch.files[0]!]).toBe('missing');
+  expect(executionOutcomes('/repo', batch, [evidence('anime'), evidence('manga'), evidence('other')])[batch.files[0]!]).toBe('missing');
 });
 
 test('only browser and Storybook commands acquire the heavy lock', () => {

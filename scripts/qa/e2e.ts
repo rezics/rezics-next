@@ -8,6 +8,8 @@ import { pollUntilDeadline } from './readiness.ts';
 import { adoptLeaseOwner, readDirectoryLease, releaseDirectoryLease, tryAcquireDirectoryLease } from './process/lease.ts';
 import { discoverJourneyPreparations, sameJourney, selectJourneyPreparations, type JourneyPreparation } from './e2e-preparation.ts';
 import { junitSuites, mergeJUnit } from './core.ts';
+import { admitIntegrationWorkScope } from './stack-startup.ts';
+import { safetyResponders } from '../../services/main/src/modules/safety-alerts/roster.ts';
 
 const claimRoot = join(tmpdir(), 'rezics-e2e-web-ports');
 
@@ -27,8 +29,16 @@ export interface BrowserStepOptions {
 export function browserStackEnvironment(parent: NodeJS.ProcessEnv, stack: Record<string, string>): NodeJS.ProcessEnv {
   const env = { ...parent };
   for (const key of ['PLATFORM_FIRST_ADMIN_ACCOUNT', 'ACCOUNT_OPERATOR_USER_IDS',
-    'ACCOUNT_MAIN_CLIENT_ID', 'ACCOUNT_MAIN_CLIENT_SECRET', 'WEB_OAUTH_CLIENT_ID']) delete env[key];
+    'ACCOUNT_MAIN_CLIENT_ID', 'ACCOUNT_MAIN_CLIENT_SECRET', 'WEB_OAUTH_CLIENT_ID',
+    'SAFETY_PRIMARY_ACCOUNT', 'SAFETY_BACKUP_ACCOUNT']) delete env[key];
   return { ...env, ...stack };
+}
+
+/** The isolated QA member and operator already exist at this stack's issuer. */
+export function browserSafetyEnvironment(fixture: { member: { id: string }; operator: { id: string } }): Record<string, string> {
+  const roster = safetyResponders('', fixture.member.id, fixture.operator.id);
+  if (!roster) throw new Error('The QA browser fixture needs two safety responders');
+  return { SAFETY_PRIMARY_ACCOUNT: roster.primary, SAFETY_BACKUP_ACCOUNT: roster.backup };
 }
 
 /** Admission has the run deadline; the step keeps its full execution budget once admitted. */
@@ -333,10 +343,11 @@ async function runE2e(): Promise<void> {
   if (!plan.stories) console.log(`Storybook: skipped (${plan.storySkipReason})`);
   const authDir = join(root, '.temp', 'stack', `rezics-qa-${appRunId}`, 'web-auth');
   const runtime = readEnv(join(authDir, 'runtime.env'));
+  const people = JSON.parse(readFileSync(join(authDir, 'private.json'), 'utf8')) as Parameters<typeof browserSafetyEnvironment>[0];
   const publicConfig = JSON.parse(readFileSync(join(authDir, 'public.json'), 'utf8')) as { clientId: string };
   // Journeys that verify an email read this stack's Mailpit, not the shared dev stack's.
   const compose = readEnv(join(root, '.temp', 'stack', `rezics-qa-${appRunId}`, 'compose.env'));
-  const env = browserStackEnvironment(process.env, { ...apps, ...runtime, WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
+  const env = browserStackEnvironment(process.env, { ...apps, ...runtime, ...browserSafetyEnvironment(people), WEB_OAUTH_CLIENT_ID: publicConfig.clientId,
     ...(compose.MAILPIT_HTTP_PORT ? { MAILPIT_URL: `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}` } : {}),
     REZICS_QA_RUN_ID: runId,
     REZICS_WEB_AUTH_PUBLIC_PATH: join(authDir, 'public.json'),
@@ -448,6 +459,15 @@ async function runE2e(): Promise<void> {
       const relay = new Pool({ connectionString: env.MAIN_RELAY_DATABASE_URL });
       try { await initializeRelayCheckpoint(relay, env.MAIN_RELAY_CONSUMER, env.MAIN_DATA_EPOCH); }
       finally { await relay.end(); }
+      await admitIntegrationWorkScope({ root, projectRunId: appRunId, fusekiUrl: env.FUSEKI_URL!,
+        maintenanceToken: env.FUSEKI_MAINTENANCE_TOKEN, environment: env });
+      const access = new Pool({ connectionString: env.ACCESS_DATABASE_URL });
+      try {
+        // Web bootstrap registered the member; its verified operator also needs an Access identity for safety delivery.
+        await access.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+          VALUES (gen_random_uuid(), $1, $2) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
+        [env.ACCOUNT_ISSUER, people.operator.id]);
+      } finally { await access.end(); }
       const account = launch('account', 'bun', ['services/account/src/index.ts']);
       await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
       if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
