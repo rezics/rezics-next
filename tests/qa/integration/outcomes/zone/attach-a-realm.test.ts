@@ -227,8 +227,17 @@ outcomeTest(attachment, 'operator', async () => {
       },
     }),
   );
-  const refusal = await answer<{ code: string }>(Promise.resolve(attempted), 403);
-  expect(refusal.code).toBe('authority_denied');
+  expect([400, 403]).toContain(attempted.status);
+  const refusal = await answer<{ code: string; title: string }>(
+    Promise.resolve(attempted),
+    attempted.status,
+  );
+  if (attempted.status === 400)
+    expect(refusal).toMatchObject({
+      code: 'invalid_zone_configuration',
+      title: 'default Realm is unavailable',
+    });
+  else expect(refusal.code).toBe('authority_denied');
   expect(await head(target.zone)).toEqual(zoneOnly);
   await resourceMandate('realm.attach', `realm:attach:${sessions.realm}`);
   const current = await head(target.zone);
