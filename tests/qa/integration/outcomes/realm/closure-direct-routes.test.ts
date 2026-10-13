@@ -1,7 +1,8 @@
+import { outcomeTest } from '../../../support/outcome-test.ts';
+import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/closure-direct-routes.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
 } from '../../../support/personas.ts';
@@ -36,76 +37,7 @@ async function command<T>(
     throw new Error(`${method} ${path}: expected ${status}, received ${response.status} ${raw}`);
   return JSON.parse(raw) as T;
 }
-async function closeRealm(sessions: PersonaSessions): Promise<string | null> {
-  const operator = sessions.operator;
-  try {
-    const basis = await command<{ revision: string }>(
-      sessions.owner, 'GET', `${root(sessions)}?${acting(sessions.owner)}`,
-    );
-    const ruleKey = randomUUID();
-    const published = await command<{ ref: string; revision: string; digest: string }>(
-      operator, 'POST', '/v1/governance/rules', {
-        profile: 'governance-rule-v1', ref: `urn:rezics:rule:${randomUUID()}`,
-        scopeId: 'governance:platform', actingSubject: operator.actingSubject,
-        expectedRevision: null, document: { rule: 'Conceal this synthetic closure fixture' },
-        idempotencyKey: ruleKey,
-      }, 201, ruleKey,
-    );
-    const reportKey = randomUUID();
-    const report = await command<{ caseId: string }>(
-      sessions.stranger, 'POST', '/v1/reports', {
-        profile: 'content-report-v1', actingSubject: sessions.stranger.actingSubject,
-        authority: { kind: 'platform', scopeId: 'governance:platform' },
-        context: 'urn:rezics:context:global',
-        target: { owner: 'graph', resource: sessions.realm, component: 'record' },
-        disclosure: 'parties', reasonCode: 'reviewed_removal',
-        statement: 'Review this synthetic Realm record independently of its public Works.',
-        evidence: [{ owner: 'graph', resource: sessions.realm, component: 'record',
-          revision: null, locator: null }],
-        idempotencyKey: reportKey,
-      }, 201, reportKey,
-    );
-    const claimKey = randomUUID();
-    await command(operator, 'POST', `/v1/safety-cases/${report.caseId}/claim`, {
-      actingSubject: operator.actingSubject, idempotencyKey: claimKey,
-    }, 200, claimKey);
-    const safety = await command<{ generation: string; reports: { evidenceDigest: string }[] }>(
-      operator, 'GET', `/v1/safety-cases/${report.caseId}?${acting(operator)}`,
-    );
-    const key = randomUUID();
-    const input = {
-      profile: 'moderation-decision-v1', caseId: report.caseId,
-      expectedGeneration: safety.generation, actingSubject: operator.actingSubject,
-      outcome: 'restrict',
-      targets: [{ owner: 'graph', resource: sessions.realm, component: 'record',
-        locator: null, scopeKind: 'component', revision: null,
-        expectedHead: basis.revision, effect: 'disclosure' }],
-      rule: { ref: published.ref, revision: published.revision, digest: published.digest },
-      evidenceDigest: safety.reports[0]!.evidenceDigest,
-      reversesDecisionId: null, answersStepId: null,
-      rationale: 'Close only the exact Realm record', disclosure: 'parties',
-      reasons: {
-        facts: 'The synthetic report and exact Realm record were reviewed.',
-        scope: 'Only the declared Realm record.', duration: 'Until a later staff decision.',
-        automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence',
-        contentLanguage: 'en',
-      },
-      idempotencyKey: key,
-    };
-    // Replay the same admitted command; a 202 is not an effective closure.
-    for (let attempt = 0; attempt < 4; attempt++) {
-      const response = await operator.main('POST', '/v1/moderation/decisions', input, key);
-      const raw = await response.text();
-      const result = JSON.parse(raw) as { operation?: { status: string } };
-      if (response.status === 200 && result.operation?.status === 'completed') return null;
-      if (response.status !== 202 || attempt === 3)
-        throw new Error(`POST /v1/moderation/decisions: ${response.status} ${raw}`);
-    }
-    throw new Error('Platform closure did not complete');
-  } catch (error) {
-    return String(error);
-  }
-}
+
 function concealed(failures: string[], path: string, answer: Answer, absent: Answer) {
   if (answer.status !== absent.status || JSON.stringify(JSON.parse(answer.body)) !==
       JSON.stringify(JSON.parse(absent.body))) {
@@ -189,22 +121,11 @@ beforeAll(async () => {
     adopted = await publish(closed, true);
     liveAdoption = await publish(live, true);
     for (const fixture of [closed, live]) {
-      // The persona helper attaches a separate Space's Zone. D6 needs a
-      // Realm-owned Zone, so detach that site and create one in the Realm Space.
-      const owner = fixture.owner;
-      const path = `/v1/zones/${short(fixture.zone)}/configuration`;
-      const config = await command<{ revision: string }>(owner, 'GET', `${path}?${acting(owner)}`);
-      await command(owner, 'PUT', path, {
-        actingSubject: owner.actingSubject, expectedHead: config.revision, defaultRealm: null,
-      });
-      const zone = `https://rezics.com/id/${randomUUID()}`;
-      const created = await command<{ revision: string }>(owner, 'POST', '/v1/zones', {
-        zone, space: fixture.space, disclosure: 'public', name: 'Realm-owned original fixture site',
-        language: 'en', actingSubject: owner.actingSubject,
-      }, 201);
-      await command(owner, 'PUT', `/v1/zones/${short(zone)}/configuration`, {
-        actingSubject: owner.actingSubject, expectedHead: created.revision, defaultRealm: fixture.realm,
-      });
+      // personaSessions creates a Zone Space and attaches it through the
+      // public configuration API. Its owner is the Realm's owner Person.
+      const config = await command<{ configuration: { defaultRealm: string } }>(fixture.owner, 'GET',
+        `/v1/zones/${short(fixture.zone)}/configuration?${acting(fixture.owner)}`);
+      expect(config.configuration.defaultRealm).toBe(fixture.realm);
     }
     const owner = privateRealm.owner;
     const settings = await command<{ generation: string }>(owner, 'GET',
@@ -270,9 +191,9 @@ async function reads(name: PersonaName) {
     failures.push(`Independent publication GET ${publicationPath}: ${publication.status} ${publication.body}`);
   reportFailures(failures);
 }
-outcomeTest(declaration, 'visitor', () => reads('visitor'));
-outcomeTest(declaration, 'stranger', () => reads('stranger'));
-outcomeTest(declaration, 'member', () => reads('member'));
-outcomeTest(declaration, 'owner', () => reads('owner'));
-outcomeTest(declaration, 'moderator', () => reads('moderator'));
-outcomeTest(declaration, 'operator', () => reads('operator'));
+outcomeTest(declaration, 'visitor', () => closureCell(declaration, 'visitor', () => closed, () => reads('visitor')));
+outcomeTest(declaration, 'stranger', () => closureCell(declaration, 'stranger', () => closed, () => reads('stranger')));
+outcomeTest(declaration, 'member', () => closureCell(declaration, 'member', () => closed, () => reads('member')));
+outcomeTest(declaration, 'owner', () => closureCell(declaration, 'owner', () => closed, () => reads('owner')));
+outcomeTest(declaration, 'moderator', () => closureCell(declaration, 'moderator', () => closed, () => reads('moderator')));
+outcomeTest(declaration, 'operator', () => closureCell(declaration, 'operator', () => closed, () => reads('operator')));

@@ -1,9 +1,11 @@
+import { closureSetup, closureCell, closureHydrationFence, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-search.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
+  personaNames,
   type PersonaName,
   type PersonaSession,
   type PersonaSessions,
@@ -14,7 +16,9 @@ type Work = { work: string; mainVersion: string; workRevision: string };
 type Publication = Work & { contribution: string; publicationDecision: string; selection: string };
 let sessions: PersonaSessions;
 const publications: Publication[] = [];
-let closureUnavailable: string | undefined;
+let closureUnavailable: string | null = null;
+let hydration: ReturnType<typeof closureHydrationFence>;
+const raced = new Map<PersonaName, { path: string; status: number; body: string }>();
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
@@ -29,10 +33,19 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 
 async function missing(person: PersonaSession, path: string, absent: string) {
   const unavailable = await person.main('GET', path);
+  const body = await unavailable.json() as { code?: string };
+  if (unavailable.status === 409 && body.code === 'read_basis_changed') {
+    const restarted = new URL(path, 'http://main.local');
+    expect(restarted.searchParams.has('cursor'), path).toBe(true);
+    expect(JSON.stringify(body), path).not.toContain(sessions.realm);
+    restarted.searchParams.delete('cursor');
+    await missing(person, restarted.pathname + restarted.search, absent);
+    return;
+  }
   const ordinary = await person.main('GET', absent);
   expect(ordinary.status, absent).toBe(404);
   expect(unavailable.status, path).toBe(ordinary.status);
-  expect(await unavailable.json(), path).toEqual(await ordinary.json());
+  expect(body, path).toEqual(await ordinary.json());
 }
 
 async function requireClosure(person: PersonaSession) {
@@ -121,83 +134,33 @@ async function publishOriginals() {
   }
 }
 
-async function closeRealm(rule: { ref: string; revision: string; digest: string }) {
-  const owner = sessions.owner, operator = sessions.operator;
-  const header = await answer<{ revision: string }>(
-    owner.main('GET', `/v1/realms/${short(sessions.realm)}?${acting(owner)}`),
-  );
-  const reportKey = randomUUID();
-  const report = await answer<{ caseId: string }>(owner.main('POST', '/v1/reports', {
-    profile: 'content-report-v1', actingSubject: owner.actingSubject,
-    authority: { kind: 'platform', scopeId: 'governance:platform' },
-    context: 'urn:rezics:context:global',
-    target: { owner: 'graph', resource: sessions.realm, component: 'record' },
-    disclosure: 'parties', reasonCode: 'reviewed_removal',
-    statement: 'Review the exact Realm record, retaining independent originals.',
-    evidence: [{ owner: 'graph', resource: sessions.realm, component: 'record', revision: null, locator: null }],
-    idempotencyKey: reportKey,
-  }, reportKey), 201);
-  const claimKey = randomUUID();
-  await answer(operator.main('POST', `/v1/safety-cases/${report.caseId}/claim`, {
-    actingSubject: operator.actingSubject, idempotencyKey: claimKey,
-  }, claimKey));
-  const basis = await answer<{ generation: string; reports: { evidenceDigest: string }[] }>(
-    operator.main('GET', `/v1/safety-cases/${report.caseId}?${acting(operator)}`),
-  );
-  const key = randomUUID();
-  const command = {
-    profile: 'moderation-decision-v1', caseId: report.caseId,
-    expectedGeneration: basis.generation, actingSubject: operator.actingSubject, outcome: 'restrict',
-    targets: [{
-      owner: 'graph', resource: sessions.realm, component: 'record', locator: null,
-      scopeKind: 'component', revision: null, expectedHead: header.revision, effect: 'disclosure',
-    }],
-    rule, evidenceDigest: basis.reports[0]!.evidenceDigest,
-    reversesDecisionId: null, answersStepId: null,
-    rationale: 'Close the Realm record without restricting independent publications.',
-    disclosure: 'parties',
-    reasons: {
-      facts: 'The exact Realm record was reviewed.', scope: 'This Realm record.',
-      duration: 'Until a later platform decision.', automation: false,
-      appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en',
-    },
-    idempotencyKey: key,
-  };
-  const response = await operator.main('POST', '/v1/moderation/decisions', command, key);
-  const raw = await response.text();
-  const receipt = JSON.parse(raw) as { operation?: { status: string } };
-  if (response.status !== 200 || receipt.operation?.status !== 'completed') {
-    closureUnavailable = `Closure prerequisite POST /v1/moderation/decisions: HTTP ${response.status} ${raw}`;
-    console.log(closureUnavailable);
-  }
-}
-
-// Unexpected setup exceptions stay in beforeAll. Only a recorded inability to
-// establish closure through the public API becomes a pending prerequisite.
 beforeAll(async () => {
-  sessions = await personaSessions('public');
-  const key = randomUUID();
-  const command = {
-    profile: 'governance-rule-v1', ref: `urn:rezics:rule:${randomUUID()}`,
-    scopeId: 'governance:platform', actingSubject: sessions.operator.actingSubject,
-    expectedRevision: null, document: { rule: 'Review whole-Realm closure while retaining independent publications.' },
-    idempotencyKey: key,
-  };
-  const response = await sessions.operator.main('POST', '/v1/governance/rules', command, key);
-  const raw = await response.text();
-  const rule = JSON.parse(raw) as { ref: string; revision: string; digest: string; code?: string };
-  if (response.status === 403 && rule.code === 'governance_denied') {
-    closureUnavailable = `Closure fixture unavailable: POST /v1/governance/rules with governance:platform authority: HTTP 403 ${raw}`;
-    console.log(closureUnavailable);
-    return;
-  }
-  expect(response.status, raw).toBe(201);
-  await publishOriginals();
-  await prepareSurface();
-  await closeRealm({ ref: rule.ref, revision: rule.revision, digest: rule.digest });
+  hydration = closureHydrationFence();
+  sessions = await personaSessions('public', { graphEndpoint: hydration.url });
+  closureUnavailable = await closureSetup(sessions, async () => {
+    const rule = await publishClosureRule(sessions);
+    await publishOriginals();
+    await prepareSurface();
+    hydration.arm(publications.map(publication => publication.work), personaNames.length);
+    const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
+    const path = `/v1/search/catalogue?${params}`;
+    const pending = personaNames.map(async name => {
+      const response = await sessions[name].main('GET', path);
+      raced.set(name, { path, status: response.status, body: await response.text() });
+    });
+    const finished = Promise.allSettled(pending);
+    try {
+      await hydration.blocked();
+      await effectClosure(sessions, rule);
+    } finally {
+      hydration.resume();
+      const results = await finished;
+      for (const result of results) if (result.status === 'rejected') throw result.reason;
+    }
+  });
 }, 180_000);
 
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => { try { await sessions?.close(); } finally { await hydration?.close(); } });
 
 type CataloguePage = { results: { work: string }[]; next: string | null; count: { value: number; precision: string } };
 let continuation: string;
@@ -213,6 +176,24 @@ async function prepareSurface() {
 async function delivered(name: PersonaName) {
   const person = sessions[name];
   await requireClosure(person);
+  const during = raced.get(name)!;
+  const body = JSON.parse(during.body) as { results?: unknown[]; count?: { value: number }; code?: string };
+  console.log('Realm search during hydration', JSON.stringify({ persona: name, ...during }));
+  expect(JSON.stringify(body), during.path).not.toContain(sessions.realm);
+  for (const publication of publications) {
+    expect(JSON.stringify(body), during.path).not.toContain(publication.selection);
+    expect(JSON.stringify(body), during.path).not.toContain(publication.work);
+  }
+  if (during.status === 200) {
+    expect(body.results, during.path).toEqual([]);
+    expect(body.count?.value, during.path).toBe(0);
+  } else if (during.status === 409) expect(body.code, during.path).toBe('read_basis_changed');
+  else if (during.status === 503) expect(body.code, during.path).toBe('work_read_unavailable');
+  else {
+    const ordinary = await person.main('GET', `/v1/search/catalogue?q=${phrase}&realm=${encodeURIComponent(`https://rezics.com/id/${randomUUID()}`)}`);
+    expect(during.status, during.path).toBe(ordinary.status);
+    expect(body, during.path).toEqual(await ordinary.json());
+  }
   const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
   const absent = new URLSearchParams({ q: phrase, realm: `https://rezics.com/id/${randomUUID()}`, limit: '1' });
   await missing(person, `/v1/search/catalogue?${params}`, `/v1/search/catalogue?${absent}`);
@@ -246,10 +227,10 @@ async function delivered(name: PersonaName) {
   await independent(person);
 }
 
-outcomeTest(closure, 'visitor', () => delivered('visitor'));
-outcomeTest(closure, 'stranger', () => delivered('stranger'));
-outcomeTest(closure, 'member', () => delivered('member'));
-outcomeTest(closure, 'owner', () => delivered('owner'));
-outcomeTest(closure, 'moderator', () => delivered('moderator'));
-outcomeTest(closure, 'operator', () => delivered('operator'));
+outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')));
+outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')));
+outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')));
+outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')));
+outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')));
+outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')));
 

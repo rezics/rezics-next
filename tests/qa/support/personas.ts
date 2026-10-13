@@ -26,7 +26,8 @@ export const personaNames = [
   'operator',
 ] as const;
 export type PersonaName = (typeof personaNames)[number];
-type Call = (method: string, path: string, body?: unknown, key?: string) => Promise<Response>;
+type Call = (method: string, path: string, body?: unknown, key?: string,
+  options?: { headers?: Record<string, string>; bytes?: Uint8Array }) => Promise<Response>;
 export interface PersonaSession {
   /** Null only for the signed-out visitor. Commands supply this as actingSubject. */
   actingSubject: string | null;
@@ -63,12 +64,18 @@ function session(
   const sessionKey = randomUUID();
   const call =
     (base: string, credentials: () => Promise<Headers>): Call =>
-    async (method, path, body, key) => {
+    async (method, path, body, key, options) => {
       const url = new URL(path, base);
       if (url.origin !== new URL(base).origin)
         throw new Error('A persona request must stay on its service origin');
       const headers = await credentials();
+      for (const [name, value] of Object.entries(options?.headers ?? {})) {
+        if (['authorization', 'cookie', 'x-session-key'].includes(name.toLowerCase()))
+          throw new Error('A persona request cannot replace its identity');
+        headers.set(name, value);
+      }
       if (body !== undefined) headers.set('content-type', 'application/json');
+      if (body !== undefined && options?.bytes) throw new Error('A request has one body');
       if (key !== undefined || !['GET', 'HEAD'].includes(method.toUpperCase()))
         headers.set('idempotency-key', key ?? randomUUID());
       const request = (signal: AbortSignal) => fetch(url, {
@@ -76,7 +83,8 @@ function session(
         headers,
         redirect: 'manual',
         signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        ...(options?.bytes ? { body: new Blob([options.bytes]) }
+          : body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       return ['GET', 'HEAD'].includes(method.toUpperCase())
         ? outcomeResponse(request)
@@ -103,7 +111,13 @@ function session(
 let firstOperator:
   | { runId: string; email: string; password: string; actingSubject: string }
   | undefined;
-async function applications() {
+interface PersonaOptions {
+  /** External delivery service exercised over HTTP by the production adapter. */
+  notificationProvider?: { url: string; token: string; callbackSecret: string };
+  /** A transparent HTTP proxy may delay real storage responses for race proofs. */
+  graphEndpoint?: string;
+}
+async function applications(options: PersonaOptions) {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Persona sessions require the QA integration tier');
   const auth = await joiningAuthFixture(runId);
@@ -185,9 +199,15 @@ async function applications() {
     if (initialized !== 0) throw new Error(`Main relay initialization exited with ${initialized}`);
     console.log(`Persona Main relay initialization: ${((performance.now() - relayStarted) / 1000).toFixed(2)}s`);
     const composed = await composeMain({
-      config: mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined }),
+      config: mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined,
+        ...(options.notificationProvider ? {
+          MAIN_NOTIFICATION_PROVIDER_URL: options.notificationProvider.url,
+          MAIN_NOTIFICATION_PROVIDER_TOKEN: options.notificationProvider.token,
+          MAIN_NOTIFICATION_CALLBACK_SECRET: options.notificationProvider.callbackSecret,
+        } : {}),
+      }),
       fuseki: new FusekiClient(
-        Bun.env.FUSEKI_URL!,
+        options.graphEndpoint ?? Bun.env.FUSEKI_URL!,
         Bun.env.FUSEKI_MAINTENANCE_TOKEN,
         Bun.env.FUSEKI_COMMAND_TOKEN,
       ),
@@ -314,9 +334,10 @@ let active: Promise<Awaited<ReturnType<typeof applications>>> | undefined;
  * elapsedSeconds reports the measured cost; close once after the file's proofs finish. */
 export async function personaSessions(
   visibility: 'public' | 'private' = 'public',
+  options: PersonaOptions = {},
 ): Promise<PersonaSessions> {
   const started = performance.now();
-  const stack = await (active ??= applications());
+  const stack = await (active ??= applications(options));
   try {
     const owner = await stack.signup('owner');
     const stranger = await stack.signup('stranger');

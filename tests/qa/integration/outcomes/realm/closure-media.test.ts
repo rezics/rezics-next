@@ -1,92 +1,163 @@
-import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
-import { randomUUID } from 'node:crypto';
-import media from '../../../../../scripts/qa/cases/outcomes/realm/closure-media.ts';
 import { outcomeTest } from '../../../support/outcome-test.ts';
-import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
+import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { createHash, randomUUID } from 'node:crypto';
+import { deflateSync } from 'node:zlib';
+import media from '../../../../../scripts/qa/cases/outcomes/realm/closure-media.ts';
+import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import { closureCommand, closureCredit, closureOriginal, closureCell, closureSetup,
+  effectClosure, publishClosureRule } from './closure-fixture.ts';
 
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
-let ruleAnswer: { status: number; body: string };
-let ruleRequest: object;
-let mandateAnswer: { status: number; body: string };
-
-async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
-  const response = await request;
-  const raw = await response.text();
-  expect(response.status, `${response.status}: ${raw}`).toBe(status);
-  return JSON.parse(raw) as T;
+let setupFailure: string | null = null;
+let original: Awaited<ReturnType<typeof closureOriginal>>;
+type Image = { asset: string; representation: string; use: string; etag: string };
+let closedOnly: Image;
+let shared: Image;
+let independentUse: string;
+const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
+// Original green pixel authored by this fixture, including valid PNG checksums.
+function chunk(kind: string, data: Uint8Array) {
+  const encoded = Buffer.concat([Buffer.from(kind), data]);
+  let crc = 0xffffffff;
+  for (const byte of encoded) {
+    crc ^= byte;
+    for (let bit = 0; bit < 8; bit++) crc = (crc >>> 1) ^ (crc & 1 ? 0xedb88320 : 0);
+  }
+  const length = Buffer.alloc(4), checksum = Buffer.alloc(4);
+  length.writeUInt32BE(data.length); checksum.writeUInt32BE((crc ^ 0xffffffff) >>> 0);
+  return Buffer.concat([length, encoded, checksum]);
 }
+const ihdr = Buffer.alloc(13);
+ihdr.writeUInt32BE(1, 0); ihdr.writeUInt32BE(1, 4); ihdr[8] = 8; ihdr[9] = 6;
+const bytes = new Uint8Array(Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+  chunk('IHDR', ihdr), chunk('IDAT', deflateSync(new Uint8Array([0, 33, 150, 83, 255]))),
+  chunk('IEND', new Uint8Array())]));
 
+async function image(): Promise<Image> {
+  const author = sessions.member;
+  const reservation = await closureCommand<{ asset: string; uploadUrl: string; upload: string }>(author,
+    'POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png',
+      byteLength: bytes.length, sha256: sha(bytes), disclosure: 'public', actingSubject: author.actingSubject }, 201);
+  const upload = await author.main('PUT', reservation.uploadUrl, undefined, undefined,
+    { bytes, headers: { 'content-type': 'application/octet-stream' } });
+  const raw = await upload.text();
+  expect(upload.status, raw).toBe(201);
+  const activated = JSON.parse(raw) as { status: string; representation: string };
+  expect(activated.status).toBe('activated');
+  const deadline = performance.now() + 30_000;
+  for (;;) {
+    const current = await closureCommand<{ clearance: string }>(author, 'GET', `/v1/media/uploads/${reservation.upload}`);
+    if (current.clearance === 'cleared') break;
+    expect(current.clearance, 'A benign original image must clear screening').toBe('screening');
+    expect(performance.now(), 'Public image screening must finish').toBeLessThan(deadline);
+    await Bun.sleep(100);
+  }
+  const use = await createUse(author, activated.representation, sessions.realm);
+  return { asset: reservation.asset, representation: activated.representation, use, etag: `"${sha(bytes)}"` };
+}
+async function createUse(author: PersonaSession, representation: string, context: string) {
+  const created = await closureCommand<{ use: string }>(author, 'POST', '/v1/media/uses', {
+    actingSubject: author.actingSubject, target: original.work, representation,
+    occurrence: randomUUID(), context, conceal: false,
+  }, 201);
+  expect(created.use).toMatch(/^[0-9a-f-]{36}$/);
+  return created.use;
+}
+const actor = (person: PersonaSession) => person.actingSubject
+  ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
+async function available(person: PersonaSession, path: string, etag: string) {
+  const response = await person.main('GET', path);
+  expect(response.status, path).toBe(200);
+  expect(sha(new Uint8Array(await response.arrayBuffer())), path).toBe(sha(bytes));
+  expect(response.headers.get('etag'), path).toBe(etag);
+  const conditional = await person.main('GET', path, undefined, undefined, { headers: { 'if-none-match': etag } });
+  expect(conditional.status, path).toBe(304);
+  expect((await conditional.arrayBuffer()).byteLength).toBe(0);
+}
+async function absent(person: PersonaSession, path: string, control: string, etag: string) {
+  for (const headers of [{}, { 'if-none-match': etag }]) {
+    const closed = await person.main('GET', path, undefined, undefined, { headers });
+    const missing = await person.main('GET', control, undefined, undefined, { headers });
+    expect(closed.status, path).toBe(missing.status);
+    expect(closed.status, path).toBe(404);
+    expect(await closed.json(), path).toEqual(await missing.json());
+    expect(closed.headers.get('etag'), path).toBeNull();
+    expect(closed.headers.get('last-modified'), path).toBeNull();
+  }
+}
 beforeAll(async () => {
   sessions = await personaSessions('public');
-  const operator = sessions.operator;
-  const actor = operator.actingSubject!;
-  const authority = await answer<{ groups: string[] }>(operator.main('GET', '/v1/me/platform-access'));
-  expect(authority.groups).toContain('platform-admin');
-  // Request the exact action; platform administration cannot invent its assignment ceiling.
-  const path = `/v1/access/grants?profile=platform-grants-v1&issuerSubject=${encodeURIComponent(actor)}`;
-  const grants = await answer<{
-    authorityEpoch: string;
-    items: { permission: string; recipient: { principalId?: string } }[];
-  }>(operator.main('GET', path));
-  const recipient = grants.items.find(item => item.permission === 'platform:grant')?.recipient;
-  expect(recipient?.principalId).toBeDefined();
-  const mandateRequest = {
-    profile: 'platform-grant-change-v1',
-    issuerSubject: actor,
-    expectedAuthorityEpoch: grants.authorityEpoch,
-    grantId: randomUUID(),
-    action: 'create',
-    permission: 'platform:resource:governance.rule.publish',
-    scopeId: 'governance:platform',
-    recipient,
-    validUntil: new Date(Date.now() + 3_600_000).toISOString(),
-  };
-  const mandate = await operator.main('POST', '/v1/access/grant-changes', mandateRequest);
-  mandateAnswer = { status: mandate.status, body: await mandate.text() };
-  console.log('Closure rule-publisher mandate', JSON.stringify({ request: mandateRequest, answer: mandateAnswer }));
-  expect(mandateAnswer.status, mandateAnswer.body).toBe(403);
-  expect(JSON.parse(mandateAnswer.body)).toMatchObject({ code: 'grant_denied' });
-  const key = randomUUID();
-  ruleRequest = {
-    profile: 'governance-rule-v1',
-    ref: `urn:rezics:rule:${randomUUID()}`,
-    scopeId: 'governance:platform',
-    actingSubject: actor,
-    expectedRevision: null,
-    document: { rule: 'Close the affected Realm after reviewing its record' },
-    idempotencyKey: key,
-  };
-  const response = await operator.main('POST', '/v1/governance/rules', ruleRequest, key);
-  ruleAnswer = { status: response.status, body: await response.text() };
-  console.log('Closure media rule prerequisite', JSON.stringify({ request: ruleRequest, answer: ruleAnswer }));
-  // A changed prerequisite needs a complete closure fixture, not a silently green failing test.
-  expect(ruleAnswer.status, ruleAnswer.body).toBe(403);
-  expect(JSON.parse(ruleAnswer.body)).toMatchObject({ code: 'governance_denied' });
+  setupFailure = await closureSetup(sessions, async () => {
+    const rule = await publishClosureRule(sessions);
+    // Asset author/uploader is a joined member, distinct from the Realm owner.
+    original = await closureOriginal(sessions.member, 'Original closure image and independent story');
+    closedOnly = await image();
+    shared = await image();
+    independentUse = await createUse(sessions.member, shared.representation, 'urn:rezics:context:global');
+    for (const image of [closedOnly, shared]) {
+      await available(sessions.visitor, `/v1/media/uses/${image.use}`, image.etag);
+      await available(sessions.visitor, `/v1/media/representations/${image.representation}/bytes?use=${image.use}`, image.etag);
+    }
+    await available(sessions.visitor, `/v1/media/representations/${closedOnly.representation}/bytes`, closedOnly.etag);
+    await closureCommand(sessions.visitor, 'GET', `/v1/media/representations/${closedOnly.representation}`);
+    const metadata = await closureCommand<{ items: { status: string }[] }>(sessions.visitor,
+      'POST', '/v1/media/metadata', { items: [
+        { representation: closedOnly.representation, use: closedOnly.use },
+        { representation: closedOnly.representation },
+        { representation: shared.representation, use: shared.use },
+        { representation: shared.representation, use: independentUse },
+      ] });
+    expect(metadata.items.map(item => item.status)).toEqual(['available', 'available', 'available', 'available']);
+    await closureCredit(sessions.visitor, original.work, sessions.member);
+    await effectClosure(sessions, rule);
+  });
 }, 180_000);
-
-afterAll(async () => {
-  await sessions?.close();
-});
+afterAll(async () => { await sessions?.close(); });
 
 async function delivery(name: PersonaName) {
+  expect(setupFailure, setupFailure ?? '').toBeNull();
   const person = sessions[name];
-  // Establish the actual reader over HTTP, rather than converting all six to anonymous doubles.
-  const query = person.actingSubject
-    ? `?actingSubject=${encodeURIComponent(person.actingSubject)}`
-    : '';
-  await answer(person.main('GET', `/v1/realms/${sessions.realm.slice(-36)}${query}`));
-  // No byte or validator assertion can prove closure without a closed occurrence.
-  throw new Error(
-    `Public closure fixture unavailable: POST /v1/governance/rules ${JSON.stringify(ruleRequest)} -> ${ruleAnswer.status} ${ruleAnswer.body}. ` +
-    `Rule-publisher mandate: ${mandateAnswer.status} ${mandateAnswer.body}. ` +
-    'No public assignment ceiling establishes a platform rule publisher. Metadata, bare/exact-use bytes, conditional 304, Asset-owner separation, independent uses and final live disclosure remain unproved.',
-  );
+  for (const query of new Set(['', actor(person)])) await scopedDelivery(person, query);
+  if (person.actingSubject) {
+    const path = `/v1/media/assets/${shared.asset}/bytes?target=${encodeURIComponent(original.work)}&${actor(person)}`;
+    if (name === 'member') {
+      // The uploader's independent Asset-owner access is distinct from a
+      // closed Realm occurrence. Other roles receive no source-owner bypass.
+      const source = await person.main('GET', path);
+      expect(source.status, path).toBe(200);
+      expect(sha(new Uint8Array(await source.arrayBuffer()))).toBe(sha(bytes));
+    } else await absent(person, path,
+      `/v1/media/assets/${randomUUID()}/bytes?target=${encodeURIComponent(original.work)}&${actor(person)}`, shared.etag);
+  }
+  await closureCredit(person, original.work, sessions.member);
 }
-
-outcomeTest(media, 'visitor', () => delivery('visitor'));
-outcomeTest(media, 'stranger', () => delivery('stranger'));
-outcomeTest(media, 'member', () => delivery('member'));
-outcomeTest(media, 'owner', () => delivery('owner'));
-outcomeTest(media, 'moderator', () => delivery('moderator'));
-outcomeTest(media, 'operator', () => delivery('operator'));
+async function scopedDelivery(person: PersonaSession, query: string) {
+  for (const image of [closedOnly, shared]) {
+    await absent(person, `/v1/media/uses/${image.use}?${query}`, `/v1/media/uses/${randomUUID()}?${query}`, image.etag);
+    await absent(person, `/v1/media/representations/${image.representation}/bytes?use=${image.use}&${query}`,
+      `/v1/media/representations/${randomUUID()}/bytes?use=${randomUUID()}&${query}`, image.etag);
+    const metadata = await closureCommand<{ items: { status: string }[] }>(person, 'POST', '/v1/media/metadata', {
+      ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
+      items: [{ representation: image.representation, use: image.use }],
+    });
+    expect(metadata.items).toEqual([{ status: 'unavailable', reference: { representation: image.representation, use: image.use } }]);
+  }
+  await absent(person, `/v1/media/representations/${closedOnly.representation}/bytes?${query}`,
+    `/v1/media/representations/${randomUUID()}/bytes?${query}`, closedOnly.etag);
+  await absent(person, `/v1/media/representations/${closedOnly.representation}?${query}`,
+    `/v1/media/representations/${randomUUID()}?${query}`, closedOnly.etag);
+  const bare = await closureCommand<{ items: { status: string }[] }>(person, 'POST', '/v1/media/metadata', {
+    ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}), items: [{ representation: closedOnly.representation }],
+  });
+  expect(bare.items).toEqual([{ status: 'unavailable', reference: { representation: closedOnly.representation } }]);
+  await available(person, `/v1/media/uses/${independentUse}?${query}`, shared.etag);
+  await available(person, `/v1/media/representations/${shared.representation}/bytes?use=${independentUse}&${query}`, shared.etag);
+  await available(person, `/v1/media/representations/${shared.representation}/bytes?${query}`, shared.etag);
+}
+outcomeTest(media, 'visitor', () => closureCell(media, 'visitor', () => sessions, () => delivery('visitor')));
+outcomeTest(media, 'stranger', () => closureCell(media, 'stranger', () => sessions, () => delivery('stranger')));
+outcomeTest(media, 'member', () => closureCell(media, 'member', () => sessions, () => delivery('member')));
+outcomeTest(media, 'owner', () => closureCell(media, 'owner', () => sessions, () => delivery('owner')));
+outcomeTest(media, 'moderator', () => closureCell(media, 'moderator', () => sessions, () => delivery('moderator')));
+outcomeTest(media, 'operator', () => closureCell(media, 'operator', () => sessions, () => delivery('operator')));
