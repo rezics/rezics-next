@@ -1,4 +1,5 @@
 import { signupPolicyFixture } from '../../../scripts/dev/signup-policy-fixture.ts';
+import { assertSourceSupportWithdrawal } from '../fixtures/source-support-withdrawal.ts';
 import { signIn } from '../../../scripts/lib/oauth-client.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { appendFileSync, mkdirSync } from 'node:fs';
@@ -22,7 +23,7 @@ import { OpenLibraryConversionStore } from '../../../services/main/src/modules/s
 import { OpenLibrarySourceGraph } from '../../../services/main/src/modules/source/graph-projection.ts';
 import { SourceIntakeStore } from '../../../services/main/src/modules/source/intake.ts';
 import { SourceNativeWorkProposalStore } from '../../../services/main/src/modules/source/native-work-proposal.ts';
-import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption } from '../../../services/main/src/modules/source/native-work-adoption.ts';
+import { SourceNativeWorkAdoptionStore, type NativeWorkSourceAdoption, type NativeWorkSourceTitleApplication } from '../../../services/main/src/modules/source/native-work-adoption.ts';
 import { type NativeWorkSourceAttachment, type NativeWorkSupportCollection, SourceNativeWorkAttachmentStore } from '../../../services/main/src/modules/source/native-work-attachment.ts';
 import { readTitleControl } from '../../../services/main/src/modules/work/title-control.ts';
 
@@ -133,7 +134,7 @@ async function freePort(): Promise<number> {
   });
 }
 
-test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment completes each bounded dependency and preserves race/replay receipts', async () => {
+async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<void> {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
     || !Bun.env.ACCOUNT_MAIN_RESOURCE || !Bun.env.FUSEKI_URL
@@ -141,6 +142,7 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment 
     throw new Error('Run through the isolated QA integration tier');
   }
   const evidence = new CompletionEvidence();
+  evidence.record('scenario', { continuation });
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
@@ -245,11 +247,24 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment 
       { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! }, sourceConversions);
     const sourceProposals = new SourceNativeWorkProposalStore(contentPool, sourceGraph, sourceConversions);
     let failNextBinding = false;
+    let failNextTitleBinding = false;
+    let loseNextWithdrawalResponse = false;
+    let failNextSourceFetch = false;
     const bindingFaultPool = new Proxy(contentPool, { get(target, property) {
       if (property === 'query') return (query: string, values: unknown[]) => {
         if (failNextBinding && query.includes('INSERT INTO source.native_work_binding')) {
           failNextBinding = false;
           throw new Error('injected post-graph binding write failure');
+        }
+        if (failNextTitleBinding && query.includes('INSERT INTO source.native_work_title_application')) {
+          failNextTitleBinding = false;
+          throw new Error('injected post-edit source application write failure');
+        }
+        if (loseNextWithdrawalResponse && query.includes('INSERT INTO source.native_work_support_withdrawal')) {
+          loseNextWithdrawalResponse = false;
+          return target.query(query, values).then(() => {
+            throw new Error('injected lost committed withdrawal response');
+          });
         }
         return target.query(query, values);
       };
@@ -326,6 +341,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment 
       sourceAttachments: new SourceNativeWorkAttachmentStore(attachmentFaultPool, sourceProposals,
         sourceAdoptions, environment, attachmentAccess),
       openLibraryFetch: (async (url: string) => {
+        if (failNextSourceFetch) {
+          failNextSourceFetch = false;
+          return new Response('', { status: 503 });
+        }
         const workId = url.split('/').at(-1)!.slice(0, -5);
         return new Response(JSON.stringify({ key: `/works/${workId}`, type: { key: '/type/work' },
           title: titles[workId] ?? 'Source title', revision: 1,
@@ -452,6 +471,157 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment 
           headGuarantee: 'verified-before-commit' } } });
       expect((await pool.query('SELECT id FROM source.native_work_support_attachment WHERE work = $1', [raceWork.work])).rowCount).toBe(1);
     }
+    if (continuation) {
+      // Build the original applied support independently of the earlier controls.
+      // Retained provider bytes, confirmed title and exact native head are the
+      // same inputs as the original sequence, rather than seeded owner rows.
+      const proposal = await sourceTitleProposal(call, fullToken, 'OL45804W', 'Source title');
+      await authority('work:create:root', 'work.create');
+      const adoptionBody = { profile: 'source-native-work-adoption-v1',
+        actingSubject: actor, confirmedTitle: 'Source title', titleLanguage: 'en' };
+      const adopted = await call('POST', `/v1/sources/proposals/${proposal.split('/').at(-1)}/adoption/native-work`,
+        fullToken, adoptionBody);
+      expect(adopted.status).toBe(201);
+      const adoption = (await adopted.json() as { adoption: NativeWorkSourceAdoption }).adoption;
+      expect(adoption).toMatchObject({ title: 'Source title', rightsStatus: 'undetermined',
+        adoptedFields: ['title', 'semanticTypes'] });
+      const refreshedBytes = Buffer.from(JSON.stringify({ key: '/works/OL45804W',
+        type: { key: '/type/work' }, title: 'Source title refreshed', revision: 2,
+        description: { value: 'Changed source-only expression' } }));
+      const refreshed = await sourceIntake.submit(principalId, `source-refresh-${randomUUID()}`, {
+        provider: 'open-library', namespace: 'work', externalId: 'OL45804W',
+        sourceRevision: 'open-library-revision:2', mediaType: 'application/json', retention: 'retained',
+        rawBytesBase64: refreshedBytes.toString('base64'),
+        coverage: { scope: 'open-library-work-response-v1', complete: true, omittedFields: [] },
+        rightsEvidence: { basis: 'unknown', note: '' },
+      }, { profile: 'open-library-work-acquisition-v1', url: 'https://openlibrary.org/works/OL45804W.json',
+        status: 200, etag: null, lastModified: null, fetchedAt: new Date().toISOString() });
+      const converted = await sourceConversions.convert(principalId,
+        refreshed.observation.observation.split('/').at(-1)!);
+      const conversion = converted!.conversion.conversion.split('/').at(-1)!;
+      await sourceGraph.project(principalId, conversion);
+      const refreshedProposal = await sourceProposals.propose(principalId, conversion);
+      const titlePath = `/v1/works/${adoption.work.split('/').at(-1)}/source-title-applications/`
+        + refreshedProposal!.proposal.proposal.split('/').at(-1)!;
+      const titleBody = { profile: 'native-work-source-title-application-v1',
+        titleControl: { head: null, epoch: '0', protection: null }, expectedHead: adoption.workRevision,
+        actingSubject: actor, confirmedTitle: 'Source title refreshed' };
+      expect((await call('POST', titlePath, readToken, titleBody)).status).toBe(401);
+      expect((await call('POST', titlePath, sourceAdoptToken, titleBody)).status).toBe(401);
+      expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(403);
+      await authority(`work:edit:${adoption.work}`, 'work.edit');
+      await authority(`work:title:apply:${adoption.work}`, 'work.title.apply');
+      await authority(`work:read:${adoption.work}`, 'work.read');
+      failNextTitleBinding = true;
+      expect((await call('POST', titlePath, fullToken, titleBody)).status).toBe(503);
+      expect(failNextTitleBinding).toBe(false);
+      expect((await contentPool.query('SELECT id FROM source.native_work_title_application WHERE work = $1',
+        [adoption.work])).rowCount).toBe(0);
+      expect((await fuseki.query(`PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+        ASK { GRAPH <urn:rezics:graph:current> { <${adoption.work}>
+          rdfs:label "Source title refreshed"@en . } }`)).boolean).toBe(true);
+      const pending = await call('POST', `/v1/works/${adoption.work.split('/').at(-1)}/source-support/withdrawal`,
+        sourceAdoptToken, { profile: 'native-work-source-support-withdrawal-v1', binding: adoption.binding,
+          expectedSupport: adoption.binding, reason: 'Explicit withdrawal' });
+      expect(pending.status).toBe(409);
+      expect(await pending.json()).toMatchObject({ code: 'source_support_pending' });
+      const appliedResponse = await call('POST', titlePath, fullToken, titleBody);
+      expect(appliedResponse.status).toBe(200);
+      const applied = await appliedResponse.json() as { application: NativeWorkSourceTitleApplication; replayed: boolean };
+      expect(applied).toMatchObject({ replayed: true, application: {
+        predecessor: adoption.workRevision, title: 'Source title refreshed', rightsStatus: 'undetermined' } });
+      const edited = await call('POST', '/v1/content-edits', fullToken, { profile: 'metadata-only-v1',
+        work: adoption.work, expectedHead: applied.application.workRevision,
+        titleControl: (await readTitleControl(environment, adoption.work)).basis,
+        title: 'Source title refreshed', actingSubject: actor });
+      expect(edited.status).toBe(200);
+      const humanRevision = (await edited.json() as { revision: string }).revision;
+      const otherProposal = await sourceTitleProposal(call, fullToken, 'OL45805W', 'Source title');
+      const otherResponse = await call('POST', `/v1/sources/proposals/${otherProposal.split('/').at(-1)}/adoption/native-work`,
+        fullToken, adoptionBody);
+      expect(otherResponse.status).toBe(201);
+      const otherWork = (await otherResponse.json() as { adoption: NativeWorkSourceAdoption }).adoption.work;
+      const attachmentProposal = await sourceTitleProposal(call, fullToken, 'OL991401W', 'Source title refreshed');
+      const path = `/v2/works/${adoption.work.split('/').at(-1)}/source-supports`;
+      const body = { profile: 'native-work-source-title-attachment-v2', proposal: attachmentProposal,
+        expectedHead: humanRevision, confirmedTitle: 'Source title refreshed', titleLanguage: 'en', actingSubject: actor };
+      const key = `attachment-${randomUUID()}`;
+      expect((await call('POST', path, readToken, body, key)).status).toBe(401);
+      expect((await call('POST', path, sourceAdoptToken, body, key)).status).toBe(401);
+      expect((await call('POST', path, otherToken, body, key)).status).toBe(404);
+      expect((await call('POST', path, fullToken, { ...body, expectedHead: adoption.workRevision }, key)).status).toBe(409);
+      loseNextAttachmentCommitResponse = true;
+      expect((await call('POST', path, fullToken, body, key)).status).toBe(503);
+      const retries = await Promise.all([call('POST', path, fullToken, body, key), call('POST', path, fullToken, body, key)]);
+      for (const response of retries) expect(response.status).toBe(200);
+      const saved = await retries[0]!.json() as { attachment: NativeWorkSourceAttachment; replayed: boolean };
+      expect(await retries[1]!.json()).toEqual(saved);
+      expect(saved).toMatchObject({ replayed: true, attachment: { originalBinding: adoption.binding,
+        work: adoption.work, verifiedHead: humanRevision, title: 'Source title refreshed',
+        headGuarantee: 'verified-before-commit', rightsStatus: 'undetermined',
+        authority: { action: 'work.edit', scope: `work:edit:${adoption.work}`, actingSubject: actor } } });
+      expect(saved.attachment.binding).not.toBe(adoption.binding);
+      expect(saved.attachment.sourceRecord).not.toBe(adoption.sourceRecord);
+      const supportsResponse = await call('GET', path, readToken);
+      expect(supportsResponse.status).toBe(200);
+      const supports = await supportsResponse.json() as NativeWorkSupportCollection;
+      expect(supports.supports).toHaveLength(2);
+      expect(supports.supports[0]).toMatchObject({ kind: 'adoption', support: {
+        state: 'recorded', supportIdentity: applied.application.application,
+        latestApplication: applied.application, currentHead: humanRevision } });
+      expect(supports.supports[1]).toMatchObject({ kind: 'attachment', support: {
+        state: 'recorded', attachment: saved.attachment, currentHead: humanRevision,
+        verifiedRevisionIsHead: true, withdrawal: null } });
+      const exactPath = `${path}/${saved.attachment.binding.split('/').at(-1)}`;
+      await assertSourceSupportWithdrawal({ call, pool: contentPool, fuseki, adoption,
+        application: applied.application, humanRevision, sourceAdoptToken, readToken, fullToken,
+        otherToken, otherWork, actor, titlePath, titleBody,
+        failNextAcquisition: () => { failNextSourceFetch = true; },
+        loseNextWithdrawalResponse: () => { loseNextWithdrawalResponse = true; } });
+      evidence.record('continuation-start', { path, originalBinding: adoption.binding,
+        attachment: saved.attachment.binding, humanRevision });
+      // Exact attachment.finish() continuation: the withdrawn applied support
+      // and independent recorded attachment must remain distinguishable.
+      const afterAResponse = await call('GET', path, readToken);
+      expect(afterAResponse.status).toBe(200);
+      const afterA = await afterAResponse.json() as NativeWorkSupportCollection;
+      expect(afterA.supports[0]).toMatchObject({ kind: 'adoption', support: { state: 'withdrawn' } });
+      expect(afterA.supports[1]).toEqual(supports.supports[1]);
+      const withdrawPath = `${exactPath}/withdrawal`;
+      const intent = { profile: 'native-work-source-support-withdrawal-v2',
+        expectedSupport: saved.attachment.binding, reason: 'Withdraw only this independent support' };
+      expect((await call('POST', withdrawPath, readToken, intent, key)).status).toBe(401);
+      expect((await call('POST', withdrawPath, otherToken, intent, key)).status).toBe(404);
+      expect((await call('POST', withdrawPath, sourceAdoptToken,
+        { ...intent, expectedSupport: adoption.binding }, key)).status).toBe(409);
+      const withdrawals = await Promise.all([call('POST', withdrawPath, sourceAdoptToken, intent, key),
+        call('POST', withdrawPath, sourceAdoptToken, intent, key)]);
+      expect(withdrawals.map(response => response.status).sort()).toEqual([200, 201]);
+      const receipts = await Promise.all(withdrawals.map(response => response.json())) as Array<{ withdrawal: object }>;
+      expect(receipts[0]!.withdrawal).toEqual(receipts[1]!.withdrawal);
+      expect((await call('POST', withdrawPath, sourceAdoptToken, intent, `changed-${key}`)).status).toBe(409);
+      expect((await call('POST', path, fullToken, body, key)).status).toBe(200);
+      const afterBResponse = await call('GET', path, readToken);
+      expect(afterBResponse.status).toBe(200);
+      const afterB = await afterBResponse.json() as NativeWorkSupportCollection;
+      expect(afterB.currentHead).toBe(humanRevision);
+      expect(afterB.supports[0]).toEqual(afterA.supports[0]);
+      expect(afterB.supports[1]).toMatchObject({ kind: 'attachment', support: { state: 'withdrawn',
+        attachment: saved.attachment, withdrawal: receipts[0]!.withdrawal } });
+      const legacy = afterB.supports[0]!;
+      if (legacy.kind !== 'adoption' || !legacy.support.withdrawal) throw new Error('missing v1 withdrawal');
+      const replayA = await call('POST', `${path}/${adoption.binding.split('/').at(-1)}/withdrawal`,
+        sourceAdoptToken, { profile: 'native-work-source-support-withdrawal-v2',
+          expectedSupport: legacy.support.supportIdentity, reason: legacy.support.withdrawal.reason },
+        (await contentPool.query('SELECT idempotency_key FROM source.native_work_support_withdrawal WHERE binding_id = $1',
+          [adoption.binding.split('/').at(-1)])).rows[0].idempotency_key);
+      expect(replayA.status).toBe(200);
+      expect(await replayA.json()).toEqual({ kind: 'adoption', withdrawal: legacy.support.withdrawal, replayed: true });
+      evidence.record('continuation-completed', { path });
+      evidence.record('verdict', { violations: evidence.violations });
+      expect(evidence.violations).toEqual([]);
+      return;
+    }
     const proposal = await sourceTitleProposal(call, fullToken, 'OL45804W', 'Source title');
     const adoptionPath = `/v1/sources/proposals/${proposal.split('/').at(-1)}/adoption/native-work`;
     const adoptionBody = { profile: 'source-native-work-adoption-v1',
@@ -514,4 +684,10 @@ test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment 
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
     evidence.record('cleanup-completed', {});
   }
-}, 60_000);
+}
+
+test('LIVE13: applied-and-withdrawn Source support completes the independent attachment collection continuation',
+  () => qualifyAuthenticatedSourceSteps(true), 60_000);
+
+test('IAM10/LIVE01/LIVE02/LIVE03/LIVE05/LIVE13: authenticated Source attachment completes each bounded dependency and preserves race/replay receipts',
+  () => qualifyAuthenticatedSourceSteps(false), 60_000);
