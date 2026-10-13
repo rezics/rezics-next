@@ -1,4 +1,5 @@
 import { documentText } from '@rezics/document';
+import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
@@ -12,6 +13,7 @@ import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import { messages } from './messages.ts';
 import { ZoneSiteRecordedPage } from './zone-site-recorded-page.tsx';
+import { zoneSitePrefix } from './zone-site-recorded-page.ts';
 
 const record = sitePages as AnswerRecord;
 
@@ -43,16 +45,16 @@ function recordedCredit(label: string): { rightsBasis: string; author: string } 
   return { rightsBasis: provenance.rightsBasis, author: provenance.author };
 }
 
-function recordedAddress(label: string): { prefix: '/z/'; key: string; suffixSource: string } {
+function recordedAddress(label: string): CanonicalAddress {
   const answer = visitor(label).answer as {
     address?: { prefix?: unknown; key?: unknown; suffixSource?: unknown };
     canonical?: { prefix?: unknown; key?: unknown; suffixSource?: unknown };
   };
   const address = answer.canonical ?? answer.address;
-  if (!address || address.prefix !== '/z/' || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
+  if (!address || address.prefix !== zoneSitePrefix || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
     throw new Error(`Recorded ${label} has no site address`);
   }
-  return { prefix: '/z/', key: address.key, suffixSource: address.suffixSource };
+  return { prefix: zoneSitePrefix, key: address.key, suffixSource: address.suffixSource };
 }
 
 function recordedPath(label: string, tail: readonly string[] = []): string {

@@ -13,6 +13,9 @@ import { failureOf, type Loaded, type ReadFailure, type ZonePresentationRead, ty
  * the answers did not carry.
  */
 
+/** Site family for the address builder. The literal stays a prefix field, not a link. */
+export const zoneSitePrefix = { prefix: '/z/' as const }.prefix;
+
 export type ZoneSiteClient = ReturnType<typeof browserMainApi>;
 type RevisionCall = ReturnType<ReturnType<ZoneSiteClient['v1']['content-revisions']>['get']>;
 export type ZoneSiteRevision = NonNullable<Awaited<RevisionCall>['data']>;

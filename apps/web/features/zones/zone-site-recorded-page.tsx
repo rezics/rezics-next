@@ -38,16 +38,22 @@ import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { ZoneHome } from './zone-home.tsx';
 import {
   readZoneSiteRecorded,
+  zoneSitePrefix,
   type ZoneSiteCredit,
   type ZoneSiteRecordedLoad,
 } from './zone-site-recorded-page.ts';
 
-const zoneLocales: Record<UiLocale, Partial<ZoneMessages>> = {
-  en: {}, 'zh-Hant': zoneZhHant, 'zh-Hans': zoneZhHans, ja: zoneJa, ko: zoneKo, de: zoneDe, fr: zoneFr, es: zoneEs,
-};
-const realmLocales: Record<UiLocale, Partial<RealmMessages>> = {
-  en: {}, 'zh-Hant': realmZhHant, 'zh-Hans': realmZhHans, ja: realmJa, ko: realmKo, de: realmDe, fr: realmFr, es: realmEs,
-};
+const zoneOverlays = new Map<UiLocale, Partial<ZoneMessages>>([
+  ['zh-Hant', zoneZhHant], ['zh-Hans', zoneZhHans], ['ja', zoneJa], ['ko', zoneKo],
+  ['de', zoneDe], ['fr', zoneFr], ['es', zoneEs],
+]);
+const realmOverlays = new Map<UiLocale, Partial<RealmMessages>>([
+  ['zh-Hant', realmZhHant], ['zh-Hans', realmZhHans], ['ja', realmJa], ['ko', realmKo],
+  ['de', realmDe], ['fr', realmFr], ['es', realmEs],
+]);
+const siteAddressDiscrepancy = 'presentation address is not a site address';
+const refusalAddressDiscrepancy = 'missing-path refusal has no recorded site address';
+const presentationDiscrepancy = 'zone site page has no presentation answer';
 
 /** Recorded rights basis and author. No new label: the answer's own words are the credit. */
 export function ZoneSiteRecordedCredit({ credit }: { credit: ZoneSiteCredit }) {
@@ -58,8 +64,8 @@ export function ZoneSiteRecordedCredit({ credit }: { credit: ZoneSiteCredit }) {
 }
 
 function siteAddress(address: { prefix: string; key: string; suffixSource: string }): CanonicalAddress | null {
-  if (address.prefix !== '/z/') return null;
-  return { prefix: '/z/', key: address.key, suffixSource: address.suffixSource };
+  if (address.prefix !== zoneSitePrefix) return null;
+  return { prefix: zoneSitePrefix, key: address.key, suffixSource: address.suffixSource };
 }
 
 function siteZone(presentation: ZonePresentationRead, locale: UiLocale, ref: string): ZoneContext {
@@ -90,7 +96,7 @@ function RecordedSiteFrame({ presentation, locale, homeLabel, children }: {
   children: ReactNode;
 }) {
   const site = siteAddress(presentation.address);
-  if (!site) return <p role="alert">presentation address is not a site address</p>;
+  if (!site) return <p role="alert">{siteAddressDiscrepancy}</p>;
   const ref = addressKey(site);
   const zone = siteZone(presentation, locale, ref);
   const cuts = savedSiteCuts(
@@ -109,22 +115,22 @@ function RecordedSiteFrame({ presentation, locale, homeLabel, children }: {
 }
 
 function RecordedBody({ load, locale }: { load: ZoneSiteRecordedLoad; locale: UiLocale }) {
-  const zones = { ...zoneMessages, ...zoneLocales[locale] };
-  const homeLabel = { ...realmMessages, ...realmLocales[locale] }.home;
+  const zones = { ...zoneMessages, ...zoneOverlays.get(locale) };
+  const homeLabel = { ...realmMessages, ...realmOverlays.get(locale) }.home;
   const mapped = load.mapped;
   if (mapped.kind === 'discrepancy' || mapped.kind === 'unavailable') {
     return <p role="alert">{mapped.kind === 'discrepancy' ? mapped.detail : mapped.failure}</p>;
   }
   if (mapped.kind === 'refusal') {
     const address = load.address ? siteAddress(load.address.canonical) : null;
-    if (!address) return <p role="alert">missing-path refusal has no recorded site address</p>;
+    if (!address) return <p role="alert">{refusalAddressDiscrepancy}</p>;
     return <ZonePageMissing title={zones.pageMissingTitle} body={zones.pageMissingBody} back={zones.pageMissingBack}
       href={spaceHref(address, 'site')} />;
   }
   const presentation = load.presentation;
-  if (!presentation) return <p role="alert">zone site page has no presentation answer</p>;
+  if (!presentation) return <p role="alert">{presentationDiscrepancy}</p>;
   const site = siteAddress(presentation.address);
-  if (!site) return <p role="alert">presentation address is not a site address</p>;
+  if (!site) return <p role="alert">{siteAddressDiscrepancy}</p>;
   const zone = siteZone(presentation, locale, addressKey(site));
   if (mapped.kind === 'empty') {
     return <RecordedSiteFrame presentation={presentation} locale={locale} homeLabel={homeLabel}>
