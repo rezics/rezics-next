@@ -1,12 +1,32 @@
 import { beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { answerRecordViolations, type AnswerContract, type AnswerRecord } from './answer-record.ts';
+import { AnswerRecordValidator, answerPersonas, answerRecordViolations, type AnswerContract, type AnswerRecord } from './answer-record.ts';
 import { buildMainOpenApi } from './generate.ts';
+import { answerContractDebts, answerContractDebtWitnesses, assertAnswerContractDebts, matchesAnswerContractDebt } from '../../tests/qa/support/answer-contract-debts.ts';
 
 const root = resolve(import.meta.dir, '../..');
 let contract: AnswerContract;
-beforeAll(async () => { contract = JSON.parse(await buildMainOpenApi()) as AnswerContract; }, 60_000);
+let contractSource: string;
+beforeAll(async () => { contractSource = await buildMainOpenApi(); contract = JSON.parse(contractSource) as AnswerContract; }, 60_000);
+
+test('the contract used by proof processes is the freshly generated declared contract', () => {
+  expect(readFileSync(join(root, 'generated/openapi/main/public.json'), 'utf8') === contractSource,
+    'Generated proof contract is stale; run task gen').toBe(true);
+});
+
+test('every debt still matches a response violation against the fresh contract', () => {
+  const validator = new AnswerRecordValidator(contract);
+  const violations = [...new Bun.Glob('tests/qa/fixtures/outcomes/**/*.json').scanSync({ cwd: root })].flatMap(file => {
+    const record = JSON.parse(readFileSync(join(root, file), 'utf8')) as AnswerRecord;
+    return answerPersonas.flatMap(persona => record.personas[persona].flatMap(sample =>
+      answerContractDebts.some(debt => debt.operationId === sample.operationId && debt.status === sample.status)
+        ? validator.responseViolations(sample) : []));
+  });
+  violations.push(...answerContractDebtWitnesses.flatMap(sample => validator.responseViolations(sample)));
+  assertAnswerContractDebts(violations);
+  expect(violations.filter(violation => !matchesAnswerContractDebt(violation))).toEqual([]);
+}, 30_000);
 
 test('every checked-in outcome answer record validates against the contract generated from this tree', () => {
   expect(answerRecordViolations(root, contract)).toEqual([]);

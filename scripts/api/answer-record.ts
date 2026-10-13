@@ -1,4 +1,5 @@
 import { Compile, type Validator, type XSchema } from 'typebox/schema';
+import { Settings } from 'typebox/system';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
@@ -18,6 +19,15 @@ export interface RecordedAnswer extends AnswerCall {
   headers: Record<string, string>;
 }
 export interface AnswerSample extends RecordedAnswer { label: string }
+export interface AnswerViolation {
+  operationId: string;
+  status: number;
+  /** JSON pointer relative to the sample, including /answer for body members. */
+  path: string;
+  expected: string;
+  received: string;
+  message: string;
+}
 export interface AnswerRecord {
   version: 1;
   row: string;
@@ -152,7 +162,54 @@ export class AnswerRecordValidator {
     return id;
   }
 
-  validate(value: unknown): AnswerRecord {
+  /** Check only the response, including refusals; never validate a proof's request. */
+  responseViolations(sample: AnswerSample): AnswerViolation[] {
+    const violation = (path: string, expected: string, value: unknown, message: string): AnswerViolation => ({
+      operationId: sample.operationId, status: sample.status, path, expected, received: answerType(value), message,
+    });
+    const entry = this.route(sample.method, sample.path);
+    if (!entry || entry.operation.operationId !== sample.operationId)
+      return [violation('/operationId', 'operation at method/path', sample.operationId, 'Operation does not exist at this method/path')];
+    const operation = entry.operation;
+    const response = operation.responses?.[String(sample.status)]
+      ?? operation.responses?.[`${Math.floor(sample.status / 100)}XX`] ?? operation.responses?.default;
+    if (!response) return [violation('/status', `declared status (${Object.keys(operation.responses ?? {}).join(', ')})`,
+      sample.status, 'Status is not declared by the operation')];
+    const content = this.resolved<ApiResponse>(response).content;
+    if (!content) return sample.answer === null ? [] :
+      [violation('/answer', 'null', sample.answer, 'Bodyless response must have a null answer')];
+    const mediaType = sample.headers['content-type']?.split(';')[0]?.trim();
+    const schema = content[mediaType ?? 'application/json']?.schema;
+    if (schema === undefined) return [violation('/headers/content-type', 'declared media type', mediaType,
+      'Response has no declared schema for this media type')];
+    const validator = this.validator(schema);
+    if (validator.Check(sample.answer)) return [];
+    // A suppressed first error must not hide later members behind TypeBox's default
+    // eight-error diagnostic cap. This synchronous pass restores process settings.
+    const maxErrors = Settings.Get().maxErrors;
+    let errors: ReturnType<Validator['Errors']>[1];
+    try { Settings.Set({ maxErrors: Infinity }); errors = validator.Errors(sample.answer)[1]; }
+    finally { Settings.Set({ maxErrors }); }
+    const violations = errors.flatMap(error => {
+      const value = pointerValue(sample.answer, error.instancePath);
+      const path = '/answer' + error.instancePath;
+      // TypeBox reports extra and missing members at their parent object. Expand them
+      // so a debt cannot silence errors in the parent's other members.
+      if (error.keyword === 'additionalProperties') return error.params.additionalProperties.map(key =>
+        violation(`${path}/${pointerKey(key)}`, 'absent (closed schema)', pointerValue(value, `/${pointerKey(key)}`), error.message));
+      if (error.keyword === 'required') return error.params.requiredProperties.map(key => {
+        const property = pointerValue(validator.Schema(), error.schemaPath.replace(/^#/, '') + `/properties/${pointerKey(key)}`) as { type?: string | string[] } | undefined;
+        return violation(`${path}/${pointerKey(key)}`, property?.type ? [property.type].flat().join(' | ') : 'required member', undefined, error.message);
+      });
+      const expected = error.keyword === 'type' ? [error.params.type].flat().join(' | ') : error.message;
+      return [violation(path, expected, value, error.message)];
+    });
+    // A false additionalProperties schema also emits a redundant boolean error.
+    const closedMembers = new Set(violations.filter(item => item.expected === 'absent (closed schema)').map(item => item.path));
+    return violations.filter(item => item.message !== 'schema is false' || !closedMembers.has(item.path));
+  }
+
+  validate(value: unknown, allowResponseViolation: (violation: AnswerViolation) => boolean = () => false): AnswerRecord {
     const candidate = value as Partial<AnswerRecord> | null;
     const row = candidate?.row ?? '<unknown>';
     const fail = (persona: string, label: string, pointer: string, message: string): never => {
@@ -178,25 +235,16 @@ export class AnswerRecordValidator {
         if (!entry || entry.operation.operationId !== sample.operationId)
           reject('/operationId', 'Operation does not exist at this method/path');
         const operation = entry!.operation;
-        const response = operation.responses?.[String(sample.status)]
-          ?? operation.responses?.[`${Math.floor(sample.status / 100)}XX`] ?? operation.responses?.default;
-        if (!response) reject('/status', 'Status is not declared by the operation');
+        for (const violation of this.responseViolations(sample)) {
+          if (!allowResponseViolation(violation)) reject(violation.path,
+            `${violation.message}; operation ${sample.operationId}, status ${sample.status}, expected ${violation.expected}, received ${violation.received}`);
+        }
         const check = (schema: XSchema, data: unknown, pointer: string) => {
           const validator = this.validator(schema);
           if (validator.Check(data)) return;
           const error = validator.Errors(data)[1][0]!;
           reject(pointer + error.instancePath, error.message);
         };
-        const content = this.resolved<ApiResponse>(response!).content;
-        if (!content) {
-          if (sample.answer !== null) reject('/answer', 'Bodyless response must have a null answer');
-        } else {
-          const mediaType = sample.headers['content-type']?.split(';')[0]?.trim();
-          const representation = content[mediaType ?? 'application/json'];
-          if (!representation || representation.schema === undefined)
-            reject('/headers/content-type', 'Response has no declared schema for this media type');
-          check(representation!.schema!, sample.answer, '/answer');
-        }
         // Refusal samples deliberately exercise invalid requests; their problem answer is still checked.
         if (sample.status >= 400) continue;
         const url = new URL(sample.path, 'https://record.invalid');
@@ -234,6 +282,18 @@ export class AnswerRecordValidator {
     }
     return record;
   }
+}
+
+function pointerKey(key: string): string { return key.replaceAll('~', '~0').replaceAll('/', '~1'); }
+function pointerValue(value: unknown, pointer: string): unknown {
+  for (const part of pointer.split('/').slice(1)) {
+    const key = part.replaceAll('~1', '/').replaceAll('~0', '~');
+    value = value && typeof value === 'object' ? (value as Record<string, unknown>)[key] : undefined;
+  }
+  return value;
+}
+function answerType(value: unknown): string {
+  return value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
 }
 
 /** Inventory validation must receive a contract freshly generated from the candidate tree. */

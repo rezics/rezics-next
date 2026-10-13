@@ -202,8 +202,8 @@ test('setup calls cannot enter a persona outcome record', async () => {
 });
 
 test('recording is off by default, and output cannot escape .temp or overwrite an existing record', async () => {
-  const off = new OutcomeRecorder(declaration, { directory: '' });
-  expect(await off.session('visitor', session)('unused', 'GET', '/not-a-contract-operation')).toBeInstanceOf(Response);
+  const off = new OutcomeRecorder(declaration, { directory: '', contract });
+  expect(await off.session('visitor', session)('unused', 'GET', '/v1/browse?limit=10')).toBeInstanceOf(Response);
   await off.publish();
   for (const directory of ['tests/qa/fixtures', '.temp', '/tmp/answer-record'])
     expect(() => new OutcomeRecorder(declaration, { directory, contract })).toThrow('under .temp/');

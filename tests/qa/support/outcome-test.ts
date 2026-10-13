@@ -2,9 +2,11 @@ import { onTestFinished, test } from 'bun:test';
 import { existsSync, linkSync, lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
+import { readFile } from 'node:fs/promises';
 import { AnswerRecordValidator, answerPersonas, answerRecord,
   type AnswerContract, type AnswerRecord, type AnswerSample } from '../../../scripts/api/answer-record.ts';
 import type { PersonaSession } from './personas.ts';
+import { matchesAnswerContractDebt, type AnswerContractDebt } from './answer-contract-debts.ts';
 import {
   outcomeTitle,
   type Persona,
@@ -34,43 +36,60 @@ export function outcomeTest(
 ): void {
   const title = outcomeTitle(declaration, persona);
   const cell = declaration.cells[persona]!;
-  if (cell.state === 'pending') test.failing(title, fn);
-  else if (recorder) test(title, () => {
+  const proof = recorder ? () => {
     onTestFinished(() => recorder.finish(persona));
     return recorder.prove(persona, fn as () => unknown);
-  });
-  else test(title, fn);
+  } : fn;
+  if (cell.state === 'pending') test.failing(title, proof);
+  else test(title, proof);
 }
 
-/** Opt in with OUTCOME_RECORD_DIR=.temp/<directory>. Normal proofs do not load a contract or write. */
+let processValidator: Promise<AnswerRecordValidator> | undefined;
+const suppliedValidators = new WeakMap<AnswerContract, AnswerRecordValidator>();
+
+function answerValidator(contract?: AnswerContract): Promise<AnswerRecordValidator> {
+  if (!contract) {
+    // Generation is a separate repository gate. Reading its artifact avoids importing
+    // the entire server into each proof process; compile only schemas actually sampled.
+    return processValidator ??= readFile(new URL('../../../generated/openapi/main/public.json', import.meta.url), 'utf8')
+      .then(source => new AnswerRecordValidator(JSON.parse(source) as AnswerContract));
+  }
+  let validator = suppliedValidators.get(contract);
+  if (!validator) { validator = new AnswerRecordValidator(contract); suppliedValidators.set(contract, validator); }
+  return Promise.resolve(validator);
+}
+
+/** Every sample is checked. Opt in to writing with OUTCOME_RECORD_DIR=.temp/<directory>. */
 export class OutcomeRecorder {
   private readonly passed = new Set<Persona>();
   private readonly active = new Set<Persona>();
+  private readonly sampleFailures = new Map<Persona, unknown>();
   private failed = false;
   private published = false;
   private readonly samples = Object.fromEntries(answerPersonas.map(persona => [persona, [] as AnswerSample[]])) as AnswerRecord['personas'];
   private readonly directory?: string;
   private readonly root: string;
-  private contract?: Promise<AnswerRecordValidator>;
 
   constructor(private readonly declaration: RowOutcomes, options: {
-    directory?: string; root?: string; contract?: AnswerContract;
+    directory?: string; root?: string; contract?: AnswerContract; debts?: readonly AnswerContractDebt[];
   } = {}) {
     this.root = options.root ?? process.cwd();
     const directory = options.directory ?? process.env.OUTCOME_RECORD_DIR;
-    if (!directory) return;
-    this.directory = recordingDirectory(this.root, directory);
-    if (options.contract) this.contract = Promise.resolve(new AnswerRecordValidator(options.contract));
+    if (directory) this.directory = recordingDirectory(this.root, directory);
+    this.contract = options.contract;
+    this.debts = options.debts;
   }
+
+  private readonly contract?: AnswerContract;
+  private readonly debts?: readonly AnswerContractDebt[];
 
   private validator(): Promise<AnswerRecordValidator> {
-    return this.contract ??= import('../../../scripts/api/generate.ts').then(async ({ buildMainOpenApi }) =>
-      new AnswerRecordValidator(JSON.parse(await buildMainOpenApi()) as AnswerContract));
+    return answerValidator(this.contract);
   }
 
-  /** Prepare the contract in fixture setup so generation does not spend a persona's proof budget. */
+  /** Load the contract in fixture setup, outside a persona's proof budget. */
   async prepare(): Promise<void> {
-    if (this.directory) await this.validator();
+    await this.validator();
   }
 
   /** Wrap the session's call, never its credential handling or fixture setup. */
@@ -81,19 +100,30 @@ export class OutcomeRecorder {
         throw new Error('Samples must belong to an active persona proof');
       }
       const response = await session.main(...args);
-      if (!this.directory) return response;
       try {
         if (this.passed.has(persona) || this.published) throw new Error('Samples must belong to an active persona proof');
         const [method, path, body] = args;
         const raw = await response.clone().text();
+        const validator = await this.validator();
+        let operationId = '<undeclared>';
+        try { operationId = validator.operationId(method, path); } catch { /* Report the full sample context below. */ }
+        let answer: unknown = null;
+        try { if (raw) answer = JSON.parse(raw) as unknown; }
+        catch { throw new Error(`row ${this.declaration.rowId}, persona ${persona}, sample ${label}, operation ${operationId}, `
+          + `status ${response.status}, /answer: expected JSON, received string; Response is not valid JSON`); }
         const sample: AnswerSample = {
-          label, operationId: (await this.validator()).operationId(method, path), method, path,
+          label, operationId, method, path,
           ...(body === undefined ? {} : { body }), status: response.status,
-          answer: raw ? JSON.parse(raw) as unknown : null,
+          answer,
           headers: Object.fromEntries(response.headers.entries()),
         };
-        this.samples[persona].push(sample);
-      } catch (error) { this.failed = true; throw error; }
+        const violations = validator.responseViolations(sample)
+          .filter(violation => !matchesAnswerContractDebt(violation, this.debts));
+        if (violations.length) throw new Error(violations.map(violation =>
+          `row ${this.declaration.rowId}, persona ${persona}, sample ${label}, operation ${violation.operationId}, `
+          + `status ${violation.status}, ${violation.path}: expected ${violation.expected}, received ${violation.received}; ${violation.message}`).join('\n'));
+        if (this.directory) this.samples[persona].push(sample);
+      } catch (error) { this.failed = true; this.sampleFailures.set(persona, error); throw error; }
       return response;
     };
   }
@@ -103,6 +133,7 @@ export class OutcomeRecorder {
       if (this.passed.has(persona) || this.active.has(persona)) throw new Error('A persona proof may run only once per record');
       this.active.add(persona);
       await fn();
+      if (this.sampleFailures.has(persona)) throw this.sampleFailures.get(persona);
       this.passed.add(persona);
     } catch (error) { this.failed = true; throw error; }
     finally { this.active.delete(persona); }
@@ -121,7 +152,7 @@ export class OutcomeRecorder {
       throw new Error('Recording needs six proved persona outcomes');
     const record = answerRecord(this.declaration.rowId, this.samples);
     const validator = await this.validator();
-    validator.validate(record);
+    validator.validate(record, violation => matchesAnswerContractDebt(violation, this.debts));
     // Recheck the directory after the run in case an ancestor became a symlink.
     const directory = recordingDirectory(this.root, this.directory);
     const file = resolve(directory, `${record.row}.json`);
