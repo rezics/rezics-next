@@ -3,7 +3,7 @@ import { notFound } from 'next/navigation';
 import { manager } from '../../../../../../features/manage/server.ts';
 import { settle } from '../../../../../../features/manage/read.ts';
 import { ZoneThemeEditor } from '../../../../../../features/zone-editor/theme-editor.tsx';
-import { initialThemeState } from '../../../../../../features/zone-editor/theme.ts';
+import { themeEditorStart } from '../../../../../../features/zone-editor/zone-navigation-theme-recorded-page.ts';
 import { messages } from '../../../../../../features/zone-editor/messages.ts';
 import { loadZoneAuthoring } from '../../../../../../features/zone-editor/read.ts';
 import { zoneThemePath } from '../../../../../../features/zone-editor/routes.ts';
@@ -34,8 +34,7 @@ export default async function ZoneThemePage({ params }: { params: Promise<{ spac
   const shellPresentation = defaultPresentation(zoneMessages);
 
   return <ZoneThemeEditor zoneId={loaded.model.zoneId} actingSubject={actingSubject} copy={copy}
-    initial={initialThemeState(read.data.configuration, read.data.revision, {
-      revision: read.data.revision, presentation: shellPresentation,
-    })} shellPresentation={shellPresentation} signInHref={signInHref}
+    initial={themeEditorStart(read.data.configuration, read.data.revision, shellPresentation)}
+    shellPresentation={shellPresentation} signInHref={signInHref}
     previewHref={loaded.previewPath} siteHref={loaded.sitePath} />;
 }
