@@ -221,7 +221,7 @@ export function recordedIndexMembers(route: Extract<ZoneRouteRead, { kind: 'inde
     kind: null,
     name: zoneText('title' in item ? item.title : item.name),
     href: zoneMemberHref(ref, route.mount.segment, siteMemberTarget(item.id,
-      'address' in item && isCanonical(item.address) ? item.address : undefined)),
+      'address' in item ? item.address as CanonicalAddress : undefined)),
   }));
 }
 
@@ -253,14 +253,11 @@ function highlightHero(answer: ZonePresentationRead, context: { locale: UiLocale
 }
 
 function siteAddress(address: ZonePresentationRead['address']): CanonicalAddress {
-  if (!isCanonical(address)) throw new Error('Recorded presentation has no site address');
-  return address;
-}
-
-function isCanonical(value: unknown): value is CanonicalAddress {
-  if (!isRecord(value) || typeof value.key !== 'string' || typeof value.suffixSource !== 'string'
-    || typeof value.prefix !== 'string') return false;
-  return value.prefix === '/z/' || value.prefix.startsWith('/z/');
+  if (!isRecord(address) || typeof address.key !== 'string' || typeof address.suffixSource !== 'string'
+    || typeof address.prefix !== 'string') {
+    throw new Error('Recorded presentation has no site address');
+  }
+  return address as CanonicalAddress;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
