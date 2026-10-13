@@ -1,0 +1,3915 @@
+{
+  "version": 1,
+  "row": "games/continue-progress-across-devices-two-device-progress",
+  "personas": {
+    "visitor": [
+      {
+        "label": "sign-in-/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "sign-in-/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "sign-in-/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/progress",
+        "operationId": "getV1CompositionsByIdProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "sign-in-/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-write-sign-in",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-write-sign-in",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "whole-device-b-initial",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 0,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-started",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-started",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-replay",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-replay-conflict",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-stale-write",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-conflict-current",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-completed",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-completed",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "completed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "finished",
+          "counts": {
+            "completed": 1,
+            "required": 1,
+            "completedRequired": 1
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-undone",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 2,
+          "standing": "not-started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-undone",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-independent",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-initial",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 0
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-started",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-started",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-replay",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-replay-conflict",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-stale-write",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-conflict-current",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-completed",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-completed",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-undone",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+          "expectedVersion": 2,
+          "completed": false,
+          "position": null
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-undone",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-independent",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "undone-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2cd47e97-a7bd-48c4-b9e5-5018610d48f5",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "whole-device-b-initial",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-started",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-started",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-replay",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 2,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-replay-conflict",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-stale-write",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-conflict-current",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-completed",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 2,
+          "standing": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-completed",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "completed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "finished",
+          "counts": {
+            "completed": 1,
+            "required": 1,
+            "completedRequired": 1
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 2
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-undone",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 3,
+          "standing": "not-started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 4
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-undone",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 4,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-independent",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 4,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-initial",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-started",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-started",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-replay",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 2,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-replay-conflict",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-stale-write",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-conflict-current",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-completed",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 2,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-completed",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-undone",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/7cfe33ca-531c-42ab-8592-6a53c516d17e",
+          "expectedVersion": 3,
+          "completed": false,
+          "position": null
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 4,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-undone",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 4
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-independent",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 4
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "undone-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 2
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959",
+          "mainVersion": "https://rezics.com/id/01a135ed-01ae-7681-8390-e7b4038802c6",
+          "title": {
+            "value": "Original partless garden game",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "fdbc0c756c0ea7b076d5ade46b07929a"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135ed-1098-76cf-ae2f-a09f7af1ace1",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102",
+            "dependencyToken": "a9f66b3b7119b0b4344acb18fab52f884859a0fff761363e0253e724f9a2368b"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/ratings",
+            "history": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/history",
+            "credits": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/credits",
+            "metadata": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/metadata",
+            "editions": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-reader-state",
+        "operationId": "getV1WorksByIdReader-state",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "status": {
+            "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+            "status": "want-to-read",
+            "startedOn": null,
+            "finishedOn": null,
+            "version": 2,
+            "changedAt": "2026-10-13 15:42:03.03288+00"
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-progress",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 4,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": "en",
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 2
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-realizations-empty",
+        "operationId": "getV1WorksByIdRealizations",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/realizations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-releases-empty",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/releases?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-relations",
+        "operationId": "getV1ResourcesByResourceRelations",
+        "method": "GET",
+        "path": "/v1/resources/01a135ed-01ae-7680-89b5-eff9cb5600c7/relations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "resource-relations-v1",
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "items": [],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-sessions-empty",
+        "operationId": "getV1MeSessions",
+        "method": "GET",
+        "path": "/v1/me/sessions?target=https%3A%2F%2Frezics.com%2Fid%2F01a135ed-01ae-7680-89b5-eff9cb5600c7&limit=50&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-header",
+        "operationId": "getV1WorksById",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "work-read-v1",
+          "id": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "revision": "https://rezics.com/id/01a135ed-0391-7148-acef-146126d9adb3",
+          "mainVersion": "https://rezics.com/id/01a135ed-0391-7147-8b46-dac5206e6856",
+          "title": {
+            "value": "Original garden with main and bonus routes",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "cover": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "work",
+            "key": "7e2c87764b59cc4c3969c064eb826220"
+          },
+          "types": [
+            "https://schema.org/VideoGame"
+          ],
+          "tagline": null,
+          "completionStatus": null,
+          "chapterCount": null,
+          "wordCount": null,
+          "lastUpdatedAt": null,
+          "disclosure": "public",
+          "publicationState": "unpublished",
+          "descriptionObligations": {
+            "status": "unassessed"
+          },
+          "description": null,
+          "metadataRevision": null,
+          "originalTitle": null,
+          "mainVersionRevision": "https://rezics.com/id/01a135ed-1741-75e4-84ea-2876ac003656",
+          "mainVersionLabel": null,
+          "selectedLanguage": "en",
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102",
+            "dependencyToken": "27f0c7fbfcc6f4bd2baae4fa20767be094d3c1e0af5e51d4249a6c7635bc2f5d"
+          },
+          "links": {
+            "versions": "/v1/query#work-versions",
+            "classifications": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/classifications",
+            "adoptions": "/v1/query#work-adoptions",
+            "ratings": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/ratings",
+            "history": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/history",
+            "credits": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/credits",
+            "metadata": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/metadata",
+            "editions": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/editions"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-reader-state",
+        "operationId": "getV1WorksByIdReader-state",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/reader-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "reader-work-state-v1",
+          "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "status": {
+            "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+            "status": "reading",
+            "startedOn": "2026-10-10",
+            "finishedOn": null,
+            "version": 1,
+            "changedAt": "2026-10-13 15:41:57.512773+00"
+          },
+          "customShelves": [],
+          "rating": {
+            "global": null,
+            "realm": null
+          },
+          "progress": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-progress",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "parts": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-0391-7146-95f9-2aafbbd2ef6a?language=en&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "scope": "disclosed-composition",
+          "policy": "composition-progress-v2",
+          "language": "en",
+          "completedParts": [],
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "states": {
+            "caughtUpWithAvailableMaterial": false,
+            "finishedPublishedParts": false,
+            "seriesConcluded": null,
+            "correspondenceUnresolved": false
+          },
+          "next": {
+            "part": {
+              "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+              "work": "https://rezics.com/id/01a135ed-072a-7717-9807-f89bb1c24710",
+              "displayLabel": "Main garden route",
+              "inclusion": "required",
+              "available": true
+            },
+            "reason": "next_available_required_part"
+          },
+          "furthestCompleted": null,
+          "partial": false,
+          "preference": null,
+          "primaryAction": {
+            "work": "https://rezics.com/id/01a135ed-072a-7717-9807-f89bb1c24710",
+            "edition": null,
+            "language": "en"
+          },
+          "revisions": {
+            "composition": {
+              "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "revision": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287"
+            },
+            "sessions": [],
+            "library": [],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "parts": null,
+            "groups": [],
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-preference-empty",
+        "operationId": "getV1MeEdition-preferencesByWork",
+        "method": "GET",
+        "path": "/v1/me/edition-preferences/01a135ed-0391-7146-95f9-2aafbbd2ef6a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": null,
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-realizations-empty",
+        "operationId": "getV1WorksByIdRealizations",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/realizations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-releases-empty",
+        "operationId": "getV1WorksByIdReleases",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-0391-7146-95f9-2aafbbd2ef6a/releases?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-relations",
+        "operationId": "getV1ResourcesByResourceRelations",
+        "method": "GET",
+        "path": "/v1/resources/01a135ed-0391-7146-95f9-2aafbbd2ef6a/relations?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "resource-relations-v1",
+          "resource": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "items": [],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "composed-sessions-empty",
+        "operationId": "getV1MeSessions",
+        "method": "GET",
+        "path": "/v1/me/sessions?target=https%3A%2F%2Frezics.com%2Fid%2F01a135ed-0391-7146-95f9-2aafbbd2ef6a&limit=50&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "items": [],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "game-routes",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a135ed-0391-7146-95f9-2aafbbd2ef6a/parts?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "mainVersion": "https://rezics.com/id/01a135ed-0391-7147-8b46-dac5206e6856",
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "revision": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287",
+          "completion": {
+            "status": "unknown",
+            "evidence": []
+          },
+          "parts": [
+            {
+              "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+              "role": "part",
+              "parent": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "labels": [],
+              "work": "https://rezics.com/id/01a135ed-072a-7717-9807-f89bb1c24710",
+              "mainVersion": "https://rezics.com/id/01a135ed-072a-7718-aff9-6d87540db0a1",
+              "displayLabel": "Main garden route",
+              "inclusion": "required"
+            },
+            {
+              "occurrence": "https://rezics.com/id/cb657d53-02ac-85c1-8a20-f918bb6b2f05",
+              "role": "part",
+              "parent": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "labels": [],
+              "work": "https://rezics.com/id/01a135ed-093a-7508-b5d8-0f0aae0b3777",
+              "mainVersion": "https://rezics.com/id/01a135ed-093a-7509-a6df-3dcfb1cc8c24",
+              "displayLabel": "Bonus garden route",
+              "inclusion": "extra"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "101"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "route-0-progress",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 4
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "route-1-progress",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/cb657d53-02ac-85c1-8a20-f918bb6b2f05/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/cb657d53-02ac-85c1-8a20-f918bb6b2f05",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 0
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "partless-routes-empty",
+        "operationId": "getV1ResourcesByResourceParts",
+        "method": "GET",
+        "path": "/v1/resources/01a135ed-01ae-7680-89b5-eff9cb5600c7/parts?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "completion-list-empty",
+        "operationId": "getV1CompositionsByIdProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/progress?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          },
+          "consistency": "live",
+          "complete": true,
+          "cost": {
+            "progressRows": 21
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "series-structure",
+        "operationId": "getV1CompositionsById",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de?limit=20&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "owner": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "component": "https://rezics.com/id/01a135ed-0391-7147-8b46-dac5206e6856",
+          "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "mainVersion": "https://rezics.com/id/01a135ed-0391-7147-8b46-dac5206e6856",
+          "revision": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287",
+          "predecessor": "https://rezics.com/id/b1e9fbb0-b3b0-8ffc-b064-6a613722ba94",
+          "completion": {
+            "status": "unknown",
+            "evidence": []
+          },
+          "occurrences": [
+            {
+              "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+              "state": "active",
+              "parent": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "part",
+              "target": "https://rezics.com/id/01a135ed-072a-7717-9807-f89bb1c24710",
+              "qualifier": {
+                "type": "work-part",
+                "displayLabel": "Main garden route",
+                "inclusion": "required"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287"
+            },
+            {
+              "occurrence": "https://rezics.com/id/cb657d53-02ac-85c1-8a20-f918bb6b2f05",
+              "state": "active",
+              "parent": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "part",
+              "target": "https://rezics.com/id/01a135ed-093a-7508-b5d8-0f0aae0b3777",
+              "qualifier": {
+                "type": "work-part",
+                "displayLabel": "Bonus garden route",
+                "inclusion": "extra"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "101"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "resume-position",
+        "operationId": "getV1Reading-positionsByWork",
+        "method": "GET",
+        "path": "/v1/reading-positions/01a135ed-0391-7146-95f9-2aafbbd2ef6a?position=mine&limit=1&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 200,
+        "answer": {
+          "profile": "reading-positions-v1",
+          "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+          "resolved": "start",
+          "items": [
+            {
+              "work": "https://rezics.com/id/01a135ed-0391-7146-95f9-2aafbbd2ef6a",
+              "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "revision": "https://rezics.com/id/14932509-67ba-8ad0-a931-1c715f11e287",
+              "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+              "parent": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "part",
+              "target": "https://rezics.com/id/01a135ed-072a-7717-9807-f89bb1c24710",
+              "displayLabel": "Main garden route"
+            }
+          ],
+          "next": "4EFkfOGsjEpwJDV8N7yJdOeALdJVDv2VINfR_uKK8P0NRmkXrOuMS0iq0hB3pbYIRrBtJ8zuKP9Qike5E5-PXybj7D7n72c64nZSJqWj1gTcg_23AOSHUsbv10RdHfTPcIxuLm-i9e3_5tcjHCLLCrD5x4f8XqAiiHUgYO05HcbuvjSV6HjV2MRa55m4HbwU7s5aeMnSwQ-6DWlsRjmJHWLVo4Ll4YIPZDjQOOqGnge3rvlIm-y4q83dcGG86PLBb7ZzSbu0hMevc2xBUpa_mdf_1cs_4YypaV-iYGWX6WJqDWhrSaNzUn6qf9QhX9uvK4_U4yM_c-LKM9yDEGVGpvpXXNPMAvU-9dVV715uQXhyAVgLKKTfSVmHYB1-QY4vRHiVk8kJYUsrvrNDcxzyAQb3a3Ufh4htC1Htb8iX-4_qyQRzLcxjoqG-EoVi7ft3SXbQgWpoojlJxw",
+          "complete": false,
+          "visibility": "visible",
+          "scope": "positions",
+          "nextCursor": "4EFkfOGsjEpwJDV8N7yJdOeALdJVDv2VINfR_uKK8P0NRmkXrOuMS0iq0hB3pbYIRrBtJ8zuKP9Qike5E5-PXybj7D7n72c64nZSJqWj1gTcg_23AOSHUsbv10RdHfTPcIxuLm-i9e3_5tcjHCLLCrD5x4f8XqAiiHUgYO05HcbuvjSV6HjV2MRa55m4HbwU7s5aeMnSwQ-6DWlsRjmJHWLVo4Ll4YIPZDjQOOqGnge3rvlIm-y4q83dcGG86PLBb7ZzSbu0hMevc2xBUpa_mdf_1cs_4YypaV-iYGWX6WJqDWhrSaNzUn6qf9QhX9uvK4_U4yM_c-LKM9yDEGVGpvpXXNPMAvU-9dVV715uQXhyAVgLKKTfSVmHYB1-QY4vRHiVk8kJYUsrvrNDcxzyAQb3a3Ufh4htC1Htb8iX-4_qyQRzLcxjoqG-EoVi7ft3SXbQgWpoojlJxw",
+          "sourcePosition": {
+            "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+            "sequence": "102"
+          },
+          "count": {
+            "value": 1,
+            "kind": "exact-page",
+            "total": null
+          },
+          "cost": {
+            "occurrences": 10000,
+            "workDepth": 16,
+            "workBatch": 50,
+            "queryBytes": 4194304,
+            "chooserPage": 100,
+            "chooserQueryChars": 200,
+            "labels": 16,
+            "sessionPages": 32,
+            "releasePins": 4096,
+            "lookupScanRows": 32
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "correspondence-definition",
+        "operationId": "getV1LexiconDefinitionsByKey",
+        "method": "GET",
+        "path": "/v1/lexicon/definitions/correspondence-equivalent?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F7cfe33ca-531c-42ab-8592-6a53c516d17e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/definition_unavailable",
+          "title": "Definition is unavailable",
+          "status": 404,
+          "code": "definition_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "whole-device-b-initial",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 0,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-started",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-started",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-replay",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-replay-conflict",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-stale-write",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-conflict-current",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-completed",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-completed",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "completed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "finished",
+          "counts": {
+            "completed": 1,
+            "required": 1,
+            "completedRequired": 1
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-undone",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 2,
+          "standing": "not-started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-undone",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-independent",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-initial",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 0
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-started",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-started",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-replay",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-replay-conflict",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-stale-write",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-conflict-current",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-completed",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-completed",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-undone",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+          "expectedVersion": 2,
+          "completed": false,
+          "position": null
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-undone",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-independent",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "undone-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff45813a9-bfcc-4bb3-bc14-c5c872693f8c",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "whole-device-b-initial",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 0,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-started",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-started",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-replay",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-replay-conflict",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-stale-write",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-conflict-current",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-completed",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-completed",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "completed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "finished",
+          "counts": {
+            "completed": 1,
+            "required": 1,
+            "completedRequired": 1
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-undone",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 2,
+          "standing": "not-started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-undone",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-independent",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-initial",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 0
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-started",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-started",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-replay",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-replay-conflict",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-stale-write",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-conflict-current",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-completed",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-completed",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-undone",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d4507a7c-a019-44ea-8311-cb84f917931e",
+          "expectedVersion": 2,
+          "completed": false,
+          "position": null
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-undone",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-independent",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "undone-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd4507a7c-a019-44ea-8311-cb84f917931e",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "whole-device-b-initial",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 0,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-started",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-started",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-replay",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "standing": "started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-replay-conflict",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-stale-write",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "standing": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "whole-conflict-current",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "started",
+          "version": 1,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-completed",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 1,
+          "standing": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-completed",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "completed",
+          "version": 2,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "completed-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "finished",
+          "counts": {
+            "completed": 1,
+            "required": 1,
+            "completedRequired": 1
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-a-undone",
+        "operationId": "putV1WorksByIdProgress",
+        "method": "PUT",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 2,
+          "standing": "not-started"
+        },
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-undone",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "whole-device-b-independent",
+        "operationId": "getV1WorksByIdProgress",
+        "method": "GET",
+        "path": "/v1/works/01a135ed-01ae-7680-89b5-eff9cb5600c7/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "standing": "not-started",
+          "version": 3,
+          "parts": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-initial",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 0
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-started",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-started",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-replay",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "completed": false,
+          "position": "played"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1,
+          "replayed": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-replay-conflict",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/progress_conflict",
+          "title": "progress idempotency key has another intent",
+          "status": 409,
+          "code": "progress_conflict"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-stale-write",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 0,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 409,
+        "answer": {
+          "type": "https://rezics.com/problems/stale_progress",
+          "title": "progress version changed",
+          "status": 409,
+          "code": "stale_progress"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "part-conflict-current",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": "played",
+          "version": 1
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-completed",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 1,
+          "completed": true,
+          "position": "completed"
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-completed",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": true,
+          "position": "completed",
+          "version": 2
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-a-undone",
+        "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "PUT",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress",
+        "body": {
+          "actingSubject": "https://rezics.com/id/4a8f9066-7b87-4329-862a-95aa92702b36",
+          "expectedVersion": 2,
+          "completed": false,
+          "position": null
+        },
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-undone",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "part-device-b-independent",
+        "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
+        "method": "GET",
+        "path": "/v1/compositions/5e95a4e1-e08c-80d9-8c62-95533714e9de/occurrences/84b33969-83c6-81ba-a8dc-2a0e91261f81/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "structure": "https://rezics.com/id/5e95a4e1-e08c-80d9-8c62-95533714e9de",
+          "occurrence": "https://rezics.com/id/84b33969-83c6-81ba-a8dc-2a0e91261f81",
+          "selectedRevision": null,
+          "completed": false,
+          "position": null,
+          "version": 3
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "undone-summary",
+        "operationId": "getV1MeProgress-summariesByResource",
+        "method": "GET",
+        "path": "/v1/me/progress-summaries/01a135ed-01ae-7680-89b5-eff9cb5600c7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4a8f9066-7b87-4329-862a-95aa92702b36",
+        "status": 200,
+        "answer": {
+          "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+          "scope": "work",
+          "policy": "composition-progress-v2",
+          "status": "not-started",
+          "counts": {
+            "completed": 0,
+            "required": 1,
+            "completedRequired": 0
+          },
+          "partial": false,
+          "states": {
+            "correspondenceUnresolved": false
+          },
+          "language": null,
+          "preference": null,
+          "revisions": {
+            "work": {
+              "resource": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+              "revision": "https://rezics.com/id/01a135ed-01ae-7682-9b88-d6733df56959"
+            },
+            "sessions": [],
+            "library": [
+              {
+                "work": "https://rezics.com/id/01a135ed-01ae-7680-89b5-eff9cb5600c7",
+                "version": 1
+              }
+            ],
+            "selections": [],
+            "graph": {
+              "dataEpoch": "e959aca8-f7e0-43a8-b591-1682562588da",
+              "sequence": "102"
+            }
+          },
+          "continuation": {
+            "sessions": null,
+            "releases": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      }
+    ]
+  }
+}

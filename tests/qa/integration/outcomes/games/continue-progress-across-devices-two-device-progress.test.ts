@@ -5,12 +5,13 @@ import { join } from 'node:path';
 import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
 import { outcomeResponse } from '../../../support/outcome-test.ts';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/continue-progress-across-devices-two-device-progress.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
 type Work = { work: string; mainVersion: string };
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(declaration);
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => person.actingSubject
   ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
@@ -59,7 +60,10 @@ async function publish(game: Work) {
   }), 201);
   return selection;
 }
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 type Standing = { standing: string; version: number; replayed?: boolean };
 type Mark = { completed: boolean; position: string | null; version: number; replayed?: boolean };
@@ -75,6 +79,7 @@ const statePath = (work: Work, person: PersonaSession) => `/v1/works/${short(wor
 const summaryPath = (work: Work, person: PersonaSession) => `/v1/me/progress-summaries/${short(work.work)}?${acting(person)}`;
 async function setupProgress() {
   sessions = await personaSessions('public');
+  await recording.prepare();
   game = await createGame('Original partless garden game');
   composed = await createGame('Original garden with main and bonus routes');
   sentinel = await createGame('Original neighbouring garden game');
@@ -215,70 +220,105 @@ beforeAll(async () => {
 
 async function continuity(name: PersonaName) {
   const a = sessions[name];
+  const sampleA = recording.session(name, a);
   if (name === 'visitor') {
     const member = sessions.member;
     const before = await answer(member.main('GET', `${wholePath()}?${acting(member)}`));
     for (const path of [`${wholePath()}?${acting(member)}`, `${partPath()}?${acting(member)}`,
       `/v1/compositions/${short(structure)}/progress?${acting(member)}`, summaryPath(game, member)])
-      await answer(a.main('GET', path), 401);
-    await answer(a.main('PUT', wholePath(), { actingSubject: member.actingSubject,
+      await answer(sampleA(`sign-in-${path.split('?')[0]}`, 'GET', path), 401);
+    await answer(sampleA('whole-write-sign-in', 'PUT', wholePath(), { actingSubject: member.actingSubject,
       expectedVersion: 0, standing: 'completed' }), 401);
-    await answer(a.main('PUT', partPath(), { actingSubject: member.actingSubject,
+    await answer(sampleA('part-write-sign-in', 'PUT', partPath(), { actingSubject: member.actingSubject,
       expectedVersion: 0, completed: true, position: 'completed' }), 401);
     expect(await answer(member.main('GET', `${wholePath()}?${acting(member)}`))).toEqual(before);
     return;
   }
   const b = devices.get(name)!;
+  const sampleB = recording.session(name, b);
   await status(a, game, 'want-to-read');
   for (const [path, start, finish, undo] of [
     [wholePath(), { standing: 'started' }, { standing: 'completed' }, { standing: 'not-started' }],
     [partPath(), { completed: false, position: 'played' },
       { completed: true, position: 'completed' }, { completed: false, position: null }],
   ] as const) {
-    const initial = await answer<{ version: number }>(b.main('GET', `${path}?${acting(b)}`));
+    const label = path === wholePath() ? 'whole' : 'part';
+    const initial = await answer<{ version: number }>(sampleB(`${label}-device-b-initial`, 'GET', `${path}?${acting(b)}`));
     const key = randomUUID();
     const command = { actingSubject: a.actingSubject, expectedVersion: initial.version, ...start };
-    const saved = await answer<{ version: number }>(a.main('PUT', path, command, key));
+    const saved = await answer<{ version: number }>(sampleA(`${label}-device-a-started`, 'PUT', path, command, key));
     expect(saved.version).toBe(initial.version + 1);
-    expect(await answer(b.main('GET', `${path}?${acting(b)}`))).toMatchObject({ ...start, version: saved.version });
-    expect(await answer(b.main('PUT', path, command, key))).toMatchObject({ ...start, version: saved.version, replayed: true });
-    expect(await answer(b.main('PUT', path, { ...command, ...finish }, key), 409))
+    expect(await answer(sampleB(`${label}-device-b-started`, 'GET', `${path}?${acting(b)}`))).toMatchObject({ ...start, version: saved.version });
+    expect(await answer(sampleB(`${label}-device-b-replay`, 'PUT', path, command, key))).toMatchObject({ ...start, version: saved.version, replayed: true });
+    expect(await answer(sampleB(`${label}-replay-conflict`, 'PUT', path, { ...command, ...finish }, key), 409))
       .toMatchObject({ code: 'progress_conflict' });
-    expect(await answer(b.main('PUT', path, { ...command, ...finish }), 409))
+    expect(await answer(sampleB(`${label}-stale-write`, 'PUT', path, { ...command, ...finish }), 409))
       .toMatchObject({ code: 'stale_progress' });
-    const winner = await answer<{ version: number }>(b.main('GET', `${path}?${acting(b)}`));
-    const completed = await answer<{ version: number }>(b.main('PUT', path, {
+    const winner = await answer<{ version: number }>(sampleB(`${label}-conflict-current`, 'GET', `${path}?${acting(b)}`));
+    const completed = await answer<{ version: number }>(sampleB(`${label}-device-b-completed`, 'PUT', path, {
       actingSubject: b.actingSubject, expectedVersion: winner.version, ...finish }));
-    expect(await answer(a.main('GET', `${path}?${acting(a)}`))).toMatchObject({ ...finish, version: completed.version });
+    expect(await answer(sampleA(`${label}-device-a-completed`, 'GET', `${path}?${acting(a)}`))).toMatchObject({ ...finish, version: completed.version });
     if (path === wholePath()) {
-      expect(await answer(b.main('GET', summaryPath(game, b))))
+      expect(await answer(sampleB('completed-summary', 'GET', summaryPath(game, b))))
         .toMatchObject({ status: 'finished', counts: { completed: 1, completedRequired: 1 } });
     }
-    const undone = await answer<{ version: number }>(a.main('PUT', path, {
+    const undone = await answer<{ version: number }>(sampleA(`${label}-device-a-undone`, 'PUT', path, {
       actingSubject: a.actingSubject, expectedVersion: completed.version, ...undo }));
-    expect(await answer(b.main('GET', `${path}?${acting(b)}`))).toMatchObject({ ...undo, version: undone.version });
+    expect(await answer(sampleB(`${label}-device-b-undone`, 'GET', `${path}?${acting(b)}`))).toMatchObject({ ...undo, version: undone.version });
     const other = name === 'member' ? sessions.stranger : sessions.member;
     const otherBase = await answer<{ version: number }>(other.main('GET', `${path}?${acting(other)}`));
     const independent = await answer<{ version: number; replayed?: boolean }>(other.main('PUT', path, {
       actingSubject: other.actingSubject, expectedVersion: otherBase.version, ...start }, key));
     expect(independent.replayed).not.toBe(true);
     expect(independent.version).toBe(otherBase.version + 1);
-    expect(await answer(b.main('GET', `${path}?${acting(b)}`))).toMatchObject({ ...undo, version: undone.version });
+    expect(await answer(sampleB(`${label}-device-b-independent`, 'GET', `${path}?${acting(b)}`))).toMatchObject({ ...undo, version: undone.version });
   }
-  expect(await answer(b.main('GET', summaryPath(game, b))))
+  expect(await answer(sampleB('undone-summary', 'GET', summaryPath(game, b))))
     .toMatchObject({ status: 'not-started', counts: { completed: 0 } });
   await privateBoundary(a, name);
+  if (name === 'member') await supportingReads(b, sampleB);
 }
 
-outcomeTest(declaration, 'visitor', () => continuity('visitor'));
+async function supportingReads(person: PersonaSession, sample: ReturnType<typeof recording.session>) {
+  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${acting(person)}`;
+  for (const work of [game, composed]) {
+    const label = work === game ? 'whole' : 'composed';
+    const root = `/v1/works/${short(work.work)}`;
+    for (const [suffix, path] of [
+      ['header', root],
+      ['reader-state', `${root}/reader-state`],
+      ['progress', `${root}/progress`],
+      ['summary', `/v1/me/progress-summaries/${short(work.work)}?language=en`],
+      ['preference-empty', `/v1/me/edition-preferences/${short(work.work)}`],
+      ['realizations-empty', `${root}/realizations?limit=20`],
+      ['releases-empty', `${root}/releases?limit=20`],
+      ['relations', `/v1/resources/${short(work.work)}/relations?limit=20`],
+      ['sessions-empty', `/v1/me/sessions?${new URLSearchParams({ target: work.work, limit: '50' })}`],
+    ] as const) await answer(sample(`${label}-${suffix}`, 'GET', viewer(path)));
+  }
+  const parts = await answer<{ parts: { occurrence: string }[] }>(
+    sample('game-routes', 'GET', viewer(`/v1/resources/${short(composed.work)}/parts?limit=20`)));
+  for (const [index, part] of parts.parts.entries()) {
+    await answer(sample(`route-${index}-progress`, 'GET', viewer(partPath(part.occurrence))));
+  }
+  await answer(sample('partless-routes-empty', 'GET', viewer(`/v1/resources/${short(game.work)}/parts?limit=20`)), 404);
+  await answer(sample('completion-list-empty', 'GET', viewer(`/v1/compositions/${short(structure)}/progress?limit=20`)));
+  await answer(sample('series-structure', 'GET', viewer(`/v1/compositions/${short(structure)}?limit=20`)));
+  await answer(sample('resume-position', 'GET', viewer(`/v1/reading-positions/${short(composed.work)}?position=mine&limit=1`)));
+  const definition = await sample('correspondence-definition', 'GET', viewer('/v1/lexicon/definitions/correspondence-equivalent'));
+  expect([200, 404]).toContain(definition.status);
+  await definition.body?.cancel();
+}
 
-outcomeTest(declaration, 'stranger', () => continuity('stranger'));
+outcomeTest(declaration, 'visitor', () => continuity('visitor'), recording);
 
-outcomeTest(declaration, 'member', () => continuity('member'));
+outcomeTest(declaration, 'stranger', () => continuity('stranger'), recording);
 
-outcomeTest(declaration, 'owner', () => continuity('owner'));
+outcomeTest(declaration, 'member', () => continuity('member'), recording);
 
-outcomeTest(declaration, 'moderator', () => continuity('moderator'));
+outcomeTest(declaration, 'owner', () => continuity('owner'), recording);
 
-outcomeTest(declaration, 'operator', () => continuity('operator'));
+outcomeTest(declaration, 'moderator', () => continuity('moderator'), recording);
+
+outcomeTest(declaration, 'operator', () => continuity('operator'), recording);
 
