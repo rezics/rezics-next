@@ -52,7 +52,7 @@ async function requireClosure(person: PersonaSession) {
   // A refused prerequisite is not an observed delivery defect. Each person
   // confirms the still-open public Realm through their own HTTP session.
   if (closureUnavailable) {
-    await answer(person.main('GET', `/v1/realms/${short(sessions.realm)}`));
+    await answer(person.main('GET', `/v1/realms/${short(sessions.realm)}?${acting(person)}`));
     throw new Error(closureUnavailable);
   }
 }
