@@ -14,7 +14,7 @@ const cli = join(import.meta.dir, 'goalctl.ts');
 // Tiny fixture repositories need short physical paths to exercise the real PostgreSQL socket guard.
 const scratch = join(tmpdir(), '.temp');
 
-function repository() {
+export function repository() {
   mkdirSync(scratch, { recursive: true });
   const dir = mkdtempSync(join(scratch, 'worker-handover-'));
   const git = (...args: string[]) => {
@@ -35,11 +35,14 @@ function repository() {
   // This launcher observes the tree at process start; it records no model or network activity.
   const launcher = join(bin, 'codex');
   writeFileSync(launcher, `#!${process.execPath}
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 const args = process.argv.slice(2);
-const refs = Object.fromEntries(readdirSync('.temp/ref').map(name => [name, readFileSync(join('.temp/ref', name), 'utf8')]));
-const record = { args, refs, prompt: args.at(-1), account: process.env.CODEX_HOME };
+const refs = Object.fromEntries((existsSync('.temp/ref') ? readdirSync('.temp/ref') : [])
+  .map(name => [name, readFileSync(join('.temp/ref', name), 'utf8')]));
+const record = { args, refs, prompt: args.at(-1), account: process.env.CODEX_HOME,
+  head: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim() };
 const last = args[args.indexOf('-o') + 1];
 writeFileSync(last, 'RESULT: partial\\nNEXT: fixture step\\n');
 process.stdout.write(JSON.stringify({ type: 'thread.started', thread_id: 'recording-session' }) + '\\n');
@@ -79,7 +82,7 @@ writeFileSync('.temp/record.json', JSON.stringify(record));
       if (Date.now() > deadline) throw new Error(`Recording launcher did not start: ${readFileSync(task.attempts.at(-1)!.output.replace('.json', '.err'), 'utf8')}`);
       await Bun.sleep(10);
     }
-    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string };
+    return JSON.parse(readFileSync(file, 'utf8')) as { args: string[]; refs: Record<string, string>; prompt: string; account: string; head: string };
   };
   return { dir, local, run, git, ledger, save, brief, reference, record,
     dispose: () => rmSync(dir, { recursive: true, force: true }) };

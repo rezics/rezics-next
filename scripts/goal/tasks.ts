@@ -13,6 +13,7 @@ import { clearRefusal, mergeTask } from './merge.ts';
 import { land, handoffResult } from './land.ts';
 import { COMPOSITION_ROOTS } from './composition-roots.ts';
 import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFiles } from './handover.ts';
+import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
 export async function dispatchMethodErrors(brief: Brief, markdown: string, outcomeRoot = root): Promise<string[]> {
@@ -352,6 +353,7 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
       const changes = changedFiles(task);
       if (task.state === 'merged' || (changes.ahead === 0 && changes.dirty.length === 0)) round = 'step';
     }
+    if (!result.error && handoffResult(result.text) === 'blocked' && blockedAttemptUnchanged(task, previous)) round = 'step';
     const refusal = round === 'fix' ? resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8')) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
@@ -373,10 +375,16 @@ export async function resumeTask(id: string, args: string[]): Promise<void> {
     const session = continuing ? previousSession : isClaudeCode(nextEngine) ? randomUUID() : '';
     const text = readFileSync(briefPathOf(task) ?? task.brief, 'utf8');
     const handover = await prepareHandover(task, text);
+    const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
+      && resolve(other.worktree) === resolve(task.worktree) && running(other));
+    const worktreeUpdate = updateResumeWorktree(task, sharers);
+    console.log(worktreeUpdate);
     copyFileSync(briefPathOf(task) ?? task.brief, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
     stageHandover(task.worktree, handover);
-    const prompt = continuing ? `${handoverPrompt(handover, task.tests ?? [])}\n\nManager note:\n${message}`
-      : `${await workerPrompt(task, manager, nextEngine, nextEffort, handover)}\n\nManager note:\n${message}`;
+    const prompt = (continuing ? handoverPrompt(handover, task.tests ?? [])
+      : await workerPrompt(task, manager, nextEngine, nextEffort, handover))
+      + `\n\n${worktreeUpdate}\n\nManager note:\n${message}`;
+    recordResumeHead(task);
     task.attempts.push(launch(task, nextEffort, session, prompt, continuing, manager, nextEngine, round));
     task.engine = nextEngine;
     task.state = 'running';
