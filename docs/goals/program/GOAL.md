@@ -183,7 +183,8 @@ coordinator sends it again. A question's message begins with its decision code
 in code style, such as `D-12`, which he copies and answers to the resident
 supermanager in its terminal. The body gives the question, the options by
 letter, the one recommended and, when the matter can be undone, the default and
-its time. The supermanager records his answer under that code
+its time, and it ends with the recommended answer ready to copy, such as
+`D-12 a`. The supermanager records his answer under that code
 (`task goal -- decide D-12 a`), and a fresh session finds the open questions
 with `task goal -- decisions`. Messages come from templates that carry a Goal,
 a task, a question and numbers, never source code, file contents, personal
@@ -230,6 +231,7 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 
 | Task | Outcome |
 | --- | --- |
+| N0 | The regression of 2026-10-13 on `main` is read: its failures are clustered by first error line with no model, the clusters the run caused itself (a host shared with workers, an agent's environment) are rerun alone, and each cluster that remains is a pending cell of a row or one task of the Goal that owns it. [state.md](state.md) has the counts |
 | N1 | One Books row is proved from end to end by the program: its declaration, its six outcome tests through the persona harness, landed through the gates, and `status` shows 1 of 67. It removes what stopped the pilots (the guard that cannot follow the loader's import, the harness's missing read) |
 | N2 | `scripts/goal/goalctl.ts` is split along its commands, with no change of behaviour, so that tooling tasks stop sharing one file of 6,300 lines |
 | N3 | The coordinator lands and closes what needs no judgment, starts a short fresh turn for an event, bounds a turn, delivers mail by level, and records each turn (reason, context, actions) |
@@ -240,7 +242,8 @@ measures in `status`; `coordinator start` and mail with a sender and a deadline;
 | N9 | The maintainer is told on Telegram and answers in the supermanager's terminal: `task goal -- ask` records a question under a decision code and sends it with that code first, in code style, then the options, the one recommended and any default with its time; `tell` sends a notice; `decide` records his answer and `decisions` lists the open ones; a failed send is retried from an outbox. No listener, no button, no library; its tests run against a fake Bot API |
 | N8 | Tests are admitted by the tool: whole tiers, browser runs and `regress` start only from the program's schedule, one at a time and when no worker is live; each Goal has a share of the QA slots; `goalctl` refuses the rest. The full run's three and a half hours are measured by batch and cut |
 
-N1, N2 and N9 start together; they share no file. N3 follows N2, N4 follows N3, N5 and N8 run beside N3,
+N0 comes first and needs no worker until its clusters are known. N1, N2 and N9
+start together; they share no file. N3 follows N2, N4 follows N3, N5 and N8 run beside N3,
 N7 follows N1. The
 api Goal resumes its 18 tasks after N4, with its matrices read by turns side by
 side. termspaces needs one thing it lacks in 0.2.0 for N4, removing a single

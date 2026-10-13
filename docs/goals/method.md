@@ -1,9 +1,10 @@
 # How work is defined, proved and landed
 
 Status: designed on 2026-10-12 at the maintainer's request, from that day's
-measurements; not yet practice. The [program](program/GOAL.md) builds its checks
-into `goalctl` first. Until a check exists in code, managers apply it by hand
-and say so in the brief.
+measurements. Since 2026-10-13 `goalctl` enforces the brief kinds, the landing
+rules and the attempt cap; the [program](program/GOAL.md#next-tasks) builds the
+rest. Until a check exists in code, managers apply it by hand and say so in the
+brief.
 
 ## Why
 
@@ -119,8 +120,8 @@ or write a design note. `goalctl` refuses a further resume without that entry.
 
 A change to a mechanism other rows build on (`scripts/static/mechanisms.ts`):
 
-- starts from a one-page design note in the brief, read by the supermanager
-  before any code: which readers and writers it touches, and how each still
+- starts from a one-page design note in the brief, read by its Goal's manager
+  before any code (the tool still asks for the line `Read by program:`): which readers and writers it touches, and how each still
   passes;
 - states the observable outcome ("reads per request do not depend on the number
   of matches"), never the mechanism to build. On 2026-10-12 "nothing replays
