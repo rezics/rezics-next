@@ -3,11 +3,11 @@ import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('recipes/read-a-recipe', {
   visitor: proved('scales and traverses the published recipe after a private draft without disclosing hidden recipes'),
-  stranger: pending('scales and traverses the published recipe after a private draft without disclosing hidden recipes'),
-  member: pending('scales and traverses the published recipe after a private draft without disclosing hidden recipes'),
+  stranger: proved('scales and traverses the published recipe after a private draft without disclosing hidden recipes'),
+  member: proved('scales and traverses the published recipe after a private draft without disclosing hidden recipes'),
   owner: pending('scales and traverses the published recipe after a private draft with preview on an explicit revision path'),
-  moderator: pending('scales and traverses the published recipe after a private draft without moderation widening the read'),
-  operator: pending('scales and traverses the published recipe after a private draft without platform authority widening the read'),
+  moderator: proved('scales and traverses the published recipe after a private draft without moderation widening the read'),
+  operator: proved('scales and traverses the published recipe after a private draft without platform authority widening the read'),
 }, { rights: { basis: 'original-contribution', credit: 'Original synthetic recipe text and arrangement by the owner Person; native author credit must name that Person.' } });
 
 // Shared public-command fixture builders for the four recipe outcome rows.
