@@ -114,7 +114,7 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
   const id = short(recipe.work);
   const viewer = (path: string) => person.actingSubject
     ? `${path}${path.includes('?') ? '&' : '?'}${acting(person)}` : path;
-  const get = async <T>(label: string, path: string): Promise<T> => {
+  const get = async <T,>(label: string, path: string): Promise<T> => {
     const response = await sample(label, 'GET', viewer(path));
     const raw = await response.text();
     if (response.status !== 200) throw new Error(`Page read GET ${viewer(path)}: ${response.status}: ${raw}`);
