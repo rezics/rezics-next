@@ -13,7 +13,10 @@ beforeAll(async () => {
 
 const id = (index: number) => `https://rezics.com/id/00000000-0000-4000-8000-${index.toString(16).padStart(12, '0')}`;
 const structure = id(1);
-function ingredient(index: number): OccurrenceRecord {
+type IngredientRecord = OccurrenceRecord & {
+  qualifier: Extract<NonNullable<OccurrenceRecord['qualifier']>, { type: 'ingredient-line' }>;
+};
+function ingredient(index: number): IngredientRecord {
   return { occurrence: id(index + 10), state: 'active', parent: structure, role: 'ingredient',
     labels: [], introducedBy: structure, sourceKey: `${id(2)}#ingredient-${index}`,
     qualifier: { type: 'ingredient-line', originalText: { value: '1½–2⅓ g flour', language: 'fr' },
