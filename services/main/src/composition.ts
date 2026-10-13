@@ -226,8 +226,6 @@ export interface ComposeMainInput {
   erasureRelayPool?: Pool;
   ownerRelayPool?: Pool;
   recommendationRelayPool?: Pool;
-  /** Index starts the notification hub at the same point as before the app is built. */
-  startNotificationRealtime?: (hub: NotificationRealtimeHub) => Promise<void>;
   overrides?: ComposeMainOverrides;
 }
 
@@ -418,7 +416,6 @@ export async function composeMain(input: ComposeMainInput) {
     config.ACCOUNT_ISSUER, new URL('/api/internal/notification-digest',
       config.ACCOUNT_INTROSPECT_URL).toString(), config.ACCOUNT_MAIN_CLIENT_SECRET);
   const notificationRealtime = relayPool ? new NotificationRealtimeHub(pool) : undefined;
-  if (notificationRealtime) await input.startNotificationRealtime?.(notificationRealtime);
   const notificationDeliveryWorker = notificationDispatcher
     ? new NotificationDeliveryWorker(notificationDispatcher, config.MAIN_NOTIFICATION_INTERVAL_MS)
     : undefined;
