@@ -209,6 +209,12 @@ async function catalogue(name: PersonaName) {
     expect(curated.matches.value).toBe(curated.items.length);
     expect(curated.sourcePosition.dataEpoch).toBe(adopted.sourcePosition.dataEpoch);
     console.log(JSON.stringify({ row: declaration.rowId, persona: name,
+      expectedWork: unadopted.work, expectedRealm: sessions.realm,
+      adoptionRequest: { method: 'POST', path: '/v1/publication-selections',
+        body: adoption(unadoptedSelection, person) }, adoptionAnswer: adopted,
+      browseRequest: { method: 'GET', path: `${root}?${new URLSearchParams({
+        q: 'published but not adopted', type: 'https://schema.org/VideoGame',
+      })}` }, browseAnswer: curated,
       adoptionPosition: adopted.sourcePosition, browsePosition: curated.sourcePosition,
       matches: curated.matches, window: curated.window, items: curated.items.map(item => item.id) }));
     if (curated.window.complete) {
