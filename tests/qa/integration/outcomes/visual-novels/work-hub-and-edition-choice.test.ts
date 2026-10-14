@@ -1,10 +1,23 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
 import hub from '../../../../../scripts/qa/cases/outcomes/visual-novels/work-hub-and-edition-choice.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(185_000);
+const proofDeadlineMs = 60_000; // The original persona proof owns these 60 seconds.
+const readDeadlineMs = 120_000;
+async function withinDeadline(part: string, milliseconds: number, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 const short = (id: string) => id.slice(-36);
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 let sessions: PersonaSessions;
@@ -23,6 +36,19 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 beforeAll(async () => {
   sessions = await personaSessions('public');
   await recording.prepare();
+  for (const name of Object.keys(sessions) as PersonaName[]) {
+    const person = sessions[name];
+    if (!person || typeof person.main !== 'function') continue;
+    const send = person.main;
+    person.main = async (...args) => {
+      const started = performance.now();
+      try { return await send(...args); }
+      finally {
+        const elapsed = Math.round(performance.now() - started);
+        if (elapsed >= 1_000) console.info(`[persona-request] ${name} ${args[0]} ${args[1]} ${elapsed} ms`);
+      }
+    };
+  }
   const owner = sessions.owner;
   const actingSubject = owner.actingSubject;
   work = await answer(owner.main('POST', '/v1/works', {
@@ -91,7 +117,8 @@ async function pageReads(name: PersonaName) {
   const person = sessions[name];
   const sample = recording.session(name, person);
   const id = short(work.work);
-  const viewer = (path: string) => `${path}${path.includes('?') ? '&' : '?'}${query(person)}`;
+  const viewer = (path: string) => person.actingSubject
+    ? `${path}${path.includes('?') ? '&' : '?'}${query(person)}` : path;
   const read = <T,>(label: string, path: string) => answer<T>(sample(label, 'GET', viewer(path)));
   const readBatch = async (requests: Array<[string, string]>) => {
     for (let offset = 0; offset < requests.length; offset += 3) {
@@ -107,7 +134,7 @@ async function pageReads(name: PersonaName) {
     await answer(sample(`hub-${template}`, 'POST', '/v1/query', {
       profile: 'template-query-v1', query: `https://rezics.com/query/${template}`, revision: 1,
       parameters: { roots: [work.work], ...(template === 'work-versions' ? { kind: 'text-variant' } : {}) },
-      presentation: { actingSubject: person.actingSubject },
+      presentation: { ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) },
     }));
   }
   await readBatch([
@@ -117,7 +144,7 @@ async function pageReads(name: PersonaName) {
     ['hub-classifications', `/v1/works/${id}/classifications?scope=global`],
   ]);
   await answer(sample('hub-facet-labels', 'GET', '/v1/facets'));
-  await answer(sample('hub-platform-access', 'GET', '/v1/me/platform-access'));
+  if (person.actingSubject) await answer(sample('hub-platform-access', 'GET', '/v1/me/platform-access'));
   const contexts = await read<{ items: Array<{ context: string }> }>('hub-rating-contexts', `/v1/resources/${id}/rating-contexts?scope=global`);
   const context = contexts.items[0]?.context;
   const contextQuery = context ? `&context=${encodeURIComponent(context)}` : '';
@@ -139,9 +166,12 @@ async function pageReads(name: PersonaName) {
   const contents = await sample('hub-contents', 'GET', viewer(`/v1/works/${id}/contents`));
   expect([200, 404]).toContain(contents.status);
   await contents.body?.cancel();
-  await read('hub-reader-state-empty', `/v1/works/${id}/reader-state`);
-  await read('hub-progress-empty', `/v1/me/progress-summaries/${id}?language=en`);
-  await read('hub-continue-empty', '/v1/me/continue?limit=6');
+  if (person.actingSubject) {
+    await read('hub-reader-state-empty', `/v1/works/${id}/reader-state`);
+    await read(name === 'member' || name === 'stranger' ? 'hub-progress-empty' : 'hub-progress-saved',
+      `/v1/me/progress-summaries/${id}?language=en`);
+    await read('hub-continue-empty', '/v1/me/continue?limit=6');
+  }
   await answer(sample('hub-selected-text', 'GET', `/v1/main-versions/${short(work.mainVersion)}/selection?language=en`));
   await answer(sample('hub-showcase-empty', 'POST', '/v1/resources/showcase', { profile: 'work-showcase-batch-v1', targets: [work.work] }));
 }
@@ -184,8 +214,65 @@ async function chooserReads(name: PersonaName) {
   }
 }
 
+// The transport records exactly the path and query Eden sends, with this persona's own bearer.
+function productionReads(name: PersonaName) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  let label = '';
+  const main = browserMainApi('https://recorded.invalid', { anonymous: !person.actingSubject,
+    fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+      const response = await sample(label, (init?.method ?? 'GET') as 'GET' | 'POST', path,
+        init?.body ? JSON.parse(String(init.body)) : undefined);
+      return response;
+    }) as typeof fetch,
+  });
+  return { main, read: async (nextLabel: string, call: () => Promise<unknown>) => {
+    label = nextLabel;
+    await call();
+  } };
+}
+
+async function savedPageReads(name: PersonaName) {
+  if (name !== 'member') await pageReads(name);
+  const person = sessions[name];
+  const { main, read } = productionReads(name);
+  const id = short(work.work);
+  const actingSubject = person.actingSubject ?? undefined;
+  // Review grain choices read a different relation bound than the hub preview.
+  await read('hub-review-relations', () => main.v1.resources({ resource: id }).relations.get({
+    query: { actingSubject, limit: 32 } }));
+  // Parts/wholes and the empty related-work list still ask Main for an empty name batch.
+  await read('hub-names-empty', () => main.v1.resources.summaries.post({
+    profile: 'resource-summary-batch-v1', resources: [], ...(actingSubject ? { actingSubject } : {}) }));
+  if (!actingSubject) return;
+  const api = mainTrackingApi(actingSubject, () => main);
+  await read('hub-correspondence-definition', () => api.definition('correspondence-equivalent'));
+  if (name === 'stranger') return;
+  const books = booksEditionReads({ main, actingSubject });
+  await read('saved-release-detail', () => books.readEditionRelease(id, releases[0]!.resource));
+  await read('saved-realization-detail', () => api.edition(work.work, { kind: 'realization', ...realization }));
+  // A release link leaves the editor for its own page; its owner and coverage are Main's.
+  await read('saved-release-work', () => main.v1.resources({ resource: short(releases[0]!.resource) }).get({
+    query: { actingSubject } }));
+  await read('saved-release-realization', () => main.v1.works({ id }).realizations({ realization: short(realization.resource) })
+    .get({ query: { actingSubject } }));
+  await read('saved-release-names', () => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
+    resources: [work.work, work.mainVersion].sort(), actingSubject }));
+  // Both editors refresh EditionsEditPage, whose inventory names its coverage Works.
+  await read('saved-editions-names', () => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
+    resources: [work.work], actingSubject }));
+}
+
 async function choice(name: PersonaName) {
-  if (name === 'member') await pageReads(name);
+  if (name === 'member') {
+    await pageReads(name);
+    // This sample must precede the proof's preference writes to keep the empty choice exact.
+    const { main, read } = productionReads(name);
+    const reads = booksEditionReads({ main, actingSubject: sessions[name].actingSubject! });
+    await read('hub-progress-empty-zh-Hans', () => reads.readProgressSummary(short(work.work), 'zh-Hans'));
+  }
   await chooserReads(name);
   const person = proofSession(name);
   const root = `/v1/works/${short(work.work)}`;
@@ -236,9 +323,14 @@ async function choice(name: PersonaName) {
   expect(await answer(victim.main('GET', `${path}?${query(victim)}`))).toEqual(before);
 }
 
-outcomeTest(hub, 'visitor', () => choice('visitor'), recording);
-outcomeTest(hub, 'stranger', () => choice('stranger'), recording);
-outcomeTest(hub, 'member', () => choice('member'), recording);
-outcomeTest(hub, 'owner', () => choice('owner'), recording);
-outcomeTest(hub, 'moderator', () => choice('moderator'), recording);
-outcomeTest(hub, 'operator', () => choice('operator'), recording);
+async function recordedChoice(name: PersonaName) {
+  await withinDeadline(`${name} proof`, proofDeadlineMs, () => choice(name));
+  await withinDeadline(`${name} page reads`, readDeadlineMs, () => savedPageReads(name));
+}
+
+outcomeTest(hub, 'visitor', () => recordedChoice('visitor'), recording);
+outcomeTest(hub, 'stranger', () => recordedChoice('stranger'), recording);
+outcomeTest(hub, 'member', () => recordedChoice('member'), recording);
+outcomeTest(hub, 'owner', () => recordedChoice('owner'), recording);
+outcomeTest(hub, 'moderator', () => recordedChoice('moderator'), recording);
+outcomeTest(hub, 'operator', () => recordedChoice('operator'), recording);
