@@ -3,7 +3,7 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { documentText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { answerPersonas, type AnswerPersona, type AnswerRecord, type AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import independentZone from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
-import { ADDRESS_HEADER, resolvedAddress } from '../address/client.ts';
+import { resolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -15,11 +15,19 @@ import { readCompletePresentation, resolveSite } from '../realm/read.ts';
 import { idOf } from '../realm/route.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../zone-editor/api.ts';
+import { readZoneManagementFrame } from '../zone-editor/authoring-reads.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import { authoringModel, draftChoice, draftWire, publicationChoice, publicationWire } from '../zone-editor/model.ts';
-import { loadZoneAuthoring, loadZoneLifecycle } from '../zone-editor/read.ts';
 import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { loadSavedPreviewFrame } from '../zone-editor/saved-preview-frame.ts';
+import { zoneHomeView as homeFromPage } from '../../app/[locale]/manage/z/[space]/page.tsx';
+import { zonePreviewBody as previewFromPage } from '../../app/[locale]/manage/z/[space]/preview/page.tsx';
+import {
+  zoneHomeView as homeFromStory,
+  zoneManagementShell as shellFromStory,
+  zonePreviewBody as previewFromStory,
+} from './independent-zone-recorded-page-manage.tsx';
+import { zoneHomeView, zoneManagementShell, zonePreviewBody } from './independent-zone-recorded-page-routes.tsx';
 import {
   independentZoneHomeBoundary,
   independentZoneVisit,
@@ -140,8 +148,17 @@ test('production and replay install the same home boundary', () => {
   expect(production.editorOpen).toBeNull();
 });
 
-const managed = ['stranger', 'member', 'moderator', 'owner'] as const;
+test('production and replay install the same management boundaries', () => {
+  expect(homeFromPage).toBe(zoneHomeView);
+  expect(homeFromStory).toBe(zoneHomeView);
+  expect(previewFromPage).toBe(zonePreviewBody);
+  expect(previewFromStory).toBe(zonePreviewBody);
+  expect(shellFromStory).toBe(zoneManagementShell);
+});
+
+const managed = ['stranger', 'member', 'moderator', 'owner', 'operator'] as const;
 type ManagedPersona = (typeof managed)[number];
+const editors = ['owner', 'operator'] as const;
 
 interface SeenRequest { method: string; path: string; query: Record<string, string>; body: unknown }
 
@@ -155,13 +172,6 @@ function actingPerson(persona: ManagedPersona): string {
   const acting = new URL(sample(persona, 'management-configuration').path, 'https://recorded.invalid').searchParams.get('actingSubject');
   if (!acting) throw new Error(`${persona} configuration has no acting person`);
   return acting;
-}
-
-/** The host now carries proxy admission instead of repeating public address and presentation reads. */
-function managementAdmission(persona: ManagedPersona, label: 'management-address' | 'saved-preview-address') {
-  const address = resolvedAddress(sample(persona, label).answer);
-  if (!address) throw new Error(`${persona} management address was not admitted`);
-  return { headers: { [ADDRESS_HEADER]: encodeURIComponent(JSON.stringify(address)) } };
 }
 
 function callOf(item: AnswerSample): SeenRequest {
@@ -229,84 +239,77 @@ test('signed-in personas read the recorded management and saved preview', async 
   for (const persona of managed) {
     const acting = actingPerson(persona);
     const space = zoneSpace(persona);
-    const owner = persona === 'owner';
-    const host = install(persona, ['management-configuration', 'management-editor', 'management-zone']);
+    const editor = (editors as readonly ManagedPersona[]).includes(persona);
+    const host = install(persona, ['management-configuration', 'management-address', 'management-editor', 'management-zone']);
     try {
-      const loaded = await pageRequest(() => loadZoneAuthoring(host.main, space, 'en', acting),
-        managementAdmission(persona, 'management-address'));
-      expectVisit(host.requests, ['management-configuration'],
-        ['management-editor', 'management-zone'], persona);
-      expect(host.requests.some(item => item.path.endsWith('/routes'))).toBe(false);
+      const frame = await pageRequest(() => readZoneManagementFrame(host.main, space, 'en', acting));
+      const parallel = ['management-editor', 'management-zone',
+        ...(editor ? [] : ['management-lifecycle-configuration'])];
+      expectVisit(host.requests, ['management-configuration', 'management-address'], parallel, persona);
+      expect(host.requests.some(item => item.path.endsWith('/routes') || item.path.endsWith('/presentation'))).toBe(false);
+      expect(host.requests.find(item => item.path === '/v1/addresses/resolve')?.query.actingSubject).toBe(acting);
       const address = sample(persona, 'management-address').answer as { capabilities?: { realm?: unknown }; canonical: CanonicalAddress };
       expect(address.capabilities?.realm).toBeUndefined();
-      if (!owner) {
+      const loaded = frame.authoring;
+      if (!editor) {
         expect(loaded.kind).toBe('failure');
         if (loaded.kind === 'failure') expect(loaded.failure).toBe('denied');
+        expect(frame.lifecycle).toEqual({ kind: 'failure', failure: 'denied' });
+        const repeated = sample(persona, 'management-lifecycle-configuration');
+        expect(callOf(repeated).path).toBe(callOf(sample(persona, 'management-configuration')).path);
+        expect(callOf(repeated).query).toEqual(callOf(sample(persona, 'management-configuration')).query);
       } else {
         expect(loaded.kind).toBe('ready');
-        if (loaded.kind !== 'ready') continue;
+        expect(frame.lifecycle.kind).toBe('ready');
+        if (loaded.kind !== 'ready' || frame.lifecycle.kind !== 'ready') continue;
         const zone = sample(persona, 'management-zone').answer as { name: string };
         const draft = (sample(persona, 'management-editor').answer as { draft: { document: DocumentSnapshot } }).draft.document;
+        const bound = new URL(sample(persona, 'management-address').path, 'https://recorded.invalid').searchParams.get('key');
+        if (!bound) throw new Error('management address has no key');
         expect(loaded.realm).toBeNull();
         expect(loaded.model.name).toBe(zone.name);
         expect(loaded.model.zoneId).toBe(space);
         expect(loaded.frameMetadata.ref).toBe(addressKey(address.canonical));
         expect(loaded.frameMetadata.name.value).toBe(zone.name);
         expect(documentText(loaded.model.document!)).toBe(documentText(draft));
+        expect(frame.lifecycle.zoneId).toBe(space);
+        expect(frame.lifecycle.spaceId).toBe(bound);
+        expect(frame.lifecycle.status).toBe('active');
       }
     } finally { host.restore(); }
 
-    const again = install(persona, ['management-configuration']);
-    try {
-      const lifecycle = await pageRequest(() => loadZoneLifecycle(again.main, space, 'en', acting),
-        managementAdmission(persona, 'management-address'));
-      expect(again.requests.some(item => item.path === '/v1/addresses/resolve')).toBe(false);
-      if (!owner) {
-        expectVisit(again.requests, ['management-configuration', 'management-configuration'], [], persona);
-        expect(lifecycle).toEqual({ kind: 'failure', failure: 'denied' });
-        const repeated = sample(persona, 'management-lifecycle-configuration');
-        expect(callOf(repeated).path).toBe(callOf(sample(persona, 'management-configuration')).path);
-        expect(callOf(repeated).query).toEqual(callOf(sample(persona, 'management-configuration')).query);
-      } else {
-        expectVisit(again.requests, ['management-configuration'], [], persona);
-        expect(lifecycle.kind).toBe('ready');
-        if (lifecycle.kind === 'ready') {
-          const bound = new URL(sample(persona, 'management-address').path, 'https://recorded.invalid').searchParams.get('key');
-          if (!bound) throw new Error('management address has no key');
-          expect(lifecycle.zoneId).toBe(space);
-          expect(lifecycle.spaceId).toBe(bound);
-        }
-      }
-    } finally { again.restore(); }
-
-    const previewLabels = ['saved-preview-configuration', 'saved-preview-editor', 'saved-preview-zone',
-      ...(owner ? ['saved-preview-navigation'] : [])];
+    const previewLabels = ['saved-preview-configuration', 'saved-preview-address', 'saved-preview-editor', 'saved-preview-zone',
+      ...(editor ? ['saved-preview-navigation'] : [])];
     const preview = install(persona, previewLabels);
     const unexpected: string[] = [];
     try {
-      const saved = await pageRequest(() => loadSavedPreviewFrame({
-        authoring: () => loadZoneAuthoring(preview.main, space, 'en', acting),
-        navigation: ready => loadCompleteZoneNavigation(preview.main, ready.model.zoneId, acting, ready.model.state),
-        presentation: async () => { unexpected.push('presentation'); return { ok: false }; },
-        realmHeader: async () => { unexpected.push('realm'); return { ok: false }; },
-        installedDigest: async () => { unexpected.push('digest'); return null; },
-        packages: {
-          load: async () => { unexpected.push('package'); return null; },
-          declarations: async () => { unexpected.push('declarations'); return null; },
-        },
-      }, { locale: 'en', homeName: realmMessages.home, lookEnabled: true }),
-      managementAdmission(persona, 'saved-preview-address'));
+      const saved = await pageRequest(async () => {
+        const frame = await readZoneManagementFrame(preview.main, space, 'en', acting);
+        return loadSavedPreviewFrame({
+          authoring: async () => frame.authoring,
+          navigation: ready => loadCompleteZoneNavigation(preview.main, ready.model.zoneId, acting, ready.model.state),
+          presentation: async () => { unexpected.push('presentation'); return { ok: false }; },
+          realmHeader: async () => { unexpected.push('realm'); return { ok: false }; },
+          installedDigest: async () => { unexpected.push('digest'); return null; },
+          packages: {
+            load: async () => { unexpected.push('package'); return null; },
+            declarations: async () => { unexpected.push('declarations'); return null; },
+          },
+        }, { locale: 'en', homeName: realmMessages.home, lookEnabled: true });
+      });
       expect(unexpected).toEqual([]);
-      expect(preview.requests.some(item => item.path === '/v1/addresses/resolve')).toBe(false);
-      if (!owner) {
-        expectVisit(preview.requests, ['saved-preview-configuration'],
-          ['saved-preview-editor', 'saved-preview-zone'], persona);
+      expect(preview.requests.some(item => item.path.endsWith('/presentation'))).toBe(false);
+      if (!editor) {
+        expectVisit(preview.requests, ['saved-preview-configuration', 'saved-preview-address'],
+          ['saved-preview-editor', 'saved-preview-zone', 'saved-preview-lifecycle-configuration'], persona);
         expect(saved.kind).toBe('failure');
         if (saved.kind === 'failure') expect(saved.failure).toBe('denied');
       } else {
-        expectVisit(preview.requests.slice(0, 3), ['saved-preview-configuration'],
+        const navigation = preview.requests.at(-1);
+        if (!navigation) throw new Error(`${persona} preview sent no navigation read`);
+        expectVisit(preview.requests.slice(0, -1), ['saved-preview-configuration', 'saved-preview-address'],
           ['saved-preview-editor', 'saved-preview-zone'], persona);
-        expect(preview.requests.slice(3).map(signature)).toEqual([signature(callOf(sample(persona, 'saved-preview-navigation')))]);
+        expect(signature(navigation)).toBe(signature(callOf(sample(persona, 'saved-preview-navigation'))));
         expect(saved.kind).toBe('ready');
         if (saved.kind !== 'ready') continue;
         const draft = (sample(persona, 'saved-preview-editor').answer as { draft: { document: DocumentSnapshot } }).draft.document;
@@ -320,8 +323,8 @@ test('signed-in personas read the recorded management and saved preview', async 
   }
 });
 
-test('the owner saves, republishes, reopens and keeps a stale draft', async () => {
-  const persona = 'owner' as const;
+test('the owner and the mandated operator save, republish, reopen and keep a stale draft', async () => {
+  for (const persona of editors) {
   const acting = actingPerson(persona);
   const zone = zoneSpace(persona);
   const editor = sample(persona, 'management-editor').answer;
@@ -371,4 +374,5 @@ test('the owner saves, republishes, reopens and keeps a stale draft', async () =
       signature(callOf(sample(persona, 'editor-reopen-heads'))),
     ]);
   } finally { stale.restore(); }
+  }
 });
