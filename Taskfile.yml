@@ -312,7 +312,7 @@ tasks:
   goal:unit-files:
     desc: Run the explicit Bun unit and inventory files selected by the merge gate.
     cmds:
-      - bun test {{.CLI_ARGS}}
+      - bun scripts/qa/repository-guards.ts {{.CLI_ARGS}}
 
   guards:
     desc: Run the repository-wide inventory guards the merge gate enforces (scripts/qa/repository-guards.ts). No stack; about three minutes.

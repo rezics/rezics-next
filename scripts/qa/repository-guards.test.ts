@@ -4,9 +4,76 @@ import { spawnSync } from 'node:child_process';
 import { join, resolve } from 'node:path';
 import ts from 'typescript-6';
 import { integrationGateFiles } from './integration-gate-files.ts';
-import { outcomeRepositoryViolations, outcomeTestViolations, outcomeSourcePattern, repositoryGuards, selectRepositoryGuards, type RepositoryGuard } from './repository-guards.ts';
+import { outcomeRepositoryViolations, outcomeTestViolations, outcomeSourcePattern, repositoryGuards, selectRepositoryGuards, guardParallelism, parseGuardRunArgs, runRepositoryGuardFiles, type RepositoryGuard } from './repository-guards.ts';
+import { parseJUnit } from './acceptance.ts';
 
 const file = 'tests/qa/integration/outcomes/reading.test.ts';
+
+test('guard parallelism fits processors and available memory while retaining the host reserve', () => {
+  const gib = 1024 ** 3;
+  expect(guardParallelism(38, 64, 32 * gib)).toBe(12);
+  expect(guardParallelism(38, 4, 128 * gib)).toBe(4);
+  expect(guardParallelism(3, 64, 128 * gib)).toBe(3);
+  expect(guardParallelism(38, 64, 7 * gib)).toBe(1);
+  expect(guardParallelism(0, 64, 32 * gib)).toBe(0);
+});
+
+test('guard arguments keep Bun options and reserve a single aggregate JUnit destination', () => {
+  expect(parseGuardRunArgs(['--timeout', '12000', './one.test.ts', '--preload', 'setup.test.ts',
+    '--reporter=junit', '--reporter-outfile', '.temp/unit.xml', 'two.test.ts']))
+    .toEqual({ files: ['./one.test.ts', 'two.test.ts'], bunArgs: ['--timeout', '12000', '--preload', 'setup.test.ts'],
+      report: '.temp/unit.xml' });
+  expect(() => parseGuardRunArgs(['--reporter=dot', 'one.test.ts'])).toThrow('junit');
+});
+
+test('guard processes overlap, inherit one QA slot, and retain every file in one JUnit report', async () => {
+  mkdirSync('.temp', { recursive: true });
+  const root = mkdtempSync(resolve('.temp/parallel-guards-'));
+  try {
+    const files = ['one', 'two', 'three'].map(name => join(root, `${name}.test.ts`));
+    for (const [index, path] of files.entries()) writeFileSync(path, `
+      import { expect, test } from 'bun:test';
+      import { existsSync, writeFileSync } from 'node:fs';
+      test('same title', async () => {
+        expect(process.env.GOAL_IN_SLOT).toBe('1');
+        expect(process.env.GOAL_QA_SLOT_DIRECTORY).toBe('existing-slot');
+        ${index === 2 ? `expect(existsSync(${JSON.stringify(join(root, '0.done'))}) || existsSync(${JSON.stringify(join(root, '1.done'))})).toBe(true);` : ''}
+        writeFileSync(${JSON.stringify(join(root, `${index}.ready`))}, '');
+        const deadline = Date.now() + 2000;
+        while (!existsSync(${JSON.stringify(join(root, `${index === 0 ? 1 : 0}.ready`))}) && Date.now() < deadline) await Bun.sleep(10);
+        expect(existsSync(${JSON.stringify(join(root, `${index === 0 ? 1 : 0}.ready`))})).toBe(true);
+        writeFileSync(${JSON.stringify(join(root, `${index}.done`))}, '');
+      });`);
+    const report = join(root, 'unit.xml');
+    const result = await runRepositoryGuardFiles(files, { parallelism: 2, report,
+      env: { ...process.env, CLAUDECODE: '1', GOAL_IN_SLOT: '1', GOAL_QA_SLOT_DIRECTORY: 'existing-slot' } });
+    expect(result.code, result.summary).toBe(0);
+    const tests = parseJUnit(readFileSync(report, 'utf8'), 'unit');
+    expect(tests.map(test => resolve(test.file)).sort()).toEqual(files.sort());
+    expect(tests.every(test => test.name === 'same title' && !test.failed)).toBe(true);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}, 10_000);
+
+test('guard failures and module crashes are attributed to their file without discarding passing siblings', async () => {
+  mkdirSync('.temp', { recursive: true });
+  const root = mkdtempSync(resolve('.temp/guard-failures-'));
+  try {
+    const files = ['pass', 'fail', 'crash', 'no-report'].map(name => join(root, `${name}.test.ts`));
+    writeFileSync(files[0]!, "import { test } from 'bun:test'; test('same title', () => {});");
+    writeFileSync(files[1]!, "import { expect, test } from 'bun:test'; test('same title', () => { expect(1).toBe(2); });");
+    writeFileSync(files[2]!, "throw new Error('module could not load');");
+    writeFileSync(files[3]!, 'process.exit(0);');
+    const report = join(root, 'unit.xml');
+    const result = await runRepositoryGuardFiles(files, { parallelism: 2, report,
+      env: { ...process.env, CLAUDECODE: '1' } });
+    expect(result.code).toBe(1);
+    const tests = parseJUnit(readFileSync(report, 'utf8'), 'unit');
+    expect(tests.filter(test => test.failed).map(test => resolve(test.file)).sort()).toEqual(files.slice(1).sort());
+    expect(tests.find(test => resolve(test.file) === files[0])?.failed).toBe(false);
+    for (const path of files.slice(1)) expect(result.summary).toContain(path);
+    expect(result.summary).toContain('module could not load');
+  } finally { rmSync(root, { recursive: true, force: true }); }
+}, 10_000);
 
 test('outcome guard refuses product imports and module mocks in outcome files', () => {
   for (const source of [
