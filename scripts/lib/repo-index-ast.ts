@@ -1,5 +1,12 @@
 import ts from 'typescript-6';
-import { indexedSource, type AstNode, type SyntaxSpan, type VariableFact } from './repo-index.ts';
+import {
+  indexedSource,
+  type AstNode,
+  type IndexedFile,
+  type SqlAncestor,
+  type SyntaxSpan,
+  type VariableFact,
+} from './repo-index.ts';
 
 // The guards use TypeScript's node vocabulary for their rules. This view maps
 // oxc's indexed syntax to that vocabulary without invoking a second parser.
@@ -24,6 +31,7 @@ const kindNames: Record<string, string> = {
   AssignmentExpression: 'BinaryExpression',
   UnaryExpression: 'PrefixUnaryExpression',
   ArrayExpression: 'ArrayLiteralExpression',
+  OmittedExpression: 'OmittedExpression',
   ObjectExpression: 'ObjectLiteralExpression',
   Property: 'PropertyAssignment',
   ParenthesizedExpression: 'ParenthesizedExpression',
@@ -72,6 +80,7 @@ type SourceContext = {
   offset: (value: number) => number;
   variableFacts?: VariableFact[];
   declarations?: WeakMap<VariableFact, ts.VariableDeclaration>;
+  declarationIndex?: IndexedFile;
 };
 type IndexedNode = ts.Node & { sourceContext: SourceContext; rawSyntax: AstNode };
 const nodePrototype = {
@@ -171,6 +180,7 @@ export function indexedSourceFile(
       );
       set('text', String(raw.value));
     }
+    if (raw.type === 'OmittedExpression') set('getText', () => '');
     if (raw.type === 'MemberExpression') {
       set(
         'kind',
@@ -273,7 +283,13 @@ export function indexedSourceFile(
       rename('whenTrue', raw.consequent);
       rename('whenFalse', raw.alternate);
     }
-    if (raw.type === 'ArrayExpression') rename('elements', raw.elements);
+    if (raw.type === 'ArrayExpression')
+      rename(
+        'elements',
+        ((raw.elements ?? []) as (AstNode | null)[]).map(
+          (element) => element ?? { type: 'OmittedExpression', start: raw.start, end: raw.start },
+        ),
+      );
     if (raw.type === 'Program') {
       set('pos', 0);
       rename('statements', raw.body);
@@ -379,24 +395,33 @@ export function forEachIndexedChild(node: ts.Node, visit: (node: ts.Node) => unk
 }
 
 /** Translate native parser byte spans once for each non-ASCII input. */
+const offsetViews = new Map<string, (value: number) => number>();
 export function indexedOffsets(text: string): (value: number) => number {
+  const previous = offsetViews.get(text);
+  if (previous) return previous;
   const boundaries: { end: number; delta: number }[] = [];
   let delta = 0;
   for (const match of text.matchAll(/[^\x00-\x7f]/gu)) {
     delta += Buffer.byteLength(match[0]) - match[0].length;
     boundaries.push({ end: match.index + match[0].length + delta, delta });
   }
-  if (!boundaries.length) return (value) => value;
-  return (value) => {
-    let low = 0,
-      high = boundaries.length;
-    while (low < high) {
-      const middle = (low + high) >>> 1;
-      if (boundaries[middle].end <= value) low = middle + 1;
-      else high = middle;
-    }
-    return value - (low ? boundaries[low - 1].delta : 0);
-  };
+  const offset = !boundaries.length
+    ? (value: number) => value
+    : (value: number) => {
+        let low = 0,
+          high = boundaries.length;
+        while (low < high) {
+          const middle = (low + high) >>> 1;
+          if (boundaries[middle].end <= value) low = middle + 1;
+          else high = middle;
+        }
+        return value - (low ? boundaries[low - 1].delta : 0);
+      };
+  // Source expressions share their file's mapper; arbitrary fixture and SQL
+  // inputs cannot grow this process cache without bound.
+  if (offsetViews.size === 2048) offsetViews.delete(offsetViews.keys().next().value!);
+  offsetViews.set(text, offset);
+  return offset;
 }
 
 /** SourceFile line breaks include CR and Unicode separators; SQL fragment
@@ -636,11 +661,7 @@ function variableDeclaration(context: SourceContext, fact: VariableFact): ts.Var
     get: () => {
       if (!fact.initializerAst)
         throw new Error(`Missing indexed initializer: ${context.file}:${fact.start}`);
-      const ast = indexedSourceFile(context, fact.initializerAst);
-      const initializerContext = (ast as IndexedNode).sourceContext;
-      initializerContext.variableFacts = context.variableFacts;
-      initializerContext.ast = context.ast;
-      const expression = (ast.statements[0] as ts.ExpressionStatement).expression;
+      const expression = factExpression(context, fact.initializerAst);
       // Independent expression payloads share the original source's ancestry,
       // including the declaration itself. Scope membership comes from parser
       // facts; the TypeScript rule still chooses the first preceding binding.
@@ -664,17 +685,141 @@ function variableDeclaration(context: SourceContext, fact: VariableFact): ts.Var
   return declaration;
 }
 
+function attachDeclarations(context: SourceContext, facts: IndexedFile): void {
+  if (context.declarationIndex === facts) return;
+  context.declarationIndex = facts;
+  Object.defineProperty(context, 'variableFacts', {
+    configurable: true,
+    get: () => {
+      const variables = facts.variableFacts;
+      Object.defineProperty(context, 'variableFacts', {
+        value: variables,
+        writable: true,
+        configurable: true,
+      });
+      return variables;
+    },
+  });
+}
+
+type SqlSourceView = {
+  ast: ts.SourceFile;
+  context: SourceContext;
+  ancestors: Map<string, ts.Node>;
+  selected?: ts.Node[];
+};
+const sqlSourceViews = new WeakMap<IndexedFile, SqlSourceView>();
+function sqlSourceView(source: { file: string; text: string }, facts: IndexedFile): SqlSourceView {
+  const previous = sqlSourceViews.get(facts);
+  if (previous) return previous;
+  const ast = indexedSourceFile(source, {
+    type: 'Program',
+    start: 0,
+    end: Buffer.byteLength(source.text),
+    body: [],
+  });
+  const context = (ast as IndexedNode).sourceContext;
+  attachDeclarations(context, facts);
+  const view = { ast, context, ancestors: new Map<string, ts.Node>([['Program', ast]]) };
+  sqlSourceViews.set(facts, view);
+  return view;
+}
+
+function factExpression(source: SourceContext, syntax: AstNode): ts.Expression {
+  const statement = (syntax.body as AstNode[])[0];
+  return source.make!(statement.expression as AstNode) as ts.Expression;
+}
+
+function sqlAncestor(view: SqlSourceView, span: SqlAncestor): ts.Node {
+  const key = scopeKey(span);
+  const previous = view.ancestors.get(key);
+  if (previous) return previous;
+  const node = ancestorView(view.context, span);
+  if (span.type === 'CallExpression') (node as unknown as { arguments: ts.Node[] }).arguments = [];
+  if (span.functionLike)
+    (node as unknown as { kind: ts.SyntaxKind }).kind =
+      span.methodKind === 'constructor'
+        ? ts.SyntaxKind.Constructor
+        : span.methodKind === 'get'
+          ? ts.SyntaxKind.GetAccessor
+          : span.methodKind === 'set'
+            ? ts.SyntaxKind.SetAccessor
+            : kindNames[span.type] === 'ArrowFunction'
+              ? ts.SyntaxKind.ArrowFunction
+              : kindNames[span.type] === 'FunctionDeclaration'
+                ? ts.SyntaxKind.FunctionDeclaration
+                : ts.SyntaxKind.MethodDeclaration;
+  view.ancestors.set(key, node);
+  return node;
+}
+
+function sqlFactNodes(source: { file: string; text: string }, facts: IndexedFile): ts.Node[] {
+  const view = sqlSourceView(source, facts);
+  if (view.selected) return view.selected;
+  const selected: ts.Node[] = [];
+  for (const fact of facts.sqlNodeFacts ?? []) {
+    if (!fact.nodeAst) throw new Error(`Missing indexed SQL expression: ${source.file}`);
+    const node = factExpression(view.context, fact.nodeAst);
+    selected.push(node);
+    // Real selected calls retain their complete value arguments. Ancestor
+    // skeletons supply only parent identity and structural branch membership.
+    view.ancestors.set(scopeKey((node as IndexedNode).rawSyntax), node);
+    let child: ts.Node = node;
+    for (const span of fact.ancestors) {
+      const parent = sqlAncestor(view, span);
+      (child as unknown as { parent?: ts.Node }).parent = parent;
+      const mutable = parent as unknown as Record<string, unknown>;
+      if (span.firstArgument && span.type === 'CallExpression') {
+        const arguments_ = mutable.arguments as ts.Node[] | undefined;
+        if (!arguments_?.length) mutable.arguments = [child];
+        else if (child === node) arguments_[0] = child;
+      }
+      if (span.branch) {
+        const conditional = span.type === 'ConditionalExpression';
+        mutable[
+          conditional
+            ? span.branch === 'then'
+              ? 'whenTrue'
+              : 'whenFalse'
+            : span.branch === 'then'
+              ? 'thenStatement'
+              : 'elseStatement'
+        ] = child;
+        const conditionField = conditional ? 'condition' : 'expression';
+        if (!(conditionField in mutable))
+          Object.defineProperty(mutable, conditionField, {
+            configurable: true,
+            get: () => {
+              if (!span.conditionAst)
+                throw new Error(`Missing indexed branch condition: ${source.file}:${span.start}`);
+              const expression = factExpression(view.context, span.conditionAst);
+              (expression as unknown as { parent?: ts.Node }).parent = parent;
+              Object.defineProperty(mutable, conditionField, { value: expression });
+              return expression;
+            },
+          });
+      }
+      child = parent;
+    }
+  }
+  view.selected = selected;
+  return selected;
+}
+
 /** Query/literal syntax and declaration membership are independent payloads.
  * Unused initializers stay compressed instead of widening the source walk. */
 export function indexedFragmentSourceFile(source: { file: string; text: string }): ts.SourceFile {
   const facts = indexedSource(source);
+  if ('sqlNodeFacts' in facts) return sqlSourceView(source, facts).ast;
   const ast = indexedSourceFile(source, facts.fragmentAst ?? facts.sqlAst);
-  if (facts.fragmentAst && facts.variableFacts)
-    (ast as IndexedNode).sourceContext.variableFacts = facts.variableFacts;
+  if (facts.fragmentAst && 'variableFacts' in facts)
+    attachDeclarations((ast as IndexedNode).sourceContext, facts);
   return ast;
 }
 
 export function indexedFragmentNodes(source: { file: string; text: string }): ts.Node[] {
+  const facts = indexedSource(source);
+  if ('sqlNodeFacts' in facts) return sqlFactNodes(source, facts);
   return selectIndexedNodes(indexedFragmentSourceFile(source), 'sql');
 }
 
@@ -699,8 +844,8 @@ export function indexedTraceNodes(
 export function indexedTraceSourceFile(source: { file: string; text: string }): ts.SourceFile {
   const facts = indexedSource(source);
   const ast = indexedSourceFile(source, facts.traceAst ?? facts.runtimeAst ?? facts.ast);
-  if (facts.traceAst && facts.variableFacts)
-    (ast as IndexedNode).sourceContext.variableFacts = facts.variableFacts;
+  if (facts.traceAst && 'variableFacts' in facts)
+    attachDeclarations((ast as IndexedNode).sourceContext, facts);
   return ast;
 }
 

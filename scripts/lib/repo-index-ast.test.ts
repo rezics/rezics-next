@@ -429,3 +429,83 @@ test('source finding lines preserve CR, CRLF and Unicode separators', () => {
       ).toEqual([[2, '12']]);
   }
 });
+
+test('quoted Unicode SQL names retain singleton writes and function gate effects', () => {
+  expect(
+    serializationFindings(
+      [
+        {
+          file: 'unicode.sql',
+          text: 'CREATE TABLE probe."Α.Σ"(id boolean PRIMARY KEY CHECK(id));',
+        },
+      ],
+      [{ file: 'unicode.ts', text: 'db.query(\'UPDATE probe."Α.Σ" SET id=true\');' }],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([
+    ['singleton-table', 'probe.Α.Σ'],
+    ['singleton-write', 'probe.Α.Σ'],
+  ]);
+  expect(
+    serializationFindings(
+      [
+        {
+          file: 'unicode.sql',
+          text: 'CREATE FUNCTION probe."Α.Σ"() RETURNS void LANGUAGE sql AS $$ UPDATE probe.scope_gate SET revision=2 WHERE id=1; $$;',
+        },
+      ],
+      [
+        {
+          file: 'unicode.ts',
+          text: `function run(db) {
+        db.query('SELECT id FROM probe.scope_gate WHERE id=1 FOR SHARE');
+        db.query('SELECT probe."Α.Σ"()');
+      }`,
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['gate-lock-upgrade', 'probe.scope_gate']]);
+});
+
+test('omitted array entries preserve SQL parameter positions and unknown template values', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'array-slots.ts',
+          text: "const args=[,17]; db.query('SELECT pg_advisory_lock($2)', args);",
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['constant-advisory-key', '17']]);
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'array-slots.ts',
+          text: 'const parts=[,17]; const sql=`SELECT pg_advisory_lock(${parts})`;',
+        },
+      ],
+      [],
+    ),
+  ).toEqual([]);
+});
+
+test('SQL constants in later call arguments retain standalone adapter analysis', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'adapter-arguments.ts',
+          text: "db.query('SELECT 1'); invoke(objectKey, 'SELECT pg_advisory_lock(19)');",
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['constant-advisory-key', '19']]);
+});

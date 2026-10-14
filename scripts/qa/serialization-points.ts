@@ -383,6 +383,16 @@ interface Token {
 }
 
 const sqlTokenCache = new Map<string, Token[]>();
+let lexTimings:
+  | {
+      requests: number;
+      misses: number;
+      load: number;
+      normalize: number;
+      effects: number;
+      advisory: number;
+    }
+  | undefined;
 const textLineOffsets = new Map<string, number[]>();
 function textLine(text: string, offset: number): number {
   let offsets = textLineOffsets.get(text);
@@ -412,14 +422,30 @@ function sourceLine(text: string, offset: number): number {
   return low + 1;
 }
 function lex(sql: string): Token[] {
+  if (lexTimings) lexTimings.requests++;
   const previous = sqlTokenCache.get(sql);
   if (previous) return previous;
+  const loadStart = lexTimings ? performance.now() : 0;
+  const tokens = indexedSql(sql).serializationTokens;
+  if (lexTimings) {
+    lexTimings.misses++;
+    lexTimings.load += performance.now() - loadStart;
+  }
+  const normalizeStart = lexTimings ? performance.now() : 0;
   const offset = indexedOffsets(sql);
-  const result = indexedSql(sql).serializationTokens.flatMap((token) => {
-    if (!token.string && !token.quoted && /^[^a-z_0-9$\s]+$/i.test(token.text))
-      return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
-    return [{ ...token, offset: offset(token.offset), literal: token.string }];
-  });
+  const result: Token[] = [];
+  for (const token of tokens) {
+    const start = offset(token.offset);
+    if (!token.string && !token.quoted && /^[^a-z_0-9$\s]+$/i.test(token.text)) {
+      let at = 0;
+      for (const text of token.text) {
+        result.push({ text, offset: start + at });
+        at += text.length;
+      }
+    } else
+      result.push({ text: token.text, offset: start, literal: token.string, quoted: token.quoted });
+  }
+  if (lexTimings) lexTimings.normalize += performance.now() - normalizeStart;
   sqlTokenCache.set(sql, result);
   return result;
 }
@@ -992,7 +1018,9 @@ const sqlEffectValues = new WeakMap<SqlFragment, Effect[]>();
 function sqlEffects(fragment: SqlFragment): Effect[] {
   const previous = sqlEffectValues.get(fragment);
   if (previous) return previous;
+  const start = lexTimings ? performance.now() : 0;
   const result = computeSqlEffects(fragment);
+  if (lexTimings) lexTimings.effects += performance.now() - start;
   sqlEffectValues.set(fragment, result);
   return result;
 }
@@ -1131,7 +1159,9 @@ const advisoryKeyValues = new WeakMap<SqlFragment, { key: string; line: number }
 function advisoryKeys(fragment: SqlFragment): { key: string; line: number }[] {
   const previous = advisoryKeyValues.get(fragment);
   if (previous) return previous;
+  const start = lexTimings ? performance.now() : 0;
   const result = computeAdvisoryKeys(fragment);
+  if (lexTimings) lexTimings.advisory += performance.now() - start;
   advisoryKeyValues.set(fragment, result);
   return result;
 }
@@ -1339,10 +1369,12 @@ function sqlNameHints(names: Iterable<string>, calls = false): (text: string) =>
       .sort((left, right) => right.length - left.length)[0]
       .toLowerCase(),
     call: calls && /^[a-z_][a-z_0-9$]*\.[a-z_][a-z_0-9$]*$/i.test(name),
+    uncertain: /[^\x00-\x7f]/.test(name),
   }));
   // A quoted identifier can contain doubled quotes. Any unescaped segment is
-  // a necessary raw spelling; an empty segment gives no usable exclusion.
-  if (pieces.some((piece) => !piece.text)) return () => true;
+  // a necessary raw spelling. Empty segments and context-sensitive Unicode
+  // case folding give no usable exclusion after splitting a qualified name.
+  if (pieces.some((piece) => !piece.text || piece.uncertain)) return () => true;
   if (!pieces.length) return () => false;
   const spellings = [true, false].flatMap((call) => {
     const matching = [
@@ -2309,6 +2341,24 @@ export function serializationFindings(
   allowlist: SerializationAllowance[] = serializationAllowlist,
   profile?: (phase: string) => void,
 ): SerializationFinding[] {
+  const previous = lexTimings;
+  const timings = profile
+    ? { requests: 0, misses: 0, load: 0, normalize: 0, effects: 0, advisory: 0 }
+    : undefined;
+  lexTimings = timings;
+  try {
+    return computeSerializationFindings(migrations, sources, allowlist, profile);
+  } finally {
+    lexTimings = previous;
+    if (timings) profile?.(`lex-detail:${JSON.stringify(timings)}`);
+  }
+}
+function computeSerializationFindings(
+  migrations: SqlSource[],
+  sources: SqlSource[],
+  allowlist: SerializationAllowance[],
+  profile?: (phase: string) => void,
+): SerializationFinding[] {
   for (const entry of allowlist) {
     if (
       !!entry.relation === !!entry.key ||
@@ -2409,6 +2459,7 @@ export function serializationFindings(
     // two different function definitions in the same historical migration.
     if (source.file.endsWith('.sql'))
       for (const body of source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)) {
+        if (!/gate\b|\\/i.test(body[2])) continue;
         const effects = sqlEffects({
           file: source.file,
           text: body[2],

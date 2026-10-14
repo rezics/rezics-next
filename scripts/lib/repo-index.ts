@@ -45,6 +45,19 @@ export interface VariableFact {
   initializerAstDeflate: string;
   initializerAst?: AstNode;
 }
+export interface SqlAncestor extends SyntaxSpan {
+  functionLike?: boolean;
+  methodKind?: 'method' | 'get' | 'set' | 'constructor';
+  branch?: 'then' | 'else';
+  conditionAstDeflate?: string;
+  conditionAst?: AstNode;
+  firstArgument?: boolean;
+}
+export interface SqlNodeFact {
+  nodeAstDeflate: string;
+  nodeAst?: AstNode;
+  ancestors: SqlAncestor[];
+}
 export interface IndexedFile {
   text: string;
   ast: AstNode;
@@ -53,6 +66,7 @@ export interface IndexedFile {
   fragmentAst?: AstNode;
   traceAst?: AstNode;
   variableFacts?: VariableFact[];
+  sqlNodeFacts?: SqlNodeFact[];
   imports: IndexedImport[];
   namedImports?: { local: string; imported: string; source: string }[];
   directCallNames?: string[];
@@ -196,6 +210,7 @@ function readIndex(output: string): RepoIndex {
             if (field === 'sqlCandidates')
               rememberCandidates(value as IndexedFile['sqlCandidates']);
             if (field === 'variableFacts') rememberVariables(value as VariableFact[]);
+            if (field === 'sqlNodeFacts') rememberSqlNodes(value as SqlNodeFact[]);
             Object.defineProperty(facts, field, { value, enumerable: false });
             return value;
           },
@@ -312,6 +327,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
       rememberSqlRecord(facts);
       rememberCandidates(facts.sqlCandidates);
       rememberVariables(facts.variableFacts);
+      rememberSqlNodes(facts.sqlNodeFacts);
     }
     for (const [hash, candidate] of payload.sqlHashes ?? []) {
       if (sqlByHash.has(hash)) continue;
@@ -324,6 +340,29 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     }
   }
   return index;
+}
+
+function rememberSqlNodes(nodes?: SqlNodeFact[]): void {
+  const astGetter = (record: Record<string, unknown>, field: string) => {
+    const encoded = record[`${field}Deflate`];
+    if (typeof encoded !== 'string') return;
+    Object.defineProperty(record, field, {
+      configurable: true,
+      enumerable: false,
+      get: () => {
+        const ast = JSON.parse(
+          inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
+        ) as AstNode;
+        Object.defineProperty(record, field, { value: ast, enumerable: false });
+        return ast;
+      },
+    });
+  };
+  for (const node of nodes ?? []) {
+    astGetter(node as unknown as Record<string, unknown>, 'nodeAst');
+    for (const ancestor of node.ancestors)
+      astGetter(ancestor as unknown as Record<string, unknown>, 'conditionAst');
+  }
 }
 
 function rememberVariables(variables?: VariableFact[]): void {

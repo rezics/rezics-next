@@ -39,15 +39,21 @@ function tokens(sql: string): Token[] {
   const previous = tokenCache.get(sql);
   if (previous) return previous;
   const offset = indexedOffsets(sql);
-  const result = indexedSql(sql).tokens.flatMap((token) => {
+  const result: Token[] = [];
+  for (const token of indexedSql(sql).tokens) {
+    let at = offset(token.offset);
     if (
       !token.string &&
       !token.quoted &&
       (/^[^a-z_0-9$\s]+$/i.test(token.text) || /^\d/.test(token.text))
-    )
-      return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
-    return [{ ...token, offset: offset(token.offset) }];
-  });
+    ) {
+      for (const text of token.text) {
+        result.push({ text, offset: at });
+        at += text.length;
+      }
+    } else
+      result.push({ text: token.text, offset: at, quoted: token.quoted, string: token.string });
+  }
   tokenCache.set(sql, result);
   return result;
 }
