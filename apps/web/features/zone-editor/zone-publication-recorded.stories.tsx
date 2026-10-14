@@ -367,29 +367,26 @@ function showRefusal(persona: AnswerPersona) {
   };
 }
 
-const commandMeta = { render: (args: { persona: AnswerPersona; selections: readonly RecordedSelection[]; locale: UiLocale;
-  commandLabel: string; presentationLabel: string; sequence?: boolean }) =>
-  <ZonePublicationCommandPage record={record} persona={args.persona} selections={args.selections} locale={args.locale}
-    commandLabel={args.commandLabel} presentationLabel={args.presentationLabel} sequence={args.sequence} /> };
-
 function commandStory(persona: AnswerPersona, commandLabel: string, presentationLabel: string, sequence = false, clicks = 1): Story {
   const selections = sequence
     ? [{ label: 'publication-acknowledgement', state: 'populated' as const }, { label: 'receipt-replay', state: 'populated' as const }]
     : [{ label: commandLabel, state: 'populated' as const }];
   return {
-    args: { persona, selections, locale: 'en' as const, commandLabel, presentationLabel, sequence },
-    ...commandMeta,
+    args: { persona, selections, locale: 'en' },
+    render: () => <ZonePublicationCommandPage record={record} persona={persona} selections={selections} locale="en"
+      commandLabel={commandLabel} presentationLabel={presentationLabel} sequence={sequence} />,
     play: showCommand(persona, commandLabel, clicks),
-  } as Story;
+  };
 }
 
 function refusalStory(persona: AnswerPersona): Story {
+  const selections = [{ label: 'owner-receipt-refused', state: 'error' as const }] as const satisfies readonly RecordedSelection[];
   return {
-    args: { persona, selections: [{ label: 'owner-receipt-refused', state: 'error' as const }], locale: 'en' as const,
-      commandLabel: 'owner-receipt-refused', presentationLabel: 'published-presentation' },
-    ...commandMeta,
+    args: { persona, selections, locale: 'en' },
+    render: () => <ZonePublicationCommandPage record={record} persona={persona} selections={selections} locale="en"
+      commandLabel="owner-receipt-refused" presentationLabel="published-presentation" />,
     play: showRefusal(persona),
-  } as Story;
+  };
 }
 
 export const ReceiptReplayPhone: Story = at(commandStory('owner', 'publication-acknowledgement', 'selected-presentation', true, 2), 'phone');

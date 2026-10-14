@@ -11,7 +11,7 @@ import type { ZonePresentationRead } from '../realm/types.ts';
 import { realmFrameReads } from '../realm/zone-presentation-read.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import type { PublicationChoice } from './model.ts';
-import { mapZoneSiteHome, readZoneSiteRecorded, type ZoneSiteMapped, type ZoneSiteRecordedLoad } from '../zones/zone-site-recorded-page.ts';
+import { mapZoneSiteHome, readZoneSiteRecorded, zoneSitePrefix, type ZoneSiteMapped, type ZoneSiteRecordedLoad } from '../zones/zone-site-recorded-page.ts';
 
 /**
  * Publication's public page is the Zone site. The site route and this page call
@@ -90,10 +90,10 @@ function clients(fetcher: typeof fetch, actingSubject: string | null) {
 
 function siteRef(presentation: ZonePresentationRead): string | null {
   const address = presentation.address;
-  if (!address || address.prefix !== '/z/' || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
+  if (!address || address.prefix !== zoneSitePrefix || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
     return null;
   }
-  return addressKey(address);
+  return addressKey({ prefix: zoneSitePrefix, key: address.key, suffixSource: address.suffixSource });
 }
 
 /**
