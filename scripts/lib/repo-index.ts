@@ -1,15 +1,5 @@
 import { createHash } from 'node:crypto';
-import {
-  closeSync,
-  existsSync,
-  mkdirSync,
-  openSync,
-  readFileSync,
-  readSync,
-  readdirSync,
-  renameSync,
-  rmSync,
-} from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -409,9 +399,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     maxBuffer: 64 * 1024 * 1024,
   });
   if (result.exitCode !== 0) throw new Error(Buffer.from(result.stderr).toString());
-  const metadata = JSON.parse(Buffer.from(result.stdout).toString()) as {
-    digest: string;
-  };
+  const metadata = JSON.parse(Buffer.from(result.stdout).toString()) as { digest: string };
   const previous = objects.get(output);
   if (previous?.digest === metadata.digest) return previous.index;
   const index = readIndex(output);
@@ -433,10 +421,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           (typeof fields)[number]
         >;
         for (const field of fields)
-          Object.defineProperty(facts, field, {
-            value: graph[field],
-            enumerable: false,
-          });
+          Object.defineProperty(facts, field, { value: graph[field], enumerable: false });
       };
       for (const field of fields)
         Object.defineProperty(facts, field, {
@@ -456,10 +441,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           const nodes = JSON.parse(
             inflateRawSync(Buffer.from(facts.sqlNodeFactsDeflate!, 'base64')).toString(),
           ) as SqlNodeFact[];
-          Object.defineProperty(facts, 'sqlNodeFacts', {
-            value: nodes,
-            enumerable: false,
-          });
+          Object.defineProperty(facts, 'sqlNodeFacts', { value: nodes, enumerable: false });
           return nodes;
         },
       });
@@ -474,10 +456,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           const ast = JSON.parse(
             inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
           ) as AstNode;
-          Object.defineProperty(facts, field, {
-            value: ast,
-            enumerable: false,
-          });
+          Object.defineProperty(facts, field, { value: ast, enumerable: false });
           return ast;
         },
       });
@@ -499,10 +478,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           return decoded;
         };
         sqlByHash.set(payload.contentHash!, load);
-        Object.defineProperty(facts, 'sql', {
-          enumerable: false,
-          get: () => load(facts.text),
-        });
+        Object.defineProperty(facts, 'sql', { enumerable: false, get: () => load(facts.text) });
       }
     } else {
       rememberSqlRecord(facts);
@@ -557,10 +533,7 @@ function rememberVariables(variables?: VariableFact[]): void {
         const ast = JSON.parse(
           inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
         ) as AstNode;
-        Object.defineProperty(variable, 'initializerAst', {
-          value: ast,
-          enumerable: false,
-        });
+        Object.defineProperty(variable, 'initializerAst', { value: ast, enumerable: false });
         return ast;
       },
     });
@@ -579,10 +552,7 @@ function rememberCandidates(candidates: IndexedFile['sqlCandidates']): void {
           const ast = JSON.parse(
             inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
           ) as AstNode;
-          Object.defineProperty(candidate, 'templateAst', {
-            value: ast,
-            enumerable: false,
-          });
+          Object.defineProperty(candidate, 'templateAst', { value: ast, enumerable: false });
           return ast;
         },
       });
@@ -602,11 +572,7 @@ function rememberSqlRecord(record: { text: string; sql?: SqlFacts; sqlDeflate?: 
       return decoded;
     };
     sql.set(record.text, load);
-    Object.defineProperty(record, 'sql', {
-      configurable: true,
-      enumerable: false,
-      get: load,
-    });
+    Object.defineProperty(record, 'sql', { configurable: true, enumerable: false, get: load });
   } else if (record.sql) rememberSql(record.text, record.sql);
 }
 
@@ -621,10 +587,7 @@ function rememberSql(text: string, facts: SqlFacts): void {
       enumerable: false,
       get: () => {
         const tree = JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64')).toString());
-        Object.defineProperty(facts, 'tree', {
-          value: tree,
-          enumerable: false,
-        });
+        Object.defineProperty(facts, 'tree', { value: tree, enumerable: false });
         return tree;
       },
     });
@@ -679,12 +642,7 @@ export function parseSources(
         : `${source.file}\0${digest(source.text)}`;
     const facts = sources.get(key);
     if (facts && facts !== previous?.facts)
-      sourceObjects.set(source, {
-        file: source.file,
-        text: source.text,
-        key,
-        facts,
-      });
+      sourceObjects.set(source, { file: source.file, text: source.text, key, facts });
     return facts;
   };
   const missing = input.filter((source) => !lookup(source));

@@ -1,21 +1,7 @@
 import { expect, test } from 'bun:test';
-import {
-  chmodSync,
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
-import {
-  indexedFiles,
-  indexedSource,
-  indexedSql,
-  repositoryIndex,
-  repoIndexBuildKey,
-} from './repo-index.ts';
+import { indexedFiles, indexedSource, indexedSql, repositoryIndex, repoIndexBuildKey } from './repo-index.ts';
 import { cruiseDependencies } from '../static/mechanism-dependencies.ts';
 
 function withTree(run: (root: string) => void) {
@@ -42,10 +28,7 @@ test('guard preparation finds Rustup without a login-shell PATH', () => {
        const { indexedSource } = await import(${JSON.stringify(resolve(import.meta.dir, 'repo-index.ts'))});
        console.log(indexedSource({ file: 'fixture.ts', text: 'export const value = 1;' }).ast.type);`,
     ],
-    {
-      cwd: resolve(import.meta.dir, '../..'),
-      env: { ...process.env, PATH: path },
-    },
+    { cwd: resolve(import.meta.dir, '../..'), env: { ...process.env, PATH: path } },
   );
   expect({
     exitCode: result.exitCode,
@@ -96,10 +79,7 @@ test('repository syntax facts reuse content and invalidate edits, additions and 
 });
 
 test('in-memory facts retain Unicode source and content-specific syntax', () => {
-  const source = {
-    file: 'unicode.tsx',
-    text: 'const 名 = "界"; const view = <div>{名}</div>;',
-  };
+  const source = { file: 'unicode.tsx', text: 'const 名 = "界"; const view = <div>{名}</div>;' };
   const first = indexedSource(source);
   expect(first.text).toBe(source.text);
   expect(indexedSource(source)).toBe(first);
@@ -136,9 +116,7 @@ test('import resolution invalidates when TypeScript path configuration changes',
     const configure = (target: string) =>
       writeFileSync(
         join(root, 'tsconfig.json'),
-        JSON.stringify({
-          compilerOptions: { baseUrl: '.', paths: { '@owner': [target] } },
-        }),
+        JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@owner': [target] } } }),
       );
     configure('./first.ts');
     expect(indexedFiles(root, ['.'])['caller.ts']!.imports[0]!.resolved).toBe('first.ts');
@@ -148,10 +126,7 @@ test('import resolution invalidates when TypeScript path configuration changes',
 });
 
 test('JavaScript string facts preserve lone UTF-16 surrogates', () => {
-  const facts = indexedSource({
-    file: 'surrogate.ts',
-    text: 'const value = "\\ud800";',
-  });
+  const facts = indexedSource({ file: 'surrogate.ts', text: 'const value = "\\ud800";' });
   expect(JSON.stringify(facts.ast)).toContain('\\ud800');
 });
 
@@ -178,11 +153,7 @@ test('import rules preserve type-only edges and follow dynamic imports and reexp
     };
     const findings = cruiseDependencies(root, config, ['.']);
     expect(findings.other).toEqual([
-      {
-        importer: 'runtime.ts',
-        imported: 'owner/internal.ts',
-        rule: 'runtime-boundary',
-      },
+      { importer: 'runtime.ts', imported: 'owner/internal.ts', rule: 'runtime-boundary' },
     ]);
     writeFileSync(join(root, 'typed.ts'), 'import { Shape, secret } from "./owner/internal.ts";');
     expect(cruiseDependencies(root, config, ['.']).other).toHaveLength(2);
@@ -252,18 +223,21 @@ sleep 0.2
 mkdir -p "$1/release"
 printf '#!/bin/sh\\nexit 0\\n' > "$1/release/repo-index"
 chmod +x "$1/release/repo-index"
+[ "$DRIFT_BUILD" != 1 ] || printf drift >> "$DRIFT_SOURCE"
 `,
     );
     chmodSync(join(bin, 'cargo'), 0o755);
     const cacheRoot = join(root, 'cache');
     mkdirSync(join(cacheRoot, 'cargo'), { recursive: true });
-    const launch = (fail = false) =>
+    const launch = (fail = false, drift = false) =>
       Bun.spawn([process.execPath, resolve(import.meta.dir, 'repo-index.ts'), '--build', root], {
         env: {
           ...process.env,
           PATH: [bin, process.env.PATH].join(delimiter),
           REZICS_REPO_INDEX_CACHE: cacheRoot,
           FAIL_BUILD: fail ? '1' : '0',
+          DRIFT_BUILD: drift ? '1' : '0',
+          DRIFT_SOURCE: join(root, 'tools/repo-index/src/main.rs'),
         },
         stdout: 'pipe',
         stderr: 'pipe',
@@ -282,6 +256,13 @@ chmod +x "$1/release/repo-index"
     expect(await retry.exited).toBe(0);
     expect((await new Response(retry.stdout).text()).trim()).not.toBe(executable);
     expect(readFileSync(join(cacheRoot, 'cargo/builds'), 'utf8')).toBe('build\nbuild\nbuild\n');
+    writeFileSync(join(root, 'tools/repo-index/src/main.rs'), 'before drift');
+    const driftKey = repoIndexBuildKey(root, 'cargo 1.98.1 (797e8a9bc 2026-08-05)');
+    const drifting = launch(false, true);
+    expect(await drifting.exited).not.toBe(0);
+    expect(await new Response(drifting.stderr).text()).toContain('inputs changed during build');
+    expect(existsSync(join(cacheRoot, driftKey, 'repo-index'))).toBe(false);
+    expect(await launch().exited).toBe(0);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
