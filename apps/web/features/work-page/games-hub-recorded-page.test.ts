@@ -236,13 +236,14 @@ test('every persona’s projection is a game, so availability is the non-book li
     const projection = sample(persona, 'hub-projection');
     const releases = sample(persona, 'hub-releases');
     const registry = (projection.answer as { registry?: { presentation?: string; primaryAction?: string } }).registry;
+    if (!registry?.presentation || !registry.primaryAction) throw new Error(`The recorded projection names no page for ${persona}`);
     const main = transport(persona, recordedGamesSelections(record, persona, 'populated'));
     const hub = await readGamesHub({ main, actingSubject: subjectOf(persona) ?? undefined }, workId(persona), 'en');
     if (!hub.header.ok || hub.book !== false) throw new Error(`The recorded game was read as a book for ${persona}`);
     if (!hub.projection.ok) throw new Error(`The recorded game projection did not load for ${persona}`);
     expect<unknown>(hub.projection.data).toEqual(projection.answer);
-    expect(hub.experience.presentation).toBe(registry?.presentation);
-    expect(hub.experience.primaryAction).toBe(registry?.primaryAction);
+    expect(hub.experience.presentation).toBe(registry.presentation);
+    expect(hub.experience.primaryAction).toBe(registry.primaryAction);
     expect(workExperience(hub.projection.data, hub.header.data.types).kind).not.toBe('book');
     expect<unknown>(hub.releases).toEqual({ ok: true, data: releases.answer });
     expect(hub.shown).toBe(true);
