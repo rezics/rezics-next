@@ -1,14 +1,12 @@
 # State
 
-Checkpoint `cf9878de-aa39-4b2a-933e-7132611b77b5` for [this Goal](GOAL.md),
-carrying forward `checkpoint:437955ba-eef0-4022-9174-e5d878e74c67` and recording
+Checkpoint `f5f2c5ab-952e-426a-a0c9-b5fad1726df5` for [this Goal](GOAL.md),
+carrying forward `checkpoint:cf9878de-aa39-4b2a-933e-7132611b77b5` and recording
 only these handled events:
 
-- `mail:2691f4d5-98f1-4fe7-ace8-6307b07b254e` (acknowledged 06:22:47 UTC).
-- `mail:2fe76e83-0ba8-45b1-8a12-96440aab2fff` (acknowledged 06:23:38 UTC).
-- `mail:85532105-520d-4050-b7f9-d87daaa65491` (acknowledged 06:29:32 UTC).
-- `task:G-2485:2`, `task:G-2482:2`, and `task:G-2480:2`.
-- `mail:e63f828e-b70a-47ae-8f32-8bb172008ee8` (acknowledged 06:46:41 UTC).
+- `task:G-2481:2`.
+- `mail:fc8ae74a-c19f-4d4f-868c-67de06eb9cda` (acknowledged 07:12:38 UTC).
+- `task:G-2485:3`.
 
 All acknowledgement times are on 2026-10-14. Later parallel handoffs are outside
 this checkpoint. It updates state only and authorizes no new work or proof.
@@ -19,7 +17,7 @@ this checkpoint. It updates state only and authorizes no new work or proof.
 | Phase | Build on `wave/1`; no QA stack, recording, coverage or physical qualification. Program runs the whole suite in prove and merges the wave to main once through the gate |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved. These events add no proved row |
 | Fixture | Small `fx-small-180553eb933a` built once in 154.817 active seconds; post-fix restores qualify in 37.620 and 65.559 active seconds. Preserve it and superseded `fx-small-a3a906c1c1b7`; no pruning or repeat build |
-| Measures | Current `task goal -- status` scope sample: 50/67 rows, 319 proved and 83 pending cells. Last recorded Operations sample: 82% first attempts (then today 100%, 2/2), landed-task median 1, max 4 (G-2248), 61.6M input / 294.3k output tokens, 9 first / 5 step / 2 fix attempts, one fix inferred. These are historical, not wave measures; current attempt/token rollups and tokens per proved row are unavailable in this checkpoint's returned sample. Retained preparation refusals remain evidence regardless of counters; G-2248's cap finding remains. Program measured 43% of worker input waiting versus 10% editing and 202/603 attempts on record tasks; the wave addresses those named causes. No weekly efficiency improvement is inferred |
+| Measures | Current `task goal -- status` sample: 50/67 rows, 319 proved and 83 pending cells; Operations 65% first attempts (today 55%, 6/11), landed-task median 1, max 4 (G-2248), 89.8M input / 453.2k output tokens, 13 first / 6 step / 7 fix attempts, five fixes inferred. Tokens per proved row remain unavailable. Reported refusal counters are zero, but retained preparation refusals remain evidence and G-2248's cap finding remains. These are cumulative, not wave-only measures; no weekly efficiency improvement is inferred. Program's earlier waiting/record-task findings remain the wave's named causes; the handled events release the interface wait and assign shared guard repair to Program |
 
 ## Wave build decisions
 
@@ -35,23 +33,26 @@ choice. A tests-only handoff is unfinished. No case-claim tool change is needed.
 
 | Work | Handled decision and next action |
 | --- | --- |
-| G-2480, release image runtime import closure | Attempt 2 accepted as build support on `wave/1` through `da6c1369296b0fa07d1667e7172a04a90c256501`, including `5206c29f6`, `38e8e110a` and `94cade3c8`; brief decision committed at `6a34f7ae9`. Pinned import closure, installed-import refusal after production focus, dependency/exclusion coverage and frontend focus are preserved. Handoff reports 19 passing stack-free tests, types, lint, AST and post-rebase scripts typecheck. G-2474's unregistered `services/main/tests/also-enjoyed-read-cost.integration.test.ts` still refuses the guard; Program was notified, with no waiver or extra G-2480 repair. Remains open for the wave after prove: no resume or individual landing |
-| G-2481, declared retained-source producer clock | Consolidates dropped G-2437 into the existing lifecycle on the wave. Preserve G-2417's failure repair on main at `8f665f906`. Publish the declared-build/physical-cut interface and its wave commit in the handoff to Operations and consumers; API G-2427 and G-2482 consume it. These events record no published-interface acceptance |
-| G-2482, owner-erasure adapter producer phase | Attempt 2 is an unfinished no-commit partial; nothing can land. Decision committed at `76d662669`: adopt G-2481's boundary before recovery fencing and coverage capture, preserving the lifecycle and source-input digest regression. Shared classification/proof-contract and registration failures waive no gate. Program's 06:44 UTC answer requires no intervening Program action: when G-2481's handoff names its commit pushed to `wave/1`, resume G-2482 once with `rebase onto wave/1; G-2481's interface is at <commit>`. Held until that event; no resume in this checkpoint |
-| G-2485, scheduled restore drill registration | Program's 06:17 UTC ruling needs no new reading for bounded g-1775 adoption; boundary committed at `8b6c2915a`. Attempt 2 ended without a handoff; no implementation accepted. Decision at `9ced396c2` requested resume, queued at that turn's host memory floor. Make registration-only core edits directly despite task claims, preserving QA slot admission, startup admission and memory leasing. Register executable drills on main; recover absent independent-restore targets from archived design within about two hours, or list exact omissions while registering what exists. No nonexistent target, second scheduler, fixture rebuild or budget increase; hand off wave commit, checks and executable serial plan |
+| G-2480, release image runtime import closure | Attempt 2 accepted as build support on `wave/1` through `da6c1369296b0fa07d1667e7172a04a90c256501`, including `5206c29f6`, `38e8e110a` and `94cade3c8`; brief decision committed at `6a34f7ae9`. Pinned import closure, installed-import refusal after production focus, dependency/exclusion coverage and frontend focus are preserved. Handoff reports 19 passing stack-free tests, types, lint, AST and post-rebase scripts typecheck. The unregistered `services/main/tests/also-enjoyed-read-cost.integration.test.ts` refused its guard; Program now reports registration repaired on the wave, with no waiver or extra G-2480 repair. Remains open for the wave after prove: no resume or individual landing |
+| G-2481, declared retained-source producer clock | Attempt 2 accepted as build support at `2c6b00efbb0b910d463dcbcbb2569ff51b01be52`, verified on `wave/1`; brief decision committed at `42d672c9a`. Published `producerBuild?: { deadlineMs: number; evidence: string; run(context: SourceContext): Promise<void> }` runs under existing producer/key leases before `adapter.build` starts the unchanged physical-cut clock. Manifest provenance records declared timing and evidence. Handoff reports 35 passing owner tests, types, lint/AST and post-rebase scripts typecheck. API G-2427 and G-2482 consume it. Program accepted the decision and owns both wave guard findings: integration-test registration has been on the wave since 07:04 UTC; generation was underway and will repeat before prove. No waiver or Operations repair. Preserve G-2417's failure repair at `8f665f906`; keep open for wave landing after prove, with no individual landing or resume |
+| G-2482, owner-erasure adapter producer phase | Attempt 2 remains an unfinished no-commit partial. The published prerequisite released the hold: decision committed at `c34cc1139`, and the worker resumed once for attempt 3 to rebase onto `wave/1` and adopt G-2481's interface at `2c6b00efbb0b910d463dcbcbb2569ff51b01be52`, per Program's 06:44 UTC instruction. Current status is running. Preserve the boundary before recovery fencing and coverage capture, the lifecycle and source-input digest regression. No new ruling, duplicate resume or physical run; await its handoff as a later event |
+| G-2485, scheduled restore drill registration | Attempt 3 accepted as build support on `wave/1` at `fb4b82552ec4fcf6e0c2f7ccaf0fa36d95a2d5f0` under the existing bounded-registration brief. Nine-file review preserves QA slot admission, startup admission and memory leasing; 18 executable drills use singleton serial consumers, retained-only selection and separate active/admission clocks. Handoff reports passing stack-free owner/unit checks, types, lint/AST and post-rebase scripts typecheck. The full guards stopped on upstream registration, later repaired and covered by a targeted inventory test; full batch was not rerun. Generated outputs were restored: Program runs generation and all wave gates before prove, with no waiver. Three independent-restore targets remain absent and unregistered; their obligations remain. Keep open for wave landing after prove; no individual landing, worker resume or brief change |
 
 ## Prove phase and next action
 
 Program has the Operations prove-phase list. No stopped qualification worker is
-resumed during build. Native erasure gaps were forwarded to API. Read G-2481's
-handoff when delivered and apply the single G-2482 resume above; decide other
-build handoffs when delivered. G-2480 stays open to land with the wave.
+resumed during build. Native erasure gaps were forwarded to API. G-2482's
+interface adoption is running; decide its handoff when delivered. G-2480,
+G-2481 and G-2485 stay open to land with the wave after prove. Later mail,
+including any direction about the three absent restore targets, is outside
+this checkpoint.
 
 | Work | Required proof |
 | --- | --- |
 | Release image and recovery (G-2480 / G-2202) | Run `scripts/ops/tests/g-919-release-images.test.ts`, `tests/qa/integration/fresh-install.test.ts`, `tests/qa/fault-recovery/second-host-format-upgrade.test.ts` and `tests/qa/fault-recovery/g-727-launch-drill.test.ts`; qualify actual OCI role startup and recovery. G-2202's payload repair is on main at `498a578a2`; its packaged-Main healthy answer proves no actual image startup or complete recovery |
+| Declared producer clock (G-2481) | Run `scripts/qa/retained-source.test.ts` in prove. Build-support acceptance establishes no physical custody, restore or erasure outcome |
 | Owner-erasure adapter and campaign (G-2482 / G-2248 / G-2205) | Preserve all six original files under `tests/qa/fault-recovery/`: `comment-source-erasure.test.ts`, `owner-restore-erasure-production.test.ts`, `owner-restore-erasure-completion.test.ts`, `owner-restore-erasure-source-closure.test.ts`, `erasure-campaign.test.ts`, `erasure-campaign-qualification.test.ts`. First-adapter publication/custody/restore, production/completion erasure and campaign outcomes remain unproved |
-| Independent restore and schedule (G-2485) | Execute the serial registered restore chain against isolated retained copies. Account for absent archived targets explicitly. Physical restore, erasure drills and second-host rollback belong to prove |
+| Independent restore and schedule (G-2485) | Execute the 18-file serial plan in `.temp/worktrees/g-2485/.temp/goal/handoff.md` through Task against isolated retained copies after wave generation and gates. `independent-restore.test.ts`, `independent-restore-authority.test.ts` and `independent-restore-refusals.test.ts` under `tests/qa/fault-recovery/` remain absent: archived wrappers depend on removed physical setup. Registration acceptance discharges none of their independent-restore obligations. Physical restore, erasure drills and second-host rollback belong to prove |
 | API Content and Realm prerequisites | G-2427 consumes G-2481's wave interface; G-2365 still needs a complete verified Realm source. G-2249 preparation, reconstruction, G-2364 and original physical crash/campaign outcomes are not accepted by these events |
 
 ## Retained evidence and contracts
