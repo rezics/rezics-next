@@ -89,7 +89,12 @@ export function registerRealmClosureDiscoveryJourneys(
               await expect(page.getByText(fixture.threadTitle, { exact: true })).toHaveCount(0);
             }
           } else if (surface === 'search') {
-            await expect(page.getByRole('alert').getByText(browseMessages[locale].unavailable, { exact: true })).toBeVisible();
+            const unavailable = page.getByRole('alert').getByText(browseMessages[locale].unavailable, { exact: true });
+            // Both the chapter-text stream and the resource list lose their
+            // Realm scope. Neither may qualify the other's failure alone.
+            await expect(unavailable).toHaveCount(2);
+            await expect(unavailable.nth(0)).toBeVisible();
+            await expect(unavailable.nth(1)).toBeVisible();
             await expect(originalLink(page, fixture)).toHaveCount(0);
           } else {
             await expect(page.getByRole('heading', { name: feed.emptyFiltered, exact: true })).toBeVisible();
