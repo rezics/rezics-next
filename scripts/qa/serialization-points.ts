@@ -636,17 +636,14 @@ function findInitializer(node: ts.Node, name: string): ts.Expression | undefined
     let declarations = scopeDeclarations.get(scope);
     if (!declarations) {
       declarations = new Map();
-      for (const child of indexedScopedDeclarations(scope)) {
-        const name = child.name.getText();
-        const entries = declarations.get(name) ?? [];
-        entries.push(child);
-        declarations.set(name, entries);
-      }
       scopeDeclarations.set(scope, declarations);
     }
-    const declaration = declarations
-      .get(name)
-      ?.find((candidate) => candidate.getStart() < node.getStart());
+    let entries = declarations.get(name);
+    if (!entries) {
+      entries = indexedScopedDeclarations(scope, name);
+      declarations.set(name, entries);
+    }
+    const declaration = entries.find((candidate) => candidate.getStart() < node.getStart());
     if (declaration) return declaration.initializer;
     scope = scope.parent;
   }
@@ -880,7 +877,7 @@ function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFra
     !syntax.hasInterpolatedTemplates
   )
     return [];
-  const candidates = indexed.sqlCandidates;
+  const candidates = syntax && !syntax.hasSqlQueries ? indexed.sqlCandidates : undefined;
   if (syntax && !syntax.hasSqlQueries && candidates?.every((candidate) => candidate.literalKind)) {
     const offset = indexedOffsets(source.text);
     const templates: ts.TemplateExpression[] = [];
@@ -953,7 +950,7 @@ function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFra
     fragmentTimings.files++;
   }
   const result: SqlFragment[] = [{ file: source.file, text: '', line: 1, ast }];
-  const add = (node: ts.Expression, parameters?: ts.Expression[]) => {
+  const add = (node: ts.Expression, parameters?: () => ts.Expression[] | undefined) => {
     for (const value of sqlVariants(node)) {
       if (
         !/\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i.test(
@@ -961,14 +958,24 @@ function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFra
         )
       )
         continue;
-      result.push({
+      const fragment: SqlFragment = {
         file: source.file,
         ...value,
         line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
         node,
         ast,
-        parameters,
-      });
+      };
+      if (parameters)
+        Object.defineProperty(fragment, 'parameters', {
+          configurable: true,
+          enumerable: true,
+          get: () => {
+            const value = parameters();
+            Object.defineProperty(fragment, 'parameters', { value, enumerable: true });
+            return value;
+          },
+        });
+      result.push(fragment);
     }
   };
   const visit = (node: ts.Node) => {
@@ -978,15 +985,21 @@ function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFra
       /^(query|execute)$/.test(node.expression.name.text) &&
       node.arguments[0]
     ) {
-      const argument = node.arguments[1];
-      const parameters =
-        argument && ts.isIdentifier(argument) ? initializer(argument, argument.text) : argument;
-      add(
-        node.arguments[0],
-        parameters && ts.isArrayLiteralExpression(parameters)
-          ? ([...parameters.elements] as ts.Expression[])
-          : undefined,
-      );
+      let resolved = false;
+      let parameters: ts.Expression[] | undefined;
+      add(node.arguments[0], () => {
+        if (!resolved) {
+          const argument = node.arguments[1];
+          const value =
+            argument && ts.isIdentifier(argument) ? initializer(argument, argument.text) : argument;
+          parameters =
+            value && ts.isArrayLiteralExpression(value)
+              ? ([...value.elements] as ts.Expression[])
+              : undefined;
+          resolved = true;
+        }
+        return parameters;
+      });
     }
     // SQL constants also reach adapters indirectly. Ignore TS comments entirely.
     if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) {
@@ -1502,7 +1515,9 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
   const functionHint = sqlNameHints(functions.keys(), true),
     triggerHint = sqlNameHints([...triggers.values()].map((trigger) => trigger.relation));
   const mayReachGate = (text: string) => {
-    if (/gate\b|\b(?:begin|commit|rollback)\b|\\|\/\*|--|__dynamic__/i.test(text)) return true;
+    // Unknown SQL holes remain literal marker tokens. Bindings substitute row
+    // keys only, so recognized relation/function names still need a raw hint.
+    if (/gate\b|\b(?:begin|commit|rollback)\b|\\|\/\*|--/i.test(text)) return true;
     const lower = text.toLowerCase();
     return (
       functionHint(lower) || (/\b(?:insert|update|delete)\b/.test(lower) && triggerHint(lower))
@@ -1510,17 +1525,43 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
   };
   const effectValues = new Map<string, Effect[]>();
   const fragmentTexts = new Map<string, number>();
+  const parameterSlots = new Map<string, number[]>();
   const expand = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
+    // Plain reads cannot add a gate or a transaction boundary. Reject them
+    // before evaluating parameter syntax solely to construct a cache key.
+    if (!mayReachGate(fragment.text)) return [];
     let text = fragmentTexts.get(fragment.text);
     if (text === undefined) {
       text = fragmentTexts.size;
       fragmentTexts.set(fragment.text, text);
     }
+    // Parameters affect effects only through a numbered SQL token. Escapes
+    // can decode such a token from a string, so keep the complete key then.
+    let parameters: unknown[] = [];
+    if (fragment.text.includes('\\')) parameters = fragment.parameters?.map(symbolValue) ?? [];
+    else {
+      let slots = parameterSlots.get(fragment.text);
+      if (!slots) {
+        slots = [
+          ...new Set([...fragment.text.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]))),
+        ]
+          .filter((slot) => slot > 0)
+          .sort((left, right) => left - right);
+        parameterSlots.set(fragment.text, slots);
+      }
+      if (slots.length) {
+        const values = fragment.parameters;
+        parameters = slots.map((slot) => [
+          slot,
+          values?.[slot - 1] ? symbolValue(values[slot - 1]) : undefined,
+        ]);
+      }
+    }
     const key = JSON.stringify([
       text,
       fragment.file,
       fragment.line,
-      fragment.parameters?.map(symbolValue) ?? [],
+      parameters,
       [...(fragment.bindings ?? [])].sort(),
       [...chain].sort(),
     ]);
@@ -1531,10 +1572,6 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
     return result;
   };
   const computeEffects = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
-    // This expander feeds gate traces only. Plain reads and unrelated writes
-    // cannot add a gate or a transaction boundary; retain uncertain spellings
-    // and every current function/trigger hint for the full token analysis.
-    if (!mayReachGate(fragment.text)) return [];
     const input = lex(fragment.text);
     if (input.some((token) => word(token, ';'))) {
       let start = 0;

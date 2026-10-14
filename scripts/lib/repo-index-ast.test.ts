@@ -509,3 +509,49 @@ test('SQL constants in later call arguments retain standalone adapter analysis',
     ).map((finding) => [finding.rule, finding.target]),
   ).toEqual([['constant-advisory-key', '19']]);
 });
+
+test('unknown SQL holes retain named function and parameter gate effects', () => {
+  for (const name of ['bump', '__dynamic__']) {
+    expect(
+      serializationFindings(
+        [
+          {
+            file: 'functions.sql',
+            text: `CREATE FUNCTION probe.${name}(target int) RETURNS void LANGUAGE sql AS $$ UPDATE probe.scope_gate SET revision=2 WHERE id=target; $$;`,
+          },
+        ],
+        [
+          {
+            file: 'dynamic-functions.ts',
+            text: `function run(db, key, unknown) {
+              const args=[key];
+              db.query('SELECT id FROM probe.scope_gate WHERE id=$1 FOR SHARE', args);
+              db.query(\`SELECT * FROM probe.readable WHERE value=\${unknown}\`, args);
+              db.query('SELECT probe.${name}($1)', args);
+            }`,
+          },
+        ],
+        [],
+      ).map((finding) => [finding.rule, finding.target]),
+    ).toEqual([['gate-lock-upgrade', 'probe.scope_gate']]);
+  }
+});
+
+test('gate parameter keys retain zero-padded slots beside unused and omitted arguments', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'parameter-slots.ts',
+          text: `function run(db, key) {
+            const args=[,key,expensiveUnknown()];
+            db.query('SELECT id FROM probe.scope_gate WHERE id=$02 FOR SHARE', args);
+            db.query('UPDATE probe.scope_gate SET revision=2 WHERE id=$0002', args);
+          }`,
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['gate-lock-upgrade', 'probe.scope_gate']]);
+});

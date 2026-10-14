@@ -598,16 +598,32 @@ function containsScopedDeclaration(raw: AstNode): boolean {
   return found;
 }
 
-export function indexedScopedDeclarations(scope: ts.Node): ts.VariableDeclaration[] {
+const declarationNames = new WeakMap<IndexedFile, Set<string>>();
+export function indexedScopedDeclarations(scope: ts.Node, name?: string): ts.VariableDeclaration[] {
   const context = (scope as IndexedNode).sourceContext;
+  const index = context.declarationIndex;
+  if (name !== undefined && index) {
+    let names = declarationNames.get(index);
+    if (!names && index.aliases) {
+      names = new Set(index.aliases.map((alias) => alias.name));
+      declarationNames.set(index, names);
+    }
+    if (names && !names.has(name)) return [];
+  }
   if (context.variableFacts) {
     const raw = (scope as IndexedNode).rawSyntax;
     const facts = variableScopes(context.variableFacts).get(scopeKey(raw));
-    return facts?.map((fact) => variableDeclaration(context, fact)) ?? [];
+    return (
+      facts
+        ?.filter((fact) => name === undefined || fact.name === name)
+        .map((fact) => variableDeclaration(context, fact)) ?? []
+    );
   }
   return containsScopedDeclaration((scope as IndexedNode).rawSyntax)
     ? (selectIndexedNodes(scope, 'declarations').filter(
-        (node) => (node as IndexedNode).rawSyntax.init != null,
+        (node) =>
+          (node as IndexedNode).rawSyntax.init != null &&
+          (name === undefined || (node as ts.VariableDeclaration).name.getText() === name),
       ) as ts.VariableDeclaration[])
     : [];
 }
@@ -758,7 +774,20 @@ function sqlFactNodes(source: { file: string; text: string }, facts: IndexedFile
   if (view.selected) return view.selected;
   const selected: ts.Node[] = [];
   for (const fact of facts.sqlNodeFacts ?? []) {
+    const immediate = fact.ancestors[0];
+    const firstArgument = immediate?.type === 'CallExpression' && immediate.firstArgument;
+    if (firstArgument) {
+      const parent = view.ancestors.get(scopeKey(immediate)) as IndexedNode | undefined;
+      const argument = (parent?.rawSyntax.arguments as AstNode[] | undefined)?.[0];
+      // Query calls already carry their argument syntax. The fragment visitor
+      // ignores direct string/template first arguments, so never hydrate them
+      // again. Nested query calls remain independently selected.
+      if (argument?.type === 'Literal' || argument?.type === 'TemplateLiteral') continue;
+    }
     if (!fact.nodeAst) throw new Error(`Missing indexed SQL expression: ${source.file}`);
+    const expression = (fact.nodeAst.body as AstNode[])[0].expression as AstNode;
+    if (firstArgument && (expression.type === 'Literal' || expression.type === 'TemplateLiteral'))
+      continue;
     const node = factExpression(view.context, fact.nodeAst);
     selected.push(node);
     // Real selected calls retain their complete value arguments. Ancestor
