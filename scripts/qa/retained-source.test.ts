@@ -43,6 +43,31 @@ function setup() {
   return { directory, inputs, adapter, store, removed, counts: () => ({ builds, verifies, restores }) };
 }
 
+test('a failed build remains primary when removal fails and cannot become selectable custody', async () => {
+  const f = setup(), cause = new Error('producer cause'), primary = new Error('producer interrupted', { cause });
+  const cleanup = new Error('external volume still held');
+  const stack = primary.stack;
+  f.adapter.build = async () => { throw primary; };
+  let removals = 0;
+  f.adapter.remove = async () => { if (++removals > 1) throw cleanup; };
+  const error = await f.store.prepare(f.adapter).catch(error => error);
+  expect(error).toBe(primary);
+  expect(error.cause).toBe(cause);
+  expect(error.stack).toBe(stack);
+  await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
+});
+
+test('a failed custody verification retains its exception when removal also fails', async () => {
+  const f = setup(), primary = new Error('native inventory refused'), cleanup = new Error('external volume still held');
+  f.adapter.verify = async () => { throw primary; };
+  let removals = 0;
+  f.adapter.remove = async () => { if (++removals > 1) throw cleanup; };
+  const error = await f.store.prepare(f.adapter).catch(error => error);
+  expect(error.message).toContain('physical verification failed');
+  expect(error.cause).toBe(primary);
+  await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
+});
+
 test('key binds every declared digest, producer identity/version/options and compatibility, never revision', () => {
   const { inputs, directory } = setup();
   writeFileSync(join(directory, 'producer'), 'producer');
