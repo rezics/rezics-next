@@ -2,7 +2,6 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { personaSessions, type PersonaSession } from '../support/personas.ts';
-import { grantPersonaFixtureAuthority } from '../support/persona-fixture-authority.ts';
 import type { ContentDerivationRecord } from '../../../services/content/src/derivation.ts';
 import type { ResourceReference } from '../../../services/content/src/adoption.ts';
 
@@ -29,11 +28,6 @@ test('Content APIs author Posts through chapters, validate procedures, pin deriv
     const chapterKey = randomUUID(), path = `/v1/works/${short(book.work)}/chapters`;
     const post = await answer<{ post: string; variantId: string }>(owner.main('POST', path, chapterBody, chapterKey), 200);
     expect(await answer(owner.main('POST', path, chapterBody, chapterKey), 200)).toMatchObject({ ...post, replayed: true });
-    await grantPersonaFixtureAuthority(owner, [
-      { scope: `content:draft:${post.post}`, action: 'content.draft' },
-      { scope: `content:publish:${post.post}`, action: 'content.publish' },
-      { scope: `content:search-eligibility:${post.post}`, action: 'content.search-eligibility' },
-    ]);
     const draftFields = { profile: 'content-text-v1', resourceId: post.post, variantId: post.variantId,
       language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject };
     const sourceDocument = structuredClone(fromPlainText('PRIVATE original source instruction', 'blocks'));

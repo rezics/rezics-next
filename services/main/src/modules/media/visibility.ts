@@ -17,7 +17,7 @@ export function bindMediaAudience(
   audiences.set(viewer, { principal, actor });
   return viewer;
 }
-/** Only the native download route selects owner access, after Access binds
+/** Native owner operations select owner access only after Access binds
  * Account to the acting owner. Disclosure repeats that live owner proof. */
 export function bindNativeAssetAudience(viewer: Viewer, asset: string): Viewer {
   const audience = audiences.get(viewer);

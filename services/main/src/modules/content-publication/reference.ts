@@ -15,6 +15,7 @@ import { publicDomainRevisionCurrent } from './public-domain-read.ts';
 import { isPublicContentRevision } from './public-selection.ts';
 import { CompositionUnavailable } from '../structure/graph.ts';
 import { readWorkComponentState } from '../work/history.ts';
+import { bindNativeAssetAudience } from '../media/visibility.ts';
 
 /** Main connects Content's closed selectors to existing Semantic, Structure and Media owners. */
 export function contentReferenceOwners(session: WorkReadSession): ReferenceOwners {
@@ -91,18 +92,24 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
     representation: async (target, revision, representation) => {
       if (!deps.media) throw new WorkReadUnavailable('Media owner is unavailable');
       const asset = target.slice('urn:rezics:media:asset:'.length);
-      const state = await deps.media.store.readAsset(asset);
-      if (!state || state.lifecycle !== 'active' || state.moderation !== 'none') return null;
-      const owner = !!principal && !!actingSubject && state.owner === actingSubject
-        && await deps.access.canManageMedia?.(principal, actingSubject);
-      if (!owner && state.disclosure !== 'public') return null;
-      const visible = await discloseInventory(env, [{ owner: 'media', resource: `https://rezics.com/id/${asset}`,
-        component: 'cover', revision: `https://rezics.com/id/${revision}` }], viewer, 'read');
-      if (visible[0] !== 'visible') return null;
-      const result = await deps.media.store.referenceSelection(asset, revision, representation);
-      const fresh = await deps.media.store.readAsset(asset);
-      if (!fresh || fresh.state !== state.state) return null;
-      return result;
+      const read = async () => {
+        const state = await deps.media.store.readAsset(asset);
+        if (!state || state.lifecycle !== 'active' || state.moderation !== 'none') return null;
+        const owner = !!principal && !!actingSubject && state.owner === actingSubject
+          && await deps.access.canManageMedia?.(principal, actingSubject);
+        if (!owner && state.disclosure !== 'public') return null;
+        const mediaViewer = disclosureViewer(principal, actingSubject);
+        if (owner) bindNativeAssetAudience(mediaViewer, asset);
+        const visible = await discloseInventory(env, [{ owner: 'media', resource: `https://rezics.com/id/${asset}`,
+          component: 'cover', revision: `https://rezics.com/id/${revision}` }], mediaViewer, 'read');
+        if (visible[0] !== 'visible') return null;
+        const result = await deps.media.store.referenceSelection(asset, revision, representation);
+        const fresh = await deps.media.store.readAsset(asset);
+        if (!fresh || fresh.state !== state.state) return null;
+        return result;
+      };
+      const selected = await read(); session.observeDependency(`media-reference:${asset}:${revision}:${representation}`, selected, read);
+      return selected;
     },
   };
 }

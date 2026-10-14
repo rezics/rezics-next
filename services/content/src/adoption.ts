@@ -1,5 +1,6 @@
 import { documentText, parseDocument, type DocumentNode, type DocumentSnapshot } from '@rezics/document';
-import { canonicalContentLanguage } from './core.ts';
+import { canonicalContentLanguage } from './language.ts';
+import { checkedContentText } from './text.ts';
 
 export const PROCEDURE_DEFINITION = 'https://rezics.com/definition/procedure-v1';
 export const RESOURCE_REFERENCE_DEFINITION = 'https://rezics.com/definition/resource-reference-v1';
@@ -8,6 +9,7 @@ export type ResourceSelector =
   | { grain: 'resource' }
   | { grain: 'revision'; revision: string }
   | { grain: 'occurrence'; structure: string; revision: string; occurrence: string }
+  // TextPositionSelector counts Unicode code points, independently of text API cost units.
   | { grain: 'content'; variantId: string; revision: string; block?: string; span?: { start: number; end: number } }
   | { grain: 'representation'; revision: string; representation: string; fragment?: string };
 export interface ResourceReference { target: string; selector: ResourceSelector }
@@ -87,6 +89,7 @@ export function checkedProcedure(value: unknown): ProcedurePayload {
       if (item.type === 'HowToStep') {
         keys(item, ['id', 'type', 'document']); const document = parseDocument(item.document);
         if (document.profile !== 'blocks') throw new ContentAdoptionInvalid('step requires a Blocks document');
+        checkedContentText(documentText(document));
         validateContentExtensions(document, true);
       } else if (item.type === 'HowToSection') {
         keys(item, ['id', 'type', 'name', 'items']);

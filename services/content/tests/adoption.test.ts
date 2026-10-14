@@ -44,6 +44,9 @@ test('Content refuses invalid known payloads on save, including nested procedure
   expect(() => checkedProcedure({ items: [{ id: 'big', type: 'HowToStep', document: fromPlainText('a'.repeat(262_144), 'blocks') }] })).toThrow();
   const inline = extension(PROCEDURE_DEFINITION, procedure(), true);
   expect(() => authoredDocumentBody({ document: inline })).toThrow();
+  for (const value of ['\0', '\uD800', 'a'.repeat(65_537)]) {
+    expect(() => checkedProcedure({ items: [{ id: 'invalid-step', type: 'HowToStep', document: fromPlainText(value, 'blocks') }] })).toThrow();
+  }
 });
 
 test('media inside a procedure participates in the same exact Media Use checks', () => {
@@ -90,6 +93,21 @@ test('representation fragments must belong to the exact retained duration', asyn
   for (const duration of [0.5, undefined]) expect(await resolveResourceReference(reference,
     { ...owners, representation: async () => ({ duration }) })).toEqual({ status: 'unavailable' });
   expect(await resolveResourceReference({ ...reference, selector: { ...reference.selector as Extract<ResourceReference['selector'], { grain: 'representation' }>, fragment: 't=npt:1,0' } }, owners))
+    .toEqual({ status: 'unavailable' });
+});
+
+test('Content span selectors count Unicode code points and ambiguous nested block IDs refuse', async () => {
+  const document = structuredClone(fromPlainText('A😀B', 'blocks')); document.doc.content![0]!.attrs!.id = 'emoji';
+  const owners: ReferenceOwners = { resource: async () => false, revision: async () => false, occurrence: async () => false,
+    representation: async () => null, content: async () => ({ document, body: 'A😀B' }) };
+  const reference: ResourceReference = { ...ref, selector: { ...ref.selector as Extract<ResourceReference['selector'], { grain: 'content' }>,
+    block: 'emoji', span: { start: 1, end: 2 } } };
+  expect(await resolveResourceReference(reference, owners)).toMatchObject({ status: 'available', text: '😀' });
+  expect(await resolveResourceReference({ ...reference, selector: { ...reference.selector as Extract<ResourceReference['selector'], { grain: 'content' }>,
+    span: { start: 3, end: 4 } } }, owners)).toEqual({ status: 'unavailable' });
+  const payload: ProcedurePayload = { items: ['one', 'two'].map(id => ({ id, type: 'HowToStep', document })) };
+  const ambiguous = extension(PROCEDURE_DEFINITION, payload);
+  expect(await resolveResourceReference(reference, { ...owners, content: async () => ({ document: ambiguous, body: 'fallback' }) }))
     .toEqual({ status: 'unavailable' });
 });
 

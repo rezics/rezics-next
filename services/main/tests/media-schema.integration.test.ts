@@ -164,6 +164,29 @@ afterAll(async () => {
   cluster?.remove();
 });
 
+test('Media references retain exact revision membership and refuse unavailable representations', async () => {
+  const pool = await database('media_reference');
+  try {
+    await migrateContent(pool);
+    const content = new ContentCore(pool), store = new MediaStore(pool, content);
+    const owner = iri(randomUUID()), first = await createAsset(pool, owner, { bytes: 'first-image' });
+    const representation = await activateOriginal(pool, first.asset, first.uploadId, 'first-image');
+    const selected = await store.recordAssetRevision(first.uploadId);
+    expect(await store.referenceSelection(first.asset, selected.revision, representation)).toEqual({});
+    const secondUpload = randomUUID();
+    await reserveUpload(pool, first.asset, secondUpload, { bytes: 'second-image' });
+    const successorRepresentation = await activateOriginal(pool, first.asset, secondUpload, 'second-image');
+    const successor = await store.recordAssetRevision(secondUpload);
+    expect(successor.revision).not.toBe(selected.revision);
+    expect(await store.referenceSelection(first.asset, selected.revision, representation)).toEqual({});
+    expect(await store.referenceSelection(first.asset, selected.revision, successorRepresentation)).toBeNull();
+    expect(await store.referenceSelection(first.asset, successor.revision, representation)).toBeNull();
+    expect(await store.referenceSelection(randomUUID(), selected.revision, representation)).toBeNull();
+    await pool.query("UPDATE media.representation SET availability='erased' WHERE id=$1", [representation]);
+    expect(await store.referenceSelection(first.asset, selected.revision, representation)).toBeNull();
+  } finally { await pool.end(); }
+});
+
 test('image presentation separates classifier evidence, manual labels, age assessment and protected occurrence concealment', async () => {
   const pool = await database('media_presentation');
   try {

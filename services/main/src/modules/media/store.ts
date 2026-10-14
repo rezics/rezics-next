@@ -1151,9 +1151,10 @@ export class MediaStore {
       FROM media.asset a JOIN content.revision r ON r.variant_id=a.variant_id AND r.id=$2
       JOIN media.representation p ON p.asset_id=a.id AND p.id=$3
       CROSS JOIN LATERAL jsonb_array_elements(r.body->'representations') item
-      WHERE a.id=$1 AND r.availability='available' AND p.availability='available'
-        AND p.clearance='cleared' AND NOT media.digest_suppressed(p.byte_digest,a.cover_only)
-        AND item->>'id'=p.id::text LIMIT 1`, [asset, revision, representation])).rows[0];
+      WHERE a.id=$1 AND r.availability='available' AND r.model='media-asset-v1'
+        AND r.body->>'profile'='media-asset-v1' AND r.body->>'asset'=$4
+        AND p.availability='available' AND media.delivery_clearance(p)='cleared'
+        AND item->>'id'=p.id::text LIMIT 1`, [asset, revision, representation, assetIri(asset)])).rows[0];
     return row ? { ...(typeof row.duration === 'number' ? { duration: row.duration } : {}) } : null;
   }
 

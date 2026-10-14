@@ -34,9 +34,9 @@ export async function resolveResourceReference(value: ResourceReference, owners:
         catch { available = false; break; }
       }
       if (s.span) {
-        if (!text || s.span.end > text.length) { available = false; break; }
-        text = text.slice(s.span.start, s.span.end);
-        if (Buffer.from(text, 'utf8').toString('utf8') !== text) { available = false; break; }
+        const characters = Array.from(text ?? '');
+        if (s.span.end > characters.length) { available = false; break; }
+        text = characters.slice(s.span.start, s.span.end).join('');
         document = undefined;
       }
       break;

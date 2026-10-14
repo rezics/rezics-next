@@ -19,7 +19,7 @@ never a delivery URL. Selectors are a closed union:
 | `resource` | none | Identity only, without an exact version assertion |
 | `revision` | `revision` | Exact revision owned by the target |
 | `occurrence` | `structure`, `revision`, `occurrence` | One use within an exact Structure revision |
-| `content` | `variantId`, `revision`; optional `block` | Exact Content revision, optionally one document-local block |
+| `content` | `variantId`, `revision`; optional `block`, `span:{start,end}` | Exact Content revision, optionally one unambiguous document-local block and a span of Unicode code points within it (start included, end excluded) |
 | `representation` | `revision`, `representation`; optional `fragment` | Exact Media asset revision and retained representation, optionally a temporal fragment |
 
 Content and Media revisions/representations use UUIDs; graph revisions and

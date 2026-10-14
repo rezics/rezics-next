@@ -11,6 +11,8 @@ import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL, CONTENT_TE
 import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
 import { ContentDerivations } from './derivation.ts';
+import { canonicalContentLanguage } from './language.ts';
+export { canonicalContentLanguage } from './language.ts';
 
 export { ContentConflict, ContentLimitExceeded, ContentPositionPending, ContentUnavailable } from './errors.ts';
 export { appendContentEvent, contentEventPosition, sequenceContentEvents, type ContentEvent } from './event-sequencer.ts';
@@ -369,15 +371,6 @@ function eligibilityDeliverySourceMatches(row: Record<string, unknown>, event: C
     && row.eligibility_decision === input.receipt.eligibilityDecision
     && row.operation_id === event.operationId
     && row.request_digest === event.requestDigest;
-}
-
-export function canonicalContentLanguage(value: string): string {
-  if (typeof value !== 'string' || !value) {
-    throw new Error('invalid Content language');
-  }
-  const canonical = Intl.getCanonicalLocales(value)[0];
-  if (!canonical) throw new Error('invalid Content language');
-  return canonical;
 }
 
 function checkedLanguage(language: LanguageIdentity): LanguageIdentity {
