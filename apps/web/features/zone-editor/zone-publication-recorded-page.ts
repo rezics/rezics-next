@@ -152,8 +152,8 @@ export async function readZonePublicationRoute(
   const address = await frames.readAddress(space, locale);
   const route = await frames.readZoneRoute(space, path);
   const canonical = address.kind === 'resolved' ? address.data.canonical : null;
-  const backHref = canonical?.prefix === '/z/' ? spaceHref(canonical, 'site') : null;
-  const ref = canonical?.prefix === '/z/' ? addressKey(canonical) : null;
+  const backHref = canonical?.prefix === zoneSitePrefix ? spaceHref(canonical, 'site') : null;
+  const ref = canonical?.prefix === zoneSitePrefix ? addressKey(canonical) : null;
   if (!route.ok && route.failure === 'missing' && route.problem && typeof route.problem === 'object') {
     const problem = route.problem as { title?: unknown; code?: unknown; status?: unknown };
     if (typeof problem.title === 'string' && typeof problem.code === 'string' && route.status) {

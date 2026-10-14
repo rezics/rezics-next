@@ -50,6 +50,9 @@ import {
 type PublicView = { kind: 'loading' } | { kind: 'discrepancy'; detail: string }
   | { kind: 'ready'; view: ZonePublicationFrameView; content: ReactNode | null };
 
+const publicationSiteAddressDiscrepancy = 'publication frame has no site address';
+const publicationPresentationDiscrepancy = 'publication frame has no presentation';
+
 function publicationZone(view: ZonePublicationFrameView, locale: UiLocale): ZoneContext | null {
   const presentation = view.presentation;
   const ref = view.ref;
@@ -79,7 +82,7 @@ function PublicationFrame({ view, locale, children }: { view: ZonePublicationFra
   const zone = publicationZone(view, locale);
   const messages = zoneMessagesFor(locale);
   const realmMessages = realmMessagesFor(locale);
-  if (!zone || !view.presentation || !view.ref) return <p role="alert">publication frame has no site address</p>;
+  if (!zone || !view.presentation || !view.ref) return <p role="alert">{publicationSiteAddressDiscrepancy}</p>;
   const cuts = savedSiteCuts(
     { tokens: zone.tokens, navigation: view.presentation.presentation.navigation },
     view.presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
@@ -166,7 +169,7 @@ export function ZonePublicationRecordedPage({ record, persona, selections, local
       back={messages.pageMissingBack} href={localizedPath(ready.backHref ?? '/', locale)} />
     : ready.presentation && zone && view.kind === 'ready' && view.content
       ? <PublicationFrame view={ready} locale={locale}>{view.content}</PublicationFrame>
-      : <p role="alert">publication frame has no presentation</p>;
+      : <p role="alert">{publicationPresentationDiscrepancy}</p>;
   return <section aria-label={persona} className="grid min-w-0 gap-2">
     <p className="px-4 pt-3 text-sm text-muted-foreground sm:px-6 lg:px-10">{persona}</p>
     {acting ? <p className="break-all px-4 text-sm text-muted-foreground sm:px-6 lg:px-10">{acting}</p> : null}
