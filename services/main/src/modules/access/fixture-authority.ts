@@ -146,6 +146,57 @@ export async function grantFixtureAuthority(client: Sql, input: FixtureAuthority
   return { grantId: await ensureGrant(client, input.scope, input.grant), representationIds };
 }
 
+export interface FixturePrincipalAuthorityInput {
+  principalId: string;
+  actor: string;
+  scope: string;
+  action: string;
+  lifetime: FixtureLifetime;
+  requireDispatch: boolean;
+}
+
+async function directFixtureScope(client: Sql, input: FixturePrincipalAuthorityInput): Promise<void> {
+  await recoveryOpen(client);
+  await openFixtureScope(client, input.scope, input.requireDispatch);
+  requireToken(input.action, actionPattern, input.scope);
+  const policy = await client.query('SELECT id FROM access.policy WHERE scope_id = $1 LIMIT 1', [input.scope]);
+  if (policy.rowCount) throw new FixtureAuthorityDenied('policy', input.scope);
+}
+
+/** Direct fixtures seed authority only, before any owner command executes.
+ * A policy scope must be set up through its policy owner instead. */
+export async function grantFixturePrincipalAuthority(client: Sql,
+  input: FixturePrincipalAuthorityInput): Promise<string> {
+  await directFixtureScope(client, input);
+  const existing = await client.query<{ id: string }>(`SELECT id FROM access.principal_permission_grant
+    WHERE principal_id = $1 AND issuer_subject = $2 AND scope_id = $3 AND action = $4
+      AND active AND valid_until > clock_timestamp() FOR SHARE`,
+  [input.principalId, input.actor, input.scope, input.action]);
+  if (existing.rows[0]) return existing.rows[0].id;
+  const id = randomUUID();
+  await client.query(`INSERT INTO access.principal_permission_grant
+    (id,issuer_subject,principal_id,scope_id,action,valid_until) VALUES ($1,$2,$3,$4,$5,${until(input.lifetime)})`,
+  [id, input.actor, input.principalId, input.scope, input.action]);
+  return id;
+}
+
+/** Attribution is independent of the principal's domain grant. The same
+ * recovery, scope and policy fences apply before either row is seeded. */
+export async function grantFixtureAgentAttribution(client: Sql,
+  input: FixturePrincipalAuthorityInput): Promise<string> {
+  await directFixtureScope(client, input);
+  const existing = await client.query<{ id: string }>(`SELECT id FROM access.principal_agent_attribution
+    WHERE principal_id = $1 AND agent_subject = $2 AND action = $3
+      AND active AND valid_until > clock_timestamp() FOR SHARE`,
+  [input.principalId, input.actor, input.action]);
+  if (existing.rows[0]) return existing.rows[0].id;
+  const id = randomUUID();
+  await client.query(`INSERT INTO access.principal_agent_attribution
+    (id,principal_id,agent_subject,action,valid_until) VALUES ($1,$2,$3,$4,${until(input.lifetime)})`,
+  [id, input.principalId, input.actor, input.action]);
+  return id;
+}
+
 /** Owner fixtures need the same active Person provenance as member authoring,
  * in addition to an open-ended direct controller. Call inside the fixture transaction. */
 export async function provisionFixturePerson(client: Sql, input: {
@@ -216,6 +267,12 @@ export async function expireFixtureAuthority(client: Sql, actor: string): Promis
   await client.query(
     `UPDATE access.permission_grant SET valid_until = clock_timestamp() - interval '1 second'
       WHERE issuer_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
+  await client.query(`UPDATE access.principal_permission_grant
+    SET valid_until = clock_timestamp() - interval '1 second'
+    WHERE issuer_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
+  await client.query(`UPDATE access.principal_agent_attribution
+    SET valid_until = clock_timestamp() - interval '1 second'
+    WHERE agent_subject = $1 AND valid_until > clock_timestamp()`, [actor]);
 }
 
 /** Negative authority fixtures can end or shorten an existing grant, never
@@ -228,8 +285,11 @@ export async function reduceFixtureGrant(client: Sql, grantId: string,
     if (!Number.isFinite(change.validUntil.getTime())) throw new FixtureAuthorityDenied('gate', grantId);
     await client.query(`UPDATE access.permission_grant SET valid_until = LEAST(valid_until,$2)
       WHERE id = $1`, [grantId, change.validUntil]);
+    await client.query(`UPDATE access.principal_permission_grant SET valid_until = LEAST(valid_until,$2)
+      WHERE id = $1`, [grantId, change.validUntil]);
   } else {
     await client.query('UPDATE access.permission_grant SET active = false WHERE id = $1', [grantId]);
+    await client.query('UPDATE access.principal_permission_grant SET active = false WHERE id = $1', [grantId]);
   }
 }
 
