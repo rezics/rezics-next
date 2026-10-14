@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
@@ -110,8 +110,75 @@ const binary = join(repository, '.temp/repo-index-build/release/repo-index');
 const objects = new Map<string, { digest: string; index: RepoIndex }>();
 const sources = new Map<string, IndexedFile>();
 const sql = new Map<string, SqlFacts | (() => SqlFacts)>();
+const sqlByHash = new Map<string, (text: string) => SqlFacts>();
 let built = false;
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+
+type PayloadFile = IndexedFile & {
+  contentHash?: string;
+  payloads?: Record<string, [number, number]>;
+};
+const payloadFiles = new FinalizationRegistry<number>((descriptor) => closeSync(descriptor));
+
+function readIndex(output: string): RepoIndex {
+  const descriptor = openSync(output, 'r');
+  let retained = false;
+  try {
+    const chunks: Buffer[] = [];
+    let length = 0;
+    let newline = -1;
+    while (newline < 0) {
+      const chunk = Buffer.allocUnsafe(64 * 1024);
+      const count = readSync(descriptor, chunk, 0, chunk.length, length);
+      if (!count) throw new Error('Repository index header is incomplete');
+      if (!length && !chunk.subarray(0, count).toString().startsWith('{"header":'))
+        return JSON.parse(readFileSync(output, 'utf8')) as RepoIndex;
+      const at = chunk.subarray(0, count).indexOf(10);
+      if (at >= 0) newline = length + at;
+      chunks.push(chunk.subarray(0, at < 0 ? count : at));
+      length += count;
+    }
+    const line = Buffer.concat(chunks).toString();
+    const prefix = '{"header":';
+    const suffix = ',"payloads":[';
+    if (!line.endsWith(suffix)) throw new Error('Repository index header framing is invalid');
+    const index = JSON.parse(line.slice(prefix.length, -suffix.length)) as RepoIndex;
+    if (index.version !== 2)
+      throw new Error(`Unsupported repository index version: ${index.version}`);
+    // Pin the inode: a later content change atomically replaces the cache path,
+    // while an older source fact may still lazily read its own immutable bytes.
+    const readPayload = ([start, size]: [number, number]): unknown => {
+      const value = Buffer.allocUnsafe(size);
+      let read = 0;
+      while (read < size) {
+        const count = readSync(descriptor, value, read, size - read, newline + 1 + start + read);
+        if (!count) throw new Error('Repository index payload is incomplete');
+        read += count;
+      }
+      return JSON.parse(value.toString());
+    };
+    payloadFiles.register(readPayload, descriptor);
+    retained = true;
+    for (const facts of Object.values(index.files) as PayloadFile[]) {
+      for (const [field, range] of Object.entries(facts.payloads ?? {})) {
+        Object.defineProperty(facts, field, {
+          configurable: true,
+          enumerable: false,
+          get: () => {
+            const value = readPayload(range);
+            if (field === 'sqlCandidates')
+              rememberCandidates(value as IndexedFile['sqlCandidates']);
+            Object.defineProperty(facts, field, { value, enumerable: false });
+            return value;
+          },
+        });
+      }
+    }
+    return index;
+  } finally {
+    if (!retained) closeSync(descriptor);
+  }
+}
 
 function ensureBinary(): void {
   if (!built) {
@@ -147,15 +214,20 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
   const metadata = JSON.parse(Buffer.from(result.stdout).toString()) as { digest: string };
   const previous = objects.get(output);
   if (previous?.digest === metadata.digest) return previous.index;
-  const index = JSON.parse(readFileSync(output, 'utf8')) as RepoIndex;
-  if (index.version !== 1)
+  const index = readIndex(output);
+  if (index.version !== 1 && index.version !== 2)
     throw new Error(`Unsupported repository index version: ${index.version}`);
   objects.set(output, { digest: metadata.digest, index });
   for (const [file, facts] of Object.entries(index.files)) {
-    if (facts.graphDeflate) {
-      const encoded = facts.graphDeflate;
+    const payload = facts as PayloadFile;
+    const has = (field: string) =>
+      payload.payloads
+        ? !!payload.payloads[field]
+        : !!(facts as unknown as Record<string, unknown>)[field];
+    if (has('graphDeflate')) {
       const fields = ['functionFacts', 'callFacts', 'aliases'] as const;
       const load = () => {
+        const encoded = facts.graphDeflate!;
         const graph = JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64')).toString()) as Pick<
           IndexedFile,
           (typeof fields)[number]
@@ -174,12 +246,13 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
         });
     }
     for (const field of ['ast', 'runtimeAst'] as const) {
-      const encoded = field === 'ast' ? facts.astDeflate : facts.runtimeAstDeflate;
-      if (!encoded) continue;
+      const encodedField = field === 'ast' ? 'astDeflate' : 'runtimeAstDeflate';
+      if (!has(encodedField)) continue;
       Object.defineProperty(facts, field, {
         configurable: true,
         enumerable: false,
         get: () => {
+          const encoded = facts[encodedField]!;
           const ast = JSON.parse(
             inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
           ) as AstNode;
@@ -190,27 +263,49 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     }
     // Register syntax without materializing every repository AST. Each guard
     // reads only the trees needed by its own rules.
-    if (facts.astDeflate || facts.ast) sources.set(`${file}\0${digest(facts.text)}`, facts);
-    rememberSqlRecord(facts);
-    for (const candidate of facts.sqlCandidates ?? []) {
-      rememberSqlRecord(candidate);
-      if (candidate.templateAstDeflate) {
-        const encoded = candidate.templateAstDeflate;
-        Object.defineProperty(candidate, 'templateAst', {
-          configurable: true,
-          enumerable: false,
-          get: () => {
-            const ast = JSON.parse(
-              inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
-            ) as AstNode;
-            Object.defineProperty(candidate, 'templateAst', { value: ast, enumerable: false });
-            return ast;
-          },
-        });
+    if (has('astDeflate') || has('ast'))
+      sources.set(`${file}\0${payload.contentHash ?? digest(facts.text)}`, facts);
+    if (payload.payloads) {
+      if (has('sqlDeflate')) {
+        let decoded: SqlFacts | undefined;
+        const load = (text: string) => {
+          if (!decoded) {
+            decoded = JSON.parse(
+              inflateRawSync(Buffer.from(facts.sqlDeflate!, 'base64')).toString(),
+            ) as SqlFacts;
+            rememberSql(text, decoded);
+          }
+          return decoded;
+        };
+        sqlByHash.set(payload.contentHash!, load);
+        Object.defineProperty(facts, 'sql', { enumerable: false, get: () => load(facts.text) });
       }
+    } else {
+      rememberSqlRecord(facts);
+      rememberCandidates(facts.sqlCandidates);
     }
   }
   return index;
+}
+
+function rememberCandidates(candidates: IndexedFile['sqlCandidates']): void {
+  for (const candidate of candidates ?? []) {
+    rememberSqlRecord(candidate);
+    if (candidate.templateAstDeflate) {
+      const encoded = candidate.templateAstDeflate;
+      Object.defineProperty(candidate, 'templateAst', {
+        configurable: true,
+        enumerable: false,
+        get: () => {
+          const ast = JSON.parse(
+            inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
+          ) as AstNode;
+          Object.defineProperty(candidate, 'templateAst', { value: ast, enumerable: false });
+          return ast;
+        },
+      });
+    }
+  }
 }
 
 function rememberSqlRecord(record: { text: string; sql?: SqlFacts; sqlDeflate?: string }): void {
@@ -302,7 +397,9 @@ export function indexedSource(source: { file: string; text: string }): IndexedFi
 }
 
 export function prepareSql(texts: readonly string[]): void {
-  const missing = [...new Set(texts)].filter((text) => !sql.has(text));
+  const missing = [...new Set(texts)].filter(
+    (text) => !sql.has(text) && !sqlByHash.has(digest(text)),
+  );
   if (!missing.length) return;
   const input = JSON.stringify(missing.map((text, index) => ({ file: `${index}.sql`, text })));
   run(repository, `sql:${digest(input)}`, ['--sql', '--stdin'], input);
@@ -310,6 +407,6 @@ export function prepareSql(texts: readonly string[]): void {
 
 export function indexedSql(text: string): SqlFacts {
   prepareSql([text]);
-  const facts = sql.get(text)!;
+  const facts = sql.get(text) ?? sqlByHash.get(digest(text))!(text);
   return typeof facts === 'function' ? facts() : facts;
 }

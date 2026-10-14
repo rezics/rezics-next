@@ -19,10 +19,13 @@ test('repository syntax facts reuse content and invalidate edits, additions and 
   withTree((root) => {
     writeFileSync(join(root, 'a.ts'), 'export const first = 1;');
     const first = indexedFiles(root, ['.']);
-    expect(first['a.ts']!.ast.type).toBe('Program');
     expect(indexedFiles(root, ['.'])).toBe(first);
     writeFileSync(join(root, 'a.ts'), 'export const other = 2;');
     expect(indexedFiles(root, ['.'])['a.ts']!.text).toContain('other');
+    // A lazy read of the old index must retain its own bytes after replacement.
+    expect(first['a.ts']!.ast.type).toBe('Program');
+    expect(JSON.stringify(first['a.ts']!.ast)).toContain('first');
+    expect(first['a.ts']!.text).toContain('first');
     writeFileSync(join(root, 'b.ts'), 'export const added = 3;');
     expect(indexedFiles(root, ['.'])['b.ts']).toBeDefined();
     rmSync(join(root, 'b.ts'));
