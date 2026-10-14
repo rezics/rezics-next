@@ -1,12 +1,12 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('recipes/instructions-in-any-form', {
-  visitor: pending('reads exact published Post, recording, procedure and ordered instructions while drafts stay concealed'),
-  stranger: pending('reads exact published instruction dependencies and transformation credit without peer editing or draft access'),
-  member: pending('reads all published instruction forms without membership widening draft or dependency access'),
-  owner: pending('adopts and publishes each form, replays changes and previews private successors without moving publication pins'),
-  moderator: pending('reads pinned instructions and AI transformation credit without moderation granting peer custody'),
-  operator: pending('reads pinned instructions and AI transformation credit without platform status granting peer custody'),
+  visitor: proved('reads exact published Post, recording, procedure and ordered instructions while drafts stay concealed'),
+  stranger: proved('reads exact published instruction dependencies and transformation credit without peer editing or draft access'),
+  member: proved('reads all published instruction forms without membership widening draft or dependency access'),
+  owner: proved('adopts and publishes each form, replays changes and previews private successors without moving publication pins'),
+  moderator: proved('reads pinned instructions and AI transformation credit without moderation granting peer custody'),
+  operator: proved('reads pinned instructions and AI transformation credit without platform status granting peer custody'),
 }, { rights: { basis: 'original-contribution',
   credit: 'Original synthetic instructions and recording by the owner Person; procedure transformed by a represented AI service Agent, credited as transformation, never source author or rights clearance.' } });
 
