@@ -18,6 +18,10 @@ whole-wave throughput over those alternatives after contention and cleanup
 costs. Shared SQL schemas or RDF graph prefixes do not provide the required
 run boundary.
 
+## Decision (program, 2026-10-14)
+
+Deferred. On the native Docker engine an empty QA stack reached both HTTP services 8.7 s after admission and used 1.34 GiB, so per-run startup no longer limits a prove wave. The measured costs are fixture preparation: the medium restore's 292 s RustFS copy, the medium build failing on default `max_locks_per_transaction` (`53200`), and persistent restores running PostgreSQL, RustFS, toxiproxy and Mailpit without the caps admission charges for. Those are repaired first. The shared substrate's isolation work (per-run roles and ACLs, a multi-dataset Fuseki JVM, crash reaping) is weighed again only if repeated prove waves still show preparation, not tests, as the limit.
+
 ## Host measurements and reproduction
 
 Worktree revision `8808031df5851ee9e0be1c7e4dc1ed4eda0c6e75`, Linux
