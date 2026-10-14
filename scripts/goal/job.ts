@@ -1,8 +1,9 @@
 import { Database } from 'bun:sqlite';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { constants } from 'node:os';
 import { checkFailureLines } from './check.ts';
 import { lastAttempt, launch, readResult, running } from './launch.ts';
 import { admitWorkers } from './tasks.ts';
@@ -21,6 +22,8 @@ export interface Job {
   id: string; task: string; attempt: number; cwd: string; command: string[]; created: number;
   phase: 'running' | 'inline' | 'parked' | 'waking' | 'woken' | 'reported';
   owner?: Pick<ProcessIdentity, 'pid'> & Partial<ProcessIdentity>;
+  executor?: Pick<ProcessIdentity, 'pid'> & Partial<ProcessIdentity>;
+  signal?: NodeJS.Signals;
   code?: number; ended?: number; resumedAttempt?: number; reason?: string;
 }
 
@@ -51,24 +54,63 @@ export class JobStore {
   close(): void { this.db.close(); }
 }
 
-/** A detached owner captures the result even after the worker's native turn exits. Commands keep their
- * existing Task memory and QA-slot admission; this wrapper never grants a slot or bypasses a queue. */
-export async function executeJob(directory: string, id: string): Promise<void> {
-  const store = new JobStore(directory);
-  const job = store.get(id)!;
-  const log = openSync(store.log(id), 'a');
-  try {
-    const code = await new Promise<number>(resolveCode => {
-      const child = spawn(job.command[0]!, job.command.slice(1), { cwd: job.cwd, stdio: ['ignore', log, log] });
-      child.once('error', error => {
-        appendFileSync(store.log(id), `error: ${error.message}\n`);
-        resolveCode(1);
-      });
-      child.once('close', code => resolveCode(code ?? 1));
-    });
-    store.update(id, current => { current.code = code; current.ended = Date.now(); });
-  } finally { closeSync(log); store.close(); }
+function childResult(child: ChildProcess): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  return new Promise((resolveExit, reject) => {
+    child.once('error', reject);
+    child.once('close', (code, signal) => resolveExit({ code, signal }));
+  });
 }
+
+/** The supervisor survives the caller and can record even SIGKILL of the executor. Both have their own
+ * process groups; commands retain their existing Task memory and QA-slot admission. */
+async function jobProcess(directory: string, id: string, role: 'owner' | 'executor'): Promise<void> {
+  const path = join(directory, `${id}.log`);
+  appendFileSync(path, `${new Date().toISOString()} job:${id} ${role} started pid:${process.pid}\n`);
+  let store: JobStore | undefined;
+  let log: number | undefined;
+  try {
+    store = new JobStore(directory);
+    // BEGIN IMMEDIATE waits for publication, including callers that still launch within a transaction.
+    // An ordinary SELECT in WAL mode can read the old snapshot and see no job at all.
+    const job = store.update(id, current => {
+      current[role] = processIdentity(process.pid) ?? { pid: process.pid };
+    });
+    log = openSync(path, 'a');
+    const child = role === 'owner'
+      ? spawn(process.execPath, [import.meta.filename, '--run', directory, id], {
+        cwd: job.cwd, detached: true, stdio: ['ignore', log, log],
+      })
+      : spawn(job.command[0]!, job.command.slice(1), { cwd: job.cwd, stdio: ['ignore', log, log] });
+    const { code, signal } = await childResult(child);
+    const reason = signal ? `${role === 'owner' ? 'executor' : 'command'} exited with signal ${signal}`
+      : role === 'owner' ? `executor exited with status ${code} without recording a result` : undefined;
+    if (role === 'owner' && signal && child.pid) {
+      // The executor cannot reap its command after SIGKILL. Its separate group contains only this job.
+      try { process.kill(-child.pid, 'SIGKILL'); }
+      catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ESRCH') throw error; }
+    }
+    store.update(id, current => {
+      if (current.code !== undefined) return;
+      if (reason) appendFileSync(path, `error: ${reason}\n`);
+      current.code = signal ? 128 + constants.signals[signal] : role === 'owner' ? code || 1 : code ?? 1;
+      current.ended = Date.now();
+      if (reason) current.reason = reason;
+      if (signal) current.signal = signal;
+    });
+  } catch (error) {
+    const reason = `error: ${role}: ${error instanceof Error ? error.stack ?? error.message : String(error)}`;
+    appendFileSync(path, `${reason}\n`);
+    process.exitCode = 1;
+    if (store?.get(id)) {
+      store.update(id, current => {
+        if (current.code !== undefined) return;
+        current.code = 1; current.ended = Date.now(); current.reason = reason;
+      });
+    }
+  } finally { if (log !== undefined) closeSync(log); store?.close(); }
+}
+
+export const executeJob = (directory: string, id: string): Promise<void> => jobProcess(directory, id, 'executor');
 
 export async function runJob(command: string[], options: {
   cwd?: string; task?: Task; inlineMs?: number; print?: (line: string) => void;
@@ -83,20 +125,26 @@ export async function runJob(command: string[], options: {
   const job: Job = { id: randomUUID(), task: task.id, attempt: lastAttempt(task).n, cwd, command,
     created: Date.now(), phase: 'running' };
   try {
-    // Publish before the executor starts. Its first update waits for this transaction's owner identity.
+    // Commit the record before starting anything that reads it on another connection.
     if (store.all().some(current => current.task === task.id && ['parked', 'waking'].includes(current.phase))) {
       throw new Error('A parked job already owns this worker continuation');
     }
-    store.db.transaction(() => {
-      store.put(job);
-      const child = spawn(process.execPath, [import.meta.filename, '--run', store.directory, job.id], {
-        cwd, detached: true, stdio: 'ignore',
+    store.put(job);
+    const log = openSync(store.log(job.id), 'a');
+    try {
+      const child = spawn(process.execPath, [import.meta.filename, '--own', store.directory, job.id], {
+        cwd, detached: true, stdio: ['ignore', log, log],
       });
-      child.on('error', error => store.update(job.id, current => { current.code = 1; current.reason = error.message; }));
-      if (!child.pid) throw new Error('Job executor did not start');
-      job.owner = processIdentity(child.pid) ?? { pid: child.pid };
-      store.put(job); child.unref();
-    }).immediate();
+      await new Promise<void>((resolveStart, reject) => {
+        child.once('spawn', resolveStart); child.once('error', reject);
+      });
+      store.update(job.id, current => { current.owner = processIdentity(child.pid!) ?? { pid: child.pid! }; });
+      child.unref();
+    } catch (error) {
+      const reason = `error: owner launch: ${error instanceof Error ? error.stack ?? error.message : String(error)}`;
+      appendFileSync(store.log(job.id), `${reason}\n`);
+      store.update(job.id, current => { current.code = 1; current.ended = Date.now(); current.reason = reason; });
+    } finally { closeSync(log); }
     const deadline = Date.now() + (options.inlineMs ?? JOB_INLINE_MS);
     while (store.get(job.id)!.code === undefined && Date.now() < deadline) await Bun.sleep(Math.min(100, Math.max(1, deadline - Date.now())));
     const result = store.update(job.id, current => { current.phase = current.code === undefined ? 'parked' : 'inline'; });
@@ -113,6 +161,7 @@ export async function runJob(command: string[], options: {
 export function jobResult(store: JobStore, job: Job): string {
   const lines = job.code ? checkFailureLines(readFileSync(store.log(job.id), 'utf8')) : [];
   return `Job job:${job.id} finished with exit status ${job.code}.\nCommand: ${job.command.join(' ')}\n`
+    + (job.reason ? `Reason: ${job.reason.slice(0, 2000)}\n` : '')
     + `${lines.join('\n').slice(0, 12_000)}\nWhole output: ${store.log(job.id)}\nContinue where you parked; this is a continuation, not a fix round.`;
 }
 
@@ -157,7 +206,18 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}): P
       }
       if (job.phase === 'waking') { report('wake intent has no published attempt; reconcile before another resume'); return; }
       if (job.code === undefined) {
-        if (!job.owner || !(options.alive ?? processAlive)(job.owner)) report('command owner exited without recording a result');
+        if (!job.owner || !(options.alive ?? processAlive)(job.owner)) {
+          const reason = 'command owner exited without recording a result';
+          let lost = false;
+          store.update(job.id, current => {
+            // Recheck under the write lock: an executor may have committed its result after our read.
+            if (current.code !== undefined) return;
+            appendFileSync(store.log(job.id), `error: ${reason}\n`);
+            current.code = 1; current.ended = Date.now(); current.reason = reason;
+            lost = true;
+          });
+          if (lost) report(reason);
+        }
         return;
       }
       if (running(task)) return;
@@ -185,4 +245,10 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}): P
   }
 }
 
-if (import.meta.main && process.argv[2] === '--run') await executeJob(process.argv[3]!, process.argv[4]!);
+if (import.meta.main) {
+  const mode = process.argv[2];
+  if (mode === '--run' || mode === '--own') {
+    try { await jobProcess(process.argv[3]!, process.argv[4]!, mode === '--own' ? 'owner' : 'executor'); }
+    catch (error) { console.error(error); process.exitCode = 1; }
+  }
+}
