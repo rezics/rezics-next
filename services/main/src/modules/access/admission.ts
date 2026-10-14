@@ -2186,25 +2186,30 @@ export class AccessAdmissionRegistry {
     if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(admissionId)) {
       throw new AdmissionDenied('unknown admission');
     }
-    const client = await admissionClient(this.pool);
+    // Contributor provenance is also read under the publication fence. That
+    // owner keeps its transaction and locks through the native publication CAS.
+    const borrowed = accessClient(this.pool);
+    const client = borrowed ?? await admissionClient(this.pool);
     try {
-      await client.query('BEGIN');
-      await client.query("SET LOCAL lock_timeout = '2s'");
-      await client.query("SET LOCAL statement_timeout = '2s'");
+      if (!borrowed) {
+        await client.query('BEGIN');
+        await client.query("SET LOCAL lock_timeout = '2s'");
+        await client.query("SET LOCAL statement_timeout = '2s'");
+      }
       const result = await client.query<{ acting_subject: unknown }>(
         'SELECT acting_subject FROM access.admission WHERE id = $1::uuid LIMIT 1', [admissionId]);
-      await client.query('COMMIT');
+      if (!borrowed) await client.query('COMMIT');
       const subject = result.rows[0]?.acting_subject;
       if (result.rows.length !== 1 || typeof subject !== 'string') {
         throw new AdmissionDenied('unknown admission');
       }
       return subject;
     } catch (error) {
-      await rollback(client);
+      if (!borrowed) await rollback(client);
       if (error instanceof AdmissionDenied || error instanceof AdmissionUnavailable) throw error;
       throw admissionError(error);
     } finally {
-      client.release();
+      if (!borrowed) client.release();
     }
   }
 
