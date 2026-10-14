@@ -1,4 +1,6 @@
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { resolveMediaMetadata } from '../../../../../apps/web/features/api/media-metadata.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
@@ -15,6 +17,9 @@ type Image = { asset: string; representation: string; use: string; etag: string 
 let closedOnly: Image;
 let shared: Image;
 let independentUse: string;
+let otherIndependentUse: string;
+const recording = new OutcomeRecorder(media);
+const storyId = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const sha = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 // Original green pixel authored by this fixture, including valid PNG checksums.
 function chunk(kind: string, data: Uint8Array) {
@@ -88,6 +93,7 @@ async function absent(person: PersonaSession, path: string, control: string, eta
 }
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   setupFailure = await closureSetup(sessions, async () => {
     const rule = await publishClosureRule(sessions);
     // Asset author/uploader is a joined member, distinct from the Realm owner.
@@ -95,6 +101,7 @@ beforeAll(async () => {
     closedOnly = await image();
     shared = await image();
     independentUse = await createUse(sessions.member, shared.representation, 'urn:rezics:context:global');
+    otherIndependentUse = await createUse(sessions.member, shared.representation, 'urn:rezics:context:global');
     for (const image of [closedOnly, shared]) {
       await available(sessions.visitor, `/v1/media/uses/${image.use}`, image.etag);
       await available(sessions.visitor, `/v1/media/representations/${image.representation}/bytes?use=${image.use}`, image.etag);
@@ -113,7 +120,42 @@ beforeAll(async () => {
     await effectClosure(sessions, rule);
   });
 }, 180_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); } finally { await sessions?.close(); }
+});
+
+async function productionVisit(name: PersonaName) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const read = async (label: string, representation: string, uses: string[], statuses: string[]) => {
+    const fetcher: typeof fetch = async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      expect(url.pathname).toBe(`${BFF_PREFIX}/v1/media/metadata`);
+      expect(init?.credentials).toBe(person.actingSubject ? 'same-origin' : 'omit');
+      const body = JSON.parse(String(init?.body)) as unknown;
+      expect(body).toEqual({ items: uses.map(use => ({ representation, use })),
+        ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) });
+      const response = await sample(label, init?.method ?? 'GET',
+        url.pathname.slice(BFF_PREFIX.length) + url.search, body);
+      expect(response.status).toBe(200);
+      const metadata = await response.clone().json() as { items: { status: string }[] };
+      expect(metadata.items.map(item => item.status)).toEqual(statuses);
+      return response;
+    };
+    await resolveMediaMetadata(uses.map(use => ({ representationId: representation, mediaUseId: use })),
+      person.actingSubject, fetcher);
+  };
+  // Public commands assign representation and Use IDs. The story's literal
+  // IDs can produce only empty metadata; live states use the API-created IDs.
+  await read('media-delivery-empty', storyId(1), [storyId(2), storyId(3)], ['unavailable', 'unavailable']);
+  await read('media-delivery-closed', shared.representation, [shared.use, independentUse], ['unavailable', 'available']);
+  await read('media-delivery-open', shared.representation, [independentUse, otherIndependentUse], ['available', 'available']);
+}
+
+async function proveAndVisit(name: PersonaName) {
+  await closureCell(media, name, () => sessions, () => delivery(name));
+  await productionVisit(name);
+}
 
 async function delivery(name: PersonaName) {
   expect(setupFailure, setupFailure ?? '').toBeNull();
@@ -155,9 +197,9 @@ async function scopedDelivery(person: PersonaSession, query: string) {
   await available(person, `/v1/media/representations/${shared.representation}/bytes?use=${independentUse}&${query}`, shared.etag);
   await available(person, `/v1/media/representations/${shared.representation}/bytes?${query}`, shared.etag);
 }
-outcomeTest(media, 'visitor', () => closureCell(media, 'visitor', () => sessions, () => delivery('visitor')));
-outcomeTest(media, 'stranger', () => closureCell(media, 'stranger', () => sessions, () => delivery('stranger')));
-outcomeTest(media, 'member', () => closureCell(media, 'member', () => sessions, () => delivery('member')));
-outcomeTest(media, 'owner', () => closureCell(media, 'owner', () => sessions, () => delivery('owner')));
-outcomeTest(media, 'moderator', () => closureCell(media, 'moderator', () => sessions, () => delivery('moderator')));
-outcomeTest(media, 'operator', () => closureCell(media, 'operator', () => sessions, () => delivery('operator')));
+outcomeTest(media, 'visitor', () => proveAndVisit('visitor'), recording);
+outcomeTest(media, 'stranger', () => proveAndVisit('stranger'), recording);
+outcomeTest(media, 'member', () => proveAndVisit('member'), recording);
+outcomeTest(media, 'owner', () => proveAndVisit('owner'), recording);
+outcomeTest(media, 'moderator', () => proveAndVisit('moderator'), recording);
+outcomeTest(media, 'operator', () => proveAndVisit('operator'), recording);
