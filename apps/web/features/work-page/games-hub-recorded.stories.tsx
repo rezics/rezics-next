@@ -12,9 +12,6 @@ import { GamesHubRecordedPage } from './games-hub-recorded-page.tsx';
 import { messages } from './messages.ts';
 
 const record = games as AnswerRecord;
-type Persona = 'visitor' | 'member';
-type Mode = 'populated' | 'loading' | 'saved';
-interface Args { persona: Persona; mode: Mode; locale: UiLocale }
 
 const sample = (persona: AnswerPersona, label: string) => {
   const found = record.personas[persona].find(item => item.label === label);
@@ -38,13 +35,13 @@ function releaseOf(persona: AnswerPersona) {
   return release;
 }
 
-async function expectTitle(canvasElement: HTMLElement, persona: Persona) {
+async function expectTitle(canvasElement: HTMLElement, persona: AnswerPersona) {
   const header = sample(persona, 'work-header').answer as { title: { value: string } };
   await expect(within(canvasElement).findByRole('heading', { level: 1, name: header.title.value })).resolves.toBeVisible();
   return header;
 }
 
-async function expectReleaseLink(canvasElement: HTMLElement, persona: Persona, locale: UiLocale) {
+async function expectReleaseLink(canvasElement: HTMLElement, persona: AnswerPersona, locale: UiLocale) {
   const release = releaseOf(persona);
   const canvas = within(canvasElement);
   const list = canvas.getByRole('list', { name: levelsCopy(locale).releases });
@@ -78,7 +75,7 @@ export const Loading: Story = { args: { mode: 'loading' }, async play({ canvasEl
 } };
 export const LoadingPhone: Story = { ...Loading, globals: phone };
 
-async function expectChooser(canvasElement: HTMLElement, args: Args, saved: boolean) {
+async function expectChooser(canvasElement: HTMLElement, args: { persona: AnswerPersona; locale: UiLocale }, saved: boolean) {
   await expectTitle(canvasElement, args.persona);
   const release = await expectReleaseLink(canvasElement, args.persona, args.locale);
   const canvas = within(canvasElement);

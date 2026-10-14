@@ -241,10 +241,8 @@ test('the member projection is a game, so availability is the non-book list and 
     { label: 'progress-summary', state: 'populated' },
   ]);
   const hub = await readGamesHub({ main, actingSubject: subjectOf(persona)! }, workId(persona), 'en');
-  expect(hub.header.ok).toBe(true);
-  if (!hub.header.ok || hub.book) throw new Error('The recorded game was read as a book');
-  expect(hub.projection.ok).toBe(true);
-  if (!hub.projection.ok) return;
+  if (!hub.header.ok || hub.book !== false) throw new Error('The recorded game was read as a book');
+  if (!hub.projection.ok) throw new Error('The recorded game projection did not load');
   expect<unknown>(hub.projection.data).toEqual(projection.answer);
   expect(hub.experience).toMatchObject({ kind: 'plain', presentation: 'game', primaryAction: 'visit' });
   expect(workExperience(hub.projection.data, hub.header.data.types).kind).not.toBe('book');
