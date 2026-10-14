@@ -375,7 +375,7 @@ test('readRealmHeader sends language and matches the recorded frame read', async
       expect(read.ok).toBe(true);
       if (read.ok) expect(read.data.name.value).toBe((header.answer as RealmHeader).name.value);
     } else expect(read).toEqual({ ok: false, failure: header.status === 401 ? 'sign-in' : 'missing',
-      problem: problemOf(header.status, header.answer) });
+      problem: problemOf(header.status, header.answer) ?? undefined });
     expect(opened.requested).toHaveLength(1);
     expect(opened.requested[0]?.path).toContain('language=en');
     expect(opened.requested[0]?.path).toContain('actingSubject=');

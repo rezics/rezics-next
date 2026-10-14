@@ -79,12 +79,12 @@ export function readMembers(main: MainClient, realm: string, query: { actingSubj
   const search = query.search?.trim();
   return settle(() => main.v1.realms({ realm }).members.get({ query: { actingSubject: query.actingSubject,
     ...search ? { search } : {}, ...query.after ? { after: query.after } : {},
-    ...query.role ? { role: query.role } : {} } }), { management: true });
+    ...query.role ? { role: query.role } : {} } }), { management: true, cursor: query.after });
 }
 
 export function readOutgoingInvitations(main: MainClient, realm: string, actingSubject: string, after?: string | null) {
   return settle(() => main.v1.realms({ realm }).invitations.get({ query: { actingSubject,
-    ...after ? { after } : {} } }), { management: true });
+    ...after ? { after } : {} } }), { management: true, cursor: after });
 }
 
 export function readRoles(main: MainClient, realm: string, actingSubject: string) {

@@ -22,12 +22,12 @@ import { newKey } from './commands.ts';
 import { agentLabel, date, shownHandle } from './format.ts';
 import { ImpactPreview } from './impact-preview.tsx';
 import type { ManageMessages } from './messages.ts';
-import { AgentMark } from './parts.tsx';
+import { AgentMark, ManageFailure } from './parts.tsx';
 import { mergeAgents } from './read.ts';
 import { MemberReads } from './members-state.ts';
 import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
-import type { AgentSummary, InvitationPage, Loaded, Member, MemberPage, Role, RoleChange } from './types.ts';
+import type { AgentSummary, InvitationPage, Loaded, Member, MemberPage, ReadFailure, Role, RoleChange } from './types.ts';
 
 /** Ban lengths moderators choose from (Main allows up to 366 days, or no end). */
 export const banDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['duration7d', 604_800],
@@ -86,6 +86,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   const [open, setOpen] = useState<Open | null>(null);
   const recovery = useRoleRecovery(api, realm, actingSubject, open !== null || roles === null, principal);
   const [status, setStatus] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ReadFailure | null>(null);
 
   const nameOf = (iri: string) => agentLabel(agents[iri], iri, id => t.agentFallback({ id }));
 
@@ -97,7 +98,13 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
     const read = await api.members(request.search, request.after, roleFilter?.id);
     if (!memberReads.current.finish(request, read.ok)) return;
     setSearching(false);
-    if (!read.ok) { setStatus(t.unavailableTitle); return; }
+    if (!read.ok) {
+      if (['missing', 'denied', 'sign-in'].includes(read.failure)) {
+        setPage(current => ({ ...current, items: [], nextCursor: null }));
+        setAgents({}); setOpen(null); setFailure(read.failure);
+      } else setStatus(read.problem?.title ?? t.unavailableTitle);
+      return;
+    }
     setPage(current => after ? { ...read.data, items: [...current.items, ...read.data.items] } : read.data);
     const found = await api.names(read.data.items.map(item => item.member));
     setAgents(known => mergeAgents(known, found));
@@ -122,7 +129,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
     setInvitationBusy(after);
     const read = await api.invitations(after);
     setInvitationBusy(null);
-    if (!read.ok) { setStatus(t.unavailableTitle); return; }
+    if (!read.ok) { setInvitations(read); setStatus(read.problem?.title ?? t.unavailableTitle); return; }
     setInvitations(current => current.ok ? { ok: true, data: { ...read.data,
       items: [...current.data.items, ...read.data.items] } } : read);
     const found = await api.names(read.data.items.map(item => item.member));
@@ -141,6 +148,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
 
   const target = (member: Member): Target => ({ iri: member.member, membershipGeneration: member.membershipGeneration,
     member });
+  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages} />;
   return <div className="grid gap-5">
     {recovery.attempts.filter(entry => entry.attempt.input.command.change.kind === 'assignment').map(entry => {
       const change = entry.attempt.input.command.change;

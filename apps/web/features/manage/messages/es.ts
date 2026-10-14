@@ -51,7 +51,7 @@ export default {
   stateOpen: 'En espera', stateClosed: 'Resueltos', stateLabel: 'Mostrar',
   filterLabel: 'Tipo', filterAll: 'Todo', filterReports: 'Denuncias', filterRights: 'Reclamaciones de derechos',
   filterContributions: 'Propuestas', filterCorrections: 'Correcciones',
-  kindContentReport: 'Denuncia', kindRightsComplaint: 'Reclamación de derechos',
+  kindContentReport: 'Denuncia', kindRightsComplaint: 'Reclamación de derechos', kindBanAppeal: 'Apelación del bloqueo',
   kindContribution: 'Propuesta', kindCorrection: 'Corrección', kindWork: 'Obra', kindPublication: 'Publicación',
   reportedBy: insert('Denunciado por {{agent}}', { agent: String }),
   complainedBy: insert('Reclamación de {{agent}}', { agent: String }),

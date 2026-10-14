@@ -30,6 +30,14 @@ export const validDecision = (value: unknown) => object(value) && ['approve', 'r
 
 export function validRecoveryInput(operation: string, input: unknown, actor: string, key: string): boolean {
   if (!object(input)) return false;
+  if (operation.startsWith('zone-attachment:')) return input.actingSubject === actor
+    && input.zone === operation.slice('zone-attachment:'.length) && fields(input, ['zone', 'realm']);
+  if (operation.startsWith('sanction-appeal:')) return input.actingSubject === actor && input.idempotencyKey === key
+    && input.caseId === operation.slice('sanction-appeal:'.length) && input.profile === 'moderation-decision-v1'
+    && text(input.expectedGeneration) && ['dismiss', 'restore'].includes(String(input.outcome))
+    && Array.isArray(input.targets) && input.targets.length === 0 && input.reversesDecisionId === null && input.answersStepId === null
+    && fields(input.rule, ['ref', 'revision', 'digest']) && text(input.evidenceDigest) && reasons(input.reasons)
+    && text(input.rationale) && ['private', 'parties', 'public_summary'].includes(String(input.disclosure));
   if (operation === 'settings') return basis(input, actor) && nullableText(input.expectedRulesRevision)
     && object(input.settings) && ['public', 'restricted', 'private'].includes(String(input.settings.visibility))
     && typeof input.settings.reviewRequired === 'boolean' && ['granted', 'members', 'closed'].includes(String(input.settings.whoMaySubmit))

@@ -1,8 +1,11 @@
 import { expect, test } from 'bun:test';
 import { browserMainApi } from '../api/browser.ts';
 import { readZoneAttachments } from './read.ts';
-import { withdrawRealmAttachment, withdrawZoneAttachment } from './zone-attachments-api.ts';
+import { withdrawRealmAttachment } from './zone-attachments-api.ts';
+import { browserZoneRealmAttachment } from '../zone-editor/api.ts';
 import { attachmentActor, attachmentFixture, attachmentRealm, attachmentZones } from './zone-attachments-fixtures.ts';
+import { isolatedAttemptStorage } from './recovery-fixtures.ts';
+import { performCommand, readCommand, retainCommand } from './safety-pending.ts';
 
 test('the production inventory reader traverses 51 attachments without repeating or truncating them', async () => {
   const fixture = attachmentFixture('populated');
@@ -32,6 +35,15 @@ test('delegated stewardship can traverse, and a revoked retained cursor conceals
   expect((await readZoneAttachments(fixture.client(), attachmentRealm, attachmentActor)).ok).toBe(true);
   expect(await readZoneAttachments(fixture.client(), attachmentRealm, attachmentActor, '24')).toMatchObject({ ok: false, failure: 'missing' });
 });
+test('a stale attachment cursor remains a refusal until the reader explicitly restarts at the first page', async () => {
+  const fixture = attachmentFixture('moved');
+  expect(await readZoneAttachments(fixture.client(), attachmentRealm, attachmentActor, '24'))
+    .toMatchObject({ ok: false, failure: 'moved', problem: { code: 'stale_zone_attachment_cursor' } });
+  expect(fixture.requests).toHaveLength(1);
+  const restarted = await readZoneAttachments(fixture.client(), attachmentRealm, attachmentActor);
+  expect(restarted).toMatchObject({ ok: true, data: { nextCursor: '24' } });
+  expect(fixture.requests[1]?.path).not.toContain('cursor=');
+});
 
 test('Realm withdrawal binds the exact subjects and preserves a pending key until the receipt', async () => {
   const fixture = attachmentFixture('pending');
@@ -52,15 +64,48 @@ test('a refusal keeps its complete problem and cannot become a successful withdr
     code: 'realm_attachment_denied', title: 'Realm stewardship has ended' });
 });
 
+test('a reloaded withdrawal replays the retained actor, target and key instead of sending a new intent', async () => {
+  const store = isolatedAttemptStorage('attachment-controller');
+  const input = { zone: attachmentZones[0]!, realm: attachmentRealm, actingSubject: attachmentActor };
+  const operation = `zone-attachment:${input.zone}`;
+  const proposed = { realm: attachmentRealm, actingSubject: attachmentActor, input, key: 'original-key', status: 'recorded' as const };
+  const pending = attachmentFixture('pending');
+  const sendPending = () => performCommand(operation, proposed,
+    attempt => withdrawRealmAttachment(pending.client(), { ...attempt.input, key: attempt.key }), store);
+  expect(await sendPending()).toEqual({ ok: false, failure: 'pending' });
+  expect(readCommand(attachmentRealm, attachmentActor, operation, store)?.key).toBe('original-key');
+  const confirmed = attachmentFixture('populated');
+  const replayed = await performCommand(operation, { ...proposed, key: 'new-render-key' },
+    attempt => withdrawRealmAttachment(confirmed.client(), { ...attempt.input, key: attempt.key }), store);
+  expect(replayed.ok).toBe(true);
+  expect(confirmed.requests[0]?.key).toBe('original-key');
+  expect(confirmed.requests[0]?.body).toEqual(pending.requests[0]?.body);
+  expect(readCommand(attachmentRealm, attachmentActor, operation, store)).toBeNull();
+  expect(await retainCommand(operation, { ...proposed, realm: 'another-realm' }, store)).toBeNull();
+  expect(await retainCommand(operation, { ...proposed, actingSubject: 'another-subject' }, store)).toBeNull();
+});
+
+for (const wrong of [{ zone: attachmentZones[1]! }, { realm: attachmentZones[1]! }, { receipt: '' }]) {
+  test(`a withdrawal receipt cannot confirm a different target or an absent receipt: ${Object.keys(wrong)[0]}`, async () => {
+    const main = browserMainApi('https://contract.invalid', { fetcher: (async () => Response.json({
+      zone: attachmentZones[0], realm: `https://rezics.com/id/${attachmentRealm}`, receipt: 'confirmed', replayed: false,
+      sourcePosition: { datasetId: 'product', dataEpoch: 'contract-fixture', sequence: '2' }, ...wrong,
+    })) as typeof fetch });
+    expect(await withdrawRealmAttachment(main, { zone: attachmentZones[0]!, realm: attachmentRealm,
+      actingSubject: attachmentActor, key: 'target-bound' })).toEqual({ ok: false, failure: 'unavailable' });
+  });
+}
+
 test('Zone withdrawal uses only the Zone configuration head and does not clear other saved configuration', async () => {
   let captured: Request | null = null;
-  const client = browserMainApi('https://contract.invalid', { fetcher: async (input, init) => {
+  const client = browserMainApi('https://contract.invalid', { fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
     captured = input instanceof Request ? input : new Request(input, init);
     return Response.json({ zone: attachmentZones[0], revision: attachmentZones[1], receipt: 'zone-receipt', replayed: false,
       sourcePosition: { datasetId: 'product', dataEpoch: 'contract-fixture', sequence: '3' } });
-  } });
+  }) as typeof fetch });
   const input = { zone: attachmentZones[0]!, expectedHead: attachmentZones[1]!, actingSubject: attachmentActor, key: 'zone-only' };
-  expect((await withdrawZoneAttachment(client, input)).ok).toBe(true);
+  expect((await browserZoneRealmAttachment(client).saveConfiguration(input.zone.slice(-36),
+    { expectedHead: input.expectedHead, actingSubject: input.actingSubject, defaultRealm: null }, input.key)).ok).toBe(true);
   expect(captured).not.toBeNull();
   const request = captured as unknown as Request;
   expect(request.url).toEndWith(`/v1/zones/${input.zone.slice(-36)}/configuration`);

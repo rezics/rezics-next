@@ -52,7 +52,7 @@ export const messages = {
   filterContributions: 'Contributions', filterCorrections: 'Corrections', filterWorks: 'Works',
   filterPublications: 'Publications',
   reasonFilterLabel: 'Reason', anyReason: 'Any reason',
-  kindContentReport: 'Report', kindRightsComplaint: 'Rights complaint',
+  kindContentReport: 'Report', kindRightsComplaint: 'Rights complaint', kindBanAppeal: 'Ban appeal',
   kindContribution: 'Contribution', kindCorrection: 'Correction', kindWork: 'Work', kindPublication: 'Publication',
   reportedBy: insert('Reported by {{agent}}', { agent: String }),
   complainedBy: insert('Complaint from {{agent}}', { agent: String }),

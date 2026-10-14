@@ -24,7 +24,8 @@ import { permissionOrder, permissionText, sortPermissions } from './permissions.
 import { mergeAgents, newestRoleList } from './read.ts';
 import { membersHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
-import type { AgentSummary, RealmPermission, Role, RoleChange, RoleCommand, RoleList } from './types.ts';
+import { ManageFailure } from './parts.tsx';
+import type { AgentSummary, ReadFailure, RealmPermission, Role, RoleChange, RoleCommand, RoleList } from './types.ts';
 
 /**
  * The Realm's roles as bundles of permissions in plain words. Every edit shows
@@ -40,6 +41,7 @@ export function RolesView({ principal, realm, address = realm, actingSubject, li
   const [editing, setEditing] = useState<Role | 'new' | null>(null);
   const recovery = useRoleRecovery(api, realm, actingSubject, editing !== null, principal);
   const [status, setStatus] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ReadFailure | null>(null);
   const [savedList, setSavedList] = useState<{ realm: string; actingSubject: string; list: RoleList } | null>(null);
   const list = newestRoleList(serverList,
     savedList?.realm === realm && savedList.actingSubject === actingSubject ? savedList.list : null);
@@ -49,8 +51,10 @@ export function RolesView({ principal, realm, address = realm, actingSubject, li
     const refreshed = await api.roles();
     if (refreshed.ok) setSavedList(current => ({ realm, actingSubject, list: newestRoleList(refreshed.data,
       current?.realm === realm && current.actingSubject === actingSubject ? current.list : null) }));
+    else if (['missing', 'denied', 'sign-in'].includes(refreshed.failure)) setFailure(refreshed.failure);
     setEditing(null); setStatus(t.roleSaved); router.refresh();
   }
+  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages} />;
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1">

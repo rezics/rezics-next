@@ -8,7 +8,7 @@ import { iriOf } from './types.ts';
 export const attachmentRealm = '00000000-0000-4000-8000-000000000101';
 export const attachmentActor = iriOf('00000000-0000-4000-8000-000000000102');
 export const attachmentZones = Array.from({ length: 51 }, (_, index) => iriOf(`00000000-0000-4000-8000-${String(index + 201).padStart(12, '0')}`));
-export type AttachmentState = 'populated' | 'empty' | 'loading' | 'error' | 'pending' | 'refused' | 'revoked';
+export type AttachmentState = 'populated' | 'empty' | 'loading' | 'error' | 'pending' | 'refused' | 'revoked' | 'moved';
 type Page = Extract<ZoneAttachmentsRead, { ok: true }>['data'];
 export const attachmentRequests = {
   first: `/v1/realms/${attachmentRealm}/zone-attachments?actingSubject=${encodeURIComponent(attachmentActor)}&limit=24`,
@@ -31,7 +31,8 @@ export function attachmentPage(offset = 0, empty = false): Page {
 
 export function attachmentFixture(state: AttachmentState, persona: AnswerPersona = 'owner', delegated = false) {
   const requests: { path: string; method: string; body: unknown; key: string | null }[] = [];
-  const fetcher: typeof fetch = async (input, init) => {
+  let refusedCursor = false;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init);
     const url = new URL(request.url);
     const path = url.pathname.replace(BFF_PREFIX, '');
@@ -40,16 +41,23 @@ export function attachmentFixture(state: AttachmentState, persona: AnswerPersona
       key: request.headers.get('idempotency-key') });
     if (state === 'loading') return new Promise<Response>(() => {});
     if (request.method === 'GET') {
-      if (state === 'revoked' && url.searchParams.has('cursor') || persona !== 'owner' && !delegated) {
-        return Response.json({ status: 404, code: 'realm_unavailable', title: 'Realm is unavailable' }, { status: 404 });
+      if (state === 'moved' && url.searchParams.has('cursor') && !refusedCursor) {
+        refusedCursor = true;
+        return Response.json({ type: 'https://rezics.com/problems/stale_zone_attachment_cursor', status: 409,
+          code: 'stale_zone_attachment_cursor', title: 'Attachment inventory changed' }, { status: 409 });
       }
-      if (state === 'error') return Response.json({ status: 503, code: 'realm_unavailable', title: 'Realm is unavailable' }, { status: 503 });
+      if (state === 'revoked' && url.searchParams.has('cursor') || persona !== 'owner' && !delegated) {
+        return Response.json({ type: 'https://rezics.com/problems/realm_unavailable', status: 404, code: 'realm_unavailable', title: 'Realm is unavailable' }, { status: 404 });
+      }
+      if (state === 'error') return Response.json({ type: 'https://rezics.com/problems/realm_unavailable', status: 503, code: 'realm_unavailable', title: 'Realm is unavailable' }, { status: 503 });
       return Response.json(attachmentPage(Number(url.searchParams.get('cursor') ?? 0), state === 'empty'));
     }
-    if (state === 'pending') return Response.json({ status: 'reconciling' }, { status: 202 });
-    if (state === 'refused') return Response.json({ status: 403, code: 'realm_attachment_denied', title: 'Realm stewardship has ended' }, { status: 403 });
+    if (state === 'pending') return Response.json({ operationId: 'attachment-withdrawal', status: 'reconciling',
+      phase: 'realm-attachment-withdrawal', result: null, retry: { allowed: true, afterMs: 1000 } }, { status: 202 });
+    if (state === 'refused') return Response.json({ type: 'https://rezics.com/problems/realm_attachment_denied',
+      status: 403, code: 'realm_attachment_denied', title: 'Realm stewardship has ended' }, { status: 403 });
     return Response.json({ zone: iriOf(path.split('/')[3]!), realm: iriOf(attachmentRealm), receipt: 'attachment-withdrawn',
       replayed: false, sourcePosition: { datasetId: 'product', dataEpoch: 'contract-fixture', sequence: '2' } });
-  };
+  }) as typeof fetch;
   return { requests, client: () => browserMainApi('https://contract.invalid', { fetcher }) };
 }

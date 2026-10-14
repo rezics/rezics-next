@@ -46,7 +46,7 @@ export default {
   stateOpen: '待處理', stateClosed: '已決定', stateLabel: '顯示',
   filterLabel: '類型', filterAll: '全部', filterReports: '檢舉', filterRights: '權利申訴',
   filterContributions: '投稿', filterCorrections: '更正',
-  kindContentReport: '檢舉', kindRightsComplaint: '權利申訴',
+  kindContentReport: '檢舉', kindRightsComplaint: '權利申訴', kindBanAppeal: '封禁申訴',
   kindContribution: '投稿', kindCorrection: '更正', kindWork: '作品', kindPublication: '發布',
   reportedBy: insert('由 {{agent}} 檢舉', { agent: String }),
   complainedBy: insert('來自 {{agent}} 的申訴', { agent: String }),

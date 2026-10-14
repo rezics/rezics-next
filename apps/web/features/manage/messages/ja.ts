@@ -46,7 +46,7 @@ export default {
   stateOpen: '確認待ち', stateClosed: '判断済み', stateLabel: '表示',
   filterLabel: '種類', filterAll: 'すべて', filterReports: '報告', filterRights: '権利に関する申し立て',
   filterContributions: '投稿', filterCorrections: '修正',
-  kindContentReport: '報告', kindRightsComplaint: '権利に関する申し立て',
+  kindContentReport: '報告', kindRightsComplaint: '権利に関する申し立て', kindBanAppeal: '利用停止への異議申立て',
   kindContribution: '投稿', kindCorrection: '修正', kindWork: '作品', kindPublication: '公開',
   reportedBy: insert('{{agent}}さんからの報告', { agent: String }),
   complainedBy: insert('{{agent}}さんからの申し立て', { agent: String }),

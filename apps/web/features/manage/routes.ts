@@ -12,7 +12,7 @@ export interface QueueView { state: 'open' | 'closed'; type: ModerationKind | nu
   reason?: string | null }
 
 const kinds: readonly ModerationKind[] = ['content_report', 'rights_complaint', 'contribution_submission',
-  'correction_submission', 'work_submission', 'content-publication_submission'];
+  'correction_submission', 'work_submission', 'content-publication_submission', 'realm_sanction_appeal'];
 // Main's report reason codes (`reportReason` in services/main/src/modules/management-reads/read-contract.ts).
 const reasonCode = /^[a-z][a-z0-9_.-]{0,63}$/;
 

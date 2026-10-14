@@ -259,6 +259,7 @@ export const GiveRoleWithImpact: Story = {
   async play({ canvasElement }) {
     reset();
     roleReads.length = 0;
+    const started = Date.now();
     const canvas = within(canvasElement);
     await userEvent.type(canvas.getByRole('searchbox', { name: 'Search members' }), 'sophie');
     await userEvent.click(canvas.getByRole('button', { name: 'Search' }));
@@ -267,6 +268,7 @@ export const GiveRoleWithImpact: Story = {
     await expect(row.getByText('No role', { exact: true })).toBeVisible();
     await openMenu(canvas, 'Sophie Li 李素菲', 'Give a role…');
     const dialog = await openDialog('Give Sophie Li 李素菲 a role');
+    await expect(dialog.getByRole('combobox', { name: 'For how long' })).toHaveTextContent('7 days');
     const impact = await dialog.findByRole('region', { name: 'Who this affects' });
     await expect(await within(impact).findByText('1 member gains: Moderate the queue')).toBeInTheDocument();
     await expect(impact).toHaveTextContent('Sophie Li 李素菲');
@@ -278,12 +280,19 @@ export const GiveRoleWithImpact: Story = {
     await expect(record.roles).toEqual([expect.objectContaining({ digest: 'b'.repeat(64),
       reason: 'Drafting the spoiler policy.', change: expect.objectContaining({ kind: 'assignment', member: people.sophie,
         roleId: roles[1]!.id, assigned: true }) })]);
+    const assigned = (record.roles[0] as RoleCommand).change;
+    if (assigned.kind !== 'assignment') throw new Error('Expected the actual roster member assignment');
+    await expect(Date.parse(assigned.validUntil)).toBeGreaterThan(started + 6 * 86_400_000);
+    await expect(Date.parse(assigned.validUntil)).toBeLessThanOrEqual(Date.now() + 7 * 86_400_000);
     await expect(await row.findByText('Rules editors', { exact: true })).toBeVisible();
     await expect(row.queryByText('No role', { exact: true })).toBeNull();
     await expect(roleReads).toEqual([{ search: 'sophie', after: null, role: undefined },
       { search: 'sophie', after: null, role: undefined }]);
   },
 };
+
+export const GiveRoleWithImpactPhone: Story = { ...GiveRoleWithImpact, globals: { viewport: { value: 'phone' } } };
+export const GiveRoleWithImpactDesktop: Story = { ...GiveRoleWithImpact, globals: { viewport: { value: 'desktop' } } };
 
 /** An earlier search can finish after the assignment's fresh member read. */
 export const AssignmentRefreshWinsPendingSearch: Story = {

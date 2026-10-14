@@ -5,13 +5,13 @@ import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { MainClient } from '../discover/types.ts';
 import { stateLabel } from '../manage/labels.ts';
-import { messages as manageMessages } from '../manage/messages.ts';
+import { managementMessages } from '../manage/localized-messages.ts';
 import { RealmFrame } from '../manage/realm-frame.tsx';
 import { QueueView } from '../manage/queue-view.tsx';
 import { noNames } from '../manage/queue-api.ts';
 import type { ModerationItem } from '../manage/types.ts';
 import { RealmBanPanel } from './panel.tsx';
-import { messages as appealMessages } from './messages.ts';
+import { realmAppealMessages } from './localized-messages.ts';
 import type { BanReading } from './reading.ts';
 import { recordedModerationQueueApi, type RealmModerationMapped } from './realm-moderation-recorded-page.ts';
 
@@ -23,7 +23,7 @@ function recordedNow(openedAt: string | undefined): number {
 function CaseNote({ item, generation, appeal, locale }: {
   item: ModerationItem; generation: string; appeal: BanReading | null; locale: UiLocale;
 }) {
-  const t = materializeData(manageMessages, { locale });
+  const t = materializeData(managementMessages(locale), { locale });
   const statement = appeal && appeal.appeal.state !== 'none' ? appeal.appeal.statement : null;
   return <section aria-label={item.id} className="grid min-w-0 gap-3">
     <h2 className="text-balance font-semibold text-lg">{t.decisionEntry({ outcome: stateLabel(item, t), generation })}</h2>
@@ -43,6 +43,7 @@ function CaseNote({ item, generation, appeal, locale }: {
 export function RealmModerationRecordedPage({ mapped, client, locale }: {
   mapped: RealmModerationMapped; client: MainClient; locale: UiLocale;
 }) {
+  const manageMessages = managementMessages(locale);
   if (mapped.kind === 'discrepancy') return <p role="alert">{mapped.detail}</p>;
   if (mapped.kind === 'refusal') {
     return <div className="p-4">
@@ -52,7 +53,7 @@ export function RealmModerationRecordedPage({ mapped, client, locale }: {
     </div>;
   }
   if (mapped.kind === 'appeal') {
-    return <RealmBanPanel reading={mapped.reading} realm={mapped.realm} locale={locale} messages={appealMessages} />;
+    return <RealmBanPanel reading={mapped.reading} realm={mapped.realm} locale={locale} messages={realmAppealMessages(locale)} />;
   }
   const opened = mapped.page.items[0]?.openedAt;
   return <div className="min-w-0">

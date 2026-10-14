@@ -1,5 +1,8 @@
+import type { UiLocale } from '../../i18n/define.ts';
+
+type ReviewCopy = { title: string; dismiss: string; restore: string; share: string; dismissHelp: string; restoreHelp: string };
 /** Local sanction review is distinct from content moderation; restoration lifts the ban. */
-export const reviewText = {
+export const reviewText: Record<UiLocale, ReviewCopy> = {
   en: { title: 'Ban appeal', dismiss: 'Uphold ban', restore: 'Lift ban', share: 'Share the reason with the appellant',
     dismissHelp: 'The ban remains in place. This closes the appeal.', restoreHelp: 'This ends the ban immediately and closes the appeal.' },
   'zh-Hans': { title: '封禁申诉', dismiss: '维持封禁', restore: '解除封禁', share: '向申诉人公开理由',
@@ -16,4 +19,4 @@ export const reviewText = {
     dismissHelp: 'Le bannissement est maintenu et le recours est clos.', restoreHelp: 'Le bannissement prend fin immédiatement et le recours est clos.' },
   es: { title: 'Apelación del bloqueo', dismiss: 'Mantener el bloqueo', restore: 'Levantar el bloqueo', share: 'Compartir el motivo con la persona que apela',
     dismissHelp: 'El bloqueo se mantiene y la apelación se cierra.', restoreHelp: 'El bloqueo termina de inmediato y la apelación se cierra.' },
-} as const;
+};

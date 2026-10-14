@@ -63,10 +63,10 @@ export interface QueueViewProps {
 }
 
 const filters: ReadonlyArray<[ModerationKind | null, 'filterAll' | 'filterReports' | 'filterRights'
-  | 'filterContributions' | 'filterCorrections' | 'filterWorks' | 'filterPublications']> = [[null, 'filterAll'],
+  | 'filterContributions' | 'filterCorrections' | 'filterWorks' | 'filterPublications' | 'kindBanAppeal']> = [[null, 'filterAll'],
   ['content_report', 'filterReports'], ['work_submission', 'filterWorks'],
   ['content-publication_submission', 'filterPublications'], ['contribution_submission', 'filterContributions'],
-  ['correction_submission', 'filterCorrections'], ['rights_complaint', 'filterRights']];
+  ['correction_submission', 'filterCorrections'], ['rights_complaint', 'filterRights'], ['realm_sanction_appeal', 'kindBanAppeal']];
 
 /** The report reasons a view offers to narrow by: those its items give, and the one in use. */
 const isReportItem = (item: ModerationItem) => item.kind === 'content_report' || item.kind === 'rights_complaint';

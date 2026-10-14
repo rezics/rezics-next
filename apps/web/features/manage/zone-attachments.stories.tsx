@@ -8,9 +8,14 @@ import { readZoneAttachments } from './read.ts';
 import { RealmFrame } from './realm-frame.tsx';
 import { ZoneAttachmentsPage, type ZoneAttachmentsRead } from './zone-attachments-page.tsx';
 import { attachmentActor, attachmentFixture, attachmentRealm, attachmentRequests, type AttachmentState } from './zone-attachments-fixtures.ts';
+import { recoveryIndexKey } from './safety-pending.ts';
+const principal = 'storybook:realm-attachment-steward';
 
 function Inventory({ state, persona = 'owner', delegated = false }: { state: AttachmentState; persona?: AnswerPersona; delegated?: boolean }) {
-  const fixture = useMemo(() => attachmentFixture(state, persona, delegated), [state, persona, delegated]);
+  const fixture = useMemo(() => {
+    localStorage.removeItem(recoveryIndexKey(principal, attachmentRealm));
+    return attachmentFixture(state, persona, delegated);
+  }, [state, persona, delegated]);
   const [page, setPage] = useState<ZoneAttachmentsRead | null>(null);
   useEffect(() => {
     let active = true;
@@ -19,7 +24,7 @@ function Inventory({ state, persona = 'owner', delegated = false }: { state: Att
     return () => { active = false; };
   }, [fixture]);
   return <RealmFrame realm={attachmentRealm} header={null} agent={{ ...acting, iri: attachmentActor }} locale="en" messages={messages}>
-    <ZoneAttachmentsPage page={page} realm={attachmentRealm} actingSubject={attachmentActor} locale="en" messages={messages}
+    <ZoneAttachmentsPage principal={principal} page={page} realm={attachmentRealm} actingSubject={attachmentActor} locale="en" messages={messages}
       client={fixture.client} retryHref={`/en/manage/r/${attachmentRealm}/zones`} />
   </RealmFrame>;
 }
@@ -71,6 +76,7 @@ const pending: Story = { args: { state: 'pending' }, parameters: { contractState
     await expect(canvas.findByText(messages.decisionStillPending)).resolves.toBeVisible();
     await expect(canvas.getByText('Reading room 1', { exact: true })).toBeVisible();
     await expect(canvas.queryByText(messages.zonesWithdrawn)).toBeNull();
+    await expect(canvas.getByRole('button', { name: messages.decisionResume })).toBeVisible();
   } };
 const refused: Story = { args: { state: 'refused' }, async play({ canvasElement }) {
   const canvas = within(canvasElement);
@@ -86,6 +92,16 @@ const revoked: Story = { args: { state: 'revoked', persona: 'moderator', delegat
   await expect(canvas.findByText('Realm is unavailable')).resolves.toBeVisible();
   await expect(canvas.queryByText('Reading room 1', { exact: true })).toBeNull();
   await expect(canvas.queryByRole('button', { name: messages.loadMore })).toBeNull();
+} };
+const moved: Story = { args: { state: 'moved' }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await canvas.findByText('Reading room 1', { exact: true });
+  await userEvent.click(canvas.getByRole('button', { name: messages.loadMore }));
+  await expect(canvas.findByText('Attachment inventory changed')).resolves.toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: messages.startOver }));
+  await expect(canvas.findByRole('button', { name: messages.loadMore })).resolves.toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: messages.loadMore }));
+  await expect(canvas.findByText('Reading room 48', { exact: true })).resolves.toBeVisible();
 } };
 const at = (story: Story, viewport: 'phone' | 'desktop'): Story => ({ ...story, globals: { viewport: { value: viewport } } });
 export const PopulatedPhone = at(populated, 'phone');
@@ -104,7 +120,16 @@ export const RefusedPhone = at(refused, 'phone');
 export const RefusedDesktop = at(refused, 'desktop');
 export const RevokedPhone = at(revoked, 'phone');
 export const RevokedDesktop = at(revoked, 'desktop');
-export const Visitor = { ...at(populated, 'phone'), args: { persona: 'visitor' as const }, play: undefined };
+export const MovedPhone = at(moved, 'phone');
+export const MovedDesktop = at(moved, 'desktop');
+const concealed: Story = { async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await expect(canvas.findByRole('heading', { name: messages.missingTitle })).resolves.toBeVisible();
+  await expect(canvas.queryByText('Reading room 1', { exact: true })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: messages.loadMore })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: messages.zonesWithdraw })).toBeNull();
+} };
+export const Visitor = { ...at(concealed, 'phone'), args: { persona: 'visitor' as const } };
 export const Stranger = { ...Visitor, args: { persona: 'stranger' as const } };
 export const Member = { ...Visitor, args: { persona: 'member' as const } };
 export const ModeratorWithoutStewardship = { ...Visitor, args: { persona: 'moderator' as const } };

@@ -86,7 +86,7 @@ export function RealmBanPanel({ reading, realm, locale, messages, actions, class
       return;
     }
     if (!result.reuseKey) keyFor.current = null;
-    setError(t.sendFailed);
+    setError(result.problem?.title ?? t.sendFailed);
   }
 
   return <section aria-label={t.region} className={cn(

@@ -51,7 +51,7 @@ export default {
   stateOpen: 'Wartet', stateClosed: 'Entschieden', stateLabel: 'Anzeigen',
   filterLabel: 'Art', filterAll: 'Alle', filterReports: 'Meldungen', filterRights: 'Rechtebeschwerden',
   filterContributions: 'Einreichungen', filterCorrections: 'Korrekturen',
-  kindContentReport: 'Meldung', kindRightsComplaint: 'Rechtebeschwerde',
+  kindContentReport: 'Meldung', kindRightsComplaint: 'Rechtebeschwerde', kindBanAppeal: 'Einspruch gegen die Sperre',
   kindContribution: 'Einreichung', kindCorrection: 'Korrektur', kindWork: 'Werk', kindPublication: 'Veröffentlichung',
   reportedBy: insert('Gemeldet von {{agent}}', { agent: String }),
   complainedBy: insert('Beschwerde von {{agent}}', { agent: String }),

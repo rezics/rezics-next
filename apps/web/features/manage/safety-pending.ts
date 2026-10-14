@@ -99,7 +99,9 @@ function validEntry(entry: unknown, principal: string, realm: string): entry is 
   return attempt.principal === principal && attempt.realm === realm && typeof attempt.actingSubject === 'string'
     && typeof attempt.key === 'string' && attempt.key.length > 0 && (attempt.status === 'recorded' || attempt.status === 'pending')
     && validRecoveryInput(entry.operation, attempt.input, attempt.actingSubject, attempt.key)
-    && (entry.operation === 'settings' || entry.operation.startsWith('role:')
+    && (!entry.operation.startsWith('zone-attachment:') || object(attempt.input) && attempt.input.realm === realm)
+    && (entry.operation === 'settings' || entry.operation.startsWith('role:') || entry.operation.startsWith('zone-attachment:')
+      || entry.operation.startsWith('sanction-appeal:')
       ? attempt.item === undefined && attempt.decision === undefined
       : object(attempt.item) && validItem(attempt.item) && validDecision(attempt.decision) && attempt.item.id === entry.operation.split(':')[1]
       && (entry.operation.startsWith('report:') ? attempt.item.kind === 'content_report' || attempt.item.kind === 'rights_complaint'

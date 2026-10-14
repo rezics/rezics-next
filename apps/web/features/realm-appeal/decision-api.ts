@@ -10,7 +10,11 @@ export function appealDecisionCommand(basis: Pick<DecisionBasis, 'caseId' | 'gen
     actingSubject: actor, outcome: input.outcome, rationale: input.rationale.trim(), disclosure: input.disclosure,
     idempotencyKey: key, targets: [], reversesDecisionId: null, answersStepId: null,
     rule: { ref: 'urn:rezics:realm-sanction-appeal', revision: '0', digest: '0'.repeat(64) },
-    evidenceDigest: '0'.repeat(64) };
+    evidenceDigest: '0'.repeat(64), reasons: {
+      facts: input.rationale.trim().slice(0, 4000), scope: 'Realm membership',
+      duration: input.outcome === 'restore' ? 'Ban lifted immediately' : 'Original ban unchanged',
+      automation: false, appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'und',
+    } };
 }
 
 export async function resolveRealmAppeal(main: MainClient, command: ModerationDecisionCommand): Promise<Outcome<DecisionReceipt>> {

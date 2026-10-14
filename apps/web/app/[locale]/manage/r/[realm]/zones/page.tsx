@@ -18,9 +18,9 @@ export default async function RealmZonesPage({ params }: { params: Promise<{ rea
   const { id: realm, address } = target;
   const locale = await requestLocale();
   const href = realmHref(address, 'zones');
-  const { actingSubject, main, signInHref } = await manager(locale, href);
+  const { principal, actingSubject, main, signInHref } = await manager(locale, href);
   const [messages, page] = await Promise.all([getMessages('manage', locale),
     readZoneAttachments(main, realm, actingSubject)]);
-  return <ZoneAttachmentsPage page={page} realm={realm} actingSubject={actingSubject} locale={locale} messages={messages}
+  return <ZoneAttachmentsPage key={`${principal}:${realm}:${actingSubject}`} principal={principal} page={page} realm={realm} actingSubject={actingSubject} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={localizedPath(href, locale)} />;
 }

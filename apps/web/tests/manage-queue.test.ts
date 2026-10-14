@@ -238,6 +238,9 @@ describe('addresses', () => {
     expect(parseQueueView({ state: 'closed', type: 'content_report' }))
       .toEqual({ state: 'closed', type: 'content_report', reason: null });
     expect(parseQueueView({ state: 'all', type: 'spam' })).toEqual({ state: 'open', type: null, reason: null });
+    expect(parseQueueView({ type: 'realm_sanction_appeal' })).toEqual({ state: 'open', type: 'realm_sanction_appeal', reason: null });
+    expect(queueHref(realm, { state: 'open', type: 'realm_sanction_appeal' }))
+      .toBe(`/manage/r/${realm}?type=realm_sanction_appeal`);
     expect(queueHref(realm, { state: 'closed', type: 'correction_submission' }))
       .toBe(`/manage/r/${realm}?state=closed&type=correction_submission`);
     expect(queueHref(realm, { state: 'open', type: null })).toBe(`/manage/r/${realm}`);

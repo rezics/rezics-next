@@ -51,7 +51,7 @@ export default {
   stateOpen: '대기 중', stateClosed: '검토 완료', stateLabel: '표시',
   filterLabel: '유형', filterAll: '전체', filterReports: '신고', filterRights: '권리 침해 신고',
   filterContributions: '기여', filterCorrections: '수정',
-  kindContentReport: '신고', kindRightsComplaint: '권리 침해 신고',
+  kindContentReport: '신고', kindRightsComplaint: '권리 침해 신고', kindBanAppeal: '차단 이의 제기',
   kindContribution: '기여', kindCorrection: '수정 요청', kindWork: '작품', kindPublication: '게시',
   reportedBy: insert('{{agent}}님이 신고', { agent: String }),
   complainedBy: insert('{{agent}}님의 신고', { agent: String }),

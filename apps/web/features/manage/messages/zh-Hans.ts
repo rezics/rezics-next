@@ -48,7 +48,7 @@ export default {
   filterLabel: '类型', filterAll: '全部', filterReports: '举报', filterRights: '权利投诉',
   filterContributions: '投稿', filterCorrections: '更正', filterWorks: '作品', filterPublications: '发布',
   reasonFilterLabel: '原因', anyReason: '任何原因',
-  kindContentReport: '举报', kindRightsComplaint: '权利投诉',
+  kindContentReport: '举报', kindRightsComplaint: '权利投诉', kindBanAppeal: '封禁申诉',
   kindContribution: '投稿', kindCorrection: '更正', kindWork: '作品', kindPublication: '发布',
   reportedBy: insert('{{agent}} 举报', { agent: String }),
   complainedBy: insert('{{agent}} 投诉', { agent: String }),

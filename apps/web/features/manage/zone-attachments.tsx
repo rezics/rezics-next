@@ -3,7 +3,7 @@
 import { Button } from '@rezics/ui/button';
 import { LocalizedText } from '@rezics/ui/localized-text';
 import { materializeData } from 'native-i18n';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { LinkIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { spaceHref } from '../address/path.ts';
@@ -11,7 +11,8 @@ import { browserMainApi } from '../api/browser.ts';
 import type { ManageMessages } from './messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { commandInstance, type CommandInstance } from '../api/command.ts';
+import { newKey } from './commands.ts';
+import { attemptStorage, performCommand, retainedCommands } from './safety-pending.ts';
 import { readZoneAttachments } from './read.ts';
 import { withdrawRealmAttachment } from './zone-attachments-api.ts';
 import type { MainClient } from './types.ts';
@@ -32,7 +33,8 @@ const attachedWhen = (iso: string, locale: UiLocale) =>
   new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(iso));
 
 /** The steward's page of Zones that show this Realm, with withdraw and the next page. */
-export function ZoneAttachments({ realm, actingSubject, locale, messages, items, nextCursor, client = browserMainApi }: {
+export function ZoneAttachments({ principal, realm, actingSubject, locale, messages, items, nextCursor, client = browserMainApi }: {
+  principal: string;
   realm: string;
   actingSubject: string;
   locale: UiLocale;
@@ -46,28 +48,37 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
   const [cursor, setCursor] = useState(nextCursor);
   const [busy, setBusy] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [moved, setMoved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  const commands = useRef(new Map<string, CommandInstance>());
-  useEffect(() => { setReady(true); }, []);
+  const store = useMemo(() => attemptStorage(principal), [principal]);
+  const [unconfirmed, setUnconfirmed] = useState(new Set<string>());
+  const retainedZones = useCallback(() => new Set(retainedCommands<{ zone: string }>(realm, actingSubject, 'zone-attachment', store)
+    .map(entry => entry.attempt.input.zone)), [realm, actingSubject, store]);
+  useEffect(() => { setReady(true); setUnconfirmed(retainedZones()); }, [retainedZones]);
 
   async function withdraw(item: ZoneAttachmentItem) {
     setBusy(item.zone);
     setNotice(null);
     try {
-      const slot = JSON.stringify([realm, actingSubject, item.zone]);
-      const command = commands.current.get(slot) ?? commandInstance();
-      commands.current.set(slot, command);
-      const key = command.id();
-      const send = () => withdrawRealmAttachment(client(), { zone: item.zone, realm, actingSubject, key });
-      let answer = await send();
-      if (!answer.ok && answer.failure === 'unavailable') answer = await send();
-      command.finish(answer);
+      const answer = await performCommand(`zone-attachment:${item.zone}`, { realm, actingSubject,
+        input: { zone: item.zone, realm, actingSubject }, key: newKey(), status: 'recorded' }, async attempt => {
+        const send = () => withdrawRealmAttachment(client(), { ...attempt.input, key: attempt.key });
+        let result = await send();
+        if (!result.ok && result.failure === 'unavailable') result = await send();
+        return result;
+      }, store);
+      setUnconfirmed(retainedZones());
       if (!answer.ok) {
         setNotice(answer.failure === 'pending' ? t.decisionStillPending : answer.title ?? t.zonesWithdrawFailed);
+        if (['denied', 'missing', 'sign-in'].includes(answer.failure)) {
+          const current = await readZoneAttachments(client(), realm, actingSubject);
+          if (!current.ok && ['missing', 'denied', 'sign-in'].includes(current.failure)) {
+            setRows([]); setCursor(null); setMoved(false);
+          }
+        }
         return;
       }
-      commands.current.delete(slot);
       setRows(current => current.filter(row => row.zone !== item.zone));
       setNotice(t.zonesWithdrawn);
     } catch {
@@ -78,12 +89,14 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
   }
 
   async function more() {
-    if (!cursor) return;
+    if (!cursor && !moved) return;
+    const restart = moved;
     setLoading(true);
     setNotice(null);
     try {
-      const answer = await readZoneAttachments(client(), realm, actingSubject, cursor);
+      const answer = await readZoneAttachments(client(), realm, actingSubject, restart ? null : cursor);
       if (!answer.ok) {
+        setMoved(answer.failure === 'moved');
         if (answer.failure === 'missing' || answer.failure === 'denied' || answer.failure === 'sign-in') {
           setRows([]); setCursor(null);
         }
@@ -91,14 +104,15 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
         return;
       }
       const page = answer.data;
+      setMoved(false);
       setRows(current => {
-        const seen = new Set(current.map(row => row.zone));
+        const seen = new Set(restart ? [] : current.map(row => row.zone));
         const incoming = page.items.filter(row => !seen.has(row.zone)).map(row => ({
           zone: row.zone, name: row.name, language: row.language, direction: row.direction,
           address: { prefix: row.address.prefix, key: row.address.key }, attachedAt: row.attachedAt,
           when: row.attachedAt ? attachedWhen(row.attachedAt, locale) : null,
         }));
-        return [...current, ...incoming];
+        return [...restart ? [] : current, ...incoming];
       });
       setCursor(page.nextCursor);
     } catch {
@@ -132,11 +146,12 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
           </div>
           <Button variant="outline" size="sm" className="justify-self-start" disabled={busy !== null}
             data-hydrated={ready ? 'true' : undefined}
-            isLoading={busy === item.zone} onClick={() => void withdraw(item)}>{busy === item.zone ? t.zonesWithdrawing : t.zonesWithdraw}</Button>
+            isLoading={busy === item.zone} onClick={() => void withdraw(item)}>{busy === item.zone ? t.zonesWithdrawing
+              : unconfirmed.has(item.zone) ? t.decisionResume : t.zonesWithdraw}</Button>
         </li>;
       })}
     </ul>}
-    {cursor ? <Button variant="outline" size="sm" className="justify-self-start" disabled={loading || busy !== null}
-      isLoading={loading} onClick={() => void more()}>{loading ? t.loadingMore : t.loadMore}</Button> : null}
+    {cursor || moved ? <Button variant="outline" size="sm" className="justify-self-start" disabled={loading || busy !== null}
+      isLoading={loading} onClick={() => void more()}>{loading ? t.loadingMore : moved ? t.startOver : t.loadMore}</Button> : null}
   </section>;
 }

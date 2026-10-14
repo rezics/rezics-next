@@ -51,7 +51,7 @@ export default {
   stateOpen: 'En attente', stateClosed: 'Traités', stateLabel: 'Afficher',
   filterLabel: 'Type', filterAll: 'Tout', filterReports: 'Signalements', filterRights: 'Plaintes relatives aux droits',
   filterContributions: 'Contributions', filterCorrections: 'Corrections',
-  kindContentReport: 'Signalement', kindRightsComplaint: 'Plainte relative aux droits',
+  kindContentReport: 'Signalement', kindRightsComplaint: 'Plainte relative aux droits', kindBanAppeal: 'Recours contre le bannissement',
   kindContribution: 'Contribution', kindCorrection: 'Correction', kindWork: 'Œuvre', kindPublication: 'Publication',
   reportedBy: insert('Signalé par {{agent}}', { agent: String }),
   complainedBy: insert('Plainte de {{agent}}', { agent: String }),
