@@ -26,6 +26,9 @@ function catalogue() {
     else if (query.includes('SELECT ?space ?realmRevision')) rows = [{
       space: uri(seed.space), realmRevision: uri(seed.realmHead), disclosure: uri(`${RV}Public`),
     }];
+    else if (query.includes('SELECT ?work ?head ?owningWork ?owningHead WHERE')) rows = [{
+      work: uri(seed.realm), head: uri(seed.realmHead),
+    }];
     else if (query.includes('RestoreCutover')) rows = [];
     else if (query.includes('SELECT DISTINCT ?work ?head ?main ?epochOrder ?sequence')) rows = [{
       work: uri(seed.work), head: uri(seed.head), main: uri(seed.main),

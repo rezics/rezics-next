@@ -6,6 +6,8 @@ import { contentText, isolate, untaggedName, zoneContentText } from '../features
 import { valueLabel } from '../features/zones/browse-view.ts';
 import { zoneWorkCards } from '../features/zones/adapt-cards.ts';
 import { messages } from '../features/zones/messages.ts';
+import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+import { clearTypes } from '../features/catalogue/types.ts';
 
 const arabic = 'مكتبة الأدب';
 const hebrew = 'עמוס עוז';
@@ -57,9 +59,14 @@ describe('G-516 content text keeps its own language and direction', () => {
   });
 
   test('browse labels say the interface locale for the page’s words and nothing for raw values', () => {
-    expect(valueLabel('status', 'ongoing', null, 'ko', messages)).toMatchObject({ lang: 'ko', dir: 'ltr' });
-    expect(valueLabel('type', 'https://schema.org/Book', null, 'ja', messages)).toMatchObject({ lang: 'ja' });
-    expect(valueLabel('status', 'unlisted', null, 'ko', messages)).toEqual({ value: 'unlisted', lang: '', dir: 'ltr' });
+    seedServedTypes();
+    try {
+      expect(valueLabel('status', 'ongoing', null, 'ko', messages)).toMatchObject({ lang: 'ko', dir: 'ltr' });
+      expect(valueLabel('type', 'https://schema.org/Book', null, 'ja', messages)).toMatchObject({ lang: 'ja' });
+      expect(valueLabel('status', 'unlisted', null, 'ko', messages)).toEqual({ value: 'unlisted', lang: '', dir: 'ltr' });
+    } finally {
+      clearTypes();
+    }
   });
 
   // The adapters keep one answer for direction and language; a literal would put the old assumption back.

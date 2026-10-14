@@ -312,6 +312,7 @@ type Target =
   | { call: readonly [string, string] }
   | { binding: string }
   | { expression: string }
+  | { property: string }
   | { branch: readonly [string, string] };
 interface Entry {
   file: string;
@@ -326,8 +327,8 @@ const entries: readonly Entry[] = [
     targets: { getV1HubWorksById: [{ call: ['link', 'install'] }, { call: ['link', 'usePrompt'] }] } },
   { file: 'features/showcase/work-action.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
     targets: { getV1HubWorksById: [{ branch: ["work.hub?.kind === 'skill'", 'action'] }] } },
-  { file: 'zones/official/ai-workshop/slots.tsx', function: 'Actions', operations: ['getV1HubWorksById'],
-    targets: { getV1HubWorksById: [{ branch: ['hub', 'tryIt'] }] } },
+  { file: 'features/zones/zone-home.tsx', function: 'slotCard', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ property: 'tryHref' }] } },
   { file: 'features/realm-appeal/panel.tsx', function: 'RealmBanPanel', operations: [
     'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal', 'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
   ], targets: {
@@ -383,6 +384,8 @@ function targetProof(body: ts.Node, operation: string, target: Target): boolean 
     if (ts.isFunctionLike(node) && !(ts.isArrowFunction(node) && ts.isCallExpression(node.parent) &&
       ts.isPropertyAccessExpression(node.parent.expression) && node.parent.expression.name.text === 'map')) return;
     if ('expression' in target && ts.isCallExpression(node) && node.expression.getText() === target.expression) proofs.push(uiGuarded(node, operation));
+    if ('property' in target && ts.isPropertyAssignment(node) && node.name.getText() === target.property)
+      proofs.push(uiGuarded(node.initializer, operation));
     if ('binding' in target && ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === target.binding && node.initializer)
       proofs.push(payload(node.initializer));
     if ('branch' in target && ts.isConditionalExpression(node) && node.condition.getText().includes(target.branch[0])) refs(node.whenTrue, target.branch[1]);
@@ -442,11 +445,24 @@ test('the scan sees the web calls to closed operations it must guard', () => {
   expect([...seen]).toContain('features/saved-filter/api.ts putV1MeSaved-filtersOrder');
   expect([...seen]).toContain('features/realm/read.ts getV1Mod-releasesByWork');
   expect([...seen]).toContain('features/work-page/read.ts getV1HubWorksById');
-});
+}, 30_000);
 
 test('closed requests have explicit operation gates and the swept UI entries have predicates', () => {
   expect(violations(webSources)).toEqual([]);
   expect(entryViolations(webSources)).toEqual([]);
+}, 30_000);
+
+test('a host-provided Try destination is gated before it is spread into a Zone card', () => {
+  const operation = 'getV1HubWorksById';
+  const inventory: readonly Entry[] = [{ file: 'fixture', function: 'slotCard', operations: [operation],
+    targets: { [operation]: [{ property: 'tryHref' }] } }];
+  const source = (condition: string) => `function slotCard() {
+    return <Slot {...( ${condition} ? { tryHref: props.work.href } : {} )} />;
+  }`;
+  expect(entryViolations({ fixture: source(`operationOpen('${operation}', access)`) }, inventory)).toEqual([]);
+  for (const condition of ['true', "operationOpen('getV1Mod-releasesByWork', access)"])
+    expect(entryViolations({ fixture: source(condition) }, inventory)).toHaveLength(1);
+  expect(entryViolations({ fixture: 'function slotCard() { return <Slot tryHref={props.work.href} />; }' }, inventory)).toHaveLength(1);
 });
 
 
