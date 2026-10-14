@@ -17,7 +17,7 @@ const options: RateLimitOptions = { secret: 'g543-test-counter-secret-at-least-3
   serviceClientIds: new Set(['installed-importer']), trustedProxyPeers: new Set(['127.0.0.2']),
   clientIpHeader: 'x-forwarded-for' };
 
-test('G-543: PostgreSQL counters enforce all classes, concurrent subject budgets, safety isolation and replay', async () => {
+test('PostgreSQL counters enforce all classes, concurrent subject budgets, safety isolation and replay', async () => {
   const root = resolve(import.meta.dir, '../../..');
   const cluster = await startPostgresCluster();
   const pool = new Pool({ ...cluster.connection, max: 8 });

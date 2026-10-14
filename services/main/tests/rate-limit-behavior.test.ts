@@ -17,7 +17,7 @@ const options: RateLimitOptions = { secret: 'g543-test-counter-secret-at-least-3
   serviceClientIds: new Set(['installed-importer']), trustedProxyPeers: new Set(['127.0.0.2']),
   clientIpHeader: 'x-forwarded-for' };
 
-test('G-543 review: hook caches token class while owner authorization remains current', async () => {
+test('hook caches token class while owner authorization remains current', async () => {
   let classifications = 0, counters = 0, effects = 0, revoked = false;
   const identities: string[] = [];
   const account = { async verify() {
@@ -44,7 +44,7 @@ test('G-543 review: hook caches token class while owner authorization remains cu
   expect(effects).toBe(11); expect(classifications).toBe(2);
 });
 
-test('G-543 review: read POSTs survive counter loss; safety and provider intake do not depend on bearer health', async () => {
+test('read POSTs survive counter loss; safety and provider intake do not depend on bearer health', async () => {
   let verifications = 0;
   const budgets = rateLimitBudgets();
   const seen: Array<{ family: string; maximum: number }> = [];
@@ -80,7 +80,7 @@ test('G-543 review: read POSTs survive counter loss; safety and provider intake 
   }
 });
 
-test('G-543 review: token attribution coalesces, expires, and has bounded storage; counters use one operation', async () => {
+test('token attribution coalesces, expires, and has bounded storage; counters use one operation', async () => {
   let now = 1000, verified = 0, classified = 0;
   const cache = new PrincipalBudgetCache(2, () => now);
   const verify = async () => { verified++; return { issuer: 'account', subject: 'same', accountExpiresAt: 2 }; };
@@ -102,7 +102,7 @@ test('G-543 review: token attribution coalesces, expires, and has bounded storag
   expect(queries).toBe(1);
 });
 
-test('G-543 review: BFF replaces spoofed IP and stack/import policies come from configuration', async () => {
+test('BFF replaces spoofed IP and stack/import policies come from configuration', async () => {
   const forwarded = mainRequestHeaders(new Headers({ 'cf-connecting-ip': '198.51.100.7',
     'x-rezics-client-ip': '203.0.113.1', 'x-forwarded-for': '203.0.113.2' }), undefined);
   expect(forwarded.get('x-rezics-client-ip')).toBe('198.51.100.7');
@@ -123,7 +123,7 @@ test('G-543 review: BFF replaces spoofed IP and stack/import policies come from 
   expect(limits).toEqual([77]);
 });
 
-test('G-543: untrusted peers cannot rotate anonymous identities with forwarded headers', () => {
+test('untrusted peers cannot rotate anonymous identities with forwarded headers', () => {
   const request = (ip: string) => new Request('http://localhost/v1/public-reports', { headers: { 'x-forwarded-for': ip } });
   expect(anonymousIdentity(request('1.1.1.1'), '127.0.0.1', options))
     .toBe(anonymousIdentity(request('2.2.2.2'), '127.0.0.1', options));
@@ -132,7 +132,7 @@ test('G-543: untrusted peers cannot rotate anonymous identities with forwarded h
   expect(anonymousIdentity(request('1.1.1.1'), undefined, options)).toBe('anonymous:unknown');
 });
 
-test('G-543 review: IPv6 interface rotation shares one canonical /64 budget', () => {
+test('IPv6 interface rotation shares one canonical /64 budget', () => {
   const identity = (ip: string) => anonymousIdentity(new Request('http://localhost'), ip, options);
   expect(identity('2001:db8:1234:abcd::1')).toBe(identity('2001:0DB8:1234:ABCD:ffff:ffff:ffff:ffff'));
   expect(identity('2001:db8:1234:abce::1')).not.toBe(identity('2001:db8:1234:abcd::1'));
@@ -144,7 +144,7 @@ test('G-543 review: IPv6 interface rotation shares one canonical /64 budget', ()
   expect(trusted).toBe(identity('2001:db8:1234:abcd::1'));
 });
 
-test('G-543: global hook reaches each Main plugin group and fails closed on dependency loss', async () => {
+test('global hook reaches each Main plugin group and fails closed on dependency loss', async () => {
   const seen: string[] = [];
   const limit = { options, budgets: rateLimitBudgets(), store: {
     async classify() { return 'member' as const; },
