@@ -117,7 +117,7 @@ export function queryRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         try {
           result = await withResourceListBudget(() => publicWorkRead(work, request,
             { limit: query.limit, cursor: query.cursor },
-            session => readResourceList(session, compiled.request)));
+            session => readResourceList(session, compiled.request)), query.scope.kind);
         } catch (error) { return discoveryError(error); }
         return Response.json({ profile: 'query-v1', template: 'resource-list-v1',
           selection: { context: query.context, scope: query.scope, filter: query.filter ?? { all: [] },

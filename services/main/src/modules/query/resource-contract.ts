@@ -150,6 +150,9 @@ export const RESOURCE_LIST_COST = {
   rankedCandidateTextRechecks: 0,
   conceptResolutionReads: 1,
   graphCalls: 32,
+  // Scope policy plus current Realm disclosure are read and fenced separately
+  // from the resource page. They do not grow with the candidate population.
+  realmGraphCalls: 4,
   postgresStatements: 96,
   deadlineMs: WORK_READ_COST.deadlineMs,
   graphBytes: WORK_READ_COST.graphBytes,
