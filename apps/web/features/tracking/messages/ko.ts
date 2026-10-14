@@ -113,6 +113,7 @@ export default {
   chapterRead: '읽음', chapterUnread: '읽지 않음',
   markChapterRead: '읽음으로 표시', markChapterUnread: '읽지 않음으로 표시',
   noSuchChapter: '그 챕터는 없습니다.',
+  noChapters: '이용 가능한 챕터가 없습니다.',
   playHeading: '플레이', notPlayed: '아직 플레이하지 않음', gamePlayed: '플레이함', gameCompleted: '완료',
   markPlayed: '플레이함으로 표시', markCompleted: '완료로 표시', markNotCompleted: '완료 해제',
   routesTitle: '루트',

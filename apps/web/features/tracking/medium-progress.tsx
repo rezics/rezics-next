@@ -22,7 +22,7 @@ type Choice = { kind: 'game' | 'chapters' | 'episodes' } | { kind: 'work'; verb:
 export function MediumProgress({ work, api, episodes, t, className }: {
   work: string; api: MediaApi; episodes: EpisodeApi | null; t: Copy; className?: string;
 }) {
-  const [choice, setChoice] = useState<Choice | null>(null);
+  const [selected, setSelected] = useState<{ work: string; api: MediaApi; episodes: EpisodeApi | null; choice: Choice } | null>(null);
   useEffect(() => {
     let current = true;
     void (async () => {
@@ -30,10 +30,11 @@ export function MediumProgress({ work, api, episodes, t, className }: {
       if (!types.ok && types.failure === 'missing') return;
       const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
       const next = await progressControl(api, episodes, work, presentation);
-      if (current) setChoice(next);
+      if (current) setSelected({ work, api, episodes, choice: next });
     })();
     return () => { current = false; };
   }, [api, episodes, work]);
+  const choice = selected?.work === work && selected.api === api && selected.episodes === episodes ? selected.choice : null;
   if (!choice) return null;
   if (choice.kind === 'work') return <WorkProgress work={work} api={api} verb={choice.verb} t={t} className={className} />;
   if (choice.kind === 'game') return <GameProgress work={work} api={api} t={t} className={className} />;

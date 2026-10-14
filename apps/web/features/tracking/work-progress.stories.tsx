@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '@rezics/ui/button';
+import { useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import type { MediaApi, WorkMark, WorkStanding } from './media-api.ts';
@@ -76,6 +78,55 @@ export const ChangedElsewhere: Story = {
     await view.findByRole('alert');
     await userEvent.click(view.getByRole('button', { name: 'Keep my change' }));
     await view.findByText('Completed', { exact: true });
+  },
+};
+
+export const Loading: Story = {
+  args: { api: { ...memory(), workStanding: () => new Promise(() => {}) } },
+  async play({ canvasElement }) {
+    await waitFor(() => expect(canvasElement.querySelector('[data-loading]')).not.toBeNull());
+    await expect(canvasElement.querySelector('[data-pending]')).toBeNull();
+  },
+};
+export const LoadingDesktop: Story = { ...Loading, globals: { viewport: { value: 'desktop' } } };
+export const Unavailable: Story = {
+  args: { api: { ...memory(), workStanding: async () => ({ ok: false, failure: 'unavailable', status: 503,
+    problem: { code: 'progress_unavailable' } }) } },
+  async play({ canvasElement }) {
+    await within(canvasElement).findByRole('alert');
+    await expect(canvasElement.querySelector('[data-pending]')).toBeNull();
+  },
+};
+export const UnavailableDesktop: Story = { ...Unavailable, globals: { viewport: { value: 'desktop' } } };
+
+function PersonChange() {
+  const [second, setSecond] = useState(false);
+  const [devices] = useState(() => {
+    let release: (answer: { ok: true; data: WorkMark }) => void = () => {};
+    const first: Pick<MediaApi, 'workStanding' | 'markWork'> = { ...memory(),
+      markWork: () => new Promise(resolve => { release = resolve; }) };
+    return { first, second: memory('completed'), release: () => release({ ok: true, data: { standing: 'started', version: 1 } }) };
+  });
+  return <PageContainer className="grid max-w-md gap-6">
+    <WorkProgress work="https://example.test/novel" api={second ? devices.second : devices.first} verb="play" t={copyOf('en')} />
+    <Button onClick={() => setSecond(true)}>Switch Person</Button>
+    <Button onClick={devices.release}>Resolve previous Person’s save</Button>
+  </PageContainer>;
+}
+
+export const PreviousPersonSave: Story = {
+  render: () => <PersonChange />,
+  async play({ canvasElement }) {
+    const view = within(canvasElement);
+    await view.findByText('Not started');
+    await userEvent.click(view.getByRole('button', { name: 'Mark playing' }));
+    await userEvent.click(view.getByRole('button', { name: 'Switch Person' }));
+    await view.findByText('Completed', { exact: true });
+    await userEvent.click(view.getByRole('button', { name: 'Resolve previous Person’s save' }));
+    await waitFor(async () => {
+      await expect(view.getByText('Completed', { exact: true })).toBeVisible();
+      await expect(view.queryByText('Playing', { exact: true })).toBeNull();
+    });
   },
 };
 

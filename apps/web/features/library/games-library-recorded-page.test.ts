@@ -98,7 +98,7 @@ test('a visitor cannot read game progress, and a foreign library read stays refu
   expect(progress.answer).toMatchObject({ status: 401, code: 'account_assertion_denied' });
   const work = progress.path.split('?')[0]!.split('/').at(-2);
   expect(await media(collection, 'visitor', [{ label: progress.label, state: 'error' }], actingSubject(progress.path))
-    .workStanding(`https://rezics.com/id/${work}`)).toEqual({ ok: false, failure: 'sign-in' });
+    .workStanding(`https://rezics.com/id/${work}`)).toEqual({ ok: false, failure: 'sign-in', status: progress.status, problem: progress.answer });
 
   const foreign = sample(collection, 'member', 'private-reader-state');
   expect(foreign.status).toBe(403);
@@ -135,7 +135,8 @@ test('a stale whole-game save keeps the other device’s recorded mark', async (
     { label: current.label, state: 'populated' },
     { label: stale.label, state: 'error' },
   ], actingSubject(current.path)).markWork(held.work, 'completed')).toEqual({
-    ok: false, failure: 'stale', current: { standing: held.standing, version: held.version }, submitted: 'completed',
+    ok: false, failure: 'stale', status: stale.status, problem: stale.answer,
+    current: { standing: held.standing, version: held.version }, submitted: 'completed',
   });
 });
 

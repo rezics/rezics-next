@@ -113,6 +113,7 @@ const en = {
   findingEpisode: insert('Finding episode {{number}}…', { number: String }),
 
   chapters: 'Chapters',
+  noChapters: 'No chapters are available.',
   volumeNumber: 'Volume',
   chapterNumber: 'Chapter',
   chapterPlace: insert('Chapter {{number}}', { number: String }),

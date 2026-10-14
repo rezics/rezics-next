@@ -300,7 +300,7 @@ export const UnreadSavedProgress: Story = {
   } } as unknown as MainClient)) },
   async play({ canvasElement }) {
     const view = within(canvasElement);
-    await waitFor(() => expect(canvasElement.querySelector('[data-pending]')).toBeNull());
+    await waitFor(() => expect(canvasElement.querySelector('[data-loading]')).toBeNull());
     await expect(await view.findByText('Unknown')).toBeVisible();
     await expect(view.queryByText('No chapter read yet')).toBeNull();
   },
@@ -314,9 +314,10 @@ export const IncompleteResume: Story = {
   } } as unknown as MainClient)) },
   async play({ canvasElement }) {
     const view = within(canvasElement);
-    await waitFor(() => expect(canvasElement.querySelector('[data-pending]')).toBeNull());
+    await waitFor(() => expect(canvasElement.querySelector('[data-loading]')).toBeNull());
     await expect(await view.findByText('Unknown')).toBeVisible();
     await expect(view.queryByText('No chapter read yet')).toBeNull();
     await expect(view.queryByRole('alert')).toBeNull();
+    await expect(view.queryByText('No chapters are available.')).toBeNull();
   },
 };

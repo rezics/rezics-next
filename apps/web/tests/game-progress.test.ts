@@ -597,7 +597,8 @@ describe('game progress tracking adapter', () => {
       const { api } = inventory(levels, options);
       const first = await api.routes(work);
       if (!first.ok || !first.data.next) throw new Error('Missing grouped continuation');
-      expect(await api.routes(work, first.data.next)).toEqual({ ok: false, failure });
+      expect(await api.routes(work, first.data.next)).toEqual({ ok: false, failure,
+        ...(failure === 'missing' ? { status: 404, problem: {} } : {}) });
     }
   });
 
@@ -682,6 +683,6 @@ describe('game progress tracking adapter', () => {
       get: async () => ({ data: null, error: { status: 403, value: {} } }),
     } }) }) } } as unknown as MainClient;
     const api = mainTrackingApi('reader', () => client).media!;
-    expect(await api.progress(part(2))).toEqual({ ok: false, failure: 'sign-in' });
+    expect(await api.progress(part(2))).toEqual({ ok: false, failure: 'sign-in', status: 403, problem: {} });
   });
 });

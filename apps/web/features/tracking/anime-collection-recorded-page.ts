@@ -1,7 +1,8 @@
 import type { CatalogueWork } from '../catalogue/work.ts';
 import type { ReadingStatus } from '../catalogue/reader-actions.tsx';
 import type { MainClient } from '../discover/types.ts';
-import { failedRead, failureOf, isOfflineError, settle, uuidOf, type Loaded, type ReadFailure } from '../feed/types.ts';
+import { failureOf, isOfflineError, settle, uuidOf, type ReadFailure } from '../feed/types.ts';
+import { type Loaded, trackingFailure } from './failure.ts';
 import { dayText, momentText } from '../library/format.ts';
 import type { CustomShelf, LibraryItem, StatusShelfItem } from '../library/types.ts';
 import { shelfCard } from '../profile/cards.ts';
@@ -75,7 +76,7 @@ type TreatyAnswer<T> = {
   data: T | null;
   error: { status: number; value: unknown } | null;
   headers?: unknown;
-  response?: { headers?: unknown };
+  response?: { status?: number; headers?: unknown };
 };
 
 export interface AnimeRefusal {
@@ -84,6 +85,7 @@ export interface AnimeRefusal {
   title: string | null;
   body: unknown;
   headers: unknown;
+  status?: number;
 }
 
 export type AnimeResumeFact =
@@ -114,14 +116,16 @@ export function problemTitle(value: unknown): string | null {
 }
 
 function refusal<T>(answer: TreatyAnswer<T>): AnimeRefusal {
-  const status = answer.error?.status ?? 503;
-  const body = answer.error?.value;
+  if (answer.error?.value instanceof Error && !answer.response) return transportRefusal(answer.error.value);
+  const status = answer.error?.status ?? answer.response?.status;
+  const body = answer.error ? answer.error.value : answer.data;
   return {
     kind: 'refusal',
-    failure: answer.error ? failureOf(status, body) : 'unavailable',
+    failure: answer.error ? failureOf(answer.error.status, body) : 'unavailable',
     title: answer.error ? problemTitle(body) : null,
     body,
     headers: answer.headers ?? answer.response?.headers,
+    ...(status === undefined ? {} : { status }),
   };
 }
 
@@ -139,7 +143,7 @@ interface ResumePage {
 
 /** A fenced completed resume names one occurrence. Any other positions window names none. */
 export function mapAnimeResume(answer: TreatyAnswer<ResumePage>): AnimeResumeFact {
-  if (answer.error || !answer.data) return refusal(answer);
+  if (answer.error || !answer.data || answer.response?.status === 202) return refusal(answer);
   const page = answer.data;
   if (page.scope !== 'resume' || page.complete !== true) return { kind: 'absent' };
   const item = page.items?.[0];
@@ -157,11 +161,11 @@ interface ProgressPage {
 }
 
 export function mapAnimeProgress(answer: TreatyAnswer<ProgressPage>, episode: AnimeEpisodeRef): AnimeProgressFact {
-  if (answer.error || !answer.data) return refusal(answer);
+  if (answer.error || !answer.data || answer.response?.status === 202) return refusal(answer);
   const page = answer.data;
   if (typeof page.completed !== 'boolean' || typeof page.version !== 'number'
     || (page.position !== null && page.position !== undefined && typeof page.position !== 'string')) {
-    return { kind: 'refusal', failure: 'unavailable', title: null, body: page, headers: answer.headers ?? answer.response?.headers };
+    return refusal(answer);
   }
   const position = page.position ?? null;
   // The loaded progress keeps an occurrence only when the answer names one.
@@ -182,11 +186,11 @@ export function mapAnimeProgress(answer: TreatyAnswer<ProgressPage>, episode: An
 interface StatusPage { work?: string; status?: string | null; version?: number; replayed?: boolean }
 
 export function mapAnimeReaderStatus(answer: TreatyAnswer<StatusPage>): AnimeStatusFact {
-  if (answer.error || !answer.data) return refusal(answer);
+  if (answer.error || !answer.data || answer.response?.status === 202) return refusal(answer);
   const page = answer.data;
   if ((page.status !== null && typeof page.status !== 'string') || typeof page.version !== 'number'
     || typeof page.replayed !== 'boolean' || !page.work) {
-    return { kind: 'refusal', failure: 'unavailable', title: null, body: page, headers: answer.headers ?? answer.response?.headers };
+    return refusal(answer);
   }
   return { kind: 'status', work: page.work, status: page.status ?? null, version: page.version, replayed: page.replayed };
 }
@@ -240,12 +244,12 @@ export function putAnimeEpisodeProgress(
 export function loadedResume(fact: AnimeResumeFact): Loaded<{ occurrence: string; label: string | null } | null> {
   if (fact.kind === 'place') return { ok: true, data: { occurrence: fact.occurrence, label: fact.label } };
   if (fact.kind === 'absent') return { ok: true, data: null };
-  return failedRead(fact.failure, fact.body, fact.headers);
+  return trackingFailure(fact.failure, fact.status, fact.body, fact.headers);
 }
 
 export function loadedProgress(fact: AnimeProgressFact): Loaded<{ completed: boolean; position: string | null; version: number }> {
   if (fact.kind === 'progress') return { ok: true, data: fact.data };
-  return failedRead(fact.failure, fact.body, fact.headers);
+  return trackingFailure(fact.failure, fact.status, fact.body, fact.headers);
 }
 
 

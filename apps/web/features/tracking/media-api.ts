@@ -1,7 +1,8 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
-import { failedRead, failureOf, isOfflineError, type Loaded, type ReadFailure, settle, uuidOf } from '../feed/types.ts';
+import { failureOf, isOfflineError, uuidOf } from '../feed/types.ts';
+import { type Loaded, type TrackingFailure, settle, trackingFailure, transportFailureOf } from './failure.ts';
 import { type EpisodeProgress, type ProgressStale, mainEpisodeApi } from './episode-api.ts';
 import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.ts';
 
@@ -10,7 +11,7 @@ import { resumeName, type ChapterRef, type Place, type RouteRef } from './media.
 // A game is read by bounded pages through all levels of its parts.
 // A read that fails is a failure rather than an empty place.
 
-export interface PositionPage { items: Place[]; next: string | null }
+export interface PositionPage { items: Place[]; next: string | null; complete?: boolean }
 
 /** Last read, and the chapter after it when that same resume read, or its one neighbour lookup, names it. */
 export interface ChapterStanding {
@@ -30,7 +31,7 @@ export interface CompletionPage { occurrences: string[]; next: string | null; co
 /** Playing or reading is `started`: one mark, named for the Work. */
 export type WorkStanding = 'not-started' | 'started' | 'completed' | 'dropped';
 export interface WorkMark { standing: WorkStanding; version: number }
-export interface WorkStale { ok: false; failure: 'stale'; current: WorkMark; submitted: WorkStanding }
+export interface WorkStale extends TrackingFailure<'stale'> { current: WorkMark; submitted: WorkStanding }
 
 export interface MediaApi {
   /** The Work's types, so the served registry can name its kind. Null when the Work is missing. */
@@ -49,14 +50,14 @@ export interface MediaApi {
   completions(structure: string, cursor?: string): Promise<Loaded<CompletionPage>>;
   progress(part: { structure: string; occurrence: string }): Promise<Loaded<EpisodeProgress>>;
   /** Writes one occurrence and, when another device wrote first, returns both sides. */
-  mark(part: { structure: string; occurrence: string }, change: { completed: boolean; position?: string | null }):
+  mark(part: { structure: string; occurrence: string }, change: { completed: boolean; position?: string | null; expectedVersion?: number }):
     Promise<Loaded<EpisodeProgress> | ProgressStale>;
   /** Whether progress is kept on parts. Main's answer, including an empty composition. */
   workParts(work: string): Promise<Loaded<boolean>>;
   /** The whole Work, when it has no parts. A Work with parts is `has-parts`, not a retry. */
-  workStanding(work: string): Promise<Loaded<WorkMark> | { ok: false; failure: 'has-parts' }>;
+  workStanding(work: string): Promise<Loaded<WorkMark> | TrackingFailure<'has-parts'>>;
   /** Writes that mark. A stale version returns both sides and does not merge them. */
-  markWork(work: string, standing: WorkStanding): Promise<Loaded<WorkMark> | WorkStale | { ok: false; failure: 'has-parts' }>;
+  markWork(work: string, standing: WorkStanding): Promise<Loaded<WorkMark> | WorkStale | TrackingFailure<'has-parts'>>;
 }
 
 /** `work_has_parts` names a Work whose progress lives on its parts. Other 409s are a moved graph or a stale write. */
@@ -74,13 +75,14 @@ const MOVED_DELAY_MS = 250;
 const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
 
 type WorkProgressBody = { parts?: boolean; standing?: WorkStanding; version?: number };
-type WorkProgressAnswer = { data: WorkProgressBody | null; error: { status: number; value: unknown } | null };
+type WorkProgressAnswer = { data: WorkProgressBody | null; error: { status: number; value: unknown } | null;
+  headers?: unknown; response?: { status?: number; headers?: unknown } };
 
 /** One progress read. A Work with parts answers immediately. A moved graph is the only 409 that restarts. */
 async function readWorkProgress(get: () => Promise<WorkProgressAnswer>): Promise<
   | { ok: true; parts: false; mark: WorkMark }
-  | { ok: true; parts: true }
-  | { ok: false; failure: ReadFailure }
+  | { ok: true; parts: true; refusal?: TrackingFailure<'has-parts'> }
+  | TrackingFailure
 > {
   for (let attempt = 0; ; attempt++) {
     let answer: WorkProgressAnswer;
@@ -91,23 +93,31 @@ async function readWorkProgress(get: () => Promise<WorkProgressAnswer>): Promise
       await wait(MOVED_DELAY_MS * 2 ** attempt);
       continue;
     }
+    const transport = transportFailureOf(answer);
+    if (transport) {
+      if (transport.failure === 'offline' || attempt === MOVED_RESTARTS) return transport;
+      await wait(MOVED_DELAY_MS * 2 ** attempt);
+      continue;
+    }
     if (answer.error && workProgressConflict(answer.error.status, answer.error.value) === 'parts') {
-      return { ok: true, parts: true };
+      return { ok: true, parts: true, refusal: trackingFailure('has-parts', answer.error.status, answer.error.value, answer.headers ?? answer.response?.headers) };
     }
     if (answer.error) {
       const failure = failureOf(answer.error.status, answer.error.value);
-      if (failure !== 'moved' && failure !== 'unavailable' || attempt === MOVED_RESTARTS) {
-        return failedRead(failure, answer.error.value);
+      const moved = answer.error.status === 409 && (answer.error.value as { code?: string } | null)?.code === 'read_basis_changed';
+      if (!moved && failure !== 'unavailable' || attempt === MOVED_RESTARTS) {
+        return trackingFailure(failure, answer.error.status, answer.error.value, answer.headers ?? answer.response?.headers);
       }
       await wait(MOVED_DELAY_MS * 2 ** attempt);
       continue;
     }
+    if (answer.response?.status === 202) return trackingFailure('unavailable', 202, answer.data, answer.headers ?? answer.response.headers);
     const data = answer.data;
     if (data?.parts === true) return { ok: true, parts: true };
     if (data?.standing && typeof data.version === 'number') {
       return { ok: true, parts: false, mark: { standing: data.standing, version: data.version } };
     }
-    if (attempt === MOVED_RESTARTS) return { ok: false, failure: 'unavailable' };
+    if (attempt === MOVED_RESTARTS) return trackingFailure('unavailable', answer.response?.status, answer.data, answer.headers ?? answer.response?.headers);
     await wait(MOVED_DELAY_MS * 2 ** attempt);
   }
 }
@@ -115,7 +125,7 @@ async function readWorkProgress(get: () => Promise<WorkProgressAnswer>): Promise
 async function restarted<T>(read: () => Promise<Loaded<T>>): Promise<Loaded<T>> {
   for (let attempt = 0; ; attempt++) {
     const answer = await read();
-    if (answer.ok || answer.failure !== 'moved' && answer.failure !== 'unavailable' || attempt === MOVED_RESTARTS) return answer;
+    if (answer.ok || answer.status === 202 || answer.failure !== 'moved' && answer.failure !== 'unavailable' || attempt === MOVED_RESTARTS) return answer;
     await wait(MOVED_DELAY_MS * 2 ** attempt);
   }
 }
@@ -235,7 +245,7 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
       if (!resumed) {
         const items = chaptersOf(read.data.items);
         return { ok: true, data: { last: null, next: null,
-          opened: { items, next: read.data.nextCursor } } };
+          opened: { items, next: read.data.nextCursor, complete: read.data.complete } } };
       }
       const item = read.data.items[0];
       if (!item) return { ok: false, failure: 'unavailable' };
@@ -245,7 +255,7 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     async positions(work, cursor) {
       const read = await positionsOf(work, { position: 'start', limit: PAGE, ...(cursor ? { cursor } : {}) });
       if (!read.ok) return read;
-      return { ok: true, data: { items: chaptersOf(read.data.items), next: read.data.nextCursor } };
+      return { ok: true, data: { items: chaptersOf(read.data.items), next: read.data.nextCursor, complete: read.data.complete } };
     },
     async completions(structure, cursor) {
       const read = await restarted(() => settle(() => main().v1.compositions({ id: uuidOf(structure) }).progress.get({
@@ -255,7 +265,7 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
         next: read.data.nextCursor, complete: read.data.complete } };
     },
     progress: part => episodes.progress(part),
-    mark: (part, change) => episodes.mark(part, change, { conflict: true }),
+    mark: (part, change) => episodes.mark(part, change, { conflict: true, expectedVersion: change.expectedVersion }),
     async workParts(work) {
       const read = await readWorkProgress(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } }));
       return read.ok ? { ok: true, data: read.parts } : read;
@@ -263,40 +273,49 @@ export function mainMediaApi(actingSubject: string, main: () => MainClient = bro
     async workStanding(work) {
       const read = await readWorkProgress(() => main().v1.works({ id: uuidOf(work) }).progress.get({ query: { actingSubject } }));
       if (!read.ok) return read;
-      return read.parts ? { ok: false, failure: 'has-parts' } : { ok: true, data: read.mark };
+      return read.parts ? read.refusal ?? { ok: false, failure: 'has-parts' } : { ok: true, data: read.mark };
     },
     async markWork(work, standing) {
       const progress = () => main().v1.works({ id: uuidOf(work) }).progress;
+      let moved: TrackingFailure = { ok: false, failure: 'moved' };
       for (let attempt = 0; attempt < 5; attempt++) {
         const current = await readWorkProgress(() => progress().get({ query: { actingSubject } }));
         if (!current.ok) return current;
-        if (current.parts) return { ok: false, failure: 'has-parts' };
+        if (current.parts) return current.refusal ?? { ok: false, failure: 'has-parts' };
         const key = commandKey();
         for (let tries = 0; tries < 3; tries++) {
           try {
-            const { data, error } = await progress().put({ actingSubject, expectedVersion: current.mark.version, standing },
+            const { data, error, response } = await progress().put({ actingSubject, expectedVersion: current.mark.version, standing },
               { headers: { 'idempotency-key': key } });
+            if (response?.status === 202) return trackingFailure('unavailable', 202, data, response.headers);
             if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
+            const transport = transportFailureOf({ error, response });
+            if (transport) {
+              if (tries === 2) return transport;
+              await wait(MOVED_DELAY_MS * 2 ** tries);
+              continue;
+            }
             if (error.status === 409) {
-              if (workProgressConflict(error.status, error.value) === 'parts') return { ok: false, failure: 'has-parts' };
+              moved = trackingFailure('moved', error.status, error.value, response?.headers);
+              if (workProgressConflict(error.status, error.value) === 'parts') return trackingFailure('has-parts', error.status, error.value, response?.headers);
               const code = (error.value as { code?: string } | null)?.code;
               if (code === 'read_basis_changed') { await wait(MOVED_DELAY_MS * 2 ** attempt); break; }
               if (code === 'stale_progress') {
                 const again = await readWorkProgress(() => progress().get({ query: { actingSubject } }));
                 if (!again.ok) return again;
-                if (again.parts) return { ok: false, failure: 'has-parts' };
-                return { ok: false, failure: 'stale', current: again.mark, submitted: standing };
+                if (again.parts) return again.refusal ?? { ok: false, failure: 'has-parts' };
+                return { ...trackingFailure('stale', error.status, error.value, response?.headers), current: again.mark, submitted: standing };
               }
-              break;
+              return trackingFailure(failureOf(error.status, error.value), error.status, error.value, response?.headers);
             }
-            if (error.status < 500 || tries === 2) return { ok: false, failure: failureOf(error.status, error.value) };
-          } catch {
-            if (tries === 2) return { ok: false, failure: 'unavailable' };
+            if (error.status < 500 || tries === 2) return trackingFailure(failureOf(error.status, error.value), error.status, error.value, response?.headers);
+          } catch (error) {
+            if (tries === 2) return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
           }
           await wait(MOVED_DELAY_MS * 2 ** tries);
         }
       }
-      return { ok: false, failure: 'moved' };
+      return moved;
     },
   };
 }

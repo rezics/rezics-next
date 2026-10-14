@@ -113,6 +113,7 @@ export default {
   chapterRead: '已讀', chapterUnread: '未讀',
   markChapterRead: '標為已讀', markChapterUnread: '標為未讀',
   noSuchChapter: '沒有這一話。',
+  noChapters: '暫無可讀章節。',
   playHeading: '你的遊玩', notPlayed: '還沒有玩過', gamePlayed: '玩過', gameCompleted: '已通關',
   markPlayed: '標為玩過', markCompleted: '標為已通關', markNotCompleted: '標為未通關',
   routesTitle: '路線',

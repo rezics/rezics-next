@@ -145,7 +145,7 @@ test('visitor private progress stays the recorded sign-in refusal', async () => 
   const progress = await animeTwoDeviceEpisodes(actingSubject!, main).progress(
     episodeOf(refused.path),
   );
-  expect(progress).toEqual({ ok: false, failure: 'sign-in' });
+  expect(progress).toEqual({ ok: false, failure: 'sign-in', status: refused.status, problem: refused.answer });
   expect(refused.status).toBe(401);
   expect(problem).toMatchObject({ status: 401, code: 'account_assertion_denied' });
   const write = recordedSample('visitor', 'episode-write-sign-in-required');
@@ -192,7 +192,7 @@ test('foreign episode progress stays the recorded authority refusal', async () =
   const progress = await animeTwoDeviceEpisodes(actingSubject, main).progress(
     episodeOf(refused.path),
   );
-  expect(progress).toEqual({ ok: false, failure: 'sign-in' });
+  expect(progress).toEqual({ ok: false, failure: 'sign-in', status: refused.status, problem: refused.answer });
   expect(refused.status).toBe(403);
   expect(problem).toMatchObject({
     status: 403,
@@ -309,7 +309,7 @@ for (const persona of signedIn) {
         replayed: false,
       });
     } else {
-      expect(written).toEqual({ ok: false, failure: 'moved' });
+      expect(written).toEqual({ ok: false, failure: 'moved', status: race.status, problem: race.answer });
       expect(race.status).toBe(409);
       expect(race.answer).toMatchObject({
         code: 'stale_progress',

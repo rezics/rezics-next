@@ -325,7 +325,8 @@ describe('Main behind the episode api', () => {
 
   test('stale answers are reported after a few tries, not retried forever', async () => {
     const { api, asked } = main({ put: () => ({ data: null, error: { status: 409, value: { code: 'stale_progress' } } }) });
-    expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'moved' });
+    expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'moved',
+      status: 409, problem: { code: 'stale_progress' } });
     expect(asked.puts).toHaveLength(5);
   });
 
@@ -341,7 +342,8 @@ describe('Main behind the episode api', () => {
 
   test('a write refused for what it asks is not sent again', async () => {
     const { api, asked } = main({ put: () => ({ data: null, error: { status: 404, value: {} } }) });
-    expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'missing' });
+    expect(await api.mark({ structure, occurrence: at('e17') }, { completed: true })).toEqual({ ok: false, failure: 'missing',
+      status: 404, problem: {} });
     expect(asked.puts).toHaveLength(1);
   });
 

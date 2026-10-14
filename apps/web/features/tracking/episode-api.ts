@@ -1,7 +1,8 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { commandKey } from '../feed/api.ts';
-import { failureOf, type Loaded, settle, uuidOf } from '../feed/types.ts';
+import { failureOf, isOfflineError, uuidOf } from '../feed/types.ts';
+import { type Loaded, type TrackingFailure, settle, trackingFailure, transportFailureOf } from './failure.ts';
 import {
   episodeProgressBody, loadedProgress, loadedResume, putAnimeEpisodeProgress, readAnimeEpisodeProgress,
   readAnimeEpisodeResume,
@@ -27,9 +28,7 @@ export interface EpisodeProgress { completed: boolean; position: string | null; 
  * Another device wrote this occurrence first. `submitted` is the change this device still means to
  * make; nothing is merged until the reader chooses.
  */
-export interface ProgressStale {
-  ok: false;
-  failure: 'stale';
+export interface ProgressStale extends TrackingFailure<'stale'> {
   current: EpisodeProgress;
   submitted: { completed: boolean; position: string | null };
 }
@@ -55,7 +54,7 @@ export interface EpisodeApi {
    * instead, so the reader can keep their change or take the other device's.
    */
   mark(episode: EpisodeRef, change: { completed: boolean; position?: string | null },
-    options?: { conflict?: boolean }): Promise<Loaded<EpisodeProgress> | ProgressStale>;
+    options?: { conflict?: boolean; expectedVersion?: number }): Promise<Loaded<EpisodeProgress> | ProgressStale>;
 }
 
 /**
@@ -75,7 +74,7 @@ const wait = (ms: number) => new Promise(done => setTimeout(done, ms));
 async function restarted<T>(read: () => Promise<Loaded<T>>): Promise<Loaded<T>> {
   for (let attempt = 0; ; attempt++) {
     const answer = await read();
-    if (answer.ok || answer.failure !== 'moved' && answer.failure !== 'unavailable' || attempt === MOVED_RESTARTS) return answer;
+    if (answer.ok || answer.status === 202 || answer.failure !== 'moved' && answer.failure !== 'unavailable' || attempt === MOVED_RESTARTS) return answer;
     await wait(MOVED_DELAY_MS * 2 ** attempt);
   }
 }
@@ -107,39 +106,49 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
     },
     progress: read,
     async mark(episode, change, options) {
+      let moved: TrackingFailure = { ok: false, failure: 'moved' };
       for (let attempt = 0; attempt < MARK_ATTEMPTS; attempt++) {
         const current = await read(episode);
         if (!current.ok) return current;
         const body = episodeProgressBody({
-          actingSubject, completed: change.completed, expectedVersion: current.data.version,
+          actingSubject, completed: change.completed, expectedVersion: options?.expectedVersion ?? current.data.version,
           position: change.position === undefined ? current.data.position : change.position,
         });
         // One key per intent: a write Main could not answer is sent again as the same command, and replays.
         const key = commandKey();
         for (let tries = 0; tries < SEND_ATTEMPTS; tries++) {
           try {
-            const { data, error } = await putAnimeEpisodeProgress(main(), episode, body, key);
+            const { data, error, response } = await putAnimeEpisodeProgress(main(), episode, body, key);
+            if (response?.status === 202) return trackingFailure('unavailable', 202, data, response.headers);
             if (!error) return data ? { ok: true, data } : { ok: false, failure: 'unavailable' };
+            const transport = transportFailureOf({ error, response });
+            if (transport) {
+              if (tries === SEND_ATTEMPTS - 1) return transport;
+              await wait(MOVED_DELAY_MS * 2 ** tries);
+              continue;
+            }
             if (error.status === 409) {
+              moved = trackingFailure('moved', error.status, error.value, response?.headers);
               const code = (error.value as { code?: string } | null)?.code;
               // Main moving under the write asks for a pause; another device's write asks to read again.
               if (code === 'read_basis_changed') await wait(MOVED_DELAY_MS * 2 ** attempt);
               else if (options?.conflict && code === 'stale_progress') {
                 const again = await read(episode);
                 if (!again.ok) return again;
-                return { ok: false, failure: 'stale', current: again.data,
+                return { ...trackingFailure('stale', error.status, error.value, response?.headers), current: again.data,
                   submitted: { completed: change.completed, position: body.position } };
               }
+              else if (code !== 'stale_progress') return trackingFailure(failureOf(error.status, error.value), error.status, error.value, response?.headers);
               break;
             }
-            if (error.status < 500 || tries === SEND_ATTEMPTS - 1) return { ok: false, failure: failureOf(error.status, error.value) };
-          } catch {
-            if (tries === SEND_ATTEMPTS - 1) return { ok: false, failure: 'unavailable' };
+            if (error.status < 500 || tries === SEND_ATTEMPTS - 1) return trackingFailure(failureOf(error.status, error.value), error.status, error.value, response?.headers);
+          } catch (error) {
+            if (tries === SEND_ATTEMPTS - 1) return { ok: false, failure: isOfflineError(error) ? 'offline' : 'unavailable' };
           }
           await wait(MOVED_DELAY_MS * 2 ** tries);
         }
       }
-      return { ok: false, failure: 'moved' };
+      return moved;
     },
   };
 }

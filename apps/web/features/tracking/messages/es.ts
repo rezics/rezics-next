@@ -116,6 +116,7 @@ export default {
   chapterRead: 'Leído', chapterUnread: 'No leído',
   markChapterRead: 'Marcar como leído', markChapterUnread: 'Marcar como no leído',
   noSuchChapter: 'Ese capítulo no existe.',
+  noChapters: 'No hay capítulos disponibles.',
   playHeading: 'Tu partida', notPlayed: 'Aún sin jugar', gamePlayed: 'Jugado', gameCompleted: 'Completado',
   markPlayed: 'Marcar como jugado', markCompleted: 'Marcar como completado', markNotCompleted: 'Marcar como no completado',
   routesTitle: 'Rutas',

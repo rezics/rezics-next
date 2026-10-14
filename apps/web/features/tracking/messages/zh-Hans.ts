@@ -113,6 +113,7 @@ export default {
   chapterRead: '已读', chapterUnread: '未读',
   markChapterRead: '标为已读', markChapterUnread: '标为未读',
   noSuchChapter: '没有这一话。',
+  noChapters: '暂无可读章节。',
   playHeading: '你的游玩', notPlayed: '还没有玩过', gamePlayed: '玩过', gameCompleted: '已通关',
   markPlayed: '标为玩过', markCompleted: '标为已通关', markNotCompleted: '标为未通关',
   routesTitle: '路线',

@@ -113,6 +113,7 @@ export default {
   chapterRead: '読了', chapterUnread: '未読',
   markChapterRead: '読了にする', markChapterUnread: '未読に戻す',
   noSuchChapter: 'その章はありません。',
+  noChapters: '利用できる章はありません。',
   playHeading: 'プレイ', notPlayed: 'まだプレイしていない', gamePlayed: 'プレイ済み', gameCompleted: 'クリア',
   markPlayed: 'プレイ済みにする', markCompleted: 'クリアにする', markNotCompleted: 'クリアを取り消す',
   routesTitle: 'ルート',

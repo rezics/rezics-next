@@ -99,14 +99,16 @@ test('the owner’s recipe progress keeps its compare-and-set version, replay an
     { label: 'progress-empty', state: 'populated' },
     { label: 'progress-stale', state: 'error' },
   ])).media!.markWork(work, 'completed');
-  expect(stale).toEqual({ ok: false, failure: 'stale', current: { standing: 'not-started', version: 0 }, submitted: 'completed' });
+  const refused = sample('owner', 'progress-stale');
+  expect(stale).toEqual({ ok: false, failure: 'stale', status: refused.status, problem: refused.answer,
+    current: { standing: 'not-started', version: 0 }, submitted: 'completed' });
 });
 
 test('a visitor and another Person are refused the owner’s private recipe tracking', async () => {
   const visitor = sample('visitor', 'progress-authentication-required');
   const visitorStanding = await mainTrackingApi(actingSubject(visitor.path), () => client('visitor', [
     { label: visitor.label, state: 'error' }])).media!.workStanding(workId(visitor.path));
-  expect(visitorStanding).toEqual({ ok: false, failure: 'sign-in' });
+  expect(visitorStanding).toEqual({ ok: false, failure: 'sign-in', status: visitor.status, problem: visitor.answer });
 
   for (const persona of ['stranger', 'member', 'moderator', 'operator'] as const) {
     const denied = sample(persona, 'peer-progress-summary-denied');
