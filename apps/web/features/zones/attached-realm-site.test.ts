@@ -3,19 +3,16 @@ import '../../tests/support/official-package-fixture.ts';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
+import homes from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { addressKey, spaceHref } from '../address/path.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
-import type { ZoneBrowsePage, ZonePresentationRead } from '../realm/types.ts';
+import type { RealmHeader, ZoneBrowsePage, ZonePresentationRead } from '../realm/types.ts';
+import { idOf } from '../realm/route.ts';
 
-const record = manga as AnswerRecord;
-// These identities belong together to the canonical-key recording.
-const realm = '01a137cb-bd72-774d-9b57-e048179e856d';
-const zone = '777d533e-408a-8f2c-8aa7-47a56f2df0a4';
-const siteKey = '1Cg1BFuSog8nCaEwJY4TrN';
-const realmSpace = '01a137cb-bc52-74bb-b11e-91c466ef45fe';
+let record = manga as AnswerRecord;
 let persona: AnswerPersona = 'visitor';
 const host = { ...(await import('next/headers')) };
 void mock.module('next/headers', () => ({ ...host,
@@ -29,7 +26,10 @@ let fetcher: typeof fetch;
 void mock.module('../api/main.ts', () => ({ ...api,
   mainApiWithToken: (token: string | undefined) => api.mainApiWithToken(token, { fetcher }),
 }));
-const { ZoneSiteRoute } = await import('./site-route.tsx');
+const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
+const { SiteHomeRoute } = await import('../realm/routes.tsx');
+const { ZoneHome } = await import('./zone-home.tsx');
+const { ZoneHomeContent } = await import('../zone-editor/home-content.tsx');
 const { RealmFrame } = await import('../realm/realm-page.tsx');
 const { ZoneBrowse } = await import('./browse.tsx');
 const { ZoneFrame } = await import('./zone-frame.tsx');
@@ -46,6 +46,27 @@ function sample(label: string) {
   return found;
 }
 
+function replay(labels: string[]) {
+  const transport = recordedFetch(record, persona, labels.map(label => ({ label,
+    state: sample(label).status >= 400 ? 'error' : 'populated' })));
+  disposals.push(transport.dispose);
+  const requests: { path: string; query: Record<string, string>; authorization: string | null }[] = [];
+  const gaps: string[] = [];
+  fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    requests.push({ path: url.pathname, query: Object.fromEntries(url.searchParams),
+      authorization: request.headers.get('authorization') });
+    try { return await transport.fetcher(input, init); }
+    catch (error) { gaps.push(String(error)); throw error; }
+  }) as typeof fetch;
+  const escaped = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(fetcher, {
+    preconnect: globalThis.fetch.preconnect,
+  }));
+  disposals.push(() => escaped.mockRestore());
+  return { requests, gaps };
+}
+
 function find(node: ReactNode, type: unknown): ReactElement<Record<string, unknown>> | null {
   if (Array.isArray(node)) return node.map(child => find(child, type)).find(Boolean) ?? null;
   if (!isValidElement<{ children?: ReactNode }>(node)) return null;
@@ -55,26 +76,15 @@ function find(node: ReactNode, type: unknown): ReactElement<Record<string, unkno
 for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
   test(`${who}: a Zone-only address selects the attached Realm browse chain and canonical site links`, async () => {
     persona = who;
+    record = manga as AnswerRecord;
+    const realm = new URL(sample('frame-realm-header').path, 'https://recorded.invalid').pathname.split('/')[3]!;
+    const zone = new URL(sample('frame-presentation').path, 'https://recorded.invalid').pathname.split('/')[3]!;
+    const siteKey = new URL(sample('frame-address').path, 'https://recorded.invalid').searchParams.get('key')!;
+    const realmSpace = idOf((sample('frame-realm-header').answer as RealmHeader).space)!;
     const labels = ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header',
       'frame-facets', 'page-browse-default', ...(who === 'visitor' ? [] : ['frame-session-agent',
         'frame-person-preferences', 'frame-joining', 'frame-follow', 'frame-platform-access'])];
-    const replay = recordedFetch(record, who, labels.map(label => ({ label,
-      state: sample(label).status >= 400 ? 'error' : 'populated' })));
-    disposals.push(replay.dispose);
-    const requests: { path: string; query: Record<string, string>; authorization: string | null }[] = [];
-    const gaps: string[] = [];
-    fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
-      const request = new Request(input, init);
-      const url = new URL(request.url);
-      requests.push({ path: url.pathname, query: Object.fromEntries(url.searchParams),
-        authorization: request.headers.get('authorization') });
-      try { return await replay.fetcher(input, init); }
-      catch (error) { gaps.push(String(error)); throw error; }
-    }) as typeof fetch;
-    const escaped = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(fetcher, {
-      preconnect: globalThis.fetch.preconnect,
-    }));
-    disposals.push(() => escaped.mockRestore());
+    const { requests, gaps } = replay(labels);
     const presentation = sample('frame-presentation').answer as ZonePresentationRead;
     expect(presentation.address).toMatchObject({ prefix: '/z/' });
     const siteAddress = { ...presentation.address!, prefix: '/z/' as const };
@@ -123,4 +133,49 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
     expect(requests.findIndex(request => request.path.endsWith('/routes')))
       .toBeLessThan(requests.findIndex(request => request.path.endsWith('/modules/browse')));
   });
+
+  for (const branch of ['published', 'empty'] as const) {
+    test(`${who}: the published ${branch} home selects its recorded Realm or standalone frame`, async () => {
+      persona = who;
+      record = homes as AnswerRecord;
+      const prefix = `frame-${branch}`;
+      const labels = [`${prefix}-space-address`, `${prefix}-presentation`, ...(who === 'visitor' ? []
+        : ['session-agent', 'person-preferences'].map(name => `${prefix}-${name}`)), ...(branch === 'empty' ? []
+          : [`${prefix}-realm-header`, `${prefix}-facets`, 'frame-empty-browse-counts', ...(who === 'visitor' ? []
+            : ['joining', 'follow', 'platform-access'].map(name => `${prefix}-${name}`))])];
+      const { requests, gaps } = replay(labels);
+      const presentation = sample(`${prefix}-presentation`).answer as ZonePresentationRead;
+      const siteKey = new URL(sample(`${prefix}-space-address`).path, 'https://recorded.invalid').searchParams.get('key')!;
+      const page = await ZoneSiteRoute({ params: Promise.resolve({ locale: 'en', space: siteKey }),
+        searchParams: Promise.resolve({}) });
+      expect(isValidElement(page)).toBe(true);
+      const frame = page as ReactElement<{ view: RealmView; children: ReactNode; zone: { realm: string | null } }>;
+      if (branch === 'empty') {
+        expect(presentation.realm).toBeNull();
+        expect(frame.type).toBe(StandaloneZoneSiteFrame);
+        expect(frame.props.zone.realm).toBeNull();
+        expect(requests.some(request => request.path.startsWith('/v1/realms/'))).toBe(false);
+      } else {
+        const realm = new URL(sample(`${prefix}-realm-header`).path, 'https://recorded.invalid').pathname.split('/')[3]!;
+        expect(presentation.realm).toBe(`https://rezics.com/id/${realm}`);
+        expect(frame.type).toBe(RealmFrame);
+        expect(frame.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
+        expect(frame.props.view.context.realm).toBe(realm);
+        expect(frame.props.view.publication).toEqual(presentation);
+        expect(find(frame.props.children, ZoneHomeContent)?.props.page).toEqual(presentation.home);
+        const home = await SiteHomeRoute({ params: Promise.resolve({ locale: 'en', realm: siteKey }),
+          searchParams: Promise.resolve({}) }) as ReactElement<{ view: RealmView; children: ReactNode }>;
+        expect(home.type).toBe(RealmFrame);
+        expect(home.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
+        expect(find(home.props.children, ZoneHome)).not.toBeNull();
+        // The two Zone presentations share this Realm; its existing recorded count read is exact.
+        expect(requests.filter(request => request.path.endsWith('/modules/browse'))).toEqual([
+          { path: `/v1/realms/${realm}/modules/browse`, query: { limit: '1' }, authorization: null },
+        ]);
+        expect(requests.filter(request => request.path === `/v1/realms/${realm}`)
+          .every(request => request.authorization === null && Object.keys(request.query).length === 0)).toBe(true);
+      }
+      expect(gaps).toEqual([]);
+    });
+  }
 }

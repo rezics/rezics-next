@@ -163,7 +163,7 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
       }
       const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
       let realm = idOf(resolved.data.capabilities?.realm ?? '');
-      const attached = surface === 'site' && zoneId && !realm;
+      const attached = zoneId && (surface === 'site' || !realm);
       if (attached) {
         const publication = await readPublication(zoneId);
         if (!publication.ok) return publication.failure === 'missing' ? { kind: 'missing' }
@@ -202,8 +202,11 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
         const fallback = await privateRealm(ref, locale, resolved.data);
         return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
       }
+      const publication = await readPublication(zone);
+      if (!publication.ok) return publication.failure === 'missing' ? { kind: 'missing' }
+        : { kind: 'unavailable', failure: publication.failure, ...(publication.reference ? { reference: publication.reference } : {}) };
       return { kind: 'site', address: resolved.data, zone,
-        realm: idOf(resolved.data.capabilities?.realm ?? '') };
+        realm: idOf(publication.data.realm ?? '') };
     },
   };
 }
@@ -249,7 +252,7 @@ export const readRealmZone = cache(async (realm: string): Promise<RealmFrameRead
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
 export const resolveSite = cache(async (ref: string, locale: UiLocale, fresh = false): Promise<SiteResolution> => {
   if (!fresh && (await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
-  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveSite(ref, locale, fresh);
+  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader, readCompletePresentation } }).resolveSite(ref, locale, fresh);
 });
 
 export const readPresentation = cache(async (zone: string, after?: string): Promise<RealmFrameRead<ZonePresentationRead>> => {

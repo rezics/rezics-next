@@ -84,10 +84,7 @@ export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps):
   if (resolved.kind === 'join')
     return { title: resolved.page.name.value, robots: { index: false }, referrer: 'no-referrer' };
   if (resolved.kind !== 'site') return metadata;
-  if (!resolved.realm) {
-    const presentation = await readCompletePresentation(resolved.zone);
-    if (!presentation.ok || !presentation.data.realm) return metadata;
-  }
+  if (!resolved.realm) return metadata;
   const realm = await resolveRealm(space, locale, 'site');
   if (realm.kind === 'join')
     return { title: realm.page.name.value, robots: { index: false }, referrer: 'no-referrer' };
@@ -191,10 +188,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       reference={resolved.reference} />;
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
-  if (!resolved.realm) {
-    const presentation = await readCompletePresentation(resolved.zone);
-    if (!presentation.ok || !presentation.data.realm) return standaloneSite(resolved, locale, path, search);
-  }
+  if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
   const communityProps = {
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),

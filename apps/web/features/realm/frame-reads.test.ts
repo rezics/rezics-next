@@ -5,11 +5,13 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { readPublishedRealmHeader, realmFrameReads } from './read.ts';
+import { idOf } from './route.ts';
+import type { RealmHeader } from './types.ts';
 
 const record = manga as AnswerRecord;
-const realm = '01a137cb-bd72-774d-9b57-e048179e856d';
-const zone = '777d533e-408a-8f2c-8aa7-47a56f2df0a4';
-const siteKey = '1Cg1BFuSog8nCaEwJY4TrN';
+const realm = new URL(sample('visitor', 'frame-realm-header').path, 'https://recorded.invalid').pathname.split('/')[3]!;
+const zone = new URL(sample('visitor', 'frame-presentation').path, 'https://recorded.invalid').pathname.split('/')[3]!;
+const siteKey = new URL(sample('visitor', 'frame-address').path, 'https://recorded.invalid').searchParams.get('key')!;
 const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 
@@ -63,10 +65,12 @@ for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'o
     expect<unknown>(header).toEqual({ ok: true, data: sample(persona, 'frame-realm-header').answer });
     expect<unknown>(facets).toEqual({ ok: true, data: sample(persona, 'frame-facets').answer });
     expect<unknown>(address).toEqual({ kind: 'resolved', data: sample(persona, 'frame-address').answer });
-    // A site with no Realm capability remains a site; it does not invent a Realm or private fallback.
+    // The published attachment owns the Realm selection, independently of address capabilities.
     expect<unknown>(await reads.resolveSite(siteKey, 'en')).toEqual({ kind: 'site',
-      address: sample(persona, 'frame-address').answer, zone, realm: null });
-    expect(await reads.resolveRealm(siteKey, 'en')).toEqual({ kind: 'missing' });
+      address: sample(persona, 'frame-address').answer, zone, realm });
+    const realmHeader = sample(persona, 'frame-realm-header').answer as RealmHeader;
+    expect<unknown>(await reads.resolveRealm(siteKey, 'en')).toEqual({ kind: 'realm', realm,
+      ref: idOf(realmHeader.space), header: realmHeader, zone: { id: zone, segment: null } });
     expect<unknown>(await reads.readCompletePresentation(zone)).toEqual({ ok: true,
       data: sample(persona, 'frame-presentation').answer });
     const refused = await reads.readZoneRoute(zone, 'browse');
@@ -77,10 +81,11 @@ for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'o
       { path: `/v1/facets`, query: {}, authorization: null },
       ...Array.from({ length: 3 }, () => ({ path: `/v1/addresses/resolve`,
         query: { scope: 'space', key: siteKey }, authorization: null })),
+      { path: `/v1/realms/${realm}`, query: {}, authorization: null },
     ]);
     expect(personal.requests).toEqual([
-      { path: `/v1/zones/${zone}/presentation`, query: actor ? { actingSubject: actor } : {},
-        authorization: actor ? `Bearer recorded-${persona}` : null },
+      ...Array.from({ length: 3 }, () => ({ path: `/v1/zones/${zone}/presentation`, query: actor ? { actingSubject: actor } : {},
+        authorization: actor ? `Bearer recorded-${persona}` : null })),
       { path: `/v1/zones/${zone}/routes`, query: { ...(actor ? { actingSubject: actor } : {}), path: 'browse' },
         authorization: actor ? `Bearer recorded-${persona}` : null },
     ]);

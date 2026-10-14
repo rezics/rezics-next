@@ -200,7 +200,7 @@ export function SiteHomeRoute(props: RealmRouteProps, loadView?: typeof loadReal
             <CommunitySetupChecklist
               realm={view.realm.realm}
               actor={view.reader.actingSubject}
-              path={spaceHref(view.context.ref, 'community')}
+              path={spaceHref(view.realm.ref, 'community')}
               locale={view.context.locale}
               rules={Boolean(view.realm.header.rules?.length)}
               icon={view.realm.header.icon.kind === 'image'}
