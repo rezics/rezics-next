@@ -172,6 +172,11 @@ test.each(runtimeEntries)('image runtime closure follows pinned transitive impor
   }
   expect(readFileSync(join(options.context, 'runtime-adapters/runtime-package.json'), 'utf8')).toBe('{"pinned":true}');
   expect(readFileSync(join(options.context, 'runtime-workspaces.txt'), 'utf8')).toContain('@test/imported');
+  for (const path of ['services/main/.env.production', 'services/main/src/index.test.ts',
+    'services/main/node_modules/private/index.ts', 'services/main/fixtures/private.json',
+    'packages/dev/src/index.ts', 'apps/frontend/src/index.ts']) {
+    expect(existsSync(join(options.context, path)), path).toBe(false);
+  }
 });
 
 test.each(['./missing.ts', './index.test.ts', '../.env.production', './../../../outside.ts']) (
@@ -192,6 +197,28 @@ test('image runtime closure refuses a package absent from production dependency 
   write(options.repository, 'services/main/src/index.ts', "import 'missing-package/subpath';");
   git(options.repository, 'add', '--all');
   git(options.repository, 'commit', '--quiet', '-m', 'Missing production dependency');
+  await expect(prepareImageContext(options.context, { ...options, revision: 'HEAD' }))
+    .rejects.toThrow('Unresolved production runtime dependency');
+});
+
+test('image runtime closure admits hoisted production dependencies and refuses locked development packages', async () => {
+  const options = fixture();
+  write(options.repository, 'packages/direct/package.json', JSON.stringify({
+    name: '@test/direct', dependencies: { producer: '1.0.0' },
+    devDependencies: { development: '1.0.0' },
+  }));
+  write(options.repository, 'yarn.lock', JSON.stringify({
+    'producer@npm:1.0.0': { dependencies: { transitive: 'npm:^1.0.0' } },
+    'transitive@npm:^1.0.0, transitive@npm:1.0.0': {},
+    'development@npm:1.0.0': {},
+  }));
+  write(options.repository, 'services/main/src/index.ts', "import 'transitive/subpath';");
+  git(options.repository, 'add', '--all');
+  git(options.repository, 'commit', '--quiet', '-m', 'Hoisted production import');
+  await prepareImageContext(options.context, { ...options, revision: 'HEAD' });
+  write(options.repository, 'services/main/src/index.ts', "import 'development';");
+  git(options.repository, 'add', '--all');
+  git(options.repository, 'commit', '--quiet', '-m', 'Development import');
   await expect(prepareImageContext(options.context, { ...options, revision: 'HEAD' }))
     .rejects.toThrow('Unresolved production runtime dependency');
 });
