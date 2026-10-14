@@ -4,6 +4,10 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import type { StructureProfileRegistration } from '../structure/profiles.ts';
 import { checkOccurrenceQualifier, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
 import type { PlacementState } from '../structure/graph.ts';
+import { checkExactInstructionSelection } from '../structure/selection.ts';
+import { canReadContentTarget, ContentDraftUnavailable, resolveContentTarget } from '../content-publication/draft.ts';
+import { CompositionUnavailable } from '../structure/graph.ts';
+import type { DocumentSnapshot } from '@rezics/document';
 
 const RECIPE_PROFILE = 'https://rezics.com/definition/recipe-structure-v1';
 
@@ -157,16 +161,72 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   editPermission: 'work:edit',
   editAction: 'recipe.edit',
   receiptFamily: 'structure-command',
+  targetPattern: /^(?:https:\/\/rezics\.com\/id\/|urn:rezics:media:asset:)[0-9a-f-]{36}$/,
+  async authorizeTarget(authority) {
+    if (!authority.environment) return false;
+    if (authority.target.startsWith('urn:rezics:media:asset:')) {
+      if (!authority.targetReader || !await authority.access.canManageMedia?.(authority.principal, authority.actingSubject)) return false;
+      return authority.targetReader(async session => {
+        const asset = await session.deps.media?.store.readAsset(authority.target.slice('urn:rezics:media:asset:'.length));
+        return asset?.owner === authority.actingSubject;
+      });
+    }
+    try {
+      const target = await resolveContentTarget(authority.environment, authority.target);
+      return await canReadContentTarget(authority.environment, authority.access, authority.principal,
+        authority.actingSubject, authority.target, target);
+    } catch (error) {
+      if (error instanceof ContentDraftUnavailable) return false;
+      throw error;
+    }
+  },
+  async validateSelection(reader, target, selection) {
+    if (selection.mode !== 'fixed-revision' || !selection.selector) return;
+    const selector = checkExactInstructionSelection(target, selection.revision, selection.selector);
+    await reader(async session => {
+      const exact = (await session.deps.content?.readExactBatch([selector.revision], async ids => new Set(ids)))?.[0];
+      const resource = selector.grain === 'representation'
+        ? `https://rezics.com/id/${target.slice('urn:rezics:media:asset:'.length)}` : target;
+      if (exact?.status !== 'available' || exact.reference.resourceId !== resource
+        || selector.grain === 'content' && exact.reference.variantId !== selector.variantId) {
+        throw new CompositionUnavailable('Instruction selection is unavailable');
+      }
+      if (selector.grain === 'content' && selector.block) {
+        const document = exact.body.document as DocumentSnapshot | undefined;
+        const block = document?.doc.content?.find(node => node.attrs?.id === selector.block);
+        if (block?.type !== 'extensionBlock' || block.attrs?.definition !== 'https://rezics.com/definition/procedure-v1') {
+          throw new CompositionUnavailable('Instruction procedure block is unavailable');
+        }
+      }
+      if (selector.grain === 'representation') {
+        const representations = exact.body.representations as { id: string }[] | undefined;
+        if (!representations?.some(item => item.id === selector.representation)) {
+          throw new CompositionUnavailable('Instruction representation is unavailable');
+        }
+      }
+    });
+  },
   catalogTargetTypes: ['https://schema.org/Recipe', 'https://schema.org/HowToStep',
     'https://schema.org/HowToSection', 'https://schema.org/Thing'],
-  roles: ['group', 'ingredient', 'step', 'equipment'],
-  targetRoles: [],
-  optionalTargetRoles: ['ingredient', 'equipment'],
-  selectionRequiredRoles: [],
+  roles: ['group', 'ingredient', 'step', 'instruction', 'equipment'],
+  targetRoles: ['instruction'],
+  optionalTargetRoles: ['ingredient', 'equipment', 'step'],
+  selectionRequiredRoles: ['instruction'],
+  selectionOptionalRoles: ['step'],
+  checkOccurrence(record) {
+    if (record.role !== 'instruction' && record.role !== 'step') return;
+    if (record.target) {
+      if (record.qualifier || record.selection?.mode !== 'fixed-revision') {
+        throw new InvalidStructureObject('adopted instructions require an exact selection and no text qualifier');
+      }
+      try { checkExactInstructionSelection(record.target, record.selection.revision, record.selection.selector); }
+      catch (error) { throw new InvalidStructureObject((error as Error).message); }
+    } else if (!record.qualifier) throw new InvalidStructureObject('instructions require an admitted authored form');
+  },
   measures: true,
   qualifiers: {
     ingredient: { type: 'ingredient-line', required: true },
-    step: { type: 'recipe-step', required: true },
+    step: { type: 'recipe-step', required: false },
   },
   projectQualifier: project,
   hydrateQualifier: hydrate,

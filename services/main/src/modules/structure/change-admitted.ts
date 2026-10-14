@@ -133,7 +133,7 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
   const digest = input.newWork
     ? chapterCreateDigest(input.structure, input.expectedHead, input.operations, input.newWork)
     : compositionChangeDigest(input.structure, input.expectedHead, input.operations, profile.id);
-  const targets = [...new Set(input.operations.flatMap(operation => operation.op === 'insert'
+  const targets = [...new Set(input.operations.flatMap(operation => (operation.op === 'insert' || operation.op === 'update')
     && operation.target && operation.target !== input.newWork?.work
     && !isCatalogTarget(profile, operation.target) ? [operation.target] : []))];
   const result = await admitted(env, account, access, request, { owner: header.owner, profile,
@@ -148,6 +148,11 @@ export async function changeAdmittedComposition(env: WorkActivationEnvironment, 
       if (!await canReadStructureTarget(profile, { environment: env, access, principal,
         actingSubject: input.actingSubject, target, targetReader: reader })) {
         throw new CompositionUnavailable('Structure target is unavailable');
+      }
+    }
+    for (const operation of input.operations) {
+      if ((operation.op === 'insert' || operation.op === 'update') && operation.target && operation.selection) {
+        await profile.validateSelection?.(reader, operation.target, operation.selection);
       }
     }
     return changeComposition(env, { admission, structure: input.structure,
@@ -167,8 +172,8 @@ export async function changeAdmittedStructureMeasures(env: WorkActivationEnviron
     expectedHead: string; measures: readonly RecipeMeasure[]; actingSubject: string;
     idempotencyKey: string }) {
   const { header, profile } = await structureOwner(env, input.structure);
-  if (profile.id !== 'recipe-composition') {
-    throw new InvalidCompositionChange('measures require a Recipe Structure');
+  if (!profile.measures) {
+    throw new InvalidCompositionChange('measures require a profile that admits them');
   }
   const digest = structureMeasureDigest(input.structure, input.expectedHead, input.measures);
   return admitted(env, account, access, request, { owner: header.owner, profile,

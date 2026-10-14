@@ -50,7 +50,7 @@ export type TargetReadSession = Pick<WorkReadSession, 'query' | 'checkDeadline' 
   viewer?: Viewer;
   deps: Pick<WorkReadSession['deps'], 'environment'>
     & Partial<Pick<WorkReadSession['deps'], 'account' | 'governance'
-      | 'media' | 'mediaAccess' | 'contextSelections'>>
+      | 'media' | 'mediaAccess' | 'contextSelections' | 'content'>>
     & { access?: Partial<Pick<WorkReadSession['deps']['access'], 'realmReadProof'
       | 'canReadWork' | 'canReadSemanticResource'>> & { client?: PoolClient } };
 };

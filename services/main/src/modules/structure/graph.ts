@@ -3,6 +3,7 @@ import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { STRUCTURE_LIMITS, type OccurrenceRecord, type OrderEntry } from './format.ts';
 import type { OccurrenceRole, StructureProfile } from './format.ts';
+import type { ExactInstructionSelector } from './selection.ts';
 import { isContainerRole, structureProfileFor, structureProfileForGraph } from './profiles.ts';
 
 // Bounded current-graph reads for Book compositions. Every read names the
@@ -65,7 +66,8 @@ export function placementIri(generation: string, occurrence: string): string {
   return `urn:rezics:placement:${createHash('sha256').update(`${generation}\0${occurrence}`).digest('hex')}`;
 }
 
-export type Selection = { mode: 'follow-context' } | { mode: 'fixed-revision'; revision: string };
+export type Selection = { mode: 'follow-context' } | { mode: 'fixed-revision'; revision: string;
+  selector?: ExactInstructionSelector };
 export interface Label { value: string; language: string }
 
 /** One occurrence use in the selected generation, active or tombstoned. */
@@ -178,7 +180,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
     : `?placement rv:orderSegment ${iri(selector.segment)} .`;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     SELECT ?placement ?occurrence ?type ?segment ?parent ?segmentKey ?orderKey ?role ?label
-      ?item ?qualifierNode ?mode ?pinned ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
+      ?item ?qualifierNode ?mode ?pinned ?selector ?sourceKey ?introducedBy ?removedBy ?lastParent WHERE {
       GRAPH ${iri(GRAPHS.current)} {
         ${scope}
         ?placement rv:generation ${iri(generation)} ; rv:occurrence ?occurrence ; a ?type ;
@@ -192,6 +194,7 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
         OPTIONAL { ?placement rv:qualifier ?qualifierNode }
         OPTIONAL { ?placement rv:selectionMode ?mode }
         OPTIONAL { ?placement rv:pinnedRevision ?pinned }
+        OPTIONAL { ?placement rv:selectionSelector ?selector }
         OPTIONAL { ?placement rv:sourceKey ?sourceKey }
         OPTIONAL { ?placement rv:removedBy ?removedBy ; rv:lastParent ?lastParent }
       }
@@ -227,7 +230,9 @@ export async function readPlacements(env: WorkActivationEnvironment, generation:
       ...(target ? { target } : {}),
       ...(mode === `${RV}FollowContext` ? { selection: { mode: 'follow-context' } }
         : mode === `${RV}FixedRevision` && value(row, 'pinned')
-          ? { selection: { mode: 'fixed-revision', revision: value(row, 'pinned')! } } : {}),
+          ? { selection: { mode: 'fixed-revision', revision: value(row, 'selector')
+            ? (JSON.parse(value(row, 'selector')!) as ExactInstructionSelector).revision : value(row, 'pinned')!,
+          ...(value(row, 'selector') ? { selector: JSON.parse(value(row, 'selector')!) as ExactInstructionSelector } : {}) } } : {}),
       ...(value(row, 'sourceKey') ? { sourceKey: value(row, 'sourceKey') } : {}) };
     const catalogTarget = target !== undefined && catalogTargetTypes.includes(target);
     const needsSelection = target !== undefined && !catalogTarget

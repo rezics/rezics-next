@@ -1,5 +1,6 @@
 import { Type, type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
+import { ExactInstructionSelector } from './selection.ts';
 
 // Immutable object formats for Structure revisions. The graph holds the current
 // projection and the revision anchor; these bytes hold the complete state that
@@ -68,6 +69,7 @@ export interface BoundStructureProfile {
   selectionRequiredRoles?: readonly string[];
   selectionOptionalRoles?: readonly string[];
   qualifiers?: Readonly<Record<string, StructureQualifierSpec>>;
+  checkOccurrence?: (record: Pick<OccurrenceRecord, 'role' | 'target' | 'selection' | 'qualifier'>) => void;
 }
 
 let boundProfiles: ReadonlyMap<string, BoundStructureProfile> | undefined;
@@ -128,7 +130,8 @@ export function checkIngredientTextParts(value: unknown): Static<typeof ingredie
 const selection = Type.Union([
   Type.Object({ mode: Type.Literal('follow-context') }, { additionalProperties: false }),
   Type.Object({ mode: Type.Literal('fixed-realm'), realm: nativeId }, { additionalProperties: false }),
-  Type.Object({ mode: Type.Literal('fixed-revision'), revision: reference }, { additionalProperties: false }),
+  Type.Object({ mode: Type.Literal('fixed-revision'), revision: Type.String({ minLength: 1 }),
+    selector: Type.Optional(ExactInstructionSelector) }, { additionalProperties: false }),
 ]);
 
 /** How a Book group divides the book: numbered volumes, titled parts, or unnumbered extras (番外). */
@@ -426,6 +429,7 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
     throw new InvalidStructureObject(`role ${record.role} target cardinality differs`);
   }
   checkOccurrenceQualifierRole(record, profile);
+  registration?.checkOccurrence?.(record);
 }
 
 /** The same qualifier format is used for insertion, replacement and in-place edits. */

@@ -35,9 +35,11 @@ import { workReadError, workReadProblems } from './work-reads.ts';
 import { groupUuid } from './shared.ts';
 
 import { ingredientLine, recipeStep } from './recipe-qualifiers.ts';
+import { ExactInstructionSelector } from '../modules/structure/selection.ts';
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const selection = t.Union([t.Object({ mode: t.Literal('follow-context') }),
-  t.Object({ mode: t.Literal('fixed-revision'), revision: t.String() })]);
+  t.Object({ mode: t.Literal('fixed-revision'), revision: t.String(),
+    selector: t.Optional(ExactInstructionSelector) })]);
 const label = t.Object({ value: t.String({ minLength: 1, maxLength: 500 }),
   language: t.String() });
 const position = t.Union([t.Literal('first'), t.Literal('last'),
@@ -77,6 +79,7 @@ const operation = t.Union([
     { additionalProperties: false }),
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
   t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
+    target: t.Optional(t.String({ format: 'uri' })), selection: t.Optional(selection),
     qualifier: t.Optional(t.Union([ingredientLine, recipeStep, declaredQualifier, noteQualifier])),
     division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
     inclusion: t.Optional(inclusion) }, { additionalProperties: false }),

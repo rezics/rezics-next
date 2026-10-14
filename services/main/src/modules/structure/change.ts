@@ -1,5 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { Value } from 'typebox/value';
+import { checkExactInstructionSelection } from './selection.ts';
 import { ObjectIntegrityError, ObjectUnavailable, type ImmutableObjects }
   from '../../infrastructure/immutable-objects.ts';
 import { validatedCommand } from '../../infrastructure/invalid-receipt.ts';
@@ -73,7 +74,8 @@ export type CompositionOperation =
   | { op: 'move'; occurrence: string; parent: string; position: Position }
   | { op: 'remove'; occurrence: string }
   /** Replace supplied qualifiers or a localized label in place; omitted state is preserved. */
-  | { op: 'update'; occurrence: string; label?: Label; qualifier?: OccurrenceRecord['qualifier'] };
+  | { op: 'update'; occurrence: string; label?: Label; qualifier?: OccurrenceRecord['qualifier'];
+    target?: string; selection?: Selection };
 
 // The v1 command digest retains its legacy identity slots for same-key retries.
 // Only work (the Post IRI) and workRevision are materialized in the graph.
@@ -198,9 +200,17 @@ export function checkedOperations(operations: readonly CompositionOperation[],
         })) throw new InvalidCompositionChange(qualifier.type === 'book-group' || registration.id === 'book-composition'
           ? 'Book group division is not admitted by this Structure profile' : 'qualifier is not admitted by this Structure profile');
       }
-      if (!label && !qualifier) throw new InvalidCompositionChange('an update names a label or qualifier');
+      if (operation.selection && (operation.selection.mode !== 'fixed-revision' || !operation.target)) {
+        throw new InvalidCompositionChange('a selection update names its target and exact revision');
+      }
+      if (operation.target && operation.selection?.mode === 'fixed-revision') {
+        try { checkExactInstructionSelection(operation.target, operation.selection.revision, operation.selection.selector); }
+        catch (error) { throw new InvalidCompositionChange((error as Error).message); }
+      }
+      if (!label && !qualifier && !operation.selection) throw new InvalidCompositionChange('an update names a label, qualifier or selection');
       return { op: 'update', occurrence: native(operation.occurrence, 'occurrence'),
         ...(label ? { label } : {}),
+        ...(operation.target ? { target: operation.target, selection: operation.selection } : {}),
         ...(qualifier ? { qualifier } : {}) };
     }
     if (operation.op === 'move') {
@@ -213,7 +223,8 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     }
     const target = operation.target === undefined ? undefined
       : registration && isCatalogTarget(registration, operation.target)
-        ? operation.target : native(operation.target, 'target');
+        ? operation.target : operation.selection?.mode === 'fixed-revision' && operation.selection.selector
+          ? operation.target : native(operation.target, 'target');
     if (registration && (registration.targetRoles.includes(operation.role) && target === undefined
       || target !== undefined && !registration.targetRoles.includes(operation.role)
         && !registration.optionalTargetRoles?.includes(operation.role))) {
@@ -231,10 +242,13 @@ export function checkedOperations(operations: readonly CompositionOperation[],
     if (target && (needsSelection || operation.selection !== undefined)) {
       const requested = operation.selection ?? { mode: 'follow-context' };
       if (requested.mode === 'fixed-revision') {
-        if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(requested.revision)) {
+        if (requested.selector) {
+          try { checkExactInstructionSelection(target, requested.revision, requested.selector); }
+          catch (error) { throw new InvalidCompositionChange((error as Error).message); }
+        } else if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(requested.revision)) {
           throw new InvalidCompositionChange('a fixed chapter pins an exact Content revision');
         }
-        selection = { mode: 'fixed-revision', revision: requested.revision };
+        selection = { ...requested };
       } else if (requested.mode === 'follow-context') selection = { mode: 'follow-context' };
       else throw new InvalidCompositionChange('selection mode is not admitted');
     } else if (!target && operation.selection !== undefined) {
@@ -248,6 +262,9 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       }
     }
     const label = checkedLabel(operation.label);
+    try { registration?.checkOccurrence?.({ role: operation.role, target, selection,
+      qualifier: operation.qualifier }); }
+    catch (error) { throw new InvalidCompositionChange((error as Error).message); }
     if (operation.sourceKey !== undefined && (!operation.sourceKey.length || operation.sourceKey.length > 200
       || /[\u0000-\u001f\u007f]/u.test(operation.sourceKey))) {
       throw new InvalidCompositionChange('source key is invalid');
@@ -811,7 +828,7 @@ function placementFromRecord(record: OccurrenceRecord, generation: string): Plac
     ...(record.target ? { target: record.target } : {}),
     ...(record.selection?.mode === 'follow-context' ? { selection: { mode: 'follow-context' as const } }
       : record.selection?.mode === 'fixed-revision'
-        ? { selection: { mode: 'fixed-revision' as const, revision: record.selection.revision } } : {}),
+        ? { selection: { ...record.selection } } : {}),
     ...(record.qualifier ? { qualifier: record.qualifier } : {}),
     ...(record.sourceKey ? { sourceKey: record.sourceKey } : {}) };
 }
@@ -1204,6 +1221,13 @@ async function apply(w: Working, operation: CompositionOperation, index: number)
   const state = await w.get(operation.occurrence);
   if (!state?.active) throw new CompositionConflict('occurrence is not active in this composition');
   if (operation.op === 'update') {
+    if (operation.selection && operation.target) {
+      try { checkOccurrenceRecord({ ...placementRecord(state), target: operation.target,
+        selection: operation.selection }, w.header.profile); }
+      catch (error) { throw new CompositionConflict((error as Error).message); }
+      state.target = operation.target;
+      state.selection = operation.selection;
+    }
     if (operation.qualifier) {
       try { checkOccurrenceQualifierRole({ role: state.role, qualifier: operation.qualifier }, w.header.profile); }
       catch (error) {
@@ -1306,7 +1330,7 @@ async function checkFixedSelections(env: WorkActivationEnvironment,
   selections: readonly (CompositionOperation | OccurrenceRecord)[]): Promise<void> {
   const requested = selections.flatMap(operation => (!('op' in operation) || operation.op === 'insert')
     && operation.target
-    && operation.selection?.mode === 'fixed-revision'
+    && operation.selection?.mode === 'fixed-revision' && !operation.selection.selector
     ? [{ target: operation.target, revision: operation.selection.revision }] : []);
   if (!requested.length) return;
   const result = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target ?revision WHERE {
@@ -1360,7 +1384,10 @@ function placementTriples(state: PlacementState, generation: string,
   if (state.selection?.mode === 'follow-context') add('selectionMode', 'rv:FollowContext');
   if (state.selection?.mode === 'fixed-revision') {
     add('selectionMode', 'rv:FixedRevision');
-    add('pinnedRevision', iri(state.selection.revision));
+    add('pinnedRevision', iri(state.selection.selector
+      ? `urn:rezics:${state.selection.selector.grain === 'content' ? 'content' : 'media'}:revision:${state.selection.revision}`
+      : state.selection.revision));
+    if (state.selection.selector) add('selectionSelector', lit(JSON.stringify(state.selection.selector)));
   }
   if (state.sourceKey) add('sourceKey', lit(state.sourceKey));
   if (qualifier) {
@@ -1734,8 +1761,8 @@ export async function changeStructureMeasures(env: WorkActivationEnvironment, in
   measures: readonly RecipeMeasure[];
 }): Promise<{ terminal: CompositionTerminal; committed: boolean; cost?: CompositionCost }> {
   const registration = structureProfileForAction(intent.admission.action);
-  if (registration.id !== 'recipe-composition') {
-    throw new InvalidCompositionChange('measures require a Recipe Structure');
+  if (!registration.measures) {
+    throw new InvalidCompositionChange('measures require a profile that admits them');
   }
   const digest = structureMeasureDigest(intent.structure, intent.expectedHead, intent.measures);
   checkAdmission(intent.admission, digest, registration);

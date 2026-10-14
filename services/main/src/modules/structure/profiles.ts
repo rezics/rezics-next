@@ -9,6 +9,7 @@ import type { ProfileId } from '../../infrastructure/profile.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
+import type { Selection } from './graph.ts';
 
 export type StructureTargetReader = <T>(operation: (session: TargetReadSession) => Promise<T>) => Promise<T>;
 
@@ -16,7 +17,7 @@ export interface StructureTargetAuthority {
   /** Owner policies can distinguish the target's current structural type. */
   environment?: WorkActivationEnvironment;
   access: Pick<AccessAdmissionRegistry, 'canReadWork'>
-    & Partial<Pick<AccessAdmissionRegistry, 'canReadWorks' | 'canReadSemanticResource'>>;
+    & Partial<Pick<AccessAdmissionRegistry, 'canReadWorks' | 'canReadSemanticResource' | 'withOwnerAuthority' | 'canManageMedia'>>;
   principal: VerifiedPrincipal;
   actingSubject: string;
   target: string;
@@ -46,6 +47,9 @@ export interface StructureProfileRegistration {
   targetReadPermission?: string;
   /** Current target disclosure. The Book default remains work:read. */
   authorizeTarget?: (authority: StructureTargetAuthority) => Promise<boolean>;
+  /** Owner-reviewed identities outside the native graph namespace. */
+  targetPattern?: RegExp;
+  validateSelection?: (reader: StructureTargetReader, target: string, selection: Selection) => Promise<void>;
   /** Existing reader used when disclosing occurrence targets. */
   targetDisclosure?: 'work' | 'resource' | 'structure-target';
   /** Owner target invariants, checked before planning and again inside the graph transaction. */
@@ -78,6 +82,8 @@ export interface StructureProfileRegistration {
   topologyValidationProfile?: ProfileId;
   /** These roles may retain a Content pin, but resource membership needs no pin. */
   selectionOptionalRoles?: readonly OccurrenceRole[];
+  /** Field-specific owner forms, also used for retained and staged objects. */
+  checkOccurrence?: (record: Pick<OccurrenceRecord, 'role' | 'target' | 'selection' | 'qualifier'>) => void;
   /** An owner projects its qualifier node alongside the common placement. */
   projectQualifier?: (state: PlacementState, generation: string) => {
     iri: string; triples: readonly string[] } | null;
@@ -267,7 +273,7 @@ export async function canReadStructureTargets(profile: StructureProfileRegistrat
   const distinct = [...new Set(targets)];
   const readable = new Set(distinct.filter(target => isCatalogTarget(profile, target)));
   const native = distinct.filter(target => !readable.has(target)
-    && /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target));
+    && (profile.targetPattern ?? /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/).test(target));
   if (!native.length) return readable;
   if (!profile.authorizeTarget && authority.access.canReadWorks) {
     const allowed = await authority.access.canReadWorks(authority.principal, authority.actingSubject, native);
