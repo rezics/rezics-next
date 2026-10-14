@@ -9,7 +9,7 @@ type Replacements<T> = {
  * Only functions can change: value exports keep their real identity and are refused in the table.
  * The returned cleanup resets delegates; .set changes them without replacing the module again.
  */
-export function replaceModule<T extends object>(specifier: string, exports: T, replacements: Replacements<T>) {
+export function replaceModule<T extends Record<string, unknown>>(specifier: string, exports: T, replacements: Replacements<T>) {
   const real: Record<string, unknown> = { ...exports };
   const keys = Object.keys(replacements);
   let current = { ...real };

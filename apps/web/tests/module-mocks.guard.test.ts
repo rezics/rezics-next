@@ -34,6 +34,7 @@ function factoryResult(node: ts.Expression | undefined): ts.Expression | undefin
 }
 
 function inspectModuleMocks(text: string, options: { legacy?: boolean; path?: string } = {}): { count: number; violations: string[] } {
+  if (!text.includes('mock') && !text.includes('module-replacement')) return { count: 0, violations: [] };
   const path = options.path ?? join(import.meta.dir, 'sample.tsx');
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
   const mocks = new Set<string>();
@@ -133,24 +134,24 @@ function inspectModuleMocks(text: string, options: { legacy?: boolean; path?: st
   collectCalls(source);
   const cleanupCalls = new Set<ts.CallExpression>();
   const cleanupReferences = new Set<string>();
-  function followCleanup(node: ts.Node, seen: Set<string>) {
-    if (ts.isIdentifier(node)) {
+  function followCleanup(node: ts.Node, seen: Set<string>, callable = false) {
+    if (ts.isIdentifier(node) && callable) {
       cleanupReferences.add(node.text);
       if (seen.has(node.text)) return;
       seen.add(node.text);
       const body = functions.get(node.text);
       if (body) followCleanup(body, seen);
       const initial = bindings.get(node.text)?.initializer;
-      if (initial && ts.isIdentifier(expression(initial))) followCleanup(expression(initial), seen);
+      if (initial && ts.isIdentifier(expression(initial))) followCleanup(expression(initial), seen, true);
     }
     if (ts.isCallExpression(node)) {
       cleanupCalls.add(node);
-      followCleanup(node.expression, seen);
+      followCleanup(node.expression, seen, true);
     }
     ts.forEachChild(node, child => followCleanup(child, seen));
   }
   for (const call of allCalls) if (isHook(call.expression)) {
-    for (const argument of call.arguments) followCleanup(argument, new Set());
+    for (const argument of call.arguments) followCleanup(argument, new Set(), true);
   }
   const isDirect = (call: ts.CallExpression) => isModule(call.expression)
     || (ts.isIdentifier(expression(call.expression)) && moduleAliases.has(expression(call.expression).getText(source)));
@@ -282,6 +283,8 @@ test('the guard requires a matching early snapshot, one top-level installation a
     `${helperImport} import { afterAll } from 'bun:test'; const real = await import('next/navigation'); ${install} afterAll(reset);`,
     `${helperImport} import { afterAll } from 'bun:test'; ${install} ${realSnapshot} afterAll(reset);`,
     `${helperImport} ${realSnapshot} ${install}`,
+    `${helperImport} import { afterAll } from 'bun:test'; ${realSnapshot} ${install} afterAll(() => reset.set({ useRouter() {} }));`,
+    `${helperImport} import { afterAll } from 'bun:test'; ${realSnapshot} ${install} afterAll(() => { console.log(reset); });`,
     `${helperImport} import { beforeEach, afterAll } from 'bun:test'; ${realSnapshot} beforeEach(() => { ${install} afterAll(reset); });`,
     `${helperImport} import { afterAll } from 'bun:test'; ${realSnapshot} afterAll(() => { ${install} });`,
     `import * as replacements from './support/module-replacement.ts'; import { afterAll } from 'bun:test'; ${realSnapshot} afterAll(() => replacements.replaceModule(import.meta.resolve('next/navigation'), real, {}));`,
