@@ -5,6 +5,7 @@ import { resolve } from 'node:path';
 import { chromium } from '@playwright/test';
 import team from '../../../../../scripts/qa/cases/outcomes/realm/roles-and-team.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -319,9 +320,7 @@ async function moderatorProof() {
   );
 }
 async function operatorProof() {
-  expect(await answer(recording.session('operator', sessions.operator)('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({
-    groups: ['platform-admin'],
-  });
+  expectQaPlatformAccess(await answer(recording.session('operator', sessions.operator)('platform-access', 'GET', '/v1/me/platform-access')));
   await refused('operator');
   await answer(sessions.operator.main('GET', `${root()}/roles?${acting(sessions.owner)}`), 403);
 }

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
 import rules from '../../../../../scripts/qa/cases/outcomes/realm/rules.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 import {
   personaSessions,
@@ -545,9 +546,7 @@ outcomeTest(rules, 'moderator', async () => {
   );
 }, recording);
 outcomeTest(rules, 'operator', async () => {
-  expect(await answer(publicRealm.operator.main('GET', '/v1/me/platform-access'))).toMatchObject({
-    groups: ['platform-admin'],
-  });
+  expectQaPlatformAccess(await answer(publicRealm.operator.main('GET', '/v1/me/platform-access')));
   await participate('operator');
   await answer(
     publicRealm.operator.main(

@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import admission from '../../../../../scripts/qa/cases/outcomes/realm/membership-and-admission.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { expectQaPlatformAccess } from '../../../support/platform-access.ts';
 import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import {
   personaSessions,
@@ -474,9 +475,7 @@ outcomeTest(admission, 'operator', personaProof('operator', async () => {
   const person = sessions.operator,
     root = rootOf(sessions.realm);
   const sample = recording.session('operator', person);
-  expect(await answer(sample('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({
-    groups: ['platform-admin'],
-  });
+  expectQaPlatformAccess(await answer(sample('platform-access', 'GET', '/v1/me/platform-access')));
   await answer(sample('private-realm-hidden', 'GET', `${root}?${acting(person)}`), 404);
   await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
   await answer(sample('requests-refused', 'GET', `${root}/join-requests?${acting(person)}&limit=50&q=`), 403);
