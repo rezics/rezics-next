@@ -11,12 +11,13 @@ import { ZoneUnavailable } from '../src/modules/zone/configuration.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const native = (number: number) => `https://rezics.com/id/00000000-0000-4000-8000-${number.toString(16).padStart(12, '0')}`;
-const realm = native(1), space = native(2), revision = native(3);
+const realm = native(1), revision = native(3), realmSpace = native(4);
 const first = native(10), second = native(11);
+const zoneSpace = (zone: string) => native(1000 + Number.parseInt(zone.slice(-12), 16));
 const term = (value: string) => ({ type: 'uri', value });
-const candidate = (zone: string, official = false) => ({ zone: term(zone), zoneSpace: term(space),
+const candidate = (zone: string, official = false) => ({ zone: term(zone), zoneSpace: term(zoneSpace(zone)),
   ...(official ? { official: term('true') } : {}) });
-const publication = (zone: string, patch: object = {}) => ({ zone, realm, space, revision,
+const publication = (zone: string, patch: object = {}) => ({ zone, realm, space: zoneSpace(zone), revision,
   official: null, disclosure: 'public', storedDisclosure: 'public', listing: 'listed', discovery: 'listed',
   presentation: DEFAULT_ZONE_PRESENTATION, ...patch });
 
@@ -36,7 +37,7 @@ function owner(rows = [candidate(first), candidate(second)], signedIn = true) {
       if (body.includes('ASK')) return { boolean: true };
       const zone = [first, second].find(id => body.includes(`<${id}>`))!;
       visibility.push(zone);
-      return { results: { bindings: [{ kind: term('space'), space: term(space),
+      return { results: { bindings: [{ kind: term('space'), space: term(zoneSpace(zone)),
         disclosure: term(`${RV}Private`), zoneDisclosure: term(`${RV}Private`) }] } };
     } },
   } as unknown as WorkActivationEnvironment;
@@ -46,7 +47,7 @@ function owner(rows = [candidate(first), candidate(second)], signedIn = true) {
     principal: signedIn ? {} : null, viewer: ANONYMOUS_VIEWER,
     position: { dataEpoch: 'epoch', sequence: '8' },
     deps: { environment, access: { canReadSemanticResource: async (_principal: unknown, _actor: string, zone: string) => access.has(zone) } },
-    realm: async () => ({ space, realmRevision: revision, visibility: 'public', reviewMode: 'open', revision: null }),
+    realm: async () => ({ space: realmSpace, realmRevision: revision, visibility: 'public', reviewMode: 'open', revision: null }),
     observeDependency: () => '',
     query: async (body: string, limit: number) => { queries.push({ body, limit }); return rows; },
   } as unknown as WorkReadSession;
@@ -144,13 +145,21 @@ test('the last eligible attachment remains reachable within the command cap, wit
   })).zone).toBe(zones.at(-1)!);
   expect(hydrated).toEqual(zones);
   expect(fixture.queries).toHaveLength(1);
-  expect(fixture.queries[0]!.limit).toBe(REALM_ATTACHMENT_CAP + 1);
+  expect(fixture.queries[0]!.limit).toBe(REALM_ATTACHMENT_CAP + 2);
   expect(fixture.queries[0]!.body).toContain(`rv:defaultRealm <${realm}>`);
-  expect(fixture.queries[0]!.body).toContain(`LIMIT ${REALM_ATTACHMENT_CAP + 1}`);
+  expect(fixture.queries[0]!.body).toContain(`LIMIT ${REALM_ATTACHMENT_CAP + 2}`);
+});
+
+test('the Realm same-Space Zone remains selectable alongside the full cross-Space attachment cap', async () => {
+  const ownZone = native(200), ownRow = { ...candidate(ownZone, true), zoneSpace: term(realmSpace) };
+  const fixture = owner([...Array.from({ length: REALM_ATTACHMENT_CAP }, (_, index) => candidate(native(100 + index))), ownRow]);
+  expect((await readRealmZone(fixture.session, realm, async (_env, zone) => publication(zone,
+    zone === ownZone ? { space: realmSpace, official: 'fiction' } : {}) as never)).zone).toBe(ownZone);
 });
 
 test('attachment corruption and publication identity inconsistencies remain faults', async () => {
   for (const rows of [[candidate(first), candidate(first, true)], [{ zone: term(first) }] as never,
+    [first, second].map(zone => ({ ...candidate(zone), zoneSpace: term(realmSpace) })),
     Array.from({ length: REALM_ATTACHMENT_CAP + 1 }, (_, index) => candidate(native(100 + index)))]) {
     await expect(readRealmZone(owner(rows).session, realm,
       async (_env, zone) => publication(zone) as never)).rejects.toBeInstanceOf(WorkReadUnavailable);

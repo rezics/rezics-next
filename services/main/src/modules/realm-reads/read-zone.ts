@@ -6,13 +6,14 @@ import { readRealmBasis } from './read-realm.ts';
 import { readZoneVisibility } from '../zone/route-visibility.ts';
 import { REALM_ATTACHMENT_CAP } from '../zone/config-format.ts';
 
-/** Only this Realm's attachments, bounded by the command's attachment cap.
+/** Only this Realm's attachments, bounded by the cross-Space attachment cap
+ * plus its one same-Space Zone. One additional row detects corruption.
  * Eligible official Zones precede ordinary Zones; each group keeps the
  * inventory's ascending IRI order. Only candidates examined need hydration.
  * Private disclosure repeats the bounded shared Space/Zone admission too. */
 export async function readRealmZone(session: WorkReadSession, realm: string,
   publicationRead: typeof readZonePublication = readZonePublication) {
-  await readRealmBasis(session, realm);
+  const basis = await readRealmBasis(session, realm);
   const rows = await session.query(`SELECT DISTINCT ?zone ?official ?zoneSpace WHERE {
     GRAPH ${iri(GRAPHS.current)} { ?zone a rv:Zone ; rv:zoneState rv:Active ;
       rv:disclosure ?disclosure ; rv:defaultRealm ${iri(realm)} ; rv:space ?zoneSpace .
@@ -22,8 +23,10 @@ export async function readRealmZone(session: WorkReadSession, realm: string,
       FILTER(?disclosure IN (rv:Public,rv:Private))
       OPTIONAL { ?zone rv:official ?official }
     }
-  } ORDER BY STR(?zone) LIMIT ${REALM_ATTACHMENT_CAP + 1}`, REALM_ATTACHMENT_CAP + 1);
-  if (rows.length > REALM_ATTACHMENT_CAP || rows.some(row => !row.zone?.value || !row.zoneSpace?.value)
+  } ORDER BY STR(?zone) LIMIT ${REALM_ATTACHMENT_CAP + 2}`, REALM_ATTACHMENT_CAP + 2);
+  const sameSpace = rows.filter(row => row.zoneSpace?.value === basis.space).length;
+  if (rows.length - sameSpace > REALM_ATTACHMENT_CAP || sameSpace > 1
+    || rows.some(row => !row.zone?.value || !row.zoneSpace?.value)
     || new Set(rows.map(row => row.zone!.value)).size !== rows.length) {
     throw new WorkReadUnavailable('Realm Zone relation is ambiguous');
   }
