@@ -488,6 +488,14 @@ test('Public Realm classification Context selects, replaces and clears one schem
     expect(loser).toMatchObject({ code: 'stale_head' });
     const winner = await competing.find(response => response.status === 200)!.json() as Configured;
     expect((await readContext(realm))?.contextRevision).toBe(winner.contextRevision);
+    await home.json(await call('POST', '/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2',
+      scheme: { id: root.scheme, expectedHead: last.schemeHead },
+      concept: { id: child.concept, expectedHead: child.conceptHead }, state: 'retired',
+      actingSubject: author.actor,
+    }), 201);
+    expect((await traverse({ context: shared.context })).map(item => item.id).sort())
+      .toEqual([root.concept, last.concept].sort());
     await author.grant(`governance:realm:${otherRealm}`, 'realm.owner');
     await author.grant(`governance:realm:${otherRealm}`, 'governance.rule.publish');
     const space = realmSpaces.get(otherRealm)!;
