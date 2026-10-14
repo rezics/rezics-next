@@ -17,7 +17,7 @@ const row = (value: string) => ({ value });
 const basis = { space: zone, realmRevision: decision, visibility: 'public', reviewMode: 'open', revision: null };
 
 function disclosure() {
-  const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
+  const environment = { fuseki: {}, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
   configureFixtureDisclosureAncestry(environment, () => undefined);
   configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   return { deps: { environment }, viewer: ANONYMOUS_VIEWER, observeDependency: () => '' };
