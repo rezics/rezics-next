@@ -109,7 +109,8 @@ function boardWorld(options: { retired?: boolean; hidden?: boolean } = {}) {
     if (query.includes('SELECT ?concept ?head')) {
       expect(limit).toBe(2);
       expect(query).toContain('rv:conceptState rv:Retired');
-      return options.retired ? [] : [{ concept: { type: 'uri', value: news }, head: { type: 'uri', value: reply(901) } }];
+      const selected = query.match(/BIND\(<([^>]+)> AS \?concept\)/)![1]!;
+      return options.retired ? [] : [{ concept: { type: 'uri', value: selected }, head: { type: 'uri', value: reply(901) } }];
     }
     let rows = await original(query, limit);
     if (query.includes('SELECT DISTINCT ?id ?reply ?work')) {
