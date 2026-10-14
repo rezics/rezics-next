@@ -18,8 +18,8 @@ public class RealmSearchSeekTest {
     private static final Node REALM=id(1),SPACE=id(2);
     private static final String ALIAS="Maintained realm alias",BODY="Realm selected passage";
     private static void set(DatasetGraph data,Node graph,Node subject,String predicate,Node value){data.deleteAny(graph,subject,p(predicate),Node.ANY);data.add(graph,subject,p(predicate),value);}
-    private record Owner(Node work,Node main,Node unit,Node selection,Node contribution,Node decision,Node draft,Node slot){}
-    private static final class Fixture implements AutoCloseable {
+    record Owner(Node work,Node main,Node unit,Node selection,Node contribution,Node decision,Node draft,Node slot){}
+    static final class Fixture implements AutoCloseable {
         final FilteredGraphTextIndex index; final DatasetGraphText data;
         Fixture(){
             var definition=new EntityDefinition("uri","label","graph");definition.set("body",p("searchBody"));definition.set("publicTitle",p("publicTitle"));definition.set("label",label());definition.setLangField("lang");definition.setUidField("uid");
