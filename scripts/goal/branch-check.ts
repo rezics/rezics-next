@@ -64,6 +64,19 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
     const unpack = spawnSync('tar', ['-xf', archive, '-C', tree], { encoding: 'utf8' });
     if (unpack.status !== 0) throw new Error(unpack.stderr || 'Unable to extract branch');
     rmSync(archive);
+    // Git-aware scanners stop at this boundary and see exactly the tip's tracked paths.
+    git(tree, ['init', '--quiet', '--initial-branch=main']);
+    const tracked = spawnSync('git', ['ls-tree', '-rz', '--name-only', commit], { cwd });
+    if (tracked.status !== 0) throw new Error('Unable to inventory branch files');
+    const staged = spawnSync('git', ['add', '--force', '--pathspec-from-file=-', '--pathspec-file-nul'], {
+      cwd: tree, input: tracked.stdout, encoding: 'utf8',
+    });
+    if (staged.status !== 0) throw new Error(staged.stderr || 'Unable to stage snapshot inventory');
+    git(tree, ['config', 'core.hooksPath', '/dev/null']);
+    const snapshotTree = git(tree, ['write-tree']);
+    const snapshotCommit = git(tree, ['-c', 'user.name=Branch check', '-c', 'user.email=branch-check@example.invalid',
+      'commit-tree', snapshotTree, '-m', `Snapshot of ${commit}`]);
+    git(tree, ['update-ref', 'refs/heads/main', snapshotCommit]);
     // Workspace links must resolve to the certified snapshot, never the caller's dirty sources.
     const linkDependencies = (original: string, destination: string) => {
       if (!existsSync(original)) return;
@@ -71,10 +84,10 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
       for (const entry of readdirSync(original)) {
         const path = join(original, entry);
         const target = join(destination, entry);
-        if (entry.startsWith('@')) { linkDependencies(path, target); continue; }
+        if (entry.startsWith('@') || entry === '.bin') { linkDependencies(path, target); continue; }
         const local = lstatSync(path).isSymbolicLink() ? resolve(original, readlinkSync(path)) : path;
         const location = relative(cwd, local);
-        symlinkSync(location && !location.startsWith('..') && !location.startsWith('node_modules/')
+        symlinkSync(location && !location.startsWith('..') && !location.split('/').includes('node_modules')
           ? join(tree, location) : path, target);
       }
     };
@@ -85,19 +98,21 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
     const run = options.runner ?? runCheckCommand;
     const checks: CheckResult[] = [];
     // Regenerate this snapshot's ignored contracts; never borrow another tip's generated code.
-    const commands: [CheckResult['name'], string[]][] = [
+    const commands: [CheckResult['name'], string[], string?][] = [
       ['contract', ['task', 'gen']],
       ...WORKER_TYPE_PROJECTS.filter(project => existsSync(join(tree, project.project)))
-        .map(project => ['types', project.task ? ['task', project.task]
-          : ['task', 'goal:type-files', '--', '--project', project.project]] as [CheckResult['name'], string[]]),
+        .map(project => project.workspace === 'about'
+          ? ['types', ['node', 'astro-check.cjs'], project.root] as [CheckResult['name'], string[], string]
+          : ['types', project.task ? ['task', project.task]
+            : ['task', 'goal:type-files', '--', '--project', project.project]] as [CheckResult['name'], string[]]),
       ['lint', ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost']],
       ['ast', ['task', 'ast-grep', '--', 'scan']],
       ['guards', ['task', 'guards']],
     ];
-    for (const [index, [name, command]] of commands.entries()) {
+    for (const [index, [name, command, directoryName]] of commands.entries()) {
       const start = performance.now();
       let result;
-      try { result = await run(command, tree, join(directory, `${index}-${name}.log`)); }
+      try { result = await run(command, directoryName ? join(tree, directoryName) : tree, join(directory, `${index}-${name}.log`)); }
       catch (error) { result = { code: 1, output: `error: ${String(error)}` }; }
       if (name === 'guards' && existsSync(join(tree, '.temp/repository-guards'))) {
         const artifacts = join(directory, 'guard-artifacts');

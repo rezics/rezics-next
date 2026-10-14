@@ -95,3 +95,26 @@ test('guard reports survive snapshot cleanup and cached results keep their evide
   expect(readFileSync(join(result.log, '../guard-artifacts/run/unit.xml'), 'utf8')).toBe('<testsuites/>');
   expect(readFileSync(result.log, 'utf8')).toContain('Guard artifacts:');
 });
+
+test('Git-aware tools see the snapshot inventory and ordinary dependency directories do not loop', async () => {
+  const f = fixture();
+  mkdirSync(join(f.cwd, 'services/main/node_modules/.bin'), { recursive: true });
+  writeFileSync(join(f.cwd, 'services/main/node_modules/.bin/tool'), '#!/bin/sh\nexit 0\n');
+  await branchCheck('HEAD', { ...f, runner: async (command, tree, log) => {
+    const tracked = spawnSync('git', ['ls-files'], { cwd: tree, encoding: 'utf8' });
+    expect(tracked.status).toBe(0); expect(tracked.stdout).toContain('services/main/value.ts');
+    expect(tracked.stdout).not.toContain('node_modules');
+    expect(readFileSync(join(tree, 'services/main/node_modules/.bin/tool'), 'utf8')).toContain('exit 0');
+    return f.runner(command, tree, log);
+  } });
+});
+
+test('the about site uses its owning Astro checker and workspace directory', async () => {
+  const f = fixture(); f.write('apps/about/tsconfig.json', '{}'); f.git('add', '.'); f.git('commit', '-qm', 'about');
+  let checked = false;
+  await branchCheck('HEAD', { ...f, runner: async (command, cwd, log) => {
+    if (command[0] === 'node') { expect(command).toEqual(['node', 'astro-check.cjs']); expect(cwd.endsWith('/apps/about/')).toBe(true); checked = true; return { code: 0, output: '' }; }
+    return f.runner(command, cwd, log);
+  } });
+  expect(checked).toBe(true);
+});
