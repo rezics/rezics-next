@@ -1,7 +1,11 @@
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import declaration from '../../../../../scripts/qa/cases/outcomes/realm/closure-directory.ts';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { browseQuery, emptyBrowse } from '../../../../../apps/web/features/discover/browse-state.ts';
+import { seedServedTypes } from '../../../../../apps/web/features/catalogue/type-fixtures.ts';
+import { BrowseReadError, discoveryApi } from '../../../../../apps/web/features/discover/api.ts';
+import { recordedMainClient } from '../../../support/recorded-main-client.ts';
+import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
 } from '../../../support/personas.ts';
@@ -12,6 +16,11 @@ let live: PersonaSessions;
 let setupFailure: string | null = null;
 let closureFailure: string | null = null;
 type Page = { items: { id: string }[]; nextCursor: string | null };
+const recording = new OutcomeRecorder(declaration);
+seedServedTypes();
+const directoryState = { ...emptyBrowse, tab: 'communities' };
+const directoryBody = browseQuery(directoryState, 1);
+const beforeClosure = new Map<PersonaName, string>();
 
 function reportFailures(failures: string[]) {
   if (failures.length) console.log(failures.join('\n'));
@@ -66,6 +75,14 @@ async function inventory(person: PersonaSession, sort: string, q: string | undef
 beforeAll(async () => {
   closed = await personaSessions('public');
   live = await personaSessions('public');
+  await recording.prepare();
+  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const response = await closed[name].main('POST', '/v1/query', directoryBody);
+    expect(response.status).toBe(200);
+    const { result } = await response.json() as { result: Page };
+    expect(result.nextCursor).not.toBeNull();
+    beforeClosure.set(name, result.nextCursor!);
+  }
   try {
     for (const successor of [false, true]) {
       const ids = await inventory(closed.visitor, 'newest', undefined, successor);
@@ -77,12 +94,39 @@ beforeAll(async () => {
   if (setupFailure) console.log(`Directory prerequisite: ${setupFailure}`);
   if (closureFailure) console.log(`Directory closure prerequisite: ${closureFailure}`);
 }, 180_000);
-afterAll(async () => { await closed?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await closed?.close(); }
+});
+
+async function storyReads(name: PersonaName) {
+  const read = (label: string, body: ReturnType<typeof browseQuery>) =>
+    discoveryApi(recordedMainClient(recording, name, closed[name], label), 'en').resources(body);
+  // The production directory sends no actingSubject, including authenticated visits.
+  const page = await read('directory', directoryBody);
+  expect(page.items.map(item => item.id)).not.toContain(closed.realm);
+  expect(page.nextCursor).not.toBeNull();
+  await read('directory-continuation', browseQuery({ ...directoryState, cursor: page.nextCursor }, 1));
+  const empty = await read('directory-empty', browseQuery({ ...directoryState, q: 'no-matching-live-realms' }, 1));
+  expect(empty.items).toEqual([]);
+  const filtered = await read('directory-filtered', browseQuery({ ...directoryState, q: 'Original',
+    conditions: { include: ['00000000-0000-8000-8000-000000000901'], exclude: [], match: 'all' } }, 1));
+  expect(filtered.items.map(item => item.id)).not.toContain(closed.realm);
+  try {
+    await read('directory-moved', browseQuery({ ...directoryState, cursor: beforeClosure.get(name)! }, 1));
+    throw new Error('The pre-closure directory cursor must refuse its changed basis');
+  } catch (error) {
+    expect(error).toBeInstanceOf(BrowseReadError);
+    expect((error as BrowseReadError).status).toBe(409);
+    expect((error as BrowseReadError).code).toBe('read_basis_changed');
+  }
+}
 
 async function reads(name: PersonaName) {
   expect(closureFailure, closureFailure ?? '').toBeNull();
   expect(setupFailure, setupFailure ?? '').toBeNull();
   const person = closed[name];
+  await storyReads(name);
   const failures: string[] = [];
   for (const successor of [false, true]) {
     const sorts = successor ? ['newest', 'updated', 'relevance'] : ['activity', 'members', 'newest', 'growing'];
@@ -97,9 +141,9 @@ async function reads(name: PersonaName) {
   }
   reportFailures(failures);
 }
-outcomeTest(declaration, 'visitor', () => closureCell(declaration, 'visitor', () => closed, () => reads('visitor')));
-outcomeTest(declaration, 'stranger', () => closureCell(declaration, 'stranger', () => closed, () => reads('stranger')));
-outcomeTest(declaration, 'member', () => closureCell(declaration, 'member', () => closed, () => reads('member')));
-outcomeTest(declaration, 'owner', () => closureCell(declaration, 'owner', () => closed, () => reads('owner')));
-outcomeTest(declaration, 'moderator', () => closureCell(declaration, 'moderator', () => closed, () => reads('moderator')));
-outcomeTest(declaration, 'operator', () => closureCell(declaration, 'operator', () => closed, () => reads('operator')));
+outcomeTest(declaration, 'visitor', () => closureCell(declaration, 'visitor', () => closed, () => reads('visitor')), recording);
+outcomeTest(declaration, 'stranger', () => closureCell(declaration, 'stranger', () => closed, () => reads('stranger')), recording);
+outcomeTest(declaration, 'member', () => closureCell(declaration, 'member', () => closed, () => reads('member')), recording);
+outcomeTest(declaration, 'owner', () => closureCell(declaration, 'owner', () => closed, () => reads('owner')), recording);
+outcomeTest(declaration, 'moderator', () => closureCell(declaration, 'moderator', () => closed, () => reads('moderator')), recording);
+outcomeTest(declaration, 'operator', () => closureCell(declaration, 'operator', () => closed, () => reads('operator')), recording);

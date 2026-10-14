@@ -1,7 +1,10 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import ranking from '../../../../../scripts/qa/cases/outcomes/realm/ranking.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { readRankingAnswer, readRankingModuleAnswer } from '../../../../../apps/web/features/realm/ranking-read.ts';
+import { recordedMainClient } from '../../../support/recorded-main-client.ts';
+import { publishClosureOriginals, type ClosureOriginal } from './closure-original-credit-setup.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; workRevision: string };
@@ -15,6 +18,9 @@ setDefaultTimeout(420_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
 let preparation: Promise<void> | undefined;
+let emptyRealm: string, movedRealm: string;
+const recording = new OutcomeRecorder(ranking);
+const coordinates = [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']] as const;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
 
@@ -77,6 +83,18 @@ async function seed(sessions: PersonaSessions, size: number, label: string) {
 beforeAll(async () => {
   publicRealm = await personaSessions('public');
   privateRealm = await personaSessions('private');
+  await recording.prepare();
+  const founder = publicRealm.stranger;
+  for (const state of ['empty', 'moved'] as const) {
+    const created = await answer<{ realm: string }>(founder.main('POST', '/v1/spaces', {
+      profile: 'space-realm-v2', name: `Original ${state} ranking garden`, language: 'en',
+      handle: `ranking-${randomUUID().slice(0, 12)}`, capabilities: ['realm'], actingSubject: founder.actingSubject,
+      initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open',
+        whoMaySubmit: 'members', selfJoin: false, rules: [] },
+    }), 201);
+    if (state === 'empty') emptyRealm = created.realm;
+    else movedRealm = created.realm;
+  }
 }, 180_000);
 // Session bootstrap failures remain ordinary failures. The large inventory
 // is the pending public-HTTP proof and currently cannot finish in the client's
@@ -102,8 +120,80 @@ async function prepare() {
   await answer(privateRealm.member.main('POST', `${root}/invitations/${invitation.invitation.id}/response`, {
     actingSubject: privateRealm.member.actingSubject, action: 'accept', listed: false }));
   currentThreads.push(...await seed(privateRealm, 21, 'current'));
+  await seed({ ...publicRealm, owner: publicRealm.stranger, realm: movedRealm }, 21, 'moving');
+  // Whole-Work progress is the public source of the chart's reads metric.
+  // Twelve adopted originals give its limit=10 request a real continuation.
+  const originals: ClosureOriginal[] = [];
+  for (let batch = 0; batch < 4; batch++)
+    await publishClosureOriginals(publicRealm, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`);
+  for (const original of originals) await answer(publicRealm.owner.main('PUT',
+    `/v1/works/${short(original.work)}/progress`, {
+      actingSubject: publicRealm.owner.actingSubject, expectedVersion: 0, standing: 'started',
+    }));
 }
-afterAll(async () => { await publicRealm?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await publicRealm?.close(); }
+});
+
+async function storyRanking(sessions: PersonaSessions, name: PersonaName,
+  sort: 'best' | 'top', window: 'week' | 'month' | 'all', label: string, cursor?: string) {
+  return readRankingAnswer(recordedMainClient(recording, name, sessions[name], label), {
+    realm: sessions.realm, sort, window, actingSubject: sessions[name].actingSubject, ...(cursor ? { cursor } : {}),
+  });
+}
+
+async function storyStates(name: PersonaName) {
+  const person = publicRealm[name];
+  const stateRealm = { ...publicRealm, realm: emptyRealm };
+  const absentRealm = { ...publicRealm, realm: `https://rezics.com/id/${randomUUID()}` };
+  for (const [sort, window] of coordinates) {
+    const empty = await storyRanking(stateRealm, name, sort, window, `${sort}-${window}-empty`);
+    expect(empty.ok).toBe(true);
+    if (!empty.ok) throw new Error('Empty ranking read failed');
+    expect(empty.data.items).toEqual([]);
+    expect(empty.data.nextCursor).toBeNull();
+    expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`))
+      .toMatchObject({ ok: false, status: 404, failure: 'missing' });
+    const invalid = await storyRanking(publicRealm, name, sort, window,
+      `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2');
+    expect(invalid).toMatchObject({ ok: false, status: 400, failure: 'invalid' });
+  }
+  for (const interval of ['day', 'week', 'month'] as const) {
+    const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
+    const populated = await readRankingModuleAnswer(main, publicRealm.realm, interval, 'reads');
+    expect(populated.ok).toBe(true);
+    if (!populated.ok) throw new Error('Populated ranking module read failed');
+    expect(populated.data.items.length).toBeGreaterThan(0);
+    expect(populated.data.nextCursor).not.toBeNull();
+    // The module itself never follows this cursor; retain that separate API answer as evidence.
+    const continuation = recordedMainClient(recording, name, person, `ranking-module-${interval}-continuation`);
+    await continuation.v1.realms({ realm: short(publicRealm.realm) }).rankings.get({ query: {
+      interval, metric: 'reads', limit: 10, cursor: populated.data.nextCursor!,
+    } });
+    const empty = await readRankingModuleAnswer(
+      recordedMainClient(recording, name, person, `ranking-module-${interval}-empty`), emptyRealm, interval, 'reads');
+    expect(empty.ok).toBe(true);
+    if (empty.ok) expect(empty.data.items).toEqual([]);
+    expect(await readRankingModuleAnswer(recordedMainClient(recording, name, person,
+      `ranking-module-${interval}-missing`), absentRealm.realm, interval, 'reads')).toMatchObject({ ok: false, failure: 'missing' });
+  }
+  const moving = { ...publicRealm, realm: movedRealm };
+  const first = await storyRanking(moving, name, 'best', 'all', 'moved-basis');
+  expect(first.ok).toBe(true);
+  if (!first.ok) throw new Error('Moving ranking basis read failed');
+  expect(first.data.nextCursor).not.toBeNull();
+  const other = name === 'stranger' ? publicRealm.member : publicRealm.stranger;
+  const otherParams = acting(other); otherParams.set('sort', 'best'); otherParams.set('window', 'all');
+  const otherPage = await answer<Page>(other.main('GET', `/v1/realms/${short(movedRealm)}/threads?${otherParams}`));
+  expect(otherPage.nextCursor).not.toBeNull();
+  const stolen = await storyRanking(moving, name, 'best', 'all', 'viewer-bound-refusal', otherPage.nextCursor!);
+  expect(stolen).toMatchObject({ ok: false, status: 400, failure: 'invalid' });
+  // A committed placement advances this Realm's rank revision, invalidating the old cut.
+  await seed({ ...moving, owner: publicRealm.stranger }, 1, 'next-ranked-cut');
+  expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!))
+    .toMatchObject({ ok: false, status: 409, failure: 'moved' });
+}
 
 async function traverse(sessions: PersonaSessions, name: PersonaName, expected: string[]) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}`;
@@ -112,8 +202,17 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
     const params = acting(person); params.set('sort', sort!); params.set('window', window!); params.set('limit', '20');
     const seen: string[] = [], scores: number[] = [], cursors = new Set<string>();
     let page: Page;
+    let pageNumber = 0;
     do {
       page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
+      if (pageNumber < 2) {
+        const prefix = sessions === privateRealm ? 'private-' : '';
+        const suffix = pageNumber === 0 ? '' : '-continuation';
+        const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
+          window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
+        expect(recorded.ok).toBe(true);
+      }
+      pageNumber++;
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.items.length).toBeLessThanOrEqual(20);
       for (const item of page.items) {
@@ -149,8 +248,11 @@ async function prove(name: PersonaName) {
     for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']]) {
       const params = acting(person); params.set('sort', sort!); params.set('window', window!);
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
+      expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
+        `private-${sort}-${window}`)).toMatchObject({ ok: false, status: 404, failure: 'missing' });
     }
   }
+  await storyStates(name);
   // A continuation is bound to the represented reader, not just its ranking coordinates.
   if (name !== 'visitor') {
     const person = publicRealm[name], params = acting(person); params.set('sort', 'best');
@@ -162,9 +264,9 @@ async function prove(name: PersonaName) {
   }
 }
 
-outcomeTest(ranking, 'visitor', () => prove('visitor'));
-outcomeTest(ranking, 'stranger', () => prove('stranger'));
-outcomeTest(ranking, 'member', () => prove('member'));
-outcomeTest(ranking, 'owner', () => prove('owner'));
-outcomeTest(ranking, 'moderator', () => prove('moderator'));
-outcomeTest(ranking, 'operator', () => prove('operator'));
+outcomeTest(ranking, 'visitor', () => prove('visitor'), recording);
+outcomeTest(ranking, 'stranger', () => prove('stranger'), recording);
+outcomeTest(ranking, 'member', () => prove('member'), recording);
+outcomeTest(ranking, 'owner', () => prove('owner'), recording);
+outcomeTest(ranking, 'moderator', () => prove('moderator'), recording);
+outcomeTest(ranking, 'operator', () => prove('operator'), recording);

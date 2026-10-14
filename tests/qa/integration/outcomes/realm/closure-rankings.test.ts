@@ -1,4 +1,6 @@
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordedMainClient } from '../../../support/recorded-main-client.ts';
+import { readRankingAnswer, readRankingModuleAnswer } from '../../../../../apps/web/features/realm/ranking-read.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-rankings.ts';
 import { afterAll, beforeAll, describe, expect, setDefaultTimeout } from 'bun:test';
@@ -18,6 +20,7 @@ const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
 let journeyStarted = 0;
 let evidence: ReturnType<typeof createClosureCreditEvidence>;
+const recording = new OutcomeRecorder(closure);
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
@@ -72,6 +75,17 @@ async function delivered(name: PersonaName) {
   await requireClosure(person);
   const root = `/v1/realms/${short(sessions.realm)}`;
   const absent = `/v1/realms/${randomUUID()}`;
+  for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']] as const) {
+    const missing = await readRankingAnswer(recordedMainClient(recording, name, person, `${sort}-${window}-missing`), {
+      realm: sessions.realm, sort, window, actingSubject: person.actingSubject,
+    });
+    expect(missing).toMatchObject({ ok: false, status: 404, failure: 'missing' });
+  }
+  for (const interval of ['day', 'week', 'month'] as const) {
+    const missing = await readRankingModuleAnswer(recordedMainClient(recording, name, person,
+      `ranking-module-${interval}-missing`), sessions.realm, interval, 'reads');
+    expect(missing).toMatchObject({ ok: false, failure: 'missing' });
+  }
   for (const suffix of ['/threads?sort=best&window=all', '/threads?sort=top&window=all',
     '/rankings', '/modules/rising']) {
     const query = person.actingSubject && suffix.startsWith('/threads') ? `&${acting(person)}` : '';
@@ -95,6 +109,7 @@ describe('rankings closure journey', () => {
     const started = performance.now();
     evidence = createClosureCreditEvidence('realm/closure-rankings', 'journey', import.meta.path);
     sessions = await evidence.phase('persona-preparation', () => personaSessions('public'));
+    await recording.prepare();
     evidence.observe(sessions);
     closureUnavailable = await closureSetup(sessions, () => evidence.phase('preparation', async () => {
       const rule = await evidence.phase('closure-rule', () => publishClosureRule(sessions));
@@ -112,16 +127,17 @@ describe('rankings closure journey', () => {
     try {
       evidence?.record({ kind: 'journey-timing', row: closure.rowId,
         journeySeconds: journeyStarted ? (performance.now() - journeyStarted) / 1000 : null });
+      await recording.publish();
     } finally {
       await sessions?.close();
     }
   });
 
-  outcomeTest(closure, 'visitor', () => evidence.phase('journey-visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor'))));
-  outcomeTest(closure, 'stranger', () => evidence.phase('journey-stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger'))));
-  outcomeTest(closure, 'member', () => evidence.phase('journey-member', () => closureCell(closure, 'member', () => sessions, () => delivered('member'))));
-  outcomeTest(closure, 'owner', () => evidence.phase('journey-owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner'))));
-  outcomeTest(closure, 'moderator', () => evidence.phase('journey-moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator'))));
-  outcomeTest(closure, 'operator', () => evidence.phase('journey-operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator'))));
+  outcomeTest(closure, 'visitor', () => evidence.phase('journey-visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor'))), recording);
+  outcomeTest(closure, 'stranger', () => evidence.phase('journey-stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger'))), recording);
+  outcomeTest(closure, 'member', () => evidence.phase('journey-member', () => closureCell(closure, 'member', () => sessions, () => delivered('member'))), recording);
+  outcomeTest(closure, 'owner', () => evidence.phase('journey-owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner'))), recording);
+  outcomeTest(closure, 'moderator', () => evidence.phase('journey-moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator'))), recording);
+  outcomeTest(closure, 'operator', () => evidence.phase('journey-operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator'))), recording);
 
 });
