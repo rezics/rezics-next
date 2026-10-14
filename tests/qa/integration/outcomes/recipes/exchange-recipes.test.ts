@@ -184,18 +184,19 @@ const discard = async (request: Promise<Response>) => { await (await request).bo
 // RecipeEditPage gates summary/metadata, then recipe/notes, on the Work's editor authority.
 async function exchangeReads(name: PersonaName, recipe: Recipe, prefix: string, editor: boolean) {
   const person = sessions[name], sample = recording.session(name, person), id = short(recipe.work);
+  const read = prefix === 'editor' ? answer : discard;
   await Promise.all([
-    person.actingSubject ? discard(sample(`${prefix}-authority`, 'GET', `/v1/resources/${id}/page${query(person)}`)) : null,
-    discard(sample(`${prefix}-work-header`, 'GET', `/v1/works/${id}${query(person)}`)),
+    person.actingSubject ? read(sample(`${prefix}-authority`, 'GET', `/v1/resources/${id}/page${query(person)}`)) : null,
+    read(sample(`${prefix}-work-header`, 'GET', `/v1/works/${id}${query(person)}`)),
   ]);
   if (!editor) return;
   await Promise.all([
-    discard(sample(`${prefix}-resource-summary`, 'GET', `/v1/resources/${id}${query(person)}`)),
-    discard(sample(`${prefix}-metadata-empty`, 'GET', `/v1/works/${id}/metadata${query(person)}`)),
+    read(sample(`${prefix}-resource-summary`, 'GET', `/v1/resources/${id}${query(person)}`)),
+    read(sample(`${prefix}-metadata-empty`, 'GET', `/v1/works/${id}/metadata${query(person)}`)),
   ]);
   await Promise.all([
-    discard(sample(`${prefix}-recipe`, 'GET', `/v1/recipes/works/${id}${query(person)}`)),
-    discard(sample(`${prefix}-notes-empty`, 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
+    read(sample(`${prefix}-recipe`, 'GET', `/v1/recipes/works/${id}${query(person)}`)),
+    read(sample(`${prefix}-notes-empty`, 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
   ]);
 }
 
