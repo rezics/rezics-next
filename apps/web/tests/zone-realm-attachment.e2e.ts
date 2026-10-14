@@ -11,7 +11,7 @@ import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { retainedAboutPost } from '../features/zones/about-discussion-intent.ts';
 import { aboutDiscussionMessages } from '../features/zones/about-discussion-messages.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
-import { visitJourney } from './journey-navigation.ts';
+import { reloadJourney, visitJourney } from './journey-navigation.ts';
 import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 
 // An editor attaches a Realm from another Space and publishes a routable Work page.
@@ -474,7 +474,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
       for (const tab of [page, other]) {
         // New fixture publications can still be moving. Follow the real region's offered recovery.
         await expect(async () => {
-          const retry = tab.locator('[data-discussion-state="unavailable"]')
+          const retry = tab.getByRole('region', { name: aboutDiscussionMessages.en.title, exact: true })
             .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
           if (await retry.isVisible()) await retry.press('Enter');
           const retryPage = tab.getByRole('alert').getByRole('link', { name: aboutDiscussionMessages.en.retry, exact: true });
@@ -525,7 +525,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
       await Promise.all(answers);
       expect(await retained(tab), JSON.stringify(writes)).toEqual([]);
     }
-    await Promise.all([page.reload(), other.reload()]);
+    await Promise.all([reloadJourney(page, zoneUrl), reloadJourney(other, zoneUrl)]);
     for (const actor of [actingSubject, visitor.agent]) {
       expect(writes.some(write => [200, 201].includes(write.status)
         && (JSON.parse(write.request) as { actingSubject: string }).actingSubject === actor), JSON.stringify(writes)).toBe(true);
@@ -533,7 +533,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     for (const tab of [page, other]) {
       const area = discussion(tab);
       await expect(async () => {
-        const retry = tab.locator('[data-discussion-state="unavailable"]')
+        const retry = tab.getByRole('region', { name: aboutDiscussionMessages.en.title, exact: true })
           .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
         if (await retry.isVisible()) await retry.press('Enter');
         const retryPage = tab.getByRole('alert').getByRole('link', { name: aboutDiscussionMessages.en.retry, exact: true });
@@ -560,7 +560,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
       await visitJourney(page, threadUrl!);
       await expect(page).toHaveURL(/\/discussions\//);
     }
-    await page.reload();
+    await reloadJourney(page, threadUrl!);
     for (const body of bodies) await expect(page.getByText(body, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 
     // Interface locale changes preserve the attached Realm and canonical discussion.
