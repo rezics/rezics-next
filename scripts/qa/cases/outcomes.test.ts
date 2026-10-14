@@ -30,6 +30,7 @@ afterEach(() => {
 
 function fixture() {
   const directory = mkdtempSync(join(root, '.temp/persona-outcomes-'));
+  expect(spawnSync('git', ['init', '-q', directory]).status).toBe(0);
   directories.push(directory);
   const declarationsDirectory = join(directory, 'scripts/qa/cases/outcomes');
   mkdirSync(declarationsDirectory, { recursive: true });

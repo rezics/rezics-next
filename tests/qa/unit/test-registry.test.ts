@@ -92,6 +92,7 @@ test('every tracked Bun test belongs to a QA tier, native image stage or reasone
 
 test('owner discovery registers nested Bun TSX tests without admitting an unregistered stack test', () => {
   const fixture = mkdtempSync(join(root, '.temp/test-registry-'));
+  expect(spawnSync('git', ['init', '-q', fixture]).status).toBe(0);
   try {
     for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts',
       'infra/dev/tests', 'infra/jena/tests']) mkdirSync(join(fixture, directory), { recursive: true });

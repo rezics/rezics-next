@@ -29,6 +29,7 @@ test('guard arguments keep Bun options and reserve a single aggregate JUnit dest
 test('guard processes overlap, inherit one QA slot, and retain every file in one JUnit report', async () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/parallel-guards-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const files = ['one', 'two', 'three'].map(name => join(root, `${name}.test.ts`));
     for (const [index, path] of files.entries()) writeFileSync(path, `
@@ -57,6 +58,7 @@ test('guard processes overlap, inherit one QA slot, and retain every file in one
 test('guard failures and module crashes are attributed to their file without discarding passing siblings', async () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/guard-failures-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const files = ['pass', 'fail', 'crash', 'no-report'].map(name => join(root, `${name}.test.ts`));
     writeFileSync(files[0]!, "import { test } from 'bun:test'; test('same title', () => {});");
@@ -117,6 +119,7 @@ test('outcome guard accepts public clients, persona fixtures, comments and other
 test('outcome inventory reads every nested outcome file', () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/outcome-guard-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const directory = join(root, 'tests/qa/integration/outcomes/nested');
     mkdirSync(directory, { recursive: true });
@@ -213,8 +216,9 @@ function literalScanPatterns(file: string): string[] {
   const ast = ts.createSourceFile(file, readFileSync(resolve(import.meta.dir, '../..', file), 'utf8'), ts.ScriptTarget.Latest, true);
   const patterns: string[] = [];
   const visit = (node: ts.Node) => {
-    if (ts.isNewExpression(node) && node.expression.getText(ast) === 'Bun.Glob') {
-      const pattern = node.arguments?.[0];
+    if (ts.isNewExpression(node) && node.expression.getText(ast) === 'Bun.Glob'
+      || ts.isCallExpression(node) && node.expression.getText(ast) === 'repositoryGlob') {
+      const pattern = node.arguments?.[ts.isCallExpression(node) ? 1 : 0];
       if (pattern && ts.isStringLiteral(pattern)) patterns.push(pattern.text);
     }
     ts.forEachChild(node, visit);
@@ -229,9 +233,9 @@ test('declared inventories retain the scan patterns from executable guard source
     ['scripts/static/web-continuations.test.ts', 'scripts/static/web-continuations.ts', ['']],
     ['scripts/static/web-page-filtering.test.ts', 'scripts/static/web-continuations.ts', ['']],
     ['scripts/static/web-accepted-commands.test.ts', 'scripts/static/web-accepted-commands.ts', ['apps/web/']],
-    ['scripts/static/web-acting-identity.test.ts', 'scripts/static/web-acting-identity.test.ts', ['apps/web/']],
+    ['scripts/static/web-acting-identity.test.ts', 'scripts/static/web-acting-identity.test.ts', ['']],
     ['tests/qa/unit/g-1046-sql-relations.test.ts', 'scripts/qa/sql-relations.ts', ['services/', 'scripts/', 'tests/']],
-    ['tests/qa/unit/serialization-points.test.ts', 'scripts/qa/serialization-points.ts', ['services/']],
+    ['tests/qa/unit/serialization-points.test.ts', 'scripts/qa/serialization-points.ts', ['']],
     ['tests/qa/unit/outbox-event-handlers.test.ts', 'tests/qa/unit/outbox-event-handlers.test.ts', ['']],
     ['services/main/tests/g-543-rate-limit.test.ts', 'services/main/tests/g-543-rate-limit.test.ts', ['services/main/migrations/access/']],
     ['services/main/tests/g-896-content-sequence.test.ts', 'services/main/tests/g-896-content-sequence.test.ts', ['']],

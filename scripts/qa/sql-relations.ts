@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript-6';
@@ -695,10 +696,7 @@ export function repositorySqlSources(root: string): SqlSource[] {
   repositoryIndex(root);
   const sources = ['services', 'scripts', 'tests'].flatMap((directory) =>
     [
-      ...new Bun.Glob('**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
-        cwd: join(root, directory),
-        onlyFiles: true,
-      }),
+      ...repositoryGlob(join(root, directory), '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'),
     ]
       .filter(
         (file) => !file.split('/').some((part) => ['node_modules', '.temp', 'dist'].includes(part)),

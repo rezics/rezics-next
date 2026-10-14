@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { repositoryFiles } from '../../lib/repository-files.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import ts from 'typescript-6';
@@ -30,16 +31,7 @@ export interface LoadOutcomesOptions {
 
 function declarationFiles(directory: string): string[] {
   if (!existsSync(directory)) return [];
-  return readdirSync(directory, { withFileTypes: true })
-    .flatMap((entry) => {
-      const file = join(directory, entry.name);
-      return entry.isDirectory()
-        ? declarationFiles(file)
-        : entry.isFile() && file.endsWith('.ts')
-          ? [file]
-          : [];
-    })
-    .sort();
+  return repositoryFiles(directory).filter(file => file.endsWith('.ts')).map(file => join(directory, file)).sort();
 }
 
 // outcomeTest supplies the title from the imported declaration; a text search

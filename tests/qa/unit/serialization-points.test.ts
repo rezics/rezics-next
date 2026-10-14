@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -657,6 +658,7 @@ test('allowances require an exact relation or key, writer and reason', () => {
 test('discovery audits unregistered services and orders nested migrations numerically', () => {
   const root = resolve(import.meta.dir, '../../..');
   const fixture = mkdtempSync(join(root, '.temp/serialization-discovery-'));
+  expect(spawnSync('git', ['init', '-q', fixture]).status).toBe(0);
   try {
     const directory = join(fixture, 'services/future/migrations/nested');
     mkdirSync(directory, { recursive: true });

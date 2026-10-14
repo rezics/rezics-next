@@ -88,6 +88,7 @@ test('integration shards keep fixture and product assembler files apart', () => 
 test('raw SPARQL scan reports an unresolved helper at its import site', () => {
   const root = resolve(import.meta.dir, '../..');
   const directory = mkdtempSync(join(root, '.temp', 'qa-raw-update-scan-'));
+  expect(spawnSync('git', ['init', '-q', directory]).status).toBe(0);
   const integrationDirectory = join(directory, 'tests', 'qa', 'integration');
   mkdirSync(integrationDirectory, { recursive: true });
   writeFileSync(join(integrationDirectory, 'unresolved-helper.test.ts'), "import './missing-support.ts';\n");
@@ -103,6 +104,7 @@ test('raw SPARQL scan reports an unresolved helper at its import site', () => {
 test('raw SPARQL scan maps HTTP update helpers to the importing integration test', () => {
   const root = resolve(import.meta.dir, '../..');
   const directory = mkdtempSync(join(root, '.temp', 'qa-raw-http-scan-'));
+  expect(spawnSync('git', ['init', '-q', directory]).status).toBe(0);
   const integrationDirectory = join(directory, 'tests', 'qa', 'integration');
   mkdirSync(integrationDirectory, { recursive: true });
   writeFileSync(join(integrationDirectory, 'http-update.test.ts'), "import { sendUpdate } from './http-update-support.ts';\nvoid sendUpdate;\n");

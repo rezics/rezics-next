@@ -1,3 +1,5 @@
+import { spawnSync } from 'node:child_process';
+import { repositoryFiles } from '../lib/repository-files.ts';
 // Baseline guard for the backend-one rule. A count or key below the baseline passes.
 // Rewrite it with `bun scripts/static/anti-silo.test.ts --update` or
 // `ANTI_SILO_UPDATE=1 bun test scripts/static/anti-silo.test.ts`. Bun's test runner
@@ -13,7 +15,6 @@ import {
   existsSync,
   mkdtempSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync,
@@ -107,16 +108,11 @@ function posix(path: string): string {
 }
 
 function walk(tree: string, directory: string, visit: (absolute: string, path: string) => void) {
-  if (!existsSync(directory)) return;
-  const stack = [directory];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      const absolute = join(current, entry.name);
-      if (entry.isDirectory()) stack.push(absolute);
-      else if (entry.isFile()) visit(absolute, posix(relative(tree, absolute)));
-    }
+  const prefix = posix(relative(tree, directory)) + '/';
+  for (const path of repositoryFiles(tree)) {
+    if (!path.startsWith(prefix)) continue;
+    if (path.slice(prefix.length).split('/').some(part => part === 'node_modules' || part.startsWith('.'))) continue;
+    visit(join(tree, path), path);
   }
 }
 
@@ -412,6 +408,7 @@ function withTree(files: Record<string, string>, run: (tree: string) => void) {
   const scratch = join(root, '.temp');
   mkdirSync(scratch, { recursive: true });
   const tree = mkdtempSync(join(scratch, 'anti-silo-'));
+  expect(spawnSync('git', ['init', '-q', tree]).status).toBe(0);
   try {
     for (const [path, body] of Object.entries(files)) {
       const absolute = join(tree, path);

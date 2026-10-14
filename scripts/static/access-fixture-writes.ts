@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
+import { repositoryFiles } from '../lib/repository-files.ts';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { extname, join, relative, resolve, sep } from 'node:path';
 
 const sourceRoots = ['apps', 'services', 'tests', 'scripts', 'packages'];
@@ -37,22 +38,8 @@ function isExcluded(file: string): boolean {
 }
 
 function sourceFiles(root: string): string[] {
-  const files: string[] = [];
-  const walk = (directory: string) => {
-    for (const entry of readdirSync(directory, { withFileTypes: true })) {
-      const path = join(directory, entry.name);
-      // Directory entries already carry type information; only links need a stat.
-      if (entry.isDirectory() || entry.isSymbolicLink() && statSync(path).isDirectory()) walk(path);
-      else if (sourceExtensions.has(extname(entry.name)) && !isExcluded(relative(root, path))) files.push(path);
-    }
-  };
-  for (const directory of sourceRoots) {
-    const path = join(root, directory);
-    try { walk(path); } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
-  }
-  return files.sort();
+  return repositoryFiles(root).filter(file => sourceRoots.some(directory => file.startsWith(`${directory}/`))
+    && sourceExtensions.has(extname(file)) && !isExcluded(file)).map(file => join(root, file));
 }
 
 export function scanAccessFixtureWrites(root = resolve(import.meta.dir, '../..')): AccessFixtureWrite[] {

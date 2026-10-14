@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,7 +13,7 @@ const fixture = (name: string, path: string) => ({
 
 test('only Rights and Governance write assessment, obligation and enforcement state', async () => {
   const violations: string[] = [];
-  for await (const path of new Bun.Glob('services/**/src/**/*.ts').scan({ cwd: root })) {
+  for await (const path of repositoryGlob(root, 'services/**/src/**/*.ts')) {
     violations.push(...mechanismWriterViolations([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
   }
   expect(violations.sort()).toEqual([]);
@@ -20,12 +21,12 @@ test('only Rights and Governance write assessment, obligation and enforcement st
 
 test('Access authority writes stay in Access, the frozen debt, or neither scripts nor other modules', async () => {
   const serviceWriters: string[] = [];
-  for await (const path of new Bun.Glob('services/**/src/**/*.ts').scan({ cwd: root })) {
+  for await (const path of repositoryGlob(root, 'services/**/src/**/*.ts')) {
     serviceWriters.push(...accessAuthorityWriters([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));
   }
   expect(serviceWriters.sort()).toEqual([...accessAuthorityDebt].sort());
   const scriptViolations: string[] = [];
-  for await (const path of new Bun.Glob('scripts/**/*.ts').scan({ cwd: root })) {
+  for await (const path of repositoryGlob(root, 'scripts/**/*.ts')) {
     // Guard fixtures are the negative cases.
     if (path.startsWith('scripts/static/fixtures/')) continue;
     scriptViolations.push(...mechanismWriterViolations([{ path, source: readFileSync(resolve(root, path), 'utf8') }]));

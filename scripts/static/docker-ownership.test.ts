@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -39,6 +40,7 @@ test('Docker program identity escapes remain covered by the inventory', () => {
   const temporaryBase = join(root, '.temp');
   mkdirSync(temporaryBase, { recursive: true });
   const directory = mkdtempSync(join(temporaryBase, 'docker-ownership-'));
+  expect(spawnSync('git', ['init', '-q', directory]).status).toBe(0);
   try {
     writeFileSync(join(directory, 'escaped.ts'), String.raw`spawnSync('do\cker', ['version'], { env: process.env });`);
     writeFileSync(join(directory, 'unrelated.ts'), `const source = 'ordinary code';`);

@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import { repositoryFiles } from '../lib/repository-files.ts';
 import { extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { indexedFiles, repositoryIndex } from '../lib/repo-index.ts';
@@ -94,25 +95,14 @@ function entryPointFile(owner: string, point: string): string | null {
   return file;
 }
 
-function ownerSourceFiles(root: string, owner: string): string[] {
+function ownerSourceFiles(root: string, owner: string, inventory: readonly string[]): string[] {
   const directory = join(root, owner);
   if (!owner || isAbsolute(owner) || owner.split('/').includes('..') || !existsSync(directory))
     return [];
   if (!statSync(directory).isDirectory()) return [];
-  const found: string[] = [];
-  const stack = [directory];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      const absolute = join(current, entry.name);
-      if (entry.isDirectory()) stack.push(absolute);
-      else if (entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))) {
-        found.push(relative(root, absolute).replaceAll('\\', '/'));
-      }
-    }
-  }
-  return found.sort();
+  return inventory.filter(file => file.startsWith(`${owner}/`)
+    && !file.slice(owner.length + 1).split('/').some(part => part === 'node_modules' || part.startsWith('.'))
+    && SOURCE_EXTENSIONS.has(extname(file)));
 }
 
 function matchesAdapter(file: string, owner: string, adapter: string): boolean {
@@ -122,8 +112,8 @@ function matchesAdapter(file: string, owner: string, adapter: string): boolean {
 }
 
 /** Entry-point files plus adapter files under the owner whose path matches the role name. */
-export function allowedImportFiles(entry: Mechanism, root: string): string[] {
-  const files = ownerSourceFiles(root, entry.owner);
+export function allowedImportFiles(entry: Mechanism, root: string, inventory = repositoryFiles(root)): string[] {
+  const files = ownerSourceFiles(root, entry.owner, inventory);
   const allowed = new Set<string>();
   for (const point of entry.entryPoints) {
     const file = entryPointFile(entry.owner, point);
@@ -142,8 +132,9 @@ export function assessMechanismDependencies(
 ): MechanismDependencyAssessment {
   const rules: MechanismCruiseRule[] = [];
   const errors: string[] = [];
+  const inventory = repositoryFiles(root);
   for (const entry of list) {
-    const files = ownerSourceFiles(root, entry.owner);
+    const files = ownerSourceFiles(root, entry.owner, inventory);
     if (files.length === 0) {
       errors.push(`${entry.id}: selector matches no file: ${entry.owner || '(empty)'}`);
       continue;
@@ -153,7 +144,7 @@ export function assessMechanismDependencies(
       if (!file || !files.includes(file))
         errors.push(`${entry.id}: selector matches no file: ${point || '(empty)'}`);
     }
-    const allowed = allowedImportFiles(entry, root);
+    const allowed = allowedImportFiles(entry, root, inventory);
     if (allowed.length === 0) errors.push(`${entry.id}: selector matches no file: entry points`);
     const rule: MechanismCruiseRule = {
       name: mechanismRuleName(entry.id),
