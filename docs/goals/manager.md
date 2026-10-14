@@ -188,6 +188,8 @@ opinion, such as
    note. Do not grant an exception in a mail. A wave build task
    (docs/goals/wave.md) is never landed on its own: accept its `RESULT: done`
    once its commits are on `wave/<n>`, and it reaches `main` with the wave.
+   Leave it exited: program closes the wave's tasks as verified after the wave
+   merges.
    (2026-10-14: managers ran `land` on wave tasks, and each run cost a
    settlement that the wave hold then refused.)
 5. **Keep a later list.** A finding no row's persona meets goes to `later.md`
