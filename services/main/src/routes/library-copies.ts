@@ -7,6 +7,7 @@ import { loanDirection, loanState, loanStatus } from '../modules/library/loans.t
 import { libraryParty, libraryTime } from '../modules/library/copies.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { verifyCommandAccount } from '../modules/account/verify-assertion.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -49,7 +50,9 @@ function failure(error: unknown): Response {
 
 export function libraryCopiesRoutes(deps: MainWorkDependencies) {
   const own = async (request: Request, agent: string, write = false) => {
-    const principal = await deps.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    const principal = write
+      ? await verifyCommandAccount(deps.account, request, ['work:read', 'library:write'])
+      : await deps.account.verify(request, ['work:read']);
     if (!await deps.access.canReadAsBaselineMember?.(principal, agent)) {
       throw new LibraryRecordDenied('Copies and loans are private to your own Person');
     }

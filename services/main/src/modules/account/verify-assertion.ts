@@ -31,10 +31,25 @@ export class AccountAssertionInsufficientScope extends AccountAssertionDenied {}
 export class AccountAssertionUnavailable extends Error {}
 
 interface RequestAdmission { scopes: readonly string[]; principal: VerifiedAccountAssertion }
-/** Rate-limit admission for this Request, taken by its first read session.
+/** Account admission for this Request, taken by its first read session.
  * A retry session finds nothing here and verifies again, so a revocation
  * between attempts is seen. Nothing is keyed by the bearer. */
 const requestAdmissions = new WeakMap<Request, RequestAdmission>();
+
+/** A command verifies its full consent now, then hands that same admission to
+ * its effect-free Work read. The read consumes it once; another request or a
+ * retry verifies again. No budget-attribution cache authorizes the command. */
+export async function verifyCommandAccount(
+  account: Pick<AccountAssertionVerifier, 'verify'>,
+  request: Request,
+  requiredScopes: readonly string[],
+): Promise<VerifiedAccountAssertion> {
+  // A failed command must not leave an earlier rate-limit grant available.
+  requestAdmissions.delete(request);
+  const principal = await account.verify(request, requiredScopes);
+  requestAdmissions.set(request, { scopes: requiredScopes, principal });
+  return principal;
+}
 
 function grantCovers(admission: RequestAdmission, requiredScopes: readonly string[]): boolean {
   // A published grant is the introspection result. A verifier that omits it
@@ -62,8 +77,8 @@ export async function verifyRequestAccount(
     }
   }
   const principal = await account.verify(request, requiredScopes);
-  // Only the rate-limit check, which asks for no operation scope, is stored.
-  // A read session's own verification must not satisfy the next attempt.
+  // This path stores only rate-limit checks. Commands explicitly hand off
+  // their admission above; a read's verification cannot cover its next attempt.
   if (requiredScopes.length === 0 && !requestAdmissions.has(request)) {
     requestAdmissions.set(request, { scopes: requiredScopes, principal });
   }

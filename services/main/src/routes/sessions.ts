@@ -5,6 +5,7 @@ import { InvalidSession, SESSION_COST, SessionConflict, SessionDenied, SessionMi
 import { resolveSessionSelections } from '../modules/session/resolve.ts';
 import { TargetNotBound } from '../modules/target/resolve.ts';
 import { workRead } from '../modules/work/read-session.ts';
+import { verifyCommandAccount } from '../modules/account/verify-assertion.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -40,7 +41,9 @@ function failure(error: unknown): Response {
 
 export function sessionsRoutes(work: MainWorkDependencies) {
   const own = async (request: Request, agent: string, write = false) => {
-    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    const principal = write
+      ? await verifyCommandAccount(work.account, request, ['work:read', 'library:write'])
+      : await work.account.verify(request, ['work:read']);
     // Access's own-person baseline excludes delegated Agents, even when they
     // hold work.read, agent.control or another public command's permission.
     if (!await work.access.canReadAsBaselineMember?.(principal, agent)) {

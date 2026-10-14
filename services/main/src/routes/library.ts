@@ -14,6 +14,7 @@ import { shelfWork } from '../modules/profiles/read-contract.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
+import { verifyCommandAccount } from '../modules/account/verify-assertion.ts';
 import { readRichReadingYear } from '../modules/library/stats.ts';
 import { resourceListing } from '../modules/realm-admin/contract.ts';
 import { pageDiscovery } from '../modules/realm-reads/read-contract.ts';
@@ -163,7 +164,9 @@ function readWorks(value: string) {
 
 export function libraryRoutes(work: MainWorkDependencies) {
   const reader = async (request: Request, agent: string, write = false) => {
-    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    const principal = write
+      ? await verifyCommandAccount(work.account, request, ['work:read', 'library:write'])
+      : await work.account.verify(request, ['work:read']);
     if (!work.access.canReadAsBaselineMember
       || !await work.access.canReadAsBaselineMember(principal, agent)) return null;
     return principal;

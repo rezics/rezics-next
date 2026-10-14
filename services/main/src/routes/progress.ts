@@ -29,6 +29,7 @@ import { configureProgressProjections } from '../modules/progress/completion-pla
 import { memberAnchoring } from '../modules/reading-position/continuity.ts';
 import { ReadingContinuityUnsupported } from '../modules/reading-position/errors.ts';
 import { AdmissionDenied } from '../modules/access/admission.ts';
+import { verifyCommandAccount } from '../modules/account/verify-assertion.ts';
 
 const ref = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const contentRevision = t.String({ pattern: '^urn:rezics:content:revision:[0-9a-f-]{36}$' });
@@ -82,7 +83,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       .structureObjects = work.structureObjects;
   }
   const own = async (request: Request, actingSubject: string, write = false) => {
-    const principal = await work.account.verify(request, write ? ['work:read', 'library:write'] : ['work:read']);
+    const principal = write
+      ? await verifyCommandAccount(work.account, request, ['work:read', 'library:write'])
+      : await work.account.verify(request, ['work:read']);
     if (!await work.access.canReadAsBaselineMember?.(principal, actingSubject)) {
       throw new AdmissionDenied('Progress is private to the principal’s controlled Person');
     }

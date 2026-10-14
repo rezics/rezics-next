@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
-import { AccountAssertionDenied, AccountAssertionInsufficientScope, verifyRequestAccount,
+import { AccountAssertionDenied, AccountAssertionInsufficientScope, verifyCommandAccount, verifyRequestAccount,
   type VerifiedAccountAssertion } from '../src/modules/account/verify-assertion.ts';
 import { rateLimitBudgets } from '../src/modules/rate-limit/budgets.ts';
 import { rateLimitHook } from '../src/modules/rate-limit/hook.ts';
@@ -152,4 +152,60 @@ test('a published grant refuses a missing scope without asking Account again', a
   await expect(verifyRequestAccount(account, request, ['realm:adopt'])).rejects.toBeInstanceOf(AccountAssertionInsufficientScope);
   await verifyRequestAccount(account, request, ['governance:decide']);
   expect(verifications).toBe(1);
+});
+
+test('a command replaces budget admission with current consent for exactly one read attempt', async () => {
+  let verifications = 0, active = true;
+  const account = { verify: async () => {
+    verifications++;
+    if (!active) throw new AccountAssertionDenied('revoked');
+    return granted(['work:read', 'library:write']);
+  } };
+  const request = new Request('http://main.local/v1/works/work/reader-status', {
+    method: 'PUT', headers: { authorization: 'Bearer reader' },
+  });
+  const budget = await verifyRequestAccount(account, request, []);
+  const command = await verifyCommandAccount(account, request, ['work:read', 'library:write']);
+  expect(command).not.toBe(budget);
+  expect(verifications).toBe(2);
+  active = false;
+  expect(await verifyRequestAccount(account, request, ['work:read'])).toBe(command);
+  expect(verifications).toBe(2);
+  await expect(verifyRequestAccount(account, request, ['work:read'])).rejects.toBeInstanceOf(AccountAssertionDenied);
+  expect(verifications).toBe(3);
+});
+
+test('a failed command discards the earlier budget grant rather than authorizing a read with it', async () => {
+  let active = true;
+  const account = { verify: async () => {
+    if (!active) throw new AccountAssertionDenied('revoked');
+    return granted(['work:read', 'library:write']);
+  } };
+  const request = new Request('http://main.local/v1/works/work/reader-status', {
+    method: 'PUT', headers: { authorization: 'Bearer reader' },
+  });
+  await verifyRequestAccount(account, request, []);
+  active = false;
+  await expect(verifyCommandAccount(account, request, ['work:read', 'library:write']))
+    .rejects.toBeInstanceOf(AccountAssertionDenied);
+  await expect(verifyRequestAccount(account, request, ['work:read'])).rejects.toBeInstanceOf(AccountAssertionDenied);
+});
+
+test('command read admission stays on its Request and retains the verified scope ceiling', async () => {
+  const seen: string[][] = [];
+  const account = { verify: async (_request: Request, scopes: readonly string[]) => {
+    seen.push([...scopes]);
+    if (scopes.includes('library:write')) throw new AccountAssertionInsufficientScope('Missing consent');
+    // Older adapters publish no grant: only the scopes just verified may pass.
+    return { issuer: 'https://account.test', subject: 'reader' };
+  } };
+  const request = new Request('http://main.local/v1/works/work/reader-status', {
+    method: 'PUT', headers: { authorization: 'Bearer reader' },
+  });
+  await verifyCommandAccount(account, request, ['work:read']);
+  await expect(verifyRequestAccount(account, request, ['library:write'])).rejects.toBeInstanceOf(AccountAssertionDenied);
+  expect(await verifyRequestAccount(account, request, ['work:read'])).toMatchObject({ subject: 'reader' });
+  expect(seen).toEqual([['work:read'], ['library:write']]);
+  await verifyRequestAccount(account, new Request(request), ['work:read']);
+  expect(seen).toEqual([['work:read'], ['library:write'], ['work:read']]);
 });
