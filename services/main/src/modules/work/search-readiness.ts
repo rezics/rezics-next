@@ -39,6 +39,17 @@ export class SearchRequestTimedOut extends SearchIndexUnavailable {
     this.diagnostics = diagnostics;
   }
 }
+
+/** A pending event-loop timer is not proof that the wall budget remains. */
+export function assertSearchDeadline() {
+  const budget = fusekiReadBudget.getStore();
+  if (budget && (budget.signal.aborted
+    || (budget.deadline !== undefined && performance.now() >= budget.deadline))) {
+    throw new SearchRequestTimedOut('public search request exceeded wall deadline', {
+      diagnostics: snapshotFusekiReadDiagnostics(budget),
+    });
+  }
+}
 /** The JVM started after an unclean stop; only an empty-index rebuild clears it (OPS15). */
 export class SearchIndexUncertain extends SearchIndexUnavailable {}
 
@@ -105,9 +116,15 @@ export async function withStableSearchSnapshot<T>(fuseki: FusekiClient | undefin
         budget.attempt = attempt;
         budget.phase = 'read';
         const readStarted = performance.now();
-        try { return await Promise.race([read(), expired]); }
+        try {
+          assertSearchDeadline();
+          const result = await Promise.race([read(), expired]);
+          assertSearchDeadline();
+          return result;
+        }
         catch (error) {
           reportAttempt(diagnostics, attempt, 'read', readStarted, error);
+          if (error instanceof SearchRequestTimedOut) controller.abort(error);
           if (controller.signal.aborted) {
             if (error instanceof SearchRequestTimedOut) throw error;
             throw new SearchRequestTimedOut('public search request exceeded wall deadline', {

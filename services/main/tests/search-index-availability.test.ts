@@ -109,3 +109,53 @@ test('the search owner starts no graph fence after its deadline even before the 
   expect(controller.signal.aborted).toBe(false);
   expect(fences).toBe(0);
 });
+
+test('a fence that consumes the remaining budget starts no final health read', async () => {
+  for (const graphBasis of ['matching-cut', 'selected-units'] as const) {
+    const fixture = indexed('25');
+    const controller = new AbortController();
+    const budget = { signal: controller.signal, callsLeft: 72, bytesLeft: 8_388_608, deadline: Infinity };
+    let healthReads = 0;
+    const health = fixture.client.commandHealth.bind(fixture.client);
+    fixture.client.commandHealth = async () => { healthReads++; return health(); };
+    const query = fixture.client.query.bind(fixture.client);
+    fixture.client.query = async (...args) => {
+      if (args[0].includes('LIMIT 2')) budget.deadline = performance.now() - 1;
+      return query(...args);
+    };
+    await expect(fusekiReadBudget.run(budget, () => withSearchGraphSnapshot(
+      { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => {
+        healthReads = 0;
+        return { results: [] };
+      }, graphBasis))).rejects.toBeInstanceOf(SearchRequestTimedOut);
+    expect(healthReads).toBe(0);
+    expect(controller.signal.aborted).toBe(false);
+  }
+});
+
+test('completed search cannot beat a pending wall timer with an expired result', async () => {
+  let cancelled = false;
+  await expect(withStableSearchSnapshot(undefined, async () => {
+    fusekiReadBudget.getStore()!.signal.addEventListener('abort', () => { cancelled = true; }, { once: true });
+    const stop = performance.now() + 15;
+    while (performance.now() < stop) { /* Hold the timer until completion's microtask. */ }
+    return { results: [] };
+  }, 5)).rejects.toBeInstanceOf(SearchRequestTimedOut);
+  expect(cancelled).toBe(true);
+});
+
+test('readiness consuming the wall budget admits no matching or hydration callback', async () => {
+  const fixture = indexed('25');
+  const budget = { signal: new AbortController().signal, callsLeft: 72, bytesLeft: 8_388_608, deadline: Infinity };
+  const proof = fixture.client.searchDeltaSince.bind(fixture.client);
+  fixture.client.searchDeltaSince = async (...args) => {
+    const result = await proof(...args);
+    budget.deadline = performance.now() - 1;
+    return result;
+  };
+  let reads = 0;
+  await expect(fusekiReadBudget.run(budget, () => withSearchGraphSnapshot(
+    { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => { reads++; })))
+    .rejects.toBeInstanceOf(SearchRequestTimedOut);
+  expect(reads).toBe(0);
+});
