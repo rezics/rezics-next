@@ -205,10 +205,12 @@ test('a wrapped test startup streams a four-minute injected memory wait within i
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
-test('test-side startup children stop before parent cancellation completes, without a QA slot', async () => {
-  const alive = (pid: number) => processRunning(pid);
-  for (const boundary of ['direct', 'indirect']) {
-    for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'timeout', 'forced-timeout']) {
+// Each child lifecycle is a case; host scheduling across ten independent
+// cancellations must not consume a single case's unchanged thirty-second clock.
+for (const boundary of ['direct', 'indirect']) {
+  for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'timeout', 'forced-timeout']) {
+    test(`test-side startup children stop before parent cancellation completes, without a QA slot (${boundary}, ${mode})`, async () => {
+      const alive = (pid: number) => processRunning(pid);
       const dir = mkdtempSync(join(scratch, 'qa-startup-cancellation-'));
       const ready = join(dir, 'ready'), cancelReady = join(dir, 'cancel-ready'), late = join(dir, 'late-compose');
       mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
@@ -278,9 +280,9 @@ test('test-side startup children stop before parent cancellation completes, with
         }
         rmSync(dir, { recursive: true, force: true });
       }
-    }
+    }, 30000);
   }
-}, 30000);
+}
 
 function unsafeStartupWraps(path: string, text: string): string[] {
   // Every guarded launch needs one of these identifiers, actions or paths.
