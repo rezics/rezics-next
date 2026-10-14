@@ -7,10 +7,10 @@ import { browseQuery, emptyBrowse, type BrowseState } from '../discover/browse-s
 import { creationSample, foundingPersonas } from './creation-story-inputs.ts';
 
 export type DirectoryStoryState = 'populated' | 'continuation' | 'filtered' | 'empty' | 'error' | 'moved' | 'loading';
-const realmTypes = browseCategories(servedTypes.types).find(category => category.id === 'communities')?.types;
-if (!realmTypes) throw new Error('The served registry must declare the communities category');
 const position = { dataEpoch: 'directory-story', sequence: '1' };
 function liveCard(id: string, value: string): ResourceCard {
+  const realmTypes = browseCategories(servedTypes.types).find(category => category.id === 'communities')?.types;
+  if (!realmTypes) throw new Error('The served registry must declare the communities category');
   return { id, name: { value, language: 'en', direction: direction('en', value), basis: 'fallback' }, kind: 'realm', types: realmTypes,
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'realm' } };
 }
