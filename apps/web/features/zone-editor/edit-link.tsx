@@ -1,5 +1,3 @@
-import { buttonVariants } from '@rezics/ui/button';
-import { cn } from '@rezics/ui/utils';
 import { cookies } from 'next/headers';
 import { cache } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -7,15 +5,11 @@ import { getTranslation } from '../../i18n/server.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { readSession } from '../auth/session.ts';
-import { settle } from '../manage/read.ts';
-import LocalizedLink from '../shell/localized-link.tsx';
-import { zoneEditorPath } from './routes.ts';
+import { readShowcaseEditor, ZoneEditSiteLink } from './edit-site-link.tsx';
 
 /** The showcase-editor read. A refusal is no link. The Realm frame uses this same check. */
-export const showcaseEditorOpen = cache(async (zoneId: string, actingSubject: string, token: string | undefined) => settle(
-  () => mainApiWithToken(token).v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }),
-  { management: true },
-));
+export const showcaseEditorOpen = cache(async (zoneId: string, actingSubject: string, token: string | undefined) =>
+  (await readShowcaseEditor(mainApiWithToken(token), zoneId, actingSubject)).loaded);
 
 /**
  * Edit site, for a reader who can already open this Zone's editor.
@@ -33,8 +27,5 @@ export async function ZoneEditLink({ zoneId, space, locale, className }: {
   const allowed = await showcaseEditorOpen(zoneId, session.agent.agent.iri, token);
   if (!allowed.ok) return null;
   const { t } = await getTranslation('manage', [locale]);
-  return <LocalizedLink href={zoneEditorPath(space)} documentNavigation
-    className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), className)}>
-    {t.editSite}
-  </LocalizedLink>;
+  return <ZoneEditSiteLink space={space} className={className}>{t.editSite}</ZoneEditSiteLink>;
 }

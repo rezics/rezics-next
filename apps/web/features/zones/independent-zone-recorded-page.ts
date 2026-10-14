@@ -3,88 +3,74 @@ import type { ZoneContext } from '@rezics/zone-sdk';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { addressKey } from '../address/path.ts';
-import { browserMainApi } from '../api/browser.ts';
-import { isOfflineError } from '../feed/types.ts';
+import type { MainClient } from '../discover/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
-import { failureOf as managementFailure, type ReadFailure as ManagementFailure } from '../manage/types.ts';
-import { completePublicNavigation } from '../realm/public-navigation.ts';
-import { idOf, siteHref } from '../realm/route.ts';
-import { failureOf, type ReadFailure, type ZonePresentationRead } from '../realm/types.ts';
+import { siteHref } from '../realm/route.ts';
+import { realmFrameReads, type SiteResolution } from '../realm/read.ts';
+import type { ReadFailure, ZonePresentationRead } from '../realm/types.ts';
+import type { RealmFrameRead } from '../realm/zone-presentation-read.ts';
+import { zonePresentationReads } from '../realm/zone-presentation-read.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import {
-  mapZoneSiteRecordedPage,
-  zoneSitePrefix,
-  type ZoneSiteCredit,
-  type ZoneSiteMapped,
-  type ZoneSiteProblem,
-  type ZoneSiteRead,
-} from './zone-site-recorded-page.ts';
+  readShowcaseEditor,
+  showcaseEditorAuthority,
+  type ShowcaseEditorAuthority,
+} from '../zone-editor/edit-site-link.tsx';
+import { mapZoneSiteHome, type ZoneSiteCredit, type ZoneSiteMapped } from './zone-site-recorded-page.ts';
 
 /**
- * Published home of a Zone with no Realm. The standalone route builds this
- * context and the shared published frame; stories replay the visit through the supplied client.
- * A presentation or route that names a Realm is a different page.
+ * Published home of a Zone with no Realm. Production and a recorded story call
+ * this with their own clients: the request-cached host readers, or the replaying client.
+ * An empty path does not read a route. A presentation that names a Realm is a different page.
  */
 
-type MainClient = ReturnType<typeof browserMainApi>;
-type TreatyAnswer<T> = {
-  data: T | null;
-  error: { status: number; value: unknown } | null;
-  response?: unknown;
-  headers?: unknown;
-};
-
-const replayGap = /Unmatched recorded request|Recorded sample|Ambiguous recorded request|cannot supply/;
-
-function problemOf(status: number, value: unknown): ZoneSiteProblem | null {
-  if (!value || typeof value !== 'object') return null;
-  const body = value as Record<string, unknown>;
-  if (typeof body.title !== 'string' || typeof body.code !== 'string') return null;
-  if (typeof body.status === 'number' && body.status !== status) return null;
-  return { status, title: body.title, code: body.code };
+export interface IndependentZoneHomeBoundary {
+  resolveSite: (space: string, locale: UiLocale) => Promise<SiteResolution>;
+  readCompletePresentation: (zone: string) => Promise<RealmFrameRead<ZonePresentationRead>>;
+  editorOpen: ((zoneId: string, actingSubject: string) => Promise<ShowcaseEditorAuthority>) | null;
 }
 
-interface Settled<T, Failure extends string> {
-  loaded: { ok: true; data: T } | { ok: false; failure: Failure };
-  problem: ZoneSiteProblem | null;
-}
-
-async function settle<T, Failure extends string>(
-  call: () => Promise<TreatyAnswer<T>>,
-  fail: (status: number, value: unknown) => Failure,
-  closed: { offline: Failure; unavailable: Failure },
-): Promise<Settled<T, Failure>> {
-  try {
-    let answer = await call();
-    if (!answer.response && answer.error) {
-      const value = answer.error.value;
-      throw value instanceof Error ? value : new Error(typeof value === 'string' ? value : JSON.stringify(value));
-    }
-    if (answer.error?.status === 409) answer = await call();
-    if (answer.error) {
-      return {
-        loaded: { ok: false, failure: fail(answer.error.status, answer.error.value) },
-        problem: problemOf(answer.error.status, answer.error.value),
-      };
-    }
-    return answer.data == null
-      ? { loaded: { ok: false, failure: closed.unavailable }, problem: null }
-      : { loaded: { ok: true, data: answer.data }, problem: null };
-  } catch (error) {
-    if (error instanceof Error && replayGap.test(error.message)) throw error;
-    if (error instanceof DOMException && error.name === 'AbortError') throw error;
-    return { loaded: { ok: false, failure: isOfflineError(error) ? closed.offline : closed.unavailable }, problem: null };
-  }
-}
-
-const publicClosed = { offline: 'offline', unavailable: 'unavailable' } as const;
-function readPublic<T>(call: () => Promise<TreatyAnswer<T>>) {
-  return settle(call, (status, value) => failureOf(status, value), publicClosed);
-}
-
-export interface IndependentZoneIdentity {
-  zone: string;
-  canonical: CanonicalAddress;
+export function independentZoneHomeBoundary(input: {
+  main?: MainClient;
+  personal?: MainClient;
+  actingSubject?: string;
+  /** Host readers. Present only in production, where address resolution keeps its cache and headers. */
+  production?: {
+    resolveSite: IndependentZoneHomeBoundary['resolveSite'];
+    readCompletePresentation: IndependentZoneHomeBoundary['readCompletePresentation'];
+  };
+  editorOpen?: IndependentZoneHomeBoundary['editorOpen'];
+  /** Replaying editor client. Production passes `editorOpen` so the session cache stays the one the link uses. */
+  editorClient?: MainClient | null;
+}): IndependentZoneHomeBoundary {
+  const actingSubject = input.actingSubject;
+  const editorOpen = input.editorOpen ?? (actingSubject && input.editorClient
+    ? async (zoneId: string, subject: string) => showcaseEditorAuthority(await readShowcaseEditor(input.editorClient!, zoneId, subject))
+    : null);
+  if (input.production) return { ...input.production, editorOpen };
+  if (!input.main) throw new Error('independent zone home needs a supplied client');
+  const personal = input.personal ?? input.main;
+  const pages = zonePresentationReads(personal, actingSubject, false);
+  const pending = new Map<string, Promise<RealmFrameRead<ZonePresentationRead>>>();
+  const readCompletePresentation = (zone: string) => {
+    const existing = pending.get(zone);
+    if (existing) return existing;
+    const read = pages.readCompletePresentation(zone);
+    pending.set(zone, read);
+    return read;
+  };
+  const reads = realmFrameReads({
+    main: input.main,
+    personal,
+    actingSubject,
+    keepProblem: false,
+    resolution: { readCompletePresentation },
+  });
+  return {
+    resolveSite: (space, locale) => reads.resolveSite(space, locale),
+    readCompletePresentation,
+    editorOpen,
+  };
 }
 
 /** The space key and acting person on the selected visit, taken from its request URLs. */
@@ -143,30 +129,6 @@ export function independentZoneContext(
   };
 }
 
-function zoneIdentity(value: unknown): IndependentZoneIdentity | { detail: string } {
-  if (!value || typeof value !== 'object') return { detail: 'address answer is not a record' };
-  const data = value as Record<string, unknown>;
-  if (data.status !== 'resolved' || data.scope !== 'space') return { detail: 'address is not a resolved space' };
-  const canonical = data.canonical;
-  if (!canonical || typeof canonical !== 'object') return { detail: 'address has no canonical site' };
-  const site = canonical as Record<string, unknown>;
-  if (site.prefix !== zoneSitePrefix || typeof site.key !== 'string' || typeof site.suffixSource !== 'string') {
-    return { detail: 'address canonical is not a zone site' };
-  }
-  const capabilities = data.capabilities;
-  if (!capabilities || typeof capabilities !== 'object') return { detail: 'address has no capabilities' };
-  const caps = capabilities as Record<string, unknown>;
-  if (typeof caps.zone !== 'string') return { detail: 'address has no zone' };
-  const zone = idOf(caps.zone);
-  if (!zone) return { detail: 'address zone is not a native id' };
-  if (caps.realm !== undefined) return { detail: 'address names a realm' };
-  return { zone, canonical: { prefix: zoneSitePrefix, key: site.key, suffixSource: site.suffixSource } };
-}
-
-export type IndependentZoneEditor =
-  | { ok: true }
-  | { ok: false; failure: ManagementFailure; problem: ZoneSiteProblem | null };
-
 export type IndependentZoneRead =
   | {
       kind: 'published';
@@ -176,7 +138,7 @@ export type IndependentZoneRead =
       ref: string;
       zoneId: string;
       credit: ZoneSiteCredit | null;
-      editor: IndependentZoneEditor | null;
+      editor: ShowcaseEditorAuthority | null;
     }
   | {
       kind: 'empty';
@@ -185,77 +147,47 @@ export type IndependentZoneRead =
       zone: ZoneContext;
       ref: string;
       zoneId: string;
-      editor: IndependentZoneEditor | null;
+      editor: ShowcaseEditorAuthority | null;
     }
-  | { kind: 'refusal'; problem: ZoneSiteProblem | null }
-  | { kind: 'unavailable'; failure: ReadFailure }
+  | { kind: 'unavailable'; failure: ReadFailure; reference?: string }
   | { kind: 'discrepancy'; detail: string };
 
-/**
- * The standalone home visit: anonymous address, complete presentation, home route,
- * and the editor link only when an acting person is already selected.
- * The caller supplies the acting client and the replay transport. The address
- * read stays anonymous, matching the visit's public resolution.
- */
-export async function readIndependentZonePublished(client: MainClient, input: {
+/** Address, one complete presentation, and the editor link when an acting person is selected. No route read. */
+export async function readIndependentZoneHome(boundary: IndependentZoneHomeBoundary, input: {
   space: string;
   locale: UiLocale;
   actingSubject?: string;
-  origin: string;
-  fetcher: typeof fetch;
 }): Promise<IndependentZoneRead> {
-  const actingSubject = input.actingSubject;
-  const addressClient = browserMainApi(input.origin, { anonymous: true, fetcher: input.fetcher });
-  const address = await readPublic(() => addressClient.v1.addresses.resolve.get({ query: { scope: 'space', key: input.space } }));
-  if (!address.loaded.ok) return { kind: 'unavailable', failure: address.loaded.failure };
-  const identity = zoneIdentity(address.loaded.data);
-  if ('detail' in identity) return { kind: 'discrepancy', detail: identity.detail };
-  const zone = identity.zone;
-  let presentationProblem: ZoneSiteProblem | null = null;
-  const [presentationLoaded, route] = await Promise.all([
-    completePublicNavigation(async after => {
-      const read = await readPublic(() => client.v1.zones({ id: zone }).presentation.get({ query: { actingSubject, after } }));
-      if (!read.loaded.ok) presentationProblem = read.problem;
-      return read.loaded;
-    }),
-    readPublic(() => client.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path: '/' } })),
-  ]);
-  const presentation: ZoneSiteRead<ZonePresentationRead> = {
-    loaded: presentationLoaded,
-    problem: presentationLoaded.ok ? null : presentationProblem,
-  };
-  if (presentation.loaded.ok && presentation.loaded.data.realm !== null) {
-    return { kind: 'discrepancy', detail: 'presentation realm is not null' };
+  const site = await boundary.resolveSite(input.space, input.locale);
+  if (site.kind === 'missing' || site.kind === 'join') return { kind: 'discrepancy', detail: `site resolution is ${site.kind}` };
+  if (site.kind === 'unavailable') {
+    return { kind: 'unavailable', failure: site.failure ?? 'unavailable', ...(site.reference ? { reference: site.reference } : {}) };
   }
-  if (route.loaded.ok && route.loaded.data.realm !== null) {
-    return { kind: 'discrepancy', detail: 'route realm is not null' };
+  if (site.realm) return { kind: 'discrepancy', detail: 'presentation realm is not null' };
+  const presentation = await boundary.readCompletePresentation(site.zone);
+  if (!presentation.ok) {
+    return { kind: 'unavailable', failure: presentation.failure, ...(presentation.reference ? { reference: presentation.reference } : {}) };
   }
-  const mapped = mapZoneSiteRecordedPage({ presentation, route });
-  if (mapped.kind === 'discrepancy' || mapped.kind === 'unavailable' || mapped.kind === 'refusal') return mapped;
-  if (!presentation.loaded.ok) return { kind: 'unavailable', failure: 'unavailable' };
-  const editor = actingSubject ? await readEditor(client, zone, actingSubject) : null;
-  const { zone: context, ref } = independentZoneContext(presentation.loaded.data, identity.canonical, input.locale);
+  if (presentation.data.realm) return { kind: 'discrepancy', detail: 'presentation realm is not null' };
+  const mapped = mapZoneSiteHome(presentation.data);
+  if (mapped.kind === 'empty' && presentation.data.home) {
+    return { kind: 'discrepancy', detail: 'presentation home is present but not a document the page can show' };
+  }
+  const { zone, ref } = independentZoneContext(presentation.data, site.address.canonical, input.locale);
+  const editor = input.actingSubject && boundary.editorOpen
+    ? await boundary.editorOpen(site.zone, input.actingSubject)
+    : null;
   if (mapped.kind === 'empty') {
-    return { kind: 'empty', mapped, presentation: presentation.loaded.data, zone: context, ref, zoneId: zone, editor };
+    return { kind: 'empty', mapped, presentation: presentation.data, zone, ref, zoneId: site.zone, editor };
   }
   return {
     kind: 'published',
     mapped,
-    presentation: presentation.loaded.data,
-    zone: context,
+    presentation: presentation.data,
+    zone,
     ref,
-    zoneId: zone,
+    zoneId: site.zone,
     credit: mapped.credit,
     editor,
   };
-}
-
-async function readEditor(client: MainClient, zone: string, actingSubject: string): Promise<IndependentZoneEditor> {
-  const read = await settle(
-    () => client.v1.zones({ id: zone })['showcase-editor'].get({ query: { actingSubject } }),
-    status => managementFailure(status, true),
-    { offline: 'unavailable', unavailable: 'unavailable' },
-  );
-  if (!read.loaded.ok) return { ok: false, failure: read.loaded.failure, problem: read.problem };
-  return { ok: true };
 }

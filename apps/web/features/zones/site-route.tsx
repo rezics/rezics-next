@@ -45,19 +45,24 @@ import { workBase, workTabOf, ZoneWorkPage } from './site-work.tsx';
 import { addressKey, siteMemberTarget, spaceHref, zoneMemberHref } from '../address/path.ts';
 import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
-import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
-import { publishedFrameModel } from '../realm/zone-presentation-read.ts';
 import type { SiteMountCut, SitePresentationCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
-import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
+import { showcaseEditorOpen, ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
 import { mapZoneSiteHome, zoneSiteRouteMissing } from './zone-site-recorded-page.ts';
 import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
-import { independentZoneContext } from './independent-zone-recorded-page.ts';
+import { independentZoneContext, independentZoneHomeBoundary, readIndependentZoneHome } from './independent-zone-recorded-page.ts';
+import {
+  independentZoneFrameModel,
+  independentZoneHomeBody,
+  independentZoneSiteFrame,
+} from './independent-zone-recorded-page-view.tsx';
 import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from './csp.ts';
+import { ACCESS_COOKIE } from '../auth/cookies.ts';
+import { readSession } from '../auth/session.ts';
 import { ZoneAboutDiscussion } from './about-discussion-entry.tsx';
 
 // /{locale}/z/{space}/… has one optional catch-all, including home. Main's
@@ -188,7 +193,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       reference={resolved.reference} />;
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
-  if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
+  if (!resolved.realm) return standaloneSite(resolved, locale, path, search, space);
   const communityProps = {
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),
@@ -426,13 +431,14 @@ async function standaloneSite(
   locale: import('../../i18n/define.ts').UiLocale,
   path: readonly string[],
   search: Search,
+  space: string,
 ): Promise<ReactNode> {
-  const [route, presentation, messages, workMessages, zoneMessages] = await Promise.all([
-    path.length ? readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)) : null,
+  if (!path.length) return publishedIndependentZoneHome(resolved, locale, space);
+  const [route, presentation, messages, workMessages] = await Promise.all([
+    readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search)),
     readCompletePresentation(resolved.zone),
     getMessages('realm', locale),
     getMessages('workPage', locale),
-    getMessages('zones', locale),
   ]);
   if (route && zoneSiteRouteMissing(route)) notFound();
   if (route && !route.ok || !presentation.ok) {
@@ -442,38 +448,9 @@ async function standaloneSite(
       : null;
   }
   const { zone, ref } = independentZoneContext(presentation.data, resolved.address.canonical, locale);
-  const mounts = presentation.data.navigation;
   const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} address={ref}
     locale={locale} messages={messages} presentation={presentation.data}>{children}</StandaloneZoneSiteFrame>;
-  if (!path.length) {
-    // The published home page is its Content document. Mounts stay in the site navigation.
-    // Until a document is published, the page keeps the list of those mounts.
-    const mapped = mapZoneSiteHome(presentation.data);
-    if (mapped.kind === 'published') return frame(<>
-      <ZoneHomeContent page={mapped.page} presentation={presentation.data.presentation}
-        moduleData={presentation.data.moduleData}
-        slideMedia={presentation.data.slideMedia} zone={zone} pkg={null} messages={zoneMessages}
-        context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
-          mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }} />
-      {mapped.credit ? <ZoneSiteRecordedCredit credit={mapped.credit} /> : null}
-    </>);
-    return frame(<ZoneHomeContent page={null} presentation={presentation.data.presentation}
-      moduleData={presentation.data.moduleData} slideMedia={presentation.data.slideMedia}
-      zone={zone} pkg={null} messages={zoneMessages}
-      context={{ locale, ref, realm: resolved.zone, zone: resolved.zone,
-        mounts: new Map(mounts.map(mount => [mount.target, mount.segment])) }}
-      empty={<PageContainer>
-        <MemberList
-          members={mounts.map((mount) => ({
-            id: mount.target,
-            href: siteHref(locale, ref, [mount.segment]),
-            name: zoneText(mount.name),
-            kind: null,
-          }))}
-        />
-      </PageContainer>} />);
-  }
-  if (!route?.ok) notFound();
+  if (!route.ok) notFound();
   const read = route.data;
   if (read.kind === 'home') notFound();
   if (read.kind === 'index')
@@ -541,20 +518,45 @@ export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, m
   children: ReactNode;
 }) {
   const [jar, incoming] = await Promise.all([cookies(), headers()]);
-  const model = publishedFrameModel(presentation, zoneId, locale, messages.home, '', {
-    reader: parseTheme(jar.get(THEME_COOKIE)?.value),
-    ref: address,
-    zone,
-    mounts: siteMounts,
-    tokens: siteTokens,
-    navigation: siteNavigation,
-  });
-  const { zone: frameZone, cuts, theme } = model;
+  const model = independentZoneFrameModel(presentation, zone, zoneId, address, locale, messages.home,
+    parseTheme(jar.get(THEME_COOKIE)?.value), { mounts: siteMounts, tokens: siteTokens, navigation: siteNavigation });
   const actions = <ZoneEditLink zoneId={zoneId} space={address} locale={locale} />;
-  return <ZoneFrame zone={frameZone} dataZone={zoneId} theme={theme} pkg={null}
-    nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined} members={null} actions={actions}
-    masthead={<ZoneMasthead zone={frameZone} members={null} actions={actions} />} tabs={null}
-    site={{ label: frameZone.name.value, links: cuts.navigation }}>
-    {children}
-  </ZoneFrame>;
+  return independentZoneSiteFrame(model, incoming.get(ZONE_NONCE_HEADER) ?? undefined, actions, children);
+}
+
+/** Published home. The same supplied-client visit a recorded story runs, with the host's cached readers. */
+async function publishedIndependentZoneHome(
+  resolved: Extract<SiteResolution, { kind: 'site' }>,
+  locale: import('../../i18n/define.ts').UiLocale,
+  space: string,
+): Promise<ReactNode> {
+  const [session, messages, zoneMessages] = await Promise.all([
+    readSession(),
+    getMessages('realm', locale),
+    getMessages('zones', locale),
+  ]);
+  const actingSubject = session?.agent.status === 'selected' ? session.agent.agent.iri : undefined;
+  const token = actingSubject ? (await cookies()).get(ACCESS_COOKIE)?.value : undefined;
+  const visit = await readIndependentZoneHome(independentZoneHomeBoundary({
+    production: { resolveSite, readCompletePresentation },
+    actingSubject,
+    editorOpen: actingSubject ? async (zoneId, subject) => {
+      const loaded = await showcaseEditorOpen(zoneId, subject, token);
+      return loaded.ok ? { ok: true } : { ok: false, failure: loaded.failure, problem: null };
+    } : null,
+  }), { space, locale, actingSubject });
+  if (visit.kind === 'unavailable') {
+    const shown = shownZoneFailure({ ok: true }, { ok: false, failure: visit.failure, ...(visit.reference ? { reference: visit.reference } : {}) });
+    return shown
+      ? failure(shown.failure, siteHref(locale, addressKey(resolved.address.canonical), []), messages, shown.reference)
+      : null;
+  }
+  if (visit.kind !== 'published' && visit.kind !== 'empty') notFound();
+  return <StandaloneZoneSiteFrame zone={visit.zone} zoneId={visit.zoneId} address={visit.ref} locale={locale}
+    messages={messages} presentation={visit.presentation}>
+    {independentZoneHomeBody({
+      mapped: visit.mapped, presentation: visit.presentation, zone: visit.zone, zoneId: visit.zoneId,
+      ref: visit.ref, locale, messages: zoneMessages,
+    })}
+  </StandaloneZoneSiteFrame>;
 }

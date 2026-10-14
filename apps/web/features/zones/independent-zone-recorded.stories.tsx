@@ -29,7 +29,6 @@ function visit(persona: AnswerPersona, presentation: 'populated' | 'loading'): r
   const editor = record.personas[persona].find(item => item.label === 'page-editor-link');
   return [
     { label: 'page-address', state: 'populated' },
-    { label: 'page-home-route', state: 'populated' },
     { label: 'page-presentation', state: presentation },
     ...(editor ? [{ label: 'page-editor-link', state: editor.status === 200 ? 'populated' as const : 'error' as const }] : []),
   ];

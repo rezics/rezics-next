@@ -4,11 +4,16 @@ import { answerPersonas, type AnswerPersona, type AnswerRecord, type AnswerSampl
 import independentZone from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
 import { resolvedAddress } from '../address/client.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import { realmFrameReads } from '../realm/read.ts';
+import { readCompletePresentation, resolveSite } from '../realm/read.ts';
 import { idOf } from '../realm/route.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
-import { independentZoneVisit, readIndependentZonePublished, type IndependentZoneRead } from './independent-zone-recorded-page.ts';
+import {
+  independentZoneHomeBoundary,
+  independentZoneVisit,
+  readIndependentZoneHome,
+  type IndependentZoneRead,
+} from './independent-zone-recorded-page.ts';
 
 const record = independentZone as AnswerRecord;
 const disposals: (() => void)[] = [];
@@ -24,7 +29,6 @@ function selections(persona: AnswerPersona): readonly RecordedSelection[] {
   const editor = record.personas[persona].find(item => item.label === 'page-editor-link');
   return [
     { label: 'page-address', state: 'populated' },
-    { label: 'page-home-route', state: 'populated' },
     { label: 'page-presentation', state: 'populated' },
     ...(editor ? [{ label: 'page-editor-link', state: editor.status === 200 ? 'populated' as const : 'error' as const }] : []),
   ];
@@ -60,8 +64,9 @@ async function replay(persona: AnswerPersona, selected: readonly RecordedSelecti
     requests.push({ method: request.method, path, query: Object.fromEntries(url.searchParams) });
     return transport.fetcher(input, init);
   }) as typeof fetch;
-  const main = browserMainApi('https://recorded.invalid', { anonymous: visit.actingSubject === undefined, fetcher });
-  return { visit, requests, main, fetcher };
+  const anonymous = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher });
+  const acting = browserMainApi('https://recorded.invalid', { anonymous: visit.actingSubject === undefined, fetcher });
+  return { visit, requests, anonymous, acting };
 }
 
 function published(read: IndependentZoneRead) {
@@ -83,11 +88,11 @@ for (const persona of answerPersonas) {
     if (!admitted) throw new Error(`${persona} address is not admitted`);
     expect(admitted.capabilities?.realm).toBeUndefined();
     expect(idOf(admitted.capabilities?.zone ?? '')).toBe(admitted.key);
-    const { visit, requests, main, fetcher } = await replay(persona, selected);
-    const read = published(await readIndependentZonePublished(main, {
-      space: visit.space, locale: 'en', actingSubject: visit.actingSubject,
-      origin: 'https://recorded.invalid', fetcher,
-    }));
+    const { visit, requests, anonymous, acting } = await replay(persona, selected);
+    const read = published(await readIndependentZoneHome(independentZoneHomeBoundary({
+      main: anonymous, personal: acting, actingSubject: visit.actingSubject,
+      editorClient: visit.actingSubject ? acting : null,
+    }), { space: visit.space, locale: 'en', actingSubject: visit.actingSubject }));
     expect(read.zone.realm).toBeNull();
     expect(read.presentation.realm).toBeNull();
     expect(read.zoneId).toBe(admitted.key);
@@ -110,13 +115,15 @@ for (const persona of answerPersonas) {
     }
     if (persona === 'operator') expect(visit.actingSubject).not.toBe(read.credit?.author);
     expect(requests[0]).toEqual(requestOf(address));
+    expect(requests.some(item => item.path.endsWith('/routes'))).toBe(false);
     expect(requests.map(item => JSON.stringify(item)).sort()).toEqual(selected.map(item => JSON.stringify(requestOf(sample(persona, item.label)))).sort());
-    const production = await replay(persona, selected.filter(item => item.label !== 'page-editor-link'));
-    const reads = realmFrameReads({ main: production.main, actingSubject: visit.actingSubject });
-    const site = await reads.resolveSite(visit.space, 'en');
-    expect<unknown>(site).toEqual({ kind: 'site', address: address.answer, zone: admitted.key, realm: null });
-    expect<unknown>(await reads.readCompletePresentation(admitted.key)).toEqual({ ok: true, data: sample(persona, 'page-presentation').answer });
-    expect<unknown>(await reads.readZoneRoute(admitted.key, '/')).toEqual({ ok: true, data: sample(persona, 'page-home-route').answer });
     expect(escaped).not.toHaveBeenCalled();
   });
 }
+
+test('production and replay install the same home boundary', () => {
+  const production = independentZoneHomeBoundary({ production: { resolveSite, readCompletePresentation } });
+  expect(production.resolveSite).toBe(resolveSite);
+  expect(production.readCompletePresentation).toBe(readCompletePresentation);
+  expect(production.editorOpen).toBeNull();
+});
