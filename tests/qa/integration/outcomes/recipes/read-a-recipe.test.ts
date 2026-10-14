@@ -155,6 +155,9 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
     await response.body?.cancel();
   }));
   if (person.actingSubject) await get('reader-state-empty', `/v1/works/${id}/reader-state`);
+  // WorkFrame's follow control calls state(work.id) without a kind or body.
+  if (person.actingSubject) await (await sample('recipe-follow-state', 'GET',
+    `/v1/me/follow-state?${new URLSearchParams({ actingSubject: person.actingSubject, target: recipe.work })}`)).body?.cancel();
   const statements = projection.sections.find(section => section.id === 'statements');
   if (statements) {
     type Fact = { kind: string; value: { kind: string; iri?: string; ref?: string }; qualifiers: { applicability: string[] } };
