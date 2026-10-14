@@ -555,3 +555,55 @@ test('gate parameter keys retain zero-padded slots beside unused and omitted arg
     ).map((finding) => [finding.rule, finding.target]),
   ).toEqual([['gate-lock-upgrade', 'probe.scope_gate']]);
 });
+
+test('migration-head gate reachability follows functions, cycles and write triggers', () => {
+  const definitions = {
+    file: 'functions.sql',
+    text: `
+      CREATE FUNCTION probe.leaf() RETURNS void LANGUAGE sql AS $$ UPDATE probe.scope_gate SET revision=2 WHERE id=1; $$;
+      CREATE FUNCTION probe.indirect() RETURNS void LANGUAGE sql AS $$ SELECT probe.leaf(); $$;
+      CREATE FUNCTION probe.recursive() RETURNS void LANGUAGE sql AS $$ SELECT probe.cycle(); SELECT probe.leaf(); $$;
+      CREATE FUNCTION probe.cycle() RETURNS void LANGUAGE sql AS $$ SELECT probe.recursive(); $$;
+      CREATE FUNCTION probe.unrelated() RETURNS int LANGUAGE sql AS $$ SELECT 1; $$;
+      CREATE FUNCTION probe.write_other() RETURNS void LANGUAGE sql AS $$ UPDATE probe.readable SET value=2 WHERE id=1; $$;
+      CREATE TRIGGER bump AFTER UPDATE ON probe.readable FOR EACH ROW EXECUTE FUNCTION probe.indirect();
+    `,
+  };
+  const source = (sql: string) => ({
+    file: 'reachable-functions.ts',
+    text: `function run(db) {
+      db.query('SELECT id FROM probe.scope_gate WHERE id=1 FOR SHARE');
+      db.query(${JSON.stringify(sql)});
+    }`,
+  });
+  for (const sql of [
+    'SELECT probe.leaf()',
+    'SELECT probe.indirect()',
+    'SELECT probe.recursive()',
+    'SELECT probe.cycle()',
+    'SELECT probe.write_other()',
+    'UPDATE probe.readable SET value=2 WHERE id=1',
+  ])
+    expect(
+      serializationFindings([definitions], [source(sql)], []).map((finding) => [
+        finding.rule,
+        finding.target,
+      ]),
+    ).toEqual([['gate-lock-upgrade', 'probe.scope_gate']]);
+  expect(serializationFindings([definitions], [source('SELECT probe.unrelated()')], [])).toEqual(
+    [],
+  );
+  expect(
+    serializationFindings(
+      [
+        definitions,
+        {
+          file: 'replacement.sql',
+          text: 'CREATE OR REPLACE FUNCTION probe.leaf() RETURNS int LANGUAGE sql AS $$ SELECT 1; $$;',
+        },
+      ],
+      [source('SELECT probe.write_other()')],
+      [],
+    ),
+  ).toEqual([]);
+});

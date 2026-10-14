@@ -1430,10 +1430,14 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
 }
 function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Effect[] {
   const functions = new Map<string, { fragment: SqlFragment; parameters: string[] }>();
-  const triggers = new Map<
-    string,
-    { relation: string; function: string; operations: Set<string>; phase: number; name: string }
-  >();
+  type Trigger = {
+    relation: string;
+    function: string;
+    operations: Set<string>;
+    phase: number;
+    name: string;
+  };
+  const triggers = new Map<string, Trigger>();
   for (const source of migrations) {
     const input = lex(source.text);
     for (let i = 0; i < input.length; i++) {
@@ -1512,8 +1516,65 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
         });
     }
   }
-  const functionHint = sqlNameHints(functions.keys(), true),
-    triggerHint = sqlNameHints([...triggers.values()].map((trigger) => trigger.relation));
+  const dispatch = (
+    input: Token[],
+    call: (name: string, arguments_: Token[][]) => void,
+    triggered: (trigger: Trigger) => void,
+  ) => {
+    for (let i = 0; i < input.length; i++) {
+      const name = relationAt(input, i);
+      if (name && functions.has(name.name) && word(input[name.end], '(')) {
+        call(name.name, parts(input.slice(name.end + 1, close(input, name.end))));
+        i = close(input, name.end);
+      }
+      const operation = ['insert', 'update', 'delete'].find((value) => word(input[i], value));
+      if (!operation || word(input[i - 1], 'for') || word(input[i - 1], 'do')) continue;
+      const relation = relationAt(input, i + (operation === 'update' ? 1 : 2));
+      if (!relation) continue;
+      // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
+      // triggers, then sorts equal-kind triggers by name.
+      for (const trigger of [...triggers.values()]
+        .filter(
+          (trigger) => trigger.relation === relation.name && trigger.operations.has(operation),
+        )
+        .sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name)))
+        triggered(trigger);
+    }
+  };
+  // Bindings affect row keys, not relation names or function/trigger dispatch.
+  // Compute which current definitions can reach any gate once, including cycles,
+  // instead of expanding unrelated functions for every repository query.
+  const reachable = new Set<string>();
+  const callers = new Map<string, Set<string>>();
+  for (const [name, definition] of functions) {
+    if (sqlEffects(definition.fragment).some((effect) => /(?:^|[._])gate$/.test(effect.relation)))
+      reachable.add(name);
+    const edge = (target: string) => {
+      const parents = callers.get(target) ?? new Set<string>();
+      parents.add(name);
+      callers.set(target, parents);
+    };
+    const input = lex(definition.fragment.text);
+    let start = 0;
+    for (let end = 0; end <= input.length; end++)
+      if (end === input.length || word(input[end], ';')) {
+        dispatch(input.slice(start, end), edge, (trigger) => edge(trigger.function));
+        start = end + 1;
+      }
+  }
+  const pending = [...reachable];
+  for (let at = 0; at < pending.length; at++)
+    for (const name of callers.get(pending[at]) ?? [])
+      if (!reachable.has(name)) {
+        reachable.add(name);
+        pending.push(name);
+      }
+  const functionHint = sqlNameHints(reachable, true),
+    triggerHint = sqlNameHints(
+      [...triggers.values()]
+        .filter((trigger) => reachable.has(trigger.function))
+        .map((trigger) => trigger.relation),
+    );
   const mayReachGate = (text: string) => {
     // Unknown SQL holes remain literal marker tokens. Bindings substitute row
     // keys only, so recognized relation/function names still need a raw hint.
@@ -1627,28 +1688,14 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
         .filter((effect) => effect.kind !== 'boundary')
         .map((effect) => ({ ...effect, file: effect.file ?? definition.fragment.file }));
     };
-    for (let i = 0; i < input.length; i++) {
-      const name = relationAt(input, i);
-      if (name && functions.has(name.name) && word(input[name.end], '(')) {
-        result.push(...invoke(name.name, parts(input.slice(name.end + 1, close(input, name.end)))));
-        i = close(input, name.end);
-      }
-      const operation = ['insert', 'update', 'delete'].find((value) => word(input[i], value));
-      if (!operation || word(input[i - 1], 'for') || word(input[i - 1], 'do')) continue;
-      const relation = relationAt(input, i + (operation === 'update' ? 1 : 2));
-      if (!relation) continue;
-      // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
-      // triggers, then sorts equal-kind triggers by name. Migration order is not
-      // execution order: an AFTER bump can depend on a later-defined BEFORE lock.
-      for (const trigger of [...triggers.values()]
-        .filter(
-          (trigger) => trigger.relation === relation.name && trigger.operations.has(operation),
-        )
-        .sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name))) {
+    dispatch(
+      input,
+      (name, arguments_) => result.push(...invoke(name, arguments_)),
+      (trigger) => {
         const target = trigger.phase < 2 ? before : result;
         target.push(...invoke(trigger.function));
-      }
-    }
+      },
+    );
     return [...before, ...result];
   };
   return (fragment) => expand(fragment, new Set());
