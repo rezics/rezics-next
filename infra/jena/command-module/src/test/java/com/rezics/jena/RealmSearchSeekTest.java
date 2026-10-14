@@ -331,7 +331,9 @@ public class RealmSearchSeekTest {
             for(int i=0;i<population;i++)fixture.owner(10000+i*10,true,false,BODY,null);
             fixture.committed();fixture.data.begin(ReadWrite.READ);
             try(var work=new CommandWork()){
-                var page=fixture.index.ranked(p("searchBody"),BODY,1,null,new Measured(fixture.data),new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,true));
+                // The legacy body reader retains its 1000-hit counting
+                // threshold. Catalogue page pruning is proved separately.
+                var page=fixture.index.ranked(p("searchBody"),BODY,1,null,new Measured(fixture.data),new FilteredGraphTextIndex.RankScope(REALM.getURI(),"zh-Hant",null,false));
                 assertEquals(1,page.hits().size());assertTrue(count(work,"rank_live_witnesses_visited")<=128);
                 long collections=count(work,"rank_lucene_collection_events");assertTrue(collections>previous);previous=collections;
                 assertTrue("actual scoring must be observed",count(work,"rank_lucene_score_calls")>0);

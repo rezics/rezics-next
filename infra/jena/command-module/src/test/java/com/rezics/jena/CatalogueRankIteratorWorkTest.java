@@ -172,22 +172,34 @@ public class CatalogueRankIteratorWorkTest {
     @Test public void matchingTitleTiesStopAtTheNativePageBound() throws Exception {
         var failures = new ArrayList<String>();
         for (boolean realm : List.of(false, true)) try (var fixture = new RealmSearchSeekTest.Fixture()) {
-            RealmSearchSeekTest.Owner first = null;
             long baselineNext = 0, baselineAdvance = 0;
             int population = 0;
             for (int size : new int[] {10, 26, 74, 200}) {
                 while (population < size) {
                     if (!fixture.data.isInTransaction()) fixture.data.begin(ReadWrite.WRITE);
-                    var owner = add(fixture, 30000 + population * 10, realm, PHRASE, "Unrelated article");
-                    if (first == null) first = owner;
+                    add(fixture, 30000 + population * 10, realm, PHRASE, "Unrelated article");
                     fixture.committed(); population++;
                 }
                 fixture.data.begin(ReadWrite.READ);
+                String expected;
+                // Independent exhaustive Lucene ordering: commits/merges may
+                // change document order, so insertion order is not an oracle.
+                try (var reader = org.apache.lucene.index.DirectoryReader.open(fixture.index.lucene().getIndexWriter().getDirectory())) {
+                    var searcher = new org.apache.lucene.search.IndexSearcher(reader);
+                    var title = new org.apache.lucene.queryparser.classic.QueryParser("publicTitle", fixture.index.lucene().getQueryAnalyzer()).parse("\"" + WORD + "\"");
+                    var names = new org.apache.lucene.search.BooleanQuery.Builder()
+                        .add(title, org.apache.lucene.search.BooleanClause.Occur.MUST)
+                        .add(new org.apache.lucene.search.PrefixQuery(new org.apache.lucene.index.Term("uri", PublicNameProjection.PREFIX + "work:")), org.apache.lucene.search.BooleanClause.Occur.FILTER).build();
+                    var top = searcher.search(new org.apache.lucene.search.ConstantScoreQuery(names),
+                        new org.apache.lucene.search.TopScoreDocCollectorManager(1, null, Integer.MAX_VALUE));
+                    expected = searcher.storedFields().document(top.scoreDocs[0].doc).get("uri");
+                }
                 try (var work = new CommandWork()) {
                     var page = fixture.index.ranked(p("searchBody"), WORD, 1, null, fixture.data,
                         new FilteredGraphTextIndex.RankScope(realm ? id(1).getURI() : null, null, null, true));
                     assertEquals(1, page.hits().size()); assertTrue(page.more());
-                    assertEquals(first.main().getURI(), page.hits().getFirst().key());
+                    assertEquals(expected, page.hits().getFirst().id());
+                    assertNotNull(page.hits().getFirst().key());
                     assertEquals(2_000_000f, page.hits().getFirst().score(), 0f);
                     long next = CommandWork.currentCount("rank_lucene_iterator_next_calls");
                     long advance = CommandWork.currentCount("rank_lucene_iterator_advance_calls");
