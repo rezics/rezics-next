@@ -274,6 +274,9 @@ test('test-side startup children stop before parent cancellation completes, with
 }, 30000);
 
 function unsafeStartupWraps(path: string, text: string): string[] {
+  // Every guarded launch needs one of these identifiers, actions or paths.
+  // Escaped source always receives the full analysis, including encoded literals.
+  if (!/scriptCommand|stack:|scripts\/(?:dev|load|fixture|operations)\/|\\/.test(text)) return [];
   const source = ts.createSourceFile(path, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
   const scopes = new Map<ts.Node, Map<string, ts.Node[]>>();
   const scope = (node: ts.Node): ts.Node => {
@@ -309,17 +312,22 @@ function unsafeStartupWraps(path: string, text: string): string[] {
         if (values) return values.flatMap(value => strings(value, seen));
       }
     }
-    return node.getChildren(source).flatMap(child => strings(child, seen));
+    // Semantic children contain the same literals and bindings without lazily
+    // allocating punctuation/token trees for every launch-argument traversal.
+    const values: string[] = [];
+    ts.forEachChild(node, child => { values.push(...strings(child, seen)); });
+    return values;
   };
   const startup = (values: string[]) => values.filter(value => value === 'stack:up' || value === 'stack:clone');
   const containsCall = (node: ts.Node, name: string): boolean => {
     if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) return true;
-    return node.getChildren(source).some(child => containsCall(child, name));
+    return ts.forEachChild(node, child => containsCall(child, name) ? true : undefined) === true;
   };
   const safeFallback = (node: ts.Node, actions: string[]): boolean => {
     for (let parent = node.parent; parent; parent = parent.parent) {
       if (!ts.isConditionalExpression(parent) || node.pos < parent.whenFalse.pos || node.end > parent.whenFalse.end) continue;
-      const conditionValues = [...strings(parent.condition), ...parent.condition.getChildren(source).flatMap(child => strings(child))];
+      const conditionValues = strings(parent.condition);
+      ts.forEachChild(parent.condition, child => { conditionValues.push(...strings(child)); });
       if (actions.every(action => conditionValues.includes(action))
         && (containsCall(parent.whenTrue, 'runQaStartupChildAsync')
           || containsCall(parent.whenTrue, 'runQaAdmissionChildAsync'))) return true;
@@ -359,6 +367,8 @@ test('the startup guard resolves direct arguments, local arrays, typed actions a
     `function start(args:string[]) { spawnSync(...scriptCommand(args),{timeout:180000}); }`,
     `spawnSync('sh',['-c','bun scripts/dev/cli.ts stack:up'],{timeout:180000})`,
     `spawnSync('bun',['scripts/load/search-probe.ts'],{timeout:145000})`,
+    String.raw`spawnSync('b\u0075n',['scripts/d\u0065v/cli.ts','stack:\u0075p'])`,
+    "spawnSync('sh',['-c',`bun scripts/dev/cli.ts stack:up`])",
   ]) expect(unsafeStartupWraps('tests/qa/unsafe.ts', text).length).toBeGreaterThan(0);
   expect(unsafeStartupWraps('safe.ts', `function start(action:'stack:up'|'stack:down') {
     const args=['scripts/dev/cli.ts',action];
