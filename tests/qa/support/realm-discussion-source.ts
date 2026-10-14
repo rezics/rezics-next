@@ -281,8 +281,24 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
       // Account attempts retain timing/identity only; passwords and OAuth bodies never enter diagnostics.
       appendFileSync(join(context.backup, 'producer-requests.jsonl'), stable(request) + '\n', { mode: 0o600 });
       appendFileSync(join(evidence, 'producer-requests.jsonl'), stable(request) + '\n', { mode: 0o600 });
+      context.budget.remaining();
     }, () => stage));
     const live = sessions;
+    const bounded = new WeakSet<PersonaSession>();
+    for (const realm of Object.values(live)) for (const role of realmSourceRoles) {
+      const person = realm[role];
+      if (bounded.has(person)) continue;
+      bounded.add(person);
+      for (const service of ['main', 'account'] as const) {
+        const call = person[service];
+        person[service] = async (...args) => {
+          context.budget.remaining();
+          const response = await call(...args);
+          context.budget.remaining();
+          return response;
+        };
+      }
+    }
     const publicWork = await phase('public-ranking-root', () => createWork(live.rankingPublic, 'Original public ranking garden'));
     const pub = await phase('public-ranking', () => populate(live.rankingPublic, publicWork, 261,
       index => `Original public thread ${index}\nA synthetic discussion authored for this ranking proof.`));

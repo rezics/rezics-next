@@ -210,6 +210,21 @@ test('a terminal public command refusal closes the producer and never cuts or pu
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('the producer checks its declared active budget between requests inside a long population phase', async () => {
+  const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-deadline-unit-'));
+  let clock = 0;
+  const owner = f.sessions.rankingPublic.owner, main = owner.main;
+  owner.main = async (...args) => { const response = await main(...args); clock += 900_000; return response; };
+  try {
+    const store = new RetainedSources(directory, () => clock), adapter = realmDiscussionSourceAdapter(
+      realmDiscussionSourceSpecification({ producer: sha256('deadline fixture') }, { native: 'fixture' }), f.runtime);
+    await expect(store.prepare(adapter)).rejects.toThrow('producer build exceeded');
+    expect(f.counts().cuts).toBe(0);
+    expect(f.requests.filter(request => request.path === '/v1/realm-replies')).toHaveLength(0);
+    expect(f.counts().closed).toBe(1);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 test('distributions keep actual retries, phase overlap and waits distinct and reject changed retry bodies', () => {
   const request = (start: number, finish: number, key: string): RealmSourceRequest => ({ phase: 'identities', service: 'Main',
     caller: { accountId: 'account', actingSubject: 'author' }, method: 'POST', path: '/v1/realm-replies', key,
