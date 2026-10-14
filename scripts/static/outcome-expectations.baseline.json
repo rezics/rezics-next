@@ -1,17 +1,1 @@
-[
-  {
-    "file": "tests/qa/integration/outcomes/zone/attached-realm-discussion.test.ts",
-    "row": "zone/attached-realm-discussion",
-    "expression": "answer<{ code: string }>( post(sessions.moderator, moderationPage, 'Requires review', undefined, sample, 'review-required-post-refused'), 503, )"
-  },
-  {
-    "file": "tests/qa/integration/outcomes/zone/attached-realm-discussion.test.ts",
-    "row": "zone/attached-realm-discussion",
-    "expression": "expect([403, 503]).toContain(forged.status)"
-  },
-  {
-    "file": "tests/qa/integration/outcomes/zone/attached-realm-discussion.test.ts",
-    "row": "zone/attached-realm-discussion",
-    "expression": "expect([409, 503]).toContain(refused.status)"
-  }
-]
+[]
