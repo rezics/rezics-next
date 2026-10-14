@@ -11,7 +11,7 @@ export async function withPublicRealmSearch<T>(env: WorkActivationEnvironment, r
   read: () => Promise<T>): Promise<T> {
   if (!realm) return read();
   const policy = await readRealmPolicy(env, realm);
-  if (!policy || policy.visibility !== 'public') throw new PublicRealmUnavailable('Realm is unavailable');
+  if (!policy || policy.visibility === 'private') throw new PublicRealmUnavailable('Realm is unavailable');
   if (!policy.realmRevision || !hasDisclosure(env)) throw new PublicQueryUnavailable('Realm disclosure is unavailable');
   const assertVisible = async () => {
     const decisions = await discloseInventory(env, [{ owner: 'graph', resource: realm,

@@ -35,10 +35,10 @@ function fixture() {
 }
 
 test('Realm search answers closed, absent and private scopes as unavailable before matching or cursor decoding', async () => {
-  for (const condition of ['closed', 'absent', 'private', 'restricted', 'tombstone']) {
+  for (const condition of ['closed', 'absent', 'private', 'tombstone']) {
     const { env, state } = fixture();
     if (condition === 'absent') state.present = false;
-    if (condition === 'private' || condition === 'restricted') state.visibility = condition;
+    if (condition === 'private') state.visibility = condition;
     if (condition === 'closed') state.decision = 'hidden';
     if (condition === 'tombstone') state.decision = 'tombstone';
     let executions = 0;
@@ -76,6 +76,14 @@ test('Realm search preserves open answers and global originals without a Realm d
   expect(await withPublicRealmSearch(env, undefined, async () => answer)).toBe(answer);
   expect(state.targets).toEqual([]);
   expect(state.policyReads).toBe(0);
+});
+
+test('Realm search preserves the public Space disclosure of restricted Realm policies', async () => {
+  const { env, state } = fixture();
+  state.visibility = 'restricted';
+  const answer = { results: [], next: null };
+  expect(await withPublicRealmSearch(env, realm, async () => answer)).toBe(answer);
+  expect(state.targets).toHaveLength(2);
 });
 
 test('Realm search cannot treat an unavailable disclosure owner as an empty public answer', async () => {
