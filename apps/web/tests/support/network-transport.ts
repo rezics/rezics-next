@@ -26,11 +26,15 @@ export function protectJourneyBrowser(browser: Browser, origin: string): () => v
     const context = await original.call(browser, options);
     await context.route('**/*', route => serveJourneyResource(route, origin));
     const close = context.close.bind(context);
+    let closing: Promise<void> | undefined;
     context.close = async closeOptions => {
       // Closing a context while Node is fulfilling its last asset otherwise
       // reports a route callback error after the journey has already passed.
-      await context.unrouteAll({ behavior: 'wait' });
-      await close(closeOptions);
+      closing ??= (async () => {
+        if (!context.isClosed()) await context.unrouteAll({ behavior: 'ignoreErrors' });
+        await close(closeOptions);
+      })();
+      await closing;
     };
     return context;
   };

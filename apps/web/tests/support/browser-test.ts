@@ -9,7 +9,7 @@ export const test = base.extend({
     const restore = browserName === 'chromium' ? protectJourneyBrowser(browser, new URL(origin).origin) : () => {};
     try { await use(browser); }
     finally {
-      await Promise.all(browser.contexts().map(context => context.unrouteAll({ behavior: 'wait' })));
+      await Promise.all(browser.contexts().map(context => context.unrouteAll({ behavior: 'ignoreErrors' })));
       restore();
     }
   }, { scope: 'worker' }],
