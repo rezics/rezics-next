@@ -4,6 +4,9 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
+import { direction } from '@rezics/main/language';
 import anime from '../../zones/official/anime/index.tsx';
 import manga from '../../zones/official/manga/index.tsx';
 import games from '../../zones/official/games/index.tsx';
@@ -52,9 +55,9 @@ function CatalogueDiscovery(args: Args) {
   const { sample, record, facet, state } = source(args);
   const request = catalogueRequest(sample.path);
   const messages = zoneMessagesFor(args.locale);
+  const zoneName = { books: 'Books', 'visual-novels': 'Visual novels', anime: 'Anime', manga: 'Manga', games: 'Games' }[args.slug];
   const zone: ZoneContext = { slug: args.slug, realm: `https://rezics.com/id/${request.realm}`,
-    name: { value: { books: 'Books', 'visual-novels': 'Visual novels', anime: 'Anime', manga: 'Manga', games: 'Games' }[args.slug],
-      lang: 'en', dir: 'ltr' }, description: null, icon: null, hero: null,
+    name: { value: zoneName, lang: 'en', dir: direction('en', zoneName) }, description: null, icon: null, hero: null,
     tokens: presetTokens.editorial, locale: args.locale,
     links: { home: siteHref(args.locale, request.realm, []), browse: siteHref(args.locale, request.realm, ['browse']),
       works: siteHref(args.locale, request.realm, ['browse']), discussions: realmHref(args.locale, request.realm, 'discussions'),
@@ -90,7 +93,7 @@ function CatalogueDiscovery(args: Args) {
 
 const meta = { title: 'Zones/Catalogue discovery', component: CatalogueDiscovery,
   args: { slug: 'books', persona: 'visitor', locale: 'en' },
-  globals: { viewport: { value: 'desktop' } }, parameters: { route: { pathname: '/en/z/books/browse' } },
+  globals: { viewport: { value: 'desktop' } }, parameters: { route: { pathname: localizedPath(spaceHref('books', 'site', ['browse']), 'en') } },
   async play({ canvasElement, args }) {
     const canvas = within(canvasElement);
     const { sample } = source(args);

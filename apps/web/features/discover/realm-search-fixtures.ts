@@ -1,13 +1,14 @@
 import type { ResourceCard, ServedPage } from './api.ts';
 import { browseQuery, emptyBrowse, type BrowseState } from './browse-state.ts';
 import type { MainClient } from './types.ts';
+import { direction } from '@rezics/main/language';
 
 const id = (index: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
 export const closureSearchState: BrowseState = { ...emptyBrowse,
   q: 'Lantern original', scope: { kind: 'realm', realm: id(1).split('/').at(-1)! } };
 export const independentOriginal: ResourceCard = {
   id: id(2), kind: 'work', types: ['https://schema.org/Book'],
-  name: { value: 'Lantern original', language: 'en', direction: 'ltr', basis: 'requested' },
+  name: { value: 'Lantern original', language: 'en', direction: direction('en', 'Lantern original'), basis: 'requested' },
   icon: { kind: 'fallback', policy: 'avatar-fallback-v1', resourceType: 'work', key: 'original' },
   work: { primaryCredits: [{ id: id(3), role: 'author', participantKind: 'agent', identityStatus: 'active',
     agent: id(4), displayName: 'Original author', handle: 'original-author', provider: null, key: null, ordinal: null }],

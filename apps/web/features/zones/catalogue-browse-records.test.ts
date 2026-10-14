@@ -12,13 +12,15 @@ import type { RealmView } from '../realm/realm-page.tsx';
 import { uiLocales } from '../../i18n/define.ts';
 import { presetTokens } from './presentation.ts';
 import { isValidElement } from 'react';
+import { direction } from '@rezics/main/language';
+import { realmHref, siteHref } from '../realm/route.ts';
 
 const zone = (realm: string): ZoneContext => ({
-  slug: null, realm: `https://rezics.com/id/${realm}`, name: { value: 'Catalogue', lang: 'en', dir: 'ltr' },
+  slug: null, realm: `https://rezics.com/id/${realm}`, name: { value: 'Catalogue', lang: 'en', dir: direction('en', 'Catalogue') },
   description: null, icon: null, hero: null, locale: 'en',
   tokens: presetTokens.editorial,
-  links: { home: '/z/catalogue', browse: '/z/catalogue/browse', works: '/z/catalogue/browse',
-    discussions: '/r/catalogue/discussions', decisions: '/r/catalogue/decisions', about: '/r/catalogue/about' },
+  links: { home: siteHref('en', realm, []), browse: siteHref('en', realm, ['browse']), works: siteHref('en', realm, ['browse']),
+    discussions: realmHref('en', realm, 'discussions'), decisions: realmHref('en', realm, 'decisions'), about: realmHref('en', realm, 'about') },
 });
 
 for (const slug of ['books', 'visual-novels', 'manga'] as const) {

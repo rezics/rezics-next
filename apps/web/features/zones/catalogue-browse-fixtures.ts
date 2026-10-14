@@ -3,6 +3,7 @@ import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse
 import visualNovels from '../../../../tests/qa/fixtures/outcomes/visual-novels/catalogue-browse-and-search-in-its-zone.json';
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
 import type { ZoneBrowsePage } from '../realm/types.ts';
+import { direction } from '@rezics/main/language';
 
 export type CatalogueSlug = 'books' | 'visual-novels' | 'anime' | 'manga' | 'games';
 export const cataloguePersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
@@ -20,7 +21,7 @@ export const catalogueLabels = {
 
 export const catalogueFixtureId = (index: number) =>
   `https://rezics.com/id/00000000-0000-4000-8000-${String(index).padStart(12, '0')}`;
-const name = (value: string) => ({ value, language: 'en', direction: 'ltr' as const, basis: 'requested' as const });
+const name = (value: string) => ({ value, language: 'en', direction: direction('en', value), basis: 'requested' as const });
 
 /** Contract fixtures only: these requests have no recorded answer yet. Never represented as captures. */
 export function catalogueContractSample(slug: 'anime' | 'games',
