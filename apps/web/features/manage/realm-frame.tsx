@@ -9,7 +9,7 @@ import type { ManageMessages } from './messages.ts';
 import { AgentMark, Named, Thumb } from './parts.tsx';
 import { AccessRealmTabs } from './settings-navigation.tsx';
 import { accessMessages } from './settings-messages.ts';
-import type { RealmHeader } from './types.ts';
+import type { MainClient, RealmHeader } from './types.ts';
 
 /** The acting Agent, shown before any decision is made (Identity before action). */
 export function ActingAs({ agent, locale, messages }: { agent: AgentOption; locale: UiLocale; messages: ManageMessages }) {
@@ -27,12 +27,14 @@ export function ActingAs({ agent, locale, messages }: { agent: AgentOption; loca
  * The Realm's name is the page's one <h1>; each section titles itself with <h2>.
  */
 export function RealmFrame({ realm, address = realm, header, agent, locale, messages, children, settingsAllowed,
-  siteHref = null }: {
+  accessClient, siteHref = null }: {
   realm: string;
   /** How the address names the Realm: its official Zone's segment, or its ID. Links keep it. */
   address?: string;
   header: RealmHeader | null; agent: AgentOption; locale: UiLocale; messages: ManageMessages; children: ReactNode;
   settingsAllowed?: boolean;
+  /** The section tabs' client. Production omits it and the tabs use the browser host client. */
+  accessClient?: MainClient;
   /** The Zone editor, when this Realm has a Zone the acting Agent may edit. */
   siteHref?: string | null;
 }) {
@@ -54,7 +56,8 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
           <h1 className="min-w-0 break-words font-semibold text-2xl tracking-tight sm:text-3xl">
             {header ? <Named name={header.name} /> : fallback}</h1>
         </div>
-        <AccessRealmTabs realm={realm} address={address} actor={agent.iri} settingsAllowed={settingsAllowed} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
+        <AccessRealmTabs realm={realm} address={address} actor={agent.iri} settingsAllowed={settingsAllowed}
+          accessClient={accessClient} labels={{ nav: t.realmNav, queue: t.tabQueue, log: t.tabLog, members: t.tabMembers,
           roles: t.tabRoles, showcase: t.tabShowcase, zones: t.tabZones, settings: t.tabSettings }} />
         <div className="flex flex-wrap gap-x-4 pb-3">
           <LocalizedLink href={`/manage/r/${address}/requests`} className="w-fit rounded-md text-primary text-sm underline-offset-4 hover:underline">
