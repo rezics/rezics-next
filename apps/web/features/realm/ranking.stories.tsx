@@ -57,7 +57,11 @@ const meta = {
   globals: { viewport: { value: 'desktop' } },
   parameters: { route: { pathname: '/en/r/ranking-garden/discussions' },
     docs: { description: { component: rankingStateSource + '. Exact requests and expected states are in ranking-contract-states.ts. Neither ranking read declares HTTP 202.' } } },
-  render: (args, { globals }) => <RankingStory {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  render: (args, { globals }) => {
+    const locale = (globals.locale as UiLocale | undefined) ?? args.locale;
+    return <RankingStory key={`${args.persona}-${args.state}-${args.privateRealm}-${args.sort}-${args.window}-${locale}`}
+      {...args} locale={locale} />;
+  },
 } satisfies Meta<typeof RankingStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;

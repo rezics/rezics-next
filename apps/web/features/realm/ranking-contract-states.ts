@@ -28,6 +28,8 @@ function item(index: number, history: 'public' | 'retained' | 'current'): Thread
 
 export interface RankingContractState {
   source: typeof rankingStateSource;
+  persona: AnswerPersona;
+  realmState: 'public' | 'private' | 'closed';
   rights: { basis: 'original-contribution'; author: string };
   request: RankingRequest;
   /** Exact service-relative request/state for the prove-phase recording. */
@@ -68,7 +70,8 @@ export function rankingContractState({ persona, state, privateRealm = false, sor
     sourcePosition: rankingPosition, count: { value: items.length, kind: 'exact-page' as const, total: null },
   } : { type: `https://rezics.com/problems/${code}`, status, code,
     title: status === 404 ? 'Resource is unavailable' : 'The ranking read could not complete' };
-  return { source: rankingStateSource, rights: { basis: 'original-contribution', author: rankingAuthor }, request,
+  return { source: rankingStateSource, persona, realmState: state === 'missing' ? 'closed' : privateRealm ? 'private' : 'public',
+    rights: { basis: 'original-contribution', author: rankingAuthor }, request,
     path: `/v1/realms/${rankingRealm.slice(-36)}/threads?${query}`, status, answer, loading: state === 'loading' };
 }
 

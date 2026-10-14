@@ -45,7 +45,10 @@ const meta = {
   title: 'Realm/Ranking module contract states', component: ModuleStory,
   args: { state: 'populated', locale: 'en' }, globals: { viewport: { value: 'desktop' } },
   parameters: { docs: { description: { component: rankingStateSource + '. Chart interval requests and independent author credit are constructed in ranking-module-contract-states.ts.' } } },
-  render: (args, { globals }) => <ModuleStory {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+  render: (args, { globals }) => {
+    const locale = (globals.locale as UiLocale | undefined) ?? args.locale;
+    return <ModuleStory key={`${args.state}-${locale}`} {...args} locale={locale} />;
+  },
 } satisfies Meta<typeof ModuleStory>;
 export default meta;
 type Story = StoryObj<typeof meta>;
