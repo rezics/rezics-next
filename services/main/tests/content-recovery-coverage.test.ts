@@ -7,6 +7,7 @@ import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts
 import { graphErasureReceipt } from '../src/modules/erasure/graph.ts';
 import { openRecoveryPayload, sealRecoveryPayload } from '../../account/src/recovery-envelope.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage, assertZoneHomeContentReferences,
+  ContentRecoveryConflict,
   type ContentRecoveryCoverage, type ContentRecoveryProofContext, type GraphContentReference } from '../src/modules/work/content-recovery-coverage.ts';
 
 const revisionId = '2d31cde1-6f5d-4f0f-8f6b-6901446c42d3';
@@ -120,6 +121,25 @@ function retainedCut() {
   const erase = () => { state.erased = true; reference.byteDigest = null; };
   return { state, reference, pool, fuseki, proof, capture, erase, graphQueries, homeSelections };
 }
+
+test('Content erased publication pins refuse missing retained digests during capture and restore', async () => {
+  for (const graph of [GRAPHS.receipts, GRAPHS.revisions]) {
+    const cut = retainedCut();
+    cut.state.erased = true;
+    cut.reference.graph = graph;
+    const valid = await cut.capture();
+    cut.reference.byteDigest = null;
+    // Even graph coverage signed around the corrupt tuple cannot reconstruct
+    // the publication digest from the native owner row during restore.
+    const corrupt = { ...valid, graphReferencesDigest: hash(JSON.stringify([cut.reference])) };
+    const outcomes = await Promise.allSettled([cut.capture(),
+      assertContentRecoveryCoverage(cut.pool, cut.fuseki, corrupt, cut.proof)]);
+    for (const outcome of outcomes) {
+      expect(outcome.status).toBe('rejected');
+      if (outcome.status === 'rejected') expect(outcome.reason).toBeInstanceOf(ContentRecoveryConflict);
+    }
+  }
+});
 
 test('Content capture after erasure uses the immutable owner digest without suppressed graph rows', async () => {
   const cut = retainedCut();

@@ -1,12 +1,36 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { Pool } from 'pg';
+import { randomUUID } from 'node:crypto';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { migrateAccess, qaStack, rootCommand } from '../../../tests/qa/fault-recovery/search-ops-support.ts';
+import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { ContentCore } from '../../content/src/core.ts';
 import { migrateContent } from '../../content/src/migrate.ts';
 import type { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { assertContentRecoveryCoverage, captureContentRecoveryCoverage,
   ContentRecoveryConflict, graphContentReferences } from '../src/modules/work/content-recovery-coverage.ts';
-import { RV } from '../src/modules/work/activate.ts';
+import { GRAPHS, RV, activateMetadataWork, hash, initializeFreshGraph, metadataWorkRequestDigest } from '../src/modules/work/activate.ts';
+import { AccessAdmissionRegistry, type RegisteredAdmission } from '../src/modules/access/admission.ts';
+import { S3ImmutableObjects } from '../src/infrastructure/immutable-objects.ts';
+import { PostgresReceiptCustodyStore, ReceiptCustody } from '../src/modules/outbox/receipt-custody.ts';
+import { proofRetirementSender } from '../src/modules/graph/slim-command.ts';
+import { ensureModelGeneration } from '../src/modules/semantic/command.ts';
+import { contentPublicationDigest, publishPinnedContent } from '../src/modules/content-publication/publish.ts';
+import { journalErasure, markErasureSuppressed } from '../src/modules/erasure/journal.ts';
+import { readGraphErasureProof, suppressGraphContentRevisions } from '../src/modules/erasure/graph.ts';
+import { applyContentErasure } from '../src/modules/erasure/content.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../src/modules/outbox/relay.ts';
+
+const recoveryStack = qaStack(`content-recovery-${randomUUID().slice(0, 12)}`);
+beforeAll(async () => {
+  if (!Bun.env.REZICS_QA_RUN_ID) throw new Error('Run through admitted QA integration');
+  await rootCommand(['stack:up', ...recoveryStack.args], 180_000);
+}, 600_000);
+afterAll(async () => {
+  await rootCommand(['stack:reset', ...recoveryStack.args], 120_000);
+}, 180_000);
 
 test('OPS03: Content recovery binds exact graph revision, preparation, receipt, outbox and bytes', async () => {
   const cluster = await startPostgresCluster();
@@ -100,3 +124,129 @@ test('OPS03: Content recovery binds exact graph revision, preparation, receipt, 
     cluster.remove();
   }
 }, 30_000);
+
+test('OPS12: retained erased publication pins refuse all-null digests while native outbox nulls recover', async () => {
+  const started = performance.now();
+  const runId = Bun.env.REZICS_QA_RUN_ID;
+  if (!runId) throw new Error('Run through admitted QA integration');
+  const stack = recoveryStack;
+  const root = resolve(import.meta.dir, '../../..');
+  let accessPool: Pool | undefined, contentPool: Pool | undefined, relay: Pool | undefined;
+  try {
+    const apps = stack.apps, fuseki = stack.fuseki;
+    await migrateAccess(apps.ACCESS_DATABASE_URL!);
+    accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
+    contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
+    relay = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL });
+    await migrateContent(contentPool);
+    for (const file of schemaFiles(root, 'relay'))
+      await relay.query(readFileSync(resolve(root, 'services/main/migrations/relay', file), 'utf8'));
+    const objects = new S3ImmutableObjects({ endpoint: apps.MAIN_S3_ENDPOINT!, bucket: apps.MAIN_S3_BUCKET!,
+      region: apps.MAIN_S3_REGION, accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
+      prefix: 'semantic/work/' });
+    await objects.initialize();
+    const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
+    access.configureBaseline(fuseki);
+    const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(accessPool), objects, fuseki,
+      apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
+    const env = { fuseki, receiptCustody: custody, workObjects: objects, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
+      lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
+    await initializeFreshGraph(fuseki, env.lineage);
+    await ensureModelGeneration(env);
+    const content = new ContentCore(contentPool);
+    const actor = `https://rezics.com/id/${randomUUID()}`;
+    const title = 'Retained erased publication';
+    const createAdmission: RegisteredAdmission = { id: randomUUID(), principalId: randomUUID(), actingSubject: actor,
+      scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
+      requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(), state: 'claimed', dispatchEligible: true, replayed: false };
+    const work = await activateMetadataWork(env, { title, admission: createAdmission });
+    const variant = { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work.work!,
+      language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const };
+    const saved = await content.saveDraft({ operationId: `recovery-draft:${randomUUID()}`, variant,
+      expectedHead: null, model: 'content-shape-v1', sourceRevision: null, provenance: {},
+      serializedJson: '{"body":"erased publication bytes"}' });
+    const revisionId = saved.revisionId!;
+    const exact = (await content.readExactBatch([revisionId], async ids => new Set(ids)))[0];
+    if (exact?.status !== 'available') throw new Error('Publication bytes unavailable');
+    const input = { preparationId: `recovery-publish:${randomUUID()}`, revisionId,
+      expectedDigest: exact.reference.byteDigest, expectedContentEpoch: saved.position.dataEpoch,
+      resourceId: work.work!, variantId: variant.id, expectedPublicationHead: null };
+    const admission: RegisteredAdmission = { ...createAdmission, id: randomUUID(), idempotencyKey: randomUUID(),
+      scope: `content:publish:${variant.id}`, action: 'content.publish', requestDigest: contentPublicationDigest(input) };
+    const publication = await publishPinnedContent(env, content, admission, input);
+    expect(publication.status).toBe('active');
+    const second = await content.preparePublication(`recovery-second:${randomUUID()}`, revisionId, input.expectedDigest);
+    await content.settlePublication(`recovery-second-settle:${randomUUID()}`, second.operationId,
+      { outcome: 'active', revisionId, receipt: publication.receipt,
+        dataEpoch: publication.graphDataEpoch!, sequence: publication.graphSequence! });
+    const other = await content.saveDraft({ operationId: `recovery-other:${randomUUID()}`,
+      variant: { ...variant, id: `urn:rezics:variant:${randomUUID()}` }, expectedHead: null,
+      model: 'content-shape-v1', sourceRevision: null, provenance: {}, serializedJson: '{"body":"other revision"}' });
+    const otherExact = (await content.readExactBatch([other.revisionId!], async ids => new Set(ids)))[0];
+    if (otherExact?.status !== 'available') throw new Error('Other revision bytes unavailable');
+    const foreign = await content.preparePublication(`recovery-other-prepare:${randomUUID()}`,
+      other.revisionId!, otherExact.reference.byteDigest);
+    const consumer = `recovery-erased:${randomUUID()}`;
+    await initializeRelayCheckpoint(relay, consumer, env.lineage.dataEpoch);
+    while (await relayMainOutboxOnce(fuseki, relay, consumer)) { /* retain native custody */ }
+    const entry = await journalErasure(relay, { operationId: `recovery-erase:${randomUUID()}`,
+      requestDigest: hash(revisionId), kind: 'revision',
+      principalId: admission.principalId, admissionId: randomUUID(), authorityEpoch: '0',
+      targets: [{ kind: 'content_revision', ref: revisionId }] });
+    await suppressGraphContentRevisions(fuseki, env.lineage, entry.erasureId, entry.erasureEpoch, [revisionId]);
+    const originalProof = await readGraphErasureProof(fuseki, env.lineage, entry.erasureId, entry.erasureEpoch, [revisionId]);
+    expect((await relayMainOutboxOnce(fuseki, relay, consumer))?.eventIds).toHaveLength(1);
+    expect(await applyContentErasure(contentPool, { preservationAccess: accessPool,
+      erasureId: entry.erasureId, erasureEpoch: entry.erasureEpoch, resourceId: work.work!,
+      revisionIds: [revisionId], graphProof: originalProof })).toEqual({ applied: 1 });
+    await markErasureSuppressed(relay, entry.erasureId);
+    expect((await contentPool.query('SELECT availability,serialized_bytes,body,byte_digest FROM content.revision WHERE id=$1',
+      [revisionId])).rows).toEqual([{ availability: 'erased', serialized_bytes: null, body: null,
+      byte_digest: input.expectedDigest }]);
+    expect((performance.now() - started) / 1000).toBeLessThan(600);
+    const references = await graphContentReferences(fuseki);
+    const pins = references.filter(pin => pin.predicate === `${RV}contentRevision`
+      && pin.object === `urn:rezics:content:revision:${revisionId}`);
+    expect(pins.filter(pin => pin.graph === GRAPHS.receipts && pin.byteDigest === input.expectedDigest).length).toBeGreaterThan(0);
+    expect(pins.filter(pin => pin.graph === GRAPHS.revisions && pin.byteDigest === input.expectedDigest).length).toBeGreaterThan(0);
+    const nativePin = pins.find(pin => pin.graph === GRAPHS.outbox && pin.byteDigest === null)!;
+    expect(nativePin).toBeDefined();
+    expect(pins.filter(pin => pin.byteDigest === null).every(pin => pin.graph === GRAPHS.outbox)).toBe(true);
+    const relayClient = await relay.connect(), contentClient = await contentPool.connect();
+    try {
+      await relayClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await relayClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch',0))");
+      await contentClient.query('BEGIN ISOLATION LEVEL REPEATABLE READ');
+      const context = { fuseki, relayClient, contentClient };
+      const captured = await captureContentRecoveryCoverage(contentPool, references, context);
+      await expect(assertContentRecoveryCoverage(contentPool, fuseki, captured, context)).resolves.toBeUndefined();
+      // Keep the exact independently owned stimulus: every retained pin loses its digest.
+      await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => ({ ...pin, byteDigest: null })), context))
+        .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      for (const graph of [GRAPHS.receipts, GRAPHS.revisions]) {
+        await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => pin.graph === graph
+          ? { ...pin, byteDigest: null } : pin), context)).rejects.toBeInstanceOf(ContentRecoveryConflict);
+      }
+      const historicalPin = { ...nativePin, preparationId: second.operationId,
+        ownerEpoch: second.position.dataEpoch, ownerSequence: second.position.sequence };
+      await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => pin === nativePin ? historicalPin : pin), context))
+        .resolves.toBeDefined();
+      const conflicts = [{ ...nativePin, preparationId: foreign.operationId },
+        { ...nativePin, ownerEpoch: randomUUID(), ownerSequence: second.position.sequence },
+        { ...nativePin, ownerEpoch: second.position.dataEpoch, ownerSequence: (BigInt(captured.sequence) + 1n).toString() }];
+      for (const conflict of conflicts) {
+        await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => pin === nativePin ? conflict : pin), context))
+          .rejects.toBeInstanceOf(ContentRecoveryConflict);
+      }
+      expect(await captureContentRecoveryCoverage(contentPool, references, context)).toEqual(captured);
+      console.info('Erased Content recovery evidence:', JSON.stringify({ pins, originalProof, captured,
+        historicalPin, conflicts, preparationSeconds: (performance.now() - started) / 1000 }));
+    } finally {
+      await contentClient.query('ROLLBACK'); contentClient.release();
+      await relayClient.query('ROLLBACK'); relayClient.release();
+    }
+  } finally {
+    await Promise.allSettled([accessPool?.end(), contentPool?.end(), relay?.end()]);
+  }
+}, 120_000);
