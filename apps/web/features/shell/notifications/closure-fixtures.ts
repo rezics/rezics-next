@@ -15,6 +15,9 @@ export const closureCredit = {
   basis: 'original-contribution', closedAuthor: `https://rezics.com/id/${streamId(800)}`,
   liveAuthor: `https://rezics.com/id/${streamId(801)}`,
 } as const;
+// Main resolves the acting Agent; original-contribution credit names the author Person separately.
+export const closureActor = { id: `https://rezics.com/id/${streamId(802)}`,
+  name: 'Live member', handle: null, avatar: null };
 export const closureRequests = {
   latest: '/v1/me/notifications?before=latest&limit=50',
   count: '/v1/me/notifications/unread-count',
@@ -34,7 +37,7 @@ export function closureAnswers(persona: ClosurePersona, state: ClosureState = 'p
   closed.deliveries = [{ id: streamId(20 + offset), channel: 'push' }];
   const live = notice(2 + offset, '400');
   live.subject = { owner: 'reply', ref: `https://rezics.com/id/${streamId(700)}`, revision: null };
-  live.display = { kind: 'reply', actor: { id: closureCredit.liveAuthor, name: 'Live member', handle: null, avatar: null },
+  live.display = { kind: 'reply', actor: closureActor,
     realm: `https://rezics.com/id/${streamId(710)}`, realmName: 'Independent public Realm', realmRouteSegment: 'independent',
     roleName: null, roleChange: null, groupKey: null,
     target: { title: 'Independent original source', excerpt: 'Original reply by the credited live member Person.',

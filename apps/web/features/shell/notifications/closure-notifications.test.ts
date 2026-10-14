@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import { browserMainApi } from '../../api/browser.ts';
-import { closureAnswers, closureCredit, closurePersonas, closureRequests, closureTransport } from './closure-fixtures.ts';
+import { closureActor, closureAnswers, closureCredit, closurePersonas, closureRequests, closureTransport } from './closure-fixtures.ts';
 import { readLatest, readNotificationCount, readNotificationDelivery, readWindow } from './window.ts';
 
 describe('closed Realm notification reader', () => {
@@ -21,7 +21,9 @@ describe('closed Realm notification reader', () => {
       expect(latest.data.items).toEqual(fixture.page.items);
       expect(latest.data.items.find(item => item.id === fixture.closed.id))
         .toMatchObject({ subject: null, display: null, proposal: null });
-      expect(latest.data.items.find(item => item.id === fixture.live.id)?.display?.actor?.id).toBe(closureCredit.liveAuthor);
+      expect(latest.data.items.find(item => item.id === fixture.live.id)?.display?.actor?.id).toBe(closureActor.id);
+      expect(closureActor.id).not.toBe(closureCredit.liveAuthor);
+      expect(closureActor.id).not.toBe(fixture.recipient);
       expect(latest.data.unreadCount).toEqual({ ok: true, data: fixture.count });
       expect(await readWindow(fixture.main, latest.data.next))
         .toMatchObject({ ok: true, data: { items: fixture.continuation.items, next: null } });
