@@ -477,6 +477,8 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
           const retry = tab.locator('[data-discussion-state="unavailable"]')
             .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
           if (await retry.isVisible()) await retry.press('Enter');
+          const retryPage = tab.getByRole('alert').getByRole('link', { name: aboutDiscussionMessages.en.retry, exact: true });
+          if (await retryPage.isVisible()) await retryPage.press('Enter');
           await expect(discussion(tab).getByText(aboutDiscussionMessages.en.empty)).toBeVisible({ timeout: 8_000 });
         }).toPass({ timeout: 90_000 });
       }
@@ -534,6 +536,8 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
         const retry = tab.locator('[data-discussion-state="unavailable"]')
           .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
         if (await retry.isVisible()) await retry.press('Enter');
+        const retryPage = tab.getByRole('alert').getByRole('link', { name: aboutDiscussionMessages.en.retry, exact: true });
+        if (await retryPage.isVisible()) await retryPage.press('Enter');
         await expect(area.locator('article'), JSON.stringify(writes)).toHaveCount(2, { timeout: 8_000 });
       }).toPass({ timeout: 90_000 });
       for (const body of bodies) await expect(area.getByText(body, { exact: true })).toBeVisible();
