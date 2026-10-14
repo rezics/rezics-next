@@ -16,7 +16,7 @@ import type { AgentCredit, AgentCreditPage, ReadFailure, RecipeWorkPage, WorkHea
 // Production passes the request-cached host; a story passes the replaying client.
 // `read.ts` passes its request-cached client through this same boundary.
 
-export type RecipeReadingHost = { main: MainClient; actingSubject?: string | null };
+export type RecipeReadingHost = { main: Pick<MainClient, 'v1'>; actingSubject?: string | null };
 
 type CallResult<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 

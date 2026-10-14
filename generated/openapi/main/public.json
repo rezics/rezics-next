@@ -606328,6 +606328,15 @@
                                     ],
                                     "type": "object"
                                   },
+                                  "structurePublicationHead": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
                                   "tagline": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -614610,6 +614619,15 @@
                             "sequence"
                           ],
                           "type": "object"
+                        },
+                        "structurePublicationHead": {
+                          "~elyTyp": 7,
+                          "nullable": true,
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": [
+                            "string",
+                            "null"
+                          ]
                         },
                         "tagline": {
                           "~elyTyp": 7,
@@ -748530,6 +748548,15 @@
                         "sequence"
                       ],
                       "type": "object"
+                    },
+                    "structurePublicationHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "tagline": {
                       "~elyTyp": 7,

@@ -38,7 +38,7 @@ export function readAnimeAgentCredits(main: MainClient, actingSubject: string | 
   return settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } }));
 }
 
-export function readAnimeWorkCredits(main: MainClient, actingSubject: string | undefined, id: string):
+export function readAnimeWorkCredits(main: Pick<MainClient, 'v1'>, actingSubject: string | undefined, id: string):
   Promise<BooksRead<CreditPage>> {
   return settle(async () => {
     const result = await main.v1.query.post({ profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits',
@@ -110,7 +110,7 @@ export async function readUndatedAnimeHub(main: MainClient, actingSubject: strin
 }
 
 /** The sourced publication's public credit page keeps author and transcriber roles supplied by Main. */
-export function readSelectedWorkCredits(main: MainClient, actingSubject: string | undefined, id: string, sourced: boolean) {
+export function readSelectedWorkCredits(main: Pick<MainClient, 'v1'>, actingSubject: string | undefined, id: string, sourced: boolean) {
   return sourced ? settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }))
     : readAnimeWorkCredits(main, actingSubject, id);
 }

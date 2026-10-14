@@ -4,8 +4,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { mayEdit } from '../work-levels-edit/allowed.ts';
 import type { BooksRead } from '../work-page/books-edition-page.read.ts';
 import type { WorkPageMessages } from '../work-page/messages.ts';
-import { RegionFailure } from '../work-page/region.tsx';
-import { RecipeExperience } from '../work-page/types/recipe.tsx';
+import { RecipeRegionView } from '../work-page/recipe-reading-recorded-page.tsx';
 import type { RecipeWorkPage } from '../work-page/types.ts';
 import type { RecipeExport, RecipeExportApi } from './export-api.ts';
 import { copyOf } from './messages.ts';
@@ -18,8 +17,7 @@ export function RecipeResourceBody({ recipe, href, actingSubject, allowed, work,
   work: string; text: string | null; locale: UiLocale; messages: WorkPageMessages;
   exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
 }) {
-  if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
-  return <RecipeExperience initial={recipe.data} href={href} actingSubject={actingSubject}
+  return <RecipeRegionView recipe={recipe} href={href} actingSubject={actingSubject}
     edit={mayEdit(allowed) ? { href: recipeEditHref(work), label: copyOf(locale).editRecipe } : null}
     text={text} locale={locale} messages={messages} exportApi={exportApi} saveExport={saveExport} />;
 }
