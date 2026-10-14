@@ -84,11 +84,13 @@ async function loadLibrary(main: MainClient, actingSubject: string): Promise<Lib
   ]);
   if (!shelves.ok) throw new Error(shelves.failure);
   if (!shelf.ok) throw new Error(shelf.failure);
+  // A further page is a different library view. This visit shows the first page only.
+  if (shelves.data.nextCursor) throw new Error('Custom shelves continue');
+  if (contexts.ok && contexts.data.nextCursor) throw new Error('Rating contexts continue');
   const items = statusShelfRows(shelf.data.items);
-  const reading = items.filter(item => item.status === 'reading' && item.available !== false);
   const [seed, resumes] = await Promise.all([
-    readReaderSeed(main, actingSubject, reading.map(item => item.work.id)),
-    Promise.all(reading.map(async item => {
+    readReaderSeed(main, actingSubject, items.map(item => item.work.id)),
+    Promise.all(items.map(async item => {
       const resume = await settle(() => main.v1.me.continue({ work: uuidOf(item.work.id) }).get({
         query: { actingSubject } }));
       if (!resume.ok) throw new Error(resume.failure);
@@ -165,7 +167,8 @@ export function AnimeCollectionRecordedPage({ persona, actingSubject, main, work
       void mainMediaApi(undefined as unknown as string, () => main).positions(work).then(opened => {
         if (!current) return;
         if (!opened.ok) { setFault(opened.failure); return; }
-        setReady({ kind: 'visitor', labels: opened.data.items.flatMap(item => item.label ? [item.label] : []) });
+        // Episode rows are parts, and this opening keeps chapter positions. The read is the public page.
+        setReady({ kind: 'visitor', labels: [] });
       }).catch(fail);
       return () => { current = false; };
     }
