@@ -46,6 +46,8 @@ export async function platformResourceAuthority(
 /** A syntactic candidate only. The exact action and scope must be held as an
  * ordinary resource grant below; being an administrator supplies no action. */
 export function platformAdministratorAction(action: string, scope: string): boolean {
+  if (action === 'work.publish')
+    return !/\s/.test(scope) && /^work:publish:https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(scope);
   return /^[a-z][a-z0-9.-]{0,99}$/.test(action) && /^[^\s\0]{1,256}$/.test(scope);
 }
 
