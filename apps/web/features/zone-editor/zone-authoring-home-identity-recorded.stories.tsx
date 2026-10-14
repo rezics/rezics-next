@@ -1,14 +1,15 @@
+import { recordedHomeNavigation } from './home-authoring-recorded-inputs.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { serializeDocument } from '@rezics/document';
 import { Button } from '@rezics/ui/button';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
-import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
+import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
-import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, type NavigationSnapshot } from './api.ts';
+import { browserZoneAuthoring, browserZoneTheme, type NavigationSnapshot } from './api.ts';
 import { writeZoneEditorDraft, zoneEditorDraftKey } from './draft-state.ts';
 import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorExit } from './draft-provider.tsx';
 import { ZoneHomeEditor } from './editor.tsx';
@@ -18,13 +19,13 @@ import { authoringModel, reduceEditor, type DraftWire, type EditorState, type Zo
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import { recordedActingSubject, zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts';
 
-const record = navigationAndTheme as AnswerRecord;
+const record = homeRendering as AnswerRecord;
 function sample(label: string) {
   const found = record.personas.owner.find(item => item.label === label);
   if (!found) throw new Error(`Missing owner record: ${label}`);
   return found;
 }
-const editor = sample('showcase-editor');
+const editor = sample('management-editor');
 const zoneId = zoneIdFromRecordedPath(editor.path);
 const actingSubject = recordedActingSubject(editor.path);
 const copy = messages.en;
@@ -64,10 +65,9 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
     for (const section of ['home', 'navigation'] as const) {
       sessionStorage.removeItem(zoneEditorDraftKey(zoneId, actingSubject, section));
     }
-    const replay = recordedFetch(record, 'owner', [{ label: 'mount-target-work', state: 'error' }, ...[
-      'showcase-editor', 'draft-navigation', 'draft-navigation-editor', 'draft-configuration',
-      'mount-target-collection-name', 'save-home-draft', 'save-home-draft-over-head', 'publish-site-bundle',
-    ].map(label => ({ label, state: 'populated' as const }))], { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, 'owner', [
+      'management-editor', 'management-zone', 'management-lifecycle-configuration', 'editor-save', 'editor-publication',
+    ].map(label => ({ label, state: 'populated' as const })), { pathPrefix: BFF_PREFIX });
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try {
         const answer = await replay.fetcher(input, init);
@@ -83,18 +83,17 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
       const [showcase, zone, navigation] = await Promise.all([
         main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }),
         main.v1.zones({ id: zoneId }).get({ query: { actingSubject } }),
-        browserZoneNavigation(main).readNavigation(zoneId, actingSubject),
+        recordedHomeNavigation(main).readNavigation(zoneId, actingSubject),
       ]);
       if (showcase.error || zone.error || !navigation.ok) throw new Error('Authorized recorded editor refused');
       const model = authoringModel(showcase.data, zone.data, zoneId, 'Recorded site');
       if (!model) throw new Error('Authorized recorded model unavailable');
-      const firstSaved = capturedState(model.state, 'save-home-draft', true);
       const dirty = place === 'save' || place === 'exit-save';
-      const state = capturedState(firstSaved, 'save-home-draft-over-head', !dirty);
+      const state = capturedState(model.state, 'editor-save', !dirty);
       if (active) {
         if (dirty) writeZoneEditorDraft(sessionStorage, zoneEditorDraftKey(zoneId, actingSubject, 'home'), state, true);
-        setLoaded({ model: { ...model, state: dirty ? firstSaved : state,
-          document: (sample(dirty ? 'save-home-draft' : 'save-home-draft-over-head').body as DraftWire).document }, navigation: navigation.data, main });
+        setLoaded({ model: { ...model, state: dirty ? model.state : state,
+          document: dirty ? model.document : (sample('editor-save').body as DraftWire).document }, navigation: navigation.data, main });
       }
     }
     void load().catch(failure => { if (active) setError(failure as Error); });
@@ -106,7 +105,7 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
   const home = place.endsWith('review') ? reduceEditor(model.state, { type: 'publish-stale' }) : model.state;
   const nav = place.startsWith('navigation');
   const authoring = browserZoneAuthoring(main);
-  const navigationApi = browserZoneNavigation(main);
+  const navigationApi = recordedHomeNavigation(main);
   const themeApi = browserZoneTheme(main);
   const links = navigation.links;
   return <div data-accepted-statuses={accepted.join(',')}>

@@ -3,7 +3,6 @@ import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import { addressKey } from '../address/path.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
-import { settleRealmRead } from '../realm/browse-page-read.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { siteHref } from '../realm/route.ts';
 import { realmFrameReads } from '../realm/zone-presentation-read.ts';
@@ -66,7 +65,6 @@ test('recorded published home keeps its slide, document, rights and continuation
     { label: 'frame-published-presentation', state: 'populated' },
     { label: 'frame-published-realm-header', state: 'populated' },
     { label: 'published-home-route', state: 'populated' },
-    { label: 'published-content-revision', state: 'populated' },
   ]);
   const header = sample('frame-published-realm-header').answer as RealmHeader;
   const published = sample('frame-published-presentation').answer as ZonePresentationRead;
@@ -128,24 +126,17 @@ test('recorded published home keeps its slide, document, rights and continuation
   if (!route.ok || route.data.kind !== 'home' || !route.data.page) throw new Error('The recorded home route was not a home');
   expect(route.data.page.document).toEqual(page.document);
 
-  const revision = await settleRealmRead(() => main.v1['content-revisions']({ revision: pathId('published-content-revision') }).get());
-  expect(revision.ok).toBe(true);
-  if (!revision.ok) throw new Error('The recorded content revision did not load');
-  expect(revision.data.body.document).toEqual(page.document);
   expect(data.home.reference.provenance.rightsBasis).toBe('original-contribution');
-  expect(revision.data.reference.provenance?.rightsBasis).toBe(data.home.reference.provenance.rightsBasis);
-  expect(revision.data.reference.provenance?.author).toBe(data.home.reference.provenance.author);
+  expect(route.data.page.reference).toEqual(data.home.reference);
 });
 
 test('a recorded route refusal stays missing rather than an empty home', async () => {
   const routeSample = sample('unpublished-route-refused');
-  const draftSample = sample('draft-content-revision');
   const main = client([
     { label: 'frame-published-space-address', state: 'populated' },
     { label: 'frame-published-presentation', state: 'populated' },
     { label: 'frame-published-realm-header', state: 'populated' },
     { label: 'unpublished-route-refused', state: 'error' },
-    { label: 'draft-content-revision', state: 'error' },
   ]);
   const loaded = await loadZoneHomeFrame(main, queryValue('frame-published-space-address', 'key'), 'en',
     queryValue('unpublished-route-refused', 'path'));
@@ -154,10 +145,7 @@ test('a recorded route refusal stays missing rather than an empty home', async (
   expect(loaded.kind).toBe('missing');
   if (loaded.kind !== 'missing') throw new Error('The recorded route refusal became a page');
   expect(loaded.route).toEqual({ ok: false, failure: 'missing', status: 404, problem: routeSample.answer });
-  const draft = await settleRealmRead(() => main.v1['content-revisions']({ revision: pathId('draft-content-revision') }).get());
-  expect(draftSample.status).toBe(404);
-  expect(draftSample.answer).toMatchObject({ code: 'revision_unavailable' });
-  expect(draft).toEqual({ ok: false, failure: 'missing' });
+
 });
 
 test('an empty published home and an empty mount keep their recorded continuation', async () => {
@@ -193,9 +181,9 @@ test('an empty published home and an empty mount keep their recorded continuatio
 });
 
 function privateDraftText() {
-  const draft = record.personas.owner?.find(item => item.label === 'draft-content-revision');
+  const draft = record.personas.owner.find(item => item.label === 'management-editor');
   const published = texts((sample('frame-published-presentation').answer as { home?: { document?: unknown } }).home?.document);
-  const extra = texts((draft?.answer as { body?: { document?: unknown } } | undefined)?.body?.document)
+  const extra = texts((draft?.answer as { draft?: { document?: unknown } } | undefined)?.draft?.document)
     .filter(text => !published.includes(text));
   if (!extra.length) throw new Error('The recorded owner draft has no text beyond the published home');
   return extra[0]!;

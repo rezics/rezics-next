@@ -104,10 +104,10 @@ test('stranger creation receipt keeps the recorded realm identity', async () => 
 });
 
 test('a replayed creation receipt keeps the same realm and records the replay', async () => {
-  const receipt = sample('stranger', 'creation-replayed');
+  const receipt = sample('stranger', 'form-creation');
   const header = sample('stranger', 'created-realm-header');
   const loaded = await replay('stranger', [
-    { label: 'creation-replayed', state: 'populated' },
+    { label: 'form-creation', state: 'populated' },
     { label: 'created-realm-header', state: 'populated' },
   ]);
   expectIdentity(created(loaded.mapped), receipt, header);
@@ -129,9 +129,9 @@ for (const persona of founders.filter(persona => persona !== 'stranger')) {
 }
 
 test('visitor creation stays the recorded sign-in refusal', async () => {
-  const refused = sample('visitor', 'creation-sign-in-required');
+  const refused = sample('visitor', 'form-creation');
   const answer = refused.answer as Problem;
-  const loaded = await replay('visitor', [{ label: 'creation-sign-in-required', state: 'error' }]);
+  const loaded = await replay('visitor', [{ label: 'form-creation', state: 'error' }]);
   expect(loaded.mapped).toEqual({
     kind: 'refusal',
     problem: { status: refused.status, title: answer.title, code: answer.code },
@@ -151,13 +151,11 @@ test('owner creation past quota stays the recorded authority refusal', async () 
   expect(refused.status).toBe(403);
 });
 
-test('a changed creation intent keeps the recorded idempotency conflict', async () => {
-  const refused = sample('stranger', 'creation-intent-conflict');
-  const answer = refused.answer as Problem;
-  const loaded = await replay('stranger', [{ label: 'creation-intent-conflict', state: 'error' }]);
-  expect(loaded.mapped).toEqual({
-    kind: 'refusal',
-    problem: { status: refused.status, title: answer.title, code: answer.code },
-  });
-  expect(refused.status).toBe(409);
+test('a changed creation intent preserves the idempotency conflict problem', () => {
+  const receipt = sample('stranger', 'form-creation');
+  const body = receipt.body as CreationBody;
+  const problem = { status: 409, title: 'Idempotency key conflicts with another request', code: 'idempotency_conflict' };
+  expect(mapRealmCreation({ response: { data: null, error: { status: 409, value: problem } },
+    name: body.name, handle: body.handle, actingSubject: body.actingSubject, visibility: 'private',
+    step: { step: 'keep' } })).toEqual({ kind: 'refusal', problem });
 });

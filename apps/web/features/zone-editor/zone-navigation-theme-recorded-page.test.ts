@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
@@ -99,8 +100,8 @@ test('a recorded published presentation keeps navigation, home text and original
 test('a recorded republished presentation keeps both mounts and the later home text', async () => {
   const item = sample('owner', 'republished-presentation');
   const session = open('owner', [{ label: item.label, state: 'populated' }]);
-  const frame = await loadPublishedFrame(session.main, zoneIdFromRecordedPath(item.path), 'en',
-    realmMessages.home, zoneMessages.moduleHeroCarousel);
+  const read = await zonePresentationReads(session.main, recordedActingSubject(item.path)).readCompletePresentation(zoneIdFromRecordedPath(item.path));
+  const frame = read.ok ? { ok: true as const, data: publishedFrameModel(read.data, zoneIdFromRecordedPath(item.path), 'en', realmMessages.home, zoneMessages.moduleHeroCarousel) } : read;
   if (!frame.ok) throw new Error(String(session.unmatched() ?? frame.failure));
   const answer = item.answer as ZonePresentationRead;
   expect(answer.navigation).toHaveLength(2);
@@ -116,8 +117,10 @@ test('a recorded republished presentation keeps both mounts and the later home t
 });
 
 test('a recorded empty home is a site with no mounts and no home document', async () => {
-  const item = sample('visitor', 'empty-home-presentation');
-  const session = open('visitor', [{ label: item.label, state: 'empty' }]);
+  const item = (homeRendering as AnswerRecord).personas.visitor.find(sample => sample.label === 'frame-empty-presentation')!;
+  const replay = recordedFetch(homeRendering as AnswerRecord, 'visitor', [{ label: item.label, state: 'empty' }], { pathPrefix: BFF_PREFIX });
+  disposals.push(replay.dispose);
+  const session = { main: browserMainApi('https://recorded.invalid', { fetcher: replay.fetcher }), unmatched: () => undefined };
   const frame = await loadPublishedFrame(session.main, zoneIdFromRecordedPath(item.path), 'en',
     realmMessages.home, zoneMessages.moduleHeroCarousel);
   if (!frame.ok) throw new Error(String(session.unmatched() ?? frame.failure));
@@ -307,7 +310,7 @@ test('the navigation reader asks for a page the recorded draft does not', async 
 });
 
 test('publishing names the zone as the page, which the recorded home document does not', () => {
-  const item = sample('owner', 'publish-site-bundle');
+  const item = (homeRendering as AnswerRecord).personas.owner.find(sample => sample.label === 'editor-publication')!;
   const body = publishBody(item.body);
   const zoneIri = `https://rezics.com/id/${zoneIdFromRecordedPath(item.path)}`;
   const choice: PublicationChoice = {

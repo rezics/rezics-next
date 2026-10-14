@@ -9,7 +9,7 @@ const personas: AnswerPersona[] = ['visitor', 'stranger', 'member', 'owner', 'mo
 for (const persona of personas) {
   test(`closed Realm entry is ordinarily missing for ${persona}, using unchanged HTTP records`, async () => {
     const record = closure as AnswerRecord;
-    const replay = recordedRealmEntry(record, persona, record.personas[persona].map(sample => ({
+    const replay = recordedRealmEntry(record, persona, record.personas[persona].filter(sample => sample.label.startsWith('discussion-')).map(sample => ({
       label: sample.label, state: sample.status >= 400 ? 'error' : 'populated',
     })), 'discussion-space-address', persona === 'visitor' ? undefined : 'discussion-session-agent');
     try { expect((await replay.read('en')).resolved).toEqual({ kind: 'missing' }); }

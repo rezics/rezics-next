@@ -73,9 +73,9 @@ function searchOf(persona: Persona, label: string): Record<string, string> {
 function selections(persona: Persona, label: string, state: RecordedState): RecordedSelection[] {
   const frame = ['frame-address', 'frame-presentation', 'frame-realm-header', 'frame-facets', label];
   const signedIn = persona === 'visitor' ? [] : [
-    'frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-follow', 'frame-platform-access',
+    'frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban', 'frame-follow', 'frame-platform-access',
   ];
-  return [...frame, ...signedIn].map(item => ({ label: item, state: item === label ? state : 'populated' }));
+  return [...frame, ...signedIn].map(item => ({ label: item, state: item === label ? state : browseSample(persona, item).status >= 400 ? 'error' : 'populated' }));
 }
 
 function resultText(answer: ZoneBrowsePage) {

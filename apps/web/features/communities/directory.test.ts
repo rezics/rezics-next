@@ -41,7 +41,7 @@ test('The directory reader keeps an unavailable response distinct from a changed
     const transport = recordedFetch(input.record, 'visitor', [{ label: 'directory', state: 'error' }], { pathPrefix: BFF_PREFIX });
     try {
       await expect(discoveryApi(browserMainApi('https://recorded.invalid', { fetcher: transport.fetcher }), 'en').resources(input.body))
-        .rejects.toEqual(new BrowseReadError(input.sample.status, mode === 'moved' ? 'read_basis_changed' : 'read_unavailable'));
+        .rejects.toEqual(new BrowseReadError(input.sample.status, mode === 'moved' ? 'read_basis_changed' : 'read_unavailable', input.sample.answer));
     } finally { transport.dispose(); }
   }
 });

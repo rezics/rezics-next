@@ -89,8 +89,8 @@ function refusalTitle(): string {
 }
 
 function privateDraftText() {
-  const draft = record.personas.owner?.find(item => item.label === 'draft-content-revision');
-  const extra = documentTexts((draft?.answer as { body?: { document?: unknown } } | undefined)?.body?.document)
+  const draft = record.personas.owner?.find(item => item.label === 'management-editor');
+  const extra = documentTexts((draft?.answer as { draft?: { document?: unknown } } | undefined)?.draft?.document)
     .filter(text => !documentTexts(publishedHome?.document).includes(text));
   if (!extra[0]) throw new Error('The recorded owner draft has no text beyond the published home');
   return extra[0];

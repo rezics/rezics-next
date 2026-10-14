@@ -11,18 +11,17 @@ export function creationSample(persona: AnswerPersona, label: string): AnswerSam
   return sample;
 }
 
-/** These requests are the production form's private admission policy. The
- * recorded outcome uses a different initial policy, so they need recording in
- * the prove phase. Receipt/refusal bodies below remain unchanged. */
+/** Captured form requests are replayed as captured; unavailable UI states are explicit contract constructions. */
 export function creationStoryInputs(persona: typeof foundingPersonas[number], state: CreationStoryState = 'created') {
-  const label = state === 'quota' ? 'creation-quota-denied' : state === 'conflict' ? 'creation-intent-conflict'
-    : state === 'expired' ? 'creation-sign-in-required' : state === 'replayed' ? 'creation-replayed' : 'creation-receipt';
-  const source = creationSample(state === 'quota' ? 'owner' : state === 'expired' ? 'visitor' : persona, label);
+  const source = creationSample(state === 'quota' ? 'owner' : state === 'expired' ? 'visitor' : persona,
+    state === 'quota' ? 'creation-quota-denied' : state === 'expired' || state === 'replayed' ? 'form-creation' : 'creation-receipt');
   const receipt = creationSample(persona, 'creation-receipt');
   const intent = receipt.body as CommunityCreationIntent;
   const body: CommunityCreationIntent = { ...intent, topics: [], initialSettings: initialCommunitySettings('private', []) };
   const command: AnswerSample = {
     ...source, label: 'form-creation', body,
+    ...(state === 'conflict' ? { status: 409, answer: { type: 'about:blank', status: 409,
+      title: 'Idempotency key conflicts with another request', code: 'idempotency_conflict' } } : {}),
     ...(state === 'pending' ? { status: 202, answer: {
       operationId: 'creation-pending', status: 'reconciling', phase: 'realm-initialization', result: null,
       retry: { allowed: true, afterMs: 1000 },
@@ -46,12 +45,13 @@ export function creationStoryInputs(persona: typeof foundingPersonas[number], st
     headers: { 'content-type': 'application/json' },
   };
   const existingReads: AnswerSample[] = state === 'owned' || state === 'taken' ? [
-    creationSample(persona, 'founder-address'),
-    state === 'owned' ? creationSample(persona, 'founder-managed-realms') : {
+    { ...creationSample(persona, 'landing-address'), status: 200, answer: { status: 'resolved', capabilities: { realm: answer.realm } },
+      path: `/v1/addresses/resolve?scope=space&key=${encodeURIComponent(body.handle!)}&actingSubject=${encodeURIComponent(body.actingSubject)}` },
+    {
       label: 'moderated-realm', operationId: 'getV1MeManaged-realms', method: 'GET',
       path: `/v1/me/managed-realms?actingSubject=${encodeURIComponent(body.actingSubject)}`,
       status: 200, headers: { 'content-type': 'application/json' },
-      answer: { items: [{ realm: answer.realm, permissions: ['governance.moderate'],
+      answer: { items: [{ realm: answer.realm, permissions: [state === 'owned' ? 'realm.owner' : 'governance.moderate'],
         openCount: { kind: 'exact', value: 0 }, escalatedCount: { kind: 'exact', value: 0 }, latestActivity: null }],
         nextCursor: null, complete: true },
     },
@@ -63,6 +63,6 @@ export function creationStoryInputs(persona: typeof foundingPersonas[number], st
   return { record, persona, body, answer, command,
     // Exact requests are exposed without presenting constructed inputs as captures.
     missingRecordedStates: [command, ...(persona === 'stranger' ? [] : [preferenceRead]), ...profileWrites,
-      ...existingReads.filter(sample => sample.label === 'moderated-realm')],
+      ...existingReads],
   };
 }

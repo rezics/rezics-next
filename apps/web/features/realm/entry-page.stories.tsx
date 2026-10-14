@@ -23,10 +23,10 @@ function RecordedEntry({ persona, state, locale }: { persona: AnswerPersona; sta
     let active = true;
     const closed = state === 'closed';
     const record = (closed ? closure : admission) as AnswerRecord;
-    const labels = closed ? record.personas[persona].map(sample => sample.label)
+    const labels = closed ? record.personas[persona].filter(sample => sample.label.startsWith('discussion-')).map(sample => sample.label)
       : persona === 'visitor' ? ['join-address', 'private-realm-hidden', 'request-landing']
         : ['join-address', 'join-public-realm', 'join-realm', 'join-landing', 'join-session-agent',
-          state === 'requested' ? 'own-request-pending' : state === 'withdrawn' ? 'own-request-withdrawn' : 'join-own-requests-before-request'];
+          state === 'requested' ? 'join-own-request-pending' : state === 'withdrawn' ? 'join-own-request-withdrawn' : 'join-own-requests-before-request'];
     const selections: RecordedSelection[] = labels.map(label => {
       const sample = record.personas[persona].find(item => item.label === label)!;
       return { label, state: state === 'loading' && label === 'join-address' ? 'loading' : sample.status >= 400 ? 'error' : 'populated' };

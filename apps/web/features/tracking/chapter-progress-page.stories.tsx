@@ -54,7 +54,7 @@ function ChapterProgressPage({ medium, persona, state, locale }: Props) {
             <p lang="en" className="mb-3 text-muted-foreground text-sm">{device === 'first' ? 'First device'
               : scenario.omnibus ? 'Second device · Omnibus' : 'Second device'}</p>
             <MediumProgress key={`${device}/${generation}`} work={device === 'second' ? scenario.omnibus ?? scenario.work : scenario.work}
-              api={device === 'first' ? scenario.firstApi! : scenario.secondApi!} episodes={null} t={t} />
+              api={device === 'first' ? scenario.firstApi! : scenario.secondApi!} episodes={null} t={{ ...t, chapters: `${t.chapters} · ${device === 'first' ? 'First device' : 'Second device'}` }} />
             <Button className="mt-3" variant="outline" onClick={() => setGeneration(value => value + 1)}>{t.retry}</Button>
           </div>)}
         </div>}

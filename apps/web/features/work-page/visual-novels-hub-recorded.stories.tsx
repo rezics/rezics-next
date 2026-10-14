@@ -29,7 +29,7 @@ type PageView = Awaited<ReturnType<typeof readBooksEditionPage>> & { actions?: R
 
 /** Member's production inventory was recorded with the hub page; every other persona has the chooser page. */
 function inventoryLabel(persona: Persona, kind: 'releases' | 'realizations') {
-  return persona === 'member' ? `hub-${kind}` : `chooser-${kind}`;
+  return persona === 'member' ? `hub-${kind}` : persona === 'visitor' ? `chooser-${kind}` : `visit-chooser-${kind}`;
 }
 
 function sample(persona: AnswerPersona, label: string) {

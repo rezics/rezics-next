@@ -122,7 +122,7 @@ for (const persona of publicPersonas) {
     expect(after.mapped).toEqual(before.mapped);
     expect(reference.provenance).toEqual({
       rightsBasis: 'original-contribution',
-      author: 'https://rezics.com/id/07b24c79-f11f-48f4-ac74-3dd865f75d3c',
+      author: actingSubject('owner', 'manage-configuration'),
     });
     expect(sample(persona, 'published-presentation').path).not.toContain('actingSubject');
     expect(sample(persona, 'unchanged-public-presentation').path).not.toContain('actingSubject');
@@ -154,7 +154,7 @@ test('visitor missing draft route stays the recorded refusal', async () => {
   });
   expect(refused.status).toBe(404);
   expect(problem).toMatchObject({ title: 'Zone route is unavailable', code: 'route_missing', status: 404 });
-  expect(refused.path).toBe('/v1/zones/364474ce-9de9-8d5c-8550-f35240d6d598/routes?path=%2Fdraft-link');
+  expect(new URL(refused.path, 'https://recorded.invalid').searchParams.get('path')).toBe('/draft-link');
   expect(loaded.address?.canonical).toEqual(address.canonical);
   expect(loaded.presentation).toBeNull();
   expect(recordedActingPerson(record, 'visitor', [{ label: 'site-address', state: 'populated' }])).toBeNull();
@@ -191,7 +191,7 @@ test('competing publication stays public after the original receipt is replayed'
     variantId: competing.page.variantId,
     revisionId: competing.page.revisionId,
     byteDigest: competing.page.byteDigest,
-    provenance: { rightsBasis: 'original-contribution', author: 'https://rezics.com/id/07b24c79-f11f-48f4-ac74-3dd865f75d3c' },
+    provenance: { rightsBasis: 'original-contribution', author: actingSubject('owner', 'manage-configuration') },
   });
   const current = homeAnswer('owner', 'competing-presentation');
   const stayed = homeAnswer('owner', 'unchanged-competing-presentation');
@@ -249,7 +249,7 @@ function actingSubject(persona: AnswerPersona, label: string): string {
 test('owner management read opens the recorded editor', async () => {
   const persona = 'owner' as const;
   const acting = actingSubject(persona, 'manage-configuration');
-  const zoneId = '364474ce-9de9-8d5c-8550-f35240d6d598';
+  const zoneId = new URL(sample(persona, 'manage-configuration').path, 'https://recorded.invalid').pathname.split('/')[3]!;
   const replayed = receipt('receipt-replay');
   const address = sample(persona, 'manage-space-address').answer as { canonical: Parameters<typeof spaceHref>[0] };
   const configuration = sample(persona, 'manage-configuration');
@@ -265,8 +265,8 @@ test('owner management read opens the recorded editor', async () => {
   const loaded = frame.authoring;
   expect(loaded.kind).toBe('ready');
   if (loaded.kind !== 'ready') return;
-  expect(acting).toBe('https://rezics.com/id/07b24c79-f11f-48f4-ac74-3dd865f75d3c');
-  expect(loaded.model.name).toBe('Published site');
+  expect(acting).toBe(actingSubject('owner', 'manage-configuration'));
+  expect(loaded.model.name).toBe(configured.name);
   expect(loaded.model.zoneId).toBe(zoneId);
   expect(loaded.model.zoneIri).toBe(`https://rezics.com/id/${zoneId}`);
   expect(loaded.model.state.variantId).toBe(replayed.page.variantId);
@@ -279,7 +279,7 @@ test('owner management read opens the recorded editor', async () => {
   expect(loaded.sitePath).toBe(spaceHref(address.canonical, 'site'));
   expect(loaded.model.document).not.toBeNull();
   if (!loaded.model.document) return;
-  expect(documentText(loaded.model.document)).toContain('Private subsequent owner text');
+  expect<unknown>(loaded.model.document).toEqual((sample(persona, 'site-editor-access').answer as { draft: { document: unknown } }).draft.document);
   expect(configured.configuration.state).toBe('active');
   expect(frame.lifecycle).toMatchObject({
     kind: 'ready', zoneId, spaceId: configured.configuration.space.split('/').at(-1),
@@ -305,19 +305,20 @@ for (const persona of refusedManagement) {
     const acting = actingSubject(persona, 'manage-configuration');
     expect(configuration.status).toBe(404);
     expect(problem).toMatchObject({ title: 'Zone is unavailable', code: 'zone_unavailable', status: 404 });
-    expect(configuration.path).toBe(`/v1/zones/364474ce-9de9-8d5c-8550-f35240d6d598/configuration?actingSubject=${encodeURIComponent(acting)}`);
+    const zoneId = new URL(configuration.path, 'https://recorded.invalid').pathname.split('/')[3]!;
+    expect(configuration.path).toBe(`/v1/zones/${zoneId}/configuration?actingSubject=${encodeURIComponent(acting)}`);
     const transport = managementClient(persona, [
       { label: 'manage-configuration', state: 'error' },
       { label: 'site-address', state: 'populated' },
       { label: 'site-editor-access', state: 'error' },
       { label: 'manage-zone', state: 'error' },
     ]);
-    const frame = await readZoneManagementFrame(transport.client, '364474ce-9de9-8d5c-8550-f35240d6d598', 'en', acting);
+    const frame = await readZoneManagementFrame(transport.client, zoneId, 'en', acting);
     expect(transport.configuration).toEqual([configuration.path, configuration.path]);
     expect(frame.authoring).toEqual({ kind: 'failure', failure: 'denied' });
     expect(frame.lifecycle).toEqual({ kind: 'failure', failure: 'denied' });
     expect(frame.missing).toBe(false);
-    expect(frame.name).toBe('364474ce-9de9-8d5c-8550-f35240d6d598');
+    expect(frame.name).toBe(zoneId);
     expect(frame.lifecycleOnly).toBe(false);
     expect(frame.draftZoneId).toBeNull();
     expect(frame.lifecycleAddress).toBeUndefined();
@@ -326,6 +327,6 @@ for (const persona of refusedManagement) {
 
 test('a signed-in site read keeps its acting Person, and the anonymous reread does not', () => {
   expect(recordedActingPerson(record, 'stranger', [{ label: 'site-home-presentation', state: 'populated' }]))
-    .toBe('https://rezics.com/id/e3b91929-019f-4dd9-8d94-2be6024e12f1');
+    .toBe(actingSubject('stranger', 'site-home-presentation'));
   expect(recordedActingPerson(record, 'visitor', [{ label: 'site-home-presentation', state: 'populated' }])).toBeNull();
 });

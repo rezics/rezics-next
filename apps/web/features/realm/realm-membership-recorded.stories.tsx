@@ -57,6 +57,7 @@ const joinedFrame = [
   { label: 'frame-realm', state: 'populated' },
   { label: 'frame-realm-zone', state: 'error' },
   { label: 'frame-joining', state: 'populated' },
+  { label: 'frame-own-ban', state: 'error' },
   { label: 'frame-follow', state: 'populated' },
   { label: 'frame-platform-access', state: 'populated' },
 ] as const satisfies readonly RecordedSelection[];

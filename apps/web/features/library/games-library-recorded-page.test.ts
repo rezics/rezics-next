@@ -93,7 +93,7 @@ test('the currently-reading page the library reader requests is not the recorded
 });
 
 test('a visitor cannot read game progress, and a foreign library read stays refused', async () => {
-  const progress = sample(collection, 'visitor', 'sign-in-/v1/works/01a13624-9ebd-74c9-a463-c8e102e57230/progress');
+  const progress = collection.personas.visitor.find(item => item.method === 'GET' && /\/works\/[^/]+\/progress(?:\?|$)/.test(item.path))!;
   expect(progress.status).toBe(401);
   expect(progress.answer).toMatchObject({ status: 401, code: 'account_assertion_denied' });
   const work = progress.path.split('?')[0]!.split('/').at(-2);

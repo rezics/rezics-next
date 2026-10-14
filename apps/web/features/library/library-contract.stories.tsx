@@ -117,7 +117,7 @@ export const VisualNovelStaleWinner: Story = {
     await userEvent.click(await canvas.findByRole('button', { name: 'Mark completed' }));
     await expect(await canvas.findByRole('alert')).toHaveTextContent('Playing');
     await userEvent.click(canvas.getByRole('button', { name: 'Use the other version' }));
-    await expect(await canvas.findByText('Playing', { exact: true })).toBeVisible();
+    await expect(await canvas.findAllByText('Playing', { exact: true }).then(items => items[0]!)).toBeVisible();
     await userEvent.click(canvas.getByRole('button', { name: 'Mark completed' }));
     await expect(await canvas.findByText('Completed', { exact: true })).toBeVisible();
   },
@@ -168,7 +168,7 @@ export const ImportPending: Story = {
     const canvas = within(canvasElement);
     await canvas.findByRole('heading', { level: 1, name: 'Library' });
     await userEvent.click(canvas.getByRole('heading', { name: 'Import your books' }));
-    await userEvent.click(await canvas.findByRole('button', { name: 'Continue' }));
+    await userEvent.click(await canvas.findByRole('button', { name: /^Continue/ }));
     await userEvent.click(await canvas.findByRole('button', { name: 'Add to my library' }));
     await expect(await canvas.findByText('Adding to your library: 0 of 1')).toBeVisible();
     await expect(canvas.queryByText('Your import is complete.')).toBeNull();

@@ -115,7 +115,7 @@ async function expectOwnerQueue(canvasElement: HTMLElement) {
   await expect(canvas.getAllByText(manage.submittedText)[0]).toBeVisible();
   await expect(canvas.queryByRole('button', { name: manage.loadMore })).toBeNull();
   if (canvasElement.ownerDocument.documentElement.clientWidth >= 1024) {
-    await expect(canvas.getByRole('button', { name: 'Uphold ban' })).toBeVisible();
+    await expect(await canvas.findByRole('button', { name: /^Uphold ban/ })).toBeVisible();
   }
   await fits(canvasElement);
 }

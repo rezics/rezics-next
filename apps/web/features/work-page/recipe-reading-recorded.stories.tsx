@@ -1,3 +1,4 @@
+import { readingLine, type IngredientQualifier } from '../recipe-editor/ingredient-line.ts';
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
@@ -90,7 +91,7 @@ const published: NonNullable<Story['play']> = async ({ canvasElement, args }) =>
   const canvas = within(canvasElement);
   const page = sample(args.persona, 'recipe-start').answer as RecipeWorkPage;
   await canvas.findByRole('heading', { name: (sample(args.persona, 'work-header').answer as { title: { value: string } }).title.value });
-  await expect(canvas.getByText(page.ingredients[0]!.line)).toBeVisible();
+  await expect(canvas.getByText(readingLine({ ...(page.occurrences.find(node => node.occurrence === page.ingredients[0]!.occurrence)!.qualifier as IngredientQualifier), amount: page.ingredients[0]!.amount }))).toBeVisible();
   await expect(canvas.queryByText(/PRIVATE DRAFT/)).not.toBeInTheDocument();
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 };
@@ -115,10 +116,10 @@ export const ScalingAndContinuation: Story = { async play(context) {
   await published(context);
   const canvas = within(context.canvasElement);
   const servings = canvas.getByRole('spinbutton', { name: messages.en.servings });
-  await userEvent.clear(servings); await userEvent.type(servings, '8');
+  await userEvent.tripleClick(servings); await userEvent.keyboard('8');
   await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
   const scaled = sample(context.args.persona, 'recipe-scaled-start').answer as RecipeWorkPage;
-  await expect(canvas.findByText(scaled.ingredients[0]!.line)).resolves.toBeVisible();
+  await expect(canvas.findByText(readingLine({ ...(scaled.occurrences.find(node => node.occurrence === scaled.ingredients[0]!.occurrence)!.qualifier as IngredientQualifier), amount: scaled.ingredients[0]!.amount }))).resolves.toBeVisible();
   await userEvent.click(canvas.getByRole('button', { name: messages.en.showMoreRecipe }));
   await expect(canvas.findByText('Mix the sauce.')).resolves.toBeVisible();
   await expect(canvas.findByText('Cook for five minutes.')).resolves.toBeVisible();

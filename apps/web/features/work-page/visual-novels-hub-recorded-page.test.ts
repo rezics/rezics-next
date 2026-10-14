@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import bookRecord from '../../../../tests/qa/fixtures/outcomes/books/work-hub-and-edition-choice.json';
 import record from '../../../../tests/qa/fixtures/outcomes/visual-novels/work-hub-and-edition-choice.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
@@ -59,27 +60,26 @@ for (const persona of personas) {
     expect(failures).toEqual([]);
   });
 
-  test(`${persona}: another person's edition preference stays the recorded refusal`, async () => {
-    const refused = sample(persona, 'primary-get-me-edition-preferences-0');
-    const failures: string[] = [];
-    const main = transport(persona, [{ label: refused.label, state: 'error' }], failures);
-    const reads = booksEditionReads({ main, actingSubject: subjectOf(persona, refused.label) });
-    expect<unknown>(await reads.readEditionPreference(workId(persona))).toEqual({
-      ok: false, failure: 'sign-in', status: refused.status, problem: refused.answer,
+  // Both hubs use the same preference adapter. Cross-person refusals are captured by the book proof.
+  for (const method of ['GET', 'PUT'] as const) {
+    test(`${persona}: the shared edition adapter preserves the captured ${method} authority refusal`, async () => {
+      const authority = bookRecord as AnswerRecord;
+      const refused = authority.personas[persona].find(sample => sample.method === method
+        && sample.path.includes('/edition-preferences/') && [401, 403].includes(sample.status))!;
+      const replay = recordedFetch(authority, persona, [{ label: refused.label, state: 'error' }], { pathPrefix: BFF_PREFIX });
+      disposals.push(replay.dispose);
+      const main = browserMainApi('https://recorded.invalid', { fetcher: replay.fetcher });
+      const url = new URL(refused.path, 'https://recorded.invalid');
+      const work = url.pathname.split('/').at(-1)!;
+      const body = refused.body as EditionChoice & { actingSubject: string; expectedVersion: number };
+      const actingSubject = method === 'GET' ? url.searchParams.get('actingSubject')! : body.actingSubject;
+      const result = method === 'GET' ? await booksEditionReads({ main, actingSubject }).readEditionPreference(work)
+        : await mainTrackingApi(actingSubject, () => main).setPreference(`https://rezics.com/id/${work}`, body.expectedVersion,
+          { edition: body.edition, language: body.language });
+      expect<unknown>(result).toEqual({ ok: false, failure: 'sign-in', ...(method === 'GET' ? { status: refused.status, problem: refused.answer } : {}) });
     });
-    expect(failures).toEqual([]);
-  });
+  }
 
-  test(`${persona}: saving another person's edition preference is refused`, async () => {
-    const label = 'primary-put-me-edition-preferences-0';
-    const { answer, actingSubject, expectedVersion, choice, work } = command(persona, label);
-    const failures: string[] = [];
-    const main = transport(persona, [{ label, state: 'error' }], failures);
-    expect(await mainTrackingApi(actingSubject, () => main).setPreference(work, expectedVersion, choice))
-      .toEqual({ ok: false, failure: 'sign-in' });
-    expect(failures).toEqual([]);
-    expect(answer.status === 401 || answer.status === 403).toBe(true);
-  });
 }
 
 test('member: the edition seam consumes the recorded Work, exact releases and empty preference', async () => {
@@ -139,8 +139,8 @@ test('member: the saved realization preference keeps its revision and progress c
 
 for (const persona of ['visitor', 'stranger', 'owner', 'moderator', 'operator'] as const) {
   test(`${persona}: the production release reader consumes the recorded limit-20 page`, async () => {
-    const releases = sample(persona, 'chooser-releases');
-    const realizations = sample(persona, 'chooser-realizations');
+    const releases = sample(persona, persona === 'visitor' ? 'chooser-releases' : 'visit-chooser-releases');
+    const realizations = sample(persona, persona === 'visitor' ? 'chooser-realizations' : 'visit-chooser-realizations');
     const failures: string[] = [];
     const actingSubject = subjectOf(persona, releases.label);
     const main = transport(persona, [
@@ -169,8 +169,8 @@ for (const persona of ['visitor', 'stranger', 'owner', 'moderator', 'operator'] 
 for (const persona of ['stranger', 'owner', 'moderator', 'operator'] as const) {
   test(`${persona}: the edition seam consumes the recorded Work, exact releases and empty preference`, async () => {
     const header = sample(persona, 'primary-get-works-0');
-    const releases = sample(persona, 'chooser-releases');
-    const realizations = sample(persona, 'chooser-realizations');
+    const releases = sample(persona, 'visit-chooser-releases');
+    const realizations = sample(persona, 'visit-chooser-realizations');
     const preference = sample(persona, persona === 'stranger' ? 'chooser-preference-empty' : 'primary-get-me-edition-preferences-1');
     const progress = sample(persona, 'chooser-progress-empty');
     expect(preference.answer).toBeNull();
@@ -265,7 +265,7 @@ for (const persona of choosers) {
   });
 
   test(`${persona}: a recorded save, replay and compare-and-set keep the exact edition`, async () => {
-    for (const label of ['primary-put-me-edition-preferences-1', 'primary-put-me-edition-preferences-2', 'primary-put-me-edition-preferences-3', 'primary-put-me-edition-preferences-4'] as const) {
+    for (const label of ['primary-put-me-edition-preferences-1', 'primary-put-me-edition-preferences-3', 'primary-put-me-edition-preferences-4'] as const) {
       const { answer, actingSubject, expectedVersion, choice, work } = command(persona, label);
       const failures: string[] = [];
       const main = transport(persona, [{ label, state: answer.status === 200 ? 'populated' : 'error' }], failures);

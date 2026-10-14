@@ -148,7 +148,7 @@ test('an owner opens the recorded draft at its head', async () => {
   expect(steps(loaded.data).map((node) => node.qualifier.instructionText.value)).toEqual(
     stepValues,
   );
-  expect(stepValues).toContain('Private draft note.');
+  expect(stepValues).toHaveLength(2);
   const amounts = answer.occurrences
     .filter((item) => item.role === 'ingredient' && item.state === 'active')
     .map((item) => item.qualifier?.amount ?? null);

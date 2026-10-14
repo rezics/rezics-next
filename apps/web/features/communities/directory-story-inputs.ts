@@ -1,3 +1,4 @@
+import admission from '../../../../tests/qa/fixtures/outcomes/realm/membership-and-admission.json';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import { direction } from '@rezics/main/language';
 import { browseCategories } from '../catalogue/registry.ts';
@@ -14,17 +15,17 @@ function liveCard(id: string, value: string): ResourceCard {
   return { id, name: { value, language: 'en', direction: direction('en', value), basis: 'fallback' }, kind: 'realm', types: realmTypes,
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'realm' } };
 }
-const publicAddress = creationSample('visitor', 'public-created-address').answer as {
+const publicAddress = (admission as AnswerRecord).personas.visitor.find(sample => sample.label === 'join-address')!.answer as {
   capabilities: { realm: string }; canonical: { suffixSource: string };
 };
-export const directoryLiveCards = [liveCard(publicAddress.capabilities.realm, publicAddress.canonical.suffixSource),
+export const directoryLiveCards = [liveCard(publicAddress.capabilities.realm, publicAddress.canonical.suffixSource || 'Original public reading circle'),
   liveCard('https://rezics.com/id/00000000-0000-8000-8000-000000000903', 'Original public reading circle 2')];
 export const closedDirectoryIdentity = 'https://rezics.com/id/00000000-0000-8000-8000-000000000904';
 export const privateCreationIdentities = foundingPersonas.map(persona =>
   (creationSample(persona, 'creation-receipt').answer as { realm: string }).realm);
 
 /** Closure directory answers are not recorded yet. These are explicit
- * contract states, using the visitor's public address and synthetic public
+ * contract states, using the visitor's captured admission address and synthetic public
  * Realms. Founders' private recorded Realms must never supply visitor rows. */
 export function directoryStoryInputs(persona: AnswerPersona, mode: DirectoryStoryState = 'populated') {
   const state: BrowseState = { ...emptyBrowse, tab: 'communities',
