@@ -92,13 +92,13 @@ async function createSpace(page: Page, data: Record<string, unknown>, ready: (bo
 }
 
 /** Fixture setup uses the same real commands as Studio, with one retained key per command. */
-async function command<T>(page: Page, path: string, data: Record<string, unknown>): Promise<T> {
+async function command<T>(page: Page, path: string, data: Record<string, unknown>, method: 'POST' | 'PUT' = 'POST'): Promise<T> {
   const key = randomUUID();
   for (let attempt = 0; attempt < 12; attempt++) {
-    const response = await page.request.post(`/api/main/v1/${path}`, { headers: { 'idempotency-key': key }, data });
+    const response = await page.request.fetch(`/api/main/v1/${path}`, { method, headers: { 'idempotency-key': key }, data });
     const body = await response.json();
     if (response.status() === 200 || response.status() === 201) return body as T;
-    if (response.status() !== 202) throw new Error(`${path}: ${response.status()} ${JSON.stringify(body).slice(0, 400)}`);
+    if (response.status() !== 202) throw new Error(`${method} /api/main/v1/${path}: ${response.status()} request=${JSON.stringify(data)} response=${JSON.stringify(body).slice(0, 800)}`);
     await page.waitForTimeout(300);
   }
   throw new Error(`${path} did not settle`);
@@ -139,18 +139,26 @@ async function publishedWorkPage(page: Page, zone: string, actor: string, princi
   const mounted = await command<{ revision: string }>(page, `${zonePath}/mounts`, {
     expectedHead: head.revision, target: collection, routeSegment: 'guide', disclosure: 'public', actingSubject: actor,
   });
+  const before = await page.request.get(`/api/main/v1/${zonePath}/configuration?actingSubject=${encodeURIComponent(actor)}`);
+  expect(before.ok(), await before.text()).toBe(true);
+  await command(page, `${zonePath}/configuration`, {
+    expectedHead: (await before.json() as { revision: string }).revision, prepareHomeDocument: true, actingSubject: actor,
+  }, 'PUT');
+  const configuration = await page.request.get(`/api/main/v1/${zonePath}/configuration?actingSubject=${encodeURIComponent(actor)}`);
+  expect(configuration.ok(), await configuration.text()).toBe(true);
+  const configured = await configuration.json() as { revision: string; configuration: { homeDocument: string | null } };
+  expect(configured.configuration.homeDocument).toBeTruthy();
+  const homeDocument = configured.configuration.homeDocument!;
   const variantId = `urn:rezics:variant:${randomUUID()}`;
   const draft = await command<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(page, 'content-drafts', {
-    profile: 'content-text-v1', resourceId: zone, variantId, expectedHead: null,
+    profile: 'content-text-v1', resourceId: homeDocument, variantId, expectedHead: null,
     document: fromPlainText('Harbor annex home', 'blocks'),
     language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', actingSubject: actor,
   });
-  const configuration = await page.request.get(`/api/main/v1/${zonePath}/configuration?actingSubject=${encodeURIComponent(actor)}`);
-  expect(configuration.ok()).toBe(true);
   await command(page, `${zonePath}/site-publications`, {
-    expectedHead: (await configuration.json() as { revision: string }).revision,
+    expectedHead: configured.revision,
     routesRevision: mounted.revision, navigationRevision: mounted.revision, actingSubject: actor,
-    pages: [{ page: zone, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
+    pages: [{ page: homeDocument, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
   });
   return created.work;
 }
@@ -218,7 +226,7 @@ async function recover(page: Page, body: string) {
 
 test.use({ actionTimeout: 15_000 });
 
-async function attachRealm(page: Page, info: TestInfo) {
+async function attachRealm(page: Page, info: TestInfo, throughEditor = true) {
   const { member, principalId, actingSubject } = fixture<{
     member: { email: string; password: string }; principalId: string; actingSubject: string;
   }>('REZICS_WEB_AUTH_PRIVATE_PATH');
@@ -242,6 +250,16 @@ async function attachRealm(page: Page, info: TestInfo) {
 
   const editor = localizedPath(`/manage/z/${uuidOf(zoneSpace.space!)}/realm`, 'en');
   const zones = localizedPath(`/manage/r/${uuidOf(realmSpace.realm!)}/zones`, 'en');
+
+  if (!throughEditor) {
+    const path = `zones/${uuidOf(zoneSpace.zone!)}/configuration`;
+    const read = await page.request.get(`/api/main/v1/${path}?actingSubject=${encodeURIComponent(actingSubject)}`);
+    expect(read.ok(), await read.text()).toBe(true);
+    await command(page, path, {
+      expectedHead: (await read.json() as { revision: string }).revision, defaultRealm: realmSpace.realm, actingSubject,
+    }, 'PUT');
+    return { member, principalId, zoneSpace, realmSpace, actingSubject, zoneName, editor, zones };
+  }
 
   await page.setViewportSize(phone);
   await expect(async () => {
@@ -426,7 +444,7 @@ test('a Realm steward can attach, list, and withdraw a Zone', async ({ page }, i
 test('attached-realm-discussion: two Persons post concurrently and reopen the same thread after reload', async ({ page, browser }, info) => {
   test.setTimeout(600_000);
   const found: Findings = [];
-  const { member, principalId, zoneSpace, realmSpace, actingSubject } = await attachRealm(page, info);
+  const { member, principalId, zoneSpace, realmSpace, actingSubject } = await attachRealm(page, info, false);
   await grantPlatformUse(await platformAdministratorSession(), principalId, 'realm-reply');
   const about = await publishedWorkPage(page, zoneSpace.zone!, actingSubject, principalId);
   const zoneUrl = localizedPath(zoneMemberHref(uuidOf(zoneSpace.space!), 'guide', about), 'en');
@@ -460,8 +478,9 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
         answers.push(response.text().then(body => { write.body = body; }));
       }
     });
-    await Promise.all([page, other].map(tab => pressByKeyboard(tab,
+    await Promise.all([page, other].map(tab => keyboardReach(tab,
       discussion(tab).getByRole('button', { name: aboutDiscussionMessages.en.send, exact: true }), found, 'Post message')));
+    await Promise.all([page.keyboard.press('Enter'), other.keyboard.press('Enter')]);
     for (const tab of [page, other]) {
       // A genuine 202 or lost response exposes recovery with the same retained intent.
       for (let attempt = 0; attempt < 12; attempt++) {

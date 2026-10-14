@@ -118,7 +118,7 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
       for (const number of [1, 21, 1000, 1001, 1002]) {
         await jump(number);
         await expect(panel.locator('[data-selected="main"]')).toContainText(`Episode ${number}`, { timeout: 180_000 });
-        await expect(panel.locator('[data-selected="main"] [data-state]')).toBeVisible();
+        await expect(panel.locator('[data-selected="main"] span[data-state]')).toBeVisible();
       }
       await jump(1003);
       await expect(panel.getByText(t.noSuchEpisode({ number: '1003' }), { exact: true })).toBeVisible({ timeout: 180_000 });
