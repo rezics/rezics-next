@@ -204,7 +204,8 @@ for (const mismatch of [{ zone: native(31) }, { realm: native(31) }, { space: na
       ? [{ zone: binding(zone), zoneSpace: binding(native(30)) }] : []);
     const publication = async () => ({ zone, realm, space: native(30), disclosure: 'public', official: null,
       listing: 'listed', revision: head, presentation: {}, discovery: {}, ...mismatch }) as never;
-    await expect(readRealmZone(owner.session, realm, publication)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(readRealmZone(owner.session, realm, publication)).rejects.toBeInstanceOf(
+      'realm' in mismatch ? WorkReadMissing : WorkReadUnavailable);
   });
 }
 

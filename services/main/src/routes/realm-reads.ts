@@ -108,6 +108,9 @@ export function realmReadRoutes(work: MainWorkDependencies) {
       catch (error) { return realmReadError(error); }
     })
     .get('/v1/realms/:realm/zone', {
+      detail: { description: 'Returns the visible active Zone whose published configuration names this Realm. '
+        + 'Selects an eligible official Zone first; otherwise selects the first eligible Zone in the attachment inventory’s ascending Zone IRI order. '
+        + 'Returns 404 when no attached Zone is eligible for this reader.' },
       params, query: t.Object({ actingSubject: t.Optional(readId) }, { additionalProperties: false }),
       response: { 200: realmZoneRead, ...workReadProblems },
     }, async ({ request, params: path, query }) => {

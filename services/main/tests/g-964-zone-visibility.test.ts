@@ -53,7 +53,7 @@ function fixture(input: { spacePrivate: boolean; zonePrivate: boolean; member: b
         zoneDisclosure: RV + (input.zonePrivate ? 'Private' : 'Public'), listing: input.listing ?? 'listed' }]);
       if (query.includes('SELECT ?space ?realmRevision')) return rows([{ space, realmRevision: head,
         disclosure: RV + (input.spacePrivate ? 'Private' : 'Public'), listing: input.listing ?? 'listed' }]);
-      if (query.includes('SELECT DISTINCT ?zone ?official')) return rows([{ zone }]);
+      if (query.includes('SELECT DISTINCT ?zone ?official')) return rows([{ zone, zoneSpace: space }]);
       throw new Error(`Unexpected G-964 query: ${query}`);
     } } }, account: { verify: async (_request: Request, scopes: string[]) => {
       if (input.deniedWorkScope && scopes.includes('work:read')) throw new Error('Work read scope denied');

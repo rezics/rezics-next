@@ -4,6 +4,10 @@ import { readRealmZone } from '../src/modules/realm-reads/read-zone.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../src/modules/zone/presentation-format.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession }
   from '../src/modules/work/read-session.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = (value: string) => `https://rezics.com/id/${value}`;
 const realm = id('00000000-0000-4000-8000-000000000001');
@@ -12,9 +16,16 @@ const decision = id('00000000-0000-4000-8000-000000000003');
 const row = (value: string) => ({ value });
 const basis = { space: zone, realmRevision: decision, visibility: 'public', reviewMode: 'open', revision: null };
 
+function disclosure() {
+  const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' } } as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
+  return { deps: { environment }, viewer: ANONYMOUS_VIEWER, observeDependency: () => '' };
+}
+
 test('exact Decision applies the public relation and denies absent or ambiguous rows', async () => {
   const queries: string[] = [];
-  const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
+  const session = { ...disclosure(), options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
     realm: async () => basis,
     disclosure: async (targets: readonly unknown[]) => targets.map(() => 'visible'),
     query: async (body: string) => { queries.push(body); return [{ id: row(decision),
@@ -32,9 +43,9 @@ test('exact Decision applies the public relation and denies absent or ambiguous 
 });
 
 test('Realm Zone resolution returns the stored presentation only for its own public Realm', async () => {
-  const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
-    realm: async () => basis, deps: { environment: {} },
-    query: async () => [{ zone: row(zone), official: row('true') }],
+  const session = { ...disclosure(), options: {}, position: { dataEpoch: 'epoch', sequence: '8' },
+    realm: async () => basis,
+    query: async () => [{ zone: row(zone), zoneSpace: row(basis.space), official: row('true') }],
   } as unknown as WorkReadSession;
   const publication = { zone, realm, space: basis.space, official: 'fiction', revision: decision,
     presentation: DEFAULT_ZONE_PRESENTATION, disclosure: 'public',storedDisclosure:'public',listing:'listed',discovery:'listed' };
@@ -42,7 +53,13 @@ test('Realm Zone resolution returns the stored presentation only for its own pub
     profile: 'realm-zone-v1', zone, realm, routeSegment: 'fiction',
     presentationUrl: '/v1/zones/00000000-0000-4000-8000-000000000002/presentation' });
   await expect(readRealmZone(session, realm, async () => ({ ...publication,
-    realm: zone }) as never)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    realm: zone }) as never)).rejects.toBeInstanceOf(WorkReadMissing);
+  await expect(readRealmZone(session, realm, async () => ({ ...publication,
+    realm: null }) as never)).rejects.toBeInstanceOf(WorkReadMissing);
+  for (const mismatch of [{ zone: realm }, { space: realm }, { official: null }]) {
+    await expect(readRealmZone(session, realm, async () => ({ ...publication,
+      ...mismatch }) as never)).rejects.toBeInstanceOf(WorkReadUnavailable);
+  }
   await expect(readRealmZone({ ...session, query: async () => [] } as never,
     realm)).rejects.toBeInstanceOf(WorkReadMissing);
 });
