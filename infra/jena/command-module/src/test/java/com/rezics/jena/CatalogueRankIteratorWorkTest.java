@@ -21,7 +21,7 @@ public class CatalogueRankIteratorWorkTest {
     private static Node p(String name) { return NodeFactory.createURI("https://rezics.com/vocab/" + name); }
     private static Node id(int n) { return NodeFactory.createURI(String.format("https://rezics.com/id/00000000-0000-4000-8000-%012d", n)); }
     private static Node label() { return NodeFactory.createURI("http://www.w3.org/2000/01/rdf-schema#label"); }
-    private record Moves(long next, long advance, long bitsets, long matches) {}
+    private record Moves(long next, long advance, long bitsets, long matches, long nanos) {}
     private record Scan(List<String> keys, List<String> units, List<Float> scores, List<Moves> work, int pages) {}
 
     private static RealmSearchSeekTest.Owner add(RealmSearchSeekTest.Fixture fixture, int n,
@@ -50,13 +50,14 @@ public class CatalogueRankIteratorWorkTest {
             for (;;) {
                 JsonObject page;
                 try (var work = new CommandWork()) {
+                    long started = System.nanoTime();
                     page = JSON.parse(new FilteredGraphTextIndex.RankedFunction().exec(List.of(
                         NodeValue.makeNode(p("searchBody")), NodeValue.makeString(phrase), NodeValue.makeInteger(1),
                         NodeValue.makeString(after), NodeValue.makeString(scope.toString())), env).asString());
                     measured.add(new Moves(CommandWork.currentCount("rank_lucene_iterator_next_calls"),
                         CommandWork.currentCount("rank_lucene_iterator_advance_calls"),
                         CommandWork.currentCount("rank_lucene_iterator_bitset_calls"),
-                        CommandWork.currentCount("rank_lucene_two_phase_matches")));
+                        CommandWork.currentCount("rank_lucene_two_phase_matches"), System.nanoTime() - started));
                 }
                 assertFalse("an unchanged read basis must not restart", page.hasKey("restart"));
                 JsonArray hits = page.get("hits").getAsArray();
@@ -84,6 +85,7 @@ public class CatalogueRankIteratorWorkTest {
     }
 
     @Test public void unrelatedWorkNamesCannotExpandNativeIteratorWork() throws Exception {
+        var failures = new ArrayList<String>();
         for (boolean realm : List.of(false, true)) try (var fixture = new RealmSearchSeekTest.Fixture()) {
             fixture.data.getContext().set(org.apache.jena.query.text.TextQuery.textIndex, fixture.index);
             var titleOnly = add(fixture, 10000, realm, PHRASE, "Unrelated article");
@@ -114,6 +116,18 @@ public class CatalogueRankIteratorWorkTest {
                     }
                 } finally { fixture.data.end(); }
                 for (String phrase : List.of(WORD, PHRASE)) {
+                    // Warm the actual function and retain the median of seven
+                    // native first-page times, separate from HTTP served time.
+                    scan(fixture, phrase, realm);
+                    long[] times = new long[7];
+                    for (int sample = 0; sample < times.length; sample++)
+                        times[sample] = scan(fixture, phrase, realm).work().getFirst().nanos();
+                    Arrays.sort(times);
+                    System.out.printf("catalogue native first-page size=%d realm=%s query=%s medianMs=%.3f%n",
+                        size, realm, phrase, times[times.length / 2] / 1_000_000d);
+                    // A fixed 100 ms ceiling tolerates shared-host scheduling;
+                    // iterator deltas below remain the causal growth assertion.
+                    bounded(failures, "native first-page time at size " + size, times[times.length / 2], 100_000_000L);
                     var result = scan(fixture, phrase, realm);
                     assertEquals(expected, result.keys()); assertEquals(expectedUnits, result.units());
                     assertEquals(2_000_000f, result.scores().get(0), 0f);
@@ -123,8 +137,8 @@ public class CatalogueRankIteratorWorkTest {
                     for (int page = 0; page < result.work().size(); page++) {
                         Moves moves = result.work().get(page);
                         assertTrue("native iterator measurement must be present", moves.next() + moves.advance() > 0);
-                        assertTrue("fixed nested next-call ceiling: size=" + size + " realm=" + realm + " query=" + phrase + " page=" + page + " " + moves, moves.next() <= NEXT_LIMIT);
-                        assertTrue("fixed nested advance-call ceiling: " + moves, moves.advance() <= ADVANCE_LIMIT);
+                        bounded(failures, "fixed nested next-call ceiling at size " + size, moves.next(), NEXT_LIMIT);
+                        bounded(failures, "fixed nested advance-call ceiling at size " + size, moves.advance(), ADVANCE_LIMIT);
                         String control = phrase + ":" + page;
                         if (size == 10) baseline.put(control, moves);
                         if (size == 26) page26.put(control, moves);
@@ -134,18 +148,24 @@ public class CatalogueRankIteratorWorkTest {
                         // Fix the ceiling at size ten. Small allowance permits
                         // segment/lead-iterator choices; it never scales with
                         // catalogue size. The old word prefix clause exceeds it.
-                        assertTrue("nested next calls grew: " + moves + " baseline=" + fixed, moves.next() <= fixed.next() + 8);
-                        assertTrue("nested advance calls grew: " + moves + " baseline=" + fixed, moves.advance() <= fixed.advance() + 16);
-                        assertTrue("bitset work grew", moves.bitsets() <= fixed.bitsets() + 2);
-                        assertTrue("two-phase checks grew", moves.matches() <= fixed.matches() + 4);
+                        String context = "size=" + size + " realm=" + realm + " query=" + phrase + " page=" + page;
+                        bounded(failures, "nested next calls " + context, moves.next(), fixed.next() + 8);
+                        bounded(failures, "nested advance calls " + context, moves.advance(), fixed.advance() + 16);
+                        bounded(failures, "bitset work " + context, moves.bitsets(), fixed.bitsets() + 2);
+                        bounded(failures, "two-phase checks " + context, moves.matches(), fixed.matches() + 4);
                         if (size == 200) {
                             Moves at26 = page26.get(control);
-                            assertTrue("size 200 next calls grew over 26: " + moves + " at26=" + at26, moves.next() <= at26.next() + 8);
-                            assertTrue("size 200 advance calls grew over 26: " + moves + " at26=" + at26, moves.advance() <= at26.advance() + 16);
+                            bounded(failures, "size 200 next calls over 26 " + context, moves.next(), at26.next() + 8);
+                            bounded(failures, "size 200 advance calls over 26 " + context, moves.advance(), at26.advance() + 16);
                         }
                     }
                 }
             }
         }
+        assertTrue(String.join("\n", failures), failures.isEmpty());
+    }
+
+    private static void bounded(List<String> failures, String label, long actual, long ceiling) {
+        if (actual > ceiling) failures.add(label + ": " + actual + " > " + ceiling);
     }
 }
