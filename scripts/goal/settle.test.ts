@@ -542,11 +542,13 @@ for (const kind of ['implementation', 'mechanism'] as const) {
   });
 }
 
-test('a capacity refusal continues the same session and makes no manager event', async () => {
+// The service ended these turns before any work, with the session intact (16 Sol tasks from 08:25 to
+// 08:52 UTC on 2026-10-14 ended on the routing message).
+for (const message of ['at capacity', 'workspace routing discovery timed out']) test(`a turn refused with "${message}" continues the same session and makes no manager event`, async () => {
   const f = fixture();
   const ledger = f.ledger(); ledger.tasks[f.task.id]!.attempts[0]!.engine = 'codex';
   ledger.tasks[f.task.id]!.attempts[0]!.session = ''; f.save(ledger);
-  writeFileSync(f.output, '{"type":"thread.started","thread_id":"capacity-session"}\n{"type":"turn.failed","error":{"message":"at capacity"}}\n');
+  writeFileSync(f.output, `{"type":"thread.started","thread_id":"capacity-session"}\n{"type":"turn.failed","error":{"message":"${message}"}}\n`);
   const worker = join(f.directory, '.temp/bin/codex');
   writeFileSync(worker, '#!/usr/bin/env bun\nawait Bun.sleep(30000);\n'); chmodSync(worker, 0o755);
   // Execute the pass with a detached child using the same settlement entry point and a short capacity pause.
