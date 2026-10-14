@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import { expect as baseExpect, type Locator, type Page, test } from '@playwright/test';
+import { mkdir, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { expect as baseExpect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import { catalogs } from '../i18n/catalogs.ts';
+import { parseAddressSegment } from '../features/address/path.ts';
 import { realmHref } from '../features/realm/route.ts';
 import { keyboardReach, pressByKeyboard, expectClean, type Findings, locales } from './g-743-matrix.ts';
 import {
@@ -14,13 +17,29 @@ const expect = baseExpect.configure({ timeout: 30_000 });
 test.use({ actionTimeout: 30_000, reducedMotion: 'reduce' });
 test.setTimeout(600_000);
 test.afterAll(closeParticipant);
+async function capture(page: Page, info: TestInfo, name: string, detail = '') {
+  const directory = resolve('.temp/realm-journeys', process.env.REZICS_QA_RUN_ID ?? 'local');
+  await mkdir(directory, { recursive: true });
+  const file = resolve(directory, `${info.testId}-${name}`);
+  await writeFile(`${file}.txt`, `${page.url()}\n${detail}\n${await page.locator('body').innerText()}`);
+  await page.screenshot({ path: `${file}.png`, fullPage: true });
+  await info.attach(name, { path: `${file}.txt`, contentType: 'text/plain' });
+  await info.attach(`${name}-screen`, { path: `${file}.png`, contentType: 'image/png' });
+}
 test.afterEach(async ({ browser }, info) => {
   if (info.status === info.expectedStatus) return;
   let index = 0;
   for (const context of browser.contexts()) for (const page of context.pages()) {
-    await info.attach(`failed-page-${index++}`, {
-      body: `${page.url()}\n${await page.locator('body').innerText()}`, contentType: 'text/plain',
-    });
+    const parts = new URL(page.url()).pathname.split('/');
+    const realm = parts[2] === 'r' ? parseAddressSegment(parts[3] ?? '') : null;
+    const reply = parts[4] === 'discussions' ? parseAddressSegment(parts[5] ?? '') : null;
+    let detail = '';
+    if (realm?.kind === 'id' && reply?.kind === 'id') {
+      const path = `/api/main/v1/realms/${realm.id}/threads/${reply.id}?sort=best`;
+      const response = await page.request.get(path);
+      detail = `GET ${path}\nHTTP ${response.status()}\n${await response.text()}`;
+    }
+    await capture(page, info, `failed-page-${index++}`, detail);
   }
 });
 
@@ -52,7 +71,7 @@ async function chooseMenu(page: Page, label: string, current: string, next: stri
   await expect(choices.first()).toBeVisible();
   await page.keyboard.press('Home');
   for (let index = 0; index < await choices.count(); index++) {
-    if ((await page.locator('[role="menuitemradio"]:focus').innerText()).split('\n')[0] === next) {
+    if ((await page.locator('[role="menuitemradio"][data-highlighted]').innerText()).split('\n')[0] === next) {
       await page.keyboard.press('Enter');
       await expect(page.getByRole('button', { name: `${label}: ${next}`, exact: true })).toBeVisible();
       return;
@@ -62,8 +81,7 @@ async function chooseMenu(page: Page, label: string, current: string, next: stri
   throw new Error(`The keyboard could not choose ${next}`);
 }
 
-for (const locale of [locales.latin, locales.cjk]) {
-  test(`realm-boards: a visitor selects boards and returns to all discussions after reload (${locale})`, async ({ page, browser }, info) => {
+  test('realm-boards: a visitor selects boards and returns to all discussions after reload in English and Japanese', async ({ page, browser }, info) => {
     test.setTimeout(600_000);
     const found: Findings = [];
     const manager = await managerSession(page);
@@ -94,9 +112,13 @@ for (const locale of [locales.latin, locales.cjk]) {
         titles[index]!, 'A discussion placed on one board.', [boards[index]!.concept]);
     }
     await waitForThreads(manager.api, realm.realm, manager.actor, titles);
+    for (let index = 0; index < boards.length; index++) {
+      await waitForThreads(manager.api, realm.realm, manager.actor, [titles[index]!], boards[index]!.concept);
+    }
     const context = await browser.newContext({ baseURL: info.project.use.baseURL, reducedMotion: 'reduce' });
     try {
       const reader = await context.newPage();
+      for (const locale of [locales.latin, locales.cjk]) {
       const t = materializeData(await catalogs.realm[locale](), { locale });
       const f = materializeData(await catalogs.feed[locale](), { locale });
       await reader.goto(realmHref(locale, realm.realm, 'discussions'));
@@ -117,18 +139,19 @@ for (const locale of [locales.latin, locales.cjk]) {
       await reader.reload();
       await expect(feed.getByRole('heading', { level: 3 })).toHaveCount(2);
       for (const title of titles) await expect(feed.getByRole('heading', { name: title, exact: true })).toBeVisible();
+      }
       expectClean(found);
     } catch (error) {
       const reader = context.pages()[0]!;
       const query = new URL(reader.url()).searchParams;
       const path = `/api/main/v1/realms/${realm.id}/threads?${query}`;
       const response = await reader.request.get(path);
-      await info.attach('board-request', { body: `GET ${path}\nHTTP ${response.status()}\n${await response.text()}\n${await reader.locator('body').innerText()}`, contentType: 'text/plain' });
+      await capture(reader, info, 'board-request', `GET ${path}\nHTTP ${response.status()}\n${await response.text()}`);
       throw error;
     } finally { await context.close(); }
   });
 
-  test(`realm-threads: a member publishes a thread and nested replies that another reader sees after reload (${locale})`, async ({ page, browser }, info) => {
+  test('realm-threads: a member publishes a thread and nested replies that another reader sees after reload in English and Japanese', async ({ page, browser }, info) => {
     test.setTimeout(600_000);
     const found: Findings = [];
     const manager = await managerSession(page);
@@ -141,6 +164,7 @@ for (const locale of [locales.latin, locales.cjk]) {
     await grant(`reply:place:${realm.realm}`, 'reply.place', writer.principalId, writer.actor);
     await letMemberDraft(writer.page, writer.actor, writer.principalId);
     await joinRealm(writer.page, realm.realm);
+    for (const locale of [locales.latin, locales.cjk]) {
     const t = materializeData(await catalogs.realm[locale](), { locale });
     const f = materializeData(await catalogs.feed[locale](), { locale });
     const p = materializeData(await catalogs.postComposer[locale](), { locale });
@@ -173,10 +197,11 @@ for (const locale of [locales.latin, locales.cjk]) {
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
     for (const text of [body, comment, nested]) await expect(page.getByText(text, { exact: true })).toBeVisible();
+    }
     expectClean(found);
   });
 
-  test(`realm-ranking: a reader votes and reloads Best, New and Top with each time window (${locale})`, async ({ page, browser }, info) => {
+  test('realm-ranking: a reader votes and reloads Best, New and Top with each time window in English and Japanese', async ({ page, browser }, info) => {
     test.setTimeout(600_000);
     const found: Findings = [];
     const manager = await managerSession(page);
@@ -186,17 +211,20 @@ for (const locale of [locales.latin, locales.cjk]) {
     for (const title of titles) await seedThread(manager.api, realm.realm, work, manager.actor, manager.principalId, title, 'A discussion for the ranking.');
     await waitForThreads(manager.api, realm.realm, manager.actor, titles);
     const voter = await participantFor(browser, info);
-    const f = materializeData(await catalogs.feed[locale](), { locale });
     await grant(`work:read:${work.work}`, 'work.read', voter.principalId, voter.actor);
+    for (const locale of [locales.latin, locales.cjk]) {
+    const f = materializeData(await catalogs.feed[locale](), { locale });
     await voter.page.goto(realmHref(locale, realm.realm, 'discussions'));
     await expect(voter.page.locator('html')).toHaveAttribute('lang', locale);
     const feed = voter.page.getByRole('feed', { name: f.discussionsLabel, exact: true });
     const card = feed.getByRole('article').filter({ has: voter.page.getByRole('heading', { name: titles[1]!, exact: true }) });
     const upvote = card.getByRole('button', { name: f.upvote, exact: true });
+    if (locale === locales.latin) {
     const saved = voter.page.waitForResponse(response => /\/api\/main\/v1\/feed\/[0-9a-f-]{36}\/vote$/.test(new URL(response.url()).pathname));
     await activate(voter.page, upvote, found);
     const response = await saved;
     expect(response.status(), await response.text()).toBe(200);
+    }
     await expect(upvote).toHaveAttribute('aria-pressed', 'true');
     const best = [titles[1]!, titles[2]!, titles[0]!];
     const newest = [titles[2]!, titles[1]!, titles[0]!];
@@ -224,6 +252,6 @@ for (const locale of [locales.latin, locales.cjk]) {
     await chooseMenu(voter.page, f.sortLabel, f.top, f.best, found);
     await voter.page.reload();
     await expect(headings).toHaveText(best);
+    }
     expectClean(found);
   });
-}

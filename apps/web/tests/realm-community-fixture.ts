@@ -280,8 +280,9 @@ export async function seedThread(api: PublicCommands, realm: string, work: { wor
   return progress.reply;
 }
 
-export async function waitForThreads(api: PublicCommands, realm: string, actor: string, titles: readonly string[]) {
-  const path = `/realms/${idOf(realm)}/threads?sort=best&limit=20&actingSubject=${encodeURIComponent(actor)}`;
+export async function waitForThreads(api: PublicCommands, realm: string, actor: string, titles: readonly string[], concept?: string) {
+  const path = `/realms/${idOf(realm)}/threads?${new URLSearchParams({ sort: 'best', limit: '20',
+    actingSubject: actor, ...(concept ? { concept } : {}) })}`;
   const deadline = Date.now() + 120_000;
   let lastStatus = 0;
   do {
