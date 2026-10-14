@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { Pool } from 'pg';
+import { sourceIdentity } from '../../../../../scripts/qa/core.ts';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { settledWrite } from '../../../support/settled-write.ts';
@@ -19,7 +21,8 @@ import { PREVIEW_COUNTS } from '../../../../../apps/web/features/work-levels/pre
 
 setDefaultTimeout(210_000);
 let sessions: PersonaSessions;
-const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string }>();
+const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string;
+  caller: { persona: PersonaName; accountId: string | null; actingSubject: string | null } }>();
 const failures: { request: unknown; status: number; answer: string }[] = [];
 const preparation = { durationMs: 0 };
 let preparing = true;
@@ -82,7 +85,26 @@ const occurrences: string[] = [], targets: string[] = [];
 beforeAll(async () => {
   const started = Date.now();
   try {
-  sessions = await personaSessions();
+  const source = sourceIdentity(process.cwd());
+  const evidenceDirectory = `.temp/anime-collection-tracking-and-progress-evidence-${Bun.env.REZICS_QA_RUN_ID}`;
+  mkdirSync(evidenceDirectory, { recursive: true });
+  writeFileSync(`${evidenceDirectory}/source.json`, JSON.stringify(source, null, 2), { flag: 'wx' });
+  sessions = await personaSessions({ observeMain: async observed => {
+    if (observed.response.status < 500) return;
+    const persona = sessions && (['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)
+      .find(name => sessions[name] === observed.caller);
+    const failure = { source, phase: preparing ? 'preparation' : 'proof',
+      caller: { persona: persona ?? null, accountId: observed.caller.accountId,
+        actingSubject: observed.caller.actingSubject },
+      request: observed.request, status: observed.response.status, answer: observed.response.body,
+      requestStartedAt: observed.requestStartedAt, answeredAt: observed.answeredAt };
+    writeFileSync(`${evidenceDirectory}/failure-${randomUUID()}.json`, JSON.stringify(failure, null, 2), { flag: 'wx' });
+    if (preparing) return;
+    failures.push(failure);
+    // Observe before the shared transport can repeat a read: an eventual 200
+    // cannot prove a journey whose first answer was a dependency refusal.
+    expect(observed.response.status, `${observed.response.status}: ${observed.response.body}`).toBe(200);
+  } });
   await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const person = sessions[name], main = person.main;
@@ -90,7 +112,8 @@ beforeAll(async () => {
       key ??= method === 'GET' ? undefined : randomUUID();
       const response = !preparing || method === 'GET' ? await main(method, path, body, key, options)
         : await settledWrite(main, method, path, body, key);
-      requests.set(response, { method, path, body, key });
+      requests.set(response, { method, path, body, key,
+        caller: { persona: name, accountId: person.accountId, actingSubject: person.actingSubject } });
       if (!preparing && response.status >= 500) {
         await answer(Promise.resolve(response));
       }
