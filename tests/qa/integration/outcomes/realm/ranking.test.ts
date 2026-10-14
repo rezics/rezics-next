@@ -96,9 +96,7 @@ beforeAll(async () => {
     else movedRealm = created.realm;
   }
 }, 180_000);
-// Session bootstrap failures remain ordinary failures. The large inventory
-// is the pending public-HTTP proof and currently cannot finish in the client's
-// bearer window; every cell retains that same observed command refusal.
+// All readers traverse the same inventory, authored through the public API.
 async function prepare() {
   publicThreads.push(...await seed(publicRealm, 261, 'public'));
   oldThreads.push(...await seed(privateRealm, 21, 'retained'));
@@ -124,8 +122,7 @@ async function prepare() {
   // Whole-Work progress is the public source of the chart's reads metric.
   // Twelve adopted originals give its limit=10 request a real continuation.
   const originals: ClosureOriginal[] = [];
-  for (let batch = 0; batch < 4; batch++)
-    await publishClosureOriginals(publicRealm, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`);
+  await publishClosureOriginals(publicRealm, originals, `Rankinggarden${randomUUID().replaceAll('-', '')}`, 12);
   for (const original of originals) await answer(publicRealm.owner.main('PUT',
     `/v1/works/${short(original.work)}/progress`, {
       actingSubject: publicRealm.owner.actingSubject, expectedVersion: 0, standing: 'started',

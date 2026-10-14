@@ -101,7 +101,7 @@ export function createClosureCreditEvidence(
   return { record, phase, observe, requests };
 }
 
-export async function publishClosureOriginals(sessions: PersonaSessions, publications: Publication[], phrase: string) {
+export async function publishClosureOriginals(sessions: PersonaSessions, publications: Publication[], phrase: string, count = 3) {
   const owner = sessions.owner;
   const root = `/v1/realms/${short(sessions.realm)}`;
   const roleId = randomUUID();
@@ -120,7 +120,7 @@ export async function publishClosureOriginals(sessions: PersonaSessions, publica
     const preview = await answer<{ digest: string }>(owner.main('POST', `${root}/role-impact`, command));
     await answer(owner.main('POST', `${root}/role-changes`, { ...command, impactDigest: preview.digest }), 201);
   }
-  for (let index = 0; index < 3; index++) {
+  for (let index = 0; index < count; index++) {
     const work = await answer<Work>(owner.main('POST', '/v1/works', {
       profile: 'metadata-only-v1', title: `${phrase} ${index}`, language: 'en',
       semanticTypes: ['https://schema.org/Book'], authoring: 'own-work',
