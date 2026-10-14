@@ -388,6 +388,22 @@ test.each(publicationActions)('%s: publication without a controller proof fails 
   await expect(f.registry.register(publicationRequest(f, action))).rejects.toBeInstanceOf(AdmissionDenied);
 });
 
+test.each(publicationActions)('%s: a controller revoked after registration cannot dispatch', async action => {
+  const f = await fixture();
+  const request = publicationRequest(f, action);
+  const admitted = await f.registry.register(request);
+  expect(admitted.dispatchEligible).toBe(true);
+  // Retain a controller for the Agent while revoking the admission's controller.
+  const replacement = await principal();
+  await authority(replacement, f.control.actor, `agent:control:${f.control.actor}`, 'agent.control');
+  await new AccessAgentControl(pool).removeController(replacement.verified, {
+    idempotencyKey: randomUUID(), requestDigest: digest(randomUUID()),
+  }, { subjectId: f.control.actor, representationId: f.control.mandates[0]!.id,
+    expectedGeneration: f.control.mandates[0]!.generation });
+  await expect(f.registry.claim(admitted.id, request.requestDigest, f.owner.verified))
+    .rejects.toBeInstanceOf(AdmissionDenied);
+});
+
 test.each(publicationActions)('%s: a closed publication gate remains closed', async action => {
   const f = await fixture();
   const request = publicationRequest(f, action);

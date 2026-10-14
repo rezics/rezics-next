@@ -687,7 +687,9 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   });
   expect(rows('recipes', 'Collection tracking and progress')).toEqual([
     expect.objectContaining({ api: expect.objectContaining({ missing: 'gap' }),
-      browser: { missing: 'L21', reason: expect.stringMatching(/POST \/v1\/work-publications.*403 authority_denied/) } }),
+      browser: expect.objectContaining({ file: 'apps/web/tests/recipe-tracking.e2e.ts',
+        test: 'recipe-tracking / en: a cook saves a recipe, completes it and returns to persisted progress',
+        evidence: expect.stringContaining('ordinary signed-in cook creates and publishes an original Recipe') }) }),
   ]);
   expect(rows('zone', 'Publication')[0]!.browser).toMatchObject({
     test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
@@ -728,10 +730,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 53, missingRows: 15, missingProofs: 17 });
+    .toEqual({ rows: 68, provedPairs: 53, missingRows: 15, missingProofs: 16 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 2, L26: 0, gap: 11, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 1, L26: 0, gap: 11, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
