@@ -199,7 +199,8 @@ describe('stale and conflicting decisions', () => {
     expect(commandFailure(409, 'stale_realm_management_basis')).toBe('stale');
     expect(commandFailure(409, 'idempotency_conflict')).toBe('conflict');
     expect(commandFailure(403, 'realm_management_denied')).toBe('denied');
-    expect(commandFailure(503, 'submission_pending')).toBe('pending');
+    expect(commandFailure(503, 'submission_pending')).toBe('unavailable');
+    expect(commandFailure(202, 'submission_pending')).toBe('pending');
     expect(commandFailure(503, 'realm_management_unavailable')).toBe('unavailable');
   });
 });

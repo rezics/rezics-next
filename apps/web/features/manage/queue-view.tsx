@@ -30,7 +30,8 @@ import { ReportDecisionDialog } from './report-decision-dialog.tsx';
 import { mergeAgents } from './read.ts';
 import { type QueueView as View, queueHref } from './routes.ts';
 import { subjectOf } from './queue-subject.ts';
-import type { DecisionBasis, Loaded, ModerationItem, ModerationKind, ModerationPage, PublishedRule } from './types.ts';
+import type { DecisionBasis, Loaded, MainClient, ModerationItem, ModerationKind, ModerationPage, PublishedRule } from './types.ts';
+import { RealmAppealDecisionPanel } from '../realm-appeal/decision-panel.tsx';
 
 export interface QueueViewProps {
   principal: string;
@@ -41,6 +42,8 @@ export interface QueueViewProps {
   actingSubject: string;
   /** What the acting Agent may decide here; everything when Main could not say. */
   authority?: QueueAuthority;
+  appealAuthority?: { dismiss: boolean; restore: boolean };
+  appealClient?: MainClient;
   /** Settings & rules, for someone who may publish the Realm's rules. */
   rulesHref?: string | null;
   view: View;
@@ -105,7 +108,7 @@ function rulesOf(bases: Record<string, Loaded<DecisionBasis> | 'loading'>): Rule
  */
 export function QueueView({ principal, recoverReports, realm, address = realm, actingSubject, authority = fullAuthority, rulesHref = null, view,
   initial, names: initialNames, realmRules = [], now, locale, messages, api: givenApi,
-  undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
+  appealAuthority, appealClient, undoWindowMs = UNDO_WINDOW_MS }: QueueViewProps) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffQueueApi(realm, actingSubject, locale, principal),
     [givenApi, realm, actingSubject, locale, principal]);
@@ -382,7 +385,11 @@ export function QueueView({ principal, recoverReports, realm, address = realm, a
     </li>;
   }
 
-  const detail = (className?: string) => <QueueDetail item={current} names={names}
+  const detail = (className?: string) => current?.kind === 'realm_sanction_appeal'
+    ? <div className={className}><RealmAppealDecisionPanel key={current.id} item={current} realm={realm} actingSubject={actingSubject} principal={principal}
+      authority={appealAuthority ?? { dismiss: authority.decideReports, restore: false }} client={appealClient}
+      locale={locale} messages={messages} onDecided={() => void reload()} /></div>
+    : <QueueDetail item={current} names={names}
     unresolved={current !== null && (state.settled[current.id]?.kind === 'recorded' || state.settled[current.id]?.kind === 'pending')}
     draft={current ? drafts[current.id] : undefined} basis={current ? bases[current.id] : undefined}
     allowed={current && visible.includes(current.id) && state.settled[current.id]?.kind !== 'recorded'

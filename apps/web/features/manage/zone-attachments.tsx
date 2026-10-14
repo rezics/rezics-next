@@ -12,7 +12,9 @@ import type { ManageMessages } from './messages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { commandInstance, type CommandInstance } from '../api/command.ts';
-import { send as sendCommand } from './commands.ts';
+import { readZoneAttachments } from './read.ts';
+import { withdrawRealmAttachment } from './zone-attachments-api.ts';
+import type { MainClient } from './types.ts';
 
 export interface ZoneAttachmentItem {
   zone: string;
@@ -29,19 +31,15 @@ export interface ZoneAttachmentItem {
 const attachedWhen = (iso: string, locale: UiLocale) =>
   new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(iso));
 
-const realmIriPattern = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
-
-/** The list path takes the Realm id. Withdrawal's body is that Realm's IRI. */
-const realmIri = (realm: string) => realmIriPattern.test(realm) ? realm : `https://rezics.com/id/${realm}`;
-
 /** The steward's page of Zones that show this Realm, with withdraw and the next page. */
-export function ZoneAttachments({ realm, actingSubject, locale, messages, items, nextCursor }: {
+export function ZoneAttachments({ realm, actingSubject, locale, messages, items, nextCursor, client = browserMainApi }: {
   realm: string;
   actingSubject: string;
   locale: UiLocale;
   messages: ManageMessages;
   items: ZoneAttachmentItem[];
   nextCursor: string | null;
+  client?: () => MainClient;
 }) {
   const t = materializeData(messages, { locale });
   const [rows, setRows] = useState(items);
@@ -61,14 +59,12 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
       const command = commands.current.get(slot) ?? commandInstance();
       commands.current.set(slot, command);
       const key = command.id();
-      const bodyRealm = realmIri(realm);
-      const send = () => browserMainApi().v1.zones({ id: item.zone.slice(-36) })['realm-attachment-withdrawals'].post(
-        { realm: bodyRealm, actingSubject }, { headers: { 'idempotency-key': key } });
-      let answer = await sendCommand(send);
-      if (!answer.ok && answer.failure === 'unavailable') answer = await sendCommand(send);
+      const send = () => withdrawRealmAttachment(client(), { zone: item.zone, realm, actingSubject, key });
+      let answer = await send();
+      if (!answer.ok && answer.failure === 'unavailable') answer = await send();
       command.finish(answer);
       if (!answer.ok) {
-        setNotice(t.zonesWithdrawFailed);
+        setNotice(answer.failure === 'pending' ? t.decisionStillPending : answer.title ?? t.zonesWithdrawFailed);
         return;
       }
       commands.current.delete(slot);
@@ -86,10 +82,12 @@ export function ZoneAttachments({ realm, actingSubject, locale, messages, items,
     setLoading(true);
     setNotice(null);
     try {
-      const answer = await browserMainApi().v1.realms({ realm })['zone-attachments'].get({
-        query: { actingSubject, cursor, limit: 24 } });
-      if (answer.error || !answer.data) {
-        setNotice(t.unavailableHelp);
+      const answer = await readZoneAttachments(client(), realm, actingSubject, cursor);
+      if (!answer.ok) {
+        if (answer.failure === 'missing' || answer.failure === 'denied' || answer.failure === 'sign-in') {
+          setRows([]); setCursor(null);
+        }
+        setNotice(answer.problem?.title ?? t.unavailableHelp);
         return;
       }
       const page = answer.data;

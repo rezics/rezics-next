@@ -6,8 +6,8 @@ import { changeMember, changeRole, invite, newKey, type Outcome, previewRole, sa
 import type { ImpactState } from './impact-preview.tsx';
 import { attemptStorage, performCommand, readCommand, retainedCommands } from './safety-pending.ts';
 import { mergeAgents, readAgents, readHandle, readMembers, readOutgoingInvitations, readRoles, readSettings } from './read.ts';
-import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult, Loaded, MainClient, MemberCommand, MemberPage, MemberReceipt,
-  RoleChange, RoleCommand, RoleImpact, RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
+import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult, Loaded, MainClient, MemberCommand, MemberPage,
+  MemberReceipt, RoleChange, RoleCommand, RoleImpact, RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
 
 /** Members, roles and settings from the browser. Stories pass a stand-in. */
 export interface AdminApi {
@@ -27,8 +27,8 @@ export interface AdminApi {
   saveSettings(command: Parameters<typeof saveSettings>[2], key: string): Promise<Outcome<SettingsReceipt>>;
 }
 
-export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
-  return adminApi(() => browserMainApi(), realm, actingSubject);
+export function bffAdminApi(realm: string, actingSubject: string, client: () => MainClient = () => browserMainApi()): AdminApi {
+  return adminApi(client, realm, actingSubject);
 }
 
 /** The same browser adapter with a supplied typed transport for recorded paths. */

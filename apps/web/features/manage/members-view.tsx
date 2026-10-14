@@ -34,8 +34,8 @@ export const banDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['
   ['duration30d', 2_592_000], ['duration365d', 31_536_000], ['durationForever', null]] as const;
 /** How long an invitation stays open (Main allows up to a week, and never past the inviter's own access). */
 export const inviteDurations = [['duration1d', 86_400], ['duration3d', 259_200], ['duration7d', 604_800]] as const;
-/** How long a role is given for. It cannot outlast the giver's own access. */
-export const roleDurations = [['validFor7', 7], ['validFor30', 30], ['validFor90', 90], ['validFor365', 365]] as const;
+/** Main caps every administrator's representation and role delegation ceiling at seven days. */
+export const roleDurations = [['duration1d', 1], ['duration3d', 3], ['validFor7', 7]] as const;
 
 type Target = { iri: string; membershipGeneration: string; member: Member | null };
 type Open =
@@ -163,11 +163,11 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
         <Button size="sm" onClick={() => setOpen({ kind: 'invite' })}><UserPlusIcon aria-hidden="true" />{t.inviteMember}</Button>
       </div>
     </div>
-    <form role="search" aria-label={t.searchMembers} onSubmit={search} className="flex max-w-xl gap-2">
-      <Field className="flex-1">
+    <form role="search" aria-label={t.searchMembers} onSubmit={search} className="flex max-w-xl flex-wrap items-center gap-2">
+      <Field className="min-w-0 flex-1 basis-[min(100%,16rem)]">
         <FieldLabel className="sr-only">{t.searchMembers}</FieldLabel>
         <Input type="search" value={query} placeholder={t.searchMembersPlaceholder} maxLength={80}
-          onChange={event => setQuery(event.currentTarget.value)} />
+          className="w-full min-w-0" onChange={event => setQuery(event.currentTarget.value)} />
       </Field>
       <Button type="submit" variant="secondary" isLoading={searching}><SearchIcon aria-hidden="true" />{t.search}</Button>
       {searched ? <Button type="button" variant="ghost" onClick={() => { setQuery(''); void load(''); }}>{t.clearSearch}</Button>
@@ -182,7 +182,8 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
     <div role="status" aria-live="polite" className="empty:hidden">{status ? <p className="text-sm">{status}</p> : null}</div>
     {!page.items.length ? <EmptyState icon={UsersIcon}
       title={searched ? t.noMemberMatches({ query: searched }) : roleFilter ? t.roleHoldersHelp : t.noMembersTitle}
-      description={searched || roleFilter ? undefined : t.noMembersHelp} />
+      description={searched || roleFilter ? undefined : t.noMembersHelp}
+      className="w-full min-w-0 [&_h2]:max-w-full [&_h2]:break-all" />
       : <ul aria-label={t.membersTitle} className="grid divide-y divide-border/60 rounded-2xl border border-border/60 bg-card">
         {page.items.map(member => {
           const name = nameOf(member.member);
@@ -392,7 +393,7 @@ function RoleDialog({ principal, realm, open, generation, roles, api, actingSubj
   const held = new Set(open.target.member?.roles.map(role => role.id) ?? []);
   const choices = roles.filter(role => !held.has(role.id));
   const [roleId, setRoleId] = useState(open.kind === 'take' ? open.role.id : choices[0]?.id ?? '');
-  const [days, setDays] = useState<number>(30);
+  const [days, setDays] = useState<number>(7);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);

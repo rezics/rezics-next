@@ -4,6 +4,7 @@ import { ManageFailure } from '../../../../../features/manage/parts.tsx';
 import { readQueueNames } from '../../../../../features/manage/queue-api.ts';
 import { authorityFrom } from '../../../../../features/manage/queue-state.ts';
 import { QueueView } from '../../../../../features/manage/queue-view.tsx';
+import { appealDecisionAuthority } from '../../../../../features/realm-appeal/decision-api.ts';
 import { readQueue } from '../../../../../features/manage/read.ts';
 import { parseQueueView, queueHref, realmHref } from '../../../../../features/manage/routes.ts';
 import { managedAddress, manager, permissionsIn, realmHeader } from '../../../../../features/manage/server.ts';
@@ -44,6 +45,7 @@ export default async function RealmQueueRoute({ params, searchParams }: {
   return <QueueView principal={principal} recoverReports={readsReports} key={`${principal}:${realm}:${actingSubject}:${readsReports}:${view.state}:${view.type ?? ''}:${view.reason ?? ''}`} realm={realm} address={address}
     actingSubject={actingSubject} view={view} initial={page.data} names={names}
     realmRules={header.ok ? header.data.rules ?? undefined : undefined} authority={authorityFrom(permissions)}
+    appealAuthority={appealDecisionAuthority(permissions)}
     rulesHref={publishesRules ? realmHref(address, 'settings') : null} now={Date.now()} locale={locale}
     messages={messages} />;
 }

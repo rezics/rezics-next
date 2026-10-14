@@ -74,8 +74,41 @@ function appealOf(value: unknown): BanReading['appeal'] | null {
  * other caller, so none of those render. Any other failure stays quiet too.
  */
 export function readingFromBanResponse(status: number, body: unknown): BanReading | null {
-  if (status !== 200) return null;
-  return parseBanReading(body);
+  const read = banBodyRead(status, body);
+  return read.ok ? read.reading : null;
+}
+
+/** The problem sentence a refusal carried, when the body has a title and a code. */
+export interface BanProblem { status: number; title: string; code: string }
+
+export function problemCode(value: unknown): string | null {
+  return value && typeof value === 'object' && 'code' in value && typeof value.code === 'string' ? value.code : null;
+}
+
+export function banProblem(status: number, value: unknown): BanProblem | null {
+  if (!value || typeof value !== 'object') return null;
+  const body = value as Record<string, unknown>;
+  const title = typeof body.title === 'string' && body.title.length > 0 ? body.title : null;
+  const code = problemCode(body);
+  if (!title || !code) return null;
+  if (typeof body.status === 'number' && body.status !== status) return null;
+  return { status, title, code };
+}
+
+/** A ban or appeal body. A 200 that does not parse names the keys it carried. */
+export type BanBodyRead =
+  | { ok: true; reading: BanReading }
+  | { ok: false; status: number; problem: BanProblem | null; code: string | null; discrepancy?: string };
+
+export function banBodyRead(status: number, body: unknown): BanBodyRead {
+  const code = problemCode(body);
+  if (status === 200) {
+    const reading = parseBanReading(body);
+    if (reading) return { ok: true, reading };
+    const keys = body && typeof body === 'object' ? Object.keys(body as object).join(', ') : typeof body;
+    return { ok: false, status, problem: null, code, discrepancy: `ban answer did not parse (${keys})` };
+  }
+  return { ok: false, status, problem: banProblem(status, body), code };
 }
 
 /** Keep a ban reading and drop any decider identity a caller attached beside it. */

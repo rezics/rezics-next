@@ -19,7 +19,8 @@ export async function settle<T>(call: () => Promise<Answer<T>>, options: { manag
     if (error && recordedReplayGap(error.value)) throw error.value;
     if (error) {
       const problem = problemOf(error.status, error.value);
-      return { ok: false, failure: failureOf(error.status, options.management), ...problem ? { problem } : {} };
+      return { ok: false, failure: error.status === 404 && problem?.code === 'realm_unavailable'
+        ? 'missing' : failureOf(error.status, options.management), ...problem ? { problem } : {} };
     }
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch (error) {
@@ -88,6 +89,13 @@ export function readOutgoingInvitations(main: MainClient, realm: string, actingS
 
 export function readRoles(main: MainClient, realm: string, actingSubject: string) {
   return settle(() => main.v1.realms({ realm }).roles.get({ query: { actingSubject } }), { management: true });
+}
+
+/** Realm stewardship inventory; a retained cursor never restarts silently. */
+export function readZoneAttachments(main: MainClient, realm: string, actingSubject: string, cursor?: string | null) {
+  return settle(() => main.v1.realms({ realm: uuidOf(realm) })['zone-attachments'].get({
+    query: { actingSubject, limit: 24, ...cursor ? { cursor } : {} },
+  }), { management: true, cursor });
 }
 
 /** A route refresh may still carry the pre-save props. Keep the newer confirmed read. */

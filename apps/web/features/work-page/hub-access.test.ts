@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
 import { cloneElement, createElement, isValidElement, type ReactElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { PlatformAccess } from '../api/platform-access.ts';
@@ -31,35 +32,30 @@ seedServedTypes();
 const typesFor = (kind: 'prompt' | 'skill') => [servedTypes.types.find(type => type.presentation === kind)!.type];
 let answer: { data: HubWorkPage | null; error: { status: number; value?: unknown } | null };
 
-await mock.module('../api/main.ts', () => ({ ...originalMain,
+const restoreMain = replaceModule(import.meta.resolve('../api/main.ts'), originalMain, {
   readPlatformAccess: async () => access,
   mainApiWithToken: () => ({ v1: { hub: { works: { [id]: { get: async () => { reads++; return answer; } } } } } }),
-}));
-await mock.module('next/headers', () => ({ ...originalHeaders,
+});
+const restoreHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => signedIn ? { value: 'session-token' } : undefined }),
-}));
-await mock.module('next/navigation', () => ({ ...originalNavigation,
+});
+const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), originalNavigation, {
   usePathname: () => localizedPath(workHref(id), 'en'),
   useSearchParams: () => new URLSearchParams(),
-}));
-await mock.module('../auth/session.ts', () => ({ ...originalSession, sessionAgentState: async () => null }));
-await mock.module('../entity-page/read.ts', () => ({ ...originalProjection,
+});
+const restoreSession = replaceModule(import.meta.resolve('../auth/session.ts'), originalSession, { sessionAgentState: async () => null });
+const restoreProjection = replaceModule(import.meta.resolve('../entity-page/read.ts'), originalProjection, {
   readEntityProjection: async () => ({ ok: true, data: projectionFor({ id, base: 'work', types: typesFor(kind),
     name: work.title.value }) }),
-}));
+});
 const originalRead = { ...(await import('./read.ts')) };
-await mock.module('./read.ts', () => ({ ...originalRead,
+const restoreRead = replaceModule(import.meta.resolve('./read.ts'), originalRead, {
   readingAgent: async () => ({ signedIn, actingSubject: null }),
   readReaderState: async () => null,
   readRatings: async () => ({ ok: false, failure: 'unavailable' }),
-}));
-afterAll(async () => {
-  await mock.module('../api/main.ts', () => originalMain);
-  await mock.module('next/headers', () => originalHeaders);
-  await mock.module('next/navigation', () => originalNavigation);
-  await mock.module('../auth/session.ts', () => originalSession);
-  await mock.module('../entity-page/read.ts', () => originalProjection);
-  await mock.module('./read.ts', () => originalRead);
+});
+afterAll(() => {
+  restoreMain(); restoreHeaders(); restoreNavigation(); restoreSession(); restoreProjection(); restoreRead();
 });
 const { readHubWorkPage } = await import('./read.ts');
 const { TypeExperience, WorkOverview, WorkFrameView } = await import('./work-views.tsx');

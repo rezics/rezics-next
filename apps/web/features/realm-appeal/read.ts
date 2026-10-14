@@ -1,4 +1,5 @@
 import { cookies } from 'next/headers';
+import type { MainClient } from '../discover/types.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serviceOrigin } from '../api/origins.ts';
@@ -6,6 +7,7 @@ import { operationOpen } from '../api/platform-access.ts';
 import { readPlatformAccess } from '../api/main.ts';
 import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
 import { serverRead } from '../api/server-read.ts';
+import { readMemberBan } from './ban-read.ts';
 import { readingFromBanResponse, type BanReading } from './reading.ts';
 
 /**
@@ -16,9 +18,16 @@ import { readingFromBanResponse, type BanReading } from './reading.ts';
  * one of those cases. A reversal stays readable: outcome `reversed`, `decidedAt`
  * and `liftedAt`. The lift receipt id and the decider stay off this reading.
  */
-export async function readOwnRealmBan(realm: string, actingSubject: string): Promise<BanReading | null> {
+export async function readOwnRealmBan(realm: string, actingSubject: string, client?: MainClient): Promise<BanReading | null> {
   const id = realm.slice(-36);
   if (!/^[0-9a-f-]{36}$/.test(id)) return null;
+  // A caller that already holds the request client (the page, or a replay) uses it.
+  // The platform gate stays here, so a closed operation still makes no request.
+  if (client) {
+    if (!operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) return null;
+    const read = await readMemberBan(client, realm, actingSubject);
+    return read.ok ? read.reading : null;
+  }
   try {
     if (operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) {
       const token = (await cookies()).get(ACCESS_COOKIE)?.value;

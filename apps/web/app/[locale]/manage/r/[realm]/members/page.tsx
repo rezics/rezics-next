@@ -5,7 +5,7 @@ import type { AdminApi } from '../../../../../../features/manage/admin-api.ts';
 import { notFound } from 'next/navigation';
 import { MembersView } from '../../../../../../features/manage/members-view.tsx';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
-import { readAgents, readMembers, readOutgoingInvitations, readRoles } from '../../../../../../features/manage/read.ts';
+import { mapRealmMembers, readRealmMembersPage } from '../../../../../../features/manage/realm-team-recorded-page.ts';
 import { membersHref, parseMemberRole } from '../../../../../../features/manage/routes.ts';
 import { managedAddress, manager } from '../../../../../../features/manage/server.ts';
 import { localizedPath } from '../../../../../../i18n/locale.ts';
@@ -35,16 +35,12 @@ export async function realmMembersBody({ main, anonymous, principal, realm, addr
   role?: string | null; locale: UiLocale; signInHref: string; api?: AdminApi; refresh?: () => void; now?: number;
 }) {
   const back = membersHref(address, role);
-  const [messages, page, roles, invitations] = await Promise.all([getMessages('manage', locale),
-    readMembers(main, realm, { actingSubject, role }), readRoles(main, realm, actingSubject),
-    readOutgoingInvitations(main, realm, actingSubject)]);
-  if (!page.ok) return <ManageFailure failure={page.failure} locale={locale} messages={messages} signInHref={signInHref}
-    retryHref={localizedPath(back, locale)} />;
-  const agents = await readAgents(anonymous, [...page.data.items.map(item => item.member),
-    ...(invitations.ok ? invitations.data.items.map(item => item.member) : [])]);
-  const named = role && roles.ok ? roles.data.roles.find(item => item.id === role)?.name ?? null : null;
-  return <MembersView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} first={page.data} agents={agents}
-    invitations={invitations} roles={roles.ok ? roles.data.roles : null}
-    roleFilter={role ? { id: role, name: named } : null}
+  const [messages, loaded] = await Promise.all([getMessages('manage', locale),
+    readRealmMembersPage({ main, anonymous }, { realm, actingSubject, role })]);
+  const mapped = mapRealmMembers(loaded.page, loaded.roles, loaded.invitations, role);
+  if (mapped.kind === 'refusal') return <ManageFailure failure={mapped.failure} locale={locale} messages={messages}
+    signInHref={signInHref} retryHref={localizedPath(back, locale)} />;
+  return <MembersView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} first={mapped.page} agents={loaded.agents}
+    invitations={mapped.invitations} roles={mapped.roles} roleFilter={mapped.roleFilter}
     now={now ?? Date.now()} locale={locale} messages={messages} api={api} refresh={refresh} />;
 }

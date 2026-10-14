@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { afterAll, expect, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
 
 const originalHeaders = { ...(await import('next/headers')) };
 const originalServerRead = { ...(await import('../api/server-read.ts')) };
@@ -18,13 +19,11 @@ const banBody = {
   decider: moderator, appeal: { state: 'none' },
 };
 
-await mock.module('next/headers', () => ({
-  ...originalHeaders,
+const restoreHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => ({ value: 'session-token' }) }),
   headers: async () => new Headers(),
-}));
-await mock.module('../api/server-read.ts', () => ({
-  ...originalServerRead,
+});
+const restoreServerRead = replaceModule(import.meta.resolve('../api/server-read.ts'), originalServerRead, {
   serverRead: async (input: RequestInfo | URL) => {
     const url = input instanceof URL ? input : new URL(String(input));
     requested.push(`${url.pathname}${url.search}`);
@@ -33,10 +32,10 @@ await mock.module('../api/server-read.ts', () => ({
     }
     return Response.json(banBody);
   },
-}));
-afterAll(async () => {
-  await mock.module('next/headers', () => originalHeaders);
-  await mock.module('../api/server-read.ts', () => originalServerRead);
+});
+afterAll(() => {
+  restoreHeaders();
+  restoreServerRead();
 });
 
 const { readOwnRealmBan } = await import('./read.ts');

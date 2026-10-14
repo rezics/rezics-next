@@ -34,7 +34,6 @@ export function commandFailure(status: number, code: string | undefined): Comman
   if (status === 401) return 'sign-in';
   if (status === 404) return 'missing';
   if (status === 422) return 'budget';
-  if (status === 503 && code?.endsWith('_pending')) return 'pending';
   return 'unavailable';
 }
 

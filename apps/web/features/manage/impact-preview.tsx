@@ -53,6 +53,12 @@ export function ImpactPreview({ state, agents, actingSubject, locale, messages }
               </li>;
             })}
           </ul> : <p className="text-sm">{t.impactNone}</p>}
+          {state.impact.changes.flatMap(change => (change.jurisdictions ?? []).filter(scope => scope.targetScope)
+            .map(scope => <div key={`${change.member}:${scope.targetScope?.id}`} className="grid gap-1 break-words text-sm">
+              <p>{agentLabel(agents[change.member], change.member, id => t.agentFallback({ id }))} · {t.scopeLabel}: {scope.targetScope?.id}</p>
+              {scope.gained.map(permission => <p key={`gain:${permission}`}>{t.impactGain({ count: 1, permission: t[permissionText[permission].name] })}</p>)}
+              {scope.lost.map(permission => <p key={`lose:${permission}`}>{t.impactLose({ count: 1, permission: t[permissionText[permission].name] })}</p>)}
+            </div>))}
           <p className="text-muted-foreground text-xs">{t.impactExact}</p>
           {removesOwnRoleManagement(state.impact, actingSubject) ? <Alert variant="warning">
             <TriangleAlertIcon aria-hidden="true" />
