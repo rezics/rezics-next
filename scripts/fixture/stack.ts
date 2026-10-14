@@ -1,7 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
-import { devPorts } from '../dev/config.ts';
+import { composeProcessEnvironment, devPorts, readEnv } from '../dev/config.ts';
+import { prepareComposeFileMounts } from '../dev/compose-mounts.ts';
 import { allocatePortSet } from '../lib/ports.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from './command-output.ts';
 import { loadDockerEnvironment } from '../load/docker-env.ts';
@@ -103,7 +104,11 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
 }
 
 export function composeArgs(project: string, envFile: string, command: string[]): string[] {
-  return ['compose', '--env-file', envFile, '-f', composeFile, '--project-name', project, ...command];
+  const args = ['compose', '--env-file', envFile, '-f', composeFile,
+    '-f', join(root, 'infra/dev/compose.qa-resources.yaml'), '--project-name', project, ...command];
+  if (command[0] === 'up') prepareComposeFileMounts(root, args,
+    composeProcessEnvironment(dockerEnvironment(), readEnv(envFile)));
+  return args;
 }
 
 /** Fresh loopback ports for every Compose port variable; endpoints are run-local. */

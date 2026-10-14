@@ -1,3 +1,5 @@
+import { composeArgs } from '../fixture/stack.ts';
+import { qaMemoryNeed, type QaMemoryService } from '../qa/memory-admission.ts';
 import { afterEach, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -145,13 +147,14 @@ test('disposable QA caps every service beside Fuseki and still accepts an overri
   const saved = ensureSecrets(root, { profile: 'qa', runId: 'caps' });
   const base = join(import.meta.dir, '../../infra/dev/compose.yaml');
   const overlay = join(import.meta.dir, '../../infra/dev/compose.qa.yaml');
-  const overlayText = readFileSync(overlay, 'utf8');
-  expect(overlayText).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}');
+  const resources = join(import.meta.dir, '../../infra/dev/compose.qa-resources.yaml');
+  const overlayText = readFileSync(resources, 'utf8');
+  expect(overlayText).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}');
   const resolve = (extra: Record<string, string>) => {
     const env = composeProcessEnvironment(process.env, saved);
     for (const name of ['REZICS_POSTGRES_MEMORY_LIMIT', 'REZICS_RUSTFS_MEMORY_LIMIT',
       'REZICS_TOXIPROXY_MEMORY_LIMIT', 'REZICS_MAILPIT_MEMORY_LIMIT']) delete env[name];
-    const resolved = Bun.spawnSync(['docker', 'compose', '-f', base, '-f', overlay, 'config', '--format', 'json'],
+    const resolved = Bun.spawnSync(['docker', 'compose', '-f', base, '-f', resources, '-f', overlay, 'config', '--format', 'json'],
       { env: { ...env, ...extra } });
     expect(resolved.exitCode).toBe(0);
     return JSON.parse(new TextDecoder().decode(resolved.stdout)).services as Record<string, { mem_limit?: number }>;
@@ -259,4 +262,28 @@ test('the Accounts app is the public Account origin only where task dev serves i
   expect(ensureSecrets(root, { profile: 'qa', runId: 'tier' }).ACCOUNTS_PORT).toBeUndefined();
   expect(ensureSecrets(root, { profile: 'qa', runId: 'tier', accountsApp: true }, { ACCOUNTS_PORT: 14114 })
     .ACCOUNTS_PORT).toBe('14114');
+});
+
+test('persistent fixture Compose keeps backup volumes and enforces each admitted cap', () => {
+  const checkout = resolve(import.meta.dir, '../..');
+  const directory = mkdtempSync('.temp/fixture-memory-caps-'); roots.push(directory);
+  const envFile = join(directory, 'compose.env');
+  writeFileSync(envFile, '');
+  for (const overrides of [{}, { REZICS_FUSEKI_MEMORY_LIMIT: undefined },
+    { REZICS_POSTGRES_MEMORY_LIMIT: '1536m', REZICS_FUSEKI_MEMORY_LIMIT: '12g' }]) {
+    const env = composeProcessEnvironment(process.env, ensureSecrets(directory,
+      { profile: 'qa', runId: 'caps', persistent: true }));
+    Object.assign(env, overrides);
+    const resolved = Bun.spawnSync(['docker', ...composeArgs('rezics-qa-caps', envFile, ['config', '--format', 'json'])], { env });
+    expect(resolved.exitCode).toBe(0);
+    const services = JSON.parse(new TextDecoder().decode(resolved.stdout)).services as
+      Record<string, { mem_limit: number; tmpfs?: string[]; volumes?: { type: string; source: string }[] }>;
+    for (const service of ['postgres', 'fuseki', 'rustfs', 'toxiproxy', 'mailpit'] as QaMemoryService[]) {
+      expect(Number(services[service]!.mem_limit)).toBe(qaMemoryNeed(checkout, 'other', 'catalogue-disk', env, [service]).vm);
+    }
+    for (const service of ['postgres', 'fuseki', 'rustfs']) {
+      expect(services[service]!.tmpfs ?? []).toEqual([]);
+      expect(services[service]!.volumes?.some(volume => volume.type === 'volume' && volume.source === `${service}_data`)).toBe(true);
+    }
+  }
 });

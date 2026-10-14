@@ -46,12 +46,12 @@ test('one passing invocation prints five ok lines and retains every command outp
   expect(result.log.startsWith(join(f.cwd, '.temp/goal/check/'))).toBe(true);
   expect(f.lines.at(-1)).toBe(`Full output: ${result.log}`);
   expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
-  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'scripts']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', 'scripts/example.ts']);
   expect(f.commands).toContainEqual(['task', 'ast-grep', '--', 'scan', 'scripts/example.ts']);
   expect(f.commands.find(command => command[1] === 'scripts/qa/test.ts')?.slice(0, 3))
     .toEqual(['bun', 'scripts/qa/test.ts', 'scripts/example.test.ts']);
-  expect(f.commands.find(command => command[1] === 'goal:unit-files')?.slice(0, 5))
-    .toEqual(['task', 'goal:unit-files', '--', '--timeout=5000', 'scripts/qa/repository-guards.test.ts']);
+  expect(f.commands.find(command => command[1] === 'guards')?.slice(0, 5))
+    .toEqual(['task', 'guards', '--', '--timeout=5000', 'scripts/qa/repository-guards.test.ts']);
 });
 
 test('a failing type check prints its diagnostic and returns failure without passing transcripts', async () => {
@@ -81,7 +81,7 @@ test('worker guards use changed inputs and report empty changes without acquirin
     f.lines.length = 0;
     const result = await workerCheck({ ...f, changed, only: ['guards'] });
     expect(result.code).toBe(0);
-    expect(f.commands.some(command => command.includes('goal:unit-files'))).toBe(runs);
+    expect(f.commands.some(command => command[1] === 'guards')).toBe(runs);
     expect(f.lines.filter(line => line.startsWith('Repository guards:'))).toHaveLength(1);
     if (!changed.length) expect(f.lines.join('\n')).toMatch(/Repository guards: 0\/\d+ selected for changed paths: \(none\)/);
   }
@@ -175,12 +175,15 @@ test('compiler and lint commands are serialized while proofs and guards may run 
     const heavy = command[1]?.endsWith(':typecheck') || command[0]?.endsWith('/oxlint');
     if (heavy) { activeHeavy++; maxHeavy = Math.max(maxHeavy, activeHeavy); }
     if (command[1] === 'scripts/qa/test.ts') testsDuringTypes = activeHeavy === 1;
-    if (command.includes('goal:unit-files')) { guardsDuringTypes = activeHeavy === 1; releaseTypes(); }
+    if (command.includes('scripts/qa/repository-guards.test.ts')) { guardsDuringTypes = activeHeavy === 1; releaseTypes(); }
     if (command[1]?.endsWith(':typecheck')) await typesBlocked;
     if (heavy) activeHeavy--;
     return { code: 0, output: '' };
   };
-  await workerCheck({ ...f, changed: [...f.changed, 'apps/web/example.ts'], runner });
+  // A missing guard must fail the overlap assertions rather than leave a pending runner forever.
+  const watchdog = setTimeout(releaseTypes, 1000);
+  try { await workerCheck({ ...f, changed: [...f.changed, 'apps/web/example.ts'], runner }); }
+  finally { clearTimeout(watchdog); releaseTypes(); }
   expect(maxHeavy).toBe(1);
   expect(testsDuringTypes).toBe(true);
   expect(guardsDuringTypes).toBe(true);
@@ -328,7 +331,8 @@ function sleepFixture(testBody: string, guardBody = '') {
   const f = fixture();
   const file = 'tests/qa/unit/slow.test.ts';
   const guard = 'scripts/qa/repository-guards.test.ts';
-  writeFileSync(join(f.cwd, 'Taskfile.yml'), 'version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun test {{.CLI_ARGS}}\n');
+  const guardRunner = join(import.meta.dir, '../qa/repository-guards.ts');
+  writeFileSync(join(f.cwd, 'Taskfile.yml'), `version: "3"\ntasks:\n  goal:unit-files:\n    cmds:\n      - bun test {{.CLI_ARGS}}\n  guards:\n    cmds:\n      - bun '${guardRunner}' {{.CLI_ARGS}}\n`);
   for (const [path, body] of [[file, testBody], [guard, guardBody]]) {
     mkdirSync(join(f.cwd, path!, '..'), { recursive: true });
     writeFileSync(join(f.cwd, path!), `import { test, expect } from 'bun:test';
@@ -369,7 +373,8 @@ test('tests and guards recover with the longer retry under runner admission, tes
   expect(result.checks.map(check => check.name)).toEqual(['tests', 'guards']);
   expect(f.calls).toHaveLength(4);
   expect(f.calls.slice(0, 2).every(command => command[1] === 'scripts/qa/test.ts')).toBe(true);
-  expect(f.calls.slice(2).every(command => command[1] === 'goal:unit-files')).toBe(true);
+  expect(f.calls[2]![1]).toBe('guards');
+  expect(f.calls[3]![1]).toBe('goal:unit-files');
   expect(f.calls[1]).toContain('--timeout=30000');
   expect(f.calls[3]).toContain('--timeout=30000');
   expect(f.lines.filter(line => line.startsWith('Timeout retry passed:'))).toHaveLength(2);

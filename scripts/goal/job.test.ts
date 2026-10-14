@@ -1,9 +1,10 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { JobStore, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
-import { coordinateWorkerJobs } from './coordinator.ts';
+import { coordinateWorkerJobs, stopTurnProcesses } from './coordinator.ts';
+import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { settlementOwed } from './settle.ts';
 import { managerEvents } from './manager-commands.ts';
 import { GoalMailStore } from './mail.ts';
@@ -48,6 +49,135 @@ test('inline completion preserves output, exit status and log without a wake', a
     expect(store.all()[0]!.phase).toBe('inline'); expect(f.prompts).toHaveLength(0);
   } finally { store.close(); }
 });
+
+test('executor waits for the transaction publishing its record before reading it', async () => {
+  const f = fixture(); const store = new JobStore(jobDirectory(f.cwd));
+  const ready = join(f.cwd, 'executor-ready');
+  const log = openSync(store.log('publication'), 'a');
+  let exited: Promise<number | null>;
+  try {
+    store.db.transaction(() => {
+      store.put({ id: 'publication', task: f.task.id, attempt: 1, cwd: f.cwd,
+        command: [process.execPath, '-e', 'console.log("published command ran")'], created: Date.now(), phase: 'parked' });
+      const child = spawn(process.execPath, ['-e', `import { executeJob } from ${JSON.stringify(join(import.meta.dir, 'job.ts'))};
+        import { writeFileSync } from 'node:fs';
+        writeFileSync(${JSON.stringify(ready)}, 'ready');
+        await executeJob(${JSON.stringify(store.directory)}, 'publication');`], { stdio: ['ignore', log, log] });
+      exited = new Promise(resolveExit => child.once('close', resolveExit));
+      const deadline = Date.now() + 3000;
+      while (!existsSync(ready) && Date.now() < deadline) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10);
+      expect(existsSync(ready)).toBe(true);
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200);
+    }).immediate();
+    expect(await exited!).toBe(0);
+    expect(store.get('publication')!.code).toBe(0);
+    expect(readFileSync(store.log('publication'), 'utf8')).toContain('published command ran');
+  } finally { closeSync(log); store.close(); }
+});
+
+test('startup exceptions leave a start marker, stack and terminal failure record', async () => {
+  const f = fixture(); const store = new JobStore(jobDirectory(f.cwd));
+  store.put({ id: 'invalid', task: f.task.id, attempt: 1, cwd: f.cwd, command: [], created: Date.now(), phase: 'parked' });
+  try {
+    const child = spawn(process.execPath, [join(import.meta.dir, 'job.ts'), '--run', store.directory, 'invalid'], { stdio: 'ignore' });
+    await new Promise(resolveExit => child.once('close', resolveExit));
+    const result = store.get('invalid')!;
+    expect(result.code).toBe(1); expect(result.ended).toBeNumber();
+    expect(result.reason).toContain('error:');
+    const log = readFileSync(store.log('invalid'), 'utf8');
+    expect(log).toContain('executor started'); expect(log).toContain('error:'); expect(log).toContain('job.ts:');
+    await wakeJobs(store, f.options);
+    expect(f.prompts).toHaveLength(1); expect(f.prompts[0]).toContain('error:');
+  } finally { store.close(); }
+});
+
+test('a command killed by a signal records that signal in its result and continuation', async () => {
+  const f = fixture(); const lines: string[] = [];
+  expect(await runJob([process.execPath, '-e', 'process.kill(process.pid, "SIGKILL")'], {
+    cwd: f.cwd, task: f.task, inlineMs: 3000, print: line => lines.push(line),
+  })).not.toBe(0);
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    expect(store.all()[0]!.reason).toContain('SIGKILL');
+    expect(lines.join('\n')).toContain('SIGKILL');
+  } finally { store.close(); }
+});
+
+async function until(check: () => boolean, timeout = 5000): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!check() && Date.now() < deadline) await Bun.sleep(20);
+  expect(check()).toBe(true);
+}
+
+/** A real caller process parks, then the same group cleanup used for turns ends it. */
+async function endCaller(f: ReturnType<typeof fixture>, command: string[]): Promise<void> {
+  const parked = join(f.cwd, 'caller-parked');
+  const token = `job-test-${f.cwd}`;
+  const caller = spawn(process.execPath, ['-e', `
+    import { runJob } from ${JSON.stringify(join(import.meta.dir, 'job.ts'))};
+    import { writeFileSync } from 'node:fs';
+    await runJob(${JSON.stringify(command)}, { cwd: ${JSON.stringify(f.cwd)}, task: ${JSON.stringify(f.task)}, inlineMs: 1,
+      print: line => writeFileSync(${JSON.stringify(parked)}, line) });
+    await Bun.sleep(60000);
+  `], { cwd: f.cwd, detached: true, stdio: 'ignore',
+    env: { ...process.env, GOAL_TASK_ID: f.task.id, GOAL_WORKTREE: f.cwd, GOAL_TURN_TOKEN: token } });
+  const closed = new Promise(resolveExit => caller.once('close', resolveExit));
+  try {
+    const identity = processIdentity(caller.pid!)!;
+    await until(() => existsSync(parked));
+    expect(readFileSync(parked, 'utf8')).toStartWith('PARKED job:');
+    stopTurnProcesses(token, identity);
+    await closed;
+    expect(processAlive(identity)).toBe(false);
+  } finally { caller.kill('SIGKILL'); }
+}
+
+test('the surviving owner records SIGKILL of a parked executor and reaps its command', async () => {
+  const f = fixture(); const ready = join(f.cwd, 'command-ready');
+  await endCaller(f, [process.execPath, '-e', `
+    import { writeFileSync } from 'node:fs';
+    writeFileSync(${JSON.stringify(ready)}, String(process.pid)); await Bun.sleep(30000);
+  `]);
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => existsSync(ready));
+    const command = processIdentity(Number(readFileSync(ready, 'utf8')))!;
+    const job = store.all()[0]!;
+    expect(job.executor).toBeDefined(); expect(job.owner!.pid).not.toBe(job.executor!.pid);
+    expect(processAlive(job.owner!)).toBe(true);
+    process.kill(job.executor!.pid, 'SIGKILL');
+    await until(() => store.get(job.id)!.code !== undefined);
+    const result = store.get(job.id)!;
+    expect(result.code).toBe(137); expect(result.signal).toBe('SIGKILL'); expect(result.ended).toBeNumber();
+    expect(result.reason).toBe('executor exited with signal SIGKILL');
+    expect(readFileSync(store.log(job.id), 'utf8')).toContain('error: executor exited with signal SIGKILL');
+    await until(() => !processAlive(command));
+    await wakeJobs(store, f.options); await wakeJobs(store, f.options);
+    expect(f.prompts).toHaveLength(1); expect(f.prompts[0]).toContain('SIGKILL'); expect(f.reports).toHaveLength(0);
+  } finally { store.close(); }
+});
+
+test('twenty parked 30-second jobs all wake once after their caller turns are killed', async () => {
+  const fixtures = Array.from({ length: 20 }, fixture);
+  await Promise.all(fixtures.map(f => endCaller(f, [process.execPath, '-e',
+    'await Bun.sleep(30000); console.log("thirty-second command completed")'])));
+  const stores = fixtures.map(f => new JobStore(jobDirectory(f.cwd)));
+  try {
+    for (const store of stores) {
+      const job = store.all()[0]!;
+      expect(job.phase).toBe('parked'); expect(job.code).toBeUndefined(); expect(processAlive(job.owner!)).toBe(true);
+    }
+    await until(() => stores.every(store => store.all()[0]!.code !== undefined), 40000);
+    for (const [index, f] of fixtures.entries()) {
+      await coordinateWorkerJobs(f.ledger, f.options); await coordinateWorkerJobs(f.ledger, f.options);
+      const job = stores[index]!.all()[0]!;
+      expect(job.code).toBe(0); expect(job.phase).toBe('woken'); expect(job.resumedAttempt).toBe(2);
+      expect(readFileSync(stores[index]!.log(job.id), 'utf8')).toContain('thirty-second command completed');
+      expect(f.prompts).toHaveLength(1); expect(f.reports).toHaveLength(0);
+    }
+    console.log('Parked-job soak: 20/20 callers ended; 20/20 commands completed after 30s; 20/20 continuations woken exactly once.');
+  } finally { for (const store of stores) store.close(); }
+}, 60000);
 
 test('parked command outlives the caller and coordinator wakes its same session once with bounded failures', async () => {
   const f = fixture(); const lines: string[] = [];
@@ -100,6 +230,23 @@ test('capacity queues the wake; timeout and a lost command owner reach the manag
     store.update('completed', job => { job.phase = 'parked'; delete job.code; });
     await wakeJobs(store, { ...f.options, alive: () => false });
     expect(f.reports[1]).toBe('command owner exited without recording a result');
+    expect(store.get('completed')!.code).toBe(1); expect(store.get('completed')!.ended).toBeNumber();
+    expect(readFileSync(store.log('completed'), 'utf8')).toContain('error: command owner exited without recording a result');
+  } finally { store.close(); }
+});
+
+test('a result committed during an owner liveness check is neither overwritten nor reported lost', async () => {
+  const f = fixture(); const store = completed(f);
+  store.update('completed', job => { delete job.code; job.owner = processIdentity(process.pid)!; });
+  try {
+    await wakeJobs(store, { ...f.options, alive: () => {
+      store.update('completed', job => { job.code = 0; job.ended = Date.now(); });
+      return false;
+    } });
+    expect(store.get('completed')!.code).toBe(0); expect(store.get('completed')!.phase).toBe('parked');
+    expect(f.reports).toHaveLength(0);
+    await wakeJobs(store, f.options);
+    expect(f.prompts).toHaveLength(1);
   } finally { store.close(); }
 });
 

@@ -14,7 +14,7 @@ const root = resolve(import.meta.dir, '../..');
 const releaseHome = join(root, '.temp/releases');
 const migrationDirectories = ['services/main/migrations/access',
   'services/main/migrations/relay', 'services/content/migrations', 'services/account/migrations'] as const;
-const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'package.json',
+const inputs = ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'infra/dev/compose.qa-resources.yaml', 'package.json',
   'infra/release/Dockerfile',
   'infra/release/postgres-provision.sql', 'scripts/ops/postgres-preflight.ts',
   '.yarnrc.yml', 'yarn.lock',

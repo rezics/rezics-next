@@ -16,7 +16,8 @@ afterEach(() => {
 });
 
 function fixture() {
-  const parent = join(import.meta.dir, '../../.temp/surface-gate-tests');
+  // Exercise the gate's nested checkout paths, where the ancestor itself contains "unit-gate-".
+  const parent = join(import.meta.dir, '../../.temp/unit-gate-fixtures/surface-gate-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'case-')); roots.push(cwd);
   const write = (file: string, value: string) => {
@@ -179,7 +180,8 @@ test.each(['contract', 'types', 'lint', 'ast', 'tests', 'guards', 'stories'])('a
   expect(check.code).toBe(1); expect(check.checks.at(-1)?.name).toBe(failed);
   const checkCommands = [...f.commands]; f.commands.length = 0;
   expect(await preMergeSurfaceGate(f.cwd, 'main', f.brief, f.changed, new Set(), { ...f, runner })).toContain('surface gate failed');
-  const stableCommands = (commands: string[][]) => commands.map(command => command.filter(arg => !arg.startsWith('--reporter-outfile=')));
+  const stableCommands = (commands: string[][]) => commands.filter(command => command[0] !== 'node_modules/.bin/oxlint' && command[1] !== 'ast-grep')
+    .map(command => command.filter(arg => !arg.startsWith('--reporter-outfile=')).map((arg, index) => index === 1 && arg === 'guards' ? 'goal:unit-files' : arg));
   expect(stableCommands(f.commands)).toEqual(stableCommands(checkCommands));
   expect(f.commands.filter(commands[failed]!)).toHaveLength(1);
 });
@@ -268,7 +270,8 @@ test.each(['tests', 'guards'] as const)('%s failure also on pinned main is repor
   expect(result.excused).toEqual([{ part, file: f.file, test: 'busy surface guard', reason: 'fails-on-main', revision: f.selection.main }]);
   expect(f.lines.join('\n')).toContain(`Failure on main: ${f.file} > busy surface guard (${f.selection.main})`);
   expect(f.attempts.filter(attempt => attempt.command.includes(f.file))).toHaveLength(2);
-  expect(f.git('worktree', 'list', '--porcelain')).not.toContain('unit-gate-');
+  expect(f.git('worktree', 'list', '--porcelain').split('\n').filter(line => line.startsWith('worktree ')))
+    .toEqual([`worktree ${f.cwd}`]);
 });
 
 test('a branch-only failing test blocks even beside another test that fails on main in the same file', async () => {
@@ -350,4 +353,17 @@ test('a file absent from pinned main cannot gain a baseline allowance', async ()
   expect(result.code).toBe(1);
   expect(result.excused).toEqual([]);
   expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(1);
+});
+
+test('surface workers narrow static tools while landing keeps full workspace types and type-aware lint', async () => {
+  const f = fixture();
+  f.write('apps/web/tsconfig.json', JSON.stringify({ compilerOptions: { noLib: true, types: [] }, include: ['features/**/*.ts', 'features/**/*.tsx'] }));
+  f.write('apps/web/features/unrelated.ts', 'export {};');
+  expect((await workerCheck(f)).code).toBe(0);
+  expect(f.commands).toContainEqual(['task', 'goal:type-files', '--', '--project', 'apps/web/tsconfig.json', 'apps/web/features/zones/catalogue.ts']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', 'apps/web/features/zones/catalogue.ts']);
+  f.commands.length = 0;
+  expect(await preMergeSurfaceGate(f.cwd, 'main', f.brief, f.changed, new Set(), f)).toBeUndefined();
+  expect(f.commands).toContainEqual(['task', 'web:typecheck']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'apps/web/features/zones']);
 });

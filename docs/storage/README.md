@@ -5,6 +5,7 @@
 - [Content PostgreSQL owner](../../services/content/src/core.ts): exact bodies/history and publication pins; [owner placement](ownership-and-placement.md) maps the separate Account, Access and operational state.
 - [Immutable-object adapter](../../services/main/src/infrastructure/immutable-objects.ts): conditional writes, digest verification and owner namespaces.
 - [Workload policy](workload-budgets.md): cost contracts, reusable/bulk preparation, the current 500M-entity capacity baseline and owner workload rules.
+- [Shared QA databases](qa-shared-databases.md): host measurements, per-run isolation and a staged proposal for ordinary test runs.
 - [Schema evolution](schema-evolution.md): model, storage, API and index generations.
 - [Home erasure ordering](zone-home-erasure-ordering.md): publication fencing, exact H closure journaling and retry coverage.
 

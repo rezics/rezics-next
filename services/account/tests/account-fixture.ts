@@ -22,9 +22,10 @@ export async function freePort(): Promise<number> {
 }
 
 export async function accountFixture(overrides: Partial<AccountConfig> = {}, hostname = '127.0.0.1',
-  poolOptions: Pick<PoolConfig, 'max' | 'connectionTimeoutMillis'> = {}) {
-  const cluster = await startPostgresCluster();
-  const pool = new Pool({ ...cluster.connection, ...poolOptions });
+  poolOptions: Pick<PoolConfig, 'max' | 'connectionTimeoutMillis'> = {},
+  preparedDatabase?: { connection: PoolConfig; initialize?: boolean; dispose: () => Promise<void> }) {
+  const cluster = preparedDatabase ? undefined : await startPostgresCluster();
+  const pool = new Pool({ ...cluster?.connection, ...preparedDatabase?.connection, ...poolOptions });
   const accountPort = await freePort();
   const baseURL = `http://${hostname}:${accountPort}`;
   const secret = 'account-g205-integration-secret-at-least-32';
@@ -39,11 +40,16 @@ export async function accountFixture(overrides: Partial<AccountConfig> = {}, hos
     try {
       await app?.stop();
       await pool.end();
-    } finally { cluster.remove(); }
+    } finally {
+      if (preparedDatabase) await preparedDatabase.dispose();
+      else cluster?.remove();
+    }
   };
   try {
-    await (await getMigrations(accountAuthOptions(config))).runMigrations();
-    await installConsentRefreshFence(pool);
+    if (!preparedDatabase || preparedDatabase.initialize) {
+      await (await getMigrations(accountAuthOptions(config))).runMigrations();
+      await installConsentRefreshFence(pool);
+    }
     const auth = createAccountAuth(config);
     app = createAccountApp(auth, pool, { operatorUserIds: operators, displayPreferenceClientIds })
       .listen({ hostname: '127.0.0.1', port: accountPort });

@@ -14,7 +14,7 @@ export default async function confirm(args: string[]): Promise<number> {
   // Owner deadlines must not import the entry module while it awaits this command.
   provideGoalctl({ declaredTestTimeout, planUnitGateShards, heavyQaStatus });
   const manifest = await runConfirmation({ repo: process.cwd(), stateDir: directory,
-    at: options.at, lanes: options.lanes,
+    at: options.at, lanes: options.lanes, record: options.record,
     // Moving reports to a worktree does not move the host's admission configuration.
     slots: qaSlotCount(join(stateDir, 'qa-slots')),
     checkoutRoot: process.env.GOAL_REGRESS_CHECKOUT_ROOT });

@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 const BATCH_ROWS = 5_000;
 
 /** Set-based batches: one statement binds each column as one array parameter. */
-export async function insertColumns(client: PoolClient, statement: string,
+export async function insertColumns(client: Pool | PoolClient, statement: string,
   rows: Iterable<unknown[]>, columns: number): Promise<number> {
   let batch: unknown[][] = Array.from({ length: columns }, () => []);
   let pending = 0;

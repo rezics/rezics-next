@@ -96,7 +96,7 @@ function writeFingerprintFile(checkout: string, path: string, bytes: string | Ui
 function fingerprintCheckout(checkout: string): void {
   // Tiny source trees retain the real schema and preparation sources under
   // examination. They do not import or execute any copied application code.
-  for (const path of ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'infra/dev/postgres/00-owners.sh',
+  for (const path of ['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'infra/dev/compose.qa-resources.yaml', 'infra/dev/postgres/00-owners.sh',
     'scripts/qa/bootstrap.ts', 'scripts/qa/integration-reset.ts', 'scripts/dev/config.ts', 'scripts/ops/migrate.ts',
     'services/account/src/migrate.ts', 'services/account/src/auth.ts', 'services/account/src/account-settings.ts',
     'services/account/package.json', 'yarn.lock', 'scripts/lib/migration-order.ts',

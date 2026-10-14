@@ -174,7 +174,7 @@ const stackPool = createQaStackPool({ root, slotDirectory: qaSlotDirectory,
 async function integrationInfrastructureFingerprint(environment: NodeJS.ProcessEnv): Promise<string | undefined> {
   // Schemas and graph seeds are planned from imported code. Whole source trees
   // deliberately prefer an extra startup to reusing a different bootstrap result.
-  const paths = [...new Set(['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml',
+  const paths = [...new Set(['infra/dev/compose.yaml', 'infra/dev/compose.qa.yaml', 'infra/dev/compose.qa-resources.yaml',
     'infra/dev/postgres/00-owners.sh', 'services/account/package.json', 'yarn.lock',
     ...['scripts/**/*', 'services/*/src/**/*', 'packages/*/src/**/*', 'generated/**/*',
       '{package.json,.yarnrc.yml,bunfig.toml,tsconfig*.json}',
