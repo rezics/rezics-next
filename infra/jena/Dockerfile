@@ -20,10 +20,10 @@ RUN --mount=type=cache,id=rezics-native-test-files,target=/build/tmp,sharing=loc
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0
 ARG FUSEKI_SHA512=ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132
-RUN (curl --fail --location --retry 3 \
+RUN (curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
       "https://dlcdn.apache.org/jena/binaries/apache-jena-fuseki-${FUSEKI_VERSION}.tar.gz" \
       --output /tmp/fuseki.tar.gz \
-    || curl --fail --location --retry 3 \
+    || curl --fail --location --retry 3 --connect-timeout 15 \
       "https://archive.apache.org/dist/jena/binaries/apache-jena-fuseki-${FUSEKI_VERSION}.tar.gz" \
       --output /tmp/fuseki.tar.gz) \
     && echo "${FUSEKI_SHA512}  /tmp/fuseki.tar.gz" | sha512sum --check - \

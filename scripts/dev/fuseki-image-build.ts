@@ -1,8 +1,8 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { fusekiDockerfile, fusekiImageTag } from './fuseki-image.ts';
+import { composeFile, fusekiDockerfile, fusekiImageTag, stampFusekiImage } from './fuseki-image.ts';
 import { preserveReapEnvironment } from '../qa/container-reaper.ts';
 import { terminateProcessGroup } from '../qa/process/terminate.ts';
 
@@ -26,13 +26,18 @@ export function fusekiImageLock(image: string, directory = '/tmp/rezics-fuseki-i
 /** The second inspection runs under the kernel lock. Its fd is inherited by the
  * builder, so a dead caller cannot free the lock while its build is still alive. */
 export function fusekiImageBuildCommand(root: string, image: string, options: FusekiImageOptions = {}): string[] {
-  const script = 'if "$1" image inspect "$2" >/dev/null 2>&1; then '
+  const script = `check_inputs() { "$3" -e 'const { fusekiImageTag } = await import(process.argv[1]); if (fusekiImageTag(process.argv[2]) !== process.argv[3]) throw new Error("Fuseki inputs changed during image preparation");' "$7" "$6" "$2"; }\n`
+    + 'check_inputs "$@" || exit $?\n'
+    + 'if "$1" image inspect "$2" >/dev/null 2>&1; then '
     + 'printf "Image present: %s\\n" "$2"; exit 0; fi\n'
     + 'printf "Building image: %s\\n" "$2"\n'
-    + 'exec "$3" "$4" --gib 4 -- "$1" build --progress plain --file "$5" --tag "$2" "$6"';
+    + 'unset REZICS_STACK_PROFILE\n'
+    + '"$3" "$4" --gib 4 -- "$1" build --progress plain --file "$5" --tag "$2" "$6" || exit $?\n'
+    // Only this builder may remove its tag on input drift, while still holding the lock.
+    + 'check_inputs "$@" || { "$1" image rm "$2"; exit 1; }';
   return ['flock', '--exclusive', fusekiImageLock(image, options.lockDirectory), 'sh', '-c', script,
     'fuseki-image', options.docker ?? 'docker', image, process.execPath,
-    join(import.meta.dir, '../qa/host-admission.ts'), join(root, fusekiDockerfile), root];
+    join(import.meta.dir, '../qa/host-admission.ts'), join(root, fusekiDockerfile), root, join(import.meta.dir, 'fuseki-image.ts')];
 }
 
 /** Stream a command without buffering Maven output and stop its whole process group on cancellation. */
@@ -64,6 +69,8 @@ export async function runImageCommand(root: string, command: readonly string[], 
 
 /** Shared by generation, stack startup, refresh and the explicit task. */
 export async function ensureFusekiImage(root: string, options: FusekiImageOptions = {}): Promise<string> {
+  // Startup must consume the same input digest it obtains, even before task gen.
+  if (existsSync(join(root, composeFile))) stampFusekiImage(root, false);
   const image = fusekiImageTag(root);
   const inspected = spawnSync(options.docker ?? 'docker', ['image', 'inspect', image],
     { cwd: root, env: preserveReapEnvironment({ ...process.env, ...options.env }),
@@ -71,7 +78,9 @@ export async function ensureFusekiImage(root: string, options: FusekiImageOption
   if (inspected.status === 0) return image;
   console.log(`Waiting for image build lock: ${image}`);
   await runImageCommand(root, fusekiImageBuildCommand(root, image, options), options);
-  if (fusekiImageTag(root) !== image) throw new Error('Fuseki build inputs changed during the build; run task jena:image again');
+  if (fusekiImageTag(root) !== image) {
+    throw new Error('Fuseki build inputs changed during the build; run task jena:image again');
+  }
   return image;
 }
 

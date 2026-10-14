@@ -31,7 +31,7 @@ use exact direct pins; Compose and Dockerfiles pin external images by digest.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
-`task jena:image` obtains that tag: an existing image returns immediately;
+`task jena:image` stamps and obtains that tag: an existing image returns immediately;
 otherwise callers share a host-wide lock keyed by tag and inspect again before
 building. Generation, stack startup, toolchain installation and dev refresh use
 the same implementation. Linux `flock` (util-linux 2.41.5 on the development host)
@@ -50,6 +50,12 @@ skips the test stage when building the runtime image. Jena downloads try
 This split removes the 16–40 minute native suite and slow archive download from
 ordinary image preparation without weakening the gate; simultaneous image
 builds previously repeated the suite while waiting on its fixture cache lock.
+On 2026-10-14, native Docker built the missing final tag in 33.6 seconds with
+Maven dependencies cached; a concurrent second caller waited 33.2 seconds and
+started no build, and an existing-tag call took 140 ms. A completely cold Maven
+dependency layer took 249 seconds in an earlier 277-second image build. The
+intentional Java failure probe rejected the gate's native-proof runner and
+retained the Maven failure output.
 
 Type checks run `bun check`, Bun's built-in checker (the same errors as `tsc` from
 TypeScript 7, in seconds instead of minutes), so the host needs Bun 1.4.3 or newer and
