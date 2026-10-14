@@ -131,6 +131,18 @@ public class WorkStructurePublicationGuardTest {
             put(data, receipts, RECEIPT, field, data.find(uri(revisions), uri(DECISION), p(field), Node.ANY).next().getObject());
     }
 
+    private static void assertReceiptReplay(DatasetGraph data) {
+        data.commit(); data.end();
+        try {
+            var service = SlimCommandTest.service(SlimCommandTest.profiles());
+            for (String digest : List.of("b".repeat(64), "c".repeat(64)))
+                assertEquals(digest.startsWith("b") ? "committed" : "conflict",
+                    service.runCommand(data, RECEIPT, digest, update(null, null), List.of(),
+                        System.nanoTime() + 30_000_000_000L).get("status"));
+        } finally { data.begin(ReadWrite.WRITE); }
+        assertTrue(data.contains(uri(CommandPolicy.CURRENT), uri(WORK), p("workStructurePublicationHead"), uri(DECISION)));
+    }
+
     @Test public void truthfulPublicDomainPoststateAdmitsOnlyConsistentV2FocusesAndExactReceiptBindings() {
         DatasetGraph data = publication();
         data.begin(ReadWrite.WRITE);
@@ -146,6 +158,7 @@ public class WorkStructurePublicationGuardTest {
             put(data, receipts, RECEIPT, "sourceObservation", uri(OBSERVATION));
             assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, focuses(v2, v2, v2), Set.of(WORK)));
             assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            assertReceiptReplay(data);
             for (int i = 0; i < 3; i++) {
                 var valid = focuses(v2, v2, v2);
                 var entry = valid.get(i);
@@ -213,6 +226,7 @@ public class WorkStructurePublicationGuardTest {
                 var validations = focuses(profile, profile, profile);
                 assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, validations, Set.of(WORK)));
                 assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                assertReceiptReplay(data);
                 put(data, CommandPolicy.RECEIPTS, RECEIPT, "sourceObservation", uri(OBSERVATION));
                 assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
                 data.deleteAny(uri(CommandPolicy.RECEIPTS), uri(RECEIPT), p("sourceObservation"), Node.ANY);
