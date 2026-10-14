@@ -8,7 +8,9 @@ import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
 import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
 import { failureOf } from './failure.ts';
+import type { MainClient } from '../discover/types.ts';
 import { booksEditionReads, settle } from './books-edition-page.read.ts';
+import { readSuppliedContents, readSuppliedStart } from './games-hub-recorded-page.ts';
 import { booksLanguageReads } from './books-language-recorded-page.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
@@ -19,7 +21,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readerEntry } from '../catalogue/reader-store.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { chapterHref, type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, postPlaceHref, textHref,
+import { type ContentsQuery, idOf, iriOf, mainScope, parseWorkRef, postPlaceHref,
   type VersionQuery, type WorkRef, type WorkScope, workHref } from './route.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
@@ -333,12 +335,12 @@ export const readAgentCredits = cache(async (id: string): Promise<Loaded<AgentCr
   return booksEditionReads({ main, actingSubject }).readAgentCredits(id);
 });
 
+/** A caller-supplied Main client. Omitted, reads use the request-cached host client. */
+type SuppliedClient = { main: MainClient; actingSubject?: string };
+
 /** One level of the Main Version's table of contents: a group's children, or the top level. */
-export async function readContents(id: string, query: ContentsQuery): Promise<Loaded<ContentsPage>> {
-  const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).contents.get({ query: { actingSubject,
-    parent: query.parent ? iriOf(query.parent) : undefined, language: query.language, cursor: query.cursor } }),
-  query.cursor);
+export async function readContents(id: string, query: ContentsQuery, client?: SuppliedClient): Promise<Loaded<ContentsPage>> {
+  return readSuppliedContents(client ?? await reader(), id, query);
 }
 
 /**
@@ -363,29 +365,9 @@ export const oneTextLanguage = cache(async (id: string, locale: UiLocale, select
  * selected text is read as that one text. Null when the Work has nothing to
  * read; `contents` when Main could not say, so Contents explains.
  */
-export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null):
-  Promise<ReadStart> => {
-  const { main, actingSubject } = await reader();
-  if (actingSubject) {
-    const next = await settle(() => main.v1.me.continue.get({ query: { actingSubject, limit: 6 } }));
-    const item = next.ok ? next.data.items.find(entry => entry.work === work) : undefined;
-    if (item) {
-      return { kind: item.lastPosition ? 'continue' : 'start', href: item.nextUnread.href, chapter: item.nextUnread.title };
-    }
-  }
-  const nothing = async (): Promise<ReadStart> => await oneTextLanguage(id, locale, selected)
-    ? { kind: 'start', href: textHref(id), chapter: null } : null;
-  let parent: string | undefined;
-  for (let depth = 0; depth < 3; depth += 1) {
-    const level = await readContents(id, { parent });
-    if (!level.ok) return depth === 0 && level.failure === 'missing' ? nothing() : { kind: 'contents' };
-    const first = level.data.items.find(item => item.availability === 'available');
-    const occurrence = first ? idOf(first.occurrence) : null;
-    if (!first || !occurrence) return depth === 0 && !level.data.items.length ? nothing() : { kind: 'contents' };
-    if (first.role === 'chapter') return { kind: 'start', href: chapterHref(id, occurrence), chapter: first.label?.value ?? null };
-    parent = occurrence;
-  }
-  return { kind: 'contents' };
+export const readStart = cache(async (id: string, work: string, locale: UiLocale, selected: string | null,
+  client?: SuppliedClient): Promise<ReadStart> => {
+  return readSuppliedStart(client ?? await reader(), id, work, () => oneTextLanguage(id, locale, selected));
 });
 
 /**
