@@ -12,7 +12,7 @@ import type { FeedCheckpoint } from '../src/modules/feed/store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { RealmReplyStale, RealmReplyUnavailable, type PlacementPreparation,
   type RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
-import { replyReceiptIri } from '../src/modules/realm-reply/graph.ts';
+import { replyReceiptIri, replySlotIri } from '../src/modules/realm-reply/graph.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -638,6 +638,19 @@ function placementReplay(realm: string, parent: string | null, work: string, own
         if (sql.includes('SELECT ?space ?realmRevision ?disclosure')) return { results: { bindings: [{
           space: { type: 'uri', value: native() }, disclosure: { type: 'uri', value: `${RV}Public` },
         }] } };
+        // Terminal replay rechecks this exact slot before maintaining its board-aware index.
+        if (sql.includes('?placement ?revision ?review ?root ?author ?preparation ?rootRevision')) {
+          expect(sql).toContain(`<${replySlotIri(realm, reply)}>`);
+          const values = { placement, revision: `urn:rezics:content:revision:${revisionId}`,
+            review: `urn:rezics:realm-review:${prepared.reviewDecisionId}`, root: work,
+            author: prepared.author, preparation: prepared.operationId, rootRevision: prepared.rootRevision };
+          return { results: { bindings: [Object.fromEntries(Object.entries(values)
+            .map(([key, value]) => [key, { type: 'uri', value }]))] } };
+        }
+        if (sql.includes('SELECT ?concept ?primary')) {
+          expect(sql).toContain(`<${placement}> a rv:RealmReplyPlacement`);
+          return { results: { bindings: [{}] } };
+        }
         throw new Error('Placement performed an unrelated graph inventory read');
       },
       commandWithReceipt: async () => {
