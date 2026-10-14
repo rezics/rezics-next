@@ -133,6 +133,63 @@ test('member: the saved realization preference keeps its revision and progress c
   expect(failures).toEqual([]);
 });
 
+for (const persona of ['visitor', 'stranger', 'owner', 'moderator', 'operator'] as const) {
+  test(`${persona}: the production release reader consumes the recorded limit-20 page`, async () => {
+    const releases = sample(persona, 'chooser-releases');
+    const realizations = sample(persona, 'chooser-realizations');
+    const failures: string[] = [];
+    const actingSubject = subjectOf(persona, releases.label);
+    const main = transport(persona, [
+      { label: releases.label, state: 'populated' },
+      { label: realizations.label, state: 'populated' },
+    ], failures);
+    const reads = booksEditionReads({ main, actingSubject });
+    expect<unknown>(await reads.readReleases(workId(persona))).toEqual({ ok: true, data: releases.answer });
+    if (!actingSubject) {
+      expect(failures).toEqual([]);
+      return;
+    }
+    const offered = await mainTrackingApi(actingSubject, () => main).editions((sample(persona, 'primary-get-works-0').answer as { id: string }).id);
+    expect(offered.ok, failures.join('\n')).toBe(true);
+    if (!offered.ok) return;
+    const releasePage = releases.answer as { items: unknown; nextCursor: string | null };
+    const realizationPage = realizations.answer as { items: unknown; nextCursor: string | null };
+    expect<unknown>(offered.data.releases).toEqual(releasePage.items);
+    expect<unknown>(offered.data.realizations).toEqual(realizationPage.items);
+    expect(offered.data.releasesCursor).toBe(releasePage.nextCursor);
+    expect(offered.data.realizationsCursor).toBe(realizationPage.nextCursor);
+    expect(failures).toEqual([]);
+  });
+}
+
+for (const persona of ['stranger', 'owner', 'moderator', 'operator'] as const) {
+  test(`${persona}: the edition seam consumes the recorded Work, exact releases and empty preference`, async () => {
+    const header = sample(persona, 'primary-get-works-0');
+    const releases = sample(persona, 'chooser-releases');
+    const realizations = sample(persona, 'chooser-realizations');
+    const preference = sample(persona, persona === 'stranger' ? 'chooser-preference-empty' : 'primary-get-me-edition-preferences-1');
+    const progress = sample(persona, 'chooser-progress-empty');
+    expect(preference.answer).toBeNull();
+    const failures: string[] = [];
+    const main = transport(persona, [
+      { label: header.label, state: 'populated' },
+      { label: releases.label, state: 'populated' },
+      { label: realizations.label, state: 'populated' },
+      { label: preference.label, state: 'empty' },
+      { label: progress.label, state: 'populated' },
+    ], failures);
+    const actingSubject = subjectOf(persona, header.label)!;
+    const reads = booksEditionReads({ main, actingSubject });
+    const page = await readBooksEditionPage(reads, workId(persona), 'en');
+    expect<unknown>(page.header).toEqual({ ok: true, data: header.answer });
+    expect<unknown>(page.releases).toEqual({ ok: true, data: releases.answer });
+    expect<unknown>(page.status.preference).toEqual({ ok: true, data: null });
+    expect<unknown>(page.status.progress).toEqual({ ok: true, data: progress.answer });
+    expect(page.status.editionName).toBeNull();
+    expect(failures).toEqual([]);
+  });
+}
+
 for (const persona of choosers) {
   test(`${persona}: a recorded save, replay and compare-and-set keep the exact edition`, async () => {
     for (const label of ['primary-put-me-edition-preferences-1', 'primary-put-me-edition-preferences-2', 'primary-put-me-edition-preferences-3', 'primary-put-me-edition-preferences-4'] as const) {

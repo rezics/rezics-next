@@ -18,13 +18,16 @@ import { BooksEditionPage } from './books-edition-page.tsx';
 import { messages } from './messages.ts';
 import { IdentityStatus } from './primary-action.tsx';
 import type { WorkHeader } from './types.ts';
-import { YourEdition } from './your-edition.tsx';
 
 const row = record as AnswerRecord;
-type Persona = 'visitor' | 'member';
+type Persona = 'visitor' | 'stranger' | 'member' | 'owner' | 'moderator' | 'operator';
 interface Props { persona: Persona; state: 'populated' | 'loading' | 'stale'; locale: UiLocale }
-type MemberView = Awaited<ReturnType<typeof readBooksEditionPage>> & { actions?: ReaderActions };
-type Shown = { kind: 'visitor'; header: WorkHeader } | { kind: 'member'; page: MemberView };
+type PageView = Awaited<ReturnType<typeof readBooksEditionPage>> & { actions?: ReaderActions };
+
+/** Member's production inventory was recorded with the hub page; every other persona has the chooser page. */
+function inventoryLabel(persona: Persona, kind: 'releases' | 'realizations') {
+  return persona === 'member' ? `hub-${kind}` : `chooser-${kind}`;
+}
 
 function sample(persona: AnswerPersona, label: string) {
   const found = row.personas[persona].find(item => item.label === label);
@@ -34,7 +37,7 @@ function sample(persona: AnswerPersona, label: string) {
 
 /** The Work hub's edition slice, read through the same seam as the server page. */
 function RecordedVisualNovelsHub({ persona, state, locale }: Props) {
-  const [shown, setShown] = useState<Shown | null>(null);
+  const [shown, setShown] = useState<PageView | null>(null);
   const [fault, setFault] = useState<string | null>(null);
   useEffect(() => {
     setShown(null);
@@ -42,16 +45,19 @@ function RecordedVisualNovelsHub({ persona, state, locale }: Props) {
     const header = sample(persona, 'primary-get-works-0');
     const actingSubject = new URL(header.path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined;
     const id = new URL(header.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
+    const signedIn = persona !== 'visitor';
+    // The production release read asks for limit 20. A saved edition then asks for that release or
+    // realization by its own address; this record has the save and not that detail, so the page shows
+    // the empty choice and the exact release list.
     const selections: RecordedSelection[] = [
       { label: header.label, state: state === 'loading' ? 'loading' : 'populated' },
+      { label: inventoryLabel(persona, 'releases'), state: 'populated' },
     ];
-    // The production release read asks for limit 20. Only the member's hub read recorded that page.
-    if (persona === 'member') {
+    if (signedIn) {
       selections.push(
-        { label: 'hub-releases', state: 'populated' },
-        { label: 'hub-realizations', state: 'populated' },
-        { label: 'primary-get-me-edition-preferences-1', state: 'empty' },
-        { label: 'hub-progress-empty', state: 'populated' },
+        { label: inventoryLabel(persona, 'realizations'), state: 'populated' },
+        { label: persona === 'stranger' ? 'chooser-preference-empty' : 'primary-get-me-edition-preferences-1', state: 'empty' },
+        { label: persona === 'member' ? 'hub-progress-empty' : 'chooser-progress-empty', state: 'populated' },
       );
       if (state === 'stale') selections.push({ label: 'primary-put-me-edition-preferences-3', state: 'error' });
     }
@@ -67,34 +73,22 @@ function RecordedVisualNovelsHub({ persona, state, locale }: Props) {
     const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher });
     const reads = booksEditionReads({ main, actingSubject });
     const actions = actingSubject ? createReaderStore({ actingSubject, main: () => main }) : undefined;
-    const pending: Promise<{ ok: true; shown: Shown } | { ok: false; fault: string }> = persona === 'member'
-      ? readBooksEditionPage(reads, id, locale).then(page => (page.header.ok
-        ? { ok: true, shown: { kind: 'member', page: { ...page, actions } } }
-        : { ok: false, fault: `Work header: ${page.header.failure}` }))
-      : reads.readWorkHeader(id).then(read => (read.ok
-        ? { ok: true, shown: { kind: 'visitor', header: read.data } }
-        : { ok: false, fault: `Work header: ${read.failure}` }));
-    void pending.then(result => {
+    void readBooksEditionPage(reads, id, locale).then(page => {
       if (!mounted) return;
-      if (result.ok) setShown(result.shown);
-      else setFault(result.fault);
+      if (!page.header.ok) { setFault(`Work header: ${page.header.failure}`); return; }
+      setShown({ ...page, actions });
     });
     return () => { mounted = false; replay.dispose(); };
   }, [persona, state, locale]);
   const t = messages[locale];
   if (fault) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</pre>;
-  if (!shown) return <p role="status" aria-busy="true" className="p-6">{t.loading}</p>;
-  const header = shown.kind === 'visitor' ? shown.header : shown.page.header.ok ? shown.page.header.data : null;
-  if (!header) return null;
-  return <ReaderActionsProvider signedIn={shown.kind === 'member'} signInHref="/auth/start"
-    actions={shown.kind === 'member' ? shown.page.actions : undefined}>
+  if (!shown || !shown.header.ok) return <p role="status" aria-busy="true" className="p-6">{t.loading}</p>;
+  return <ReaderActionsProvider signedIn={persona !== 'visitor'} signInHref="/auth/start" actions={shown.actions}>
     <main className="mx-auto grid min-w-0 max-w-3xl grid-cols-1 gap-6 px-4 py-6" lang={locale}>
-      <h1 className="break-words font-semibold text-2xl" lang={header.title.language}>{header.title.value}</h1>
-      {shown.kind === 'member' && shown.page.header.ok ? <>
-        <IdentityStatus {...shown.page.status} locale={locale} messages={t} />
-        <BooksEditionPage work={shown.page.header.data.id} releases={shown.page.releases} signInHref="/auth/start"
-          editionsHref={editionsHref(shown.page.header.data.id.slice(-36))} locale={locale} messages={t} />
-      </> : <YourEdition work={header.id} signInHref="/auth/start" locale={locale} messages={t} />}
+      <h1 className="break-words font-semibold text-2xl" lang={shown.header.data.title.language}>{shown.header.data.title.value}</h1>
+      <IdentityStatus {...shown.status} locale={locale} messages={t} />
+      <BooksEditionPage work={shown.header.data.id} releases={shown.releases} signInHref="/auth/start"
+        editionsHref={editionsHref(shown.header.data.id.slice(-36))} locale={locale} messages={t} />
     </main>
   </ReaderActionsProvider>;
 }
@@ -114,9 +108,9 @@ async function expectTitle(canvasElement: HTMLElement, persona: Persona) {
   return header;
 }
 
-async function expectReleases(canvasElement: HTMLElement, locale: UiLocale) {
+async function expectReleases(canvasElement: HTMLElement, persona: Persona, locale: UiLocale, status: boolean) {
   const canvas = within(canvasElement);
-  const releases = sample('member', 'hub-releases').answer as BooksReleasePage;
+  const releases = sample(persona, inventoryLabel(persona, 'releases')).answer as BooksReleasePage;
   for (const release of releases.items) {
     const link = canvas.getAllByRole('link', { name: release.title.value })
       .find(item => item.getAttribute('href')?.endsWith(releaseHref(release.id)));
@@ -126,28 +120,16 @@ async function expectReleases(canvasElement: HTMLElement, locale: UiLocale) {
     await expect(article).toHaveTextContent(String(release.publicationYear));
     if (release.platform) await expect(article).toHaveTextContent(release.platform);
   }
-  await expect(canvas.getByRole('list', { name: messages[locale].yourEdition }))
+  if (status) await expect(canvas.getByRole('list', { name: messages[locale].yourEdition }))
     .toHaveTextContent(copyOf(locale).notStarted);
   await document.fonts.ready;
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   return releases;
 }
 
-export const Visitor: Story = { args: { persona: 'visitor' }, async play({ canvasElement, args }) {
-  await expectTitle(canvasElement, 'visitor');
-  await expect(within(canvasElement).getByRole('link', { name: messages[args.locale].signInForEdition })).toBeVisible();
-  await expect(within(canvasElement).queryByRole('button', { name: copyOf(args.locale).savePreference })).not.toBeInTheDocument();
-  await document.fonts.ready;
-  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-} };
-export const VisitorPhone: Story = { ...Visitor, globals: phone };
-export const VisitorChinese: Story = { ...Visitor, args: { persona: 'visitor', locale: 'zh-Hans' },
-  globals: { locale: 'zh-Hans' } };
-export const VisitorChinesePhone: Story = { ...VisitorChinese, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
-
-export const Member: Story = { async play({ canvasElement, args }) {
-  await expectTitle(canvasElement, 'member');
-  const releases = await expectReleases(canvasElement, args.locale);
+async function expectOwnChooser(canvasElement: HTMLElement, args: Props) {
+  await expectTitle(canvasElement, args.persona);
+  const releases = await expectReleases(canvasElement, args.persona, args.locale, true);
   const canvas = within(canvasElement);
   const t = copyOf(args.locale);
   await userEvent.click(await canvas.findByRole('combobox', { name: t.edition }));
@@ -159,8 +141,30 @@ export const Member: Story = { async play({ canvasElement, args }) {
     await waitFor(() => expect(canvas.getByRole('option', { name })).toBeVisible());
   }
   await userEvent.keyboard('{Escape}');
+}
+
+export const Visitor: Story = { args: { persona: 'visitor' }, async play({ canvasElement, args }) {
+  await expectTitle(canvasElement, 'visitor');
+  await expectReleases(canvasElement, 'visitor', args.locale, false);
+  await expect(within(canvasElement).getByRole('link', { name: messages[args.locale].signInForEdition })).toBeVisible();
+  await expect(within(canvasElement).queryByRole('button', { name: copyOf(args.locale).savePreference })).not.toBeInTheDocument();
+  await expect(within(canvasElement).queryByRole('list', { name: messages[args.locale].yourEdition })).not.toBeInTheDocument();
 } };
+export const VisitorPhone: Story = { ...Visitor, globals: phone };
+export const VisitorChinese: Story = { ...Visitor, args: { persona: 'visitor', locale: 'zh-Hans' },
+  globals: { locale: 'zh-Hans' } };
+export const VisitorChinesePhone: Story = { ...VisitorChinese, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+export const Member: Story = { play: async ({ canvasElement, args }) => { await expectOwnChooser(canvasElement, args); } };
 export const MemberPhone: Story = { ...Member, globals: phone };
+export const Stranger: Story = { args: { persona: 'stranger' }, play: Member.play };
+export const StrangerPhone: Story = { ...Stranger, globals: phone };
+export const Owner: Story = { args: { persona: 'owner' }, play: Member.play };
+export const OwnerPhone: Story = { ...Owner, globals: phone };
+export const Moderator: Story = { args: { persona: 'moderator' }, play: Member.play };
+export const ModeratorPhone: Story = { ...Moderator, globals: phone };
+export const Operator: Story = { args: { persona: 'operator' }, play: Member.play };
+export const OperatorPhone: Story = { ...Operator, globals: phone };
 
 export const Loading: Story = { args: { state: 'loading' }, async play({ canvasElement }) {
   await expect(within(canvasElement).getByRole('status')).toHaveTextContent(messages.en.loading);
@@ -169,7 +173,7 @@ export const LoadingPhone: Story = { ...Loading, globals: phone };
 
 export const StaleRefusal: Story = { args: { state: 'stale' }, async play({ canvasElement, args }) {
   await expectTitle(canvasElement, 'member');
-  await expectReleases(canvasElement, args.locale);
+  await expectReleases(canvasElement, 'member', args.locale, true);
   const canvas = within(canvasElement);
   const t = copyOf(args.locale);
   await userEvent.click(await canvas.findByRole('combobox', { name: t.edition }));
