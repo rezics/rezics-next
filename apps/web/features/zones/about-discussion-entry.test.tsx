@@ -2,7 +2,7 @@ import { replaceModule } from '../../tests/support/module-replacement.ts';
 import { afterAll, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { AboutDiscussionTargetReader } from './about-discussion-api.ts';
+import type { AboutDiscussionRouteReader, AboutDiscussionTargetReader } from './about-discussion-api.ts';
 
 const actingSubject = 'https://rezics.com/id/00000000-0000-4000-8000-000000000004';
 const about = 'https://rezics.com/id/00000000-0000-4000-8000-000000000003';
@@ -10,6 +10,7 @@ const revision = 'https://rezics.com/id/00000000-0000-4000-8000-000000000006';
 let lookupFailure = true;
 let postingOpen = true;
 const projections: Array<[string, string | undefined]> = [];
+const routes: Array<[string, string, string | undefined]> = [];
 let target: Awaited<ReturnType<AboutDiscussionTargetReader>>;
 
 const mainApi = { ...(await import('../api/main.ts')) };
@@ -17,6 +18,7 @@ const platformAccess = { ...(await import('../api/platform-access.ts')) };
 const authSession = { ...(await import('../auth/session.ts')) };
 const workReads = { ...(await import('../work-page/read.ts')) };
 const entityReads = { ...(await import('../entity-page/read.ts')) };
+const realmReads = { ...(await import('../realm/read.ts')) };
 const discussionApi = { ...(await import('./about-discussion-api.ts')) };
 const discussionView = { ...(await import('./about-discussion.tsx')) };
 
@@ -32,11 +34,20 @@ const restoreEntityReads = replaceModule(import.meta.resolve('../entity-page/rea
     return { ok: true, data: { target: { resource: about, revision } } };
   },
 });
+const restoreRealmReads = replaceModule(import.meta.resolve('../realm/read.ts'), realmReads, {
+  readZoneRoute: async (zone: string, path: string, cursor?: string) => {
+    routes.push([zone, path, cursor]);
+    return { ok: true, data: { kind: 'detail', path, resource: { id: about } } };
+  },
+});
 const restoreDiscussionApi = replaceModule(import.meta.resolve('./about-discussion-api.ts'), discussionApi, {
-  readAboutDiscussion: async (_main: unknown, _input: unknown, readTarget?: AboutDiscussionTargetReader) => {
+  readAboutDiscussion: async (_main: unknown, _input: unknown, readTarget?: AboutDiscussionTargetReader,
+    readRoute?: AboutDiscussionRouteReader) => {
     if (lookupFailure) throw new Error('DisclosureUnavailable');
     if (!readTarget) throw new Error('Current projection reader is missing');
     target = await readTarget(about);
+    if (!readRoute) throw new Error('Current frame route reader is missing');
+    expect(await readRoute()).toMatchObject({ error: null, data: { path: '/guide/harbor-field-guide' } });
     return { kind: 'ready' };
   },
 });
@@ -49,6 +60,7 @@ const restoreDiscussionView = replaceModule(import.meta.resolve('./about-discuss
 afterAll(async () => {
   restoreDiscussionView();
   restoreDiscussionApi();
+  restoreRealmReads();
   restoreEntityReads();
   restorePlatformAccess();
   restoreMainApi();
@@ -81,6 +93,7 @@ test('the discussion shares the entity frame reader with an explicit current pos
     expect(renderToStaticMarkup(discussion!)).toContain('data-discussion-state="ready"');
     expect(projections).toEqual([[about.slice(-36), undefined]]);
     expect(target).toEqual({ resource: about, revision });
+    expect(routes).toEqual([['00000000-0000-4000-8000-000000000001', '/guide/harbor-field-guide', undefined]]);
   } finally { lookupFailure = true; }
 });
 

@@ -1,6 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import { readSession } from '../auth/session.ts';
-import { resolveSite } from '../realm/read.ts';
+import { readZoneRoute, resolveSite } from '../realm/read.ts';
 import { reader } from '../work-page/read.ts';
 import { readPlatformAccess } from '../api/main.ts';
 import { gateFor } from '../api/platform-access.ts';
@@ -37,6 +37,10 @@ export async function ZoneAboutDiscussion({ zone, spaceRef, path, href, locale }
       // projection, even when the frame renders a retained reading position.
       const projection = await readEntityProjection(resource.slice(-36), undefined);
       return projection.ok ? projection.data.target : null;
+    }, async () => {
+      // Share the frame's current route admission. A retained reading position has a separate reader.
+      const route = await readZoneRoute(zone!.slice(-36), path, undefined);
+      return route.ok ? { data: route.data, error: null } : { data: null, error: route };
     });
     return <AboutDiscussion read={read} locale={locale} href={href} recoveryScope={recoveryScope} />;
   } catch {

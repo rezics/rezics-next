@@ -3,6 +3,7 @@ import { browserMainApi } from '../api/browser.ts';
 import { platformClosed, type OperationGate } from '../api/platform-access.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { ThreadRead } from '../feed/thread.ts';
+import type { ZoneRouteRead } from '../realm/types.ts';
 import { attachedDiscussionAbout, zoneDiscussionEntry } from './zone-discussion-recorded-page.ts';
 
 export interface AboutDiscussionBasis {
@@ -75,15 +76,16 @@ export type AboutDiscussionRead =
       mode: AboutDiscussionMode; actingSubject: string | null };
 export type AboutDiscussionTargetReader =
   (resource: string) => Promise<{ resource: string; revision: string } | null>;
+export type AboutDiscussionRouteReader = () => Promise<{ data: ZoneRouteRead | null; error: unknown | null }>;
 
 /** Reads the current route, never the Zone's cached frame attachment or reading-position route. */
 export async function readAboutDiscussion(main: MainClient, input: {
   zone: string; path: string; signedIn: boolean; actingSubject?: string; personal: boolean; postingOpen?: boolean;
-}, readCurrentTarget?: AboutDiscussionTargetReader): Promise<AboutDiscussionRead> {
+}, readCurrentTarget?: AboutDiscussionTargetReader, readCurrentRoute?: AboutDiscussionRouteReader): Promise<AboutDiscussionRead> {
   try {
     // Eden keeps object key order. Recorded requests name the page or about first, then the actor.
     const actor = input.actingSubject === undefined ? {} : { actingSubject: input.actingSubject };
-    const routeRead = await main.v1.zones({ id: uuid(input.zone) }).routes.get({
+    const routeRead = readCurrentRoute ? await readCurrentRoute() : await main.v1.zones({ id: uuid(input.zone) }).routes.get({
       query: { path: input.path, ...actor },
     });
     const route = routeRead.data;
