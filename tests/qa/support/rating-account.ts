@@ -11,6 +11,25 @@ import { accountAuthOptions, createAccountAuth } from '../../../services/account
 import { installConsentRefreshFence } from '../../../services/account/src/consent-fence.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 
+export const RETAINED_RATING_AUTH_VERSION = 'retained-rating-auth-v1';
+interface RetainedRatingUser { id: string; email: string; password: string; cookie: string }
+/** Bound to the backup manifest; Account's restored rows remain the sole
+ * authority for passwords, OAuth clients, signing keys and login fences. */
+export interface RetainedRatingAuth {
+  version: typeof RETAINED_RATING_AUTH_VERSION;
+  issuer: string;
+  base: string;
+  resource: string;
+  secret: string;
+  scopes: string;
+  a: RetainedRatingUser;
+  b: RetainedRatingUser;
+  oauthClientId: string;
+  verifierClientId: string;
+  verifierClientSecret: string;
+}
+const redirectUri = 'http://localhost:3000/auth/callback';
+
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
     const server = createServer();
@@ -80,7 +99,6 @@ export async function ratingAccount(apps: Record<string, string>,
       token_endpoint_auth_method: 'client_secret_post', grant_types: ['client_credentials'],
       client_credentials_scopes: ['work:create', 'work:edit', 'work:read', 'space:create',
         'rating:configure', 'rating:submit', 'rating:read'] } });
-    const redirectUri = 'http://localhost:3000/auth/callback';
     const oauthClient = await auth.api.adminCreateOAuthClient({ headers, body: {
       client_name: 'Rating native client', application_type: 'native',
       redirect_uris: [redirectUri], token_endpoint_auth_method: 'none',
@@ -98,7 +116,13 @@ export async function ratingAccount(apps: Record<string, string>,
     }
 
     const a = await signUp('a'), b = await signUp('b');
+    const retainedAuth: RetainedRatingAuth = { version: RETAINED_RATING_AUTH_VERSION,
+      issuer: `${base}/api/auth`, base, resource: apps.ACCOUNT_MAIN_RESOURCE!,
+      secret: apps.ACCOUNT_SECRET!, scopes, a: { ...a }, b: { ...b },
+      oauthClientId: oauthClient.client_id, verifierClientId: verifierClient.client_id,
+      verifierClientSecret: verifierClient.client_secret! };
     return { issuer: `${base}/api/auth`, a, b, tokenFor,
+      retainedAuth,
       expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
       stop,
       tokenA: await tokenFor(a), tokenB: await tokenFor(b), noScope: await tokenFor(a, 'openid'),
@@ -106,6 +130,60 @@ export async function ratingAccount(apps: Record<string, string>,
         audience: apps.ACCOUNT_MAIN_RESOURCE!, jwksUrl: `${base}/api/auth/jwks`,
         introspectUrl: `${base}/api/auth/oauth2/introspect`,
         clientId: verifierClient.client_id, clientSecret: verifierClient.client_secret! }),
+      close: async () => { try { await stop(); } finally { await closePool(); } } };
+  } catch (error) { try { await stop(); } finally { await closePool(); } throw error; }
+}
+
+/** Reopen the retained Account authority on an isolated restored database.
+ * Never migrate, create identities or grant clients while consuming a source. */
+export async function restoreRatingAccount(snapshot: RetainedRatingAuth, accountDatabaseUrl: string) {
+  if (snapshot.version !== RETAINED_RATING_AUTH_VERSION || snapshot.issuer !== `${snapshot.base}/api/auth`) {
+    throw new Error('retained Account authentication snapshot is incompatible');
+  }
+  const pool = new Pool({ connectionString: accountDatabaseUrl });
+  // Better Auth's drivers share this live pool; their cleanup must not close
+  // it before the isolated listener and introspection consumer stop.
+  let releasePool = false;
+  const endPool = pool.end.bind(pool);
+  pool.end = ((callback?: () => void) => {
+    if (!releasePool) { callback?.(); return Promise.resolve(); }
+    return callback ? endPool(callback) : endPool();
+  }) as typeof pool.end;
+  const closePool = async () => { releasePool = true; await endPool(); };
+  let stop = async () => {};
+  try {
+    const port = await freePort();
+    const service = `http://127.0.0.1:${port}`;
+    const auth = createAccountAuth({ baseURL: snapshot.base, secret: snapshot.secret,
+      resource: snapshot.resource, pool, operatorUserIds: new Set<string>() });
+    const account = createAccountApp(auth, pool).listen({ hostname: '127.0.0.1', port });
+    let unregisterTelemetryPeers = () => {};
+    let stopped = false;
+    stop = async () => { if (!stopped) { stopped = true;
+      try { await account.stop(true); } finally { unregisterTelemetryPeers(); } } };
+    unregisterTelemetryPeers = registerTelemetryPeers({ ACCOUNT_DATABASE_URL: accountDatabaseUrl,
+      ACCOUNT_ORIGIN: service, ACCOUNT_JWKS_URL: `${service}/api/auth/jwks`,
+      ACCOUNT_INTROSPECT_URL: `${service}/api/auth/oauth2/introspect` });
+    async function tokenFor(user: { email: string; password: string }, scope = snapshot.scopes) {
+      // Preserve the retained issuer's trusted Origin even though the isolated
+      // socket has a new port; Account still enforces the actual login policy.
+      const signedIn = await account.handle(new Request(`${snapshot.base}/api/auth/sign-in/email`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: snapshot.base },
+        body: JSON.stringify({ email: user.email, password: user.password }),
+      }));
+      expect(signedIn.status).toBe(200);
+      return (await signIn({ account: snapshot.base, service,
+        clientId: snapshot.oauthClientId, redirectUri, scope, resource: snapshot.resource,
+      }, signedIn.headers.get('set-cookie')!)).accessToken;
+    }
+    const retainedAuth: RetainedRatingAuth = { ...snapshot, a: { ...snapshot.a }, b: { ...snapshot.b } };
+    const a = { ...snapshot.a }, b = { ...snapshot.b };
+    return { issuer: snapshot.issuer, a, b, tokenFor, retainedAuth,
+      expireSessions: async (id: string) => { await pool.query('DELETE FROM session WHERE "userId" = $1', [id]); },
+      stop, tokenA: await tokenFor(a), tokenB: await tokenFor(b), noScope: await tokenFor(a, 'openid'),
+      verifier: new AccountAssertionVerifier({ issuer: snapshot.issuer, audience: snapshot.resource,
+        jwksUrl: `${service}/api/auth/jwks`, introspectUrl: `${service}/api/auth/oauth2/introspect`,
+        clientId: snapshot.verifierClientId, clientSecret: snapshot.verifierClientSecret }),
       close: async () => { try { await stop(); } finally { await closePool(); } } };
   } catch (error) { try { await stop(); } finally { await closePool(); } throw error; }
 }

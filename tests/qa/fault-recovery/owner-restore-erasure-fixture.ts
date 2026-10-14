@@ -12,11 +12,12 @@ import {
   mkdirSync,
   openSync,
   readFileSync,
+  readdirSync,
   readSync,
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { ACCOUNT_RECOVERY_USAGE_EXCLUSIONS } from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -119,7 +120,12 @@ import type { MainWorkDependencies } from '../../../services/main/src/routes/dep
 import { healthRoutes } from '../../../services/main/src/routes/health.ts';
 import { erasureRoutes } from '../../../services/main/src/routes/erasures.ts';
 import { ownerRoutes } from '../../../services/main/src/routes/owners.ts';
-import { ratingAccount } from '../../../tests/qa/support/rating-account.ts';
+import { ratingAccount, restoreRatingAccount, type RetainedRatingAuth } from '../../../tests/qa/support/rating-account.ts';
+import { stable } from '../../../scripts/fixture/corpus.ts';
+import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
+import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
+import { fixtureModel } from '../../../scripts/fixture/model.ts';
+import { RetainedSourceRefusal, RetainedSources, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest } from '../../../scripts/qa/retained-source.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { deliverRetainedContentEligibilityOnce } from '../../../services/main/src/modules/content-publication/eligibility-delivery.ts';
@@ -153,8 +159,10 @@ import {
 export const restoreKey = 'e6'.repeat(32);
 
 export interface OwnerRestoreErasureFixtureOptions {
-  /** Optional foreground API population performed before owner coverage capture. */
+  /** Foreground API population returns JSON proof identities for later isolated consumers. */
   beforeCutApiSeed?: (context: BeforeCutRecipeSeedContext) => Promise<unknown>;
+  /** A callback cannot share the default source key; its authored identity/inputs are required. */
+  beforeCutSource?: { identity: string; inputs: RetainedOwnerState; files: string[] };
   /** Admit one completed revision erasure through the public API after the base backup. */
   laterApiAdmission?: boolean;
 }
@@ -375,7 +383,7 @@ export function createRestoreCopyDisposal(
 }
 
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
-export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFixtureOptions = {}) {
+async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixtureOptions = {}, retained?: { context: SourceContext; manifest: RetainedSourceManifest<RetainedOwnerState> }) {
   const preparationStarted = Date.now();
   const { runId, artifacts } = requireFaultTier();
   const timing = createRestoreFixtureTiming({ artifactDirectory: artifacts });
@@ -383,14 +391,18 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
   const qa = qaStack(runId);
   const image = pinnedImage();
   const apps = readEnv(join(qa.directory, 'apps.env'));
-  const databases = await timing.phase('source.owner-database-clone', () =>
+  const databases = retained ? {
+    urls: { ...retained.manifest.metadata.databaseUrls as unknown as Record<'account' | 'access' | 'content' | 'relay', string> },
+    close: async () => {},
+    snapshot: async () => { throw new Error('retained consumers cannot snapshot former source databases'); },
+  } : await timing.phase('source.owner-database-clone', () =>
     cloneQaOwnerDatabases(runId, ['account', 'access', 'content', 'relay'], 'owner'),
   );
   const suffix = randomBytes(6).toString('hex');
   const directory = join(root, '.temp', `owner-erasure-restore-${suffix}`);
   const socketDirectory = join(root, '.temp', 's');
-  const backupObjects = join(directory, 'objects-cut');
-  const pgBackup = join(directory, 'postgres-cut');
+  const backupObjects = retained ? join(retained.context.backup, 'objects-cut') : join(directory, 'objects-cut');
+  const pgBackup = retained ? join(retained.context.backup, 'postgres-cut') : join(directory, 'postgres-cut');
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   mkdirSync(socketDirectory, { recursive: true, mode: 0o700 });
   const pools = new Set<Pool>();
@@ -442,27 +454,11 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
     }
     graphResources.unregisterVolume(name);
   };
-  const copyGraph = (from: string, to: string) =>
-    docker([
-      'run',
-      '--rm',
-      '--network',
-      'none',
-      '--user',
-      '0:0',
-      '--volume',
-      `${from}:/from:ro`,
-      '--volume',
-      `${to}:/to`,
-      '--entrypoint',
-      'sh',
-      image,
-      '-ec',
-      'cp -a /from/rezics /to/rezics',
-    ]);
+  const copyGraph = (from: string, to: string) => copyVolume(from, to, qa.dockerEnv);
+  let retainedPort: number | undefined;
   const admin = async (sql: string) => {
     const client = new Client({
-      connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${qa.composeEnv.POSTGRES_PORT}/postgres`,
+      connectionString: `postgres://postgres:${encodeURIComponent(qa.composeEnv.POSTGRES_PASSWORD!)}@127.0.0.1:${retainedPort ?? qa.composeEnv.POSTGRES_PORT}/postgres`,
     });
     await client.connect();
     try {
@@ -505,7 +501,6 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
   };
   const objects = new DirectoryObjects(join(directory, 'objects-live'));
   let attachmentCustody: ReturnType<typeof recoveryTestCustody> | undefined;
-  let nativeAccessAttachment: EncryptedRecoveryAttachment<AccessErasureRecoverySummary> | undefined;
   let authenticated: Awaited<ReturnType<typeof ratingAccount>> | undefined;
   const close = () =>
     timing.phase('fixture.final-disposal', async () => {
@@ -523,7 +518,8 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       for (const value of [...pools])
         actions.push({ resource: 'candidate or source pool', run: () => closePool(value) });
       actions.push(...graphResources.containerCleanupActions());
-      for (const data of [...pgCopies])
+      const sourceData = join(directory, 'postgres-source');
+      for (const data of pgCopies.filter(data => data !== sourceData))
         actions.push({
           resource: `recovery PostgreSQL process ${data}`,
           run: () => stopPostgres(data),
@@ -541,6 +537,9 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
       actions.push({
         resource: 'source and relay template databases',
         run: () => databases.close(),
+      });
+      if (pgCopies.includes(sourceData)) actions.push({
+        resource: 'isolated current source PostgreSQL process', run: () => stopPostgres(sourceData),
       });
       actions.push(...graphResources.volumeCleanupActions(removeVolume));
       for (const path of [...candidateDirectories]) {
@@ -579,6 +578,9 @@ export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFix
   let sourceApiPhase: RestoreFixturePhaseHandle | undefined;
   let sourceProofPhase: RestoreFixturePhaseHandle | undefined;
   try {
+    const produce = async () => {
+    let nativeAccessAttachment: EncryptedRecoveryAttachment<AccessErasureRecoverySummary> | undefined;
+    let beforeCutApiSeedResult: RetainedJson = null;
     await timing.phase('source.content-migration', () => migrateContent(source.content));
     expect(
       (await source.content.query("SELECT to_regclass('content.receipt') IS NOT NULL AS present"))
@@ -868,7 +870,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         recipeWork,
         currentOwnerToken,
       );
-      await options.beforeCutApiSeed({ request, actor, grant });
+      const seeded = await options.beforeCutApiSeed({ request, actor, grant });
+      if (!isRetainedJson(seeded)) throw new Error('foreground source seed must return JSON proof identities');
+      beforeCutApiSeedResult = seeded;
       const preparedMembership = await normalizeStoredMembership(env, 256, Date.now() + 540_000);
       if (!preparedMembership.complete) {
         throw new Error('Source Recipe membership preparation did not complete before capture');
@@ -1073,10 +1077,11 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     };
     timing.finish(sourceApiPhase);
     sourceApiPhase = undefined;
+    const rdfCut = await native.query('SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g ?s ?p ?o');
     await timing.phase('source.cut-stop-copy-restart', async () => {
       cpSync(objects.directory, backupObjects, { recursive: true });
       live.runner.stop();
-      copyGraph(liveVolume, cutVolume);
+      await copyGraph(liveVolume, cutVolume);
       await live.runner.start();
     });
     // Reuse the owner-cut drill's physical backup mechanism. The graph cut is
@@ -1366,8 +1371,80 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     if (options.laterApiAdmission) source.relay = pool(databases.urls.relay);
     timing.finish(sourceProofPhase!);
     sourceProofPhase = undefined;
+      return { lineage, beforeCutMembershipProof, beforeCutApiSeedResult, coverage, authority, newerCoverage, newerAuthority, generation, laterAdmission, nativeAccessAttachment, original, erased, revisionId, quotedSource, availableBeforeErasure, laterRevisionId, created, retired, backupLabel, historicalManifest, manifest, prepared, principal, actor, published, principalId, leaseTemplates, postgresRecoveryMaxLocks, retainedRelayTemplate, rdfCut, liveVolume, cutVolume, native, live, custody, currentOwnerToken };
+    };
+    type ProducedSource = Awaited<ReturnType<typeof produce>>;
+    const restoreSource = async (): Promise<ProducedSource> => {
+      const saved = JSON.parse(JSON.stringify(retained!.manifest.metadata.facts)) as ProducedSource;
+      const secrets = retained!.manifest.metadata.secrets as unknown as Record<string, string>;
+      Object.assign(qa.composeEnv, secrets);
+      const data = join(directory, 'postgres-source'), logFile = join(directory, 'postgres-source.log');
+      pgCopies.push(data);
+      candidateDirectories.add(data); candidateDirectories.add(logFile);
+      await timing.phase('retained.source-postgres-copy-startup', async () => {
+        copyRecoveryTree(join(retained!.context.backup, 'postgres-current'), data);
+        appendFileSync(join(data, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
+        writeFileSync(join(data, 'recovery.signal'), '');
+        retainedPort = await freePort();
+        execFileSync('pg_ctl', ['-D', data, '-l', logFile, '-o',
+          `-h 127.0.0.1 -p ${retainedPort} -k ${socketDirectory} -c max_locks_per_transaction=${saved.postgresRecoveryMaxLocks}`,
+          '-t', '60', '-w', 'start'], { timeout: 65_000 });
+        for (const owner of ['account', 'access', 'content', 'relay'] as const) {
+          await closePool(source[owner]);
+          const url = new URL(databases.urls[owner]);
+          url.hostname = '127.0.0.1'; url.port = String(retainedPort);
+          databases.urls[owner] = url.toString();
+          source[owner] = pool(url.toString());
+        }
+        let recovering = true;
+        for (let attempt = 0; attempt < 100 && recovering; attempt++) {
+          recovering = (await source.account.query<{ recovering: boolean }>('SELECT pg_is_in_recovery() AS recovering')).rows[0]?.recovering ?? true;
+          if (recovering) await Bun.sleep(100);
+        }
+        expect(recovering).toBe(false);
+      });
+      const liveVolume = volume('source-current');
+      await copyGraph(retainedSourceVolumes(retained!.context.key).current, liveVolume);
+      const cutVolume = retainedSourceVolumes(retained!.context.key).cut;
+      const live = await timing.phase('retained.source-graph-readiness', () => standaloneFuseki(qa.dockerEnv, {
+        name: `rezics-owner-erasure-${suffix}-source`, image, volume: liveVolume, secrets: fusekiSecrets(qa.composeEnv),
+      }, { onAllocated: graphResources.registerContainer }));
+      const native = new FusekiClient(live.url, qa.composeEnv.FUSEKI_MAINTENANCE_TOKEN, qa.composeEnv.FUSEKI_COMMAND_TOKEN);
+      cpSync(join(retained!.context.backup, 'objects-current'), objects.directory, { recursive: true });
+      authenticated = await restoreRatingAccount(retained!.manifest.metadata.auth as unknown as RetainedRatingAuth, databases.urls.account);
+      let token = authenticated.tokenA;
+      const currentOwnerToken = async () => {
+        if ((decodeJwt(token).exp ?? 0) * 1000 - 30_000 <= Date.now()) token = await authenticated!.tokenFor(authenticated!.a);
+        return token;
+      };
+      const custody = new ReceiptCustody(new PostgresReceiptCustodyStore(source.access), objects, native,
+        qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(live.url, qa.composeEnv.FUSEKI_COMMAND_TOKEN!));
+      if (saved.nativeAccessAttachment) {
+        const home = join(directory, 'native-access-custody');
+        const secretHome = join(home, 'offhost-keys'), publicHome = join(home, 'backup-public-keys');
+        mkdirSync(secretHome, { recursive: true, mode: 0o700 }); mkdirSync(publicHome, { recursive: true, mode: 0o700 });
+        attachmentCustody = { recipient: retained!.manifest.metadata.attachmentRecipient as string,
+          offhost: { ...process.env, GNUPGHOME: secretHome }, publicOnly: { ...process.env, GNUPGHOME: publicHome } };
+        execFileSync('gpg', ['--batch', '--import', join(retained!.context.backup, 'attachment-secret.gpg')], { env: attachmentCustody.offhost, timeout: 60_000 });
+        execFileSync('gpg', ['--batch', '--import', join(retained!.context.backup, 'attachment-public.gpg')], { env: attachmentCustody.publicOnly, timeout: 60_000 });
+        cpSync(join(retained!.context.backup, 'native-access-attachments'), join(directory, 'native-access-attachments'), { recursive: true });
+      }
+      // Buffer's JSON encoding is data, not a live custody process.
+      const retiredPayload = saved.retired.payload as unknown as { type: string; data: number[] };
+      saved.retired.payload = Buffer.from(retiredPayload.data);
+      const relayUrl = new URL(saved.retainedRelayTemplate);
+      relayUrl.hostname = '127.0.0.1'; relayUrl.port = String(retainedPort);
+      return { ...saved, retainedRelayTemplate: relayUrl.toString(), liveVolume, cutVolume, native, live, custody, currentOwnerToken };
+    };
+    const state = retained ? await restoreSource() : await produce();
+    const { lineage, beforeCutMembershipProof, beforeCutApiSeedResult, coverage, authority, newerCoverage, newerAuthority, generation, laterAdmission, nativeAccessAttachment, original, erased, revisionId, quotedSource, availableBeforeErasure, laterRevisionId, created, retired, backupLabel, historicalManifest, manifest, prepared, principal, actor, published, principalId, leaseTemplates, postgresRecoveryMaxLocks, retainedRelayTemplate, rdfCut, liveVolume, cutVolume, native, live, custody, currentOwnerToken } = state;
     let index = 0;
     const copy = async () => {
+      if (retained) {
+        const verified = await new RetainedSources().select(ownerErasureSourceAdapter(options));
+        if (verified.digest !== retained.manifest.digest)
+          throw new RetainedSourceRefusal(retained.context.key, ['source manifest changed during consumption']);
+      }
       const copyStarted = Date.now(),
         ordinal = ++index;
       const retainedDatabase = `qa_owner_erasure_${suffix}_${ordinal}`;
@@ -1489,7 +1566,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         'candidate.graph-copy-startup',
         async () => {
           restoredVolume = volume(`copy-${ordinal}`);
-          copyGraph(cutVolume, restoredVolume);
+          await copyGraph(cutVolume, restoredVolume);
           graph = await standaloneFuseki(
             qa.dockerEnv,
             {
@@ -1730,14 +1807,62 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         dispose,
       };
     };
+    const retain = async (context: SourceContext) => {
+      if (retained) throw new Error('a restored consumer cannot republish source custody');
+      await authenticated!.stop();
+      const sourceVolumes = retainedSourceVolumes(context.key);
+      await timing.phase('source.immutable-publication-copy', async () => {
+        await copyGraph(cutVolume, sourceVolumes.cut);
+        live.runner.stop();
+        await copyGraph(liveVolume, sourceVolumes.current);
+        cpSync(backupObjects, join(context.backup, 'objects-cut'), { recursive: true });
+        cpSync(objects.directory, join(context.backup, 'objects-current'), { recursive: true });
+        copyRecoveryTree(pgBackup, join(context.backup, 'postgres-cut'));
+        writeFileSync(join(context.backup, 'rdf-cut.json'), stable(rdfCut), { mode: 0o600 });
+        // The post-cut relay template and signed authority are a second physical frontier.
+        // It must survive independently of the old QA cluster, alongside the historical cut.
+        const remote = `/tmp/rezics-retained-owner-${suffix}`;
+        try {
+          const copied = qa.compose(['exec', '-T', '-u', 'postgres', 'postgres', 'sh', '-ec',
+            `PGPASSWORD="$POSTGRES_PASSWORD" PGCONNECT_TIMEOUT=5 pg_basebackup -h 127.0.0.1 -p 5432 -U postgres -w -D ${remote} -Fp -Xs --checkpoint=fast`], 65_000);
+          if (copied.status !== 0) throw new Error('retained post-cut PostgreSQL backup failed');
+          const container = qa.compose(['ps', '-q', 'postgres']).output.trim();
+          if (!/^[0-9a-f]{12,64}$/.test(container)) throw new Error('retained PostgreSQL container is unavailable');
+          docker(['cp', `${container}:${remote}`, join(context.backup, 'postgres-current')]);
+          execFileSync('pg_verifybackup', ['--no-parse-wal', join(context.backup, 'postgres-current')], { timeout: 15_000 });
+        } finally {
+          const removed = qa.compose(['exec', '-T', '-u', 'postgres', 'postgres', 'rm', '-rf', remote], 10_000);
+          if (removed.status !== 0) throw new Error('retained post-cut PostgreSQL export cleanup failed');
+        }
+        if (attachmentCustody) {
+          writeFileSync(join(context.backup, 'attachment-secret.gpg'), execFileSync('gpg', ['--batch', '--export-secret-keys', attachmentCustody.recipient], { env: attachmentCustody.offhost, timeout: 60_000 }), { mode: 0o600 });
+          writeFileSync(join(context.backup, 'attachment-public.gpg'), execFileSync('gpg', ['--batch', '--export', attachmentCustody.recipient], { env: attachmentCustody.publicOnly, timeout: 60_000 }), { mode: 0o600 });
+          cpSync(join(directory, 'native-access-attachments'), join(context.backup, 'native-access-attachments'), { recursive: true });
+        }
+      });
+      const { liveVolume: _liveVolume, cutVolume: _cutVolume, native: _native, live: _live, custody: _custody, currentOwnerToken: _token, ...facts } = state;
+      const secrets = Object.fromEntries(['POSTGRES_PASSWORD', 'FUSEKI_MAINTENANCE_TOKEN', 'FUSEKI_COMMAND_TOKEN', 'FUSEKI_TITLE_ADMISSION_KEY', 'FUSEKI_CONTENT_PROJECTION_KEY'].map(key => [key, qa.composeEnv[key]]));
+      const metadata = JSON.parse(JSON.stringify({ contract: 'owner-erasure-source-v1', facts, databaseUrls: databases.urls,
+        auth: authenticated!.retainedAuth, secrets, attachmentRecipient: attachmentCustody?.recipient ?? null })) as RetainedOwnerState;
+      const ownerState = JSON.parse(JSON.stringify({ coverage, authority, newerCoverage, newerAuthority, original, erased,
+        generation, lineage, retainedRelayTemplate, volumes: {
+          cut: retainedVolumeInventory(sourceVolumes.cut, qa.dockerEnv),
+          current: retainedVolumeInventory(sourceVolumes.current, qa.dockerEnv),
+        } })) as RetainedOwnerState;
+      return { metadata, ownerState, rdfDigest: hash(stable(rdfCut)),
+        producerRevision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
+        qaIdentity: runId, phases: timing.durations() };
+    };
     const preparationElapsedMs = Date.now() - preparationStarted;
     console.info('owner restore erasure cut ready', { elapsedMs: preparationElapsedMs });
     expect(preparationElapsedMs).toBeLessThan(600_000);
     return {
+      retain,
       source,
       native,
       sourceLineage: lineage,
       beforeCutMembershipProof,
+      beforeCutApiSeedResult,
       custody,
       coverage,
       authority,
@@ -1794,7 +1919,154 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
   }
 }
 
-export type Fixture = Awaited<ReturnType<typeof ownerRestoreErasureFixture>>;
+function retainedSourceVolumes(key: string) {
+  const project = fixtureProject(`rs-${hash(key)}`);
+  return { cut: `${project}_fuseki_cut`, current: `${project}_fuseki_current` };
+}
+
+/** Inventory mounted custody read-only; copyVolume remains the sole volume copier. */
+function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<string, RetainedFileIntegrity> {
+  if (!volumeExists(volume, docker)) throw new Error(`retained graph volume is missing: ${volume}`);
+  const output = run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
+    '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
+    '--entrypoint', 'sh', postgresImage(), '-ec',
+    `cd /backup
+test -z "$(find . -type l -print -quit)"
+find . -type f -exec sh -c 'for file do
+  digest=$(sha256sum "$file"); bytes=$(stat -c %s "$file")
+  printf "%s\\t%s\\t%s\\n" "${'${digest%% *}'}" "$bytes" "${'${file#./}'}"
+done' sh {} +`], docker, 60_000);
+  const inventory: Record<string, RetainedFileIntegrity> = {};
+  for (const line of output.trim().split('\n').filter(Boolean)) {
+    const match = /^([a-f0-9]{64})\t([0-9]+)\t([^\t\n]+)$/.exec(line);
+    if (!match || match[3]!.split('/').some(part => part === '..' || !part))
+      throw new Error('retained volume inventory is invalid');
+    inventory[match[3]!] = { sha256: match[1]!, bytes: Number(match[2]) };
+  }
+  if (!Object.keys(inventory).length) throw new Error('retained graph volume is empty');
+  return inventory;
+}
+
+/** Relative import closure binds the actual producer/helper/service bytes rather than Git HEAD. */
+function producerModules(root: string, initial: readonly string[]): string[] {
+  const paths = new Set<string>();
+  const visit = (path: string) => {
+    if (paths.has(path)) return;
+    const full = resolve(root, path);
+    if (relative(root, full).startsWith('..')) throw new Error('producer input escapes checkout');
+    paths.add(path);
+    if (!path.endsWith('.ts')) return;
+    for (const match of readFileSync(full, 'utf8').matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) {
+      const dependency = resolve(dirname(full), match[1]!);
+      if (existsSync(dependency)) visit(relative(root, dependency));
+      else if (existsSync(`${dependency}.ts`)) visit(relative(root, `${dependency}.ts`));
+    }
+  };
+  for (const path of initial) visit(path);
+  // Runtime model/native definitions are read as data rather than imported TS modules.
+  const walk = (directory: string) => {
+    for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
+      const path = `${directory}/${entry.name}`;
+      if (entry.isDirectory()) walk(path);
+      else if (entry.isFile()) paths.add(path);
+    }
+  };
+  for (const directory of ['packages/model/src', 'infra/fuseki']) walk(directory);
+  return [...paths].sort();
+}
+
+export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+  if (Boolean(options.beforeCutApiSeed) !== Boolean(options.beforeCutSource))
+    throw new Error('foreground seed requires explicit source identity, inputs and files');
+  if (options.beforeCutSource && (!options.beforeCutSource.identity || !options.beforeCutSource.files.length))
+    throw new Error('foreground seed requires an authored identity and source-affecting files');
+  const root = resolve(import.meta.dir, '../../..');
+  const docker = qaStack(requireFaultTier().runId).dockerEnv;
+  const engines = currentEngines(docker);
+  const modules = producerModules(root, ['tests/qa/fault-recovery/owner-restore-erasure-fixture.ts',
+    'yarn.lock', 'package.json', 'services/main/package.json', 'services/content/package.json', 'services/account/package.json',
+    ...(options.beforeCutSource?.files ?? [])]);
+  const specification = {
+    producer: 'owner-erasure-source', version: '1',
+    files: { ...sourceFileDigests(root, modules), ...migrationInventory(root) },
+    inputs: {
+      primaryBody: 'erased native HTTP fixture payload', laterBody: 'later retained journal fixture payload',
+      quotedBody: 'authored annotation stays', language: 'en', direction: 'ltr',
+      foregroundSeed: options.beforeCutSource ?? null, laterApiAdmission: options.laterApiAdmission ?? false,
+    },
+    compatibility: JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
+      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+  };
+  return {
+    specification,
+    build: async context => {
+      const fixture = await runOwnerRestoreErasureFixture(options);
+      let result: Awaited<ReturnType<typeof fixture.retain>>;
+      try { result = await fixture.retain(context); } finally { await fixture.close(); }
+      return { ...result, phases: fixture.timing.durations() };
+    },
+    verify: async (context, manifest) => {
+      const evidence: string[] = [];
+      if (manifest.metadata.contract !== 'owner-erasure-source-v1') evidence.push('owner source contract differs');
+      const facts = manifest.metadata.facts as RetainedOwnerState | undefined;
+      if (!facts || !manifest.metadata.auth || !manifest.metadata.secrets || !manifest.metadata.databaseUrls)
+        evidence.push('owner source runtime descriptor is incomplete');
+      else for (const field of ['coverage', 'authority', 'newerCoverage', 'newerAuthority', 'original', 'erased', 'generation', 'lineage', 'retainedRelayTemplate']) {
+        if (facts[field] === undefined || stable(facts[field]) !== stable(manifest.integrity.ownerState[field]))
+          evidence.push(`owner source descriptor differs: ${field}`);
+      }
+      const volumes = retainedSourceVolumes(context.key);
+      const stored = manifest.integrity.ownerState.volumes as unknown as Record<'cut' | 'current', Record<string, RetainedFileIntegrity>>;
+      for (const kind of ['cut', 'current'] as const) {
+        if (stable(retainedVolumeInventory(volumes[kind], docker)) !== stable(stored[kind]))
+          evidence.push(`retained ${kind} graph physical inventory differs`);
+      }
+      if (hash(readFileSync(join(context.backup, 'rdf-cut.json'))) !== manifest.integrity.rdfDigest)
+        evidence.push('retained RDF digest differs');
+      for (const kind of ['postgres-cut', 'postgres-current'])
+        execFileSync('pg_verifybackup', ['--no-parse-wal', join(context.backup, kind)], { timeout: 15_000 });
+      return evidence;
+    },
+    restore: (context, manifest) => runOwnerRestoreErasureFixture(options, { context, manifest }),
+    dispose: fixture => fixture.close(),
+    remove: async key => {
+      if (!key.startsWith('rs-owner-erasure-source-')) throw new Error('source removal belongs to another producer');
+      const volumes = Object.values(retainedSourceVolumes(key)).filter(name => volumeExists(name, docker));
+      if (volumes.length) removeVolumes(volumes, docker);
+    },
+  };
+}
+
+export async function prepareOwnerErasureSource(options: OwnerRestoreErasureFixtureOptions = {}) {
+  return new RetainedSources().prepare(ownerErasureSourceAdapter(options));
+}
+
+export async function ownerRestoreErasureFixture(options: OwnerRestoreErasureFixtureOptions = {}) {
+  const adapter = ownerErasureSourceAdapter(options);
+  const selectedKey = process.env.OWNER_ERASURE_SOURCE_KEY;
+  if (selectedKey && selectedKey !== sourceKey(adapter.specification))
+    throw new Error('harness selected incompatible owner-erasure source inputs');
+  const restored = await new RetainedSources().restore(adapter);
+  console.info('owner-erasure retained source consumed', { key: restored.manifest.key, digest: restored.manifest.digest,
+    integrity: restored.manifest.integrity.digest, producerRevision: restored.manifest.provenance.producerRevision,
+    qaIdentity: restored.manifest.provenance.qaIdentity, elapsedMs: restored.elapsedMs, admissionWaitMs: restored.admissionWaitMs });
+  return { ...restored.candidate, close: async () => {
+    await restored.dispose();
+    console.info('owner-erasure retained source immutable after consumption', {
+      key: restored.manifest.key, digest: restored.manifest.digest, integrity: restored.manifest.integrity.digest,
+    });
+  } };
+}
+
+if (import.meta.main) {
+  const evidenceIndex = process.argv.indexOf('--evidence');
+  if (!process.argv.includes('--prepare-retained-source') || evidenceIndex < 0 || !process.argv[evidenceIndex + 1])
+    throw new Error('select --prepare-retained-source --evidence <path>');
+  const report = await prepareOwnerErasureSource({ laterApiAdmission: process.argv.includes('--later-api-admission') });
+  writeFileSync(process.argv[evidenceIndex + 1]!, `${stable(report)}\n`, { mode: 0o600 });
+}
+
+export type Fixture = Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>;
 export type Copy = Awaited<ReturnType<Fixture['copy']>>;
 
 export function operatorContext(fixture: Fixture, copy: Copy): OperatorRestoreReleaseContext {

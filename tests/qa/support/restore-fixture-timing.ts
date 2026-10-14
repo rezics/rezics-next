@@ -44,6 +44,7 @@ export function createRestoreFixtureTiming(options: RestoreFixtureTimingOptions 
     : undefined;
   let ordinal = 0;
   let lastElapsedMs = 0;
+  const completedDurations = new Map<string, number>();
 
   if (filePath) mkdirSync(artifactDirectory!, { recursive: true });
 
@@ -64,6 +65,10 @@ export function createRestoreFixtureTiming(options: RestoreFixtureTimingOptions 
     status: RestoreFixturePhaseStatus,
     at: number,
   ) => {
+    const durationMs = Math.max(0, at - handle.startedAt);
+    if (status !== 'start') {
+      completedDurations.set(handle.phase, (completedDurations.get(handle.phase) ?? 0) + durationMs);
+    }
     append({
       schema: 'restore-fixture-phase-v1',
       fixtureId,
@@ -71,7 +76,7 @@ export function createRestoreFixtureTiming(options: RestoreFixtureTimingOptions 
       phase: handle.phase,
       status,
       elapsedMs: elapsed(at),
-      ...(status === 'start' ? {} : { durationMs: Math.max(0, at - handle.startedAt) }),
+      ...(status === 'start' ? {} : { durationMs }),
       ...(handle.operationOrdinal === undefined
         ? {}
         : { operationOrdinal: handle.operationOrdinal }),
@@ -129,5 +134,9 @@ export function createRestoreFixtureTiming(options: RestoreFixtureTimingOptions 
     }
   };
 
-  return { fixtureId, filePath, begin, finish, fail, phase };
+  /** Snapshot only completed phases; repeated labels accumulate and failed
+   * phases retain their spent time without changing the lifecycle records. */
+  const durations = (): Record<string, number> => Object.fromEntries(completedDurations);
+
+  return { fixtureId, filePath, begin, finish, fail, phase, durations };
 }

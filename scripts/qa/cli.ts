@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { ownerErasurePreparationOptions } from './retained-source.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
@@ -712,6 +713,29 @@ async function runShardWork(
       errors.push(message);
       return finish({ ok: false, timedOut: true, noMatch: false,
         xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
+    }
+  }
+  // Source API population/backup owns preparation, before the operation-file clock.
+  // Each shard selects the same keyed custody; a second shard verifies/reuses it.
+  if (tier === 'fault/recovery') {
+    const preparations = new Map(files.flatMap(file => {
+      const selected = ownerErasurePreparationOptions(file);
+      return selected ? [[String(selected.laterApiAdmission), selected] as const] : [];
+    }));
+    for (const [variant, selected] of preparations) {
+      const evidence = join(directory, `owner-erasure-source-${label}-${variant}.json`);
+      const prepared = await commandAsync(root, 'bun', [
+        'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts', '--prepare-retained-source', '--evidence', evidence,
+        ...(selected.laterApiAdmission ? ['--later-api-admission'] : []),
+      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
+        REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
+      writeFileSync(join(logs, `${label}-owner-erasure-source-${variant}.log`), prepared.output);
+      if (!prepared.ok) {
+        errors.push(`owner-erasure source preparation failed before operation clock (${label}, later admission ${variant})`);
+        return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
+          xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
+      }
+      environment.REZICS_FIXTURE_ROOT ??= join(root, '.temp', 'fixture');
     }
   }
   record.stage = 'test';

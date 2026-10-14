@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs';
+import { closeSync, constants, fstatSync, lstatSync, openSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import {
@@ -15,6 +15,116 @@ import type { FixtureEngines } from './stack.ts';
 import { fixtureModel } from './model.ts';
 
 export const MANIFEST_FORMAT = 'rezics-fixture-manifest-v1';
+
+export type RetainedJson = null | boolean | number | string | RetainedJson[] |
+  { [key: string]: RetainedJson };
+export type RetainedOwnerState = Record<string, RetainedJson>;
+export interface RetainedFileIntegrity { sha256: string; bytes: number }
+/** The metadata digest binds the RDF proof and restorable owner contract to
+ * exactly the inventoried graph, object and PostgreSQL backup bytes. */
+export interface RetainedIntegrity {
+  files: Record<string, RetainedFileIntegrity>;
+  rdfDigest: string;
+  ownerState: RetainedOwnerState;
+  digest: string;
+}
+
+function safeRetainedPath(path: string): boolean {
+  return path.length > 0 && !path.includes('\\') &&
+    path.split('/').every((part) => part !== '' && part !== '.' && part !== '..');
+}
+
+/** Inventory the backup directory, excluding no files. The manifest belongs
+ * outside this directory so neither its own digest nor temporary files escape custody. */
+export function inventoryDirectory(directory: string): Record<string, RetainedFileIntegrity> {
+  const files: Record<string, RetainedFileIntegrity> = {};
+  function visit(path: string, relative: string): void {
+    const stat = lstatSync(path);
+    if (stat.isSymbolicLink()) throw new Error(`retained backup contains symlink: ${relative || '.'}`);
+    if (stat.isDirectory()) {
+      for (const name of readdirSync(path).sort()) {
+        const child = relative ? `${relative}/${name}` : name;
+        if (!safeRetainedPath(child)) throw new Error(`unsafe retained backup path: ${child}`);
+        visit(join(path, name), child);
+      }
+    } else if (stat.isFile() && relative) {
+      const descriptor = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+      try {
+        if (!fstatSync(descriptor).isFile()) throw new Error(`retained backup is not a regular file: ${relative}`);
+        const bytes = readFileSync(descriptor);
+        Object.defineProperty(files, relative, {
+          value: { sha256: sha256(bytes), bytes: bytes.length }, enumerable: true,
+          configurable: true, writable: true,
+        });
+      } finally { closeSync(descriptor); }
+    } else throw new Error(`retained backup is not a regular file or directory: ${relative || '.'}`);
+  }
+  visit(directory, '');
+  return files;
+}
+
+export function isRetainedJson(value: unknown, ancestors = new Set<object>()): boolean {
+  if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
+  if (typeof value === 'number') return Number.isFinite(value);
+  if (typeof value !== 'object' || ancestors.has(value)) return false;
+  if (!Array.isArray(value) && Object.getPrototypeOf(value) !== Object.prototype &&
+    Object.getPrototypeOf(value) !== null) return false;
+  ancestors.add(value);
+  const valid = Object.values(value).every((item) => isRetainedJson(item, ancestors));
+  ancestors.delete(value);
+  return valid;
+}
+
+export function retainedIntegrity(directory: string, rdfDigest: string,
+  ownerState: RetainedOwnerState): RetainedIntegrity {
+  if (!/^[a-f0-9]{64}$/.test(rdfDigest)) throw new Error('retained RDF digest must be SHA-256');
+  if (!ownerState || typeof ownerState !== 'object' || Array.isArray(ownerState) || !isRetainedJson(ownerState)) {
+    throw new Error('retained owner state must be a JSON object');
+  }
+  const metadata = { files: inventoryDirectory(directory), rdfDigest,
+    ownerState: JSON.parse(stable(ownerState)) as RetainedOwnerState };
+  return { ...metadata, digest: sha256(stable(metadata)) };
+}
+
+/** Refusals are evidence; verification never repairs, reseals or follows a
+ * manifest path outside the backup directory. */
+export function verifyRetainedIntegrity(directory: string, integrity: RetainedIntegrity): string[] {
+  const reasons: string[] = [];
+  if (!integrity || !integrity.files || typeof integrity.files !== 'object' ||
+    Array.isArray(integrity.files) || !isRetainedJson(integrity.files) || !integrity.ownerState ||
+    typeof integrity.ownerState !== 'object' ||
+    Array.isArray(integrity.ownerState) || !isRetainedJson(integrity.ownerState) ||
+    !/^[a-f0-9]{64}$/.test(integrity.rdfDigest)) {
+    return ['retained integrity metadata is invalid'];
+  }
+  const { files, rdfDigest, ownerState } = integrity;
+  if (sha256(stable({ files, rdfDigest, ownerState })) !== integrity.digest) {
+    reasons.push('retained integrity metadata digest differs');
+  }
+  for (const [path, entry] of Object.entries(files)) {
+    if (!safeRetainedPath(path)) reasons.push(`unsafe retained manifest path: ${path}`);
+    if (!entry || !/^[a-f0-9]{64}$/.test(entry.sha256) ||
+      !Number.isSafeInteger(entry.bytes) || entry.bytes < 0) {
+      reasons.push(`invalid retained file integrity: ${path}`);
+    }
+  }
+  let actual: Record<string, RetainedFileIntegrity>;
+  try { actual = inventoryDirectory(directory); }
+  catch (error) {
+    reasons.push(`retained backup inventory refused: ${error instanceof Error ? error.message : String(error)}`);
+    return reasons;
+  }
+  for (const path of Object.keys(files).sort()) {
+    if (!Object.hasOwn(actual, path)) reasons.push(`retained backup file missing: ${path}`);
+    else if (actual[path]!.sha256 !== files[path]?.sha256 || actual[path]!.bytes !== files[path]?.bytes) {
+      reasons.push(`retained backup file changed: ${path}`);
+    }
+  }
+  for (const path of Object.keys(actual).sort()) {
+    if (!Object.hasOwn(files, path)) reasons.push(`retained backup file unexpected: ${path}`);
+  }
+  return reasons;
+}
 /** Tracked per file: applied files must stay byte-identical; newer files apply at restore. */
 export const MIGRATION_DIRECTORIES = [
   'services/main/migrations/access',
