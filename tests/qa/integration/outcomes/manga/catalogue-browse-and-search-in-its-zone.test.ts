@@ -9,6 +9,8 @@ import { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outc
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import { mainBrowseQuery, parseBrowseState } from '../../../../../apps/web/features/zones/browse-state.ts';
+import { catalogueYearParam } from '../../../../../apps/web/features/zones/catalogue-year.ts';
 
 type Work = { work: string; mainVersion: string; contribution: string; publicationDecision: string; concept: string | null; year: number | null; status: string };
 type Page = { items: { id: string; primaryCredits: { agent: string | null; role: string }[] }[]; nextCursor: string | null;
@@ -161,6 +163,7 @@ async function browse(name: PersonaName) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
     'space', short(sessions.zone), 'browse');
+  await pageReads(name);
   const sample = recording.session(name, person), sampledCards = new Set<string>();
   const filters = [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
     { publicationYear: '1995' }, { publicationYear: '1995-2001', concept: manga },
@@ -217,6 +220,48 @@ async function browse(name: PersonaName) {
       work: work.work, contribution: work.contribution, publicationDecision: work.publicationDecision,
       expectedSelectionHead: null, context: { kind: 'realm-local', id: sessions.realm }, mainVersion: work.mainVersion,
       selectionBasis: 'realm-manager-review', actingSubject: person.actingSubject }), 403);
+  }
+}
+async function pageReads(name: PersonaName) {
+  const publicRead = recording.session(name, sessions.visitor);
+  const realmRoot = `/v1/realms/${short(sessions.realm)}`;
+  if (name !== 'visitor') {
+    const personalRead = recording.session(name, sessions[name]);
+    const header = await personalRead('frame-personal-realm-header', 'GET', realmRoot);
+    await header.body?.cancel();
+    const address = await personalRead('frame-personal-space-address', 'GET', `/v1/addresses/resolve?${new URLSearchParams({
+      scope: 'space', key: short(sessions.space),
+    })}`);
+    await address.body?.cancel();
+  }
+  const addresses: [string, Record<string, string>][] = [
+    ['page-browse-default', {}],
+    ['page-browse-newest', { sort: 'newest' }],
+    ['page-browse-updated', { sort: 'updated' }],
+    ['page-search-default', { q: phrase }],
+    ['page-search-relevance', { q: phrase, sort: 'relevance' }],
+    ['page-search-newest', { q: phrase, sort: 'newest' }],
+    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-search-no-match', { q: `${phrase}nomatch` }],
+    ['page-search-no-match-relevance', { q: `${phrase}nomatch`, sort: 'relevance' }],
+    ['page-publication-year', { year: '1995' }],
+    ['page-publication-year-and-search', { q: phrase, year: '1995' }],
+  ];
+  for (const [label, address] of addresses) {
+    let cursor: string | null = null;
+    let continuation = 0;
+    do {
+      const year = catalogueYearParam(address.year);
+      // Match catalogueBrowseQuery: the address's single year follows mainBrowseQuery.
+      // A year range is dropped by catalogueYearParam and has no distinct page read.
+      const query = { ...mainBrowseQuery(parseBrowseState({ ...address, ...(cursor ? { cursor } : {}) })),
+        ...(year !== null ? { publicationYear: String(year) } : {}) };
+      const params = new URLSearchParams(query as Record<string, string>);
+      const path = `${realmRoot}/modules/browse${params.size ? `?${params}` : ''}`;
+      const page = await answer<Page>(publicRead(continuation ? `${label}-continuation-${continuation}` : label, 'GET', path));
+      cursor = page.nextCursor;
+      continuation++;
+    } while (cursor);
   }
 }
 // The Zone browse frame and catalogue-facts/year-directory reads used by the page.
