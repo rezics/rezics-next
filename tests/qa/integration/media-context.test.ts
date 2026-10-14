@@ -137,15 +137,66 @@ test('media context inputs share default selection, retry identity and storage w
 const deliveryBytes = new Uint8Array(Buffer.from(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQnBb8HwAD8AIKCU5mOAAAAABJRU5ErkJggg==', 'base64'));
 
+test('native Asset bytes belong to their owner without an avatar selection', async () => {
+  const s = await stack();
+  const owner = await s.member('native-media-owner');
+  const stranger = await s.member('native-media-stranger');
+  const work = await s.publicWork(owner.actor);
+  await owner.grant(`content:publish:${work.work}`, 'media.use');
+  await owner.grant(`work:read:${work.work}`, 'work.read');
+  await stranger.grant(`work:read:${work.work}`, 'work.read');
+  const image = await owner.upload(deliveryBytes);
+  const use = await owner.send('POST', '/v1/media/uses', {
+    actingSubject: owner.actor, target: work.work, representation: image.representation,
+    occurrence: randomUUID(), context: 'urn:rezics:context:global', conceal: false,
+  });
+  expect(use.status, await use.clone().text()).toBe(201);
+  expect((await s.contentPool.query('SELECT target FROM media.selection_slot WHERE attachment_asset_id=$1',
+    [image.asset])).rows).toHaveLength(0);
+  const path = (asset: string) => `/v1/media/assets/${asset}/bytes?${new URLSearchParams({ target: work.work })}`;
+  const refused = await stranger.read(path(image.asset));
+  const absent = await stranger.read(path(randomUUID()));
+  expect(refused.status).toBe(404);
+  expect(absent.status).toBe(404);
+  expect(await refused.json()).toEqual(await absent.json());
+  expect(refused.headers.get('etag')).toBeNull();
+  const response = await owner.read(path(image.asset));
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(response.headers.get('etag')).toBe(`"${sha(deliveryBytes)}"`);
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+  expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(deliveryBytes));
+  const unattached = await owner.upload(deliveryBytes, 'private');
+  const privateBytes = await owner.read(path(unattached.asset));
+  expect(privateBytes.status, await privateBytes.clone().text()).toBe(200);
+  expect(sha(new Uint8Array(await privateBytes.arrayBuffer()))).toBe(sha(deliveryBytes));
+  const privateRefusal = await stranger.read(path(unattached.asset));
+  expect(privateRefusal.status).toBe(404);
+  expect(await privateRefusal.json()).toEqual(await (await stranger.read(path(randomUUID()))).json());
+  const forged = (asset: string) => s.call('GET', `${path(asset)}&${
+    new URLSearchParams({ actingSubject: owner.actor })}`, { token: stranger.token });
+  const impersonated = await forged(unattached.asset);
+  expect(impersonated.status).toBe(404);
+  expect(await impersonated.json()).toEqual(await (await forged(randomUUID())).json());
+  expect(impersonated.headers.get('etag')).toBeNull();
+  const unrelatedTarget = await owner.read(`/v1/media/assets/${unattached.asset}/bytes?${
+    new URLSearchParams({ target: `https://rezics.com/id/${randomUUID()}` })}`);
+  expect(unrelatedTarget.status, await unrelatedTarget.clone().text()).toBe(200);
+  expect(sha(new Uint8Array(await unrelatedTarget.arrayBuffer()))).toBe(sha(deliveryBytes));
+  const erased = await owner.send('POST', `/v1/media/assets/${image.asset}/state`, {
+    profile: 'media-asset-state-v1', expectedState: image.stateHead,
+    disclosure: 'public', lifecycle: 'erased', actingSubject: owner.actor,
+  });
+  expect(erased.status, await erased.clone().text()).toBe(201);
+  const erasedBytes = await owner.read(path(image.asset));
+  expect(erasedBytes.status).toBe(404);
+  expect(await erasedBytes.json()).toEqual(await (await owner.read(path(randomUUID()))).json());
+  expect(erasedBytes.headers.get('etag')).toBeNull();
+}, 180_000);
+
 let documentFixture: ReturnType<typeof createDocumentUses> | undefined;
 const documentUses = () => documentFixture ??= createDocumentUses();
 
-async function createDocumentUses() {
-  const visibility = 'public';
-  const sessions = await personaSessions(visibility);
-  deliverySessions.push(sessions);
-  const author = sessions.member;
-  const original = await closureOriginal(author, `Media ${visibility} context original`);
+async function uploadDocumentImage(author: PersonaSession) {
   const reservation = await closureCommand<{ asset: string; upload: string; uploadUrl: string }>(author,
     'POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null,
       mediaType: 'image/png', byteLength: deliveryBytes.length, sha256: sha(deliveryBytes),
@@ -160,6 +211,16 @@ async function createDocumentUses() {
     expect(performance.now()).toBeLessThan(deadline);
     await Bun.sleep(100);
   }
+  return { ...image, asset: reservation.asset };
+}
+
+async function createDocumentUses() {
+  const visibility = 'public';
+  const sessions = await personaSessions(visibility);
+  deliverySessions.push(sessions);
+  const author = sessions.member;
+  const original = await closureOriginal(author, `Media ${visibility} context original`);
+  const image = await uploadDocumentImage(author);
   const create = (context: string) => closureCommand<{ use: string }>(author, 'POST', '/v1/media/uses', {
     actingSubject: author.actingSubject, target: original.work, representation: image.representation,
     occurrence: randomUUID(), context, conceal: false,
@@ -242,12 +303,32 @@ test('unreadable Realm document image Use is absent to visitor and stranger but 
 
 test('document image Use follows public Realm disclosure and closure while its independent global Use survives', async () => {
   const f = await documentUses();
+  const native = await uploadDocumentImage(f.sessions.member);
+  const nativeUse = await closureCommand<{ use: string }>(f.sessions.member, 'POST', '/v1/media/uses', {
+    actingSubject: f.sessions.member.actingSubject, target: f.original.work,
+    representation: native.representation, occurrence: randomUUID(), context: f.sessions.realm, conceal: false,
+  }, 201);
+  const ownerBytes = async () => {
+    const response = await f.sessions.member.main('GET', `/v1/media/assets/${native.asset}/bytes?${
+      new URLSearchParams({ target: f.original.work, actingSubject: f.sessions.member.actingSubject!,
+        context: f.sessions.realm })}`);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expect(response.headers.get('etag')).toBe(`"${sha(deliveryBytes)}"`);
+    expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(deliveryBytes));
+  };
+  await ownerBytes();
   await useAvailable(f.sessions.visitor, f.scoped);
   await useAvailable(f.sessions.visitor, f.global);
   await closureCredit(f.sessions.visitor, f.original.work, f.sessions.member);
+  await closureCredit(f.sessions.stranger, f.original.work, f.sessions.member);
+  await closureCredit(f.sessions.owner, f.original.work, f.sessions.member);
+  await closureCredit(f.sessions.moderator, f.original.work, f.sessions.member);
   await effectClosure(f.sessions, await publishClosureRule(f.sessions));
   await useAbsent(f.sessions.visitor, f.scoped);
   await useAbsent(f.sessions.member, f.scoped);
+  await useAbsent(f.sessions.member, nativeUse.use);
+  await ownerBytes();
   await useAvailable(f.sessions.visitor, f.global);
   await closureCredit(f.sessions.visitor, f.original.work, f.sessions.member);
 }, 240_000);

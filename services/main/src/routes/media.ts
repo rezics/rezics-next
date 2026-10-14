@@ -27,7 +27,8 @@ import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/vi
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { disclose, discloseInventory, discloseInventoryWithAnonymousNames, type DisclosureTarget } from '../modules/disclosure/read.ts';
 import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
-import { mediaVisibility } from '../modules/media/visibility.ts';
+import { bindNativeAssetAudience, mediaVisibility } from '../modules/media/visibility.ts';
+import { readClosedRealmMediaSelection } from '../modules/media/closed-realm-media.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -629,14 +630,44 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const principal = await work.account.verify(request, ['work:read']);
         const reader = await readerFor(request, query.actingSubject);
-        const basis = await withDisclosureViewer(reader.viewer ?? ANONYMOUS_VIEWER,
-          () => work.media!.store.assetDelivery(params.asset, query.target, query.context ?? DEFAULT_MEDIA_CONTEXT));
-        if (!basis || basis.availability !== 'available' || (basis.disclosure !== 'private' && basis.owner !== query.actingSubject)
-          || basis.moderation !== 'none' || basis.lifecycle !== 'active'
-          || !(basis.clearance === 'cleared' || (basis.clearance === 'screening' && basis.owner === query.actingSubject
-            && basis.uploader === await work.access.activePrincipalId(principal)))
-          || !Number.isSafeInteger(basis.byteLength) || basis.byteLength < 1
-          || basis.byteLength > MAX_UPLOAD_BYTES) return unavailable();
+        const owner = await work.access.canManageMedia?.(principal, query.actingSubject)
+          || await work.access.canReadAsBaselineMember?.(principal, query.actingSubject)
+          ? query.actingSubject : undefined;
+        const viewer = reader.viewer ?? ANONYMOUS_VIEWER;
+        if (owner) bindNativeAssetAudience(viewer, params.asset);
+        const readBasis = async () => {
+          const basis = await withDisclosureViewer(viewer,
+            () => work.media!.store.assetDelivery(params.asset, query.target,
+              query.context ?? DEFAULT_MEDIA_CONTEXT, owner));
+          if (!basis || basis.availability !== 'available' || (basis.disclosure !== 'private' && basis.owner !== query.actingSubject)
+            || basis.moderation !== 'none' || basis.lifecycle !== 'active'
+            || !(basis.clearance === 'cleared' || (basis.clearance === 'screening' && basis.owner === query.actingSubject
+              && basis.uploader === await work.access.activePrincipalId(principal)))
+            || !Number.isSafeInteger(basis.byteLength) || basis.byteLength < 1
+            || basis.byteLength > MAX_UPLOAD_BYTES) return null;
+          return basis;
+        };
+        const basis = await readBasis();
+        if (!basis) return unavailable();
+        if (owner === basis.owner) {
+          // An owner's own bytes depend on the Asset, not a Work grant or a Use.
+          // Reuse the disclosure fence so erasure or lost owner authority while
+          // buffering cannot return either bytes or their validator.
+          const result = await readClosedRealmMediaSelection(work.environment, readBasis,
+            () => ({ asset: params.asset }), async selected => {
+              const bytes = await work.media!.objects(selected.objectNamespace).get(selected.sha256);
+              if (bytes.byteLength !== selected.byteLength) throw new ObjectIntegrityError('media byte length differs');
+              return { bytes, selected };
+            }, viewer);
+          if (!result) return unavailable();
+          return new Response(result.bytes.slice(), { headers: {
+            'content-type': result.selected.mediaType,
+            etag: `"${result.selected.sha256}"`,
+            'content-length': String(result.selected.byteLength),
+            'x-content-type-options': 'nosniff',
+            'cache-control': 'private, no-store',
+          } });
+        }
         lease = await work.downloadLeases.admit(principal, query.actingSubject, query.target, params.asset);
         const target = (await readResourceSummaries(work.environment, undefined,
           reader, { resources: [query.target], context: DEFAULT_MEDIA_CONTEXT,

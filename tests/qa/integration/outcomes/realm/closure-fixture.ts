@@ -374,9 +374,10 @@ export async function closureOriginal(author: PersonaSession, title: string) {
 }
 
 export async function closureCredit(person: PersonaSession, work: string, author: PersonaSession) {
-  await closureCommand(person, 'GET', `/v1/works/${short(work)}`);
+  const query = person.actingSubject ? `?${acting(person)}` : '';
+  await closureCommand(person, 'GET', `/v1/works/${short(work)}${query}`);
   const credits = await closureCommand<{ items: { agent: string; role: string }[] }>(person,
-    'GET', `/v1/works/${short(work)}/agent-credits`);
+    'GET', `/v1/works/${short(work)}/agent-credits${query}`);
   expect(credits.items).toContainEqual(expect.objectContaining({ agent: author.actingSubject, role: 'author' }));
 }
 

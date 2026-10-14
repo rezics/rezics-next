@@ -1332,11 +1332,24 @@ export class MediaStore {
       ...(typeof row.campaign_zone === 'string' ? { campaignZone: row.campaign_zone } : {}) }] as const));
   }
 
-  /** Exact current avatar bytes linked to the requested Work and context. */
-  async assetDelivery(asset: string, target: string, context = DEFAULT_MEDIA_CONTEXT) {
+  /** Owners read their current original independently of Uses. Other leased
+   * readers retain the current avatar selection for their Work and context. */
+  async assetDelivery(asset: string, target: string, context = DEFAULT_MEDIA_CONTEXT, owner?: string) {
     if (!uuid.test(asset) || !nativeId.test(target)
-      || (context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(context))) return null;
-    const result = await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length, p.availability, media.delivery_clearance(p) AS clearance, a.owner, uploader.principal_id AS uploader,
+      || (context !== DEFAULT_MEDIA_CONTEXT && !nativeId.test(context))
+      || (owner !== undefined && !nativeId.test(owner))) return null;
+    let result = owner ? await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length,
+        p.availability, media.delivery_clearance(p) AS clearance, a.owner, uploader.principal_id AS uploader,
+        st.disclosure, st.moderation, st.lifecycle, a.object_namespace
+      FROM media.asset a
+      JOIN media.asset_state st ON st.id = a.state_head
+      JOIN content.variant v ON v.id = a.variant_id
+      JOIN content.revision rev ON rev.id = v.draft_head AND rev.availability = 'available'
+      JOIN media.representation p ON p.asset_id = a.id AND p.kind = 'original'
+        AND rev.body @> jsonb_build_object('representations', jsonb_build_array(jsonb_build_object('id', p.id::text)))
+      JOIN media.upload uploader ON uploader.id = p.upload_id
+      WHERE a.id = $1 AND a.owner = $2 LIMIT 1`, [asset, owner]) : null;
+    if (!result?.rows.length) result = await this.pool.query(`SELECT p.byte_digest, p.media_type, p.byte_length, p.availability, media.delivery_clearance(p) AS clearance, a.owner, uploader.principal_id AS uploader,
         st.disclosure, st.moderation, st.lifecycle, a.object_namespace
       FROM media.selection_slot s
       JOIN media.selection_revision r ON r.id = s.head

@@ -8,7 +8,7 @@ import { readResourceSummaries, type SummaryReader } from './summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaUnavailable } from './store.ts';
 
 // These proofs come from Account verification, never from serialized viewer preferences.
-const audiences = new WeakMap<Viewer, { principal: VerifiedPrincipal; actor?: string }>();
+const audiences = new WeakMap<Viewer, { principal: VerifiedPrincipal; actor?: string; nativeAsset?: string }>();
 export function bindMediaAudience(
   viewer: Viewer,
   principal: VerifiedPrincipal,
@@ -16,6 +16,17 @@ export function bindMediaAudience(
 ): Viewer {
   audiences.set(viewer, { principal, actor });
   return viewer;
+}
+/** Only the native download route selects owner access, after Access binds
+ * Account to the acting owner. Disclosure repeats that live owner proof. */
+export function bindNativeAssetAudience(viewer: Viewer, asset: string): Viewer {
+  const audience = audiences.get(viewer);
+  if (audience) audience.nativeAsset = `https://rezics.com/id/${asset}`;
+  return viewer;
+}
+export function isNativeAssetOwner(viewer: Viewer, reference: string, owner: string): boolean {
+  const audience = audiences.get(viewer);
+  return audience?.nativeAsset === reference && audience.actor === owner;
 }
 interface MediaVisibilityProbe { reference: string; exactUse: boolean }
 type Gate = (targets: readonly DisclosureTarget[], viewer: Viewer,
@@ -47,8 +58,11 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     const audience = audiences.get(viewer);
     const principal = audience?.principal,
       actor = audience?.actor;
+    const nativeOwner = (reference: string, fact: MediaVisibilityFact) =>
+      isNativeAssetOwner(viewer, reference, fact.owner) && !fact.exactUse;
     const canManage = !!(
-      [...facts.values()].some((fact) => fact.pending || fact.disclosure !== 'public') &&
+      [...facts].some(([reference, fact]) => fact.pending || fact.disclosure !== 'public'
+        || nativeOwner(reference, fact)) &&
       principal &&
       actor &&
       ((await deps.access.canManageMedia?.(principal, actor)) ||
@@ -99,6 +113,9 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     };
     const byContext = new Map<string, Set<string>>();
     for (const [reference, fact] of facts) {
+      // Owning an Asset is independent of its Uses. Exact Use and bare
+      // representation reads never receive this native-download audience.
+      if (nativeOwner(reference, fact)) continue;
       // A truncated Asset inventory cannot prove readability. Do not probe it.
       if (fact.attachmentOverflow || exactUses.has(reference) && fact.attachments.length !== 1) continue;
       for (const attachment of fact.attachments) {
@@ -157,7 +174,9 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       if (!fact) return !probe.exactUse;
       // An exact Use must still be attached, including mutable selection slots.
       if ((probe.exactUse || fact.exactUse) && fact.attachments.length !== 1) return false;
-      if (fact.blocked || fact.attachmentOverflow) return false;
+      if (fact.blocked) return false;
+      if (!probe.exactUse && nativeOwner(probe.reference, fact)) return canManage;
+      if (fact.attachmentOverflow) return false;
       if ((fact.disclosure !== 'public' || fact.pending) && !(canManage && actor === fact.owner))
         return false;
       return fact.attachments.length === 0 || fact.attachments.some((attachment) =>

@@ -8,7 +8,7 @@ import { captureDisclosure, configureDisclosure, fenceDisclosure, resolveDisclos
   DisclosureUnavailable, type DisclosureChannel,
   type DisclosureTarget } from './read.ts';
 import { currentDisclosureViewer } from './viewer.ts';
-import { configureMediaVisibility } from '../media/visibility.ts';
+import { configureMediaVisibility, isNativeAssetOwner } from '../media/visibility.ts';
 import { graphErasedContentRevisions } from '../erasure/graph.ts';
 
 /** Keep the owner-selected occurrence fixed across hydration and the final
@@ -113,10 +113,13 @@ export function disclosureMedia(store: MediaStore, env: WorkActivationEnvironmen
     if (property === 'assetDelivery') return async (...args: Parameters<MediaStore['assetDelivery']>) => {
       const row = await target.assetDelivery(...args);
       if (!row) return null;
-      const viewer = currentDisclosureViewer(), context = args[2] ?? DEFAULT_MEDIA_CONTEXT;
+      const viewer = currentDisclosureViewer();
+      const nativeOwner = isNativeAssetOwner(viewer, `https://rezics.com/id/${args[0]}`, row.owner);
+      const context = nativeOwner ? undefined : args[2] ?? DEFAULT_MEDIA_CONTEXT;
       const { decisions } = await finalDisclosure(env, [
         { owner: 'media', resource: `https://rezics.com/id/${args[0]}`, component: 'cover', context },
-        { owner: 'graph', resource: args[1], component: 'name', context },
+        ...nativeOwner ? []
+          : [{ owner: 'graph' as const, resource: args[1], component: 'name' as const, context }],
       ], viewer, 'media', rereadDelivery(row, () => target.assetDelivery(...args)));
       return decisions.every(decision => decision === 'visible') ? row : null;
     };
