@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { Pool } from 'pg';
 import { sourceIdentity } from '../../../../../scripts/qa/core.ts';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
@@ -86,9 +86,6 @@ beforeAll(async () => {
   const started = Date.now();
   try {
   const source = sourceIdentity(process.cwd());
-  const evidenceDirectory = `.temp/anime-collection-tracking-and-progress-evidence-${Bun.env.REZICS_QA_RUN_ID}`;
-  mkdirSync(evidenceDirectory, { recursive: true });
-  writeFileSync(`${evidenceDirectory}/source.json`, JSON.stringify(source, null, 2), { flag: 'wx' });
   sessions = await personaSessions({ observeMain: async observed => {
     if (observed.response.status < 500) return;
     const persona = sessions && (['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)
@@ -98,7 +95,8 @@ beforeAll(async () => {
         actingSubject: observed.caller.actingSubject },
       request: observed.request, status: observed.response.status, answer: observed.response.body,
       requestStartedAt: observed.requestStartedAt, answeredAt: observed.answeredAt };
-    writeFileSync(`${evidenceDirectory}/failure-${randomUUID()}.json`, JSON.stringify(failure, null, 2), { flag: 'wx' });
+    writeFileSync(`.temp/anime-collection-tracking-and-progress-failure-${Bun.env.REZICS_QA_RUN_ID}-${randomUUID()}.json`,
+      JSON.stringify(failure, null, 2), { flag: 'wx' });
     if (preparing) return;
     failures.push(failure);
     // Observe before the shared transport can repeat a read: an eventual 200
