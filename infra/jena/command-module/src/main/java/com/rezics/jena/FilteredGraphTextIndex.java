@@ -550,9 +550,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 cursor = new ScoreDoc(resolved.scoreDocs[0].doc, after.score());
                 }
             }
-            // Lucene's default hit-count threshold is 1000. It can skip
-            // noncompetitive blocks instead of exhaustively scoring/counting.
-            var top = searcher.searchAfter(cursor, query, size + 1);
+            // Catalogue counts come from disclosed, grouped pages in Main.
+            // Counting 1000 raw hits before pruning lets tied names walk the
+            // population even when only one card was requested. Keep the same
+            // score/doc ordering and lookahead, with a page-sized threshold.
+            var top = catalogue ? searcher.search(query,
+                new org.apache.lucene.search.TopScoreDocCollectorManager(size + 1, cursor, 0))
+                : searcher.searchAfter(cursor, query, size + 1);
             boolean more = top.scoreDocs.length > size;
             List<RankHit> ordered = new ArrayList<>();
             var stored = searcher.storedFields();
@@ -952,8 +956,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         @Override public int hashCode() { return java.util.Objects.hash(classHash(), candidates, entityField, workNamesOnly, titleScores); }
         @Override public org.apache.lucene.search.Weight createWeight(IndexSearcher searcher,
                 org.apache.lucene.search.ScoreMode mode, float boost) throws IOException {
-            return new org.apache.lucene.search.FilterWeight(this, searcher.createWeight(candidates,
-                    titleScores ? org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES : mode, boost)) {
+            return new org.apache.lucene.search.FilterWeight(this, searcher.createWeight(candidates, mode, boost)) {
                 // Query caching must not turn this candidate check into a
                 // whole-segment materialization.
                 @Override public boolean isCacheable(org.apache.lucene.index.LeafReaderContext context) { return false; }
@@ -997,9 +1000,15 @@ public final class FilteredGraphTextIndex implements TextIndex {
                                 @Override public org.apache.lucene.search.TwoPhaseIterator twoPhaseIterator() { return phase; }
                                 @Override public int advanceShallow(int target) throws IOException { return scorer.advanceShallow(target); }
                                 @Override public float getMaxScore(int upTo) throws IOException { return titleScores ? 2_000_000f * boost : scorer.getMaxScore(upTo); }
-                                // The inner constant score is not in title-tier
-                                // units, so a title threshold cannot prune it.
-                                @Override public void setMinCompetitiveScore(float score) throws IOException { if (!titleScores) scorer.setMinCompetitiveScore(score); }
+                                @Override public void setMinCompetitiveScore(float score) throws IOException {
+                                    if (!titleScores) scorer.setMinCompetitiveScore(score);
+                                    // The inner title query has constant score
+                                    // boost, while this wrapper has two tiers.
+                                    // Once neither tier can compete, translate
+                                    // the threshold to its inner score units.
+                                    else if (score > 2_000_000f * boost)
+                                        scorer.setMinCompetitiveScore(Math.nextUp(boost));
+                                }
                                 @Override public float smoothingScore(int doc) throws IOException { return scorer.smoothingScore(doc); }
                             };
                         }
