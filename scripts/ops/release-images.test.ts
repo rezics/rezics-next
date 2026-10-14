@@ -229,6 +229,10 @@ test('image runtime closure prepares the repository snapshot without installing 
   for (const path of runtimeEntries) expect(existsSync(join(context, path)), path).toBe(true);
   expect(existsSync(join(context, 'model/compiler/outputs.ts'))).toBe(true);
   expect(existsSync(join(context, 'node_modules'))).toBe(false);
+  const focused = readFileSync(join(context, 'runtime-workspaces.txt'), 'utf8').trim().split(' ');
+  expect(focused).not.toContain('@rezics/web');
+  expect(focused).not.toContain('@rezics/accounts');
+  expect(existsSync(join(context, 'apps/web/app'))).toBe(false);
   const launcher = readFileSync(join(context, 'infra/release/entrypoint.ts'), 'utf8');
   for (const match of launcher.matchAll(/['"](?:\.\/)?((?:services|scripts)\/[^'"]+\.ts)['"]/g)) {
     expect(runtimeEntries.concat(runtimeArtifacts), `launcher root ${match[1]}`).toContain(match[1]!);

@@ -288,7 +288,12 @@ export async function prepareImageContext(
         throw new Error(`Release payload must be a regular Git file: ${path}`);
       importedFiles.add(path);
       for (const workspace of workspaces.values()) {
-        if (path.startsWith(`${workspace.directory}/`)) include(workspace.manifest.name);
+        // These existing frontend configuration adapters use the service's
+        // dependencies; copying them must not focus whole client applications.
+        const configurationAdapter = path === 'apps/web/features/config/env.ts' ||
+          path === 'apps/accounts/features/config/env.ts';
+        if (path.startsWith(`${workspace.directory}/`) && !configurationAdapter)
+          include(workspace.manifest.name);
       }
       if (!/\.[cm]?[jt]sx?$/.test(path)) continue;
       const scanner = path.endsWith('x') ? scanners.tsx : scanners.ts;
