@@ -32,7 +32,8 @@ function originalPixel() {
 
 /** Preserve the exact failing public request in Playwright's output, including a pending command's receipt. */
 export async function command<T>(page: Page, method: string, path: string, data?: unknown): Promise<T> {
-  const key = randomUUID();
+  const key = data && typeof data === 'object' && 'idempotencyKey' in data && typeof data.idempotencyKey === 'string'
+    ? data.idempotencyKey : randomUUID();
   for (let attempt = 0; attempt < 60; attempt++) {
     const response = await page.request.fetch(`/api/main/v1${path}`, {
       method, data, headers: method === 'GET' ? {} : { 'idempotency-key': key },
@@ -167,7 +168,8 @@ export async function realmClosureFixture(browser: Browser, info: TestInfo) {
         revisionId: draft.revisionId, author: writer.actor, rootTarget: work.work, rootRevision: work.workRevision,
         parentReply: null, parentRevision: null, contextRevision: null });
       await command(writer.page, 'POST', '/realm-reply-placements', { profile: 'realm-reply-placement-v1', realm: realm.realm,
-        reply, ...draft, reviewDecisionId: null, expectedHead: null, actingSubject: writer.actor });
+        reply, revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
+        reviewDecisionId: null, expectedHead: null, actingSubject: writer.actor });
       return reply;
     }
 
