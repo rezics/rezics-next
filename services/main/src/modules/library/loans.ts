@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { t } from 'elysia';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import type { Static } from 'typebox';
 import { Value } from 'typebox/value';
 import { readId } from '../work/read-contract.ts';
@@ -52,7 +52,7 @@ export class LibraryLoanStore {
       });
   }
   async write(input: LoanCommand, authorize?: () => Promise<void>,
-    checkParty?: (party: LibraryParty) => Promise<void>): Promise<LoanView & { replayed: boolean }> {
+    checkParty?: (party: LibraryParty, client: PoolClient) => Promise<void>): Promise<LoanView & { replayed: boolean }> {
     const open = input.operation === 'open';
     if (open) {
       if (input.expectedVersion !== 0 || !Value.Check(readId, input.copy)
@@ -78,7 +78,7 @@ export class LibraryLoanStore {
       const now = (await client.query<{ now: Date }>('SELECT clock_timestamp() AS now')).rows[0]!.now;
       let saved: LoanState;
       if (open) {
-        await checkParty?.(input.counterparty);
+        await checkParty?.(input.counterparty, client);
         if ((await client.query(`SELECT 1 FROM reader.library_loan WHERE agent=$1 AND copy=$2 AND returned_at IS NULL LIMIT 1`,
           [input.agent, copy])).rowCount) throw new LibraryRecordConflict('Copy already has an active loan');
         saved = { id: `https://rezics.com/id/${randomUUID()}`, copy, direction: input.direction, counterparty: input.counterparty,

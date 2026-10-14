@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { Value } from 'typebox/value';
@@ -47,7 +48,7 @@ export class ConsumptionSessionStore {
     if (!Number.isSafeInteger(limit) || limit < 1 || limit > SESSION_COST.page
       || options.target !== undefined && !Value.Check(readId, options.target)
       || options.work !== undefined && (!Value.Check(readId, options.work) || options.target !== undefined)) throw new InvalidSession('Invalid session page');
-    const control = await this.pool.query<{ data_epoch: string }>(
+    const control = await contentConnection(this.pool).query<{ data_epoch: string }>(
       'SELECT data_epoch FROM content.owner_control WHERE singleton');
     if (!control.rows[0]) throw new Error('Content owner position unavailable');
     const position = { dataEpoch: control.rows[0].data_epoch, sequence: '0' };
@@ -57,7 +58,7 @@ export class ConsumptionSessionStore {
     if (cursor && !/^[1-9][0-9]*$/.test(cursor.after)) throw new InvalidSession('Invalid session cursor');
     // Creation order is immutable: edits cannot move an attempt between pages.
     // Separate query shapes keep both seek paths on their leading index keys.
-    const rows = await this.pool.query<Row>(options.work
+    const rows = await contentConnection(this.pool).query<Row>(options.work
       ? `SELECT s.state,s.attempt_order::text FROM reader.consumption_session s
          WHERE principal_issuer=$1 AND principal_subject=$2 AND agent=$3 AND work=$4
            ${cursor ? 'AND attempt_order<$6::bigint' : ''}
@@ -100,7 +101,8 @@ export class ConsumptionSessionStore {
       c.addSelections?.map(s => [s.target, s.language ?? null, s.format ?? null]) ?? [],
       c.position ? [c.position.target, c.position.unit, c.position.value] : null]);
     const operation = `session:${hash([...identity.slice(0, 2), input.idempotencyKey])}`;
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     let saved: SessionState;
     let wasFinished = false, libraryProjected = false;
     try {
@@ -187,7 +189,7 @@ export class ConsumptionSessionStore {
       await client.query('COMMIT');
       saved = result;
     } catch (error) { await client.query('ROLLBACK'); throw error; }
-    finally { client.release(); }
+    finally { if (!borrowed) client.release(); }
     await settledContentPosition(this.pool, operation);
     await this.complete(input, saved, libraryProjected || saved.state === 'finished', wasFinished);
     return { ...saved, replayed: false };

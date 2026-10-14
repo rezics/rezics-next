@@ -167,3 +167,51 @@ test('community topics use the current shared vocabulary and match both language
   expect((await readSharedVocabulary(session, '悬疑')).items).toEqual([{ id, label: '悬疑' }]);
   expect((await readSharedVocabulary(session, 'Fantasy')).items).toEqual([]);
 });
+
+test('a parallel address read does not inherit the directory page checkout', async () => {
+  const { spyOn } = await import('bun:test');
+  const { Pool: PgPool } = await import('pg');
+  const { boundedPool, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } = await import('../src/infrastructure/pg-pool.ts');
+  const { AliasRegistry } = await import('../src/modules/address/registry.ts');
+  let open!: () => void, resume!: () => void;
+  const opened = new Promise<void>(resolve => { open = resolve; });
+  const gate = new Promise<void>(resolve => { resume = resolve; });
+  const query = async (sql: string) => {
+    let rows: object[] = [];
+    if (sql.includes('BEGIN ISOLATION')) { open(); await gate; }
+    if (sql.includes('FROM access.recovery_fence')) rows = [{}];
+    if (sql.includes('FROM access.realm_directory_position')) rows = [{ data_epoch: 'epoch', sequence: '17', generation: 1 }];
+    if (sql.includes('FROM access.realm_count_position')) rows = [{ revision: '4' }];
+    return { rows, rowCount: rows.length };
+  };
+  const connect = spyOn(PgPool.prototype, 'connect').mockImplementation(((callback?: unknown) => {
+    const client = {
+      query(sql: string, _values?: unknown, done?: (error: unknown, result?: unknown) => void) {
+        const pending = query(sql);
+        if (done) void pending.then(result => done(undefined, result), done);
+        return pending;
+      },
+      once() {}, removeListener() {}, release() {},
+    } as unknown as PoolClient;
+    if (typeof callback === 'function') { callback(undefined, client, () => {}); return; }
+    return Promise.resolve(client);
+  }) as Pool['connect']);
+  const previous = nestedPoolCheckoutMode();
+  setNestedPoolCheckoutMode('throw');
+  const pool = boundedPool({ max: 2 });
+  try {
+    const session = { options: {}, position: { dataEpoch: 'epoch', sequence: '17' } } as WorkReadSession;
+    const page = new RealmDirectoryIndex(pool).page(session, { sort: 'members', q: '' });
+    try {
+      await opened;
+      // This sibling starts while the page still owns a client. A real nested
+      // request would reject before Pool.connect invokes the callback.
+      expect(await new AliasRegistry(pool).currents(['https://rezics.com/id/0194f314-9280-767f-89a6-000000000099']))
+        .toEqual(new Map());
+    } finally { resume(); await page; }
+  } finally {
+    connect.mockRestore();
+    setNestedPoolCheckoutMode(previous);
+    await pool.end();
+  }
+});

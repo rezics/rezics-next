@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import type { Pool } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
 import { baselineMemberProof } from '../access/baseline.ts';
@@ -28,7 +29,7 @@ export async function projectLibraryFollow(
       `library-follow:${agent}:${work}`,
     ]);
     const current = (
-      await content.query<{ version: string; title_key: string | null }>(
+      await contentConnection(content).query<{ version: string; title_key: string | null }>(
         'SELECT version::text,title_key FROM reader.library_status WHERE agent=$1 AND work=$2',
         [agent, work],
       )
@@ -50,7 +51,7 @@ export async function projectLibraryFollow(
     ).rows;
     if (agents.length > 16) throw new Error('Library relationship actor bound exceeded');
     const active = !!(
-      await content.query(
+      await contentConnection(content).query(
         `SELECT 1 FROM reader.library_status WHERE agent=ANY($1::text[])
       AND work=$2 AND status IN ('reading','want-to-read') LIMIT 1`,
         [agents.map((row) => row.agent_id), work],
@@ -78,7 +79,7 @@ export async function recoverLibraryFollows(content: Pool, access: Pool) {
     )
   ).rows[0]!;
   const rows = (
-    await content.query<{ agent: string; work: string }>(
+    await contentConnection(content).query<{ agent: string; work: string }>(
       `SELECT agent,work FROM reader.library_status
     WHERE (agent,work)>($1::text,$2::text) ORDER BY agent,work LIMIT $3`,
       [cursor.library_agent, cursor.library_work, RELATIONSHIP_RECOVERY_COST.libraryRows],

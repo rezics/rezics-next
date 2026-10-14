@@ -65,6 +65,7 @@ export function qaStackEnvironment(
   return {
     ...env,
     REZICS_QA_STACK_MODE: mode,
+    REZICS_NESTED_POOL_CHECKOUT: 'throw',
     REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION: String(qaPostgresMaxLocksPerTransaction),
     REZICS_FUSEKI_MEMORY_LIMIT: env.REZICS_QA_FUSEKI_MEMORY_LIMIT ?? allocation.memory,
     REZICS_FUSEKI_JVM_ARGS: env.REZICS_QA_FUSEKI_JVM_ARGS ?? allocation.jvmArgs,

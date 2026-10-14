@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
 import type { SessionOwner } from './store.ts';
@@ -15,7 +16,7 @@ export class SeriesSessionReader {
     const identity = [owner.principal.issuer, owner.principal.subject, owner.agent];
     const binding = ['series-sessions-v1', ...identity, works, releases];
     const after = decodeReadCursor(cursor, binding, position)?.after;
-    const rows = await this.pool.query<{ state: SessionState; attempt_order: string }>(`
+    const rows = await contentConnection(this.pool).query<{ state: SessionState; attempt_order: string }>(`
       WITH matches AS (
         SELECT s.id FROM unnest($4::text[]) AS w(work)
         CROSS JOIN LATERAL (SELECT id FROM reader.consumption_session

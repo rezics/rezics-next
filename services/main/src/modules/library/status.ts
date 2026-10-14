@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { logWorkerFault } from '@rezics/observability/log';
@@ -84,7 +85,7 @@ export class ReaderLibraryStatusStore {
     if (!ID.test(agent) || works.length > 24 || new Set(works).size !== works.length
       || works.some(work => !ID.test(work))) throw new InvalidLibraryStatus('invalid private review batch');
     if (!works.length) return [];
-    const rows = await this.pool.query<{ work: string; body: string; language: string; spoiler: boolean;
+    const rows = await contentConnection(this.pool).query<{ work: string; body: string; language: string; spoiler: boolean;
       version: string; changed_at: string }>(`
       SELECT work, body, language, spoiler, version::text AS version, changed_at::text AS changed_at
       FROM reader.private_import_review WHERE agent = $1 AND work = ANY($2::text[])`, [agent, works]);
@@ -102,7 +103,8 @@ export class ReaderLibraryStatusStore {
     }
     const digest = createHash('sha256').update(JSON.stringify([input.work, input.text, input.language,
       input.spoiler, input.expectedVersion])).digest('hex');
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -142,7 +144,7 @@ export class ReaderLibraryStatusStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   /** Whole-year totals are one MVCC snapshot and twelve SQL aggregate rows.
@@ -154,7 +156,7 @@ export class ReaderLibraryStatusStore {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
       throw new InvalidLibraryStatus('invalid reading stats year');
     }
-    const result = await this.pool.query<{ month: number; books: string; chapters: string }>(`
+    const result = await contentConnection(this.pool).query<{ month: number; books: string; chapters: string }>(`
       WITH books AS (
         SELECT extract(month FROM finished_on)::integer AS month, count(*) AS count
         FROM reader.library_status
@@ -185,7 +187,7 @@ export class ReaderLibraryStatusStore {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
       throw new InvalidLibraryStatus('invalid reading stats year');
     }
-    const rows = await this.pool.query<{ work: string }>(`
+    const rows = await contentConnection(this.pool).query<{ work: string }>(`
       SELECT work FROM reader.library_status
       WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
         AND finished_on < make_date($2 + 1,1,1)
@@ -201,10 +203,10 @@ export class ReaderLibraryStatusStore {
       throw new InvalidLibraryStatus('invalid reading goal');
     }
     const [goal, books] = await Promise.all([
-      this.pool.query<{ target: number | null; version: string; changed_at: string }>(`
+      contentConnection(this.pool).query<{ target: number | null; version: string; changed_at: string }>(`
         SELECT target, version::text AS version, changed_at::text AS changed_at
         FROM reader.yearly_goal WHERE agent = $1 AND year = $2`, [agent, year]),
-      this.pool.query<{ count: string }>(`
+      contentConnection(this.pool).query<{ count: string }>(`
         SELECT count(*)::text AS count FROM reader.library_status
         WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
           AND finished_on < make_date($2 + 1,1,1)`, [agent, year]),
@@ -223,7 +225,8 @@ export class ReaderLibraryStatusStore {
     }
     const digest = createHash('sha256').update(JSON.stringify([input.year, input.target,
       input.expectedVersion])).digest('hex');
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -265,14 +268,14 @@ export class ReaderLibraryStatusStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   async batch(agent: string, works: string[], transaction?: PoolClient): Promise<StatusState[]> {
     if (!ID.test(agent) || works.length > 24 || new Set(works).size !== works.length
       || works.some(work => !ID.test(work))) throw new InvalidLibraryStatus('invalid status batch');
     if (!works.length) return [];
-    const rows = await (transaction ?? this.pool).query<Row>(`SELECT ${columns} FROM reader.library_status
+    const rows = await (transaction ?? contentConnection(this.pool)).query<Row>(`SELECT ${columns} FROM reader.library_status
       WHERE agent = $1 AND work = ANY($2::text[])`, [agent, works]);
     const found = new Map(rows.rows.map(row => [row.work, row]));
     return works.map(work => state(work, found.get(work)));
@@ -280,7 +283,7 @@ export class ReaderLibraryStatusStore {
 
   async counts(agent: string): Promise<Record<ReadingStatus, number>> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
-    const rows = await this.pool.query<{ status: ReadingStatus; count: string }>(`
+    const rows = await contentConnection(this.pool).query<{ status: ReadingStatus; count: string }>(`
       SELECT status, count(*)::text AS count FROM reader.library_status
       WHERE agent = $1 AND status IS NOT NULL GROUP BY status`, [agent]);
     const result: Record<ReadingStatus, number> = { 'want-to-read': 0, reading: 0, read: 0 };
@@ -290,7 +293,7 @@ export class ReaderLibraryStatusStore {
 
   async shelves(agent: string): Promise<{ status: ReadingStatus; count: number; changedAt: string | null }[]> {
     if (!ID.test(agent)) throw new InvalidLibraryStatus('invalid Agent');
-    const rows = await this.pool.query<{ status: ReadingStatus; count: string; changed_at: string | null }>(`
+    const rows = await contentConnection(this.pool).query<{ status: ReadingStatus; count: string; changed_at: string | null }>(`
       SELECT status, count(*)::text AS count, max(changed_at)::text AS changed_at
       FROM reader.library_status WHERE agent = $1 AND status IS NOT NULL GROUP BY status`, [agent]);
     const found = new Map(rows.rows.map(row => [row.status, row]));
@@ -304,7 +307,7 @@ export class ReaderLibraryStatusStore {
       throw new InvalidLibraryStatus('invalid progress batch');
     }
     if (!structures.length) return new Map();
-    const rows = await this.pool.query<{ structure: string; occurrence: string; selection_key: string;
+    const rows = await contentConnection(this.pool).query<{ structure: string; occurrence: string; selection_key: string;
       completed: boolean; position: string | null; version: string; changed_at: string }>(`
       SELECT latest.structure, occurrence, selection_key, completed, position,
         version::text AS version, updated_at::text AS changed_at
@@ -328,7 +331,7 @@ export class ReaderLibraryStatusStore {
       rating: 'rating_revision', 'last-read': 'progress_revision' };
     if (!Object.hasOwn(keys, sort)) throw new InvalidLibraryStatus('invalid shelf sort');
     const key = keys[sort];
-    const rows = await this.pool.query<{ revision: string; sort_revision: string }>(`
+    const rows = await contentConnection(this.pool).query<{ revision: string; sort_revision: string }>(`
       SELECT revision::text AS revision, (${key})::text AS sort_revision
       FROM reader.library_status_revision WHERE agent = $1`, [agent]);
     return `${rows.rows[0]?.revision ?? '0'}:${rows.rows[0]?.sort_revision ?? '0'}`;
@@ -359,7 +362,7 @@ export class ReaderLibraryStatusStore {
     const found: Array<Row & { sort_value: string | null }> = [];
     if (!after || after.value !== null) {
       const boundary = after ? `AND (${key},work) ${compare} ($4::${type},$5::text)` : '';
-      const rows = await this.pool.query<Row & { sort_value: string | null }>(`
+      const rows = await contentConnection(this.pool).query<Row & { sort_value: string | null }>(`
         SELECT ${columns}, (${key})::text AS sort_value FROM reader.library_status AS shelf
         WHERE agent = $1 AND status = $2 AND ${key} IS NOT NULL ${boundary}
         ORDER BY ${key} ${direction}, work ${direction} LIMIT $3`,
@@ -368,7 +371,7 @@ export class ReaderLibraryStatusStore {
     }
     if (found.length < limit && sort !== 'added') {
       const nullBoundary = after?.value === null ? `AND work ${compare} $4::text` : '';
-      const rows = await this.pool.query<Row & { sort_value: string | null }>(`
+      const rows = await contentConnection(this.pool).query<Row & { sort_value: string | null }>(`
         SELECT ${columns}, NULL::text AS sort_value FROM reader.library_status AS shelf
         WHERE agent = $1 AND status = $2 AND ${key} IS NULL ${nullBoundary}
         ORDER BY work ${direction} LIMIT $3`,
@@ -390,7 +393,8 @@ export class ReaderLibraryStatusStore {
     if (!ID.test(agent) || !ID.test(work) || value !== null && (!Number.isInteger(value) || value < 1 || value > 5)) {
       throw new InvalidLibraryStatus('invalid shelf rating');
     }
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -404,7 +408,7 @@ export class ReaderLibraryStatusStore {
         WHERE agent = $1 AND work = $2 AND own_rating IS DISTINCT FROM $3`, [agent, work, current]);
       await client.query('COMMIT');
     } catch (error) { await client.query('ROLLBACK'); throw error; }
-    finally { client.release(); }
+    finally { if (!borrowed) client.release(); }
   }
 
   /** An owner composing this command may supply its Content transaction. It
@@ -440,7 +444,8 @@ export class ReaderLibraryStatusStore {
       input.finishedOn === undefined ? ['keep'] : input.finishedOn, input.expectedVersion];
     if (input.sessionProjection) intent.push(['session', input.sessionProjection]);
     const digest = createHash('sha256').update(JSON.stringify(intent)).digest('hex');
-    const client = transaction ?? await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = transaction ?? borrowed ?? await this.pool.connect();
     try {
       if (!transaction) await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -496,6 +501,6 @@ export class ReaderLibraryStatusStore {
         throw new StaleLibraryStatus('status changed concurrently');
       }
       throw error;
-    } finally { if (!transaction) client.release(); }
+    } finally { if (!transaction && !borrowed) client.release(); }
   }
 }

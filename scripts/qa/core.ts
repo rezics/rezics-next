@@ -202,7 +202,8 @@ export function parseArgs(args: string[]): { tier?: Tier; onlyFailed?: string; k
 // test, so a tier killed at its budget still shows how far it got.
 const agentOutputVariables = ['AGENT', 'CLAUDECODE', 'REPL_ID'];
 export function testLogEnvironment(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  return Object.fromEntries(Object.entries(env).filter(([key]) => !agentOutputVariables.includes(key)));
+  return { ...Object.fromEntries(Object.entries(env).filter(([key]) => !agentOutputVariables.includes(key))),
+    REZICS_NESTED_POOL_CHECKOUT: 'throw' };
 }
 
 function spawnEnvironment(name: string, args: readonly string[], env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {

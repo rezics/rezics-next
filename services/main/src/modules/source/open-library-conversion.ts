@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { SourceIntakeStore, StagedSourceObservation } from './intake.ts';
@@ -178,7 +179,8 @@ export class OpenLibraryConversionStore {
     const observation = await this.intake.read(principalId, observationId);
     if (!observation) return null;
     const projected = projectOpenLibraryWork(observation);
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -206,14 +208,14 @@ export class OpenLibraryConversionStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   async read(principalId: string, conversionId: string): Promise<OpenLibraryConversion | null> {
     if (!UUID.test(principalId) || !UUID.test(conversionId)) {
       throw new SourceConversionInvalid('invalid source conversion identity');
     }
-    const rows = await this.pool.query<ConversionRow>(`SELECT id, observation_id, mapping_revision,
+    const rows = await contentConnection(this.pool).query<ConversionRow>(`SELECT id, observation_id, mapping_revision,
       source_digest, projection, field_inventory, created_at FROM source.conversion
       WHERE id = $1 AND principal_id = $2`, [conversionId, principalId]);
     return rows.rows[0] ? result(rows.rows[0]) : null;

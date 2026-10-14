@@ -1,3 +1,4 @@
+import { contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 
@@ -164,7 +165,8 @@ export class SourceIntakeStore {
   }
 
   async reserveOpenLibrarySlot(): Promise<void> {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     let delayMs = 0;
     try {
       await client.query('BEGIN');
@@ -184,7 +186,7 @@ export class SourceIntakeStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
     if (delayMs > 0) await Bun.sleep(delayMs);
   }
 
@@ -192,7 +194,8 @@ export class SourceIntakeStore {
     if (!UUID.test(principalId) || !idempotencyKey || idempotencyKey.length > 200) {
       throw new SourceIntakeInvalid('invalid source intake identity');
     }
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       const prior = await client.query<{ observation_id: string }>(
         `SELECT observation_id FROM source.intake_receipt
@@ -201,7 +204,7 @@ export class SourceIntakeStore {
       const row = await readRow(client, principalId, prior.rows[0].observation_id);
       if (!row) throw new SourceIntakeUnavailable('source intake receipt lost its observation');
       return result(row);
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   async submit(principalId: string, idempotencyKey: string,
@@ -237,7 +240,8 @@ export class SourceIntakeStore {
     const manualDigest = manualSourceIntakeDigest(input);
     const requestDigest = capture ? createHash('sha256').update(JSON.stringify({
       family: 'source-acquisition-v1', manualDigest, capture })).digest('hex') : manualDigest;
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -280,15 +284,16 @@ export class SourceIntakeStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   async read(principalId: string, observationId: string): Promise<StagedSourceObservation | null> {
     if (!UUID.test(principalId) || !UUID.test(observationId)) {
       throw new SourceIntakeInvalid('invalid source identity');
     }
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try { return await readRow(client, principalId, observationId).then(row => row ? result(row) : null); }
-    finally { client.release(); }
+    finally { if (!borrowed) client.release(); }
   }
 }

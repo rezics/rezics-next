@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
@@ -546,7 +547,7 @@ export class MediaStore {
 
   private summaryConnection(): Pool | PoolClient {
     const held = this.summaryClients.getStore();
-    return held?.active ? held.client : this.pool;
+    return held?.active ? held.client : contentConnection(this.pool);
   }
 
   /** Exact Uses carry only their own current attachment. Asset probes retain

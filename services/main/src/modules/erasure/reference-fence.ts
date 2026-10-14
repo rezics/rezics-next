@@ -1,3 +1,4 @@
+import { contentSessionClient } from '../../../../content/src/connection.ts';
 import type { Pool, PoolClient } from 'pg';
 
 /** All references to existing bytes and their deletion use the Content database.
@@ -8,7 +9,8 @@ export async function withReferenceFence<T>(database: Pool | PoolClient, digest:
   // PoolClient also exposes Client.connect; release identifies a checked-out
   // client whose existing transaction must retain the lock through commit.
   const borrowed = 'release' in database;
-  const client = borrowed ? database as PoolClient : await (database as Pool).connect();
+  const session = borrowed ? undefined : contentSessionClient(database as Pool);
+  const client = borrowed ? database as PoolClient : session ?? await (database as Pool).connect();
   try {
     if (!borrowed) await client.query('BEGIN');
     await client.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1, 0))", [digest]);
@@ -18,5 +20,5 @@ export async function withReferenceFence<T>(database: Pool | PoolClient, digest:
   } catch (error) {
     if (!borrowed) await client.query('ROLLBACK');
     throw error;
-  } finally { if (!borrowed) client.release(); }
+  } finally { if (!borrowed && !session) client.release(); }
 }

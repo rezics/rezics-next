@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { Value } from 'typebox/value';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
@@ -51,7 +52,9 @@ export class LibraryFileStore {
   readonly jobs: LibraryImportJobStore;
   constructor(readonly pool: Pool) { this.jobs=new LibraryImportJobStore(pool); }
   async create(agent: string, key: string, digest: string, format: LibraryFileFormat, rows: CanonicalRow[]) {
-    const id = fileIdentity(agent, key), client = await this.pool.connect();
+    const id = fileIdentity(agent, key);
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[JSON.stringify(['library-upload',agent])]);
@@ -85,27 +88,28 @@ export class LibraryFileStore {
         VALUES ($1,$2,$3,$4)`,[agent,key,digest,id]);
       await client.query('COMMIT');
       return { id, total: rows.length };
-    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { if (!borrowed) client.release(); }
   }
   async file(agent: string, id: string) {
-    const result = await this.pool.query<{ import_key: string; format: LibraryFileFormat; apply_intent: ApplyIntent | null }>(`
+    const result = await contentConnection(this.pool).query<{ import_key: string; format: LibraryFileFormat; apply_intent: ApplyIntent | null }>(`
       SELECT import_key,format,apply_intent FROM reader.library_import_file WHERE agent=$1 AND id=$2 AND expires_at>clock_timestamp()`, [agent,id]);
     if (!result.rows[0]) throw new LibraryFileMissing('Import file was deleted, expired or is unavailable');
     return result.rows[0];
   }
   async page(agent: string, id: string, after: number, limit = FILE_IMPORT_COST.page as number) {
     await this.file(agent,id);
-    const result = await this.pool.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
+    const result = await contentConnection(this.pool).query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
       WHERE r.agent=$1 AND r.file_id=$2 AND r.row_number>$3 ORDER BY r.row_number LIMIT $4`, [agent,id,after,limit+1]);
     return { rows: result.rows.slice(0,limit).map(unpack), more: result.rows.length>limit };
   }
   async saveMatch(agent: string, id: string, index: number, match: RowMatch) {
-    await this.pool.query(`UPDATE reader.library_import_source_row SET match=$4,version=version+1
+    await contentConnection(this.pool).query(`UPDATE reader.library_import_source_row SET match=$4,version=version+1
       WHERE agent=$1 AND file_id=$2 AND row_number=$3 AND match IS NULL`, [agent,id,index,JSON.stringify(match)]);
   }
   async resolve(agent: string, id: string, index: number, version: number, resolution: RowResolution, key: string) {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       const digest = importDigest([id,index,version,resolution]);
@@ -133,15 +137,16 @@ export class LibraryFileStore {
       }
       await client.query(`INSERT INTO reader.library_import_review_command(agent,idempotency_key,request_digest) VALUES ($1,$2,$3)`,[agent,key,digest]);
       await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { if (!borrowed) client.release(); }
   }
   async seal(agent: string, id: string, intent: ApplyIntent) {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await this.sealOn(client,agent,id,intent);
       await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK'); throw error; } finally { if (!borrowed) client.release(); }
   }
   /** Seals inside the caller's transaction, so a command refused later leaves the upload editable. */
   async sealOn(client: PoolClient, agent: string, id: string, intent: ApplyIntent) {
@@ -158,13 +163,14 @@ export class LibraryFileStore {
     await client.query(`UPDATE reader.library_import_file SET apply_intent=$3 WHERE agent=$1 AND id=$2`, [agent,id,JSON.stringify(intent)]);
   }
   async pending(agent: string, id: string) {
-    const rows = await this.pool.query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
+    const rows = await contentConnection(this.pool).query<SourceRecord>(`SELECT r.row_number,${sourceView},r.match,r.resolution,r.outcome,r.version::text
       FROM reader.library_import_source_row r JOIN reader.library_import_source s ON s.agent=r.agent AND s.digest=r.source_digest
       WHERE r.agent=$1 AND r.file_id=$2 AND r.outcome IS NULL ORDER BY r.row_number LIMIT ${FILE_IMPORT_COST.page}`, [agent,id]);
     return rows.rows.map(unpack);
   }
   async complete(agent: string, id: string, index: number, outcome: NonNullable<StoredSourceRow['outcome']>,token?: string) {
-    const client=await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       if (token && !(await client.query(`SELECT 1 FROM reader.library_import_job WHERE agent=$1 AND file_id=$2
@@ -173,12 +179,12 @@ export class LibraryFileStore {
         WHERE agent=$1 AND file_id=$2 AND row_number=$3 AND outcome IS NULL`,[agent,id,index,JSON.stringify(outcome)]);
       if (token) await this.jobs.progress(agent,id,token,client);
       await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK');throw error; } finally { if (!borrowed) client.release(); }
   }
   async progress(agent: string, id: string) {
     await this.file(agent,id);
     const job=await this.jobs.status(agent,id);
-    const result = await this.pool.query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,
+    const result = await contentConnection(this.pool).query<{ total: number; completed: number; issues: number }>(`SELECT count(*)::integer AS total,
       count(outcome)::integer AS completed,
       count(*) FILTER (WHERE jsonb_array_length(outcome->'issues')>0)::integer AS issues
       FROM reader.library_import_source_row WHERE agent=$1 AND file_id=$2`, [agent,id]);
@@ -187,7 +193,8 @@ export class LibraryFileStore {
     return { ...counts,state,reason: job?.reason ?? null,pending: state==='pending' };
   }
   async delete(agent: string, id: string, key: string) {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',[JSON.stringify(['library-upload',agent])]);
@@ -201,6 +208,6 @@ export class LibraryFileStore {
           VALUES ($1,$2,$3)`,[agent,key,digest]);
       }
       await client.query('COMMIT');
-    } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK');throw error; } finally { if (!borrowed) client.release(); }
   }
 }

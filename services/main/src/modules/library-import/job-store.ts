@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { LibraryFileMissing, importDigest, type ApplyIntent } from './file-store.ts';
@@ -19,7 +20,7 @@ const deadlines = `(lease_expires_at<=clock_timestamp()
 export class LibraryImportJobStore {
   constructor(readonly pool: Pool) {}
   async expire() {
-    await this.pool.query(`WITH expired AS (SELECT agent,file_id FROM reader.library_import_job
+    await contentConnection(this.pool).query(`WITH expired AS (SELECT agent,file_id FROM reader.library_import_job
       WHERE state='pending' AND ${deadlines} ORDER BY lease_expires_at LIMIT 100),
     outcomes AS (SELECT j.agent,j.file_id,EXISTS(SELECT 1 FROM reader.library_import_source_row r
       WHERE r.agent=j.agent AND r.file_id=j.file_id AND r.outcome IS NULL) AS unfinished
@@ -29,20 +30,21 @@ export class LibraryImportJobStore {
       lease_token=NULL,lease_expires_at=NULL FROM outcomes o WHERE j.agent=o.agent AND j.file_id=o.file_id AND j.state='pending' AND ${deadlines}`);
   }
   async status(agent: string,id: string) {
-    await this.pool.query(`UPDATE reader.library_import_job j SET state='completed',reason=NULL,
+    await contentConnection(this.pool).query(`UPDATE reader.library_import_job j SET state='completed',reason=NULL,
       lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending'
       AND NOT EXISTS (SELECT 1 FROM reader.library_import_source_row r
         WHERE r.agent=j.agent AND r.file_id=j.file_id AND r.outcome IS NULL)`,[agent,id]);
-    await this.pool.query(`UPDATE reader.library_import_job SET state='stalled',
+    await contentConnection(this.pool).query(`UPDATE reader.library_import_job SET state='stalled',
       reason=CASE WHEN lease_expires_at<=clock_timestamp() THEN 'lease-expired' ELSE 'no-progress' END,
       lease_token=NULL,lease_expires_at=NULL WHERE agent=$1 AND file_id=$2 AND state='pending' AND ${deadlines}`,[agent,id]);
-    return (await this.pool.query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
+    return (await contentConnection(this.pool).query<ImportJob>(`SELECT state,reason,lease_token FROM reader.library_import_job
       WHERE agent=$1 AND file_id=$2`,[agent,id])).rows[0] ?? null;
   }
   /** `seal` runs in the receipt's transaction: a refused command seals nothing. */
   async accept(agent: string,id: string,key: string,intent: ApplyIntent,resume: boolean,
     seal?: (client: PoolClient) => Promise<void>) {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     const digest = importDigest([id,intent,resume]);
     try {
       await client.query('BEGIN');
@@ -77,15 +79,15 @@ export class LibraryImportJobStore {
       await client.query(`INSERT INTO reader.library_import_apply_command(agent,idempotency_key,request_digest,file_id,result)
         VALUES ($1,$2,$3,$4,$5)`,[agent,key,digest,id,JSON.stringify(result)]);
       await client.query('COMMIT');return { result,token };
-    } catch (error) { await client.query('ROLLBACK');throw error; } finally { client.release(); }
+    } catch (error) { await client.query('ROLLBACK');throw error; } finally { if (!borrowed) client.release(); }
   }
   async renew(agent: string,id: string,token: string) {
-    const result = await this.pool.query(`UPDATE reader.library_import_job
+    const result = await contentConnection(this.pool).query(`UPDATE reader.library_import_job
       SET lease_expires_at=clock_timestamp()+interval '${IMPORT_JOB_LEASE_SECONDS} seconds'
       WHERE agent=$1 AND file_id=$2 AND state='pending' AND lease_token=$3 AND NOT ${deadlines}`,[agent,id,token]);
     if (!result.rowCount) { await this.status(agent,id);throw new ImportJobLeaseLost('Import worker lease expired'); }
   }
-  async progress(agent: string,id: string,token: string,client: Pool | PoolClient = this.pool) {
+  async progress(agent: string,id: string,token: string,client: Pool | PoolClient = contentConnection(this.pool)) {
     const result = await client.query(`UPDATE reader.library_import_job SET last_progress_at=clock_timestamp(),
       lease_expires_at=clock_timestamp()+interval '${IMPORT_JOB_LEASE_SECONDS} seconds'
       WHERE agent=$1 AND file_id=$2 AND state='pending' AND lease_token=$3 AND NOT ${deadlines}`,[agent,id,token]);
@@ -93,7 +95,7 @@ export class LibraryImportJobStore {
   }
   async finish(agent: string,id: string,token: string,state: ImportJobState,reason: ImportJobReason | null = null) {
     await this.status(agent,id);
-    await this.pool.query(`UPDATE reader.library_import_job SET state=$4,reason=$5,lease_token=NULL,lease_expires_at=NULL
+    await contentConnection(this.pool).query(`UPDATE reader.library_import_job SET state=$4,reason=$5,lease_token=NULL,lease_expires_at=NULL
       WHERE agent=$1 AND file_id=$2 AND state='pending' AND lease_token=$3`,[agent,id,token,state,reason]);
   }
 }

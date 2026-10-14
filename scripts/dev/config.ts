@@ -233,6 +233,7 @@ export function appEnvironment(compose: Record<string, string>, dir: string): Re
   // Main still reads JWKS and introspection from the service directly.
   const account = compose.ACCOUNTS_PORT ? `http://127.0.0.1:${compose.ACCOUNTS_PORT}` : service;
   return {
+    ...(compose.REZICS_STACK_PROFILE === 'qa' ? { REZICS_NESTED_POOL_CHECKOUT: 'throw' } : {}),
     ...(existsSync(join(dir, 'qa-ports.json')) && compose.REZICS_STACK_PROFILE === 'qa'
       && compose.REZICS_STACK_STORAGE === 'tmpfs' ? {
         REZICS_QA_PORT_DIAGNOSTICS: '1',

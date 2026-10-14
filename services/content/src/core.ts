@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from './connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/node-postgres';
@@ -415,7 +416,8 @@ function checkUuid(value: string, name: string): void {
 }
 
 async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
-  const client = await pool.connect();
+  const borrowed = contentSessionClient(pool);
+  const client = borrowed ?? await pool.connect();
   try {
     await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
     const result = await work(client);
@@ -424,7 +426,7 @@ async function transaction<T>(pool: Pool, work: (client: PoolClient) => Promise<
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
-  } finally { client.release(); }
+  } finally { if (!borrowed) client.release(); }
 }
 
 async function ownerEpoch(client: PoolClient): Promise<string | undefined> {
@@ -492,7 +494,7 @@ export class ContentCore {
     graphReceipt: string; graphDataEpoch: string; graphSequence: string;
   } | null> {
     checkId(operationId, 'publication operation id', 200);
-    const rows = (await this.pool.query<{ revision_id: string; erasure_id: string;
+    const rows = (await contentConnection(this.pool).query<{ revision_id: string; erasure_id: string;
       erasure_epoch: string; graph_receipt: string; graph_data_epoch: string;
       graph_sequence: string }>(`SELECT s.revision_id, s.erasure_id,
         s.erasure_epoch::text AS erasure_epoch, s.graph_receipt,
@@ -511,7 +513,7 @@ export class ContentCore {
 
   async readDraftReceipt(operationId: string): Promise<SaveDraftResult | null> {
     checkId(operationId, 'operation id', 200);
-    const result = await this.pool.query(`SELECT outcome, revision_id, data_epoch,
+    const result = await contentConnection(this.pool).query(`SELECT outcome, revision_id, data_epoch,
       sequence::text AS sequence FROM content.receipt
       WHERE operation_id = $1 AND action = 'draft.save'`, [operationId]);
     const row = result.rows[0];
@@ -551,7 +553,7 @@ export class ContentCore {
   /** Internal ownership lookup for current disclosure, independent of byte health. */
   async owningResourceForRevision(revisionId: string, client?: PoolClient): Promise<string | null> {
     checkUuid(revisionId, 'revision id');
-    const result = await (client ?? this.pool).query<{ resource_id: string }>(
+    const result = await (client ?? contentConnection(this.pool)).query<{ resource_id: string }>(
       `SELECT v.resource_id FROM content.revision r
        JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
     return result.rows[0]?.resource_id ?? null;
@@ -559,7 +561,7 @@ export class ContentCore {
 
   /** The last position the sequencer assigned. */
   async ownerPosition(): Promise<ContentPosition> {
-    const rows = await drizzle({ client: this.pool }).select({ dataEpoch: ownerControl.dataEpoch,
+    const rows = await drizzle({ client: contentConnection(this.pool) }).select({ dataEpoch: ownerControl.dataEpoch,
       sequence: ownerControl.sequence }).from(ownerControl).where(eq(ownerControl.singleton, true));
     if (rows.length !== 1) throw new ContentUnavailable('Content owner position unavailable');
     return { owner: 'content', dataEpoch: rows[0]!.dataEpoch, sequence: rows[0]!.sequence.toString() };
@@ -572,7 +574,7 @@ export class ContentCore {
   } | null> {
     checkId(resourceId, 'resource id');
     checkId(variantId, 'variant id');
-    const result = await this.pool.query(`SELECT v.draft_head::text AS revision_id,
+    const result = await contentConnection(this.pool).query(`SELECT v.draft_head::text AS revision_id,
         c.data_epoch, c.sequence::text AS sequence
       FROM content.variant v CROSS JOIN content.owner_control c
       WHERE v.id = $1 AND v.resource_id = $2 AND c.singleton`, [variantId, resourceId]);
@@ -591,7 +593,7 @@ export class ContentCore {
     if (!Number.isInteger(limit) || limit < 1 || limit > 20 || after.length > 300) {
       throw new ContentConflict('invalid variant page');
     }
-    const result = await this.pool.query<{ id: string; language_kind: string;
+    const result = await contentConnection(this.pool).query<{ id: string; language_kind: string;
       language_tag: string | null; original_language_tag: string | null;
       direction: string; draft_head: string | null }>(`
       SELECT v.id, v.language_kind, v.language_tag, v.original_language_tag,
@@ -630,20 +632,21 @@ export class ContentCore {
 
   async readPublicationPreparation(operationId: string): Promise<PublicationPreparation | null> {
     checkId(operationId, 'operation id', 200);
-    const result = await this.pool.query(`SELECT p.revision_id, p.status, p.pin_active,
+    const result = await contentConnection(this.pool).query(`SELECT p.revision_id, p.status, p.pin_active,
       r.data_epoch, r.sequence::text AS sequence
       FROM content.publication_preparation p JOIN content.receipt r ON r.operation_id = p.operation_id
       WHERE p.operation_id = $1`, [operationId]);
     if (!result.rowCount) return null;
     const row = result.rows[0];
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     let reference: ExactContentReference | null;
     // Rejection releases byte custody. Its retained metadata lets cancellation
     // resume after erasure; settlePublication still verifies the terminal proof.
     try { reference = row.status === 'rejected' && !row.pin_active
       ? await readReferenceMetadata(client, row.revision_id)
       : await readReference(client, row.revision_id); }
-    finally { client.release(); }
+    finally { if (!borrowed) client.release(); }
     if (!reference) throw new ContentUnavailable('prepared exact revision unavailable');
     return { operationId, reference,
       position: row.sequence ? position(row) : await contentEventPosition(this.pool, operationId),
@@ -658,7 +661,7 @@ export class ContentCore {
   /** A zero sequencer result can also mean a busy owner lock. Rebuilds must
    * prove the committed queue is empty before retaining their exact cut. */
   async hasUnsequencedEvents(): Promise<boolean> {
-    const result = await this.pool.query<{ pending: boolean }>(
+    const result = await contentConnection(this.pool).query<{ pending: boolean }>(
       'SELECT EXISTS (SELECT 1 FROM content.outbox WHERE sequence IS NULL) AS pending');
     return result.rows[0]?.pending !== false;
   }
@@ -978,7 +981,7 @@ export class ContentCore {
     const allowed = await authorize(revisionIds);
     const admitted = revisionIds.filter((id) => allowed.has(id));
     if (!admitted.length) return revisionIds.map((revisionId) => ({ revisionId, status: 'denied' }));
-    const result = await (client ?? this.pool).query(`WITH picked AS (
+    const result = await (client ?? contentConnection(this.pool)).query(`WITH picked AS (
       SELECT r.*, v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id,
         sum(CASE WHEN r.availability = 'available' THEN r.byte_length ELSE 0 END) OVER () AS total_bytes
       FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = ANY($1::uuid[])
@@ -1025,7 +1028,7 @@ export class ContentCore {
     revisionIds.forEach(id => checkUuid(id,'revision id'));
     const allowed = await authorize(revisionIds), admitted = revisionIds.filter(id => allowed.has(id));
     if (!admitted.length) return new Map<string,{ availability: string; byteDigest: string }>();
-    const rows = await this.pool.query<{ id: string; availability: string; byte_digest: string }>(
+    const rows = await contentConnection(this.pool).query<{ id: string; availability: string; byte_digest: string }>(
       'SELECT id,availability,byte_digest FROM content.revision WHERE id=ANY($1::uuid[])', [admitted]);
     return new Map(rows.rows.map(row => [row.id,{ availability: row.availability,byteDigest: row.byte_digest }]));
   }
@@ -1033,7 +1036,7 @@ export class ContentCore {
   async readOutbox(dataEpoch: string, afterSequence: string, limit: number): Promise<ContentOutboxEvent[]> {
     if (!/^[0-9a-f-]{36}$/.test(dataEpoch) || !/^(0|[1-9][0-9]*)$/.test(afterSequence)
       || !Number.isInteger(limit) || limit < 1 || limit > 100) throw new ContentLimitExceeded('invalid outbox window');
-    const result = await this.pool.query(`SELECT event.id, event.data_epoch, event.sequence::text AS sequence,
+    const result = await contentConnection(this.pool).query(`SELECT event.id, event.data_epoch, event.sequence::text AS sequence,
       event.operation_id, event.event_type, event.recipe, event.revision_id, event.payload
       FROM content.outbox AS event WHERE event.data_epoch = $1 AND event.sequence > $2::bigint
       ORDER BY event.sequence, event.id LIMIT $3`,
@@ -1046,10 +1049,10 @@ export class ContentCore {
   async readEligibilityDeliveryProgress(streamScope: string, graphDataEpoch: string): Promise<EligibilityDeliveryProgress> {
     checkId(streamScope, 'Main stream scope');
     checkUuid(graphDataEpoch, 'Main graph epoch');
-    const owner = (await this.pool.query<{ data_epoch: string }>(
+    const owner = (await contentConnection(this.pool).query<{ data_epoch: string }>(
       'SELECT data_epoch FROM content.owner_control WHERE singleton')).rows[0];
     if (!owner) throw new ContentUnavailable('Content owner epoch unavailable');
-    const row = (await this.pool.query<{ sequence: string }>(`SELECT sequence::text AS sequence
+    const row = (await contentConnection(this.pool).query<{ sequence: string }>(`SELECT sequence::text AS sequence
       FROM content.eligibility_delivery_progress
       WHERE stream_scope = $1 AND graph_data_epoch = $2 AND content_data_epoch = $3`,
     [streamScope, graphDataEpoch, owner.data_epoch])).rows[0];
@@ -1241,7 +1244,7 @@ export class ContentCore {
     // pass. A replay retries the existing sequencer and never creates new work.
     await sequenceContentEvents(this.pool);
     const operationIds = result.events.map(event => event.operationId);
-    const positions = operationIds.length ? await this.pool.query<{ operation_id: string;
+    const positions = operationIds.length ? await contentConnection(this.pool).query<{ operation_id: string;
       data_epoch: string | null; sequence: string | null }>(`SELECT operation_id, data_epoch,
         sequence::text AS sequence FROM content.receipt WHERE operation_id = ANY($1::text[])`, [operationIds]) : null;
     const byOperation = new Map((positions?.rows ?? []).map(row => [row.operation_id,
@@ -1266,7 +1269,7 @@ export class ContentCore {
       || !/^(0|[1-9][0-9]*)$/.test(expected.sourceSequence)) {
       throw new ContentConflict('eligibility successor lookup requires an exact delivered event');
     }
-    const result = await this.pool.query(`SELECT event.id, event.data_epoch,
+    const result = await contentConnection(this.pool).query(`SELECT event.id, event.data_epoch,
       event.sequence::text AS sequence, event.operation_id, event.event_type,
       event.recipe, event.revision_id, event.payload, delivery.source_sequence
       FROM content.eligibility_delivery_source delivery
@@ -1305,7 +1308,7 @@ export class ContentCore {
       || !/^(0|[1-9][0-9]*)$/.test(event.position.sequence)) {
       throw new ContentConflict('eligibility delivery lookup requires an exact active publication event');
     }
-    const result = await this.pool.query(`SELECT event.id, event.data_epoch,
+    const result = await contentConnection(this.pool).query(`SELECT event.id, event.data_epoch,
       event.sequence::text AS sequence, event.operation_id, event.event_type,
       event.recipe, event.revision_id, event.payload, delivery.source_sequence
       FROM content.eligibility_delivery_source delivery
@@ -1336,7 +1339,7 @@ export class ContentCore {
       if (event.recipe !== RECIPE || !event.revisionId) {
         throw new ContentConflict('eligibility delivery event recipe is incomplete');
       }
-      const delivery = await this.pool.query(`SELECT event.data_epoch, event.sequence::text AS sequence,
+      const delivery = await contentConnection(this.pool).query(`SELECT event.data_epoch, event.sequence::text AS sequence,
         event.operation_id, event.event_type, event.recipe, event.revision_id, event.payload,
         receipt.action, receipt.request_digest, receipt.outcome, receipt.variant_id, receipt.revision_id AS receipt_revision,
         delivery.content_data_epoch, delivery.stream_scope, delivery.graph_data_epoch,
@@ -1395,7 +1398,7 @@ export class ContentCore {
         || stable(payload) !== stable(event.payload)) {
         throw new ContentUnavailable('Content eligibility delivery differs from its immutable Main source');
       }
-      const terminal = await this.pool.query(`SELECT event.id, event.data_epoch,
+      const terminal = await contentConnection(this.pool).query(`SELECT event.id, event.data_epoch,
         event.sequence::text AS sequence, event.operation_id, event.event_type,
         event.recipe, event.revision_id, event.payload
         FROM content.publication_preparation preparation
@@ -1422,7 +1425,7 @@ export class ContentCore {
       || event.recipe !== RECIPE || !event.revisionId) {
       throw new ContentConflict('terminal publication event required');
     }
-    const result = await this.pool.query(`SELECT o.payload, o.event_type, o.revision_id,
+    const result = await contentConnection(this.pool).query(`SELECT o.payload, o.event_type, o.revision_id,
       p.operation_id AS preparation_id, p.revision_id AS prepared_revision,
       p.status, p.pin_active, p.graph_receipt, p.graph_data_epoch, p.graph_sequence,
       prepared.data_epoch AS preparation_epoch, prepared.sequence::text AS preparation_sequence
@@ -1449,7 +1452,8 @@ export class ContentCore {
       || stable(row.payload) !== stable(event.payload)) {
       throw new ContentUnavailable('terminal publication event differs from settled pin');
     }
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       // A quarantined rebuild may inspect an obsolete terminal publication after
       // its bytes were erased. The graph head decides whether exact bytes are
@@ -1461,6 +1465,6 @@ export class ContentCore {
       return { preparationId: row.preparation_id,
         preparationPosition: { owner: 'content', dataEpoch: row.preparation_epoch,
           sequence: row.preparation_sequence }, reference, status, graph };
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 }

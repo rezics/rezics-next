@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
 import { requireImportOwnerAvailable } from './reader-import.ts';
 import { importDigest } from './file-store.ts';
@@ -23,7 +24,7 @@ const sameAttempt = (a: SessionState, b: Desired) => sameDates(a,b)
 export async function findImportSession(store: ReaderLibraryImportStore, request: Request, agent: string,
   source: CanonicalRow, format: LibraryFileFormat, desired: Desired): Promise<{ identity: string; session: SessionState | null; replay: boolean } | null> {
   const identity = importDigest([format,source.kind,source.sourceId,source.work ?? desired.target]);
-  const bound = (await store.pool.query<{ session_id: string; desired_digest: string }>(`SELECT session_id,desired_digest FROM reader.library_import_session_effect
+  const bound = (await contentConnection(store.pool).query<{ session_id: string; desired_digest: string }>(`SELECT session_id,desired_digest FROM reader.library_import_session_effect
     WHERE agent=$1 AND source_identity=$2`,[agent,identity])).rows[0];
   let cursor: string | null = null, fallback: SessionState | null = null;
   do {
@@ -40,7 +41,7 @@ export async function findImportSession(store: ReaderLibraryImportStore, request
       // Portable files can contain two real attempts with identical dates.
       // Distinct native source IDs must preserve those actual attempts; a
       // previously restored attempt is already reserved for its source ID.
-      const claimed = source.kind === 'session' && (await store.pool.query(`SELECT 1 FROM reader.library_import_session_effect
+      const claimed = source.kind === 'session' && (await contentConnection(store.pool).query(`SELECT 1 FROM reader.library_import_session_effect
         WHERE agent=$1 AND session_id=$2 AND source_identity<>$3 LIMIT 1`,[agent,candidate.id,identity])).rowCount;
       if (!claimed && !fallback) fallback=candidate;
       if (fallback && !bound && source.kind!=='session') return { identity,session: fallback,replay: false };
@@ -51,7 +52,7 @@ export async function findImportSession(store: ReaderLibraryImportStore, request
 }
 
 export async function bindImportSession(store: ReaderLibraryImportStore, agent: string, identity: string, session: SessionState, desired: Desired) {
-  await store.pool.query(`INSERT INTO reader.library_import_session_effect(agent,source_identity,session_id,desired_digest)
+  await contentConnection(store.pool).query(`INSERT INTO reader.library_import_session_effect(agent,source_identity,session_id,desired_digest)
     VALUES ($1,$2,$3,$4) ON CONFLICT (agent,source_identity) DO UPDATE SET session_id=EXCLUDED.session_id,desired_digest=EXCLUDED.desired_digest`,
   [agent,identity,session.id,importDigest(desired)]);
 }

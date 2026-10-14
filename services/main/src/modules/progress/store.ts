@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -97,7 +98,7 @@ export class StructureProgressStore {
   get owner(): Pool { return this.pool; }
 
   async readerVersion(principal: VerifiedPrincipal): Promise<string> {
-    const value = await this.pool.query<{ version: string }>(`SELECT version::text AS version
+    const value = await contentConnection(this.pool).query<{ version: string }>(`SELECT version::text AS version
       FROM structure.progress_reader WHERE principal_issuer = $1 AND principal_subject = $2`,
     [principal.issuer, principal.subject]);
     return value.rows[0]?.version ?? '0';
@@ -109,12 +110,12 @@ export class StructureProgressStore {
     validIdentity(structure, structure, null);
     if (after) validIdentity(structure, after.occurrence, after.selectedRevision);
     if (!ID.test(revision)) throw new InvalidStructureProgress('progress order revision is invalid');
-    const scope = await this.pool.query<{ order_revision: string | null; ready: boolean }>(
+    const scope = await contentConnection(this.pool).query<{ order_revision: string | null; ready: boolean }>(
       `SELECT order_revision, ready FROM structure.progress_scope
        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3`,
     [principal.issuer, principal.subject, structure]);
     if (!scope.rows[0]?.ready || scope.rows[0]?.order_revision !== revision) {
-      const legacy = await this.pool.query(`SELECT occurrence FROM structure.progress
+      const legacy = await contentConnection(this.pool).query(`SELECT occurrence FROM structure.progress
         WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 LIMIT 1`,
       [principal.issuer, principal.subject, structure]);
       if (legacy.rows.length) {
@@ -125,14 +126,14 @@ export class StructureProgressStore {
     }
     let key: string | undefined;
     if (after) {
-      const point = await this.pool.query<{ order_key: string }>(`SELECT order_key FROM structure.progress
+      const point = await contentConnection(this.pool).query<{ order_key: string }>(`SELECT order_key FROM structure.progress
         WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
           AND occurrence=$4 AND selection_key=$5 AND order_revision=$6`,
       [principal.issuer, principal.subject, structure, after.occurrence, after.selectedRevision ?? '', revision]);
       if (!point.rows[0]?.order_key) throw new InvalidStructureProgress('Resume continuation changed');
       key = point.rows[0].order_key;
     }
-    const result = await this.pool.query<{ occurrence: string; selection_key: string; completed: boolean;
+    const result = await contentConnection(this.pool).query<{ occurrence: string; selection_key: string; completed: boolean;
       position: string | null; version: string; order_key: string }>(after ? `SELECT * FROM (
         (SELECT occurrence,selection_key,completed,position,version::text AS version,order_key
          FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
@@ -164,7 +165,7 @@ export class StructureProgressStore {
    * index: a reader without any costs a single empty seek. More than a page
    * is reported as one extra entry, so the caller refuses instead of guessing. */
   async overflowMembers(principal: VerifiedPrincipal): Promise<string[]> {
-    const result = await this.pool.query<{ structure: string }>(
+    const result = await contentConnection(this.pool).query<{ structure: string }>(
       `SELECT structure FROM structure.progress_anchor_scope
        WHERE principal_issuer = $1 AND principal_subject = $2 AND parent = ''
        ORDER BY structure LIMIT $3`,
@@ -182,7 +183,7 @@ export class StructureProgressStore {
     if (!Number.isInteger(limit) || limit < 1 || limit >= STRUCTURE_PROGRESS_COST.pageRows) {
       throw new InvalidStructureProgress('progress page limit is invalid');
     }
-    const result = await this.pool.query<{ occurrence: string; selection_key: string;
+    const result = await contentConnection(this.pool).query<{ occurrence: string; selection_key: string;
       completed: boolean; position: string | null; version: string }>(
       `SELECT occurrence, selection_key, completed, position, version::text AS version
        FROM structure.progress
@@ -202,7 +203,7 @@ export class StructureProgressStore {
   async read(principal: VerifiedPrincipal, structure: string, occurrence: string,
     selectedRevision: string | null = null): Promise<StructureProgress> {
     validIdentity(structure, occurrence, selectedRevision);
-    const result = await this.pool.query<{ completed: boolean; position: string | null; version: string }>(
+    const result = await contentConnection(this.pool).query<{ completed: boolean; position: string | null; version: string }>(
       `SELECT completed, position, version::text AS version FROM structure.progress
        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
          AND occurrence = $4 AND selection_key = $5`,
@@ -275,7 +276,7 @@ export class StructureProgressStore {
     validIdentity(member.structure, member.structure, null);
     validIdentity(parent.structure, parent.structure, null);
     if (!ID.test(member.revision) || !ID.test(parent.revision)) throw new InvalidStructureProgress('progress order revision is invalid');
-    const ready = await this.pool.query(`SELECT 1 FROM structure.progress_anchor_scope
+    const ready = await contentConnection(this.pool).query(`SELECT 1 FROM structure.progress_anchor_scope
       WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=$4
         AND revision=$5 AND parent_revision=$6 AND cursor IS NULL`,
     [principal.issuer, principal.subject, member.structure, parent.structure, member.revision, parent.revision]);
@@ -318,7 +319,8 @@ export class StructureProgressStore {
       throw new InvalidStructureProgress('progress command is invalid');
     }
     const prepared = this.prepareWrite(input);
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     let saved: StructureProgress;
     let operation: string | null = null;
     try {
@@ -333,7 +335,7 @@ export class StructureProgressStore {
         throw new StaleStructureProgress('progress changed concurrently');
       }
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
     // The save is acknowledged once its event is numbered, so ordered consumers
     // (rankings, relays) see it before the reader's next request.
     if (operation) await settledContentPosition(this.pool, operation);

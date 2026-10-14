@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import { ImportCommands, importReviewedBatch, resolvePortableShelf, type ReviewedImportBatch } from './batch.ts';
 import { LibraryFileStore, importDigest, type ApplyIntent, type StoredSourceRow } from './file-store.ts';
 import type { ReaderLibraryImportStore } from './reader-import.ts';
@@ -182,7 +183,7 @@ export async function applyLibraryFile(files: LibraryFileStore, store: ReaderLib
   await store.withBatch(agent,'library-file-agent-apply',async () => {
     for (const item of await files.pending(agent,id)) {
       const reviewedKey = commandKey(agent,file.import_key,item.index,'reviewed');
-      await files.pool.query(`INSERT INTO reader.library_import_file_batch(agent,file_id,import_key)
+      await contentConnection(files.pool).query(`INSERT INTO reader.library_import_file_batch(agent,file_id,import_key)
         VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,[agent,id,reviewedKey]);
       try {
         const outcome = await applyRow(store,request,agent,file.import_key,item,intent,file.format);

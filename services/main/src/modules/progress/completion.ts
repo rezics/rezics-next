@@ -1,3 +1,4 @@
+import { contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -82,7 +83,8 @@ export class ProgressCompletionProjector {
     const { principal } = input;
     const sourceHash = digest(input.source);
     const operations: string[] = [];
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
@@ -115,7 +117,7 @@ export class ProgressCompletionProjector {
         throw new StaleStructureProgress('progress changed concurrently');
       }
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
     for (const operation of operations) await settledContentPosition(this.pool, operation);
   }
 

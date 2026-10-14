@@ -156,8 +156,8 @@ export class LibraryCopyStore {
     });
   }
   async write(input: LibraryRecordCommand & { id?: string; release?: string; changes: CopyChanges; remove?: boolean },
-    resolve: () => Promise<{ work: string; release: string }>, authorize?: () => Promise<void>,
-    checkParty?: (party: LibraryParty) => Promise<void>) {
+    resolve: (client: PoolClient) => Promise<{ work: string; release: string }>, authorize?: () => Promise<void>,
+    checkParty?: (party: LibraryParty, client: PoolClient) => Promise<void>) {
     const create = input.id === undefined;
     if (create && (input.expectedVersion !== 0 || !Value.Check(readId, input.release))
       || !create && (!Value.Check(readId, input.id) || input.release !== undefined)
@@ -181,8 +181,8 @@ export class LibraryCopyStore {
         WHERE agent=$1 AND copy=$2 AND returned_at IS NULL LIMIT 1`, [input.agent, id])).rowCount) {
         throw new LibraryRecordConflict('Return the active loan before removing its copy');
       }
-      const target = current ?? await resolve();
-      if (changes.acquiredFrom) await checkParty?.(changes.acquiredFrom);
+      const target = current ?? await resolve(client);
+      if (changes.acquiredFrom) await checkParty?.(changes.acquiredFrom, client);
       const saved: CopyState = { id, work: target.work, release: target.release,
         format: current?.format ?? null, acquiredFrom: current?.acquiredFrom ?? null,
         acquiredAt: current?.acquiredAt ?? null, ownedFrom: current?.ownedFrom ?? null, ownedThrough: current?.ownedThrough ?? null,

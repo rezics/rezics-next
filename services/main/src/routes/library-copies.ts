@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { verifyCommandAccount, type VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
@@ -70,8 +71,11 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     };
   };
   const unavailable = () => problem(503, 'library_record_unavailable', 'Copies and loans are unavailable');
-  const checkParty = (request: Request, agent: string) => async (party: LibraryParty) => {
-    if (party.kind === 'person') await workRead(deps, request, { actingSubject: agent }, session => resolveLibraryParty(session, party));
+  const checkParty = (request: Request, agent: string) => async (party: LibraryParty, client: PoolClient) => {
+    if (party.kind === 'person') {
+      const read = () => workRead(deps, request, { actingSubject: agent }, session => resolveLibraryParty(session, party));
+      await (deps.media ? deps.media.store.withSummaryClient(client, read) : read());
+    }
   };
   return new Elysia()
     .get('/v1/works/:id/copies', { params: t.Object({ id: readUuid }), query: t.Object(pageQuery, closed),
@@ -95,7 +99,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
         const { actingSubject, expectedVersion, release, ...changes } = body;
         const result = await deps.libraryCopies.write({ agent: actingSubject, expectedVersion, release, changes,
           idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        () => workRead(deps, request, { actingSubject }, session => resolveCopyRelease(session, release)),
+        client => {
+          const read = () => workRead(deps, request, { actingSubject }, session => resolveCopyRelease(session, release));
+          return deps.media ? deps.media.store.withSummaryClient(client, read) : read();
+        },
         authorize, checkParty(request, actingSubject));
         return Response.json(result, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }

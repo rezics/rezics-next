@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import type { Pool } from 'pg';
 import { metadataWorkRequestDigest } from '../work/activate.ts';
 import type { OpenLibrarySourceGraph, SourceGraphProjection } from './graph-projection.ts';
@@ -84,7 +85,8 @@ export class SourceNativeWorkProposalStore {
     }
     try { metadataWorkRequestDigest(conversion.projection.title); }
     catch { throw new SourceProposalInvalid('source title cannot be proposed for a native Work'); }
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -108,14 +110,14 @@ export class SourceNativeWorkProposalStore {
     } catch (error) {
       await client.query('ROLLBACK');
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
 
   async read(principalId: string, proposalId: string): Promise<NativeWorkSourceProposal | null> {
     if (!UUID.test(principalId) || !UUID.test(proposalId)) {
       throw new SourceProposalInvalid('invalid source proposal identity');
     }
-    const rows = await this.pool.query<ProposalRow>(`SELECT * FROM source.native_work_proposal
+    const rows = await contentConnection(this.pool).query<ProposalRow>(`SELECT * FROM source.native_work_proposal
       WHERE id = $1 AND principal_id = $2`, [proposalId, principalId]);
     const row = rows.rows[0];
     if (!row) return null;

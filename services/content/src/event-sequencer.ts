@@ -1,3 +1,4 @@
+import { contentConnection } from './connection.ts';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { ContentPosition } from './core.ts';
@@ -49,7 +50,7 @@ export async function sequenceContentEvents(pool: Pool): Promise<number> {
   for (;;) {
     let assigned: number | null;
     try {
-      assigned = (await pool.query<{ assigned: number | null }>(
+      assigned = (await contentConnection(pool).query<{ assigned: number | null }>(
         'SELECT content.sequence_events($1) AS assigned', [SEQUENCER_BATCH])).rows[0]?.assigned ?? null;
     } catch (error) {
       if (busy(error)) return total;
@@ -69,7 +70,7 @@ export async function contentEventPosition(pool: Pool, operationId: string,
   const deadline = performance.now() + waitMs;
   for (let pause = 1; ; pause = Math.min(pause * 2, 50)) {
     try {
-      const row = (await pool.query<{ data_epoch: string | null; sequence: string | null }>(
+      const row = (await contentConnection(pool).query<{ data_epoch: string | null; sequence: string | null }>(
         'SELECT data_epoch, sequence::text AS sequence FROM content.event_position($1)', [operationId])).rows[0];
       if (row?.data_epoch && row.sequence) {
         return { owner: 'content', dataEpoch: row.data_epoch, sequence: row.sequence };

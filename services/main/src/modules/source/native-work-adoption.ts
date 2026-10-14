@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import type { Pool } from 'pg';
 import { canonicalLanguage } from '../display-language/select.ts';
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
@@ -207,7 +208,7 @@ export class SourceNativeWorkAdoptionStore {
     }
     const result = new Map<string, Array<{ id: string; key: string; ordinal: number }>>();
     if (!works.length) return result;
-    const rows = (await this.pool.query<{ work: string; binding: string; projection: {
+    const rows = (await contentConnection(this.pool).query<{ work: string; binding: string; projection: {
       authorRefs?: Array<{ sourceKey: string; roleKey: string | null }> | null } }>(`
       SELECT b.work, b.id AS binding, c.projection
       FROM source.native_work_binding b
@@ -240,7 +241,7 @@ export class SourceNativeWorkAdoptionStore {
       throw new SourceAdoptionInvalid('invalid source binding batch');
     }
     if (!works.length) return new Set();
-    const rows = (await this.pool.query<{ work: string }>(`SELECT work FROM source.native_work_binding
+    const rows = (await contentConnection(this.pool).query<{ work: string }>(`SELECT work FROM source.native_work_binding
       WHERE work = ANY($1::text[]) LIMIT ${SOURCE_ADOPTION_READ_COST.feedWorks + 1}`,
     [[...new Set(works)]])).rows;
     if (rows.length > SOURCE_ADOPTION_READ_COST.feedWorks
@@ -311,13 +312,13 @@ export class SourceNativeWorkAdoptionStore {
     if (input.confirmedTitle !== proposal.candidateTitle) {
       throw new SourceAdoptionConflict('confirmed title differs from the source proposal');
     }
-    const reserved = (await this.pool.query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
+    const reserved = (await contentConnection(this.pool).query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
-    const decision = reserved ? null : (await this.pool.query<TitleLanguageDecision>(
+    const decision = reserved ? null : (await contentConnection(this.pool).query<TitleLanguageDecision>(
       'SELECT * FROM source.resolve_native_title_language($1, $2)',
       [proposalId, input.titleLanguage ?? null])).rows[0];
     if (!reserved && !decision) throw new SourceAdoptionUnavailable('source title language is unavailable');
-    await this.pool.query<{ id: string }>(`INSERT INTO source.native_work_adoption_intent
+    await contentConnection(this.pool).query<{ id: string }>(`INSERT INTO source.native_work_adoption_intent
       (id, proposal_id, principal_id, acting_subject, authority_path, confirmed_title,
        title_language, title_language_basis, title_language_observation_id,
        activation_language, request_title_language, work_idempotency_key)
@@ -335,7 +336,7 @@ export class SourceNativeWorkAdoptionStore {
       }
       throw error;
     });
-    const intent = (await this.pool.query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
+    const intent = (await contentConnection(this.pool).query<IntentRow>(`SELECT * FROM source.native_work_adoption_intent
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
     if (!intent || intent.acting_subject !== input.actingSubject
       || intent.authority_path !== input.authorityPath
@@ -343,7 +344,7 @@ export class SourceNativeWorkAdoptionStore {
       || intent.request_title_language !== (input.titleLanguage ?? null)) {
       throw new SourceAdoptionConflict('proposal is reserved for another adoption intent');
     }
-    const existing = (await this.pool.query<BindingRow>(`SELECT * FROM source.native_work_binding
+    const existing = (await contentConnection(this.pool).query<BindingRow>(`SELECT * FROM source.native_work_binding
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
     if (existing) {
       if (existing.intent_id !== intent.id) {
@@ -357,7 +358,7 @@ export class SourceNativeWorkAdoptionStore {
         semanticTypes: proposal.semanticTypes,
         actingSubject: intent.acting_subject,
         authorityPath: intent.authority_path, idempotencyKey: intent.work_idempotency_key });
-    const bound = await this.pool.query<{ id: string }>(`INSERT INTO source.native_work_binding
+    const bound = await contentConnection(this.pool).query<{ id: string }>(`INSERT INTO source.native_work_binding
       (id, intent_id, proposal_id, principal_id, work, main_version, work_revision,
        main_revision, graph_receipt, admission_id, data_epoch, sequence)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
@@ -365,7 +366,7 @@ export class SourceNativeWorkAdoptionStore {
     [Bun.randomUUIDv7(), intent.id, proposalId, principalId, work.work, work.mainVersion,
       work.workRevision, work.mainRevision, work.receipt, work.admissionId,
       work.dataEpoch, work.sequence]);
-    const row = (await this.pool.query<BindingRow>(`SELECT * FROM source.native_work_binding
+    const row = (await contentConnection(this.pool).query<BindingRow>(`SELECT * FROM source.native_work_binding
       WHERE proposal_id = $1 AND principal_id = $2`, [proposalId, principalId])).rows[0];
     if (!row || row.intent_id !== intent.id || row.work !== work.work
       || row.main_version !== work.mainVersion || row.work_revision !== work.workRevision
@@ -385,7 +386,7 @@ export class SourceNativeWorkAdoptionStore {
     }
     const proposal = await this.proposals.read(principalId, proposalId);
     if (!proposal) return null;
-    const rows = await this.pool.query<BindingRow & IntentRow>(`SELECT b.*, i.acting_subject,
+    const rows = await contentConnection(this.pool).query<BindingRow & IntentRow>(`SELECT b.*, i.acting_subject,
       i.authority_path, i.confirmed_title, i.title_language, i.title_language_basis,
       i.title_language_observation_id, i.activation_language, i.request_title_language,
       i.work_idempotency_key
@@ -402,7 +403,7 @@ export class SourceNativeWorkAdoptionStore {
     if (!UUID.test(principalId) || !ACTOR.test(work)) {
       throw new SourceAdoptionInvalid('invalid native Work identity');
     }
-    const binding = await this.pool.query<{ proposal_id: string; support_binding: string | null;
+    const binding = await contentConnection(this.pool).query<{ proposal_id: string; support_binding: string | null;
       application_id: string | null; application_proposal_id: string | null;
       withdrawal_id: string | null }>(
       `SELECT b.proposal_id, h.binding_id AS support_binding, h.application_id,
@@ -428,7 +429,7 @@ export class SourceNativeWorkAdoptionStore {
       || (application && application.sourceRecord !== proposal.record)) {
       throw new SourceAdoptionUnavailable('source application head is unavailable');
     }
-    const withdrawn = saved.withdrawal_id ? (await this.pool.query<WithdrawalRow>(
+    const withdrawn = saved.withdrawal_id ? (await contentConnection(this.pool).query<WithdrawalRow>(
       `SELECT * FROM source.native_work_support_withdrawal WHERE id = $1 AND principal_id = $2`,
       [saved.withdrawal_id, principalId])).rows[0] : null;
     if (saved.withdrawal_id && !withdrawn) {
@@ -473,20 +474,20 @@ export class SourceNativeWorkAdoptionStore {
     }
     const bindingId = support.binding.split('/').at(-1)!;
     const applicationId = support.latestApplication?.application.split('/').at(-1) ?? null;
-    const existing = (await this.pool.query<WithdrawalRow>(
+    const existing = (await contentConnection(this.pool).query<WithdrawalRow>(
       `SELECT * FROM source.native_work_support_withdrawal WHERE binding_id = $1`,
       [bindingId])).rows[0];
     let inserted = false;
     if (!existing) {
       try {
-        inserted = (await this.pool.query(`INSERT INTO source.native_work_support_withdrawal
+        inserted = (await contentConnection(this.pool).query(`INSERT INTO source.native_work_support_withdrawal
           (id, binding_id, principal_id, application_id, idempotency_key, reason)
           VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING`,
         [Bun.randomUUIDv7(), bindingId, principalId, applicationId, idempotencyKey,
           input.reason])).rowCount === 1;
       } catch (error) { supportConstraint(error); }
     }
-    const row = existing ?? (await this.pool.query<WithdrawalRow>(
+    const row = existing ?? (await contentConnection(this.pool).query<WithdrawalRow>(
       `SELECT * FROM source.native_work_support_withdrawal WHERE binding_id = $1`,
       [bindingId])).rows[0];
     if (!row || row.principal_id !== principalId || row.application_id !== applicationId
@@ -589,7 +590,7 @@ export class SourceNativeWorkAdoptionStore {
       || candidate.candidateTitle !== input.confirmedTitle) {
       throw new SourceAdoptionConflict('candidate source title or record differs');
     }
-    const existingIntent = (await this.pool.query<TitleIntentRow>(
+    const existingIntent = (await contentConnection(this.pool).query<TitleIntentRow>(
       `SELECT * FROM source.native_work_title_intent
        WHERE work = $1 AND proposal_id = $2 AND principal_id = $3`,
       [work, candidateProposalId, principalId])).rows[0];
@@ -621,7 +622,7 @@ export class SourceNativeWorkAdoptionStore {
       await this.access.register({ principal, actingSubject: input.actingSubject,
         scope: `work:title:apply:${work}`, action: 'work.title.apply', idempotencyKey: key,
         requestDigest: titleControlDigest(nativeIntent) });
-      await this.pool.query(`INSERT INTO source.native_work_title_intent
+      await contentConnection(this.pool).query(`INSERT INTO source.native_work_title_intent
         (id, proposal_id, principal_id, work, expected_head, acting_subject,
          confirmed_title, work_idempotency_key, control_intent)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
@@ -630,7 +631,7 @@ export class SourceNativeWorkAdoptionStore {
         input.actingSubject, input.confirmedTitle, key, JSON.stringify(nativeIntent)])
         .catch(supportConstraint);
     }
-    const intent = (await this.pool.query<TitleIntentRow>(
+    const intent = (await contentConnection(this.pool).query<TitleIntentRow>(
       `SELECT * FROM source.native_work_title_intent
        WHERE work = $1 AND proposal_id = $2 AND principal_id = $3`,
       [work, candidateProposalId, principalId])).rows[0];
@@ -640,7 +641,7 @@ export class SourceNativeWorkAdoptionStore {
       || titleControlDigest({ ...intent.control_intent, language: input.language, basis: input.titleControl }) !== titleControlDigest(intent.control_intent)) {
       throw new SourceAdoptionConflict('proposal is reserved for another title application');
     }
-    const existing = (await this.pool.query<TitleApplicationRow>(
+    const existing = (await contentConnection(this.pool).query<TitleApplicationRow>(
       `SELECT * FROM source.native_work_title_application WHERE intent_id = $1`,
       [intent.id])).rows[0];
     if (existing) {
@@ -654,11 +655,11 @@ export class SourceNativeWorkAdoptionStore {
         { ...intent.control_intent, actingSubject: intent.acting_subject, idempotencyKey: intent.work_idempotency_key });
     } catch (error) {
       if (error instanceof TitleControlConflict && error.terminal?.outcome === 'cancelled') {
-        await this.pool.query('DELETE FROM source.native_work_title_pending WHERE intent_id = $1', [intent.id]);
+        await contentConnection(this.pool).query('DELETE FROM source.native_work_title_pending WHERE intent_id = $1', [intent.id]);
       }
       throw error;
     }
-    const inserted = await this.pool.query(`INSERT INTO source.native_work_title_application
+    const inserted = await contentConnection(this.pool).query(`INSERT INTO source.native_work_title_application
       (id, intent_id, proposal_id, principal_id, work, expected_head, work_revision,
        graph_receipt, admission_id, data_epoch, sequence)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
@@ -666,7 +667,7 @@ export class SourceNativeWorkAdoptionStore {
     [Bun.randomUUIDv7(), intent.id, candidateProposalId, principalId, work,
       intent.expected_head, edit.revision, edit.receipt, edit.admissionId,
       edit.dataEpoch, edit.sequence]);
-    const row = (await this.pool.query<TitleApplicationRow>(
+    const row = (await contentConnection(this.pool).query<TitleApplicationRow>(
       `SELECT * FROM source.native_work_title_application WHERE intent_id = $1`,
       [intent.id])).rows[0];
     if (!row || row.proposal_id !== candidateProposalId || row.work !== work
@@ -691,7 +692,7 @@ export class SourceNativeWorkAdoptionStore {
     if (support.state !== 'recorded') throw new SourceSupportConflict('source_support_withdrawn');
     const candidate = await this.proposals.read(principalId, input.proposal.split('/').at(-1)!);
     if (!candidate || candidate.record !== support.sourceRecord) throw new SourceAdoptionConflict('return source differs from support');
-    const existing = (await this.pool.query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
+    const existing = (await contentConnection(this.pool).query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
       'SELECT * FROM source.native_work_title_return_intent WHERE principal_id = $1 AND idempotency_key = $2', [principalId, key])).rows[0];
     const label = existing ? existing.control_intent.title : (await this.env.fuseki.query(
       `SELECT ?title WHERE { GRAPH ${iri(GRAPHS.current)} { ${iri(work)} <${RV}head> ${iri(input.expectedHead)} ;
@@ -710,12 +711,12 @@ export class SourceNativeWorkAdoptionStore {
     if (existing && (existing.acting_subject !== input.actingSubject || titleControlDigest(existing.control_intent) !== digest)) {
       throw new SourceAdoptionConflict('source control return key changed');
     }
-    await this.pool.query(`INSERT INTO source.native_work_title_return_intent
+    await contentConnection(this.pool).query(`INSERT INTO source.native_work_title_return_intent
       (id,principal_id,binding_id,proposal_id,work,acting_subject,idempotency_key,control_intent)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (principal_id,idempotency_key) DO NOTHING`,
     [Bun.randomUUIDv7(), principalId, support.binding.split('/').at(-1), input.proposal.split('/').at(-1),
       work, input.actingSubject, key, JSON.stringify(intent)]).catch(supportConstraint);
-    const row = (await this.pool.query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
+    const row = (await contentConnection(this.pool).query<{ id: string; acting_subject: string; control_intent: TitleControlIntent }>(
       'SELECT * FROM source.native_work_title_return_intent WHERE principal_id = $1 AND idempotency_key = $2', [principalId, key])).rows[0];
     if (!row || row.acting_subject !== input.actingSubject || titleControlDigest(row.control_intent) !== digest) {
       throw new SourceAdoptionConflict('source control return intent changed');
@@ -725,12 +726,12 @@ export class SourceNativeWorkAdoptionStore {
       { ...intent, actingSubject: input.actingSubject, idempotencyKey: key }); }
     catch (error) {
       if (error instanceof TitleControlConflict && error.terminal) {
-        await this.pool.query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+        await contentConnection(this.pool).query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
           [row.id, JSON.stringify(error.terminal)]);
       }
       throw error;
     }
-    await this.pool.query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
+    await contentConnection(this.pool).query('INSERT INTO source.native_work_title_return_outcome (intent_id,receipt) VALUES ($1,$2) ON CONFLICT DO NOTHING',
       [row.id, JSON.stringify(terminal)]);
     return terminal;
   }
@@ -742,7 +743,7 @@ export class SourceNativeWorkAdoptionStore {
     }
     const proposal = await this.proposals.read(principalId, candidateProposalId);
     if (!proposal) return null;
-    const row = (await this.pool.query<TitleApplicationRow & TitleIntentRow>(
+    const row = (await contentConnection(this.pool).query<TitleApplicationRow & TitleIntentRow>(
       `SELECT a.*, i.acting_subject, i.confirmed_title, i.work_idempotency_key, i.control_intent
        FROM source.native_work_title_application a
        JOIN source.native_work_title_intent i ON i.id = a.intent_id

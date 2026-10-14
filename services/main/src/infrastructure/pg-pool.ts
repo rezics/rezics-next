@@ -125,9 +125,9 @@ export function nestedPoolCheckoutMode(): NestedPoolCheckoutMode {
   return checkoutMode;
 }
 
-/** Tests switch this to `throw`. Production stays on `log` until callers that
- * hold a client across a second checkout of the same pool are fixed. Starting
- * the process with REZICS_NESTED_POOL_CHECKOUT=throw selects throw as well. */
+/** QA starts services and owner tests with REZICS_NESTED_POOL_CHECKOUT=throw.
+ * Production reports in log mode. Tests can override the mode locally to
+ * exercise diagnostic reporting, then restore the harness-selected mode. */
 export function setNestedPoolCheckoutMode(mode: NestedPoolCheckoutMode): void {
   checkoutMode = mode;
 }

@@ -1,3 +1,4 @@
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import { Value } from 'typebox/value';
@@ -12,7 +13,7 @@ export class EditionPreferenceStore {
     return (await this.batch(owner, [work])).get(work) ?? null;
   }
   async batch(owner: SessionOwner, works: string[]) {
-    const result = await this.pool.query<{ work: string; choice: EditionChoice; version: string }>(
+    const result = await contentConnection(this.pool).query<{ work: string; choice: EditionChoice; version: string }>(
       `SELECT work, choice, version::text FROM reader.edition_preference
        WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND work = ANY($4::text[])`,
       [owner.principal.issuer, owner.principal.subject, owner.agent, works]);
@@ -30,7 +31,8 @@ export class EditionPreferenceStore {
     const digest = createHash('sha256').update(JSON.stringify([...identity, choice.language,
       choice.edition?.kind ?? null, choice.edition?.resource ?? null, choice.edition?.revision ?? null,
       expectedVersion])).digest('hex');
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
@@ -71,6 +73,6 @@ export class EditionPreferenceStore {
       await client.query('COMMIT');
       return { ...result, replayed: false };
     } catch (error) { await client.query('ROLLBACK'); throw error; }
-    finally { client.release(); }
+    finally { if (!borrowed) client.release(); }
   }
 }

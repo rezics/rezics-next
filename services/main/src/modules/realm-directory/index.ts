@@ -1,3 +1,4 @@
+import { withAccessClient } from '../access/topology-control.ts';
 import type { Pool, PoolClient } from 'pg';
 import { DATASET, GRAPHS, iri, lit } from '../work/activate.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadInvalid, WorkReadMoved, WorkReadUnavailable,
@@ -250,66 +251,67 @@ export class RealmDirectoryIndex {
     const column = input.sort === 'members' ? 'count_value' : input.sort === 'newest' ? 'created' : 'activity';
     const growing = input.sort === 'growing';
     const rankColumn = growing ? '-COALESCE(g.growth,0)' : `-d.${column}`;
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-      await client.query("SET LOCAL statement_timeout = '5s'");
-      if (!(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open')).rowCount) {
-        throw new WorkReadUnavailable('Realm directory recovery is held');
+    return withAccessClient(this.pool, async client => {
+      try {
+        await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        await client.query("SET LOCAL statement_timeout = '5s'");
+        if (!(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open')).rowCount) {
+          throw new WorkReadUnavailable('Realm directory recovery is held');
+        }
+        const source = (await client.query<DirectoryPosition>(
+          'SELECT * FROM access.realm_directory_position WHERE singleton')).rows[0]!;
+        if (!source.data_epoch || source.data_epoch !== session.position.dataEpoch) {
+          this.refreshNudge?.();
+          throw new WorkReadUnavailable('Realm directory is not built', {
+            cause: new RealmDirectoryWarming('Realm directory is warming up'),
+          });
+        }
+        const sourcePosition: ReadPosition = { dataEpoch: source.data_epoch, sequence: source.sequence };
+        const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
+          : decodeReadCursor(input.cursor ?? session.options.cursor, binding, sourcePosition);
+        const positionRow = (await client.query<{ revision: string; growth_revision: string; day: string }>(
+          growing ? `SELECT access.realm_count_basis() AS revision, access.realm_growth_basis() AS growth_revision,
+            (now() AT TIME ZONE 'UTC')::date::text AS day
+            FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
+            WHERE p.singleton AND g.singleton`
+            : 'SELECT access.realm_count_basis() AS revision FROM access.realm_count_position WHERE singleton')).rows[0];
+        if (!positionRow) throw new WorkReadUnavailable('Realm growth basis is unavailable');
+        const position = growing
+          ? `${positionRow.revision}/${positionRow.growth_revision}/${positionRow.day}` : positionRow.revision;
+        let rank: string | null = null;
+        if (cursor) {
+          const [prior, order] = cursor.order.split(':');
+          if (prior !== position) throw new WorkReadMoved('Realm membership changed');
+          if (!order || !/^-?\d+$/.test(order)) throw new WorkReadMoved('Realm directory cursor is unavailable');
+          rank = order;
+        }
+        const rows = (await client.query<DirectoryRow>(`${growing ? `WITH growth AS (
+          SELECT realm, SUM(members + posts) AS growth FROM access.realm_growth_day
+          WHERE day BETWEEN $6::date - 6 AND $6::date
+            AND (data_epoch = '' OR data_epoch = $7::text)
+          GROUP BY realm)` : ''}
+          SELECT d.realm, d.space, d.profile,
+          (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
+          FROM access.realm_directory d LEFT JOIN access.realm_member_count c ON c.realm = d.realm
+          ${growing ? 'LEFT JOIN growth g ON g.realm = d.realm' : ''}
+          WHERE ${cursor ? `(${rankColumn}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
+            AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
+            AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
+            AND d.generation = ${growing ? '$8' : '$6'}::smallint
+          ORDER BY ${rankColumn}, d.realm LIMIT $4`,
+        growing ? [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null,
+          positionRow.day, sourcePosition.dataEpoch, source.generation]
+          : [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null, source.generation])).rows;
+        await client.query('COMMIT');
+        const page = rows.slice(0, limit);
+        return { rows: page, position, sourcePosition, next: rows.length > limit && page.length
+          ? encodeReadCursor(binding, sourcePosition, page.at(-1)!.realm, `${position}:${page.at(-1)!.rank}`) : null };
+      } catch (error) {
+        await client.query('ROLLBACK');
+        if (error instanceof WorkReadInvalid || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable) throw error;
+        throw new WorkReadUnavailable('Realm directory page is unavailable', { cause: error });
       }
-      const source = (await client.query<DirectoryPosition>(
-        'SELECT * FROM access.realm_directory_position WHERE singleton')).rows[0]!;
-      if (!source.data_epoch || source.data_epoch !== session.position.dataEpoch) {
-        this.refreshNudge?.();
-        throw new WorkReadUnavailable('Realm directory is not built', {
-          cause: new RealmDirectoryWarming('Realm directory is warming up'),
-        });
-      }
-      const sourcePosition: ReadPosition = { dataEpoch: source.data_epoch, sequence: source.sequence };
-      const cursor = input.seek ? { after: input.seek.id, order: input.seek.key }
-        : decodeReadCursor(input.cursor ?? session.options.cursor, binding, sourcePosition);
-      const positionRow = (await client.query<{ revision: string; growth_revision: string; day: string }>(
-        growing ? `SELECT access.realm_count_basis() AS revision, access.realm_growth_basis() AS growth_revision,
-          (now() AT TIME ZONE 'UTC')::date::text AS day
-          FROM access.realm_count_position p CROSS JOIN access.realm_growth_position g
-          WHERE p.singleton AND g.singleton`
-          : 'SELECT access.realm_count_basis() AS revision FROM access.realm_count_position WHERE singleton')).rows[0];
-      if (!positionRow) throw new WorkReadUnavailable('Realm growth basis is unavailable');
-      const position = growing
-        ? `${positionRow.revision}/${positionRow.growth_revision}/${positionRow.day}` : positionRow.revision;
-      let rank: string | null = null;
-      if (cursor) {
-        const [prior, order] = cursor.order.split(':');
-        if (prior !== position) throw new WorkReadMoved('Realm membership changed');
-        if (!order || !/^-?\d+$/.test(order)) throw new WorkReadMoved('Realm directory cursor is unavailable');
-        rank = order;
-      }
-      const rows = (await client.query<DirectoryRow>(`${growing ? `WITH growth AS (
-        SELECT realm, SUM(members + posts) AS growth FROM access.realm_growth_day
-        WHERE day BETWEEN $6::date - 6 AND $6::date
-          AND (data_epoch = '' OR data_epoch = $7::text)
-        GROUP BY realm)` : ''}
-        SELECT d.realm, d.space, d.profile,
-        (${rankColumn})::text AS rank, d.count_value::text, COALESCE(c.revision,0)::text AS count_revision
-        FROM access.realm_directory d LEFT JOIN access.realm_member_count c ON c.realm = d.realm
-        ${growing ? 'LEFT JOIN growth g ON g.realm = d.realm' : ''}
-        WHERE ${cursor ? `(${rankColumn}, d.realm) > ($1::numeric, $2::text)` : "$1::numeric IS NULL AND $2::text = ''"}
-          AND ($3::text = '' OR strpos(d.search_text, $3) > 0)
-          AND ($5::text IS NULL OR d.topics @> ARRAY[$5::text])
-          AND d.generation = ${growing ? '$8' : '$6'}::smallint
-        ORDER BY ${rankColumn}, d.realm LIMIT $4`,
-      growing ? [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null,
-        positionRow.day, sourcePosition.dataEpoch, source.generation]
-        : [rank, cursor?.after ?? '', input.q, limit + 1, input.topic ?? null, source.generation])).rows;
-      await client.query('COMMIT');
-      const page = rows.slice(0, limit);
-      return { rows: page, position, sourcePosition, next: rows.length > limit && page.length
-        ? encodeReadCursor(binding, sourcePosition, page.at(-1)!.realm, `${position}:${page.at(-1)!.rank}`) : null };
-    } catch (error) {
-      await client.query('ROLLBACK');
-      if (error instanceof WorkReadInvalid || error instanceof WorkReadMoved || error instanceof WorkReadUnavailable) throw error;
-      throw new WorkReadUnavailable('Realm directory page is unavailable', { cause: error });
-    } finally { client.release(); }
+    });
   }
 
   async fence(position: string, growing = false, sourcePosition?: ReadPosition): Promise<void> {

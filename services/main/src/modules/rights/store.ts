@@ -1,3 +1,4 @@
+import { contentConnection } from '../../../../content/src/connection.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { VerifiedPrincipal } from '../access/admission.ts';
@@ -633,7 +634,7 @@ export class RightsStore {
 
   /** Only an explicit current provider non-retention decision blocks raw capture. */
   async rawRetentionPermitted(provider: string, namespace: string): Promise<boolean> {
-    const result = await this.content.query<{ outcome: string }>(`SELECT a.outcome FROM rights.material m
+    const result = await contentConnection(this.content).query<{ outcome: string }>(`SELECT a.outcome FROM rights.material m
       JOIN rights.use_assessment_head h ON h.material_id = m.id AND h.family = 'service_terms'
         AND h.use_kind = 'raw_retention' AND h.use_scope = $3
       JOIN rights.use_assessment a ON a.id = h.assessment_id
