@@ -67,16 +67,19 @@ async function fixture(run: (f: Awaited<ReturnType<typeof mediaFixture>>) => Pro
   await admin.query(`CREATE DATABASE ${name} TEMPLATE media_fence_template`);
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 },
     { ...CONNECTION_BOUNDS, idleInTransactionSessionTimeout: idleTimeout });
-  try { await run(await mediaFixture(pool, imported)); }
+  // Owners share this isolated database fixture, but retain the separate
+  // pools that production uses for cross-owner preservation fences.
+  const preservationPool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
+  try { await run(await mediaFixture(pool, preservationPool, imported)); }
   finally {
-    await pool.end();
+    await Promise.all([pool.end(), preservationPool.end()]);
     // Each scenario restores an isolated copy of the same prepared owner cut.
     // Dispose it here so earlier scenarios do not retain physical database copies.
     await admin.query(`DROP DATABASE ${name}`);
   }
 }
 
-async function mediaFixture(pool: Pool, imported: boolean) {
+async function mediaFixture(pool: Pool, preservationPool: Pool, imported: boolean) {
   const content = new ContentCore(pool);
   const store = new MediaStore(pool, content);
   const principal = randomUUID(), owner = assetIri(randomUUID());
@@ -181,7 +184,7 @@ async function mediaFixture(pool: Pool, imported: boolean) {
     const proof = admission(actingSubject);
     const input = { asset: reserved.asset, expectedState: state.state, disclosure: 'private' as const, lifecycle };
     if (lifecycle !== 'erased') return store.changeState(proof, input);
-    const guarded = await withPreservationFence(pool, assetIri(reserved.asset), proof.admissionId,
+    const guarded = await withPreservationFence(preservationPool, assetIri(reserved.asset), proof.admissionId,
       fence => store.changeState(proof, input, fence));
     if (guarded.held) throw new MediaFenced('media is retained under a preservation hold');
     return guarded.value;
@@ -192,7 +195,7 @@ async function mediaFixture(pool: Pool, imported: boolean) {
     objects.clear();
     return result;
   };
-  return { pool, content, store, reserved, objects, deleted, principal, owner, transfer, persist, persistFor,
+  return { pool, preservationPool, content, store, reserved, objects, deleted, principal, owner, transfer, persist, persistFor,
     reserveReplacement, change, erase,
     writes: () => writes, onPut: (callback: typeof onPut) => { onPut = callback; },
     onVerify: (callback: typeof onVerify) => { onVerify = callback; },
@@ -666,7 +669,8 @@ test('Content save wins the asset fence: erase waits and recording completes bef
       }));
     // Keep erasure waiting after Content commits so the separate projection
     // repair can finish too. Assert Content's own client blocks it below.
-    const keeper = await f.pool.connect();
+    const keeperPool = boundedPool({ ...cluster!.connection, database: f.pool.options.database, max: 1 });
+    const keeper = await keeperPool.connect();
     await keeper.query('BEGIN');
     const recording = f.store.recordAssetRevision(f.reserved.upload);
     const recorded = recording.then(value => value, error => error as unknown);
@@ -693,6 +697,7 @@ test('Content save wins the asset fence: erase waits and recording completes bef
       release.release();
       await keeper.query('ROLLBACK');
       keeper.release();
+      await keeperPool.end();
       await recorded;
       await erasure;
       writer.mockRestore();
@@ -747,7 +752,7 @@ test('late imported-cover repair cannot restore a lookup after asset or exact Co
     expect(activated.revision).not.toBeNull();
     const revision = activated.revision!;
     expect((await f.pool.query('SELECT 1 FROM media.imported_cover_revision')).rowCount).toBe(1);
-    if (exact) await applyContentErasure(f.pool, { preservationAccess: f.pool, erasureId: randomUUID(),
+    if (exact) await applyContentErasure(f.pool, { preservationAccess: f.preservationPool, erasureId: randomUUID(),
       erasureEpoch: '1', resourceId: assetIri(f.reserved.asset), revisionIds: [revision] });
     else await f.erase();
     expect(await f.store.repairImportedCoverProjection(revision)).toBe(false);

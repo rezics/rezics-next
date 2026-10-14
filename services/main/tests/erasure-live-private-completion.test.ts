@@ -1210,13 +1210,11 @@ test('erasure holds the digest fence while a cooperating Content writer waits fo
       expect((await writerPool.query<{ locked: boolean }>(
         "SELECT pg_try_advisory_xact_lock(hashtextextended('rezics-payload-reference:' || $1,0)) AS locked",
         [contribution.payload])).rows[0]?.locked).toBe(false);
-      writer = withReferenceFence(observed, contribution.payload, async () => {
-        linked = true;
-        return f.core.saveDraft({ operationId: randomUUID(), variant: { id: `urn:rezics:variant:${randomUUID()}`,
-          resourceId: resource(), language: { kind: 'zxx' }, direction: 'none' }, expectedHead: null,
-          model: 'fixture', sourceRevision: null, provenance: {},
-          serializedJson: payload });
-      });
+      writer = new ContentCore(observed).saveDraft({ operationId: randomUUID(),
+        variant: { id: `urn:rezics:variant:${randomUUID()}`, resourceId: resource(),
+          language: { kind: 'zxx' }, direction: 'none' }, expectedHead: null,
+        model: 'fixture', sourceRevision: null, provenance: {}, serializedJson: payload },
+      client => withReferenceFence(client, contribution.payload, async () => { linked = true; }));
       await waiting;
       expect(linked).toBe(false);
     };

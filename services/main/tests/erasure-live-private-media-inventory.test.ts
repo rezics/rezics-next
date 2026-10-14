@@ -122,11 +122,19 @@ async function fixture(run: (f: Awaited<ReturnType<typeof mediaFixture>>) => Pro
   const name = `media_inventory_${randomUUID().replaceAll('-', '')}`;
   await admin.query(`CREATE DATABASE ${name} TEMPLATE media_inventory_template`);
   const pool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
-  try { await run(await mediaFixture(pool)); }
-  finally { await pool.end(); await admin.query(`DROP DATABASE ${name}`); }
+  // Keep the owner/request boundaries even though their schemas share one
+  // restored fixture database. Every runtime pool remains instrumented.
+  const preservationPool = boundedPool({ ...cluster!.connection, database: name, max: 8 });
+  const relay = boundedPool({ ...cluster!.connection, database: name, max: 8 });
+  const contentWriter = boundedPool({ ...cluster!.connection, database: name, max: 8 });
+  try { await run(await mediaFixture(pool, preservationPool, relay, contentWriter)); }
+  finally {
+    await Promise.all([pool.end(), preservationPool.end(), relay.end(), contentWriter.end()]);
+    await admin.query(`DROP DATABASE ${name}`);
+  }
 }
 
-async function mediaFixture(pool: Pool) {
+async function mediaFixture(pool: Pool, preservationPool: Pool, relay: Pool, contentWriter: Pool) {
   const content = new ContentCore(pool), store = new MediaStore(pool, content);
   const memory = new MemoryNamespaces(templateData);
   const revisions = [revisionId];
@@ -149,12 +157,12 @@ async function mediaFixture(pool: Pool) {
     }
   }() };
   const preflight = <T>(accept: Parameters<typeof withMediaErasureInventory<T>>[4], budget?: MediaErasureBudget) =>
-    withMediaErasureInventory(pool, selection, pool, memory.objects, accept, budget);
+    withMediaErasureInventory(pool, selection, preservationPool, memory.objects, accept, budget);
   const journal = async (targets: readonly ErasureTargetInput[]): Promise<MediaErasureJournal> => {
-    const entry = await journalErasure(pool, { operationId: `erasure:${admission.id}`,
+    const entry = await journalErasure(relay, { operationId: `erasure:${admission.id}`,
       requestDigest: admission.requestDigest, kind: 'revision', principalId: admission.principalId,
       admissionId: admission.id, authorityEpoch: admission.authorityEpoch, targets: [...targets] });
-    return { relay: pool, erasureId: entry.erasureId, erasureEpoch: entry.erasureEpoch, graph };
+    return { relay, erasureId: entry.erasureId, erasureEpoch: entry.erasureEpoch, graph };
   };
   const erase = () => preflight(async (inventory, apply) => {
     const retained = await journal(inventory.targets);
@@ -187,7 +195,7 @@ async function mediaFixture(pool: Pool) {
     const bytes = await sharp(image).extract(crop).resize(width, height).toFormat(profile.type === 'image/webp' ? 'webp' : 'avif').toBuffer();
     return { bytes, width, height, type: profile.type };
   };
-  return { pool, content, store, memory, revisions, admission, selection, graph, preflight, journal, erase,
+  return { pool, preservationPool, relay, contentWriter, content, store, memory, revisions, admission, selection, graph, preflight, journal, erase,
     newRevision, queue, outputFor, suppressGraph: (value: boolean) => { graphSuppressed = value; } };
 }
 
@@ -238,7 +246,7 @@ test('P3 exact originals, quarantine, crop, width and small thumbnail outputs en
     }
     expect(f.memory.data.size).toBe(0);
     const before = await f.store.readAsset(reservation.asset);
-    await replayMediaErasure(f.pool, f.selection, f.pool, retained);
+    await replayMediaErasure(f.pool, f.selection, f.preservationPool, retained);
     expect(await f.store.readAsset(reservation.asset)).toEqual(before);
     expect((await f.pool.query('SELECT id FROM media.asset_state WHERE lifecycle=\'erased\'')).rowCount).toBe(1);
     const erasedReport = await readErasure(f.pool, retained.erasureId);
@@ -572,7 +580,7 @@ test('P4 callback failure rolls back terminalization; the retained journal retri
     const retried = await f.erase();
     expect(retried.retained.erasureId).toBe(retained!.erasureId);
     expect(retried.retained.erasureEpoch).toBe(retained!.erasureEpoch);
-    await expect(replayMediaErasure(f.pool, f.selection, f.pool, { ...retried.retained, erasureEpoch: '999' })).rejects.toBeInstanceOf(MediaFenced);
+    await expect(replayMediaErasure(f.pool, f.selection, f.preservationPool, { ...retried.retained, erasureEpoch: '999' })).rejects.toBeInstanceOf(MediaFenced);
     await expect(f.store.recordAssetRevision(reservation.upload)).rejects.toBeInstanceOf(MediaStale);
   });
 });
@@ -584,7 +592,7 @@ test('P4 Content committed before Media rollback recovers only its exact retaine
       retained = await f.journal(inventory.targets);
       await apply(retained);
       const erasureId = recovery === 'foreign-tombstone' ? randomUUID() : retained.erasureId;
-      await applyContentErasure(f.pool, { preservationAccess: preservationFence, erasureId,
+      await applyContentErasure(f.contentWriter, { preservationAccess: preservationFence, erasureId,
         erasureEpoch: retained.erasureEpoch, resourceId: assetIri(reservation.asset), revisionIds: f.revisions,
         graphProof: { receipt: graphErasureReceipt(erasureId), dataEpoch: f.graph.lineage.dataEpoch, sequence: '1' } });
       throw new Error('Media commit was lost after Content committed');
@@ -594,11 +602,11 @@ test('P4 Content committed before Media rollback recovers only its exact retaine
       .toEqual([{ availability: 'erased', body: null, serialized_bytes: null }]);
     if (recovery === 'new-orphan') await f.memory.objects(reservation.objectNamespace).put(Buffer.from('unexpected new orphan'));
     const keys = [...f.memory.data.keys()].sort();
-    const replay = replayMediaErasure(f.pool, f.selection, f.pool, retained!, f.memory.objects);
+    const replay = replayMediaErasure(f.pool, f.selection, f.preservationPool, retained!, f.memory.objects);
     if (recovery === 'exact') {
       await replay;
       expect((await f.store.readAsset(reservation.asset))!).toMatchObject({ lifecycle: 'erased', erasureEpoch: '1' });
-      await replayMediaErasure(f.pool, f.selection, f.pool, retained!);
+      await replayMediaErasure(f.pool, f.selection, f.preservationPool, retained!);
       expect((await f.pool.query("SELECT id FROM media.asset_state WHERE lifecycle='erased'")).rowCount).toBe(1);
     } else {
       await expect(replay).rejects.toBeInstanceOf(recovery === 'foreign-tombstone' ? MediaErasureUnsupported : MediaFenced);
@@ -626,7 +634,7 @@ test('P4 inventory holds the writer fence until terminalization; queued upload c
       const deadline = Date.now() + 1_500;
       let blocked = false;
       do {
-        blocked = Boolean((await f.pool.query(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
+        blocked = Boolean((await f.contentWriter.query(`SELECT 1 FROM pg_stat_activity WHERE datname=current_database()
           AND position('FOR SHARE OF a' in query)>0 AND cardinality(pg_blocking_pids(pid))>0`)).rowCount);
         if (blocked) break;
         await new Promise(resolve => setTimeout(resolve, 10));
