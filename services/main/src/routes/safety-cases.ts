@@ -285,7 +285,7 @@ export function safetyCaseRoutes(work: MainWorkDependencies) {
           return Response.json(
             {
               profile: 'moderation-decision-v1',
-              ...(await store.cancelDecision(principal, body.actingSubject, params.decisionId)),
+              ...(await store.cancelDecision(principal, body.actingSubject, params.decisionId, body.idempotencyKey)),
             },
             noStore,
           );

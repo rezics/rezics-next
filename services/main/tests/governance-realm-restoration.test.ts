@@ -361,7 +361,7 @@ test('an old Realm release without its saved source fails closed and needs a new
     .rejects.toBeInstanceOf(GovernanceUnavailable);
   await assertRestricted(f, original);
   expect(f.ownerCalls()).toBe(1);
-  const cancelled = await f.store.cancelDecision(f.principal, f.actor, old.decisionId);
+  const cancelled = await f.store.cancelDecision(f.principal, f.actor, old.decisionId, randomUUID());
   expect(cancelled.operation.status).toBe('cancelled');
   const reviewed = await f.release(original);
   const restored = await f.store.decide(f.principal, { ...reviewed,

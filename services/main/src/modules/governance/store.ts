@@ -1450,7 +1450,11 @@ export class GovernanceStore {
     principal: VerifiedPrincipal,
     actor: string,
     decisionId: string,
+    idempotencyKey: string,
   ): Promise<DecisionResult> {
+    if (typeof idempotencyKey !== 'string' || !keyPattern.test(idempotencyKey))
+      throw new GovernanceInvalid('cancellation key does not match its profile');
+    const request = sha256(canonical({ actingSubject: actor, decisionId }));
     return this.transaction(async client => {
       const decision = (
         await client.query<{ authority_scope_id: string; kind: string; case_id: string; urgent: boolean }>(
@@ -1477,10 +1481,39 @@ export class GovernanceStore {
         [decision.case_id, authority.principalId, actor, this.clock()])).rowCount) {
         throw new GovernanceDenied('claim the case before cancelling');
       }
-      await client.query(
-        'SELECT decision_id FROM access.safety_decision_operation WHERE decision_id = $1 FOR UPDATE',
+      // The current caller, specialist authority and claim precede receipt lookup.
+      // Serialize one principal's key even when overlapping calls name different cases.
+      await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
+        [canonical(['governance-cancellation', authority.principalId, idempotencyKey])]);
+      const prior = (await client.query<{
+        decision_id: string; cancellation_request_digest: string | null; cancellation_result: DecisionResult | null;
+      }>(`SELECT decision_id,cancellation_request_digest,cancellation_result
+        FROM access.safety_decision_operation
+        WHERE cancellation_principal_id = $1 AND cancellation_key = $2`,
+      [authority.principalId, idempotencyKey])).rows[0];
+      if (prior) {
+        if (prior.decision_id !== decisionId
+          || (prior.cancellation_request_digest !== null && prior.cancellation_request_digest !== request))
+          throw new GovernanceConflict('idempotency key reused');
+        // A legacy cancellation has no retained historical answer. Preserve its
+        // existing first-call answer from the stored decision and cancelled flag.
+        return prior.cancellation_result ?? this.decisionResult(client, prior.decision_id, true);
+      }
+      const operation = (await client.query<{
+        cancelled: boolean; cancellation_principal_id: string | null; cancellation_result: DecisionResult | null;
+      }>(`SELECT cancelled,cancellation_principal_id,cancellation_result
+        FROM access.safety_decision_operation WHERE decision_id = $1 FOR UPDATE`,
         [decisionId],
-      );
+      )).rows[0];
+      if (!operation) throw new GovernanceUnavailable('decision operation is unavailable');
+      // Other keys cannot replace the original binding or retained first answer.
+      // Legacy cancellations keep their unknown historical digest and result.
+      if (operation.cancelled) {
+        if (operation.cancellation_principal_id === null) await client.query(
+          `UPDATE access.safety_decision_operation SET cancellation_principal_id = $2,cancellation_key = $3
+           WHERE decision_id = $1`, [decisionId, authority.principalId, idempotencyKey]);
+        return operation.cancellation_result ?? this.decisionResult(client, decisionId, true);
+      }
       const outcome = await this.operationResult(client, decisionId);
       if (outcome.status === 'completed')
         throw new GovernanceConflict(
@@ -1494,7 +1527,11 @@ export class GovernanceStore {
         'UPDATE access.governance_case SET review_pending = review_pending WHERE id = $1',
         [decision.case_id],
       );
-      return this.decisionResult(client, decisionId, true);
+      const result = await this.decisionResult(client, decisionId, true);
+      await client.query(`UPDATE access.safety_decision_operation SET cancellation_principal_id = $2,
+        cancellation_key = $3,cancellation_request_digest = $4,cancellation_result = $5 WHERE decision_id = $1`,
+      [decisionId, authority.principalId, idempotencyKey, request, result]);
+      return result;
     });
   }
 

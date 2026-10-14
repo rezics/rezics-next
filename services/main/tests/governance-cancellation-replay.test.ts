@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { exportJWK, generateKeyPair, SignJWT } from 'jose';
 import { Pool } from 'pg';
@@ -26,6 +26,7 @@ let account: AccountAssertionVerifier;
 let accountServer: ReturnType<typeof Bun.serve>;
 let signing: Awaited<ReturnType<typeof generateKeyPair>>;
 const assertions = new Map<string, { subject: string; active: boolean }>();
+let legacy: Awaited<ReturnType<typeof fixture>>;
 
 beforeAll(async () => {
   cluster = await startPostgresCluster();
@@ -33,7 +34,7 @@ beforeAll(async () => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    for (const file of schemaFiles(root, 'access')) {
+    for (const file of schemaFiles(root, 'access').filter(file => !file.endsWith('_governance_cancellation_replay.sql'))) {
       await client.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
     }
     await client.query('COMMIT');
@@ -58,6 +59,13 @@ beforeAll(async () => {
   const base = `http://127.0.0.1:${accountServer.port}`;
   account = new AccountAssertionVerifier({ issuer, audience, jwksUrl: `${base}/jwks`,
     introspectUrl: `${base}/introspect`, clientId: 'main', clientSecret: 'fixture-secret' });
+  legacy = await fixture({ partial: true });
+  // Reproduce the old cancellation write before applying the additive migration.
+  // The real owner created this decision, its effects and its confirmed receipt.
+  await pool.query('UPDATE access.safety_decision_operation SET cancelled = true WHERE decision_id = $1',
+    [legacy.decision.decisionId]);
+  const migration = schemaFiles(root, 'access').find(file => file.endsWith('_governance_cancellation_replay.sql'))!;
+  await pool.query(readFileSync(join(root, 'services/main/migrations/access', migration), 'utf8'));
 }, 60_000);
 
 afterAll(async () => {
@@ -83,8 +91,9 @@ async function member() {
   return { principalId, principal, actor, token, assertion, grantId: authority.grantId };
 }
 
-async function fixture(options: { partial?: boolean; completed?: boolean; urgent?: boolean } = {}) {
-  const caller = await member();
+async function fixture(options: { partial?: boolean; completed?: boolean; urgent?: boolean } = {},
+  existingCaller?: Awaited<ReturnType<typeof member>>) {
+  const caller = existingCaller ?? await member();
   const asset = randomUUID();
   const resource = options.urgent ? `https://rezics.com/id/${asset}` : native();
   const revision = native();
@@ -175,8 +184,8 @@ async function snapshot(decision: DecisionResult) {
   };
 }
 
-// Cancellation selects the decision resource without binding the request key.
-// Compare complete answers to establish whether that resource supplies stable replay.
+// Compare complete answers, including enforcement, rather than inferring replay
+// from the flag or from unchanged effect receipts alone.
 test('cancellation preserves a partial answer across both keys and source/case head changes', async () => {
   const f = await fixture({ partial: true });
   expect(f.decision.operation.status).toBe('partial');
@@ -187,12 +196,14 @@ test('cancellation preserves a partial answer across both keys and source/case h
   expect(first.status).toBe(200);
   expect(first.body).toEqual({ profile: 'moderation-decision-v1', ...f.decision, replayed: true,
     operation: { ...f.decision.operation, status: 'cancelled', continuation: null } });
+  const { profile: _profile, ...ownerAnswer } = first.body;
   const saved = await snapshot(f.decision);
-  expect(saved).toEqual({ ...before, operation: [{ row: { ...before.operation[0]!.row, cancelled: true } }] });
+  expect(saved).toEqual({ ...before, operation: [{ row: { ...before.operation[0]!.row, cancelled: true,
+    cancellation_principal_id: f.caller.principalId, cancellation_key: key,
+    cancellation_request_digest: expect.stringMatching(/^[0-9a-f]{64}$/), cancellation_result: ownerAnswer } }] });
   expect(await f.cancel(key)).toEqual(first);
   expect(await f.cancel(otherKey)).toEqual(first);
-  const { profile: _profile, ...ownerAnswer } = first.body;
-  expect(await f.store.cancelDecision(f.caller.principal, f.caller.actor, f.decision.decisionId))
+  expect(await f.store.cancelDecision(f.caller.principal, f.caller.actor, f.decision.decisionId, key))
     .toEqual(ownerAnswer);
   expect(await snapshot(f.decision)).toEqual(saved);
   await f.advance();
@@ -235,6 +246,44 @@ test('overlapping first cancellations with the same or another key return one re
     expect(await f.cancel(key)).toEqual(responses[0]!);
     expect(f.applications).toHaveLength(0);
   }
+});
+
+test('overlapping use of one principal key for different decisions cancels only its winning intent', async () => {
+  const first = await fixture(), second = await fixture({}, first.caller), key = randomUUID();
+  const results = await Promise.all([first.cancel(key), second.cancel(key)]);
+  expect(results.map(result => result.status).sort()).toEqual([200, 409]);
+  const winner = results.find(result => result.status === 200)!;
+  const refused = results.find(result => result.status === 409)!;
+  expect(refused.body).toMatchObject({ code: 'idempotency_conflict', title: 'idempotency key reused' });
+  const before = await snapshot(first.decision), secondBefore = await snapshot(second.decision);
+  expect(await first.cancel(key)).toEqual(results[0]!);
+  expect(await second.cancel(key)).toEqual(results[1]!);
+  const bindings = (await pool.query(`SELECT decision_id FROM access.safety_decision_operation
+    WHERE cancellation_principal_id = $1 AND cancellation_key = $2`, [first.caller.principalId, key])).rows;
+  expect(bindings).toEqual([{ decision_id: winner.body.decisionId }]);
+  expect(await snapshot(first.decision)).toEqual(before);
+  expect(await snapshot(second.decision)).toEqual(secondBefore);
+  expect(first.applications).toHaveLength(0);
+  expect(second.applications).toHaveLength(0);
+});
+
+test('a retained key binds the currently authorized caller actingSubject through the ordinary conflict mapping', async () => {
+  const f = await fixture(), successor = await member(), key = randomUUID();
+  const first = await f.cancel(key);
+  expect(first.status).toBe(200);
+  await grantFixtureAuthority(pool, { scope, requireDispatch: true,
+    representations: [{ principalId: f.caller.principalId, actor: successor.actor,
+      action: 'governance.moderate', lifetime: 'infinity' }],
+    grant: { actor: successor.actor, action: 'governance.moderate', lifetime: 'infinity' } });
+  f.expireClaim();
+  await f.store.safety.claim(f.caller.principal, successor.actor, f.decision.caseId);
+  const before = await snapshot(f.decision);
+  const changed = await f.cancel(key, successor.actor);
+  expect(changed.status).toBe(409);
+  expect(changed.body).toMatchObject({ code: 'idempotency_conflict', title: 'idempotency key reused' });
+  expect(await f.cancel(randomUUID(), successor.actor)).toEqual(first);
+  expect(await snapshot(f.decision)).toEqual(before);
+  expect(f.applications).toHaveLength(0);
 });
 
 test('a changed actingSubject is ordinarily denied until currently represented and claimed, then replays the resource', async () => {
@@ -304,9 +353,6 @@ test('cancellation retains its first answer after a later lawful decision advanc
   expect(next.enforcement[0]!.fenceEpoch).toBe('2');
   const before = await snapshot(f.decision), nextBefore = await snapshot(next);
   const sameKey = await f.cancel(key), anotherKey = await f.cancel(otherKey);
-  mkdirSync(join(root, '.temp/goal'), { recursive: true });
-  writeFileSync(join(root, '.temp/goal/cancellation-replay-answers.json'),
-    JSON.stringify({ first, sameKey, anotherKey, next }, null, 2));
   expect(sameKey.body.operation).toEqual(first.body.operation);
   expect(anotherKey.body.operation).toEqual(first.body.operation);
   expect(await snapshot(f.decision)).toEqual(before);
@@ -314,6 +360,42 @@ test('cancellation retains its first answer after a later lawful decision advanc
   expect(f.applications).toHaveLength(4);
   expect(sameKey).toEqual(first);
   expect(anotherKey).toEqual(first);
+});
+
+test('a migrated cancellation retains unknown historical fields and binds its known decision before refusing changed-decision reuse', async () => {
+  const f = legacy, key = randomUUID();
+  const before = await snapshot(f.decision);
+  expect(before.operation[0]!.row).toMatchObject({ cancelled: true, cancellation_principal_id: null,
+    cancellation_key: null, cancellation_request_digest: null, cancellation_result: null });
+  const first = await f.cancel(key);
+  expect(first.status).toBe(200);
+  expect(first.body).toEqual({ profile: 'moderation-decision-v1', ...f.decision, replayed: true,
+    operation: { ...f.decision.operation, status: 'cancelled', continuation: null } });
+  expect(await f.cancel(key)).toEqual(first);
+  const bound = await snapshot(f.decision);
+  expect(bound).toEqual({ ...before, operation: [{ row: { ...before.operation[0]!.row,
+    cancellation_principal_id: f.caller.principalId, cancellation_key: key } }] });
+  const next = await f.reconsider();
+  const advanced = await snapshot(f.decision), nextBefore = await snapshot(next);
+  const today = await f.cancel(key);
+  expect(today.status).toBe(200);
+  expect(today.body).toEqual({ ...first.body, enforcement: next.enforcement });
+  expect(today.body.enforcement[0].fenceEpoch).toBe('2');
+  const refused = await f.cancel(key, f.caller.actor, f.caller, next.decisionId);
+  expect(refused.status).toBe(409);
+  expect(refused.body).toMatchObject({ code: 'idempotency_conflict', title: 'idempotency key reused' });
+  expect(await snapshot(f.decision)).toEqual(advanced);
+  expect(await snapshot(next)).toEqual(nextBefore);
+  await reduceFixtureGrant(pool, f.caller.grantId, { active: false });
+  const denied = await f.cancel(key);
+  expect(denied.status).toBe(403);
+  expect(denied.body.code).toBe('governance_denied');
+  expect(denied.body).not.toHaveProperty('operation');
+  expect(await f.cancel(randomUUID())).toEqual(denied);
+  expect(await f.cancel(randomUUID(), f.caller.actor, f.caller, next.decisionId)).toEqual(denied);
+  expect(await snapshot(f.decision)).toEqual(advanced);
+  expect(await snapshot(next)).toEqual(nextBefore);
+  expect(f.applications).toHaveLength(4);
 });
 
 test('completed cancellation keeps the existing GovernanceConflict HTTP mapping and all receipts', async () => {

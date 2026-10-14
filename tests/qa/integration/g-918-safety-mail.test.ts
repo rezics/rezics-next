@@ -245,7 +245,7 @@ test('SAFETY07 G918: accepted decisions queue once before effect completion; can
     const cancelledReceipt = await f.report(cancelledImage);
     const cancelledBody = await f.input(cancelledReceipt, cancelledImage);
     const cancelled = await json<{ decisionId: string }>(await f.decide(cancelledBody), 202);
-    await f.governance.cancelDecision(f.staff.principal, f.staff.actor, cancelled.decisionId);
+    await f.governance.cancelDecision(f.staff.principal, f.staff.actor, cancelled.decisionId, randomUUID());
     await source.enqueueDecision(cancelled.decisionId);
     expect(sent).toHaveLength(0);
     await f.stack.accessPool.query('UPDATE access.recovery_fence SET open = false WHERE id');

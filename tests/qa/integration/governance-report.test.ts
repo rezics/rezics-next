@@ -506,7 +506,7 @@ test('GOV02/GOV03: stale target or rule never applies; reversals have one effect
     const raced = await decide(reReviewed);
     expect(raced.status).toBe(202);
     expect(raced.body.operation.items[0].state).toBe('failed');
-    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderators[0]!, raced.body.decisionId);
+    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderators[0]!, raced.body.decisionId, randomUUID());
     expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(racedHead).not.toBeNull();
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
@@ -668,7 +668,7 @@ test('GOV02: a Content head changing after preflight makes the decision stale', 
     const decision = await s.call('POST', '/v1/moderation/decisions', s.account.tokenB, decisionInput);
     expect(decision.status, JSON.stringify(decision.body)).toBe(202);
     expect(decision.body.operation.items[0].state).toBe('failed');
-    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderator, decision.body.decisionId);
+    await s.store.cancelDecision({ issuer: s.account.issuer, subject: s.account.b.id }, moderator, decision.body.decisionId, randomUUID());
     expect(s.targetHeadReadCount() - readsBeforeRace).toBe(2);
     expect(successor).not.toBeNull();
     expect((await s.pool.query('SELECT count(*)::int AS n FROM access.moderation_decision WHERE case_id = $1',
