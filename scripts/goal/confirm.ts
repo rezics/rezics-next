@@ -1,6 +1,6 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { closeSync, copyFileSync, existsSync, lstatSync, mkdirSync, openSync, readFileSync, readdirSync, realpathSync, renameSync, writeFileSync } from 'node:fs';
+import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath, UNEXECUTED_FILE_TEST } from '../qa/acceptance.ts';
 import { newRunId } from '../qa/core.ts';
@@ -18,33 +18,79 @@ export interface ConfirmationOptions {
   at?: string;
   lanes?: number;
   slots?: number;
+  record?: string;
   outcomeRegistry?: RegressionOptions['outcomeRegistry'];
   prepare?: RegressionOptions['prepare'];
-  runner?: RegressionOptions['runner'];
+  runner?: typeof runBatch;
   /** The pump transfers its reservation to the detached child before the child starts. */
   leaseToken?: string;
 }
 
-export const confirmationUsage = 'Usage: goalctl confirm [--at <rev>] [--lanes <n>] | confirm --status [--run <id>]';
+export const confirmationUsage = 'Usage: goalctl confirm [--at <rev>] [--lanes <n>] [--record <directory under .temp/>] | confirm --status [--run <id>]';
 
-export function parseConfirmationArgs(args: string[]): { at?: string; lanes?: number; status?: boolean; run?: string } {
+export function parseConfirmationArgs(args: string[]): { at?: string; lanes?: number; record?: string; status?: boolean; run?: string } {
   const options: ReturnType<typeof parseConfirmationArgs> = {};
   for (let index = 0; index < args.length; index++) {
     const flag = args[index];
     if (flag === '--status' && !options.status) { options.status = true; continue; }
-    if (flag !== '--at' && flag !== '--lanes' && flag !== '--run') throw new Error(confirmationUsage);
+    if (flag !== '--at' && flag !== '--lanes' && flag !== '--run' && flag !== '--record') throw new Error(confirmationUsage);
     const value = args[++index];
     if (!value || value.startsWith('--')) throw new Error(confirmationUsage);
     if (flag === '--at' && options.at === undefined) options.at = value;
     else if (flag === '--run' && options.run === undefined) options.run = value;
+    else if (flag === '--record' && options.record === undefined) options.record = value;
     else if (flag === '--lanes' && options.lanes === undefined && /^[1-9]\d*$/.test(value)
       && Number.isSafeInteger(Number(value))) options.lanes = Number(value);
     else throw new Error(confirmationUsage);
   }
-  if ((options.run && !options.status) || (options.status && (options.at !== undefined || options.lanes !== undefined)))
+  if ((options.run && !options.status) || (options.status && (options.at !== undefined || options.lanes !== undefined || options.record !== undefined)))
     throw new Error(confirmationUsage);
   if (options.run) validateRunId(options.run);
   return options;
+}
+
+interface RecordedAnswer {
+  record: string;
+  file: string;
+  status: 'passed' | 'failed';
+  attempt: string;
+}
+
+export interface ConfirmationManifest extends Manifest { records?: RecordedAnswer[] }
+
+/** Both lexical traversal and existing symlink ancestors must stay inside this checkout's scratch space. */
+function recordDirectory(repo: string, directory: string): string {
+  const temp = resolve(repo, '.temp');
+  const target = resolve(repo, directory);
+  const inside = (path: string) => {
+    const local = relative(temp, path);
+    return local !== '' && local !== '..' && !local.startsWith(`..${sep}`) && !isAbsolute(local);
+  };
+  if (!inside(target)) throw new Error('--record must name a directory under .temp/');
+  let ancestor = target;
+  while (!existsSync(ancestor)) {
+    if (lstatSync(ancestor, { throwIfNoEntry: false })?.isSymbolicLink()) throw new Error('--record cannot escape through symlinks');
+    ancestor = dirname(ancestor);
+  }
+  if ((ancestor !== resolve(repo) && ancestor !== temp && !inside(realpathSync(ancestor)))
+    || (existsSync(temp) && realpathSync(temp) !== temp)) throw new Error('--record cannot escape through symlinks');
+  return target;
+}
+
+function copyRecords(repo: string, source: string, target: string, prefix = ''): string[] {
+  if (!existsSync(source)) return [];
+  const copied: string[] = [];
+  for (const entry of readdirSync(source, { withFileTypes: true })) {
+    const name = join(prefix, entry.name);
+    if (entry.isDirectory()) copied.push(...copyRecords(repo, join(source, entry.name), target, name));
+    else if (entry.isFile() && entry.name.endsWith('.json')) {
+      const destination = recordDirectory(repo, join(target, name));
+      mkdirSync(dirname(destination), { recursive: true });
+      copyFileSync(join(source, entry.name), destination);
+      copied.push(destination);
+    }
+  }
+  return copied;
 }
 
 function validateRunId(runId: string): void {
@@ -82,8 +128,9 @@ export function confirmationTimeoutOnly(manifest: Manifest, batch: Batch, result
   return failed.some(test => test.timeout) || result.classification === 'deadline';
 }
 
-export async function runConfirmation(options: ConfirmationOptions): Promise<Manifest> {
+export async function runConfirmation(options: ConfirmationOptions): Promise<ConfirmationManifest> {
   const { repo, stateDir } = options;
+  const recordTarget = options.record === undefined ? undefined : recordDirectory(repo, options.record);
   mkdirSync(stateDir, { recursive: true });
   const lock = join(stateDir, 'confirm.lock');
   const runId = options.runId ?? `confirm-${newRunId()}`;
@@ -99,7 +146,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     token = acquired.token;
   }
   let checkout: string | undefined;
-  let manifest: Manifest | undefined;
+  let manifest: ConfirmationManifest | undefined;
   let runLease: Exclude<ReturnType<typeof tryAcquireDirectoryLease>, 'held'> | undefined;
   // The format is shared, but a bounded run must not become a whole-regression baseline.
   const directory = join(stateDir, 'confirm', runId);
@@ -124,7 +171,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     atomic(join(directory, 'checkouts.json'), { [`${pinned}:pinned`]: checkout });
     manifest = { version: 1, runId, atCommit: pinned, checkout, startedAt, shards: 1, partial: false,
       status: 'running', files: [], batches: [], preflight: { commit: pinned, ok: false, artifactPaths: [] }, diagnoses: [],
-      laneCount: lanes };
+      laneCount: lanes, ...(recordTarget ? { records: [] } : {}) };
     save();
     manifest.preflight = { commit: pinned, ...await (options.prepare ?? (tree =>
       prepareCheckout(tree, join(directory, 'preflight'))))(checkout) };
@@ -144,9 +191,11 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     const execute = async (batch: Batch) => {
       batch.state = 'running'; save();
       const label = `${batch.id}/attempt-${batch.attempts.length + 1}`;
+      const recordSource = recordTarget ? join('.temp', 'confirmation-records', runId, label) : undefined;
       try {
         batch.attempts.push(await runner(checkout!, batch, join(directory, label), 1, slots,
-          regressionBatchQaDirectory(directory, label)));
+          regressionBatchQaDirectory(directory, label), recordSource
+            ? { env: { ...process.env, OUTCOME_RECORD_DIR: recordSource } } : undefined));
       } catch (error) {
         batch.attempts.push({ code: 1, outcomes: {}, artifactPaths: [], queueMs: 0, testMs: 0, totalMs: 0,
           classification: 'infrastructure', evidence: String(error) });
@@ -154,6 +203,14 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
       batch.state = 'done';
       const result = batch.attempts.at(-1)!;
       manifest!.files.find(file => file.file === batch.files[0])!.outcome = result.outcomes[batch.files[0]!] ?? 'missing';
+      if (recordTarget && recordSource) {
+        const cells = confirmationRecord(manifest!, declarations).outcomes.filter(cell => cell.file === batch.files[0]);
+        const status = !result.code && result.outcomes[batch.files[0]!] === 'passed'
+          && cells.length > 0 && cells.every(cell => cell.reading === 'passed') ? 'passed' : 'failed';
+        const target = status === 'passed' ? recordTarget : join(recordTarget, 'failed', label);
+        for (const path of copyRecords(repo, join(checkout!, recordSource), target))
+          manifest!.records!.push({ record: relative(repo, path), file: batch.files[0]!, status, attempt: label });
+      }
       save();
     };
     if (manifest.preflight.ok) {

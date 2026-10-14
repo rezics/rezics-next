@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { expect, test } from 'bun:test';
 import { loadOutcomes } from '../qa/cases/outcomes.ts';
@@ -98,6 +98,68 @@ test('confirmation pins Main declarations, runs actual failing tests under slots
     for (const name of ['0', '1']) expect(existsSync(join(slotRoot, name))).toBe(false);
   } finally { f.cleanup(); }
 }, 60_000);
+
+test('recording copies each attempt before checkout cleanup and quarantines files with any unpassed cell', async () => {
+  const f = fixture();
+  const sources = new Set<string>();
+  try {
+    const manifest = await runConfirmation({ ...f.options, record: '.temp/answers', runId: 'recording',
+      outcomeRegistry: async checkout => {
+        const rows = await f.options.outcomeRegistry!(checkout);
+        const row = rows.find(row => row.rowId === 'books/fail')!;
+        row.cells.member = { ...row.cells.visitor! };
+        return rows;
+      },
+      runner: async (checkout, batch, directory, _shards, _slots, _artifacts, options) => {
+        const source = options?.env?.OUTCOME_RECORD_DIR;
+        expect(source).toBeDefined();
+        sources.add(source!);
+        const name = batch.files[0]!.split('/').at(-1)!.replace('.test.ts', '');
+        // The same row name in different files proves concurrent lanes cannot contaminate attribution.
+        const record = join(checkout, source!, 'books/shared.json');
+        mkdirSync(dirname(record), { recursive: true });
+        writeFileSync(record, JSON.stringify({ source: name }));
+        const title = `books/${name} / visitor: gets the outcome`;
+        const detail = name === 'skip' ? '<skipped/>' : '';
+        const second = name === 'fail' ? `<testcase file="${batch.files[0]}"
+          name="books/fail / member: gets the outcome"><failure>assertion failed</failure></testcase>` : '';
+        mkdirSync(directory, { recursive: true });
+        writeFileSync(join(directory, 'integration.xml'), `<testsuites><testsuite>
+          <testcase file="${batch.files[0]}" name="${title}">${detail}</testcase>
+          ${second}
+          </testsuite></testsuites>`);
+        await Bun.sleep(10);
+        // Even a green process/file result cannot publish a record when a later cell fails.
+        return { code: 0, outcomes: { [batch.files[0]!]: 'passed' },
+          artifactPaths: [directory], queueMs: 0, testMs: 0, totalMs: 0 };
+      } });
+    expect(sources.size).toBe(5);
+    expect(existsSync(manifest.checkout)).toBe(false);
+    expect(manifest.records).toHaveLength(5);
+    expect(manifest.records!.filter(record => record.status === 'passed')).toHaveLength(1);
+    for (const record of manifest.records!) {
+      const name = record.file.split('/').at(-1)!.replace('.test.ts', '');
+      expect(JSON.parse(readFileSync(join(f.directory, record.record), 'utf8'))).toEqual({ source: name });
+      expect(record.record.includes('/failed/')).toBe(name !== 'pass');
+    }
+    const saved = JSON.parse(readFileSync(join(f.stateDir, 'confirm/recording/manifest.json'), 'utf8'));
+    expect(saved.records).toEqual(manifest.records);
+  } finally { f.cleanup(); }
+});
+
+test('record destinations reject traversal and symlink escapes before creating a pinned checkout', async () => {
+  const f = fixture();
+  try {
+    mkdirSync(join(f.directory, '.temp'), { recursive: true });
+    symlinkSync(f.directory, join(f.directory, '.temp/escape'));
+    for (const record of ['answers', '.temp', '.temp/../answers', '.temp/escape/answers']) {
+      await expect(runConfirmation({ ...f.options, record, runId: 'invalid-record',
+        prepare: async () => { throw new Error('Must not prepare an invalid recording destination'); } }))
+        .rejects.toThrow('--record');
+      expect(confirmationRunning(f.stateDir)).toBe(false);
+    }
+  } finally { f.cleanup(); }
+});
 
 test('only a timeout is retried, once, after both primary lanes drain; failures release the lane', async () => {
   const f = fixture();
@@ -224,6 +286,9 @@ test('explicit lanes use the requested host width and reject widths outside the 
 
 test('confirmation command accepts revision, lanes and run status without changing its defaults', () => {
   expect(parseConfirmationArgs([])).toEqual({});
+  expect(parseConfirmationArgs(['--record', '.temp/answers'])).toEqual({ record: '.temp/answers' });
+  expect(() => parseConfirmationArgs(['--status', '--record', '.temp/answers'])).toThrow();
+  expect(() => parseConfirmationArgs(['--record', '.temp/a', '--record', '.temp/b'])).toThrow();
   expect(parseConfirmationArgs(['--at', 'wave/1', '--lanes', '3'])).toEqual({ at: 'wave/1', lanes: 3 });
   expect(parseConfirmationArgs(['--status', '--run', 'wave'])).toEqual({ status: true, run: 'wave' });
   expect(parseConfirmationArgs(['--status'])).toEqual({ status: true });

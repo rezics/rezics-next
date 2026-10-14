@@ -950,7 +950,7 @@ export function regressionBatchArtifactPaths(reported: readonly string[], artifa
 }
 
 /** A shorter deadline cap lets the harness prove timeout cleanup without extending tier budgets. */
-export interface RegressionBatchOptions { deadlineCapMs?: number }
+export interface RegressionBatchOptions { deadlineCapMs?: number; env?: NodeJS.ProcessEnv }
 
 export async function runBatch(checkout: string, batch: Batch, directory: string, shards: number, slotLimit: number,
   artifactRoot?: string, options: RegressionBatchOptions = {}): Promise<Execution> {
@@ -975,7 +975,7 @@ export async function runBatch(checkout: string, batch: Batch, directory: string
   // Slot acquisition has one hour; memory admission has its own bounded wait. Neither is proof time.
   const outerDeadlineMs = nativeProof ? effectiveDeadlineMs + 3_600_000
     + Math.max(0, qaMemoryDeadline(process.env) - started) + defaultStopGraceMs : effectiveDeadlineMs;
-  const env = regressionBatchEnvironment(process.env, shards, slotLimit, artifactRoot, budgetMs, batch.tests);
+  const env = regressionBatchEnvironment(options.env ?? process.env, shards, slotLimit, artifactRoot, budgetMs, batch.tests);
   if (nativeProof) env[admittedCommandBudgetEnv] = String(effectiveDeadlineMs);
   const code = await command(checkout, regressionBatchCommand(batch, report, junitXmlPath), join(directory, 'runner.log'),
     outerDeadlineMs, env);
