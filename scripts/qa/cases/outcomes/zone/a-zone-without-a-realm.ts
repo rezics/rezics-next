@@ -1,4 +1,4 @@
-import { proved, rowOutcomes } from '../../outcome-cells.ts';
+import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('zone/a-zone-without-a-realm', {
   visitor: proved('reads exact public cuts while drafts and unauthenticated edits remain private'),
@@ -6,7 +6,8 @@ export default rowOutcomes('zone/a-zone-without-a-realm', {
   member: proved('membership elsewhere supplies no authority over the independent Zone'),
   owner: proved('creates, previews, republishes and reopens saved Realm-less cuts with original saving Agent credit'),
   moderator: proved('joined Realm moderation supplies no independent Zone editing authority'),
-  operator: proved('broad authority cannot edit this Zone; an exact mandate publishes and reopens saved cuts with saving Agent credit'),
+  // Reopened: with the exact mandate the editor read answers 200 and the Zone's own read 404, so the page stops.
+  operator: pending('broad authority cannot edit this Zone; an exact mandate publishes and reopens saved cuts with saving Agent credit'),
 }, {
   rights: {
     basis: 'original-contribution',
