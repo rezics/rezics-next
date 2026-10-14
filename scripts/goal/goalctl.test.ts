@@ -4736,6 +4736,33 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('a branch that resolved main by merging lands by merge, not by replaying its commits', async () => {
+    const r = repo();
+    try {
+      const task = await r.start('G-001');
+      r.commit(task);
+      writeFileSync(join(r.dir, 'worker-001.ts'), `export const value = 'main';\n`);
+      r.git('add', 'worker-001.ts');
+      r.git('commit', '-qm', 'Main takes the same file');
+      const wt = (...args: string[]) => spawnSync('git', ['-C', task.worktree, ...args], { encoding: 'utf8' });
+      expect(wt('merge', '-q', 'main').status).not.toBe(0);
+      writeFileSync(join(task.worktree, 'worker-001.ts'), `export const value = 'both';\n`);
+      expect(wt('add', 'worker-001.ts').status).toBe(0);
+      expect(wt('-c', 'core.editor=true', 'commit', '-q', '--no-edit').status).toBe(0);
+      writeFileSync(join(r.dir, 'later.ts'), `export const later = true;\n`);
+      r.git('add', 'later.ts');
+      r.git('commit', '-qm', 'Main moves on after the resolution');
+      await r.stopFixture(task.id);
+      const before = r.git('rev-parse', 'main');
+      const result = r.run(['merge', task.id, '--allow-scope', '--skip-unit-gate']);
+      expect(result.stderr).not.toContain('does not rebase onto main');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+      expect(r.git('show', 'main:worker-001.ts')).toContain(`'both'`);
+      expect(spawnSync('git', ['merge-base', '--is-ancestor', before, 'main'], { cwd: r.dir }).status).toBe(0);
+    } finally { r.cleanup(); }
+  });
+
   test('a failing generator blocks the merge and leaves the worktree clean', async () => {
     const r = repo();
     try {
