@@ -24,6 +24,7 @@ const api = (file: string, test: string, evidence?: string): ApiProof => ({ file
 const browser = api;
 const journeyBrowser = (file: string, journey: string, test: string, evidence?: string): JourneyProof => ({ file, journey, test, evidence });
 const missing = (item: string, reason?: string): MissingProof => ({ missing: item, reason });
+const realmClosureBrowserGap = 'apps/web/tests/realm-route-closure.e2e.ts defines the direct-route, thread/reply, directory and Zone journeys. Their closure prerequisite POST /v1/moderation/decisions targets graph Realm record, scopeKind=component, revision=null, effect=disclosure and returns 403 governance_denied: "decision target is outside the reported evidence". POST /v1/reports cannot capture Realm record evidence through governance/evidence.ts, so closure and restoration cannot be proved; the journey retains the exact request/response as realm-restrict-request.json.';
 
 export const launchCoverage: readonly LaunchCoverage[] = [
   {
@@ -346,7 +347,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-direct-routes.test.ts',
       'realm/closure-direct-routes / visitor: conceals closed home, teaser, adoptions, decisions and Zone entry while live controls remain readable',
       'Closes a populated Realm through platform governance and compares its home, teaser, adoptions, decisions and Zone entry with absent routes while live controls remain readable.'),
-    browser: missing('gap', 'No direct-route Realm closure browser journey is cited.'),
+    browser: missing('gap', realmClosureBrowserGap),
   },
   {
     kind: 'realm',
@@ -354,7 +355,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-threads-and-replies.test.ts',
       'realm/closure-threads-and-replies / member: conceals closed placed threads, descendants, canonical lookup, placement and counts',
       'After Realm closure, checks placed threads, descendants, canonical lookup, placement and counts through ordinary member APIs without inheriting a membership bypass.'),
-    browser: missing('gap', 'No thread and reply Realm closure browser journey is cited.'),
+    browser: missing('gap', realmClosureBrowserGap),
   },
   {
     kind: 'realm',
@@ -362,7 +363,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('services/main/tests/realm-platform-closure-reads.test.ts',
       'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
       'Filters closed indexed Realms before directory delivery, traverses every remaining live row and keeps continuation identifiers opaque.'),
-    browser: missing('gap', 'No directory Realm closure browser journey is cited.'),
+    browser: missing('gap', realmClosureBrowserGap),
   },
   {
     kind: 'realm',
@@ -370,7 +371,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-zone-discussion-entry-and-modules.test.ts',
       'realm/closure-zone-discussion-entry-and-modules / visitor: loses the closed Realm entry and module sources while independent Zone pages and credited originals survive',
       'Reads published Zone entry and module sources after attached Realm closure, omitting closed Realm occurrences while preserving independent pages, original Works and author credits.'),
-    browser: missing('gap', 'No Zone discussion entry and module Realm closure browser journey is cited.'),
+    browser: missing('gap', realmClosureBrowserGap),
   },
   {
     kind: 'realm',
