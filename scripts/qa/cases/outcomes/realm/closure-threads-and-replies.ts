@@ -1,14 +1,14 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'realm/closure-threads-and-replies',
   {
-    visitor: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
-    stranger: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
-    member: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
-    owner: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
-    moderator: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
-    operator: pending('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    visitor: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    stranger: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    member: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    owner: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    moderator: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
+    operator: proved('conceals closed placed threads, descendants, canonical lookup, placement and counts'),
   },
   {
     rights: {

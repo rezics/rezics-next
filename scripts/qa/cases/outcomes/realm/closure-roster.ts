@@ -1,14 +1,14 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'realm/closure-roster',
   {
-    visitor: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
-    stranger: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
-    member: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
-    owner: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
-    moderator: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
-    operator: pending('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    visitor: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    stranger: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    member: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    owner: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    moderator: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
+    operator: proved('conceals closed roster, featured members and retained pagination like a real absent Realm'),
   },
   {
     rights: {
