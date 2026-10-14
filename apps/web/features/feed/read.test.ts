@@ -80,6 +80,16 @@ test('platform closure stays absent while retaining its HTTP answer', async () =
   expect(await readFeedPage(main, closureQuery('member'))).toEqual({ ok: false, failure: 'closed', status: 403, problem });
 });
 
+test('a transport failure has no invented HTTP status or Main problem', async () => {
+  for (const [error, failure] of [[new TypeError('Failed to fetch'), 'offline'],
+    [new Error('Unexpected transport failure'), 'unavailable']] as const) {
+    const main = browserMainApi('https://contract.invalid', {
+      fetcher: Object.assign(async () => { throw error; }, { preconnect: globalThis.fetch.preconnect }),
+    });
+    expect(await readFeedPage(main, closureQuery('member'))).toEqual({ ok: false, failure });
+  }
+});
+
 test('an empty page retains its successor, and a refused successor retains the first original', async () => {
   for (const state of ['sparse', 'continuation-forbidden'] as const) {
     const transport = closureTransport('member', state);

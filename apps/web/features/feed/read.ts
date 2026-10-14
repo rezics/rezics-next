@@ -1,4 +1,4 @@
-import { type FeedPage, type FeedQuery, type Loaded, type MainClient, settle } from './types.ts';
+import { type FeedPage, type FeedQuery, isOfflineError, type Loaded, type MainClient, settle } from './types.ts';
 
 /** Keep Main's status and problem at the feed boundary; 403 is not an expired session. */
 export async function settleFeedRead<T>(call: () => Promise<{
@@ -13,6 +13,8 @@ export async function settleFeedRead<T>(call: () => Promise<{
   });
   if (read.ok || !refused) return read;
   const { status, value: problem } = refused as { status: number; value: unknown };
+  // Eden wraps a failed transport in a synthetic 503; there was no Main answer to retain.
+  if (problem instanceof Error) return { ok: false, failure: isOfflineError(problem) ? 'offline' : 'unavailable' };
   return { ...read, ...(status === 403 && read.failure !== 'closed' ? { failure: 'unavailable' as const } : {}),
     status, problem };
 }
