@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
@@ -47,9 +48,13 @@ async function publish(title: string): Promise<Work & { contribution: string; pu
   }), 201);
   return { ...work, contribution: draft.contribution, publicationDecision: publication.publicationDecision };
 }
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 import catalogue from '../../../../../scripts/qa/cases/outcomes/anime/catalogue-browse-and-search-in-its-zone.ts';
+const recording = new OutcomeRecorder(catalogue);
 import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
   type ClassificationPost } from '../../../../../scripts/dev/seed/classified-statement.ts';
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
@@ -69,6 +74,7 @@ beforeAll(async () => {
   const started = Date.now();
   try {
   sessions = await personaSessions();
+  await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const person = sessions[name], main = person.main;
     person.main = async (method, path, body, key, options) => {
@@ -272,6 +278,7 @@ async function journey(name: PersonaName) {
 const qualification: { persona: string; passed: boolean; error?: string }[] = [];
 async function qualify(name: PersonaName) {
   try {
+    await recordCatalogueStoryReads(recording, name, sessions[name], sessions.realm, 'anime');
     await journey(name);
     qualification.push({ persona: name, passed: true });
   } catch (error) {
@@ -282,12 +289,12 @@ async function qualify(name: PersonaName) {
       JSON.stringify(qualification, null, 2));
   }
 }
-outcomeTest(catalogue, 'visitor', () => qualify('visitor'));
-outcomeTest(catalogue, 'stranger', () => qualify('stranger'));
-outcomeTest(catalogue, 'member', () => qualify('member'));
-outcomeTest(catalogue, 'owner', () => qualify('owner'));
-outcomeTest(catalogue, 'moderator', () => qualify('moderator'));
-outcomeTest(catalogue, 'operator', () => qualify('operator'));
+outcomeTest(catalogue, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(catalogue, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(catalogue, 'member', () => qualify('member'), recording);
+outcomeTest(catalogue, 'owner', () => qualify('owner'), recording);
+outcomeTest(catalogue, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(catalogue, 'operator', () => qualify('operator'), recording);
 
 import { meterStatements } from '../../feed-read-support.ts';
 import { foregroundCounted } from '../../support/operation-cost.ts';

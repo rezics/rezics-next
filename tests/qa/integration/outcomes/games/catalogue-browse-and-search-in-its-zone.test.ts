@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/catalogue-browse-and-search-in-its-zone.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordCatalogueStoryReads } from '../../../support/catalogue-story-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(60_000);
@@ -158,6 +159,7 @@ beforeAll(async () => {
 
 async function catalogue(name: PersonaName) {
   const person = sessions[name];
+  await recordCatalogueStoryReads(recording, name, person, sessions.realm, 'games');
   const sample = recording.session(name, person);
   const sampledCards = new Set<string>();
   const home = await answer<{ kind: string; realm: string }>(sample('zone-home-route', 'GET',

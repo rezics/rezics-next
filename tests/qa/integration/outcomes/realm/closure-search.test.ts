@@ -2,7 +2,9 @@ import { closureSetup, closureCell, closureHydrationFence, effectClosure, publis
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-search.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { missingRealmSearchStates, realmSearchFixture, type RealmSearchState }
+  from '../../../../../apps/web/features/discover/realm-search-fixtures.ts';
 import {
   personaSessions,
   personaNames,
@@ -15,6 +17,8 @@ setDefaultTimeout(60_000);
 type Work = { work: string; mainVersion: string; workRevision: string };
 type Publication = Work & { contribution: string; publicationDecision: string; selection: string };
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(closure);
+const queryContinuations = new Map<PersonaName, string>();
 const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
 let hydration: ReturnType<typeof closureHydrationFence>;
@@ -89,9 +93,11 @@ async function publishOriginals() {
     const preview = await answer<{ digest: string }>(owner.main('POST', `${root}/role-impact`, command));
     await answer(owner.main('POST', `${root}/role-changes`, { ...command, impactDigest: preview.digest }), 201);
   }
-  for (let index = 0; index < 3; index++) {
+  // The production query asks for twenty cards; twenty-one public originals
+  // provide a real continuation before the Realm closes.
+  for (let index = 0; index < 21; index++) {
     const work = await answer<Work>(owner.main('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: `${phrase} ${index}`, language: 'en',
+      profile: 'metadata-only-v1', title: `${phrase} ${index} ${realmSearchFixture('global').query.q}`, language: 'en',
       semanticTypes: ['https://schema.org/Book'], authoring: 'own-work',
       actingSubject: owner.actingSubject,
     }), 201);
@@ -139,10 +145,17 @@ async function publishOriginals() {
 beforeAll(async () => {
   hydration = closureHydrationFence();
   sessions = await personaSessions('public', { graphEndpoint: hydration.url });
+  await recording.prepare();
   closureUnavailable = await closureSetup(sessions, async () => {
     const rule = await publishClosureRule(sessions);
     await publishOriginals();
     await prepareSurface();
+    for (const name of personaNames) {
+      const page = await answer<{ result: { nextCursor: string | null } }>(
+        sessions[name].main('POST', '/v1/query', storyQuery('closed')));
+      expect(page.result.nextCursor, `${name}: pre-closure query continuation`).not.toBeNull();
+      queryContinuations.set(name, page.result.nextCursor!);
+    }
     hydration.arm(publications.map(publication => publication.work), personaNames.length);
     const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
     const path = `/v1/search/catalogue?${params}`;
@@ -162,7 +175,30 @@ beforeAll(async () => {
   });
 }, 180_000);
 
-afterAll(async () => { try { await sessions?.close(); } finally { await hydration?.close(); } });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { try { await sessions?.close(); } finally { await hydration?.close(); } }
+});
+
+function storyQuery(kind: RealmSearchState, cursor?: string) {
+  const fixture = realmSearchFixture(kind);
+  return { ...fixture.query,
+    ...(fixture.state.scope.kind === 'realm'
+      ? { context: { realm: sessions.realm }, scope: { kind: 'realm' as const, realm: sessions.realm } } : {}),
+    ...(cursor ? { cursor } : {}),
+  };
+}
+
+async function storySearches(name: PersonaName) {
+  const sample = recording.session(name, sessions[name]);
+  for (const fixture of missingRealmSearchStates) {
+    // Public commands can close a Realm, but cannot make Discovery unavailable.
+    if (fixture.kind === 'error') continue;
+    const query = storyQuery(fixture.kind,
+      fixture.kind === 'closed-continuation' ? queryContinuations.get(name) : undefined);
+    await answer(sample(fixture.kind, fixture.method, fixture.path, query), fixture.status);
+  }
+}
 
 type CataloguePage = { results: { work: string }[]; next: string | null; count: { value: number; precision: string } };
 let continuation: string;
@@ -178,6 +214,7 @@ async function prepareSurface() {
 async function delivered(name: PersonaName) {
   const person = sessions[name];
   await requireClosure(person);
+  await storySearches(name);
   const during = raced.get(name)!;
   expect(during.status, during.path).toBeLessThan(500);
   const body = JSON.parse(during.body) as { results?: unknown[]; count?: { value: number }; code?: string };
@@ -232,10 +269,10 @@ async function delivered(name: PersonaName) {
   await independent(person);
 }
 
-outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')));
-outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')));
-outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')));
-outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')));
-outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')));
-outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')));
+outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')), recording);
+outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')), recording);
+outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')), recording);
+outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')), recording);
+outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')), recording);
+outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')), recording);
 

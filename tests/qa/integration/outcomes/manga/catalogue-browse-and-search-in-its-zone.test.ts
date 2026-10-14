@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { recordZoneBrowseContinuation } from '../../../support/catalogue-story-reads.ts';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { fromPlainText } from '@rezics/document';
@@ -259,6 +260,9 @@ async function pageReads(name: PersonaName) {
       const params = new URLSearchParams(query as Record<string, string>);
       const path = `${realmRoot}/modules/browse${params.size ? `?${params}` : ''}`;
       const page = await answer<Page>(publicRead(continuation ? `${label}-continuation-${continuation}` : label, 'GET', path));
+      if (label === 'page-browse-default' && continuation === 0) {
+        await recordZoneBrowseContinuation(recording, name, sessions[name], sessions.zone, page.nextCursor);
+      }
       cursor = page.nextCursor;
       continuation++;
     } while (cursor);
