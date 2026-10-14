@@ -193,13 +193,15 @@ test('comment source selectors clear once with the revision and cannot be restor
     const winner = await pool.connect();
     const closingCreate = { revisionId: closedDraft.revisionId!, resourceId: closedWork,
       author: workId(), exact: canary, body: 'should not land' };
-    let creating: Promise<unknown> | undefined;
+    let creationError: Promise<unknown> | undefined;
     try {
       await winner.query('BEGIN');
       await winner.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE',
         [closedDraft.revisionId]);
-      creating = comments.create({ ...closingCreate, admissionId: randomUUID(), authorityEpoch: '1',
+      const creating = comments.create({ ...closingCreate, admissionId: randomUUID(), authorityEpoch: '1',
         scope: `content:comment:${closedWork}`, requestDigest: contentCommentIntentDigest(closingCreate) });
+      // Observe the expected refusal before releasing the lock can reject it.
+      creationError = creating.then(() => null, (error: unknown) => error);
       for (let attempt = 0; ; attempt++) {
         const waiting = await pool.query(`SELECT 1 FROM pg_stat_activity
           WHERE wait_event_type = 'Lock' AND query LIKE '%FOR SHARE OF r%'`);
@@ -219,7 +221,7 @@ test('comment source selectors clear once with the revision and cannot be restor
       await winner.query('ROLLBACK').catch(() => undefined);
       winner.release();
     }
-    await expect(creating).rejects.toBeInstanceOf(ContentUnavailable);
+    expect(await creationError).toBeInstanceOf(ContentUnavailable);
     expect((await pool.query('SELECT count(*)::int AS n FROM content.comment WHERE revision_id = $1',
       [closedDraft.revisionId])).rows[0]?.n).toBe(0);
 
