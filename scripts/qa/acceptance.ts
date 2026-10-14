@@ -1,4 +1,5 @@
-import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { repositoryFiles } from '../lib/repository-files.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { isAbsolute, join, relative } from 'node:path';
 import type { Tier } from './core.ts';
 import { declaredCases } from './cases/index.ts';
@@ -206,17 +207,9 @@ const unitOwnerDirectories = [
 function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   const reserved = new Set<string>([...integrationGateFiles, ...modelGateFiles, ...faultGateFiles,
     ...testExclusions.map(item => item.file)]);
-  const found: string[] = [];
-  const walk = (directory: string) => {
-    for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
-      const path = `${directory}/${entry.name}`;
-      if (entry.isDirectory() && !['node_modules', '.temp', '.artifacts', 'dist', '.git'].includes(entry.name)) walk(path);
-      else if (entry.isFile() && /\.test\.tsx?$/.test(entry.name)
-        && !/\.integration\.test\.tsx?$/.test(entry.name) && !reserved.has(path)) found.push(path);
-    }
-  };
-  for (const directory of unitOwnerDirectories) walk(directory);
-  return found.sort();
+  return repositoryFiles(root).filter(path => unitOwnerDirectories.some(directory => path.startsWith(`${directory}/`))
+    && !path.split('/').some(part => ['node_modules', '.temp', '.artifacts', 'dist', '.git'].includes(part))
+    && /\.test\.tsx?$/.test(path) && !/\.integration\.test\.tsx?$/.test(path) && !reserved.has(path));
 }
 
 // Keep declared acceptance evidence in its reviewed unit tier. The coverage

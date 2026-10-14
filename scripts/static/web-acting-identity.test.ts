@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -186,7 +187,7 @@ test('selected query identities, explicit anonymous reads and public publication
 });
 
 test('production web reads introduce no acting identity omissions against live Main contracts', async () => {
-  const files = [...new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: resolve(root, 'apps/web') })]
+  const files = [...repositoryGlob(root, 'apps/web/**/*.{ts,tsx}').map(file => file.slice('apps/web/'.length))]
     .filter(path => !/^(?:tests|node_modules|dist|\.vinext|\.temp)\//.test(path)
       && !/\.(?:test|stories|fixture)\./.test(path))
     .map(path => `apps/web/${path}`);

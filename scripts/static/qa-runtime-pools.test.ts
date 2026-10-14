@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -61,7 +62,7 @@ test('the runtime pool guard detects direct constructors, including pg aliases',
 test('QA support constructs no plain runtime pools outside reasoned exceptions', () => {
   const unexpected: string[] = [];
   const used = new Set<string>();
-  for (const file of new Bun.Glob('tests/qa/support/**/*.{ts,tsx,js,mjs,cjs}').scanSync({ cwd: root })) {
+  for (const file of repositoryGlob(root, 'tests/qa/support/**/*.{ts,tsx,js,mjs,cjs}')) {
     for (const binding of directPools(readFileSync(`${root}/${file}`, 'utf8'))) {
       const exception = exceptions.find(item => item.file === file && item.binding === binding);
       const key = `${file}:${binding}`;

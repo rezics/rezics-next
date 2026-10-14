@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { availableParallelism, freemem } from 'node:os';
@@ -42,9 +43,7 @@ export function outcomeTestViolations(
 
 export function outcomeRepositoryViolations(root = process.cwd()): string[] {
   return [
-    ...new Bun.Glob(outcomeSourcePattern).scanSync({
-      cwd: root,
-    }),
+    ...repositoryGlob(root, outcomeSourcePattern),
   ]
     .sort()
     .flatMap((file) =>

@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync, type Dirent } from 'node:fs';
+import { repositoryFiles, repositoryGlob } from '../lib/repository-files.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { dirname, normalize } from 'node:path/posix';
 
@@ -36,24 +37,8 @@ const skipped = new Set(['node_modules', 'generated', 'dist', 'coverage', 'targe
 const scriptToken = String.raw`(?:\.\.?\/|scripts\/)[\w./-]+\.ts`;
 
 function walk(root: string, accept: (name: string) => boolean): string[] {
-  const found: string[] = [];
-  const visit = (directory: string, relative: string) => {
-    // ReturnType<typeof readdirSync> is the buffer-name overload. This call returns string names.
-    let entries: Dirent[];
-    try {
-      entries = readdirSync(directory, { withFileTypes: true });
-    } catch {
-      return;
-    }
-    for (const entry of entries) {
-      if (entry.name.startsWith('.') || skipped.has(entry.name)) continue;
-      const next = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) visit(join(directory, entry.name), next);
-      else if (accept(entry.name)) found.push(next);
-    }
-  };
-  visit(root, '');
-  return found;
+  return repositoryFiles(root).filter(file => !file.split('/').some(part => part.startsWith('.') || skipped.has(part))
+    && accept(file.split('/').at(-1)!));
 }
 
 function groups(source: string, expression: RegExp): string[] {
@@ -111,7 +96,7 @@ export function discoveryProblems(
     const leaf = anchor.split('/').filter(Boolean).at(-1) ?? anchor;
     if (!text.includes(anchor) && !text.includes(leaf))
       problems.push(`${discovery.discoveredBy} does not name ${anchor}`);
-    if (!/readdir|Bun\.Glob|\.scanSync?\(|\bcruise\s*\(|depcruise/.test(text))
+    if (!/readdir|repository(?:Files|Glob)|Bun\.Glob|\.scanSync?\(|\bcruise\s*\(|depcruise/.test(text))
       problems.push(`${discovery.discoveredBy} does not scan a directory`);
   }
   return problems;
@@ -156,7 +141,7 @@ export function scriptEntryFiles(
     if (resolved && existsSync(join(root, resolved))) entries.add(resolved);
   }
   for (const discovery of discoveries)
-    for (const file of new Bun.Glob(discovery.pattern).scanSync({ cwd: root, onlyFiles: true }))
+    for (const file of repositoryGlob(root, discovery.pattern))
       if (file.startsWith('scripts/') && file.endsWith('.ts')) entries.add(file);
   return [...entries].sort();
 }

@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
 import { parseSync, visitorKeys, type Node } from 'oxc-parser';
@@ -317,7 +318,7 @@ export function changedContinuationGroups(current: ContinuationInventory, accept
 
 export async function webSources(root: string): Promise<WebSource[]> {
   const sources: WebSource[] = [];
-  for await (const path of new Bun.Glob('apps/web/**/*.{ts,tsx,js,jsx,mts,cts}').scan({ cwd: root })) {
+  for await (const path of repositoryGlob(root, 'apps/web/**/*.{ts,tsx,js,jsx,mts,cts}')) {
     if (production(path)) sources.push({ path, source: readFileSync(join(root, path), 'utf8') });
   }
   return sources;

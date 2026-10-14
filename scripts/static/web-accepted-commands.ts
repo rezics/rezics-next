@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { relative, resolve } from 'node:path';
 import ts from 'typescript-6';
 import { commandSource, completesAdmission, resetCommandSources } from './web-accepted-commands-flow.ts';
@@ -96,7 +97,7 @@ export function commandInventory(root: string, api: CommandOpenApi,
   const production = (path: string) => !/\.(?:test|stories)\./.test(path) && !/(?:^|[-/])fixtures\.tsx?$/.test(path)
     && !path.includes('/tests/');
   resetCommandSources();
-  const files = new Bun.Glob('**/*.{ts,tsx}').scanSync({ cwd: resolve(root, directory), absolute: true });
+  const files = repositoryGlob(resolve(root, directory), '**/*.{ts,tsx}').map(file => resolve(root, directory, file));
   const inventory: CommandInventory[] = [];
   for (const file of files) {
     const path = relative(root, file);

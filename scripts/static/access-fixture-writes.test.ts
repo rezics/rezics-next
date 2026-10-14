@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -52,6 +53,7 @@ test('scans TypeScript below directories named migrations and excludes only the 
   const temporaryBase = resolve(import.meta.dir, '../../.temp');
   mkdirSync(temporaryBase, { recursive: true });
   const root = mkdtempSync(join(temporaryBase, 'access-fixture-write-scan-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const source = readFixture('direct-write.fixture');
     const migrationFile = join(root, 'scripts/migrations/direct-write.ts');
@@ -85,4 +87,27 @@ test('tracked direct access writes only shrink', () => {
   if (stale.length) throw new Error(`listed files no longer write a protected table:\n${stale.join('\n')}`);
   expect(debt).toEqual(accessFixtureWriteDebtFiles(findings));
   expect(debt).toEqual([...new Set(debt)].sort());
+});
+
+test('repository guards ignore build output but retain tracked and local source violations', () => {
+  const root = mkdtempSync(resolve(import.meta.dir, '../../.temp/repository-source-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
+  try {
+    writeFileSync(join(root, '.gitignore'), 'apps/web/dist/\n');
+    const ignored = join(root, 'apps/web/dist/violation.ts');
+    mkdirSync(dirname(ignored), { recursive: true });
+    writeFileSync(ignored, readFixture('direct-write.fixture'));
+    expect(scanAccessFixtureWrites(root)).toEqual([]);
+    // A tracked file stays in the inventory even when its path matches an ignore rule.
+    expect(spawnSync('git', ['add', '-f', 'apps/web/dist/violation.ts'], { cwd: root }).status).toBe(0);
+    expect(accessFixtureWriteDebtFiles(scanAccessFixtureWrites(root))).toEqual(['apps/web/dist/violation.ts']);
+    const local = join(root, 'apps/web/local.ts');
+    writeFileSync(local, readFixture('direct-write.fixture'));
+    expect(accessFixtureWriteDebtFiles(scanAccessFixtureWrites(root))).toEqual([
+      'apps/web/dist/violation.ts', 'apps/web/local.ts',
+    ]);
+    // Deleted index entries cannot be read from the working tree.
+    rmSync(ignored);
+    expect(accessFixtureWriteDebtFiles(scanAccessFixtureWrites(root))).toEqual(['apps/web/local.ts']);
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

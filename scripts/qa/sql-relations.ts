@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 // The pinned TS 7 compiler is native; the already installed TS 6 compatibility
@@ -495,10 +496,7 @@ export function sourceSqlLiterals(source: SqlSource): SqlSource[] {
 export function repositorySqlSources(root: string): SqlSource[] {
   return ['services', 'scripts', 'tests'].flatMap((directory) =>
     [
-      ...new Bun.Glob('**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
-        cwd: join(root, directory),
-        onlyFiles: true,
-      }),
+      ...repositoryGlob(root, `${directory}/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}`).map(file => file.slice(`${directory}/`.length)),
     ]
       .filter(
         (file) => !file.split('/').some((part) => ['node_modules', '.temp', 'dist'].includes(part)),

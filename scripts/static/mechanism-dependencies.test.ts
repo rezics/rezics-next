@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -24,6 +25,7 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 function withTree(files: Record<string, string>, run: (tree: string) => void) {
   mkdirSync(join(root, '.temp'), { recursive: true });
   const tree = mkdtempSync(join(root, '.temp', 'mechanism-dependencies-'));
+  expect(spawnSync('git', ['init', '-q', tree]).status).toBe(0);
   try {
     for (const [path, body] of Object.entries(files)) {
       const absolute = join(tree, path);

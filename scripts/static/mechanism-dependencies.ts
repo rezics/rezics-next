@@ -1,9 +1,9 @@
+import { repositoryFiles } from '../lib/repository-files.ts';
 import { spawnSync } from 'node:child_process';
 import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   rmSync,
   statSync,
@@ -108,20 +108,9 @@ function ownerSourceFiles(root: string, owner: string): string[] {
   if (!owner || isAbsolute(owner) || owner.split('/').includes('..') || !existsSync(directory))
     return [];
   if (!statSync(directory).isDirectory()) return [];
-  const found: string[] = [];
-  const stack = [directory];
-  while (stack.length > 0) {
-    const current = stack.pop()!;
-    for (const entry of readdirSync(current, { withFileTypes: true })) {
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-      const absolute = join(current, entry.name);
-      if (entry.isDirectory()) stack.push(absolute);
-      else if (entry.isFile() && SOURCE_EXTENSIONS.has(extname(entry.name))) {
-        found.push(relative(root, absolute).replaceAll('\\', '/'));
-      }
-    }
-  }
-  return found.sort();
+  return repositoryFiles(root).filter(file => file.startsWith(`${owner}/`)
+    && !file.slice(owner.length + 1).split('/').some(part => part === 'node_modules' || part.startsWith('.'))
+    && SOURCE_EXTENSIONS.has(extname(file)));
 }
 
 function matchesAdapter(file: string, owner: string, adapter: string): boolean {

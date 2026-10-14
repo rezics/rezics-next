@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -7,6 +8,7 @@ const root = join(import.meta.dir, '../..');
 const api: CommandOpenApi = { paths: { '/v1/works/{work}': { put: { responses: { '200': {}, '202': {} } } } } };
 function fixture(files: Record<string, string>, check: (directory: string) => void) {
   const directory = mkdtempSync(join(root, '.temp/accepted-commands-'));
+  expect(spawnSync('git', ['init', '-q', directory]).status).toBe(0);
   try {
     for (const [name, source] of Object.entries(files)) writeFileSync(join(directory, name), source);
     check(directory);

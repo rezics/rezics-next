@@ -1,4 +1,5 @@
-import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { repositoryFiles } from '../lib/repository-files.ts';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /** Calls that keep the reap owner on PATH for every container a QA process starts. */
@@ -332,29 +333,11 @@ export function scanDockerSpawnFiles(root: string, files: readonly string[]): Do
   return found.sort((a, b) => a.file.localeCompare(b.file) || a.call.localeCompare(b.call));
 }
 
-function walkTree(root: string, directory: string, found: string[]): void {
-  let entries;
-  try { entries = readdirSync(join(root, directory), { withFileTypes: true }); } catch { return; }
-  for (const entry of entries) {
-    if (entry.name === 'node_modules' || entry.name === '.temp' || entry.name === 'dist') continue;
-    const path = `${directory}/${entry.name}`;
-    if (entry.isDirectory()) walkTree(root, path, found);
-    else if (entry.isFile() && /\.tsx?$/.test(entry.name) && !entry.name.endsWith('.d.ts')) found.push(path);
-  }
-}
-
 /** tests/, scripts/qa and each service's tests. Fixtures outside these trees are scanned on purpose. */
 export function dockerOwnershipFiles(root: string): string[] {
-  const files: string[] = [];
-  walkTree(root, 'tests', files);
-  walkTree(root, 'scripts/qa', files);
-  let services: string[] = [];
-  try { services = readdirSync(join(root, 'services')); } catch { /* no services tree */ }
-  for (const service of services) {
-    const tests = join('services', service, 'tests');
-    try { if (statSync(join(root, tests)).isDirectory()) walkTree(root, tests, files); } catch { /* not a service */ }
-  }
-  return files.sort();
+  return repositoryFiles(root).filter(file => /^(?:tests\/|scripts\/qa\/|services\/[^/]+\/tests\/)/.test(file)
+    && !file.split('/').some(part => ['node_modules', '.temp', 'dist'].includes(part))
+    && /\.tsx?$/.test(file) && !file.endsWith('.d.ts'));
 }
 
 export function scanDockerOwnership(root: string): DockerSpawn[] {

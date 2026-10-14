@@ -1,4 +1,5 @@
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { repositoryFiles } from '../lib/repository-files.ts';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, extname, join, relative, resolve, sep } from 'node:path';
 import { integrationGateFiles } from './integration-gate-files.ts';
 
@@ -518,16 +519,9 @@ function rawUpdateCallSites(tokens: readonly SourceToken[]): string[] {
  * Product-ingress probes that start their own product stack do not select this shard's assembler. */
 export function scanRawSparqlIntegrationFiles(root = resolve(import.meta.dir, '../..')): RawSparqlIntegrationScan {
   const roots = new Set<string>();
-  const walk = (directory: string) => {
-    const absolute = join(root, directory);
-    if (!existsSync(absolute)) return;
-    for (const entry of readdirSync(absolute, { withFileTypes: true })) {
-      const path = `${directory}/${entry.name}`;
-      if (entry.isDirectory()) walk(path);
-      else if (entry.isFile() && /\.test\.tsx?$/.test(entry.name)) roots.add(path);
-    }
-  };
-  walk('tests/qa/integration');
+  for (const file of repositoryFiles(root)) {
+    if (file.startsWith('tests/qa/integration/') && /\.test\.tsx?$/.test(file)) roots.add(file);
+  }
   for (const file of integrationGateFiles) {
     if (existsSync(join(root, file)) && /\.test\.tsx?$/.test(file)) roots.add(file);
   }

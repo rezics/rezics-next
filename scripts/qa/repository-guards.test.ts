@@ -29,6 +29,7 @@ test('guard arguments keep Bun options and reserve a single aggregate JUnit dest
 test('guard processes overlap, inherit one QA slot, and retain every file in one JUnit report', async () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/parallel-guards-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const files = ['one', 'two', 'three'].map(name => join(root, `${name}.test.ts`));
     for (const [index, path] of files.entries()) writeFileSync(path, `
@@ -57,6 +58,7 @@ test('guard processes overlap, inherit one QA slot, and retain every file in one
 test('guard failures and module crashes are attributed to their file without discarding passing siblings', async () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/guard-failures-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const files = ['pass', 'fail', 'crash', 'no-report'].map(name => join(root, `${name}.test.ts`));
     writeFileSync(files[0]!, "import { test } from 'bun:test'; test('same title', () => {});");
@@ -117,6 +119,7 @@ test('outcome guard accepts public clients, persona fixtures, comments and other
 test('outcome inventory reads every nested outcome file', () => {
   mkdirSync('.temp', { recursive: true });
   const root = mkdtempSync(resolve('.temp/outcome-guard-'));
+  expect(spawnSync('git', ['init', '-q', root]).status).toBe(0);
   try {
     const directory = join(root, 'tests/qa/integration/outcomes/nested');
     mkdirSync(directory, { recursive: true });

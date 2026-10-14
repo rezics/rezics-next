@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, relative, resolve } from 'node:path';
@@ -41,7 +42,7 @@ function inventory(): { sources: Sources; rows: Map<string, Set<string>> } {
     if (!sources.has(file)) sources.set(file, parse(file, readFileSync(resolve(root, file), 'utf8')));
     return sources.get(file)!;
   };
-  for (const file of new Bun.Glob('tests/qa/integration/outcomes/**/*.{ts,tsx,js,mjs,cjs}').scanSync({ cwd: root })) {
+  for (const file of repositoryGlob(root, 'tests/qa/integration/outcomes/**/*.{ts,tsx,js,mjs,cjs}')) {
     const source = load(file);
     const rowIds = imports(source).flatMap(specifier => {
       const declaration = importedFile(file, specifier);

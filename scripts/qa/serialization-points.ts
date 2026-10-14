@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import ts from 'typescript-6';
@@ -1544,10 +1545,7 @@ export function serializationFindings(
 
 export function repositorySerializationSources(root: string): SqlSource[] {
   return [
-    ...new Bun.Glob('*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
-      cwd: join(root, 'services'),
-      onlyFiles: true,
-    }),
+    ...repositoryGlob(root, 'services/*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').map(file => file.slice('services/'.length)),
   ]
     .filter(
       (file) => !file.split('/').some((part) => ['node_modules', '.temp', 'dist'].includes(part)),
@@ -1561,10 +1559,7 @@ export function repositorySerializationSources(root: string): SqlSource[] {
 export function repositorySerializationMigrations(root: string): SqlSource[] {
   // New services are audited before somebody remembers to register their owner.
   return [
-    ...new Bun.Glob('*/migrations/**/*.sql').scanSync({
-      cwd: join(root, 'services'),
-      onlyFiles: true,
-    }),
+    ...repositoryGlob(root, 'services/*/migrations/**/*.sql').map(file => file.slice('services/'.length)),
   ]
     .sort(compareMigrationPaths)
     .map((file) => ({
