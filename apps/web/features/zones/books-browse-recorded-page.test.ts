@@ -101,7 +101,9 @@ test('the owner browse answer keeps titles, credit, the lower-bound count and th
 test('the owner search answer keeps the recorded text, relevance sort and lower-bound count', async () => {
   const { sample, request, built } = await readRecorded('owner', 'page-search-relevance', 'populated', true);
   const answer = pageAnswer(sample);
-  expect(request.query).toEqual({ q: answer.query.text, sort: 'relevance' });
+  const text = answer.query.text;
+  if (text === null) throw new Error('Recorded search text is missing');
+  expect(request.query).toEqual({ q: text, sort: 'relevance' });
   if (!built) throw new Error('The owner page was not built');
   expectCatalogue(built, answer);
   if (!built.ok) return;
@@ -127,7 +129,9 @@ test('the owner empty search stays an exact zero catalogue', async () => {
 test('the owner continuation is the recorded terminal page and keeps the cursor', async () => {
   const { sample, request, built } = await readRecorded('owner', 'page-browse-default-continuation-1', 'populated', true);
   const answer = pageAnswer(sample);
-  expect(request.query).toEqual({ cursor: new URL(sample.path, 'https://recorded.invalid').searchParams.get('cursor') });
+  const cursor = new URL(sample.path, 'https://recorded.invalid').searchParams.get('cursor');
+  if (cursor === null) throw new Error('Recorded continuation cursor is missing');
+  expect(request.query).toEqual({ cursor });
   expect(answer.matches).toEqual({ value: 21, kind: 'exact' });
   expect(answer.nextCursor).toBeNull();
   if (!built) throw new Error('The owner page was not built');
