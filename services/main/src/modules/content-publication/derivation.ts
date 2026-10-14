@@ -35,7 +35,7 @@ export async function recordContentDerivation(deps: MainWorkDependencies, reques
       const types = new Set(rows.map(row => row.type?.value));
       if (types.size !== 1) throw new AdmissionDenied('responsible public Agent is unavailable');
       const agentType = types.has('https://rezics.com/vocab/PersonAgent') ? 'human' as const : 'software' as const;
-      return store.record(operation, input, agentType, () => workRead(deps, request,
+      const recorded = await store.record(operation, input, agentType, () => workRead(deps, request,
         { actingSubject: input.actingSubject }, async session => {
           const owners = contentReferenceOwners(session);
           // Recheck under both authority locks immediately before the Content commit.
@@ -44,10 +44,12 @@ export async function recordContentDerivation(deps: MainWorkDependencies, reques
               throw new ContentAdoptionInvalid('an exact derivation selection is unavailable');
           }
         }));
+      return { ...recorded, projection: derivationProjection(recorded) };
     }));
 }
 
 export type DisclosedDerivation = Omit<ContentDerivationRecord, 'inputs' | 'responsibleAgent'> & {
+  replayed: false;
   inputs: (ContentDerivationRecord['inputs'][number] | { status: 'unavailable' })[];
   responsibleAgent: string | { status: 'unavailable' };
   projection?: Record<string, unknown>;
@@ -74,7 +76,7 @@ export async function readContentDerivations(session: WorkReadSession, revision:
     for (const input of record.inputs) inputs.push((await resolveResourceReference(input, owners)).status === 'available'
       ? input : { status: 'unavailable' });
     const agentAvailable = await owners.resource(record.responsibleAgent);
-    items.push({ ...record, inputs, responsibleAgent: agentAvailable ? record.responsibleAgent : { status: 'unavailable' },
+    items.push({ ...record, replayed: false, inputs, responsibleAgent: agentAvailable ? record.responsibleAgent : { status: 'unavailable' },
       ...(agentAvailable && inputs.every(item => !('status' in item)) ? { projection: derivationProjection(record) } : {}) });
   }
   // Publication can close while input checks await. Re-fence the output too.

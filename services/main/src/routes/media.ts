@@ -447,13 +447,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         } catch(error){return mediaError(error);}
       })
     .post('/v1/media/uploads', {
-      body: t.Object({ profile: t.Literal('media-image-upload-v1'), asset: t.Nullable(uuid),
+      body: t.Union([t.Object({ profile: t.Literal('media-image-upload-v1'), asset: t.Nullable(uuid),
         mediaType: t.Union([t.Literal('image/png'), t.Literal('image/jpeg'), t.Literal('image/webp'),
           t.Literal('image/gif')]),
         byteLength: t.Integer({ minimum: 1, maximum: MAX_UPLOAD_BYTES }),
         sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
         disclosure: t.Union([t.Literal('private'), t.Literal('public')]),
         actingSubject: nativeId, importedCover: t.Optional(importedCoverIntent) }, { additionalProperties: false }),
+      t.Object({ profile: t.Literal('media-recording-upload-v1'), asset: t.Nullable(uuid),
+        mediaType: t.Union([t.Literal('audio/wav'), t.Literal('video/mp4')]),
+        byteLength: t.Integer({ minimum: 1, maximum: MAX_UPLOAD_BYTES }), sha256: t.String({ pattern: '^[0-9a-f]{64}$' }),
+        disclosure: t.Literal('private'), actingSubject: nativeId }, { additionalProperties: false })]),
       response: { 200: t.Object({}, { additionalProperties: true }), 201: t.Object({}, { additionalProperties: true }), ...writeProblems, 404: problemResult(404) },
     }, async ({ request, body }) => {
       if (!work.media) return problem(503, 'media_unavailable', 'Media owner is unavailable');

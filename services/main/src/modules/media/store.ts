@@ -30,7 +30,8 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const sha = /^[0-9a-f]{64}$/;
 const crop = /^xywh=percent:([0-9]{1,3}(\.[0-9]{1,3})?,){3}[0-9]{1,3}(\.[0-9]{1,3})?$/;
-export const MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+const IMAGE_MEDIA_TYPES = ['image/png', 'image/jpeg', 'image/webp', 'image/gif'] as const;
+export const MEDIA_TYPES = [...IMAGE_MEDIA_TYPES, 'audio/wav', 'video/mp4'] as const;
 export type MediaType = typeof MEDIA_TYPES[number];
 export type Clearance = 'screening' | 'cleared' | 'held' | 'rejected';
 export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
@@ -435,7 +436,7 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
   const mediaType = image.mediaType;
   if (!sha.test(captureDigest) || typeof byteLength !== 'number' || !Number.isSafeInteger(byteLength) || byteLength < 1
     || byteLength > MAX_UPLOAD_BYTES || typeof mediaType !== 'string'
-    || !MEDIA_TYPES.includes(mediaType as MediaType)) {
+    || !IMAGE_MEDIA_TYPES.includes(mediaType as typeof IMAGE_MEDIA_TYPES[number])) {
     throw new MediaInvalid('imported cover provenance is invalid');
   }
   const originalDigest = textField(root.originalDigest, 64);
@@ -446,7 +447,7 @@ export function validateImportedCoverProvenance(value: unknown, expectedBytes?: 
     captureUrl: checkedWebUrl(image.captureUrl),
     captureDigest,
     byteLength,
-    mediaType: mediaType as MediaType,
+    mediaType: mediaType as ImportedCoverProvenance['image']['mediaType'],
   };
   if (expectedBytes && (expectedBytes.sha256 !== originalDigest
     || expectedBytes.byteLength !== normalizedImage.byteLength
@@ -480,11 +481,13 @@ function manifestProvenance(value: unknown): ImportedCoverProvenance | null {
 
 /** One manifest per asset revision. Its exact bytes are the Content revision body. */
 export function assetManifest(asset: string, representation: { id: string; sha256: string;
-  byteLength: number; mediaType: string; width: number; height: number }, importedCover?: unknown): string {
-  const base = { profile: 'media-asset-v1', asset: assetIri(asset), mediaKind: 'image',
+  byteLength: number; mediaType: string; width: number; height: number; duration?: number }, importedCover?: unknown): string {
+  const base = { profile: 'media-asset-v1', asset: assetIri(asset), mediaKind: representation.mediaType === 'audio/wav'
+    ? 'audio' : representation.mediaType === 'video/mp4' ? 'video' : 'image',
     representations: [{ id: representation.id, role: 'original', sha256: representation.sha256,
       byteLength: representation.byteLength, mediaType: representation.mediaType,
-      width: representation.width, height: representation.height }] };
+      width: representation.width, height: representation.height,
+      ...(representation.duration !== undefined ? { duration: representation.duration } : {}) }] };
   if (importedCover === undefined || importedCover === null) return JSON.stringify(base);
   const provenance = validateImportedCoverProvenance(importedCover, { sha256: representation.sha256,
     byteLength: representation.byteLength, mediaType: representation.mediaType });
@@ -657,9 +660,10 @@ export class MediaStore {
         payload: { asset, upload, created: !input.asset } });
       if (!input.asset) {
         await client.query(`INSERT INTO media.asset (id, variant_id, owner, media_kind, cover_only,
-          object_namespace, state_head, operation_id) VALUES ($1,$2,$3,'image',$4,$5,$6,$7)`,
+          object_namespace, state_head, operation_id) VALUES ($1,$2,$3,$8,$4,$5,$6,$7)`,
         [asset, assetVariant(asset), admission.actingSubject, importedCover !== null,
-          assetNamespace(asset), stateHead, operationId]);
+          assetNamespace(asset), stateHead, operationId,
+          input.mediaType === 'audio/wav' ? 'audio' : input.mediaType === 'video/mp4' ? 'video' : 'image']);
         await client.query(`INSERT INTO media.asset_state (id, asset_id, predecessor, disclosure,
           moderation, lifecycle, erasure_epoch, actor, authority_epoch, operation_id)
           VALUES ($1,$2,NULL,$3,'none','active',0,$4,$5,$6)`,
@@ -726,7 +730,7 @@ export class MediaStore {
    * abort signal and register compensation only for acknowledged new keys.
    * A replay never invokes persistence. */
   async settleUpload(upload: string, verdict: { status: 'activated'; sha256: string; byteLength: number;
-    mediaType: MediaType; width: number; height: number } | { status: 'rejected'; reason: string },
+    mediaType: MediaType; width: number; height: number; duration?: number } | { status: 'rejected'; reason: string },
     persist?: (signal: AbortSignal, onFailure: (created: { digest: string;
       cleanup: (signal: AbortSignal) => Promise<void> }) => void)
       => Promise<string>,
@@ -828,13 +832,13 @@ export class MediaStore {
         outcome: 'succeeded', eventType: 'media.upload.activated',
         payload: { asset: current.asset, upload, representation, sha256: verdict.sha256 } });
       await client.query(`INSERT INTO media.representation (id, asset_id, kind, upload_id, byte_digest,
-        byte_length, media_type, pixel_width, pixel_height, operation_id)
-        VALUES ($1,$2,'original',$3,$4,$5,$6,$7,$8,$9)`,
+        byte_length, media_type, pixel_width, pixel_height, operation_id, duration_seconds)
+        VALUES ($1,$2,'original',$3,$4,$5,$6,$7,$8,$9,$10)`,
       [representation, current.asset, upload, verdict.sha256, verdict.byteLength, verdict.mediaType,
-        verdict.width, verdict.height, operationId]);
+        verdict.width, verdict.height, operationId, verdict.duration ?? null]);
       // Required matching is a separate admission job. Classifier evidence and
       // historical classifier holds never supply its publication clearance.
-      if (this.matcherMode.kind !== 'none') await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
+      if (verdict.mediaType.startsWith('image/') && this.matcherMode.kind !== 'none') await client.query(`INSERT INTO media.transform_job(id,asset_id,source_id,input_digest,profile,
         authority_epoch,erasure_epoch,operation_id)
         SELECT $1,a.id,$2,$3,$4,s.authority_epoch,s.erasure_epoch,$5
         FROM media.asset a JOIN media.asset_state s ON s.id=a.state_head WHERE a.id=$6`,
@@ -882,9 +886,9 @@ export class MediaStore {
   async recordAssetRevision(upload: string): Promise<{ revision: string; replayed: boolean }> {
     const row = (await this.pool.query<{ asset_id: string; id: string; byte_digest: string;
       byte_length: number; media_type: string; pixel_width: number; pixel_height: number;
-      cover_only: boolean; imported_cover_intent: unknown }>(
+      cover_only: boolean; imported_cover_intent: unknown; duration_seconds: number | null }>(
       `SELECT r.asset_id,r.id,r.byte_digest,r.byte_length,r.media_type,r.pixel_width,r.pixel_height,
-        a.cover_only,u.imported_cover_intent
+        a.cover_only,u.imported_cover_intent,r.duration_seconds
         FROM media.asset a
         JOIN media.upload u ON u.asset_id=a.id JOIN media.representation r ON r.upload_id=u.id
        WHERE r.upload_id = $1 AND r.kind = 'original'`, [upload])).rows[0];
@@ -914,7 +918,8 @@ export class MediaStore {
     };
     const operationId = `media-asset-revision:${upload}`;
     const manifest = assetManifest(row.asset_id, { id: row.id, sha256: row.byte_digest,
-      byteLength: row.byte_length, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height },
+      byteLength: row.byte_length, mediaType: row.media_type, width: row.pixel_width, height: row.pixel_height,
+      ...(row.duration_seconds !== null ? { duration: row.duration_seconds } : {}) },
     importedCover);
     const attempts = [0, 1, 2, 3].map(attempt => attempt ? `${operationId}:${attempt}` : operationId);
     for (;;) {
@@ -1157,6 +1162,7 @@ export class MediaStore {
       WHERE a.id=$1 AND r.availability='available' AND r.model='media-asset-v1'
         AND r.body->>'profile'='media-asset-v1' AND r.body->>'asset'=$4
         AND p.availability='available' AND media.delivery_clearance(p)='cleared'
+        AND NOT media.digest_suppressed(p.byte_digest,a.cover_only)
         AND item->>'id'=p.id::text LIMIT 1`, [asset, revision, representation, assetIri(asset)])).rows[0];
     return row ? { ...(typeof row.duration === 'number' ? { duration: row.duration } : {}) } : null;
   }

@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia';
 import { ExactInstructionSelector } from '../modules/structure/selection.ts';
 import { isAdoptedInstruction, readRecipeInstructions } from '../modules/recipe/instructions.ts';
+import { readContentDerivations, type DisclosedDerivation } from '../modules/content-publication/derivation.ts';
 import { createHash } from 'node:crypto';
 import type { Static, TSchema } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -585,11 +586,31 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           session => readRecipeInstructions(session, scanned.records, { work: header.work, revision: header.revision }));
         const contents = [...new Map(instructions.flatMap(item => item.document
           ? [[JSON.stringify(item.reference), { reference: item.reference, document: item.document }] as const] : [])).values()];
+        const derivations: DisclosedDerivation[] = [];
+        const contentRevisions = [...new Set(contents.flatMap(item => item.reference.selector.grain === 'content'
+          ? [item.reference.selector.revision] : []))];
+        await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
+          for (const revision of contentRevisions) {
+            const page = await readContentDerivations(session, revision);
+            if (page.nextCursor) throw new RecipeExportLimit('Recipe derivations exceed the export bound');
+            derivations.push(...page.items);
+          }
+        });
         const body = query.format === 'native'
           ? { format: 'native', structure, revision: header.revision, occurrences: scanned.records,
-            contents, derivations: [], losses: [] }
+            contents, derivations, instructions, losses: [] as ReturnType<typeof exportRecipe>['losses'] }
           : { profile: 'recipe-schema-org-export-v1', structure, revision: header.revision,
             ...exportRecipe(scanned.records, structure, instructions) };
+        if (query.format !== 'native') {
+          for (const record of scanned.records) {
+            const selectedRevision = record.selection?.mode === 'fixed-revision' ? record.selection.revision : undefined;
+            if (record.selection?.mode === 'fixed-revision' && record.selection.selector?.grain === 'content'
+              && derivations.some(item => item.output.selector.revision === selectedRevision)) {
+              body.losses.push({ code: 'derivation-not-representable', occurrence: record.occurrence,
+                pointer: `/occurrences/${scanned.records.indexOf(record)}/selection` });
+            }
+          }
+        }
         if (Buffer.byteLength(JSON.stringify(body)) > 1_048_576) throw new RecipeExportLimit('Recipe export exceeds 1 MiB');
         return Response.json(body, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return routeError(error); }

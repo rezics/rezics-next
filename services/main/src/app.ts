@@ -36,6 +36,7 @@ import { sessionsRoutes } from './routes/sessions.ts';
 import { progressSummariesRoutes } from './routes/progress-summaries.ts';
 import { contentRoutes } from './routes/content.ts';
 import { contentAdoptionRoutes } from './routes/content-adoption.ts';
+import { authoredPostRoutes } from './routes/authored-posts.ts';
 import { contextRoutes } from './routes/contexts.ts';
 import { contributionRoutes } from './routes/contributions.ts';
 import { erasureRoutes } from './routes/erasures.ts';
@@ -164,6 +165,7 @@ function accessSearchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies)
     .use(searchGenerationRoutes(fuseki, work))
     .use(contentRoutes(fuseki, work))
     .use(contentAdoptionRoutes(work))
+    .use(authoredPostRoutes(work))
     .use(ratingRoutes(fuseki, work))
     .use(globalRatingRoutes(work))
     .use(classificationRoutes(fuseki, work));

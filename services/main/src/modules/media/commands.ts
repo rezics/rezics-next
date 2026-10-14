@@ -9,6 +9,7 @@ import { contentDraftReceiptIri } from '../content-publication/draft.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { DATASET, GRAPHS, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { ImageFormatRejected, verifyImage } from './image.ts';
+import { verifyRecording } from './recording.ts';
 import { validateImageInference, validateMediaField, type ImageInferenceInput,
   type MediaFieldInput, type DocumentImageUseInput } from './presentation.ts';
 import { receiptFamilies } from './receipt-family.ts';
@@ -188,9 +189,10 @@ export async function activateUploadedBytes(env: WorkActivationEnvironment, medi
   else if (upload.sha256 && digest !== upload.sha256) verdict = { status: 'rejected', reason: 'digest-mismatch' };
   else {
     try {
-      const image = verifyImage(bytes, upload.mediaType);
+      const image = upload.mediaType.startsWith('image/') ? verifyImage(bytes, upload.mediaType) : verifyRecording(bytes, upload.mediaType);
       verdict = { status: 'activated', sha256: digest, byteLength: bytes.length,
-        mediaType: image.mediaType, width: image.width, height: image.height };
+        mediaType: image.mediaType, width: image.width, height: image.height,
+        ...('duration' in image ? { duration: image.duration } : {}) };
       persist = async (signal, onFailure) => {
         // The owner holds the asset and reservation fence across both writes.
         const quarantine = media.objects(`${upload.quarantineKey}/`);
@@ -219,7 +221,7 @@ async function finish(media: MediaDependencies, uploadId: string,
   settled: Awaited<ReturnType<MediaStore['settleUpload']>> | null) {
   let upload = await media.store.readUpload(uploadId);
   if (!upload) throw new MediaMissing('media upload is unavailable');
-  if (upload.status === 'activated' && upload.representation && media.matcher) {
+  if (upload.status === 'activated' && upload.mediaType.startsWith('image/') && upload.representation && media.matcher) {
     await new RequiredMediaMatchWorker(media.store.matching,media.matcher,media.objects).tick(upload.representation);
     upload = (await media.store.readUpload(uploadId))!;
   }

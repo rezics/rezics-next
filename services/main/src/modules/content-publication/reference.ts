@@ -16,6 +16,7 @@ import { isPublicContentRevision } from './public-selection.ts';
 import { CompositionUnavailable } from '../structure/graph.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { bindNativeAssetAudience } from '../media/visibility.ts';
+import { readPublicInstructionAdoptions } from '../work/instruction-adoption.ts';
 
 async function mediaSelection(session: WorkReadSession, target: string, revision?: string,
   representation?: string): Promise<{ duration?: number } | null> {
@@ -28,11 +29,15 @@ async function mediaSelection(session: WorkReadSession, target: string, revision
     if (!state || state.lifecycle !== 'active' || state.moderation !== 'none') return null;
     const owner = !!principal && !!actingSubject && state.owner === actingSubject
       && await deps.access.canManageMedia?.(principal, actingSubject);
-    if (!owner && state.disclosure !== 'public') return null;
     const viewer = disclosureViewer(principal, actingSubject);
+    const grants = !owner && state.disclosure !== 'public' && revision && representation
+      ? await readPublicInstructionAdoptions(deps.environment, { target, mediaRevision: revision }, viewer) : [];
+    const grant = grants.find(item => item.selector.grain === 'representation'
+      && item.selector.representation === representation && item.mediaUse);
+    if (!owner && state.disclosure !== 'public' && !grant) return null;
     if (owner) bindNativeAssetAudience(viewer, asset);
     const visible = await discloseInventory(deps.environment, [{ owner: 'media',
-      resource: `https://rezics.com/id/${asset}`, component: 'cover',
+      resource: `https://rezics.com/id/${grant?.mediaUse ?? asset}`, component: 'cover',
       ...(revision ? { revision: `https://rezics.com/id/${revision}` } : {}) }], viewer, 'read');
     if (visible[0] !== 'visible') return null;
     const selected = revision && representation ? await media.store.referenceSelection(asset, revision, representation) : {};

@@ -267,14 +267,17 @@ export async function verifyOriginalWorkStructureContribution(env: Pick<WorkActi
       }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ?placement rv:generation ${iri(source.generation)} ; rv:sourceKey ?sourceKey .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
       } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ?placement rv:generation ${iri(source.generation)} ; rv:qualifier ?qualifier .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
         ?qualifier rv:media ?media .
       } }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ?placement rv:generation ${iri(source.generation)} ; rv:occurrence ?occurrence ;
           schema:item ?item .
+        FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
         OPTIONAL { ?placement rv:qualifier ?qualifier }
         FILTER(?item != ?occurrence && (!BOUND(?qualifier) || ?item != ?qualifier)
           ${source.adoptions?.length ? `&& ?occurrence NOT IN (${source.adoptions.map(item => iri(item.occurrence)).join(',')})` : ''})

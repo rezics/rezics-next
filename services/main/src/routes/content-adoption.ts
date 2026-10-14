@@ -27,7 +27,8 @@ const kind = t.Union(['transcription', 'translation', 'transformation', 'ai-gene
 const unavailable = t.Object({ status: t.Literal('unavailable') }, closed);
 const record = { derivation: t.String(), output, inputs: t.Array(resourceReferenceSchema, { minItems: 1, maxItems: 16 }),
   activity: t.Object({ id: t.String(), kind }, closed), responsibleAgent: readId,
-  responsibleAgentType: t.Union([t.Literal('human'), t.Literal('software')]) };
+  responsibleAgentType: t.Union([t.Literal('human'), t.Literal('software')]),
+  projection: t.Optional(t.Record(t.String(), t.Unknown())) };
 export const openApiOperations = {
   '/v1/content-derivations': { post: { exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true } },
   '/v1/content-revisions/{revision}/derivations': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: 'optional' } },
@@ -58,6 +59,7 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
       limit: t.Optional(t.Integer({ minimum: 1, maximum: 20 })), cursor: t.Optional(t.String({ maxLength: 2048 })) }, closed),
     response: { 200: t.Object({ revision: readUuid, items: t.Array(t.Object({ ...record,
       inputs: t.Array(t.Union([resourceReferenceSchema, unavailable]), { maxItems: 16 }),
+      replayed: t.Literal(false),
       responsibleAgent: t.Union([readId, unavailable]), projection: t.Optional(t.Record(t.String(), t.Unknown())) }), { maxItems: 20 }),
       nextCursor: t.Nullable(t.String()), complete: t.Boolean() }), ...workReadProblems },
   }, async ({ request, params, query }) => {

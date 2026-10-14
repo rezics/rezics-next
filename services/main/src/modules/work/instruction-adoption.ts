@@ -28,7 +28,8 @@ export function instructionAdoptionTriples(source: string, adoptions: readonly I
 
 /** Only a current public Work adoption grants public delivery; history is not authority. */
 export async function readPublicInstructionAdoptions(env: WorkActivationEnvironment,
-  selection: { work?: string; revision?: string; contentRevision?: string; mediaUse?: string; mediaUses?: readonly string[] }, viewer?: Viewer):
+  selection: { work?: string; revision?: string; contentRevision?: string; target?: string;
+    mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[] }, viewer?: Viewer):
   Promise<InstructionAdoption[]> {
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?work ?occurrence ?target ?selector ?use WHERE {
@@ -42,6 +43,8 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
           <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ?selector .
         OPTIONAL { ?adoption <https://schema.org/associatedMedia> ?use }
         ${selection.mediaUse ? `FILTER(?use = ${iri(`https://rezics.com/id/${selection.mediaUse}`)})` : ''}
+        ${selection.target ? `FILTER(?target = ${iri(selection.target)})` : ''}
+        ${selection.mediaRevision ? `?adoption <http://www.w3.org/ns/oa#hasState> ${iri(`urn:rezics:media:revision:${selection.mediaRevision}`)} .` : ''}
         ${selection.mediaUses ? `FILTER(?use IN (${selection.mediaUses.map(use => iri(`https://rezics.com/id/${use}`)).join(',')}))` : ''}
         ${selection.contentRevision ? `?adoption <http://www.w3.org/ns/oa#hasState> ${iri(`urn:rezics:content:revision:${selection.contentRevision}`)} .` : ''}
       }
