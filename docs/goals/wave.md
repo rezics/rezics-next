@@ -50,7 +50,10 @@ committed work except to resolve a conflict with your own.
 
 ## The prove phase
 
-`task goal -- regress --at wave/<n>` runs the suite in batches. Each failure
+`task goal -- regress --at wave/<n>` runs the suite in batches, and
+`task goal -- confirm --at wave/<n> --lanes <QA slots>` runs every outcome
+cell against that revision without touching main's confirmation record
+(`task goal -- confirm --status --run <id>` shows a run's cells). Each failure
 becomes a fix task on the same branch. Its brief carries the failing test and
 its output, and a fixer may run that one test on a stack. When the suite is
 green, records are captured in one run, and `wave/<n>` merges into `main`
