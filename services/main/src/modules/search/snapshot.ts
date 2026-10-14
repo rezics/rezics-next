@@ -3,6 +3,7 @@ import { assertPublicTextReady, assertSameTextInstance, SearchIndexUnavailable,
   SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { searchGraphSnapshot } from './snapshot-state.ts';
+import { observeSearchPhase } from './operation-evidence.ts';
 
 /** Native phrase matching exposes an exact relation, including absence and rank;
  * no per-match token covers that cut. Keep its narrow sequence fence until the
@@ -11,7 +12,8 @@ import { searchGraphSnapshot } from './snapshot-state.ts';
  * index generation checks. sourcePosition remains the opening position. */
 export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment, read: () => Promise<T>,
   graphBasis: 'matching-cut' | 'selected-units' = 'matching-cut') {
-  const position = await assertPublicTextReady(env.fuseki, env.lineage).catch(async (error: unknown) => {
+  const position = await observeSearchPhase('index-readiness',
+    () => assertPublicTextReady(env.fuseki, env.lineage)).catch(async (error: unknown) => {
     // Readiness includes admission in its successful proof. On failure, retain
     // the recovery owner's typed hold outcome without taxing successful reads.
     if (error instanceof SearchIndexUnavailable && !(error instanceof SearchSnapshotMoved)) {
