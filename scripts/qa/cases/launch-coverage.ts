@@ -168,7 +168,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'visual-novels/work-hub-and-edition-choice / member: pins exact release and realization revisions, replays and recovers stale choices',
       'Reads the published Visual Novel hub and author credits, saves exact realization and release revisions, checks replay and stale-choice recovery and preserves other readers’ preferences.'),
     browser: journeyBrowser('apps/web/tests/visual-novel-hub.e2e.ts',
-      'apps/web/tests/visual-novel-hub.e2e.ts',
+      'apps/web/tests/journeys/visual-novel-hub.ts',
       'visual-novel-hub / en: a player chooses a release by keyboard and returns to the saved edition',
       'Opens the typed Paper Cranes visual novel hub, chooses its Windows and Linux releases by keyboard, saves each choice and reloads the selected release and hub edition summary in English and Japanese.'),
   },

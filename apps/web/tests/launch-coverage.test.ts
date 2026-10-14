@@ -686,7 +686,8 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     test: 'recipes / Browse every recipe page in its Zone',
   });
   expect(rows('recipes', 'Collection tracking and progress')).toEqual([
-    expect.objectContaining({ api: expect.objectContaining({ missing: 'gap' }), browser: { missing: 'L21', reason: undefined } }),
+    expect.objectContaining({ api: expect.objectContaining({ missing: 'gap' }),
+      browser: { missing: 'L21', reason: expect.stringMatching(/POST \/v1\/work-publications.*403 authority_denied/) } }),
   ]);
   expect(rows('zone', 'Publication')[0]!.browser).toMatchObject({
     test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',
