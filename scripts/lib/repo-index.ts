@@ -33,7 +33,10 @@ export interface SqlFacts {
 export interface IndexedFile {
   text: string;
   ast: AstNode;
+  runtimeAst?: AstNode;
   imports: IndexedImport[];
+  namedImports?: { local: string; imported: string; source: string }[];
+  directCallNames?: string[];
   sqlCandidates?: {
     text: string;
     start: number;
@@ -46,6 +49,13 @@ export interface IndexedFile {
   parseErrors?: string[];
   comments?: { start: number; end: number }[];
   astDeflate?: string;
+  runtimeAstDeflate?: string;
+  syntax?: {
+    hasFunctions: boolean;
+    hasDirectCalls: boolean;
+    hasSqlQueries: boolean;
+    hasSqlOperationLiterals: boolean;
+  };
 }
 export interface RepoIndex {
   version: number;
@@ -101,16 +111,17 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     throw new Error(`Unsupported repository index version: ${index.version}`);
   objects.set(output, { digest: metadata.digest, index });
   for (const [file, facts] of Object.entries(index.files)) {
-    if (facts.astDeflate) {
-      const encoded = facts.astDeflate;
-      Object.defineProperty(facts, 'ast', {
+    for (const field of ['ast', 'runtimeAst'] as const) {
+      const encoded = field === 'ast' ? facts.astDeflate : facts.runtimeAstDeflate;
+      if (!encoded) continue;
+      Object.defineProperty(facts, field, {
         configurable: true,
         enumerable: false,
         get: () => {
           const ast = JSON.parse(
             inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
           ) as AstNode;
-          Object.defineProperty(facts, 'ast', { value: ast, enumerable: false });
+          Object.defineProperty(facts, field, { value: ast, enumerable: false });
           return ast;
         },
       });

@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-// The pinned TS 7 compiler is native; the already installed TS 6 compatibility
-// package exposes the source parser used here (also required by Astro).
 import ts from 'typescript-6';
+import { forEachIndexedChild, indexedSourceFile, indexedOffsets, indexedRelationNodes } from '../lib/repo-index-ast.ts';
+import { parseSources, repositoryIndex, indexedSql, prepareSql, indexedSource } from '../lib/repo-index.ts';
 import { migrationDirectories, migrationRecords } from '../ops/migrate.ts';
 
 export interface SqlSource {
@@ -21,26 +21,17 @@ interface Token {
   string?: boolean;
 }
 
-// A SQL lexer keeps comments, values and function calls out of relation positions.
-// Dollar bodies remain visible: owner migrations put DDL in DO blocks.
+const tokenCache = new Map<string, Token[]>();
 function tokens(sql: string): Token[] {
-  const result: Token[] = [];
-  const pattern =
-    /--[^\n]*|\/\*[\s\S]*?\*\/|\$[a-z_0-9]*\$|'(?:''|[^'])*'|"(?:""|[^"])*"|[a-z_][a-z_0-9$]*|[^\s]/gi;
-  for (const match of sql.matchAll(pattern)) {
-    const raw = match[0];
-    if (raw.startsWith('--') || raw.startsWith('/*') || /^\$[a-z_0-9]*\$$/i.test(raw)) continue;
-    result.push({
-      text: raw.startsWith('"')
-        ? raw.slice(1, -1).replaceAll('""', '"')
-        : raw.startsWith("'")
-          ? raw.slice(1, -1).replaceAll("''", "'")
-          : raw.toLowerCase(),
-      offset: match.index,
-      quoted: raw.startsWith('"'),
-      string: raw.startsWith("'"),
-    });
-  }
+  const previous = tokenCache.get(sql);
+  if (previous) return previous;
+  const offset = indexedOffsets(sql);
+  const result = indexedSql(sql).tokens.flatMap(token => {
+    if (!token.string && !token.quoted && (/^[^a-z_0-9$\s]+$/i.test(token.text) || /^\d/.test(token.text)))
+      return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
+    return [{ ...token, offset: offset(token.offset) }];
+  });
+  tokenCache.set(sql, result);
   return result;
 }
 
@@ -175,13 +166,18 @@ function dynamicDdl(source: SqlSource): { start: number; end: number; sql: strin
 }
 
 export function migratedRelations(sources: SqlSource[]): Set<string> {
-  const relations = new Set<string>();
-  for (const source of sources) {
+  prepareSql(sources.map(source => source.text));
+  const expandedSources = sources.map(source => {
     // Expand dynamic statements at their original position, before following DDL.
     let expanded = source.text;
     for (const statement of dynamicDdl(source).reverse()) {
       expanded = expanded.slice(0, statement.start) + statement.sql + expanded.slice(statement.end);
     }
+    return expanded;
+  });
+  prepareSql(expandedSources);
+  const relations = new Set<string>();
+  for (const expanded of expandedSources) {
     const input = tokens(expanded);
     for (let i = 0; i < input.length; i++) {
       const operation = input[i];
@@ -260,6 +256,7 @@ export function migrationSources(root: string): SqlSource[] {
 
 /** Keep empty and subsequently dropped owner schemas in the audit domain. */
 export function migrationSchemas(sources: SqlSource[]): Set<string> {
+  prepareSql(sources.map(source => source.text));
   const schemas = new Set<string>(['public']);
   for (const source of sources) {
     const input = tokens(source.text);
@@ -277,7 +274,10 @@ function sqlReferences(
   sql: string,
   schemas: Set<string>,
   relationConstant = false,
+  requests?: string[],
 ): { relation: string; offset: number }[] {
+  if (!sql.includes('.')) return [];
+  if (requests) { requests.push(sql); return []; }
   const input = tokens(sql);
   const result: { relation: string; offset: number }[] = [];
   const add = (at: number, allowColumns = false) => {
@@ -341,7 +341,9 @@ function sqlReferences(
             word(input[i - 2], value),
           )))
     ) {
-      const name = qualified(tokens(input[i].text), 0);
+      const match = /^\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*\.\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*$/i.exec(input[i].text);
+      const identifierName = (value: string) => value.startsWith('"') ? value.slice(1, -1).replaceAll('""', '"') : value.toLowerCase();
+      const name = match ? `${identifierName(match[1])}.${identifierName(match[2])}` : undefined;
       if (name) result.push({ relation: name, offset: input[i].offset + 1 });
     }
   }
@@ -366,15 +368,26 @@ function stringAlternatives(node: ts.Expression): { text: string; node: ts.Expre
  * Interpolation holes keep surrounding SQL visible; separately visited literals
  * catch qualified relation constants used to build dynamic queries. */
 export function sourceRelations(source: SqlSource, schemas: Set<string>): RelationReference[] {
+  return sourceRelationFacts(source, schemas);
+}
+const schemaHintPatterns = new Map<string, RegExp>();
+const sourceReferenceFacts = new WeakMap<object, Map<string, RelationReference[]>>();
+function sourceRelationFacts(source: SqlSource, schemas: Set<string>, requests?: string[]): RelationReference[] {
+  const indexed = indexedSource(source);
+  const key = JSON.stringify([...schemas].sort());
+  const cached = sourceReferenceFacts.get(indexed)?.get(key);
+  if (cached) return cached.map(reference => ({ ...reference }));
   // Quotes may be escaped in source, and SQL permits whitespace around the dot.
   if (![...schemas].some((schema) => source.text.includes(schema))) return [];
-  const ast = ts.createSourceFile(
-    source.file,
-    source.text,
-    ts.ScriptTarget.Latest,
-    true,
-    source.file.endsWith('x') ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  let hints = schemaHintPatterns.get(key);
+  if (!hints) {
+    const alternatives = [...schemas].map(schema => schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    hints = new RegExp(`(?:^|[^a-z_0-9$])(?:${alternatives.map(schema => `"?${schema}"?`).join('|')})\\s*\\.`, 'i');
+    schemaHintPatterns.set(key, hints);
+  }
+  const candidates = indexed.sqlCandidates;
+  if (candidates && !source.text.includes('${') && !candidates.some(candidate => candidate.text.includes('\\') || hints!.test(candidate.text))) return [];
+  const ast = indexedSourceFile(source);
   const result: RelationReference[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
@@ -383,7 +396,7 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
         (ts.isVariableDeclaration(parent) &&
           /(?:table|relation)(?:name)?$/i.test(parent.name.getText(ast))) ||
         (ts.isPropertyAssignment(parent) && /^table$/i.test(parent.name.getText(ast)));
-      for (const ref of sqlReferences(node.text, schemas, named))
+      for (const ref of sqlReferences(node.text, schemas, named, requests))
         result.push({
           file: source.file,
           line: ast.getLineAndCharacterOfPosition(node.getStart(ast) + 1 + ref.offset).line + 1,
@@ -393,16 +406,18 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
       // Raw positions retain source line numbers, including multiline interpolations.
       const start = node.getStart(ast) + 1;
       let sql = source.text.slice(start, node.end - 1);
-      for (const span of node.templateSpans) {
-        const holeStart = span.expression.getFullStart() - start - 2;
+      for (const [index, span] of node.templateSpans.entries()) {
+        const preceding = index === 0 ? node.head : node.templateSpans[index - 1].literal;
+        const holeStart = preceding.end - start - 2;
         const holeEnd = span.literal.getStart(ast) - start + 1;
         sql =
           sql.slice(0, holeStart) +
           sql.slice(holeStart, holeEnd).replace(/[^\n]/g, '?') +
           sql.slice(holeEnd);
       }
-      for (const span of node.templateSpans) {
-        const holeStart = span.expression.getFullStart() - start - 2;
+      for (const [index, span] of node.templateSpans.entries()) {
+        const preceding = index === 0 ? node.head : node.templateSpans[index - 1].literal;
+        const holeStart = preceding.end - start - 2;
         const holeEnd = span.literal.getStart(ast) - start + 1;
         const prefix = /("[a-z_][a-z_0-9]*"|[a-z_][a-z_0-9]*)\.$/i.exec(sql.slice(0, holeStart));
         const at = prefix ? holeStart - prefix[0].length : -1;
@@ -410,6 +425,8 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
           for (const ref of sqlReferences(
             sql.slice(0, holeStart) + value.text + sql.slice(holeEnd),
             schemas,
+            false,
+            requests,
           )) {
             if (
               ref.offset === at ||
@@ -427,7 +444,7 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
         }
       }
       // Prevent a hole from joining identifiers on either side.
-      for (const ref of sqlReferences(sql, schemas))
+      for (const ref of sqlReferences(sql, schemas, false, requests))
         result.push({
           file: source.file,
           line: ast.getLineAndCharacterOfPosition(start + ref.offset).line + 1,
@@ -437,10 +454,30 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
       for (const span of node.templateSpans) visit(span.expression);
       return;
     }
-    ts.forEachChild(node, visit);
+    forEachIndexedChild(node, visit);
   };
-  visit(ast);
+  for (const node of indexedRelationNodes(source)) visit(node);
+  if (!requests) {
+    const facts = sourceReferenceFacts.get(indexed) ?? new Map();
+    facts.set(key, result);
+    sourceReferenceFacts.set(indexed, facts);
+    return result.map(reference => ({ ...reference }));
+  }
   return result;
+}
+
+const repositoryGroups = new WeakMap<SqlSource, readonly SqlSource[]>();
+const preparedGroups = new WeakMap<readonly SqlSource[], Set<string>>();
+function prepareSourceRelations(sources: readonly SqlSource[], schemas: Set<string>): void {
+  const key = JSON.stringify([...schemas].sort());
+  const prepared = preparedGroups.get(sources) ?? new Set<string>();
+  if (prepared.has(key)) return;
+  parseSources(sources);
+  const requests: string[] = [];
+  for (const source of sources) sourceRelationFacts(source, schemas, requests);
+  prepareSql(requests);
+  prepared.add(key);
+  preparedGroups.set(sources, prepared);
 }
 
 export function missingRelations(
@@ -448,6 +485,8 @@ export function missingRelations(
   relations: Set<string>,
   schemas: Set<string>,
 ): RelationReference[] {
+  const group = sources.length === 1 ? repositoryGroups.get(sources[0]) : undefined;
+  prepareSourceRelations(group ?? sources, schemas);
   return sources
     .flatMap((source) => sourceRelations(source, schemas))
     .filter((ref) => !relations.has(ref.relation));
@@ -458,42 +497,39 @@ export function missingRelations(
 export function relationExemptions(source: SqlSource): Map<string, string> {
   const result = new Map<string, string>();
   if (!source.text.includes('sql-relations-allow:')) return result;
-  const ast = ts.createSourceFile(source.file, source.text, ts.ScriptTarget.Latest, true);
-  const visit = (node: ts.Node) => {
-    for (const range of ts.getLeadingCommentRanges(source.text, node.pos) ?? []) {
-      const comment = source.text.slice(range.pos, range.end);
-      if (!comment.includes('sql-relations-allow:')) continue;
-      const match =
-        /^\/\/ sql-relations-allow: ([a-z_][a-z_0-9]*\.[a-z_][a-z_0-9]*) -- (\S.*)$/i.exec(comment);
-      if (!match || !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(source.file)) {
-        throw new Error(
-          `${source.file}: sql-relations-allow requires a test file, exact relation and reason`,
-        );
-      }
-      result.set(match[1], match[2]);
+  const offset = indexedOffsets(source.text);
+  for (const range of indexedSource(source).comments ?? []) {
+    const comment = source.text.slice(offset(range.start), offset(range.end));
+    if (!comment.includes('sql-relations-allow:')) continue;
+    const match =
+      /^\/\/ sql-relations-allow: ([a-z_][a-z_0-9]*\.[a-z_][a-z_0-9]*) -- (\S.*)$/i.exec(comment);
+    if (!match || !/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(source.file)) {
+      throw new Error(
+        `${source.file}: sql-relations-allow requires a test file, exact relation and reason`,
+      );
     }
-    ts.forEachChild(node, visit);
-  };
-  visit(ast);
+    result.set(match[1], match[2]);
+  }
   return result;
 }
 
 /** Bookkeeping DDL is created by migration runners before their SQL inventory. */
 export function sourceSqlLiterals(source: SqlSource): SqlSource[] {
-  const ast = ts.createSourceFile(source.file, source.text, ts.ScriptTarget.Latest, true);
+  const ast = indexedSourceFile(source);
   const result: SqlSource[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       result.push({ file: source.file, text: node.text });
     }
-    ts.forEachChild(node, visit);
+    forEachIndexedChild(node, visit);
   };
   visit(ast);
   return result;
 }
 
 export function repositorySqlSources(root: string): SqlSource[] {
-  return ['services', 'scripts', 'tests'].flatMap((directory) =>
+  repositoryIndex(root);
+  const sources = ['services', 'scripts', 'tests'].flatMap((directory) =>
     [
       ...new Bun.Glob('**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
         cwd: join(root, directory),
@@ -508,4 +544,6 @@ export function repositorySqlSources(root: string): SqlSource[] {
         text: readFileSync(join(root, directory, file), 'utf8'),
       })),
   );
+  for (const source of sources) repositoryGroups.set(source, sources);
+  return sources;
 }

@@ -1,6 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import ts from 'typescript-6';
+import { indexedSourceFile, indexedOffsets, indexedSourceNodes, indexedScopedDeclarations } from '../lib/repo-index-ast.ts';
+import { parseSources, repositoryIndex, prepareSql, indexedSql, indexedSource } from '../lib/repo-index.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import type { SqlSource } from './sql-relations.ts';
 
@@ -350,25 +352,17 @@ interface Token {
   quoted?: boolean;
 }
 
-// Dollar bodies stay visible so migration functions are audited too.
+const sqlTokenCache = new Map<string, Token[]>();
 function lex(sql: string): Token[] {
-  const result: Token[] = [];
-  for (const match of sql.matchAll(
-    /--[^\n]*|\/\*[\s\S]*?\*\/|\$[a-z_0-9]*\$|'(?:''|[^'])*'|"(?:""|[^"])*"|\$\d+|\d+(?:\.\d+)?|[a-z_][a-z_0-9$]*|[^\s]/gi,
-  )) {
-    const raw = match[0];
-    if (raw.startsWith('--') || raw.startsWith('/*') || /^\$[a-z_0-9]*\$$/i.test(raw)) continue;
-    result.push({
-      text: raw.startsWith("'")
-        ? raw.slice(1, -1).replaceAll("''", "'")
-        : raw.startsWith('"')
-          ? raw.slice(1, -1).replaceAll('""', '"')
-          : raw.toLowerCase(),
-      offset: match.index,
-      literal: raw.startsWith("'"),
-      quoted: raw.startsWith('"'),
-    });
-  }
+  const previous = sqlTokenCache.get(sql);
+  if (previous) return previous;
+  const offset = indexedOffsets(sql);
+  const result = indexedSql(sql).serializationTokens.flatMap(token => {
+    if (!token.string && !token.quoted && /^[^a-z_0-9$\s]+$/i.test(token.text))
+      return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
+    return [{ ...token, offset: offset(token.offset), literal: token.string }];
+  });
+  sqlTokenCache.set(sql, result);
   return result;
 }
 const word = (token: Token | undefined, value: string) =>
@@ -524,24 +518,40 @@ interface SqlFragment extends SqlSource {
   bindings?: Map<string, string>;
 }
 
+const scopeDeclarations = new WeakMap<ts.Node, Map<string, ts.VariableDeclaration[]>>();
 function initializer(node: ts.Node, name: string): ts.Expression | undefined {
   let scope: ts.Node | undefined = node;
   while (scope) {
-    const declarations: ts.VariableDeclaration[] = [];
-    const visit = (child: ts.Node) => {
-      if (ts.isVariableDeclaration(child) && child.name.getText() === name && child.initializer)
-        declarations.push(child);
-      if (child !== scope && ts.isFunctionLike(child)) return;
-      ts.forEachChild(child, visit);
-    };
-    visit(scope);
-    const declaration = declarations.find((candidate) => candidate.getStart() < node.getStart());
+    let declarations = scopeDeclarations.get(scope);
+    if (!declarations) {
+      declarations = new Map();
+      for (const child of indexedScopedDeclarations(scope)) if (child.initializer) {
+        const name = child.name.getText();
+        const entries = declarations.get(name) ?? [];
+        entries.push(child);
+        declarations.set(name, entries);
+      }
+      scopeDeclarations.set(scope, declarations);
+    }
+    const declaration = declarations
+      .get(name)
+      ?.find(candidate => candidate.getStart() < node.getStart());
     if (declaration) return declaration.initializer;
     scope = scope.parent;
   }
   return undefined;
 }
+const expressionValues = new WeakMap<ts.Expression, Map<number, { text: string; constant: boolean }>>();
 function expressionValue(node: ts.Expression, depth = 0): { text: string; constant: boolean } {
+  const depths = expressionValues.get(node) ?? new Map();
+  const previous = depths.get(depth);
+  if (previous) return previous;
+  const value = computeExpressionValue(node, depth);
+  depths.set(depth, value);
+  expressionValues.set(node, depths);
+  return value;
+}
+function computeExpressionValue(node: ts.Expression, depth: number): { text: string; constant: boolean } {
   if (depth > 8) return { text: node.getText(), constant: false };
   if (ts.isStringLiteralLike(node)) return { text: node.text, constant: true };
   if (
@@ -626,7 +636,17 @@ function substituteSymbols(
     },
   );
 }
+const sqlVariantValues = new WeakMap<ts.Expression, Map<number, { text: string; conditions: Condition[] }[]>>();
 function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions: Condition[] }[] {
+  const depths = sqlVariantValues.get(node) ?? new Map();
+  const previous = depths.get(depth);
+  if (previous) return previous;
+  const value = computeSqlVariants(node, depth);
+  depths.set(depth, value);
+  sqlVariantValues.set(node, depths);
+  return value;
+}
+function computeSqlVariants(node: ts.Expression, depth: number): { text: string; conditions: Condition[] }[] {
   if (depth > 8) return [];
   if (ts.isConditionalExpression(node))
     return [true, false].flatMap((truth) =>
@@ -683,16 +703,15 @@ function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions
   return value.constant ? [{ text: value.text, conditions: [] }] : [];
 }
 function sourceFragments(source: SqlSource): SqlFragment[] {
-  const ast = ts.createSourceFile(
-    source.file,
-    source.text,
-    ts.ScriptTarget.Latest,
-    true,
-    /x$/.test(source.file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const syntax = indexedSource(source).syntax;
+  // Pure type/constant providers cannot contribute SQL or call effects. Their
+  // declarations and relative imports are loaded only when a traced key uses them.
+  if (syntax && !syntax.hasSqlQueries && !syntax.hasSqlOperationLiterals) return [];
+  const ast = indexedSourceFile(source);
   const result: SqlFragment[] = [{ file: source.file, text: '', line: 1, ast }];
   const add = (node: ts.Expression, parameters?: ts.Expression[]) => {
-    for (const value of sqlVariants(node))
+    for (const value of sqlVariants(node)) {
+      if (!/\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i.test(value.text)) continue;
       result.push({
         file: source.file,
         ...value,
@@ -701,6 +720,7 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
         ast,
         parameters,
       });
+    }
   };
   const visit = (node: ts.Node) => {
     if (
@@ -723,13 +743,11 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
     if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) {
       if (!ts.isCallExpression(node.parent) || node.parent.arguments[0] !== node) add(node);
       if (ts.isTemplateExpression(node)) {
-        for (const span of node.templateSpans) visit(span.expression);
         return;
       }
     }
-    ts.forEachChild(node, visit);
   };
-  visit(ast);
+  for (const node of indexedSourceNodes(source)) visit(node);
   return result;
 }
 
@@ -945,7 +963,16 @@ function pathConditions(node: ts.Node): Condition[] {
 
 // Solve the small boolean formulas used to choose SHARE versus UPDATE. Atomic
 // comparisons stay symbolic; disjoint branches must never invent an upgrade.
+const compatibilityResults = new Map<string, boolean>();
 function compatible(conditions: Condition[]): boolean {
+  const key = JSON.stringify(conditions.map(condition => [condition.expression, condition.truth]).sort());
+  const previous = compatibilityResults.get(key);
+  if (previous !== undefined) return previous;
+  const result = compatibleFormula(conditions);
+  compatibilityResults.set(key, result);
+  return result;
+}
+function compatibleFormula(conditions: Condition[]): boolean {
   const atoms = new Set<string>();
   const formula = (expression: string): ((values: Map<string, boolean>) => boolean) => {
     const ast = ts.createSourceFile(
@@ -1006,6 +1033,9 @@ function gateEffectFindings(
   const order = new Map<Effect, number>();
   let step = 0;
   for (const effect of effects) {
+    // Only gate effects can contribute to an upgrade; transaction boundaries
+    // still clear retained locks even when their helper writes no gate.
+    if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
     order.set(effect, step++);
     if (!compatible(effect.conditions ?? [])) continue;
     if (effect.kind === 'boundary') {
@@ -1138,7 +1168,23 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         });
     }
   }
+  const effectValues = new Map<string, Effect[]>();
+  const fragmentTexts = new Map<string, number>();
   const expand = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
+    let text = fragmentTexts.get(fragment.text);
+    if (text === undefined) { text = fragmentTexts.size; fragmentTexts.set(fragment.text, text); }
+    const key = JSON.stringify([
+      text, fragment.file, fragment.line,
+      fragment.parameters?.map(symbolValue) ?? [],
+      [...(fragment.bindings ?? [])].sort(), [...chain].sort(),
+    ]);
+    const previous = effectValues.get(key);
+    if (previous) return previous;
+    const result = computeEffects(fragment, chain);
+    effectValues.set(key, result);
+    return result;
+  };
+  const computeEffects = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
     const input = lex(fragment.text);
     if (input.some((token) => word(token, ';'))) {
       let start = 0;
@@ -1148,6 +1194,9 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         fragment.text.length,
       ]) {
         const text = fragment.text.slice(start, end);
+        sqlTokenCache.set(text, input
+          .filter(token => token.offset >= start && token.offset < end)
+          .map(token => ({ ...token, offset: token.offset - start })));
         if (text.trim())
           result.push(
             ...expand(
@@ -1222,19 +1271,83 @@ function gateUpgrades(
   sources: SqlSource[],
   byFile: Map<string, SqlFragment[]>,
   effects: (fragment: SqlFragment) => Effect[],
+  profile?: (phase: string) => void,
 ): SerializationFinding[] {
+  const sourceByFile = new Map(sources.map(source => [source.file, source]));
+  const sourceFiles = new Set(sourceByFile.keys());
+  const seeds = new Set<string>();
+  for (const [file, fragments] of byFile) {
+    if (fragments.some(fragment => fragment.node && ts.isCallExpression(fragment.node.parent) &&
+      fragment.node.parent.arguments[0] === fragment.node && effects(fragment).some(effect =>
+        effect.kind !== 'boundary' && /(?:^|[._])gate$/.test(effect.relation)))) seeds.add(file);
+  }
+  if (!seeds.size) return [];
+  const outgoing = new Map<string, Set<string>>();
+  const incoming = new Map<string, Set<string>>();
+  let completeGraph = true;
+  for (const source of sources) {
+    const indexed = indexedSource(source);
+    if (!indexed.namedImports || !indexed.directCallNames) { completeGraph = false; break; }
+    const calls = new Set(indexed.directCallNames);
+    for (const binding of indexed.namedImports) {
+      if (!calls.has(binding.local) || !binding.source.startsWith('.')) continue;
+      const target = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+      if (!sourceFiles.has(target)) continue;
+      const callees = outgoing.get(source.file) ?? new Set<string>();
+      callees.add(target); outgoing.set(source.file, callees);
+      const callers = incoming.get(target) ?? new Set<string>();
+      callers.add(source.file); incoming.set(target, callers);
+    }
+  }
+  // Only callers of a gate effect can produce an upgrade. Include all their
+  // callees as well: locks, boundaries and callback execution live in helpers.
+  const relevant = new Set(seeds);
+  if (completeGraph) {
+    const callers = [...relevant];
+    for (let index = 0; index < callers.length; index++) for (const file of incoming.get(callers[index]) ?? []) {
+      if (!relevant.has(file)) { relevant.add(file); callers.push(file); }
+    }
+    const callees = [...relevant];
+    for (let index = 0; index < callees.length; index++) for (const file of outgoing.get(callees[index]) ?? []) {
+      if (!relevant.has(file)) { relevant.add(file); callees.push(file); }
+    }
+  }
+  profile?.(`gate-files:${completeGraph ? relevant.size : sources.length}/${sources.length}`);
   const traces = new Map<string, FunctionTrace>();
   const named = new Map<string, string>();
   const imports = new Map<string, Map<string, string>>();
   const functionNodes = new Map<ts.Node, string>();
+  const loadImports = (source: SqlSource): Map<string, string> => {
+    const previous = imports.get(source.file);
+    if (previous) return previous;
+    const values = new Map<string, string>();
+    imports.set(source.file, values);
+    const namedImports = indexedSource(source).namedImports;
+    if (namedImports) {
+      for (const binding of namedImports) if (binding.source.startsWith('.')) {
+        const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+        values.set(binding.local, `${module}#${binding.imported}`);
+      }
+      return values;
+    }
+    for (const node of indexedSourceNodes(source)) {
+      if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier) || !node.moduleSpecifier.text.startsWith('.')) continue;
+      const module = posix.normalize(posix.join(posix.dirname(source.file), node.moduleSpecifier.text));
+      const bindings = node.importClause?.namedBindings;
+      if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
+        values.set(binding.name.text, `${module}#${binding.propertyName?.text ?? binding.name.text}`);
+      }
+    }
+    return values;
+  };
   const owner = (node: ts.Node | undefined): ts.Node | undefined => {
     while (node && !ts.isFunctionLike(node) && !ts.isSourceFile(node)) node = node.parent;
     return node;
   };
   for (const source of sources) {
+    if (completeGraph && !relevant.has(source.file)) continue;
     const fragments = byFile.get(source.file) ?? [];
-    const ast = fragments[0]?.ast;
-    if (!ast) continue;
+    const ast = fragments[0]?.ast ?? indexedSourceFile(source);
     const moduleId = `${source.file}:module`;
     functionNodes.set(ast, moduleId);
     traces.set(moduleId, {
@@ -1245,25 +1358,8 @@ function gateUpgrades(
       defaults: new Map(),
       events: [],
     });
-    const fileImports = new Map<string, string>();
-    imports.set(source.file, fileImports);
+    const fileImports = loadImports(source);
     const visit = (node: ts.Node) => {
-      if (
-        ts.isImportDeclaration(node) &&
-        ts.isStringLiteral(node.moduleSpecifier) &&
-        node.moduleSpecifier.text.startsWith('.')
-      ) {
-        const module = posix.normalize(
-          posix.join(posix.dirname(source.file), node.moduleSpecifier.text),
-        );
-        const bindings = node.importClause?.namedBindings;
-        if (bindings && ts.isNamedImports(bindings))
-          for (const binding of bindings.elements)
-            fileImports.set(
-              binding.name.text,
-              `${module}#${binding.propertyName?.text ?? binding.name.text}`,
-            );
-      }
       if (ts.isFunctionLike(node) && 'body' in node && node.body) {
         const parent = node.parent;
         const name =
@@ -1300,9 +1396,8 @@ function gateUpgrades(
         });
         if (name) named.set(`${source.file}#${className ? className + '.' : ''}${name}`, id);
       }
-      ts.forEachChild(node, visit);
     };
-    visit(ast);
+    for (const node of indexedSourceNodes(source)) visit(node);
     // Module-level SQL constants are checked for serialization above, but only
     // their invocation belongs to a transaction's effect trace.
     for (const fragment of fragments) {
@@ -1314,7 +1409,8 @@ function gateUpgrades(
         continue;
       const id = functionNodes.get(owner(fragment.node)!);
       if (!id) continue;
-      for (const effect of effects(fragment))
+      for (const effect of effects(fragment)) {
+        if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
         traces.get(id)!.events.push({
           effect: {
             ...effect,
@@ -1323,6 +1419,7 @@ function gateUpgrades(
           },
           offset: fragment.node.getStart(ast),
         });
+      }
     }
     const calls = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
@@ -1345,7 +1442,9 @@ function gateUpgrades(
               : undefined;
           // A transaction callback executes where the helper calls its run/work
           // parameter, after BEGIN and the initial exclusive fences.
-          if (call)
+          const imported = call && fileImports.get(call);
+          const knownImport = imported && sourceFiles.has(imported.slice(0, imported.lastIndexOf('#')));
+          if (call && (named.has(`${source.file}#${call}`) || knownImport || trace.parameters.includes(call)))
             trace.events.push({
               call,
               args: node.arguments.map(
@@ -1356,10 +1455,10 @@ function gateUpgrades(
             });
         }
       }
-      ts.forEachChild(node, calls);
     };
-    calls(ast);
+    for (const node of indexedSourceNodes(source)) calls(node);
   }
+  profile?.('gate-traces');
   const embeddedCallbacks = new Set<string>();
   for (const trace of traces.values())
     for (const event of trace.events) {
@@ -1370,29 +1469,41 @@ function gateUpgrades(
       }
     }
   const importedSymbols = new Map<string, Map<string, string>>();
+  const constants = new Map<string, string | undefined>();
+  const moduleDeclarations = new Map<string, Map<string, ts.VariableDeclaration[]>>();
   const constant = (file: string, name: string, seen = new Set<string>()): string | undefined => {
     const key = `${file}#${name}`;
     if (seen.has(key)) return;
+    if (constants.has(key)) return constants.get(key);
     const next = new Set(seen).add(key);
-    const imported = imports.get(file)?.get(name);
+    const provider = sourceByFile.get(file);
+    const imported = (provider ? loadImports(provider) : imports.get(file))?.get(name);
     if (imported) {
       const separator = imported.lastIndexOf('#');
-      return constant(imported.slice(0, separator), imported.slice(separator + 1), next);
+      const value = constant(imported.slice(0, separator), imported.slice(separator + 1), next);
+      constants.set(key, value);
+      return value;
     }
-    const ast = byFile.get(file)?.[0]?.ast;
+    const ast = byFile.get(file)?.[0]?.ast ?? (provider && indexedSourceFile(provider));
     if (!ast) return;
-    let value: string | undefined;
-    const visit = (node: ts.Node) => {
-      if (ts.isFunctionLike(node)) return;
-      if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name && node.initializer) {
-        const resolved = expressionValue(node.initializer);
-        if (resolved.constant) value = symbolValue(node.initializer);
-        else if (ts.isIdentifier(node.initializer))
-          value = constant(file, node.initializer.text, next);
+    let declarations = moduleDeclarations.get(file);
+    if (!declarations) {
+      declarations = new Map();
+      for (const node of indexedScopedDeclarations(ast)) if (node.initializer) {
+        const name = node.name.getText(ast);
+        const entries = declarations.get(name) ?? [];
+        entries.push(node);
+        declarations.set(name, entries);
       }
-      ts.forEachChild(node, visit);
-    };
-    visit(ast);
+      moduleDeclarations.set(file, declarations);
+    }
+    let value: string | undefined;
+    for (const declaration of declarations.get(name) ?? []) {
+      const resolved = expressionValue(declaration.initializer!);
+      if (resolved.constant) value = symbolValue(declaration.initializer!);
+      else if (declaration.initializer && ts.isIdentifier(declaration.initializer)) value = constant(file, declaration.initializer.text, next);
+    }
+    constants.set(key, value);
     return value;
   };
   for (const [file, names] of imports) {
@@ -1403,6 +1514,7 @@ function gateUpgrades(
     }
     importedSymbols.set(file, values);
   }
+  profile?.('gate-imports');
   const expand = (
     trace: FunctionTrace,
     chain: Set<string>,
@@ -1422,7 +1534,7 @@ function gateUpgrades(
       })),
     ];
     const result: Effect[] = [];
-    for (const event of trace.events.sort((a, b) => a.offset - b.offset)) {
+    for (const event of trace.events) {
       if ('effect' in event) {
         result.push({
           ...event.effect,
@@ -1446,13 +1558,47 @@ function gateUpgrades(
     }
     return result;
   };
+  // An upgrade needs a write. Walk reverse call/argument edges once to choose
+  // roots that can reach one; their expansion still includes read locks and
+  // COMMIT/ROLLBACK helpers that establish the transaction's exact ordering.
+  const parents = new Map<string, Set<string>>();
+  const writes = new Set<string>();
+  for (const trace of traces.values()) {
+    trace.events.sort((a, b) => a.offset - b.offset);
+    for (const event of trace.events) {
+      if ('effect' in event) {
+        if (event.effect.kind === 'write') writes.add(trace.id);
+        continue;
+      }
+      const imported = imports.get(trace.file)?.get(event.call);
+      const targets = [
+        event.call,
+        named.get(`${trace.file}#${event.call}`),
+        imported ? named.get(imported) : undefined,
+        ...event.args.flatMap(argument => [argument, named.get(`${trace.file}#${argument}`)]),
+      ];
+      for (const target of targets) if (target && traces.has(target)) {
+        const callers = parents.get(target) ?? new Set<string>();
+        callers.add(trace.id);
+        parents.set(target, callers);
+      }
+    }
+  }
+  const pending = [...writes];
+  for (let index = 0; index < pending.length; index++) {
+    for (const parent of parents.get(pending[index]) ?? []) if (!writes.has(parent)) {
+      writes.add(parent);
+      pending.push(parent);
+    }
+  }
   const findings: SerializationFinding[] = [];
   for (const trace of traces.values()) {
-    if (embeddedCallbacks.has(trace.id)) continue;
+    if (embeddedCallbacks.has(trace.id) || !writes.has(trace.id)) continue;
     findings.push(
       ...gateEffectFindings(expand(trace, new Set()), trace.file, trace.name ?? 'callback'),
     );
   }
+  profile?.('gate-expand');
   return findings;
 }
 
@@ -1461,6 +1607,7 @@ export function serializationFindings(
   migrations: SqlSource[],
   sources: SqlSource[],
   allowlist: SerializationAllowance[] = serializationAllowlist,
+  profile?: (phase: string) => void,
 ): SerializationFinding[] {
   for (const entry of allowlist) {
     if (
@@ -1473,9 +1620,26 @@ export function serializationFindings(
         'Serialization allowance requires one relation or key, writers and a one-line reason',
       );
   }
+  parseSources(sources);
+  profile?.('source-index');
+  prepareSql(migrations.map(source => source.text));
+  // Loading each migration registers its indexed dollar bodies before asking
+  // for procedural fragments, so they reuse the parent parse rather than spawn.
+  for (const source of migrations) indexedSql(source.text);
+  prepareSql(migrations.flatMap(source => [
+    source.text,
+    ...[...source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)]
+      .map(body => body[2]),
+  ]));
+  profile?.('sql-index');
   const singletons = singletonTables(migrations),
     findings: SerializationFinding[] = [];
-  const byFile = new Map<string, SqlFragment[]>();
+  profile?.('singletons');
+  const bySource = new Map(sources.map(source => [source, sourceFragments(source)]));
+  profile?.('source-fragments');
+  const byFile = new Map(sources.map(source => [source.file, bySource.get(source)!]));
+  prepareSql([...bySource.values()].flatMap(fragments => fragments.map(fragment => fragment.text)));
+  profile?.('fragment-index');
   const allowed = (target: string, file: string, key = false) =>
     allowlist.some(
       (entry) => (key ? entry.key : entry.relation) === target && entry.writers.includes(file),
@@ -1492,8 +1656,7 @@ export function serializationFindings(
   for (const source of [...migrations, ...sources]) {
     const fragments = source.file.endsWith('.sql')
       ? [{ ...source, line: 1 }]
-      : sourceFragments(source);
-    if (!source.file.endsWith('.sql')) byFile.set(source.file, fragments);
+      : bySource.get(source)!;
     for (const fragment of fragments) {
       for (const lock of advisoryKeys(fragment))
         if (!allowed(lock.key, source.file, true))
@@ -1531,7 +1694,10 @@ export function serializationFindings(
         findings.push(...gateEffectFindings(effects, source.file));
       }
   }
-  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations)));
+  profile?.('source-rules');
+  const effects = databaseEffects(migrations);
+  profile?.('database-effects');
+  findings.push(...gateUpgrades(sources, byFile, effects, profile));
   return [
     ...new Map(
       findings.map((finding) => [
@@ -1543,6 +1709,7 @@ export function serializationFindings(
 }
 
 export function repositorySerializationSources(root: string): SqlSource[] {
+  repositoryIndex(root);
   return [
     ...new Bun.Glob('*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
       cwd: join(root, 'services'),
