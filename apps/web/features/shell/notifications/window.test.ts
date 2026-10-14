@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 import type { MainClient } from '../../feed/types.ts';
+import { browserMainApi } from '../../api/browser.ts';
 import { mergeNotificationTriage, readLatest, readWindow, type NotificationSelection, type StreamItem } from './window.ts';
 
 type Query = { before?: string; limit: number; view?: 'saved' | 'done'; reason?: string };
@@ -83,4 +84,27 @@ describe('filtered notification continuation', () => {
     expect(await readLatest(main, selection)).toMatchObject({ ok: true, data: { items: [], next: null } });
     expect(calls).toEqual([{ before: 'latest', limit: 50, view: 'saved' }]);
   });
+});
+
+test('latest keeps the authoritative count and its overflow, even for an empty selected page', async () => {
+  const main = browserMainApi('https://contract.invalid', { fetcher: (async input => {
+    const url = new URL(String(input));
+    return Response.json(url.pathname.endsWith('/unread-count')
+      ? { profile: 'notification-unread-count-v1', generation: '7', count: 99, overflow: true }
+      : { profile: 'notification-stream-page-v1', generation: '7', head: '20000', reset: false,
+        readThrough: '0', items: [], groups: [], next: null });
+  }) as typeof fetch });
+  expect(await readLatest(main, { view: 'saved', reason: null })).toMatchObject({ ok: true, data: {
+    items: [], unreadCount: { ok: true, data: { generation: '7', count: 99, overflow: true } } } });
+});
+
+test('an expired count refuses the page rather than presenting an earlier personal read', async () => {
+  const main = browserMainApi('https://contract.invalid', { fetcher: (async input => {
+    const url = new URL(String(input));
+    return url.pathname.endsWith('/unread-count')
+      ? Response.json({ code: 'account_assertion_denied' }, { status: 401 })
+      : Response.json({ profile: 'notification-stream-page-v1', generation: '7', head: '1', reset: false,
+        readThrough: '0', items: [], groups: [], next: null });
+  }) as typeof fetch });
+  expect(await readLatest(main)).toEqual({ ok: false, failure: 'sign-in' });
 });
