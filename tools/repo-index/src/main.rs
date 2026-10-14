@@ -99,6 +99,64 @@ struct SqlCandidate {
     start: usize,
     end: usize,
     sql_deflate: String,
+    #[serde(flatten)]
+    metadata: Option<LiteralMetadata>,
+}
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct LiteralMetadata {
+    literal_kind: &'static str,
+    interpolated: bool,
+    parent_kind: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    binding_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    property_key: Option<String>,
+    first_call_argument: bool,
+}
+struct ParentFrame {
+    kind: &'static str,
+    binding_name: Option<String>,
+    property_key: Option<String>,
+    first_argument: Option<oxc_span::Span>,
+    method_span: Option<oxc_span::Span>,
+    method_name: Option<String>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FunctionFact {
+    start: u32,
+    end: u32,
+    body_start: u32,
+    body_end: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    class_name: Option<String>,
+    parameters: Vec<String>,
+    default_references: BTreeSet<String>,
+    has_sql_queries: bool,
+    has_sql_operation_literals: bool,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct CallFact {
+    start: u32,
+    end: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    function_start: Option<u32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callee_name: Option<String>,
+    argument_names: BTreeSet<String>,
+    argument_texts: Vec<String>,
+    inline_function_spans: Vec<oxc_span::Span>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AliasFact {
+    name: String,
+    references: BTreeSet<String>,
+    initializer_text: String,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -118,6 +176,9 @@ struct IndexedFile {
     syntax: SyntaxFacts,
     named_imports: Vec<NamedImport>,
     direct_call_names: BTreeSet<String>,
+    function_facts: Vec<FunctionFact>,
+    call_facts: Vec<CallFact>,
+    aliases: Vec<AliasFact>,
 }
 #[derive(Serialize)]
 struct NamedImport {
@@ -132,6 +193,7 @@ struct SyntaxFacts {
     has_direct_calls: bool,
     has_sql_queries: bool,
     has_sql_operation_literals: bool,
+    has_interpolated_templates: bool,
 }
 fn sql_operation_literal(text: &str) -> bool {
     let bytes = text.as_bytes();
@@ -328,6 +390,7 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
                         text,
                         start,
                         end,
+                        metadata: None,
                     })
                 })
                 .collect()
@@ -468,6 +531,9 @@ fn indexed_mode(
             syntax: SyntaxFacts::default(),
             named_imports: vec![],
             direct_call_names: BTreeSet::new(),
+            function_facts: vec![],
+            call_facts: vec![],
+            aliases: vec![],
         });
     }
     let allocator = Allocator::default();
@@ -502,6 +568,12 @@ fn indexed_mode(
         syntax: SyntaxFacts::default(),
         named_imports: Vec::new(),
         direct_call_names: BTreeSet::new(),
+        parents: Vec::new(),
+        function_facts: Vec::new(),
+        call_facts: Vec::new(),
+        aliases: Vec::new(),
+        functions: Vec::new(),
+        classes: Vec::new(),
     };
     facts.visit_program(&parsed.program);
     let imports = facts.imports;
@@ -509,6 +581,9 @@ fn indexed_mode(
     let syntax = facts.syntax;
     let named_imports = facts.named_imports;
     let direct_call_names = facts.direct_call_names;
+    let function_facts = facts.function_facts;
+    let call_facts = facts.call_facts;
+    let aliases = facts.aliases;
     let runtime = if compact_only || keep_runtime {
         RuntimeProjection {
             allocator: &allocator,
@@ -541,6 +616,9 @@ fn indexed_mode(
         syntax,
         named_imports,
         direct_call_names,
+        function_facts,
+        call_facts,
+        aliases,
     })
 }
 fn main() {
@@ -1190,6 +1268,159 @@ mod tests {
         });
         assert_eq!(full_spans, runtime_spans);
     }
+    #[test]
+    fn executable_graph_facts_preserve_defaults_aliases_callbacks_and_method_owners() {
+        let root = env::current_dir().unwrap();
+        let text = r#"declare function declaration(): void;
+function write(){db.query('UPDATE owner.records SET id=1')}
+function wrap(run=write){run()}
+const alias=write; const arrow=(arg)=>wrap(alias, () => write());
+class Writer {
+  constructor() { wrap() }
+  #save(value) { this.#save(value); function nested(){write()} }
+  'quoted'(...values) { wrap(Writer.quoted) }
+}"#;
+        let facts = indexed(
+            Source {
+                file: "graph.ts".to_string(),
+                text: text.to_string(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let named = |name: &str| {
+            facts
+                .function_facts
+                .iter()
+                .find(|function| function.name.as_deref() == Some(name))
+                .unwrap()
+        };
+        assert!(
+            !facts
+                .function_facts
+                .iter()
+                .any(|function| function.name.as_deref() == Some("declaration"))
+        );
+        assert!(named("write").has_sql_queries);
+        assert!(named("write").has_sql_operation_literals);
+        assert_eq!(named("wrap").parameters, vec!["run"]);
+        assert!(named("wrap").default_references.contains("write"));
+        assert_eq!(named("arrow").parameters, vec!["arg"]);
+        assert_eq!(
+            named("#save").start as usize,
+            text.find("#save(value)").unwrap()
+        );
+        assert_eq!(named("#save").class_name.as_deref(), Some("Writer"));
+        assert!(named("nested").class_name.is_none());
+        assert_eq!(named("'quoted'").parameters, vec!["values"]);
+        assert!(
+            facts
+                .function_facts
+                .iter()
+                .any(|function| function.name.is_none()
+                    && function.class_name.as_deref() == Some("Writer"))
+        );
+        let private = facts
+            .call_facts
+            .iter()
+            .find(|call| call.callee_name.as_deref() == Some("#save"))
+            .unwrap();
+        assert_eq!(private.function_start, Some(named("#save").start));
+        let callback = facts
+            .call_facts
+            .iter()
+            .find(|call| !call.inline_function_spans.is_empty())
+            .unwrap();
+        assert_eq!(callback.function_start, Some(named("arrow").start));
+        assert!(callback.argument_names.contains("alias"));
+        assert_eq!(callback.argument_texts[0], "alias");
+        assert!(
+            facts
+                .call_facts
+                .iter()
+                .any(|call| call.argument_texts == vec!["Writer.quoted"])
+        );
+        let alias = facts
+            .aliases
+            .iter()
+            .find(|alias| alias.name == "alias")
+            .unwrap();
+        assert!(alias.references.contains("write"));
+        assert_eq!(alias.initializer_text, "write");
+    }
+    #[test]
+    fn static_literal_metadata_preserves_raw_parent_names_cooked_templates_and_calls() {
+        let root = env::current_dir().unwrap();
+        let text = r#"const tableName = 'owner.records'; const {table} = 'owner.destructure'; const values = { table: 'owner.bare', 'table': 'owner.quoted', [ table /* ] */ ]: 'owner.computed' }; const q = `SELECT \u002a FROM owner.cooked`; unknown('SELECT * FROM owner.direct'); unknown('SELECT * FROM owner.cast' as string); unknown((`SELECT * FROM owner.paren`)); const dynamic = `SELECT * FROM ${name}`;"#;
+        let facts = indexed(
+            Source {
+                file: "metadata.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let candidate = |text: &str| {
+            facts
+                .sql_candidates
+                .iter()
+                .find(|candidate| candidate.text == text)
+                .unwrap()
+        };
+        let variable = candidate("owner.records").metadata.as_ref().unwrap();
+        assert_eq!(variable.parent_kind, "VariableDeclarator");
+        assert_eq!(variable.binding_name.as_deref(), Some("tableName"));
+        assert_eq!(
+            candidate("owner.destructure")
+                .metadata
+                .as_ref()
+                .unwrap()
+                .binding_name
+                .as_deref(),
+            Some("{table}")
+        );
+        for (text, key) in [
+            ("owner.bare", "table"),
+            ("owner.quoted", "'table'"),
+            ("owner.computed", "[ table /* ] */ ]"),
+        ] {
+            let parent = candidate(text).metadata.as_ref().unwrap();
+            assert_eq!(parent.parent_kind, "Property");
+            assert_eq!(parent.property_key.as_deref(), Some(key));
+        }
+        let template = candidate("SELECT * FROM owner.cooked")
+            .metadata
+            .as_ref()
+            .unwrap();
+        assert_eq!(template.literal_kind, "template");
+        assert!(!template.interpolated);
+        assert!(
+            candidate("SELECT * FROM owner.direct")
+                .metadata
+                .as_ref()
+                .unwrap()
+                .first_call_argument
+        );
+        assert!(
+            !candidate("SELECT * FROM owner.cast")
+                .metadata
+                .as_ref()
+                .unwrap()
+                .first_call_argument
+        );
+        assert!(
+            !candidate("SELECT * FROM owner.paren")
+                .metadata
+                .as_ref()
+                .unwrap()
+                .first_call_argument
+        );
+        assert!(facts.syntax.has_interpolated_templates);
+    }
 }
 
 struct Facts<'r> {
@@ -1202,8 +1433,58 @@ struct Facts<'r> {
     syntax: SyntaxFacts,
     named_imports: Vec<NamedImport>,
     direct_call_names: BTreeSet<String>,
+    parents: Vec<ParentFrame>,
+    function_facts: Vec<FunctionFact>,
+    call_facts: Vec<CallFact>,
+    aliases: Vec<AliasFact>,
+    functions: Vec<usize>,
+    classes: Vec<Option<String>>,
 }
 impl Facts<'_> {
+    fn raw(&self, span: oxc_span::Span) -> String {
+        self.text[span.start as usize..span.end as usize].to_string()
+    }
+    fn function(
+        &mut self,
+        span: oxc_span::Span,
+        body: oxc_span::Span,
+        name: Option<String>,
+        params: &FormalParameters<'_>,
+    ) {
+        let parent = self.parents.last();
+        let method_span = parent.and_then(|parent| parent.method_span);
+        let span = method_span.unwrap_or(span);
+        let name = if method_span.is_some() {
+            parent.and_then(|parent| parent.method_name.clone())
+        } else {
+            name.or_else(|| parent.and_then(|parent| parent.binding_name.clone()))
+                .or_else(|| parent.and_then(|parent| parent.property_key.clone()))
+        };
+        let mut default_references = BTreeSet::new();
+        let mut parameters = Vec::new();
+        for parameter in &params.items {
+            parameters.push(self.raw(parameter.pattern.span()));
+            if let Some(initializer) = &parameter.initializer {
+                ReferencedNames(&mut default_references).visit_expression(initializer);
+            }
+        }
+        if let Some(rest) = &params.rest {
+            parameters.push(self.raw(rest.rest.argument.span()));
+        }
+        self.functions.push(self.function_facts.len());
+        self.function_facts.push(FunctionFact {
+            start: span.start,
+            end: span.end,
+            body_start: body.start,
+            body_end: body.end,
+            name,
+            class_name: method_span.and_then(|_| self.classes.last().and_then(Clone::clone)),
+            parameters,
+            default_references,
+            has_sql_queries: false,
+            has_sql_operation_literals: false,
+        });
+    }
     fn import(&mut self, source: &str, type_only: bool) {
         let timing = Instant::now();
         let resolved = self
@@ -1225,15 +1506,36 @@ impl Facts<'_> {
         });
         elapsed(&RESOLVING, timing);
     }
-    fn candidate(&mut self, text: String, start: u32, end: u32) {
+    fn candidate(
+        &mut self,
+        text: String,
+        start: u32,
+        end: u32,
+        literal_kind: &'static str,
+        interpolated: bool,
+    ) {
         let sql_operation = sql_operation_literal(&text);
         self.syntax.has_sql_operation_literals |= sql_operation;
+        if let Some(index) = self.functions.last() {
+            self.function_facts[*index].has_sql_operation_literals |= sql_operation;
+        }
         if text.contains('.') || sql_operation || is_sql(&text) {
+            let parent = self.parents.last();
             self.candidates.push(SqlCandidate {
                 sql_deflate: compressed_sql(&sql_facts_with_parse(&text, is_sql(&text))).unwrap(),
                 text,
                 start: start as usize,
                 end: end as usize,
+                metadata: Some(LiteralMetadata {
+                    literal_kind,
+                    interpolated,
+                    parent_kind: parent.map_or("other", |parent| parent.kind),
+                    binding_name: parent.and_then(|parent| parent.binding_name.clone()),
+                    property_key: parent.and_then(|parent| parent.property_key.clone()),
+                    first_call_argument: parent
+                        .and_then(|parent| parent.first_argument)
+                        .is_some_and(|span| span.start == start && span.end == end),
+                }),
             });
         }
     }
@@ -1241,10 +1543,99 @@ impl Facts<'_> {
 impl<'a> Visit<'a> for Facts<'_> {
     fn enter_node(&mut self, kind: AstKind<'a>) {
         match kind {
+            AstKind::Class(node) => self
+                .classes
+                .push(node.id.as_ref().map(|id| id.name.to_string())),
+            AstKind::Function(node) if node.body.is_some() => {
+                self.function(
+                    node.span,
+                    node.body.as_ref().unwrap().span,
+                    node.id.as_ref().map(|id| id.name.to_string()),
+                    &node.params,
+                );
+            }
+            AstKind::ArrowFunctionExpression(node) => {
+                self.function(node.span, node.body.span(), None, &node.params)
+            }
+            _ => {}
+        }
+        let mut parent = ParentFrame {
+            kind: "other",
+            binding_name: None,
+            property_key: None,
+            first_argument: None,
+            method_span: None,
+            method_name: None,
+        };
+        match kind {
+            AstKind::VariableDeclarator(node) => {
+                let span = node.id.span();
+                parent.kind = "VariableDeclarator";
+                parent.binding_name = Some(self.raw(span));
+                if let (BindingPattern::BindingIdentifier(binding), Some(initializer)) =
+                    (&node.id, &node.init)
+                {
+                    let mut references = BTreeSet::new();
+                    ReferencedNames(&mut references).visit_expression(initializer);
+                    self.aliases.push(AliasFact {
+                        name: binding.name.to_string(),
+                        references,
+                        initializer_text: self.raw(initializer.span()),
+                    });
+                }
+            }
+            AstKind::ObjectProperty(node) => {
+                let span = node.key.span();
+                parent.kind = "Property";
+                let key = self.text[span.start as usize..span.end as usize].to_string();
+                parent.property_key = Some(if node.computed && !node.method {
+                    let tail = &self.text[span.end as usize..];
+                    let significant = js_after_trivia(tail);
+                    let end = span.end as usize + tail.len() - significant.len() + 1;
+                    self.text[node.span.start as usize..end].to_string()
+                } else if node.computed {
+                    format!("[{key}]")
+                } else {
+                    key
+                });
+            }
+            AstKind::MethodDefinition(node) => {
+                parent.method_span = Some(node.span);
+                parent.method_name = (node.kind != MethodDefinitionKind::Constructor).then(|| {
+                    let key = self.raw(node.key.span());
+                    if node.computed {
+                        format!("[{key}]")
+                    } else {
+                        key
+                    }
+                });
+            }
+            AstKind::CallExpression(node) => {
+                parent.first_argument = node.arguments.first().map(GetSpan::span)
+            }
+            _ => {}
+        }
+        self.parents.push(parent);
+        match kind {
             AstKind::Function(function) if function.body.is_some() => {
                 self.syntax.has_functions = true
             }
             AstKind::ArrowFunctionExpression(_) => self.syntax.has_functions = true,
+            _ => {}
+        }
+    }
+    fn leave_node(&mut self, kind: AstKind<'a>) {
+        self.parents.pop();
+        match kind {
+            AstKind::Class(_) => {
+                self.classes.pop();
+            }
+            AstKind::Function(node) if node.body.is_some() => {
+                self.functions.pop();
+            }
+            AstKind::ArrowFunctionExpression(_) => {
+                self.functions.pop();
+            }
             _ => {}
         }
     }
@@ -1311,6 +1702,50 @@ impl<'a> Visit<'a> for Facts<'_> {
         walk::walk_ts_import_equals_declaration(self, node);
     }
     fn visit_call_expression(&mut self, node: &CallExpression<'a>) {
+        let callee_name = match &node.callee {
+            Expression::Identifier(name) => Some(name.name.to_string()),
+            Expression::StaticMemberExpression(member)
+                if matches!(&member.object, Expression::ThisExpression(_)) =>
+            {
+                Some(member.property.name.to_string())
+            }
+            Expression::PrivateFieldExpression(member)
+                if matches!(&member.object, Expression::ThisExpression(_)) =>
+            {
+                Some(format!("#{}", member.field.name))
+            }
+            _ => None,
+        };
+        let mut argument_names = BTreeSet::new();
+        let mut inline_function_spans = Vec::new();
+        for argument in &node.arguments {
+            ReferencedNames(&mut argument_names).visit_argument(argument);
+            match argument {
+                Argument::FunctionExpression(function) if function.body.is_some() => {
+                    inline_function_spans.push(function.span)
+                }
+                Argument::ArrowFunctionExpression(function) => {
+                    inline_function_spans.push(function.span)
+                }
+                _ => {}
+            }
+        }
+        self.call_facts.push(CallFact {
+            start: node.span.start,
+            end: node.span.end,
+            function_start: self
+                .functions
+                .last()
+                .map(|index| self.function_facts[*index].start),
+            callee_name,
+            argument_names,
+            argument_texts: node
+                .arguments
+                .iter()
+                .map(|argument| self.raw(argument.span()))
+                .collect(),
+            inline_function_spans,
+        });
         if let Expression::Identifier(name) = &node.callee {
             self.direct_call_names.insert(name.name.to_string());
         }
@@ -1325,6 +1760,9 @@ impl<'a> Visit<'a> for Facts<'_> {
             Expression::StaticMemberExpression(member) => {
                 matches!(&member.object, Expression::ThisExpression(_))
             }
+            Expression::PrivateFieldExpression(member) => {
+                matches!(&member.object, Expression::ThisExpression(_))
+            }
             _ => false,
         };
         self.syntax.has_sql_queries |= match node.callee.get_inner_expression() {
@@ -1336,6 +1774,18 @@ impl<'a> Visit<'a> for Facts<'_> {
             }
             _ => false,
         };
+        if let Some(index) = self.functions.last() {
+            self.function_facts[*index].has_sql_queries |= match node.callee.get_inner_expression()
+            {
+                Expression::StaticMemberExpression(member) => {
+                    matches!(member.property.name.as_str(), "query" | "execute")
+                }
+                Expression::ComputedMemberExpression(member) => {
+                    matches!(member.expression.get_inner_expression(), Expression::StringLiteral(name) if matches!(name.value.as_str(), "query" | "execute"))
+                }
+                _ => false,
+            };
+        }
         if matches!(&node.callee,Expression::Identifier(name) if name.name == "require") {
             if let Some(Argument::StringLiteral(source)) = node.arguments.first() {
                 self.import(&source.value, false);
@@ -1344,16 +1794,39 @@ impl<'a> Visit<'a> for Facts<'_> {
         walk::walk_call_expression(self, node);
     }
     fn visit_string_literal(&mut self, node: &StringLiteral<'a>) {
-        self.candidate(node.value.to_string(), node.span.start, node.span.end);
+        self.candidate(
+            node.value.to_string(),
+            node.span.start,
+            node.span.end,
+            "string",
+            false,
+        );
     }
     fn visit_template_literal(&mut self, node: &TemplateLiteral<'a>) {
+        let interpolated = !node.expressions.is_empty();
+        self.syntax.has_interpolated_templates |= interpolated;
         let text = node
             .quasis
             .iter()
-            .map(|part| part.value.raw.as_str())
+            .map(|part| {
+                if interpolated {
+                    part.value.raw.as_str()
+                } else {
+                    part.value
+                        .cooked
+                        .as_ref()
+                        .map_or(part.value.raw.as_str(), |value| value.as_str())
+                }
+            })
             .collect::<Vec<_>>()
             .join("?");
-        self.candidate(text, node.span.start, node.span.end);
+        self.candidate(
+            text,
+            node.span.start,
+            node.span.end,
+            "template",
+            interpolated,
+        );
         if !node.expressions.is_empty() {
             let start = node.span.start as usize + 1;
             let end = node.span.end as usize - 1;
@@ -1373,7 +1846,7 @@ impl<'a> Visit<'a> for Facts<'_> {
                     .collect::<String>();
                 text.replace_range(hole_start..hole_end, &masked);
             }
-            self.candidate(text, node.span.start, node.span.end);
+            self.candidate(text, node.span.start, node.span.end, "template", true);
         }
         walk::walk_template_literal(self, node);
     }
@@ -1463,5 +1936,24 @@ impl<'a> VisitMut<'a> for RuntimeProjection<'a> {
             pending.extend(literals.values);
         }
         *node = TSType::new_ts_any_keyword(node.span(), &AstBuilder::new(self.allocator));
+    }
+}
+
+fn js_after_trivia(mut text: &str) -> &str {
+    loop {
+        text = text.trim_start();
+        if let Some(comment) = text.strip_prefix("/*") {
+            if let Some(end) = comment.find("*/") {
+                text = &comment[end + 2..];
+                continue;
+            }
+        }
+        if text.starts_with("//") {
+            if let Some(end) = text.find('\n') {
+                text = &text[end + 1..];
+                continue;
+            }
+        }
+        return text;
     }
 }
