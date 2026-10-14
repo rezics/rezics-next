@@ -175,3 +175,140 @@ export const OperatorSearchPhone: Story = {
 export const OperatorSearchDesktop: Story = {
   args: { persona: 'operator' }, globals: desktop, play: searchPlay('operator', false, false),
 };
+
+type ReachedAnswer = SearchAnswer & { items: { labels?: { value: string }[] }[] };
+
+function windowNumber(label: string): number {
+  return label === searchLabel ? 1 : Number(label.slice('distant-episode-window-'.length));
+}
+
+/** The search window in this visit that lists the distant episode. */
+function reachedSearch(persona: AnswerPersona) {
+  const visible = record.personas[persona]
+    .filter(item => item.status === 200 && (item.label === searchLabel || /^distant-episode-window-\d+$/.test(item.label)))
+    .sort((left, right) => windowNumber(left.label) - windowNumber(right.label))
+    .find(item => ((item.answer as ReachedAnswer).items ?? []).length > 0);
+  if (!visible) throw new Error(`missing recorded distant episode for ${persona}`);
+  return visible;
+}
+
+function contentsLabelForSearch(label: string): string {
+  return label === searchLabel ? 'selected-language-contents' : `distant-episode-contents-${windowNumber(label)}`;
+}
+
+/** The page's contents read, then the inventory read, for the window that shows the distant episode. */
+function RecordedReachedEpisode({ persona, header = false }: { persona: AnswerPersona; header?: boolean }) {
+  const [view, setView] = useState<BooksContentsRecordedView>({ kind: 'loading' });
+  useEffect(() => {
+    const chosen = reachedSearch(persona);
+    const contents = recordedSample(persona, contentsLabelForSearch(chosen.label));
+    const { work, actingSubject } = identityOf(chosen.path);
+    const cursor = new URL(chosen.path, 'https://recorded.invalid').searchParams.get('cursor') ?? undefined;
+    const replay = recordedFetch(record, persona, [
+      ...(header ? [{ label: 'work-header', state: 'populated' as const }] : []),
+      { label: contents.label, state: contents.status === 200 ? 'populated' as const : 'error' as const },
+      { label: chosen.label, state: 'populated' },
+    ], { pathPrefix: BFF_PREFIX });
+    let mounted = true;
+    const main = browserMainApi(window.location.origin, { anonymous: !actingSubject, fetcher: replay.fetcher });
+    const host = { main, ...(actingSubject ? { actingSubject } : {}) };
+    void (async () => {
+      const readHeader = header ? await booksEditionReads(host).readWorkHeader(work) : null;
+      if (readHeader && !readHeader.ok) throw new Error(readHeader.failure);
+      await main.v1.works({ id: work }).contents.get({
+        query: { actingSubject, language: 'en', ...(cursor ? { cursor } : {}) },
+      });
+      const next = await readContentsInventory(host, {
+        workId: work, workRef: work, workIri: iriOf(work), locale: 'en', language: 'en',
+        q: enteredLabel(chosen.path), cursor, title: readHeader?.ok ? readHeader.data.title : null,
+      });
+      if (mounted) setView(next);
+    })().catch((error: unknown) => {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
+    });
+    return () => { mounted = false; replay.dispose(); };
+  }, [persona, header]);
+  return <PageContainer>
+    <BooksContentsRecordedPage view={view} locale="en" messages={messages.en} />
+  </PageContainer>;
+}
+
+function reachedPlay(persona: AnswerPersona, phoneWidth: boolean, titled: boolean): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const chosen = reachedSearch(persona);
+    const answer = chosen.answer as ReachedAnswer;
+    const q = enteredLabel(chosen.path);
+    const cursor = new URL(chosen.path, 'https://recorded.invalid').searchParams.get('cursor');
+    const work = answer.work.slice(-36);
+    await expect(canvas.findByText(q)).resolves.toBeVisible();
+    await expect(canvas.findByText(`${answer.count.value} on this page`)).resolves.toBeVisible();
+    const region = canvas.getByRole('region', { name: 'Contents' });
+    const search = within(region).getByRole('search', { name: 'Search contents' });
+    await expect(within(search).getByRole('searchbox', { name: 'Search contents' })).toHaveValue(q);
+    await expect(search).toHaveAttribute('action', localizedPath(workHref(work, 'contents'), 'en'));
+    if (cursor) {
+      const href = within(region).getByRole('link', { name: 'First page' }).getAttribute('href') ?? '';
+      await expect(href).toContain('q=');
+      await expect(href).not.toContain('cursor=');
+    }
+    const next = within(region).queryByRole('link', { name: 'Next page' });
+    if (answer.complete) await expect(next).toBeNull();
+    else await expect(next?.getAttribute('href') ?? '').toContain('cursor=');
+    await expect(canvas.queryByRole('heading', { name: 'Nothing to read yet' })).toBeNull();
+    if (titled) {
+      const title = (recordedSample('owner', 'work-header').answer as { title: { value: string } }).title.value;
+      await expect(within(region).getByText(title)).toBeVisible();
+    }
+    if (phoneWidth) await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  };
+}
+
+export const VisitorReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'visitor' }, globals: phone, play: reachedPlay('visitor', true, false),
+};
+export const VisitorReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'visitor' }, globals: desktop, play: reachedPlay('visitor', false, false),
+};
+export const StrangerReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'stranger' }, globals: phone, play: reachedPlay('stranger', true, false),
+};
+export const StrangerReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'stranger' }, globals: desktop, play: reachedPlay('stranger', false, false),
+};
+export const MemberReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'member' }, globals: phone, play: reachedPlay('member', true, false),
+};
+export const MemberReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'member' }, globals: desktop, play: reachedPlay('member', false, false),
+};
+export const OwnerReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'owner', header: true }, globals: phone, play: reachedPlay('owner', true, true),
+};
+export const OwnerReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'owner', header: true }, globals: desktop, play: reachedPlay('owner', false, true),
+};
+export const ModeratorReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'moderator' }, globals: phone, play: reachedPlay('moderator', true, false),
+};
+export const ModeratorReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'moderator' }, globals: desktop, play: reachedPlay('moderator', false, false),
+};
+export const OperatorReachedPhone: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'operator' }, globals: phone, play: reachedPlay('operator', true, false),
+};
+export const OperatorReachedDesktop: StoryObj<typeof RecordedReachedEpisode> = {
+  render: args => <RecordedReachedEpisode {...args} />,
+  args: { persona: 'operator' }, globals: desktop, play: reachedPlay('operator', false, false),
+};

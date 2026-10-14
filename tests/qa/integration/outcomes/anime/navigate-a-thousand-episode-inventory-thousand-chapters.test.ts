@@ -10,6 +10,7 @@ import {
 } from '../../../../../scripts/lib/oauth-client.ts';
 import inventory from '../../../../../scripts/qa/cases/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -26,7 +27,8 @@ type Page = {
   count: { value: number; kind: string; total: null };
   search?: { status: string };
 };
-setDefaultTimeout(120_000);
+// Each persona records the contents walk, every inventory page and the search that reaches the distant episode.
+setDefaultTimeout(300_000);
 let sessions: PersonaSessions;
 let published: Work;
 let privateWork: Work;
@@ -46,6 +48,54 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const raw = await response.text();
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
+}
+
+type ProductionAnswer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
+
+/**
+ * The browser's Main client, recording each request the contents page sends.
+ * A moved first page is the reader's one retry, under the same call.
+ */
+function productionClient(name: PersonaName, person: PersonaSession) {
+  const sample = recording.session(name, person);
+  const used = new Set<string>();
+  let label = 'production';
+  const main = browserMainApi('https://recorded.invalid', {
+    anonymous: !person.actingSubject,
+    fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) {
+        throw new Error(`Expected the Main browser boundary: ${url.pathname}`);
+      }
+      const chosen = used.has(label) ? `${label}-retry` : label;
+      used.add(chosen);
+      const raw = await request.text();
+      return sample(chosen, request.method, url.pathname.slice(BFF_PREFIX.length) + url.search,
+        raw ? JSON.parse(raw) as unknown : undefined,
+        request.headers.get('idempotency-key') ?? undefined);
+    }) as typeof fetch,
+  });
+  const host = { main, actingSubject: person.actingSubject ?? undefined };
+  return {
+    host,
+    read<T>(next: string, call: () => Promise<T>): Promise<T> {
+      label = next;
+      return call();
+    },
+  };
+}
+
+/** Reading-position query in the page's key order. The page size stays 100. */
+function inventoryQuery(person: PersonaSession, fields: { q?: string; cursor?: string; limit?: number }) {
+  return {
+    position: 'start' as const,
+    language: 'en',
+    ...(fields.q ? { q: fields.q } : {}),
+    ...(fields.limit !== undefined ? { limit: fields.limit } : {}),
+    ...(fields.cursor ? { cursor: fields.cursor } : {}),
+    ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
+  };
 }
 
 beforeAll(async () => {
@@ -287,33 +337,47 @@ async function navigate(name: PersonaName) {
   try {
     const person = await readingSession(sessions[name]);
     const sample = recording.session(name, person);
+    const production = productionClient(name, person);
     const path = `/v1/reading-positions/${short(published.work)}`;
+    const workId = short(published.work);
     const read = (fields: Record<string, string> = {}, label?: string) =>
       answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
         : person.main('GET', `${path}?${query(person, fields)}`));
     nextPart('contents-page', ['GET /v1/works/{id}, /v1/works/{id}/contents (all pages), /v1/reading-positions/{id} (preview and search)']);
-    await contentsPageReads(name, sample, person);
+    await contentsPageReads(name, sample, person, production);
     nextPart('credits', ['GET /v1/works/{id}/credits, /v1/main-versions/{id}/native-variants']);
     await credit(person, published, sample);
     nextPart('inventory', ['GET /v1/reading-positions/{id}?position=start&limit=100 (all pages)']);
+    // The page reads contents, then the inventory, at the selected language. One prelude covers the first window.
+    await production.read('selected-language-contents', () => production.host.main.v1.works({ id: workId }).contents.get({
+      query: { actingSubject: person.actingSubject ?? undefined, language: 'en' },
+    }));
     const seen: string[] = [];
     let cursor: string | null = null;
     let pages = 0;
     let restarts = 0;
     do {
       expect(++pages).toBeLessThan(1100);
-      const response = await person.main(
-        'GET',
-        `${path}?${query(person, { limit: '100', ...(cursor ? { cursor } : {}) })}`,
-      );
-      if (response.status === 409) {
-        expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
+      if (cursor) {
+        const pageCursor = cursor;
+        await production.read(`inventory-contents-${pages}`, () => production.host.main.v1.works({ id: workId }).contents.get({
+          query: { actingSubject: person.actingSubject ?? undefined, language: 'en', cursor: pageCursor },
+        }));
+      }
+      const loaded = await production.read(`inventory-read-${pages}`, () => production.host.main.v1['reading-positions']({ work: workId }).get({
+        query: inventoryQuery(person, { limit: 100, cursor: cursor ?? undefined }),
+      }));
+      if (loaded.error?.status === 409) {
+        expect(loaded.error.value).toMatchObject({ code: 'read_basis_changed' });
         expect(++restarts).toBeLessThan(20);
         seen.length = 0;
         cursor = null;
         continue;
       }
-      const page = await answer<Page>(Promise.resolve(response));
+      if (loaded.error || !loaded.data) {
+        throw new Error(`${name} inventory-read-${pages} ${loaded.error?.status}: ${JSON.stringify(loaded.error?.value).slice(0, 400)}`);
+      }
+      const page = loaded.data as Page;
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.complete).toBe(page.nextCursor === null);
       seen.push(...page.items.map((item) => item.occurrence));
@@ -330,15 +394,23 @@ async function navigate(name: PersonaName) {
       let searchPages = 0;
       do {
         expect(++searchPages).toBeLessThan(1100);
-        const fields = {
-          q,
-          limit: '100',
-          ...(searchCursor ? { cursor: searchCursor } : {}),
-        };
-        const page = await read(fields, searchPages === 1 ? 'distant-episode-search' : undefined);
-        // A search can scan empty windows before finding the distant episode.
-        // Retain its successful page as well as its first window for the story.
-        if (page.items.length) await read(fields, 'distant-episode-match');
+        // One visit follows the cursor this search returned. The first window is not requested again,
+        // and the page that shows the episode is that continuation, not a second sample.
+        if (searchCursor) {
+          const pageCursor = searchCursor;
+          await production.read(`distant-episode-contents-${searchPages}`, () =>
+            production.host.main.v1.works({ id: workId }).contents.get({
+              query: { actingSubject: person.actingSubject ?? undefined, language: 'en', cursor: pageCursor },
+            }));
+        }
+        const label = searchPages === 1 ? 'distant-episode-search' : `distant-episode-window-${searchPages}`;
+        const loaded = await production.read(label, () => production.host.main.v1['reading-positions']({ work: workId }).get({
+          query: inventoryQuery(person, { q, limit: 100, cursor: searchCursor ?? undefined }),
+        }));
+        if (loaded.error || !loaded.data) {
+          throw new Error(`${name} ${label} ${loaded.error?.status}: ${JSON.stringify(loaded.error?.value).slice(0, 400)}`);
+        }
+        const page = loaded.data as Page;
         expect(page.search).toEqual({ status: 'current' });
         expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
         expect(page.complete).toBe(page.nextCursor === null);
@@ -386,8 +458,16 @@ async function navigate(name: PersonaName) {
   } finally { elapsed(); }
 }
 
-// Copy the contents route's own reads, including the inventory builder's key order.
-async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession) {
+type ContentsLevel = {
+  composition: string; compositionRevision: string; version: string;
+  items: { occurrence: string; parent: string; role: string; target: string; availability: string;
+    number: null; division: null; selectedRevision: null; progress: null; displayLabel: string; inclusion: string }[];
+  nextCursor: string | null; count: { value: number; kind: string; total: null };
+};
+
+// The contents route follows each cursor without adding a limit. The read's own page size stays in force.
+async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRecorder['session']>, person: PersonaSession,
+  production: ReturnType<typeof productionClient>) {
   const id = short(published.work);
   const viewer = new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
   const suffix = viewer.size ? `?${viewer}` : '';
@@ -399,14 +479,15 @@ async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRe
   let revision: string | null = null;
   do {
     expect(++pages).toBeLessThanOrEqual(50);
-    const fields = new URLSearchParams({ limit: '20', ...(cursor ? { cursor } : {}),
-      ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) });
-    const page = await answer<{ composition: string; compositionRevision: string; version: string;
-      items: { occurrence: string; parent: string; role: string; target: string; availability: string;
-        number: null; division: null; selectedRevision: null; progress: null; displayLabel: string; inclusion: string }[];
-      nextCursor: string | null; count: { value: number; kind: string; total: null } }>(
-      sample(pages === 1 ? 'contents-read' : `contents-read-continuation-${pages}`, 'GET',
-        pages === 1 ? `/v1/works/${id}/contents${suffix}` : `/v1/works/${id}/contents?${fields}`));
+    const label = pages === 1 ? 'contents-read' : `contents-read-continuation-${pages}`;
+    const loaded: ProductionAnswer<ContentsLevel> = await production.read(label, () =>
+      production.host.main.v1.works({ id }).contents.get({
+        query: { actingSubject: person.actingSubject ?? undefined, ...(cursor ? { cursor } : {}) },
+      }));
+    if (loaded.error || !loaded.data) {
+      throw new Error(`${name} ${label} ${loaded.error?.status}: ${JSON.stringify(loaded.error?.value).slice(0, 400)}`);
+    }
+    const page = loaded.data;
     expect(page.version).toBe(published.mainVersion);
     revision ??= page.compositionRevision;
     expect(page.compositionRevision).toBe(revision);
@@ -425,20 +506,6 @@ async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRe
   } while (cursor);
   expect(seen).toEqual(occurrences);
   expect(new Set(seen).size).toBe(1000);
-  const inventoryQuery = (q?: string, cursor?: string) => new URLSearchParams({
-    position: 'start',
-    language: 'en',
-    ...(q ? { q } : {}),
-    limit: '100',
-    ...(cursor ? { cursor } : {}),
-    ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
-  });
-  const read = (label: string, q?: string, cursor?: string) =>
-    answer<Page>(sample(label, 'GET', `/v1/reading-positions/${id}?${inventoryQuery(q, cursor)}`));
-  const first = await read('contents-first-page');
-  if (first.nextCursor) await read('contents-continuation', undefined, first.nextCursor);
-  const search = await read('contents-search-first-window', 'Episode 1000 重逢');
-  if (search.nextCursor) await read('contents-search-continuation', 'Episode 1000 重逢', search.nextCursor);
 }
 
 // ConnectionsPage, WorkFrameView and the series/episode panels read these alongside the positions inventory.
