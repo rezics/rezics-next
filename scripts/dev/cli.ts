@@ -23,6 +23,7 @@ import { forgetQaStack, rememberQaStack, qaStartupServices, QA_STACK_TIER } from
 import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData } from '../fixture/migrate.ts';
 import { withQaStackStartup, type StartupMemoryOptions } from '../qa/memory-admission.ts';
 import { runHostAdmission } from '../qa/host-admission.ts';
+import { dockerUnavailableMessage } from '../load/docker-env.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -59,7 +60,7 @@ function runtimeEnv(): NodeJS.ProcessEnv {
     run('docker', ['info', '--format', '{{.ServerVersion}}']);
     return process.env;
   } catch {
-    throw new Error('Docker is unavailable. Start Docker Desktop with `systemctl --user start docker-desktop`, then retry.');
+    throw new Error(`${dockerUnavailableMessage(process.env)}, then retry.`);
   }
 }
 
@@ -313,7 +314,8 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
     try {
       await startDevCompose(root, composeProcessEnvironment(env, config.composeEnv), options.profile,
         timeout => compose(options,
-          ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, timeout));
+          ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, timeout),
+        { project: projectName(options) });
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
     } catch (error) {

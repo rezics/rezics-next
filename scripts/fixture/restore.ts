@@ -189,7 +189,7 @@ export async function restoreFixture(id: string, target: string,
         const up = await startRestoredFixture(budget, env, timeout => spawnSync('docker',
           composeArgs(`rezics-qa-${target}`, envFile,
             ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])]),
-          { cwd: root, env, encoding: 'utf8', timeout }));
+          { cwd: root, env, encoding: 'utf8', timeout }), { project: `rezics-qa-${target}` });
         const log = [up.stdout, up.stderr, up.error?.message].filter((part): part is string => Boolean(part)).map(part => redactCommandOutput(part)).join('\n');
         writeFileSync(join(artifacts, attempt === 1 ? 'stack-up.log' : `stack-up-${attempt}.log`), log);
         if (!up.error && up.status === 0) return;
