@@ -60,19 +60,22 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
       data-slot="checkbox"
       {...rest}
     >
-      <ArkCheckbox.Control
-        className={children ? checkboxVariants() : 'relative size-full'}
-        data-slot="checkbox-control"
-      >
-        <CheckboxIndicator>
-          <CheckIcon />
-        </CheckboxIndicator>
+      <span className={cn('relative inline-flex shrink-0', !children && 'size-full')}>
+        <ArkCheckbox.Control
+          className={children ? checkboxVariants() : 'relative size-full'}
+          data-slot="checkbox-control"
+        >
+          <CheckboxIndicator>
+            <CheckIcon />
+          </CheckboxIndicator>
 
-        <CheckboxIndicator indeterminate>
-          <MinusIcon />
-        </CheckboxIndicator>
+          <CheckboxIndicator indeterminate>
+            <MinusIcon />
+          </CheckboxIndicator>
+        </ArkCheckbox.Control>
+        {/* Ark's visual control is aria-hidden; the native input must remain its sibling. */}
         <CheckboxHiddenInput tabIndex={tabIndex} />
-      </ArkCheckbox.Control>
+      </span>
 
       {children ? <ArkCheckbox.Label>{children}</ArkCheckbox.Label> : null}
 
