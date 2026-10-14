@@ -6,6 +6,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
@@ -28,6 +29,7 @@ public class WorkStructurePublicationGuardTest {
     private static final String RECEIPT = "urn:rezics:receipt:work-publication-head-test";
     private static final String ADMISSION = "00000000-0000-4000-8000-000000000007";
     private static final String ROOT = "urn:rezics:sha256:" + "a".repeat(64);
+    private static final String OBSERVATION = "https://rezics.com/id/00000000-0000-4000-8000-000000000009";
 
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
@@ -84,6 +86,91 @@ public class WorkStructurePublicationGuardTest {
             + " } GRAPH " + nt(CommandPolicy.RECEIPTS) + " { " + nt(RECEIPT)
             + " a rv:OperationReceipt } } WHERE { GRAPH " + nt(CommandPolicy.CURRENT) + " { "
             + nt(subject) + " " + predicate + " ?value } }";
+    }
+
+    private static void put(DatasetGraph data, String graph, String subject, String property, Node value) {
+        data.deleteAny(uri(graph), uri(subject), p(property), Node.ANY);
+        data.add(uri(graph), uri(subject), p(property), value);
+    }
+
+    private static List<CommandService.Validation> focuses(String workProfile, String decisionProfile,
+        String sourceProfile) {
+        return java.util.stream.IntStream.range(0, 3).mapToObj(i -> {
+            String profile = List.of(workProfile, decisionProfile, sourceProfile).get(i);
+            return new CommandService.Validation(profile, null,
+                "https://rezics.com/definition/" + profile + "/" + List.of("work-shape", "decision-shape", "source-shape").get(i),
+                List.of(List.of(WORK, DECISION, SOURCE).get(i)),
+                List.of(i == 0 ? CommandPolicy.CURRENT : CommandPolicy.REVISIONS), Map.of());
+        }).toList();
+    }
+
+    private static void bindReceipt(DatasetGraph data) {
+        String revisions = CommandPolicy.REVISIONS, receipts = CommandPolicy.RECEIPTS;
+        data.add(uri(receipts), uri(RECEIPT), RDF.type.asNode(), p("OperationReceipt"));
+        put(data, receipts, RECEIPT, "outcome", p("Succeeded"));
+        put(data, receipts, RECEIPT, "work", uri(WORK));
+        put(data, receipts, RECEIPT, "publicationDecision", uri(DECISION));
+        put(data, receipts, RECEIPT, "mainVersion", uri(MAIN));
+        put(data, receipts, RECEIPT, "action", NodeFactory.createLiteralString("work.publish"));
+        put(data, receipts, RECEIPT, "commandFamily", NodeFactory.createLiteralString("work-structure-publication-v1"));
+        var identity = Map.of("attestedBy", uri(MAIN), "admissionId", NodeFactory.createLiteralString(ADMISSION),
+            "admittedScope", NodeFactory.createLiteralString("work:publish:" + WORK),
+            "authorityEpoch", NodeFactory.createLiteralString("0"), "requestDigest", NodeFactory.createLiteralString("b".repeat(64)),
+            "datasetId", uri("urn:rezics:dataset:product"), "dataEpoch", NodeFactory.createLiteralString(ADMISSION),
+            "sequence", NodeFactory.createLiteralByValue(1, org.apache.jena.datatypes.xsd.XSDDatatype.XSDinteger));
+        for (String field : identity.keySet()) {
+            Node value = identity.get(field);
+            put(data, revisions, DECISION, field, value);
+            put(data, receipts, RECEIPT, field, value);
+            if (List.of("dataEpoch", "sequence").contains(field))
+                put(data, CommandPolicy.CONTROL, "urn:rezics:dataset:product", field, value);
+        }
+        for (String field : List.of("structure", "structureProfile", "structureRevision", "selectedGeneration", "sourceRoot"))
+            put(data, receipts, RECEIPT, field, data.find(uri(revisions), uri(SOURCE), p(field), Node.ANY).next().getObject());
+        for (String field : List.of("rightsBasis", "disclosure"))
+            put(data, receipts, RECEIPT, field, data.find(uri(revisions), uri(DECISION), p(field), Node.ANY).next().getObject());
+    }
+
+    @Test public void truthfulPublicDomainPoststateAdmitsOnlyConsistentV2FocusesAndExactReceiptBindings() {
+        DatasetGraph data = publication();
+        data.begin(ReadWrite.WRITE);
+        try {
+            String v1 = "work-structure-publication-v1", v2 = "work-structure-publication-v2";
+            String revisions = CommandPolicy.REVISIONS, receipts = CommandPolicy.RECEIPTS;
+            for (String field : List.of("modelRevision", "shapeRevision"))
+                put(data, revisions, DECISION, field, uri("https://rezics.com/definition/" + v2));
+            put(data, revisions, DECISION, "rightsBasis", p("PublicDomain"));
+            for (String subject : List.of(DECISION, SOURCE))
+                put(data, revisions, subject, "sourceObservation", uri(OBSERVATION));
+            bindReceipt(data);
+            put(data, receipts, RECEIPT, "sourceObservation", uri(OBSERVATION));
+            assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, focuses(v2, v2, v2), Set.of(WORK)));
+            assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            for (String profile : List.of(v1, "work-structure-publication-v3"))
+                assertNotNull(CommandService.workStructurePublicationHeadScope(data, WORK,
+                    focuses(profile, profile, profile), Set.of(WORK)));
+            for (var mixed : List.of(focuses(v1, v2, v2), focuses(v2, v1, v2), focuses(v2, v2, v1)))
+                assertNotNull(CommandService.workStructurePublicationHeadScope(data, WORK, mixed, Set.of(WORK)));
+            for (String field : List.of("attestedBy", "admissionId", "admittedScope", "authorityEpoch", "requestDigest",
+                "datasetId", "dataEpoch", "sequence", "rightsBasis", "disclosure", "sourceObservation", "work",
+                "publicationDecision", "mainVersion", "structure", "structureProfile", "structureRevision",
+                "selectedGeneration", "sourceRoot", "action", "commandFamily")) {
+                Node original = data.find(uri(receipts), uri(RECEIPT), p(field), Node.ANY).next().getObject();
+                put(data, receipts, RECEIPT, field, uri(MAIN));
+                assertNotNull(field, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, receipts, RECEIPT, field, original);
+            }
+            for (String subject : List.of(DECISION, SOURCE)) {
+                put(data, revisions, subject, "sourceObservation", uri(MAIN));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, revisions, subject, "sourceObservation", uri(OBSERVATION));
+                data.add(uri(revisions), uri(subject), p("sourceObservation"), uri(MAIN));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                data.deleteAny(uri(revisions), uri(subject), p("sourceObservation"), Node.ANY);
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, revisions, subject, "sourceObservation", uri(OBSERVATION));
+            }
+        } finally { data.abort(); data.end(); data.close(); }
     }
 
     private static String publicationScopeAfterUpdate(DatasetGraph data, String subject, String update,
