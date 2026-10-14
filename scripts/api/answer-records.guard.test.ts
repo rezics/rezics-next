@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { beforeAll, expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -38,6 +39,7 @@ test('the inventory guard catches a renamed operation and a changed answer field
   const original = JSON.parse(readFileSync(join(root, relative), 'utf8')) as AnswerRecord;
   mkdirSync(join(root, '.temp/answer-record-guard'), { recursive: true });
   const scratch = mkdtempSync(join(root, '.temp/answer-record-guard/run-'));
+  expect(spawnSync('git', ['init', '-q', scratch]).status).toBe(0);
   const file = join(scratch, relative);
   try {
     mkdirSync(dirname(file), { recursive: true });

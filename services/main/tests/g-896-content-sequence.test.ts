@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -12,7 +13,7 @@ test('G-896: no writer advances the Content owner position or appends outside th
   // Only content.sequence_events (migration 791) numbers events; writers append
   // through appendContentEvent, which keeps one event per receipt and no position.
   const unexpected: string[] = [];
-  for await (const path of new Bun.Glob('services/**/src/**/*.ts').scan({ cwd: root })) {
+  for await (const path of repositoryGlob(root, 'services/**/src/**/*.ts')) {
     const source = readFileSync(resolve(root, path), 'utf8');
     const advances = [...source.matchAll(/UPDATE\s+content\.owner_control\s+SET\s+sequence\s*=/gi)].length
       + [...source.matchAll(/\.update\(ownerControl\)/g)].length;

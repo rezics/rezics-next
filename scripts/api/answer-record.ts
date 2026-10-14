@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../lib/repository-files.ts';
 import { Compile, type Validator, type XSchema } from 'typebox/schema';
 import { Settings } from 'typebox/system';
 import { readFileSync } from 'node:fs';
@@ -311,7 +312,7 @@ function answerType(value: unknown): string {
 /** Inventory validation must receive a contract freshly generated from the candidate tree. */
 export function answerRecordViolations(root: string, contract: AnswerContract): string[] {
   const validator = new AnswerRecordValidator(contract);
-  return [...new Bun.Glob('tests/qa/fixtures/outcomes/**/*.json').scanSync({ cwd: root })].sort().flatMap(file => {
+  return [...repositoryGlob(root, 'tests/qa/fixtures/outcomes/**/*.json')].sort().flatMap(file => {
     try {
       const record = validator.validate(JSON.parse(readFileSync(resolve(root, file), 'utf8')) as unknown);
       const row = file.slice('tests/qa/fixtures/outcomes/'.length, -'.json'.length);

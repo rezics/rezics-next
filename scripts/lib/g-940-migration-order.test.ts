@@ -1,5 +1,6 @@
+import { repositoryGlob } from './repository-files.ts';
 import { expect, test } from 'bun:test';
-import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
 import { compareMigrationPaths, migrationVersion } from './migration-order.ts';
@@ -22,7 +23,7 @@ function temporaryRoot() {
 
 test('G-940: numeric migration order preserves every existing owner version', () => {
   for (const directory of Object.values(migrationDirectories)) {
-    const files = readdirSync(join(root, directory)).filter((name) => name.endsWith('.sql'));
+    const files = repositoryGlob(join(root, directory), '*.sql');
     expect([...files].sort(compareMigrationPaths).map(migrationVersion)).toEqual(
       files.map(migrationVersion).sort((left, right) => left - right),
     );

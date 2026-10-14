@@ -1,5 +1,5 @@
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { expect, test } from 'bun:test';
-import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The release migrator refuses two files with one number in a directory, but QA
@@ -16,7 +16,7 @@ const directories = [
 test('every migration directory numbers each file uniquely', () => {
   const duplicates = directories.flatMap(directory => {
     const seen = new Map<string, string[]>();
-    for (const file of readdirSync(join(root, directory)).filter(name => name.endsWith('.sql'))) {
+    for (const file of repositoryGlob(join(root, directory), '*.sql')) {
       const number = /^(\d+)_/.exec(file)?.[1];
       if (!number) continue;
       seen.set(number, [...seen.get(number) ?? [], file]);

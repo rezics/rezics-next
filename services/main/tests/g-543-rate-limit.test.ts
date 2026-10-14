@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -30,7 +31,7 @@ test('G-543: every current OpenAPI operation has an explicit policy and path bou
   }
   const migrations = resolve(import.meta.dir, '../migrations/access');
   let admittedFamilies: string[] = [];
-  for (const file of [...new Bun.Glob('*.sql').scanSync({ cwd: migrations })].sort(compareMigrationPaths)) {
+  for (const file of [...repositoryGlob(migrations, '*.sql')].sort(compareMigrationPaths)) {
     const sql = readFileSync(join(migrations, file), 'utf8');
     if (!/CREATE TABLE access\.rate_limit_v1|ALTER TABLE access\.rate_limit_v1 ADD CONSTRAINT rate_limit_v1_family_check/.test(sql)) continue;
     const check = /CHECK\s*\(family IN\s*\(([^)]+)\)\)/.exec(sql);

@@ -1,10 +1,11 @@
+import { fileURLToPath } from 'node:url';
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { expect, test } from 'bun:test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 
 test('authentication wrappers have one admitted subject capability and no legacy derivation', () => {
   const directory = new URL('../src/', import.meta.url);
-  const cookieParsers = readdirSync(directory, { recursive: true })
-    .filter(file => typeof file === 'string' && file.endsWith('.ts'))
+  const cookieParsers = repositoryGlob(fileURLToPath(directory), '**/*.ts')
     .filter(file => /\.get\(\s*['"]cookie['"]\s*\)|\bparseCookies\s*\(/.test(
       readFileSync(new URL(String(file), directory), 'utf8')));
   expect(cookieParsers).toEqual(['authentication-cookies.ts']);
