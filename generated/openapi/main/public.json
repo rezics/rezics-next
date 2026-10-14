@@ -313516,6 +313516,10 @@
             "schema": {
               "anyOf": [
                 {
+                  "const": "urn:rezics:context:global",
+                  "type": "string"
+                },
+                {
                   "const": "urn:rezics:media:context:default",
                   "type": "string"
                 },
@@ -323803,7 +323807,20 @@
                     "type": "boolean"
                   },
                   "context": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:media:context:default",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -323839,7 +323856,20 @@
                     "type": "boolean"
                   },
                   "context": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:media:context:default",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -323875,7 +323905,20 @@
                     "type": "boolean"
                   },
                   "context": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
+                        "const": "urn:rezics:media:context:default",
+                        "type": "string"
+                      },
+                      {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      }
+                    ]
                   },
                   "occurrence": {
                     "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
@@ -600893,6 +600936,10 @@
             "schema": {
               "anyOf": [
                 {
+                  "const": "urn:rezics:context:global",
+                  "type": "string"
+                },
+                {
                   "const": "urn:rezics:media:context:default",
                   "type": "string"
                 },
@@ -601448,6 +601495,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -601509,6 +601560,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -601569,6 +601624,10 @@
                   },
                   "context": {
                     "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
                       {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
@@ -620888,6 +620947,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -620989,6 +621052,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -621089,6 +621156,10 @@
                   },
                   "context": {
                     "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
                       {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
@@ -621920,6 +621991,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -621972,6 +622047,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -622023,6 +622102,10 @@
                   },
                   "context": {
                     "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
                       {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
@@ -624850,6 +624933,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -624891,6 +624978,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -624931,6 +625022,10 @@
                   },
                   "context": {
                     "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
                       {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
@@ -625731,6 +625826,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -625798,6 +625897,10 @@
                   "context": {
                     "anyOf": [
                       {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
+                      {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
                       },
@@ -625864,6 +625967,10 @@
                   },
                   "context": {
                     "anyOf": [
+                      {
+                        "const": "urn:rezics:context:global",
+                        "type": "string"
+                      },
                       {
                         "const": "urn:rezics:media:context:default",
                         "type": "string"
