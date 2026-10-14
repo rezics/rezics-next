@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { treaty } from '@elysia/eden';
 import type { MainApp } from '@rezics/main/app';
+import { spaceHref } from '../address/path.ts';
 import { discussionListHref, realmDiscussionReads } from './discussion-read.ts';
 
 test('board and thread continuations are independent selections, with the reader retained', async () => {
@@ -26,9 +27,9 @@ test('board and thread continuations are independent selections, with the reader
 });
 
 test('board links preserve the selected Concept and content language without mixing opaque cursors', () => {
-  const url = new URL(discussionListHref('/r/garden', { sort: 'top', window: 'all', concept: 'https://rezics.com/id/concept',
+  const url = new URL(discussionListHref(spaceHref('garden', 'community'), { sort: 'top', window: 'all', concept: 'https://rezics.com/id/concept',
     language: 'ja', cursor: 'thread/+==', boardsCursor: 'board/+==' }), 'https://contract.invalid');
-  expect(url.pathname).toBe('/r/garden/discussions');
+  expect(url.pathname).toBe(`${spaceHref('garden', 'community')}/discussions`);
   expect(Object.fromEntries(url.searchParams)).toEqual({ sort: 'top', t: 'all', concept: 'https://rezics.com/id/concept',
     language: 'ja', cursor: 'thread/+==', boardsCursor: 'board/+==' });
 });

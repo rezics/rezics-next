@@ -5,6 +5,7 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import admission from '../../../../tests/qa/fixtures/outcomes/realm/membership-and-admission.json';
 import closure from '../../../../tests/qa/fixtures/outcomes/realm/closure-threads-and-replies.json';
 import type { UiLocale } from '../../i18n/define.ts';
+import { spaceHref } from '../address/path.ts';
 import { spaceAccessApi } from '../manage/settings-api.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { PageContainer } from '../shell/page.tsx';
@@ -38,7 +39,7 @@ function RecordedEntry({ persona, state, locale }: { persona: AnswerPersona; sta
       if (resolved.kind === 'missing') content = <RealmNotFound messages={messages} />;
       else if (resolved.kind === 'unavailable') content = <RealmUnavailable messages={messages} failure={resolved.failure} reference={resolved.reference} />;
       else if (resolved.kind === 'join') content = <RealmJoinPage page={resolved.page} locale={locale}
-        here={`/r/${replay.key}`} actingSubject={actingSubject ?? null} persist={false}
+        here={spaceHref(replay.key, 'community')} actingSubject={actingSubject ?? null} persist={false}
         api={spaceAccessApi(() => replay.personal, resolved.page.space, resolved.page.id, actingSubject ?? '')} />;
       else throw new Error('The recorded landing unexpectedly disclosed a private Realm');
       setShown({ state, persona, locale, content });

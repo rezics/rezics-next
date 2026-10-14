@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
+import { spaceHref, threadHref } from '../address/path.ts';
 import { storyThread } from '../feed/thread-fixtures.ts';
 import { mergeThreadPage, threadContinuationHref } from './thread-pages.ts';
 
 test('a route fallback retains the exact sibling cursor, order and language', () => {
-  const url = new URL(threadContinuationHref('/r/garden/discussions/reply', 'sort=new&language=ja', 'siblings/+=='), 'https://contract.invalid');
+  const url = new URL(threadContinuationHref(threadHref(spaceHref('garden', 'community'), storyThread.focus), 'sort=new&language=ja', 'siblings/+=='), 'https://contract.invalid');
   expect(Object.fromEntries(url.searchParams)).toEqual({ sort: 'new', language: 'ja', cursor: 'siblings/+==' });
 });
 

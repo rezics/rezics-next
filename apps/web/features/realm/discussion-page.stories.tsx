@@ -16,6 +16,7 @@ import es from '../feed/messages/es.ts';
 import { memoryThreads, storyRealm, storyThread, storyThreads, THREAD_NOW } from '../feed/thread-fixtures.ts';
 import type { ThreadRead, ThreadsPage } from '../feed/thread.ts';
 import type { Loaded } from '../feed/types.ts';
+import { zoneContentText } from '../language/untagged.ts';
 import { communityZone } from '../zones/fixtures.ts';
 import { DiscussionBoards, DiscussionListContent, DiscussionListSkeleton } from './discussion-content.tsx';
 import { realmDiscussionReads, type BoardPage } from './discussion-read.ts';
@@ -82,7 +83,7 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
   if (loaded?.state === state && !loaded.page.ok && loaded.page.failure === 'missing') return <RealmNotFound messages={messages} />;
   if (thread?.state === state && !thread.read.ok && thread.read.failure === 'missing') return <RealmNotFound messages={messages} />;
   const zone = { ...communityZone(locale), realm: storyRealm.id,
-    name: { value: storyRealm.name, lang: 'en', dir: 'ltr' as const },
+    name: zoneContentText(storyRealm.name, 'en'),
     links: { home: realmHref(locale, realm), browse: '', works: '',
       discussions: realmHref(locale, realm, 'discussions'), decisions: realmHref(locale, realm, 'decisions'),
       about: realmHref(locale, realm, 'about') } };
