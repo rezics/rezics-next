@@ -210,6 +210,8 @@ export const isolatedIntegrationFileList = [
   // Account-ending probes retain native names and refresh the catalogue index.
   'tests/qa/integration/person-ended-typeahead.test.ts',
   'tests/qa/integration/person-ended-name-search.test.ts',
+  // Deployment-designation revocation must not end later files' publication assignment.
+  'tests/qa/integration/review/source-publication-authority.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
