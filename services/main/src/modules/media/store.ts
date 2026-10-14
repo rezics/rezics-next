@@ -556,7 +556,7 @@ export class MediaStore {
     const ids = references.map(reference => nativeId.test(reference) ? reference.slice(ID.length) : null);
     const rows = (await this.summaryConnection().query(`WITH requested AS (
       SELECT * FROM unnest($1::text[],$2::uuid[]) AS q(reference,id))
-      SELECT q.reference,a.owner,s.disclosure,requested_use.id IS NOT NULL AS exact_use,
+      SELECT q.reference,a.id AS asset,a.owner,s.disclosure,requested_use.id IS NOT NULL AS exact_use,
         COALESCE(requested_use.operation_id LIKE 'structure-instruction:%',false) AS structure_instruction,
         EXISTS (SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id
           AND j.profile=$3 AND j.status IN ('queued','leased')) AS pending,
@@ -589,7 +589,7 @@ export class MediaStore {
           WHERE requested_use.id IS NULL AND slot.attachment_asset_id=a.id
           LIMIT 65) u
       ) attachment ON true`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
-    return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,
+    return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string, asset: row.asset as string,
       disclosure: row.disclosure as string, exactUse: row.exact_use as boolean,
       structureInstruction: row.structure_instruction as boolean,
       pending: row.pending as boolean, blocked: row.blocked as boolean,

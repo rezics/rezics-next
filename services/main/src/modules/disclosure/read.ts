@@ -941,7 +941,11 @@ async function evaluateSelections(env: WorkActivationEnvironment, selections: re
   // Governance still checks the Asset. Its audience comes from the exact Use
   // receipt the ancestry owner issued for this occurrence, never Asset inventory.
   const mediaAllowed = await mediaVisibility(env, selectedTargets, viewer, selections.map(selection => {
-    if (isLegacy(selection.ancestry)) return { reference: selection.target.resource, exactUse: false };
+    if (isLegacy(selection.ancestry)) {
+      const occurrence = selection.target.occurrence;
+      return selection.target.owner === 'media' && occurrence?.owner === 'media' && occurrence.kind === 'media-use'
+        ? { reference: occurrence.resource, exactUse: true } : { reference: selection.target.resource, exactUse: false };
+    }
     const basis = selection.ancestry.relationshipBasis;
     const exactUse = selection.target.owner === 'media' && basis.owner === 'media' && basis.kind === 'media-use';
     return { reference: exactUse ? basis.resource : selection.target.resource, exactUse };

@@ -1,4 +1,4 @@
-import { documentText, parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { documentText, parseDocument, type DocumentSnapshot } from '@rezics/document';
 import { validateContentExtensions } from './adoption.ts';
 
 export { CONTENT_TEXT_COST, checkedContentText } from './text.ts';
@@ -63,7 +63,7 @@ export function authoredDocumentBody(input: AuthoredBodyInput, maxTextBytes = 65
     throw new Error('provide exactly one body or document');
   }
   const document = input.document === undefined ? undefined
-    : parseDocument(JSON.parse(serializeDocument(parseDocument(input.document))));
+    : parseDocument(JSON.parse(JSON.stringify(parseDocument(input.document))));
   if (document) validateContentExtensions(document);
   const body = document ? documentText(document) : input.body!;
   if (typeof body !== 'string' || body.includes('\0')
@@ -71,7 +71,7 @@ export function authoredDocumentBody(input: AuthoredBodyInput, maxTextBytes = 65
     || Buffer.from(body, 'utf8').toString('utf8') !== body) {
     throw new Error('invalid text body');
   }
-  if (document && Buffer.byteLength(serializeDocument(document), 'utf8') > 1_000_000) {
+  if (document && Buffer.byteLength(JSON.stringify(document), 'utf8') > 1_000_000) {
     throw new Error('document exceeds revision size');
   }
   return { body, ...(document ? { document } : {}) };

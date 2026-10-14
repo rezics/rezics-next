@@ -29,7 +29,8 @@ export function instructionAdoptionTriples(source: string, adoptions: readonly I
 /** Only a current public Work adoption grants public delivery; history is not authority. */
 export async function readPublicInstructionAdoptions(env: WorkActivationEnvironment,
   selection: { work?: string; revision?: string; contentRevision?: string; target?: string;
-    mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[] }, viewer?: Viewer):
+    mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[] }, viewer?: Viewer,
+  admittedWorks?: ReadonlySet<string>):
   Promise<InstructionAdoption[]> {
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?work ?occurrence ?target ?selector ?use WHERE {
@@ -51,7 +52,7 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
     } LIMIT 4097`, 2 * 1024 * 1024)).results?.bindings ?? [];
   if (rows.length > 4096) throw new PublicationUnavailable('Instruction adoption inventory exceeds its bound');
   const works = [...new Set(rows.flatMap(row => row.work?.value ? [row.work.value] : []))];
-  const allowed = await admittedPublicWorks(env, works, viewer);
+  const allowed = admittedWorks ?? await admittedPublicWorks(env, works, viewer);
   return rows.flatMap(row => {
     if (!allowed.has(row.work?.value ?? '') || !row.occurrence || !row.target || !row.selector) return [];
     const selector = JSON.parse(row.selector.value) as ExactInstructionSelector;

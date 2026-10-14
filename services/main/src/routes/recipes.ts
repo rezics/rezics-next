@@ -571,12 +571,14 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .get('/v1/recipes/:id/export', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: ref, revision: t.Optional(ref),
+      query: t.Object({ actingSubject: t.Optional(ref), revision: t.Optional(ref),
         format: t.Optional(t.Union([t.Literal('native'), t.Literal('schema-org')])) }, { additionalProperties: false }),
       response: { 200: t.Any(), 413: problemResult(413), ...problems } },
     async ({ request, params, query }: { request: Request; params: { id: string };
-      query: { actingSubject: string; revision?: string; format?: 'native' | 'schema-org' } }) => {
+      query: { actingSubject?: string; revision?: string; format?: 'native' | 'schema-org' } }) => {
       try {
+        await work.account.verify(request, ['work:read']);
+        if (!query.actingSubject) return problem(400, 'invalid_request', 'actingSubject is required');
         const structure = `https://rezics.com/id/${params.id}`;
         const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1 });

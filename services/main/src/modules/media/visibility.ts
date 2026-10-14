@@ -59,7 +59,8 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     const uses = [...facts].filter(([, fact]) => fact.exactUse && fact.structureInstruction)
       .map(([reference]) => reference.slice('https://rezics.com/id/'.length));
     const grantedUses = new Set(uses.length ? (await readPublicInstructionAdoptions(deps.environment,
-      { mediaUses: uses }, viewer)).flatMap(item => item.mediaUse ? [`https://rezics.com/id/${item.mediaUse}`] : []) : []);
+      { mediaUses: uses }, viewer, new Set([...facts.values()].flatMap(fact => fact.attachments.map(item => item.target)))))
+      .flatMap(item => item.mediaUse ? [`https://rezics.com/id/${item.mediaUse}`] : []) : []);
     const audience = audiences.get(viewer);
     const principal = audience?.principal,
       actor = audience?.actor;
@@ -177,6 +178,8 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       const fact = facts.get(probe.reference);
       // A media target may name a Work for governance rather than an Asset or Use.
       if (!fact) return !probe.exactUse;
+      if (probe.exactUse && fact.asset && ![probe.reference, `https://rezics.com/id/${fact.asset}`,
+        ...fact.attachments.map(item => item.target)].includes(target.resource)) return false;
       // An exact Use must still be attached, including mutable selection slots.
       if ((probe.exactUse || fact.exactUse) && fact.attachments.length !== 1) return false;
       if (fact.blocked) return false;
@@ -194,7 +197,9 @@ export async function mediaVisibility(
   env: WorkActivationEnvironment,
   targets: readonly DisclosureTarget[],
   viewer: Viewer,
-  probes: readonly MediaVisibilityProbe[] = targets.map(target => ({ reference: target.resource, exactUse: false })),
+  probes: readonly MediaVisibilityProbe[] = targets.map(target => target.owner === 'media'
+    && target.occurrence?.owner === 'media' && target.occurrence.kind === 'media-use'
+    ? { reference: target.occurrence.resource, exactUse: true } : { reference: target.resource, exactUse: false }),
 ) {
   const gate = (env as MediaEnvironment)[gateOwner];
   if (!gate) return Object.assign(targets.map(() => true), { cost: { mediaStatements: 0 } });
@@ -208,6 +213,7 @@ export async function mediaVisibility(
 
 export interface MediaVisibilityFact {
   owner: string;
+  asset?: string;
   /** Actual owner lookup distinguished a Use from its Asset inventory. */
   exactUse?: boolean;
   structureInstruction?: boolean;

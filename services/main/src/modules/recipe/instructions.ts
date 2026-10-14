@@ -17,11 +17,12 @@ export const isAdoptedInstruction = (record: OccurrenceRecord) =>
 
 /** Hydrates only this bounded page, deduplicating revisions without deduplicating ordered uses. */
 export async function readRecipeInstructions(session: WorkReadSession, records: readonly OccurrenceRecord[],
-  cut?: { work: string; revision: string }):
+  cut?: { work: string; revision: string; admitted?: true }):
   Promise<RecipeInstruction[]> {
   const adopted = records.filter(isAdoptedInstruction);
   const instructions: RecipeInstruction[] = [];
-  const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment, cut) : Promise.resolve([]);
+  const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment, cut, session.viewer,
+    cut.admitted ? new Set([cut.work]) : undefined) : Promise.resolve([]);
   const adoptions = adopted.some(record => record.selection?.mode === 'fixed-revision'
     && record.selection.selector?.grain === 'representation') ? await readAdoptions() : [];
   if (adoptions.length) session.observeDependency(`recipe-instruction-adoptions:${cut?.revision}`, adoptions, readAdoptions);
@@ -51,9 +52,21 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
     } else {
       const adoption = adoptions.find(item => item.occurrence === record.occurrence && item.target === record.target
         && JSON.stringify(item.selector) === JSON.stringify(selector));
-      if (adoption?.mediaUse && await session.deps.media?.store.itemDelivery(adoption.mediaUse)) {
-        instruction.status = 'available';
-        instruction.mediaUse = adoption.mediaUse;
+      if (adoption?.mediaUse && session.deps.media) {
+        const use = adoption.mediaUse;
+        const read = () => session.deps.media!.store.presentation.metadata([{ representation: selector.representation, use }]);
+        const metadata = await read();
+        session.observeDependency(`recipe-instruction-media:${use}`, metadata, read);
+        const occurrence = { owner: 'media' as const, kind: 'media-use' as const,
+          resource: `https://rezics.com/id/${use}`, revision: `https://rezics.com/id/${use}` };
+        const allowed = metadata[0] && (await session.disclosure([
+          { owner: 'media', resource: `https://rezics.com/id/${use}`, component: 'media_use', occurrence },
+          { owner: 'media', resource: `https://rezics.com/id/${metadata[0].metadata.asset}`, component: 'cover', occurrence },
+        ], 'media')).every(decision => decision === 'visible');
+        if (allowed) {
+          instruction.status = 'available';
+          instruction.mediaUse = use;
+        }
       }
     }
     instructions.push(instruction);

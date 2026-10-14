@@ -1,6 +1,16 @@
 import { expect, test } from 'bun:test';
 import { fromPlainText, serializeDocument, type JsonValue } from '@rezics/document';
 import { authoredDocumentBody, retainedDocumentBody, authoredPostNotes, retainedPostNotes } from '../src/document-body.ts';
+
+test('Content custody retains the authored snapshot without adding editor defaults', () => {
+  const document = { version: 'rezics-document-v1' as const, profile: 'blocks' as const,
+    doc: { type: 'doc', content: [{ type: 'paragraph', attrs: { id: 'authored' },
+      content: [{ type: 'text', text: 'Exact original wording.' }] }] } };
+  const saved = authoredDocumentBody({ document });
+  expect(saved.document).toEqual(document);
+  expect(saved.document).not.toBe(document);
+  expect(retainedDocumentBody(saved)).toEqual(saved);
+});
 import { resolveParagraphSelector } from '../src/comments.ts';
 
 test('Post notes keep two separate document bodies, including absent and empty parts', () => {

@@ -1477,13 +1477,14 @@ export async function changeComposition(env: WorkActivationEnvironment,
     && operation.target ? [operation.target] : []))];
   const resourceTargets = targets.filter(target => !isCatalogTarget(registration, target)
     && target !== intent.newWork?.work);
-  if (resourceTargets.length) {
+  const graphTargets = resourceTargets.filter(target => NATIVE_ID.test(target));
+  if (graphTargets.length) {
     const found = await env.fuseki.query(`PREFIX rv: <${RV}> SELECT DISTINCT ?target WHERE {
-      VALUES ?target { ${resourceTargets.map(iri).join(' ')} }
+      VALUES ?target { ${graphTargets.map(iri).join(' ')} }
       GRAPH ${iri(GRAPHS.current)} { ?target ?targetPredicate ?targetObject . }
     }`);
     const available = new Set((found.results?.bindings ?? []).map(row => row.target?.value));
-    if (resourceTargets.some(target => !available.has(target))) {
+    if (graphTargets.some(target => !available.has(target))) {
       throw new CompositionUnavailable('chapter target is unavailable');
     }
   }
@@ -1697,7 +1698,7 @@ export async function changeComposition(env: WorkActivationEnvironment,
       GRAPH ${iri(GRAPHS.current)} { ${iri(header.structure)} rv:structureHead ${iri(intent.expectedHead)} ;
         rv:selectedGeneration ${iri(header.generation)} .
         ${iri(header.generation)} rv:placementCount ${header.placementCount} . }
-      ${resourceTargets.map((target, index) => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
+      ${graphTargets.map((target, index) => `FILTER EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(target)} ?targetPredicate${index} ?targetObject${index} . } }`).join('\n')}
       ${targetInvariant?.guard ?? ''}
       ${chapter ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
