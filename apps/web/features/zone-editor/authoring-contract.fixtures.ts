@@ -1,4 +1,5 @@
-import { fromPlainText } from '@rezics/document';
+import { documentText, fromPlainText } from '@rezics/document';
+import { direction } from '@rezics/main/language';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { collectionPreview } from './home-modules.fixtures.ts';
 
@@ -58,7 +59,7 @@ export function authoringContractRequests(state: AuthoringContractState) {
     writes: [
       { method: 'POST', path: '/v1/content-drafts', body: { profile: 'content-text-v1', resourceId: contractHome,
         variantId: contractVariant, expectedHead: contractBasis.revisionId, language: { kind: 'tag', tag: 'ja', originalTag: 'ja' },
-        direction: 'ltr', document: state === 'pending-save' ? contractUnsavedDocument : contractDocument, actingSubject } },
+        direction: direction('ja', documentText(state === 'pending-save' ? contractUnsavedDocument : contractDocument)), document: state === 'pending-save' ? contractUnsavedDocument : contractDocument, actingSubject } },
       { method: 'POST', path: `${root}/site-publications`, body: { expectedHead: contractHead,
         routesRevision: contractNavigation, navigationRevision: contractNavigation, pages: [selectedPage], actingSubject } },
       ...(['retirements', 'recoveries'] as const).map(action => ({ method: 'POST', path: `${root}/${action}`,
@@ -85,7 +86,7 @@ export function authoringContractClient(state: AuthoringContractState) {
   preview.publicationStatus = state === 'empty' ? 'private' : 'behind';
   const configuration = { zone: iri(1101), space: iri(1102), state: state === 'retired' ? 'retired' : 'active',
     homeDocument: contractHome, presentation: preview.presentation };
-  const configured = { zone: iri(1101), revision: contractHead, name: 'Retained Agent garden', language: 'ja', direction: 'ltr',
+  const configured = { zone: iri(1101), revision: contractHead, name: 'Retained Agent garden', language: 'ja', direction: direction('ja', 'Retained Agent garden'),
     configuration, cost: { graphReads: 1, objectReads: 1 } };
   const receipt = { ...manifest.writes[1]!.body, outcome: 'succeeded', zone: iri(1101), revision: contractNextHead,
     themeRevision: contractHead, homeDocument: contractHome, homeRevision: iri(1118),
@@ -120,7 +121,7 @@ export function authoringContractClient(state: AuthoringContractState) {
       if (path.endsWith('/showcase-editor')) return Response.json({ ...configured, preview, slideMedia: [],
         draft: { variantId: contractVariant, revisionId: state === 'empty' ? null : savedBasis.revisionId,
           document: state === 'empty' ? null : savedDocument, byteDigest: state === 'empty' ? null : savedBasis.byteDigest,
-          language: { kind: 'tag', tag: 'ja', originalTag: 'ja' }, direction: 'ltr', editable: true,
+          language: { kind: 'tag', tag: 'ja', originalTag: 'ja' }, direction: direction('ja', documentText(savedDocument)), editable: true,
           sourcePosition: { owner: 'content', dataEpoch: savedBasis.contentEpoch, sequence: '4' } },
         publishedPage: state === 'empty' ? null : { page: contractHome, variantId: contractVariant,
           revisionId: contractCompetingRevision } });

@@ -42,18 +42,18 @@ function scenario(state: AuthoringContractState, viewport: 'phone' | 'desktop', 
         await expect(canvas.getByRole('heading', { name: copy.previewTitle })).toBeVisible();
       } else if (state === 'retired') {
         await expect(await canvas.findByRole('button', { name: copy.lifecycleRecover })).toBeVisible();
-        await expect(canvas.queryByRole('link', { name: copy.sectionHome, exact: true })).toBeNull();
+        await expect(canvas.queryByRole('link', { name: copy.sectionHome })).toBeNull();
       } else {
         await expect(await canvas.findByRole('textbox', { name: copy.editorLabel })).toBeVisible();
         if (state === 'pending-save' || state === 'pending-publication') {
-          await userEvent.click(canvas.getByRole('button', { name: state === 'pending-save' ? copy.save : copy.publish, exact: true }));
+          await userEvent.click(canvas.getByRole('button', { name: state === 'pending-save' ? copy.save : copy.publish }));
           await expect(await canvas.findByText(copy.commandPending)).toBeVisible();
           await expect(canvas.queryByText(copy.unavailableBody)).toBeNull();
           await userEvent.click(canvas.getByRole('button', { name: copy.checkConfirmation }));
           await expect(await canvas.findByText(state === 'pending-save' ? copy.savedReplayed : copy.publishedReplayed)).toBeVisible();
         }
         if (state === 'replayed-after-competition') {
-          await userEvent.click(canvas.getByRole('button', { name: copy.publish, exact: true }));
+          await userEvent.click(canvas.getByRole('button', { name: copy.publish }));
           await expect(await canvas.findByText(copy.publishedReplayed)).toBeVisible();
           await expect(canvas.getByText(copy.statusBehind)).toBeVisible();
           await userEvent.click(canvas.getByText(copy.receiptTitle, { selector: 'summary' }));

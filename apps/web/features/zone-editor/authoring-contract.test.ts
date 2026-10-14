@@ -4,7 +4,7 @@ import { commandLane } from '../api/command.ts';
 import { browserZoneAuthoring, browserZoneRealmAttachment, commitCommand, loadCompleteZoneNavigation, zoneCommandLane,
   type PublishedSite, type SavedDraft, type WriteResult } from './api.ts';
 import { readZoneAuthoring, readZoneManagementFrame } from './authoring-reads.ts';
-import { authoringContractClient, contractActor, contractManagementKey, contractBasis, contractDocument, contractHead, contractSavingAgent,
+import { authoringContractClient, contractActor, contractManagementKey, contractBasis, contractDocument, contractHead, contractHome, contractSavingAgent,
   contractZoneId, type AuthoringContractState } from './authoring-contract.fixtures.ts';
 import { publicationChoice, publicationStatus, reduceEditor, reopenEditorDraft } from './model.ts';
 import { loadSavedPreviewFrame } from './saved-preview-frame.ts';
