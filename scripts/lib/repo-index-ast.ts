@@ -134,6 +134,32 @@ export function indexedSourceFile(
     }) as ts.Node;
     wrappers.set(raw, node);
     const view = node as unknown as Record<string, unknown>;
+    let leaf = false;
+    if (raw.type === 'Identifier' || raw.type === 'PrivateIdentifier') {
+      view.text =
+        raw.type === 'PrivateIdentifier' ? `#${String(raw.name).replace(/^#/, '')}` : raw.name;
+      leaf = true;
+    } else if (raw.type === 'Literal') {
+      view.kind =
+        typeof raw.value === 'string'
+          ? ts.SyntaxKind.StringLiteral
+          : typeof raw.value === 'number'
+            ? ts.SyntaxKind.NumericLiteral
+            : raw.value === true
+              ? ts.SyntaxKind.TrueKeyword
+              : raw.value === false
+                ? ts.SyntaxKind.FalseKeyword
+                : ts.SyntaxKind.NullKeyword;
+      view.text = String(raw.value);
+      leaf = true;
+    } else if (raw.type === 'OmittedExpression') {
+      view.getText = () => '';
+      leaf = true;
+    } else if (raw.type === 'TemplateElement') leaf = true;
+    // Value leaves need no lazy child/parameter adapters. Typed identifiers
+    // still expose annotation/decorator syntax to full typed-template walks.
+    if (leaf && !raw.typeAnnotation && !(raw.decorators as unknown[] | undefined)?.length)
+      return node;
     const child = (value: unknown): unknown => {
       if (Array.isArray(value)) return value.map(child);
       if (value && typeof value === 'object' && 'type' in value && 'start' in value)
@@ -160,27 +186,6 @@ export function indexedSourceFile(
       });
     };
     const rename = (key: string, value: unknown) => get(key, value);
-    if (raw.type === 'Identifier' || raw.type === 'PrivateIdentifier')
-      set(
-        'text',
-        raw.type === 'PrivateIdentifier' ? `#${String(raw.name).replace(/^#/, '')}` : raw.name,
-      );
-    if (raw.type === 'Literal') {
-      set(
-        'kind',
-        typeof raw.value === 'string'
-          ? ts.SyntaxKind.StringLiteral
-          : typeof raw.value === 'number'
-            ? ts.SyntaxKind.NumericLiteral
-            : raw.value === true
-              ? ts.SyntaxKind.TrueKeyword
-              : raw.value === false
-                ? ts.SyntaxKind.FalseKeyword
-                : ts.SyntaxKind.NullKeyword,
-      );
-      set('text', String(raw.value));
-    }
-    if (raw.type === 'OmittedExpression') set('getText', () => '');
     if (raw.type === 'MemberExpression') {
       set(
         'kind',

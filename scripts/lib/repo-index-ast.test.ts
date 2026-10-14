@@ -51,6 +51,13 @@ test('native byte offsets map across sparse Unicode boundaries', () => {
   expect([0, 3, 5, 8, 12, 13].map(offset)).toEqual([0, 3, 4, 5, 7, 8]);
 });
 
+test('typed identifier annotations remain visible inside SQL templates', () => {
+  const text = "db.query(`SELECT ${((value: 'SELECT * FROM access.missing') => 1)('x')}`);";
+  expect(sourceRelations({ file: 'typed-parameter.ts', text }, schemas)).toEqual([
+    { file: 'typed-parameter.ts', line: 1, relation: 'access.missing' },
+  ]);
+});
+
 test('constructor, accessor and parameter-property views preserve TypeScript names', () => {
   const nodes = indexedSourceNodes({
     file: 'class.ts',
