@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { Pool } from 'pg';
 import { readEnv, savePrivate } from '../../../scripts/dev/config.ts';
@@ -42,12 +42,14 @@ function producerFiles(): string[] {
     if (path === 'scripts/qa/core.ts' || files.has(path)) return;
     const absolute = resolve(root, path);
     if (relative(root, absolute).startsWith('..')) throw new Error('producer dependency escapes checkout');
+    if (!statSync(absolute).isFile()) throw new Error(`producer digest input is not a file: ${path}`);
     files.add(path);
     if (!path.endsWith('.ts')) return;
     for (const match of readFileSync(absolute, 'utf8').matchAll(/(?:from|import)\s*['"](\.[^'"]+)['"]/g)) {
       const target = resolve(dirname(absolute), match[1]!);
-      if (existsSync(target)) visit(relative(root, target));
+      if (existsSync(target) && statSync(target).isFile()) visit(relative(root, target));
       else if (existsSync(`${target}.ts`)) visit(relative(root, `${target}.ts`));
+      else if (existsSync(join(target, 'index.ts'))) visit(relative(root, join(target, 'index.ts')));
     }
   };
   const walk = (directory: string) => {
@@ -61,7 +63,7 @@ function producerFiles(): string[] {
   for (const path of ['tests/qa/fault-recovery/retained-content-source-support.ts', 'yarn.lock',
     'package.json', 'services/main/package.json', 'services/content/package.json', 'infra/dev/compose.yaml']) visit(path);
   for (const directory of ['services/content/migrations', 'services/main/migrations/access',
-    'services/main/migrations/relay', 'packages/model/src', 'model', 'infra/jena', 'infra/fuseki']) walk(directory);
+    'services/main/migrations/relay', 'packages/model/src', 'model', 'infra/jena']) walk(directory);
   return [...files].sort();
 }
 
