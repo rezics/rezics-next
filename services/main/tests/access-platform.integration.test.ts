@@ -8,6 +8,7 @@ import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/su
 import { Elysia } from 'elysia';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { AccessExposure } from '../src/modules/access/exposure.ts';
+import { operationExposures } from '../../../generated/openapi/main/exposure.ts';
 import { bindPlatformExposure } from '../src/modules/access/exposure-routes.ts';
 import { AccessGrants } from '../src/modules/access/grants.ts';
 import { AccessGroups, GroupDenied } from '../src/modules/access/groups.ts';
@@ -177,6 +178,64 @@ const call = (path: string, token?: string, body?: unknown, key = randomUUID()) 
     }),
   );
 const saved = () => `/v1/me/saved-filters?actingSubject=${encodeURIComponent(reader.actor)}`;
+
+test('opened summaries use the owner for anonymous callers without a database read', async () => {
+  const disconnected = new Pool({ max: 1 });
+  const connect = spyOn(disconnected, 'connect');
+  try {
+    const subset = new AccessExposure(disconnected, {
+      REZICS_PLATFORM_OPEN_GROUPS: 'saved-views,realm-appeals,saved-views',
+    });
+    const anonymous = await subset.summary();
+    expect(anonymous.groups).toEqual(['realm-appeals', 'saved-views']);
+    expect(anonymous.operations).toEqual([]);
+    const route = platformAccessRoutes({ platformAccess: subset } as MainWorkDependencies);
+    const response = await route.handle(new Request('http://main.test/v1/me/platform-access'));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual(anonymous);
+    const reordered = new AccessExposure(disconnected, {
+      REZICS_PLATFORM_OPEN_GROUPS: 'realm-appeals,saved-views',
+    });
+    expect(await reordered.summary()).toEqual(anonymous);
+    const other = new AccessExposure(disconnected, { REZICS_PLATFORM_OPEN_GROUPS: 'events' });
+    expect((await other.summary()).generation).not.toBe(anonymous.generation);
+    const wildcard = new AccessExposure(disconnected, { REZICS_PLATFORM_OPEN_GROUPS: '*' });
+    expect((await wildcard.summary()).groups).toEqual([...new Set(Object.values(operationExposures)
+      .filter((value) => value.startsWith('platform:'))
+      .map((value) => value.slice('platform:'.length)))].sort());
+    expect(connect).not.toHaveBeenCalled();
+  } finally {
+    connect.mockRestore();
+    await disconnected.end();
+  }
+});
+
+test('an oversized deployment group union fails at construction', () => {
+  const groups = Array.from({ length: 129 }, (_, index) => `group-${index}`);
+  expect(() => new AccessExposure(pool, { REZICS_PLATFORM_OPEN_GROUPS: groups.join(',') }))
+    .toThrow('Platform summary group budget exceeded');
+});
+
+test('opened groups union grants on cached summaries and participate in generation', async () => {
+  const recipient = await person();
+  for (const action of ['platform:use:saved-views', 'platform:use:events', 'platform:use:getV1Contract']) {
+    await grants.platform.create(await context(), randomUUID(), action,
+      { principalId: recipient.id }, null, receipt());
+  }
+  const closed = new AccessExposure(pool, { REZICS_PLATFORM_OPEN_GROUPS: '' });
+  const subset = new AccessExposure(pool, { REZICS_PLATFORM_OPEN_GROUPS: 'saved-views,realm-appeals' });
+  const other = new AccessExposure(pool, { REZICS_PLATFORM_OPEN_GROUPS: 'saved-views' });
+  const summary = await subset.summary(recipient.principal);
+  expect(summary.groups).toEqual(['events', 'realm-appeals', 'saved-views']);
+  expect(summary.operations).toEqual(['getV1Contract']);
+  expect(await subset.summary(recipient.principal)).toEqual(summary);
+  summary.groups.push('mutated');
+  expect((await subset.summary(recipient.principal)).groups).not.toContain('mutated');
+  expect((await closed.summary(recipient.principal)).generation).not.toBe(summary.generation);
+  expect((await other.summary(recipient.principal)).generation).not.toBe(summary.generation);
+  await pool.query('UPDATE access.principal SET active=false WHERE id=$1', [recipient.id]);
+  expect(await subset.summary(recipient.principal)).toEqual(await subset.summary());
+});
 
 test('ordinary and anonymous summaries are empty; saved views open, revoke and expire with their grants', async () => {
   const anonymous = await call('/v1/me/platform-access');

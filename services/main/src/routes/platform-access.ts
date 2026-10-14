@@ -31,7 +31,7 @@ export function platformAccessRoutes(work: MainWorkDependencies) {
         if (principal && !work.platformAccess)
           throw new PlatformAccessUnavailable('Platform access is unavailable');
         const summary =
-          principal && work.platformAccess
+          work.platformAccess
             ? await work.platformAccess.summary(principal)
             : anonymousPlatformAccess();
         return Response.json(summary, { headers: { 'cache-control': 'private, no-store' } });

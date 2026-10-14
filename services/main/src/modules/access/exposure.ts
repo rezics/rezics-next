@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import type { Pool } from 'pg';
 import type { VerifiedPrincipal } from './admission.ts';
 import type { RateLimitFamily } from '../rate-limit/budgets.ts';
+import { operationExposures } from '../../../../../generated/openapi/main/exposure.ts';
 import {
   defaultPlatformOpenGroups,
   PLATFORM_OPEN_GROUPS,
@@ -84,10 +85,32 @@ interface CachedSummary {
 export class AccessExposure {
   private readonly cache = new Map<string, CachedSummary>();
   private readonly openGroups: PlatformOpenGroups | undefined;
+  private readonly openedGroups: string[];
   /** An explicit environment, including an empty value, stays closed and does
    * not consult the QA stack file. The default follows the process, then that file. */
   constructor(private readonly pool: Pool, env?: NodeJS.ProcessEnv) {
     this.openGroups = env ? readPlatformOpenGroups(env) : defaultPlatformOpenGroups();
+    const declaredGroups = Object.values(operationExposures)
+      .filter((value) => value.startsWith('platform:'))
+      .map((value) => value.slice('platform:'.length));
+    this.openedGroups = [...new Set(this.openGroups === '*' ? declaredGroups : this.openGroups ?? [])].sort();
+    // Validate the deployment's possible declared-group union before serving requests.
+    if (new Set([...declaredGroups, ...this.openedGroups]).size > 128)
+      throw new Error('Platform summary group budget exceeded');
+  }
+
+  private generation(value: unknown[]): string {
+    return createHash('sha256')
+      .update(JSON.stringify(this.openedGroups.length ? [...value, this.openedGroups] : value))
+      .digest('hex');
+  }
+
+  private anonymousSummary(): ExposureSummary {
+    return {
+      groups: [...this.openedGroups],
+      operations: [],
+      generation: this.openedGroups.length ? this.generation(['anonymous']) : 'anonymous',
+    };
   }
 
   groupOpened(exposure: Exposure | undefined): boolean {
@@ -97,7 +120,7 @@ export class AccessExposure {
   /** One exact principal/generation read on a cache hit. Misses read only the
    * bounded platform grants, and expire at the earliest grant deadline. */
   async summary(principal?: VerifiedPrincipal): Promise<ExposureSummary> {
-    if (!principal) return anonymousPlatformAccess();
+    if (!principal) return this.anonymousSummary();
     const client = await this.pool.connect();
     try {
       await client.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
@@ -118,7 +141,7 @@ export class AccessExposure {
       ).rows[0];
       if (!identity) {
         await client.query('COMMIT');
-        return anonymousPlatformAccess();
+        return this.anonymousSummary();
       }
       const version = `${identity.enforcement_epoch}:${identity.authority_epoch}`;
       const cached = this.cache.get(identity.id);
@@ -135,18 +158,15 @@ export class AccessExposure {
             .map((action) => action.slice('platform:use:'.length)),
         ),
       ].sort();
-      const groups = use.filter((value) => /^[a-z][a-z0-9-]*$/.test(value));
-      const operations = use.filter((value) => !groups.includes(value));
+      const grantedGroups = use.filter((value) => /^[a-z][a-z0-9-]*$/.test(value));
+      const groups = [...new Set([...grantedGroups, ...this.openedGroups])].sort();
+      const operations = use.filter((value) => !grantedGroups.includes(value));
       if (operations.length > PLATFORM_COST.operations)
         throw new PlatformAccessUnavailable('Platform operation budget exceeded');
       const summary = {
         groups,
         operations,
-        generation: createHash('sha256')
-          .update(
-            JSON.stringify([version, permissions.map((p) => [p.id, p.generation, p.witness])]),
-          )
-          .digest('hex'),
+        generation: this.generation([version, permissions.map((p) => [p.id, p.generation, p.witness])]),
       };
       const expiresAt = Math.min(
         ...permissions.flatMap((p) => (p.valid_until ? [p.valid_until.getTime()] : [])),

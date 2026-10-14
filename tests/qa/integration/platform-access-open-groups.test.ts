@@ -281,14 +281,14 @@ test('Deployment visibility controls qualify real HTTP answers before expected s
 // are ordinary assertions, so an outage cannot qualify a summary defect.
 for (const configuration of ['subset', 'wildcard'] as const) {
   for (const persona of personaNames) {
-    test.failing(`Deployment ${configuration} summary reports opened groups for ${persona}`, () => {
+    test(`Deployment ${configuration} summary reports opened groups for ${persona}`, () => {
       assertGroups(`${configuration}/${persona}`);
     });
   }
 }
-test.failing('Deployment subset summary unions actual group grants without duplicates and retains operation grants', () => {
+test('Deployment subset summary unions actual group grants without duplicates and retains operation grants', () => {
   assertGroups('subset/member/granted');
 });
-test.failing('Deployment wildcard summary includes every declared group on the granted authenticated cache path', () => {
+test('Deployment wildcard summary includes every declared group on the granted authenticated cache path', () => {
   assertGroups('wildcard/member/granted');
 });
