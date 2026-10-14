@@ -216,6 +216,7 @@ export async function resourceCards(
         languages: session.displayLanguages,
         includeCollections: true,
         channel: 'search',
+        settleNonAgentNameOwners: 'includingAbsent',
       },
     );
   const summaries = refs.length ? await readSummaries() : null;

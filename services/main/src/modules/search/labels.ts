@@ -48,7 +48,7 @@ export async function publicNamePage(
     session.deps.environment.fuseki,
     session.deps.environment.lineage,
   );
-  const position = await labelIndexReady(session);
+  const position = shared ?? await labelIndexReady(session);
   const rows = await session.query(
     `SELECT ?page WHERE {
     BIND(rv:rankedText(rv:publicTitle, "", ${limit}, ${lit(after ? JSON.stringify(after) : '')},
@@ -117,7 +117,7 @@ export async function indexedLabels(
     session.deps.environment.fuseki,
     session.deps.environment.lineage,
   );
-  const position = await labelIndexReady(session);
+  const position = shared ?? await labelIndexReady(session);
   const phrase = q.normalize('NFC').trim().replace(/\s+/gu, ' ');
   if (!phrase || phrase.length > 80 || /[\u0000-\u001f\u007f]/u.test(phrase)) {
     throw new WorkReadInvalid('Search text is invalid');

@@ -185,7 +185,7 @@ afterAll(async () => {
 function storyQuery(kind: RealmSearchState, cursor?: string) {
   const fixture = realmSearchFixture(kind);
   return { ...fixture.query,
-    // The live corpus has two matching originals, not the story's sample title.
+    // Search the live originals, not the story's sample title, with a continuation.
     q: kind === 'empty' ? fixture.query.q : phrase, limit: 1,
     ...(fixture.state.scope.kind === 'realm'
       ? { context: { realm: sessions.realm }, scope: { kind: 'realm' as const, realm: sessions.realm } } : {}),
@@ -272,10 +272,13 @@ async function delivered(name: PersonaName) {
   expect(page.count).toEqual({ value: publications.length, precision: 'exact' });
   expect(page.next).toBeNull();
   expect(seen.sort()).toEqual(publications.map(publication => publication.work).sort());
-  const typeahead = await answer<unknown>(
-    person.main('GET', `/v1/search/typeahead?prefix=${encodeURIComponent(phrase)}`),
-  );
-  for (const publication of publications) expect(JSON.stringify(typeahead)).toContain(publication.work);
+  // Typeahead returns at most ten items. Narrow the public prefix for each
+  // original so the complete corpus assertion does not exceed that contract.
+  for (const [index, publication] of publications.entries()) {
+    const typeahead = await answer<unknown>(person.main('GET',
+      `/v1/search/typeahead?prefix=${encodeURIComponent(`${phrase} ${index} Lantern`)}`));
+    expect(JSON.stringify(typeahead)).toContain(publication.work);
+  }
   await independent(person);
 }
 
