@@ -118,7 +118,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     kind: 'recipes',
     capability: 'Collection tracking and progress',
     api: missing('gap', 'outcomes/recipes/collection-tracking-and-progress.test.ts fails in setup on POST /v1/work-publications for the original Recipe composition: retries retain HTTP 202 reconciling, phase work-publication, so no collection or progress assertion runs. Reproduced alone in QA 20261014t190047-f360f9-r2.'),
-    browser: missing('L21'),
+    browser: missing('L21', 'recipe-tracking.e2e.ts cannot prepare a public Recipe: the signed-in original author creates the Work and edits its composition, but POST /v1/work-publications (work-structure-publication-v1, publish) returns 202 then 403 authority_denied. Exact requests are in QA 20261014t203248-0c43b8 logs/e2e-playwright.log.'),
   },
   {
     kind: 'recipes',
