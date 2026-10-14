@@ -136,6 +136,12 @@ export class AgentPublicProfiles {
         WHERE account_issuer = $1 AND account_subject = $2 AND active FOR SHARE`,
       [principal.issuer, principal.subject])).rows[0];
       if (!actor) throw new AgentProfileDenied('Agent controller is unavailable');
+      const control = await client.query(`SELECT 1 FROM access.representation r
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
+        WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
+          AND r.active AND r.valid_until > clock_timestamp()
+        LIMIT 1 FOR SHARE OF r, s`, [actor.id, input.agent]);
+      if (control.rowCount !== 1) throw new AgentProfileDenied('Agent controller is unavailable');
       const receipt = receiptFor(actor.id, input.idempotencyKey);
       const digest = hash(JSON.stringify({ family: input.localizedName ? 'agent-public-profile-v2'
         : 'agent-public-profile-v1', agent: input.agent,
@@ -152,12 +158,6 @@ export class AgentPublicProfiles {
           revision: prior.revision, receipt, replayed: true,
           sourcePosition: { dataEpoch: prior.epoch, sequence: prior.sequence } };
       }
-      const control = await client.query(`SELECT 1 FROM access.representation r
-        JOIN access.authority_subject s ON s.id = r.subject_id AND s.active AND s.kind = 'agent'
-        WHERE r.principal_id = $1 AND r.subject_id = $2 AND r.action = 'agent.control'
-          AND r.active AND r.valid_until > clock_timestamp()
-        LIMIT 1 FOR SHARE OF r, s`, [actor.id, input.agent]);
-      if (control.rowCount !== 1) throw new AgentProfileDenied('Agent controller is unavailable');
       const current = await currentHead(this.env, input.agent);
       if (current.head !== input.expectedHead) throw new AgentProfileStale(current.head);
       let localizedName = input.localizedName;
