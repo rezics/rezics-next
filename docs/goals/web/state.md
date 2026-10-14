@@ -1,22 +1,19 @@
 # State
 
-Checkpoint ffc5c8ba-4e24-471e-af5a-7ec25523650b consolidates handled events
-task:G-2483:3, mail:21c70108-20bc-4185-9e11-a465e8078447,
-task:G-2491:1, task:G-2494:1,
-mail:3cc9c13e-93db-4df5-b85d-7beaa55f3ecf, task:G-2509:2,
-task:G-2488:1, mail:ee793453-f7d1-4448-8b15-bdacb81c9b8d,
-task:G-2236:3 and task:G-2495:1.
-Carry forward unaffected decisions from checkpoint a292ee0f. These events
-accept build delivery on wave/1 for G-2483/G-2491/G-2494/G-2509/G-2488/
-G-2236/G-2495; none proves a row or closes a task. G-2509's one transport
-retry completed without changing existing assertions. G-2236's two rows
-retain their production editor assertions and whole-visit records; Program
-has the missing-request inventory and stale-import reachability question.
-Program accepted G-2435's retained build and transferred game-progress to
-quiet-host prove: a repeated timeout becomes a moving-geometry fix task
-with that run's trace. G-2498's outcome/four-file prove registration and
-phone/desktop inspection are settled. G-2484's failed individual land
-requires no parser repair, repeat landing or worker attempt.
+Checkpoint 0d3305f1-edd2-4b14-b3a3-80e82cd61d37 consolidates handled events
+task:G-2487:1, task:G-2490:1 and
+mail:c667743c-1684-490c-b3e6-a7929add70fe.
+Carry forward unaffected decisions from checkpoint ffc5c8ba. These events
+accept Library and Recipe Studio build delivery on wave/1; all eleven rows
+and both tasks remain open for wave proof and landing. Saved handoffs report
+RESULT: done despite missing parsed results, so no build retry follows.
+Library's handoff inventory belongs to the single record run; constructed
+contract states supply no API evidence. Program confirms G-2490's
+prove-states.ts on the record list and both outcomes, publication-head
+integration, affected units and listed stories on prove. Preserve whole
+persona-bound identities, editor-only publication heads, original Person
+credits and the Account frame seam. Pending requires reached HTTP 202.
+Neither handoff proves a row or authorizes an individual landing or closure.
 
 All open work uses wave build/prove. Stopped pre-wave record, coverage and
 verification tasks stay stopped. The fourteen replacement briefs were
@@ -52,7 +49,7 @@ It supplies no current tokens-per-proved-row reading.
 | Web tool measures | 70% first share, daily 56% (27 of 48); 66 first, 36 step, 28 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 7 (G-2232) |
 | Web tokens | 1542M input, 10M output, 2 unavailable sessions; tokens per proved row unavailable |
 | Web recorded refusals | 0 outcome, 8 gate, 0 failing-test finding, 16 other in retained reports; Program owns the classified tool/main/host faults below |
-| Program measures | 61% first attempts, today 55% (63 of 115); landed-task median 1, maximum 9 (G-1427); 1553.9M input, 6.7M output, 75 unavailable sessions; tokens per proved row unavailable |
+| Program measures | 61% first attempts, today 55% (63 of 115); landed-task median 1, maximum 9 (G-1427); 1561.9M input, 6.8M output, 75 unavailable sessions; tokens per proved row unavailable |
 | Program refusals | 0 outcome, 9 gate, 0 failing-test finding, 4 other in retained reports |
 | Accounts | Concurrent status: codex 54%, codex-1 70% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
@@ -195,6 +192,8 @@ replacement builds supersede their earlier instructions.
 | G-2483 | Task:G-2483:3 accepts build `adf15d2614406f9c0b183e7aa96da06006018e74` on wave/1 under committed decision `e882d7d2e`; retries found that decision and acknowledged handoff, so no duplicate action. Prove every unit/outcome/story in prove-states.json, full guards and production-boundary phone/desktop stories with zero replay misses. Program G-2514 owns six capture groups: classification/vocabulary/board continuation; qualified thread lists; body/sibling/deep/ancestor pages; six-persona closed/absent Realm direct/module reads; surviving independent Zone/original presentation; canonical attached discussion. API G-2499 owns Concept filters/placement/retirement; G-2514 rebases onto its push and names still-refused states. Preserve G-2498 shared exports and ownership, exact requests/subjects/cursors/credit/statuses. Held loading and HTTP 200 AwaitingDecision prove no pending 202; unreachable probes stay API-only. No row proof, restart, individual landing or closure. |
 | G-2484 | Task:G-2484:1 accepts five Zone-editor build commits through `264f73576` on wave/1 despite missing parsed result. Six rows remain open. The mistaken individual land request hit the RESULT parser; mail:fbb1af25 resolves it by prohibiting individual wave landings, not repairing the parser. Keep handed off without another attempt. Program lists six unchanged Zone outcomes and authoring-contract, zone-publication-recorded and saved-preview-frame stories for prove/recording. Capture lifecycle, attachment, revoked-editor, protected/restoration and cross-Space Realm-header states; pending counts only with reached HTTP 202. Stack-free passes prove no row; identities, revisions, receipts, stable retries, credit and eight locales remain intact. |
 | G-2486 | Task:G-2486:1 accepts build `916381827` on wave/1, decision `f80b0483d`; shared members reader and supplied-transport adminApi retained. Six rows/task stay open. Mail:09bd4973 ruling `f5a9fe8a6` confirms six outcomes and handoff units/stories on prove, listed flows on the single record run, with identities/cursors replaced together. Capture attachment/withdrawal, appeal and subsequent reads, concealed roster/retained cursor and actual-member supported-duration role Preview/Save. Sanction-decision pending is required only if recording reaches HTTP 202; otherwise no pending state exists to show. Duplicate registration was already repaired at `c59dca8be`; no worker retry, waiver or individual landing. |
+| G-2487 | Task:G-2487:1 accepts Library build commits through `5f8de88b7` on wave/1 under decision `48ba38865`, despite missing parsed result. All nine rows/task remain open. Program consumes library-prove-requests.json from the handoff in the single record run; recorded:false requests/statuses are constructed contract states. Record whole six-persona Library visits, private Book reviews/reading dates, repeated Recipe members, required/extra Game progress, VN winning save/replay/stale/undo, import and interrupted/changed-basis export. Preserve exact requests, bound cursors, snapshot changes, foreign-person refusals, every assertion, credit/rights and eight locales. Prove nine unchanged outcomes, library-affected.txt tests and Library stories through production page/readers, including library-contract and visual-novels-library-recorded; run answer-records and complete affected gates, inspect phone/desktop. Pending requires reached HTTP 202. No separate inventory mail, build retry, individual landing, stopped-worker resume or closure. |
+| G-2490 | Task:G-2490:1 accepts Recipe Studio build through `9be3278ca` on wave/1 despite missing parsed result; both rows/task remain open. Mail:c667743c confirms prove-states.ts on Program's record list and both unchanged Recipe outcomes, publication-head integration, affected units and listed stories on prove. Record Account viewer frame, authoring registry/Studio inventory, publication basis/save/publish, notes continuation/draft heads, empty/import/pending/stale retry and resource projection/selection with whole persona-bound identities, revisions and retry keys. Preserve editor-only publication CAS heads, withdrawal predecessors, pinned public revisions, original Person credit, Account signed-in seam, source languages and eight locales. Inspect authoring-contract, authoring-recorded, recipe-authoring-recorded, recipe-exchange, resource-page and recipe-studio at phone/desktop through production boundaries; run complete wave gates including answer-records. Only production-reached answers establish states; pending needs HTTP 202. No missing-record build retry, individual landing or closure. |
 | G-2494 | Task:G-2494:1 accepts feed build `ac4a7f692` on wave/1 under decision `a55f1adcc`; cut-turn retries retain that decision without another worker. Mail:957a58bc confirms prove tests, missingClosureAnswers and missingClosureWatermarks on Program's record list. Capture only reached answers, replace identities/cursors/cuts together and replay them in production-boundary stories. Recording, phone/desktop and full gate remain prove work; no row proof, individual landing or closure. |
 | G-2488 | Task:G-2488:1 accepts both pushed Work-page build commits on wave/1. Outcome tests, missing production records and phone/desktop story inspection remain prove work. Program's mail was acknowledged; no new row proof, brief edit, restart, individual landing or closure. |
 | G-2491 | Task:G-2491:1 accepts tracking build `45d11750c` on wave/1. Recording, browser review and full verification remain prove work; no brief edit, restart, individual landing or closure. |
@@ -421,11 +420,9 @@ G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
 
-The deciding turns acknowledged mail:21c70108-20bc-4185-9e11-a465e8078447,
-mail:3cc9c13e-93db-4df5-b85d-7beaa55f3ecf and
-mail:ee793453-f7d1-4448-8b15-bdacb81c9b8d, and the Program replies
-referenced by the accepted handoffs. G-2483's retry confirmed the handoff
-was already acknowledged. Earlier acknowledgements remain durable in mail
-history; this checkpoint supplies no new mail delivery or duplicate ack.
+The deciding turn acknowledged mail:c667743c-1684-490c-b3e6-a7929add70fe
+at 11:24:02 UTC; this checkpoint confirmed that durable acknowledgement.
+Earlier acknowledgements remain in mail history; this checkpoint supplies
+no new mail delivery or duplicate ack.
 This checkpoint edits no brief, starts no worker or landing, waits for no
 result and arms no watcher. Later mail is left for its own event.
