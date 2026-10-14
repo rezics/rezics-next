@@ -3,6 +3,7 @@ import { dirname, relative, resolve, sep } from 'node:path';
 import { expect, test } from 'bun:test';
 import ts from 'typescript-6';
 import { launchCoverage, type JourneyProof, type Proof } from '../../../scripts/qa/cases/launch-coverage.ts';
+import { loadOutcomes, outcomeTitle, personas } from '../../../scripts/qa/cases/outcomes.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
 const kinds = ['books', 'recipes', 'visual-novels', 'anime', 'manga', 'games', 'realm', 'zone'] as const;
@@ -351,7 +352,12 @@ function missingSlots(row: (typeof launchCoverage)[number]): string[] {
   ];
 }
 
-test('launch coverage names existing tests and reports remaining rows', () => {
+test('launch coverage names existing tests and reports remaining rows', async () => {
+  const outcomes = await loadOutcomes({ root: repositoryRoot });
+  const outcomeProofs = new Set([...outcomes.values()].flatMap(declaration => personas.flatMap(persona => {
+    const cell = declaration.cells[persona];
+    return cell?.state === 'proved' ? [JSON.stringify([cell.file, outcomeTitle(declaration, persona)])] : [];
+  })));
   const errors: string[] = [];
   const provedPairs = launchCoverage.filter((row) => !proofMissing(row.api) && !proofMissing(row.browser));
   const missingRows = launchCoverage.filter((row) => proofMissing(row.api) || proofMissing(row.browser));
@@ -405,7 +411,7 @@ test('launch coverage names existing tests and reports remaining rows', () => {
         if (!namedTestExists(journeySource, proof.test, registrations)) {
           errors.push(`${rowLabel(row)}: unskipped test declaration not found in journey ${proof.journey}: ${proof.test}`);
         }
-      } else if (!namedTestExists(source, proof.test)) {
+      } else if (!namedTestExists(source, proof.test) && !outcomeProofs.has(JSON.stringify([proof.file, proof.test]))) {
         errors.push(`${rowLabel(row)}: unskipped test declaration not found in ${proof.file}: ${proof.test}`);
       }
     }
@@ -680,7 +686,7 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     test: 'recipes / Browse every recipe page in its Zone',
   });
   expect(rows('recipes', 'Collection tracking and progress')).toEqual([
-    expect.objectContaining({ api: { missing: 'L21', reason: undefined }, browser: { missing: 'L21', reason: undefined } }),
+    expect.objectContaining({ api: expect.objectContaining({ missing: 'gap' }), browser: { missing: 'L21', reason: undefined } }),
   ]);
   expect(rows('zone', 'Publication')[0]!.browser).toMatchObject({
     test: 'Navigation and theme: a Realm-less Zone publishes the saved home, navigation, and layout as one site',

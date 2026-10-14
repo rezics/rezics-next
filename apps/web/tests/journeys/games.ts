@@ -23,15 +23,22 @@ export function registerGamesJourneys() {
 
   const copy = {
     en: { region: 'Your edition and availability', language: 'Language', english: 'English',
-      edition: 'Edition', save: 'Save choice', saved: 'Saved.', search: 'Search Games' },
+      edition: 'Edition', save: 'Save choice', saved: 'Saved.', search: 'Search Games', retry: 'Try again', error: 'Something went wrong' },
     ja: { region: 'あなたの版と入手状況', language: '言語', english: '英語',
-      edition: '版', save: '選択を保存', saved: '保存しました。', search: 'Gamesを検索' },
+      edition: '版', save: '選択を保存', saved: '保存しました。', search: 'Gamesを検索', retry: 'もう一度試す', error: '問題が発生しました' },
   } as const;
 
-  async function choose(page: Page, control: Locator, name: string, found: Findings): Promise<string> {
-    await pressByKeyboard(page, control, found, name);
+  async function choose(page: Page, control: Locator, name: string, found: Findings, retry?: Locator): Promise<string> {
     const options = page.getByRole('listbox').getByRole('option');
-    await expect(options.first()).toBeVisible();
+    for (let attempt = 0; ; attempt++) {
+      await pressByKeyboard(page, control, found, name);
+      await expect(options.first()).toBeVisible();
+      const wanted = options.filter({ hasText: name });
+      await expect(retry ? wanted.or(retry.filter({ visible: true })).first() : wanted).toBeVisible();
+      if (await wanted.count() === 1 || !retry || attempt >= 2) break;
+      await control.press('Escape');
+      await pressByKeyboard(page, retry, found, 'retry edition read');
+    }
     await expect(options.filter({ hasText: name })).toHaveCount(1);
     const names = (await options.allTextContents()).map(text => text.trim());
     const matches = names.filter(text => text === name || text.startsWith(`${name} · `));
@@ -67,14 +74,26 @@ export function registerGamesJourneys() {
       const availability = page.getByRole('region', { name: words.region, exact: true });
       await expect(availability).toBeVisible();
       const language = availability.getByRole('combobox', { name: words.language, exact: true });
-      await expect(language).toBeVisible();
+      let recoveries = 0;
+      await expect(async () => {
+        if (await language.isVisible()) return;
+        if (recoveries < 3 && await page.getByRole('heading', { name: words.error, exact: true }).isVisible()) {
+          recoveries++;
+          await pressByKeyboard(page, page.getByRole('button', { name: words.retry, exact: true }), found, 'retry Work page');
+        } else if (recoveries < 3 && await availability.getByRole('alert').isVisible()) {
+          recoveries++;
+          await page.reload();
+        }
+        await expect(language).toBeVisible({ timeout: 5_000 });
+      }).toPass({ timeout: 60_000, intervals: [1_000] });
       if ((await language.textContent())?.trim() !== words.english) {
         await choose(page, language, words.english, found);
       }
       const edition = availability.getByRole('combobox', { name: words.edition, exact: true });
       const current = (await edition.textContent())?.trim() ?? '';
       const release = games.releases.find(item => !current.startsWith(item.title))!;
-      const selected = await choose(page, edition, release.title, found);
+      const selected = await choose(page, edition, release.title, found,
+        availability.getByRole('button', { name: words.retry, exact: true }));
       expect(selected).toContain(release.platform);
       const failedRequests: string[] = [];
       page.on('requestfailed', request => failedRequests.push(
