@@ -70,6 +70,26 @@ async function publish(person: PersonaSession, target: Work, realm: string, body
     reviewDecisionId: null, expectedHead: null, actingSubject: person.actingSubject }), 201);
   return { reply, input, placement: placement.placement };
 }
+async function discussionWork(person: PersonaSession, title: string) {
+  const created = await answer<Work & { mainVersion: string }>(person.main('POST', '/v1/works', {
+    profile: 'metadata-only-v1', title, language: 'en',
+    authoring: 'own-work', actingSubject: person.actingSubject }), 201);
+  // A public discussion needs a publicly readable root, not its owner's draft.
+  // The private Realm still controls discussion access independently of the Work.
+  const contribution = await answer<{ contribution: string; draftRevision: string }>(person.main('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work: created.work, language: 'en',
+    body: 'An original essay about growing a discussion garden.', actingSubject: person.actingSubject }), 201);
+  const publication = await answer<{ publicationDecision: string }>(person.main('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: contribution.contribution,
+    expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: person.actingSubject }), 201);
+  await answer(person.main('POST', '/v1/publication-selections', {
+    profile: 'main-default-selection-v1', work: created.work, contribution: contribution.contribution,
+    publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
+    context: { kind: 'main-version-default', id: created.mainVersion }, selectionBasis: 'main-maintainer',
+    actingSubject: person.actingSubject }), 201);
+  return created;
+}
 beforeAll(async () => {
   await recording.prepare();
   publicRealm = await personaSessions('public');
@@ -81,12 +101,8 @@ beforeAll(async () => {
     initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open',
       whoMaySubmit: 'members', selfJoin: true, rules: [] },
   }), 201)).realm;
-  work = await answer<Work>(publicRealm.owner.main('POST', '/v1/works', {
-    profile: 'metadata-only-v1', title: 'Original discussion garden', language: 'en',
-    authoring: 'own-work', actingSubject: publicRealm.owner.actingSubject }), 201);
-  privateWork = await answer<Work>(privateRealm.owner.main('POST', '/v1/works', {
-    profile: 'metadata-only-v1', title: 'Private discussion garden', language: 'en',
-    authoring: 'own-work', actingSubject: privateRealm.owner.actingSubject }), 201);
+  work = await discussionWork(publicRealm.owner, 'Original discussion garden');
+  privateWork = await discussionWork(privateRealm.owner, 'Private discussion garden');
 }, 180_000);
 // Populate once through public commands; every persona traverses the same cut.
 async function prepare() {
@@ -165,14 +181,22 @@ async function traverse(name: PersonaName) {
   await (preparation ??= prepare());
   await productionDiscussion(name);
   params.set('sort', 'new'); params.set('limit', '10');
-  const seen: string[] = [];
+  let seen: string[] = [], restarts = 0;
   let page: Page;
-  do {
-    page = await answer<Page>(person.main('GET', `/v1/realms/${short(publicRealm.realm)}/threads?${params}`));
+  for (;;) {
+    const response = await person.main('GET', `/v1/realms/${short(publicRealm.realm)}/threads?${params}`);
+    if (response.status === 409) {
+      expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
+      expect(++restarts).toBeLessThan(4);
+      params.delete('cursor'); seen = [];
+      continue;
+    }
+    page = await answer<Page>(Promise.resolve(response));
     expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
     seen.push(...page.items.map(item => item.reply));
-    if (page.nextCursor) params.set('cursor', page.nextCursor);
-  } while (page.nextCursor);
+    if (!page.nextCursor) break;
+    params.set('cursor', page.nextCursor);
+  }
   expect(new Set(seen).size).toBe(seen.length);
   expect(seen).toEqual(expect.arrayContaining(roots.map(reply => reply.reply)));
   const read = (reply: string, cursor?: string) => {

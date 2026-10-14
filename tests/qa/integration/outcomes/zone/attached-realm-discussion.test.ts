@@ -268,8 +268,9 @@ async function thread(person: PersonaSession, page: Page, reply: string) {
   return read;
 }
 function contributions(items: Thread['items']) {
-  // The viewer's ability to vote differs between signed-in and public reads.
-  return items.map(({ vote: _vote, ...contribution }) => contribution);
+  // Compare durable content and attribution across viewers and owner readiness.
+  return items.map(item => ({ reply: item.reply, revisionId: item.revisionId,
+    author: item.author, title: item.title, body: item.body, language: item.language, parent: item.parent }));
 }
 async function privateAccess(name: PersonaName, status: number,
   sample?: ReturnType<typeof recording.session>) {
@@ -297,26 +298,30 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
     for (let attempt = 0; response.status === 409 && attempt < 3; attempt++) {
       expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
       // Another placement may move the read used to admit this command.
-      // Reobserve both public coordinates before retaining the same intent/key.
+      // Reobserve both public coordinates before starting a fresh attempt.
       const route = await answer<{ revision: string }>(person.main('GET',
         `/v1/zones/${short(page.zone)}/routes?${new URLSearchParams({ path: page.path })}&${acting(person)}`));
       const target = await answer<{ revision: string }>(person.main('GET',
         `/v1/works/${short(page.about)}?${acting(person)}`));
       expect(route.revision).toBe(page.routeRevision);
       expect(target.revision).toBe(page.targetRevision);
+      // A selected pre-dispatch refusal is terminal for its operation key.
+      // Its replacement intent needs a fresh key; successful replay retains it.
+      key = randomUUID();
       response = await post(person, page, body, key);
     }
-    return answer<Posted>(Promise.resolve(response), 201);
+    return { posted: await answer<Posted>(Promise.resolve(response), 201), key };
   };
-  const [a, b] = await Promise.all([
+  const [left, right] = await Promise.all([
     restart(requests[0]!, first, 'First independent contribution', firstKey),
     restart(requests[1]!, second, 'Second independent contribution', secondKey),
   ]);
+  const a = left.posted, b = right.posted;
   expect(a.author).toBe(first.actingSubject!);
   expect(b.author).toBe(second.actingSubject!);
   expect(a.reply).not.toBe(b.reply);
-  expect(await answer(post(first, page, 'First independent contribution', firstKey))).toEqual(a);
-  expect(await answer(post(second, page, 'Second independent contribution', secondKey))).toEqual(b);
+  expect(await answer(post(first, page, 'First independent contribution', left.key))).toEqual(a);
+  expect(await answer(post(second, page, 'Second independent contribution', right.key))).toEqual(b);
   const canonical = await answer<Lookup>(lookup(first, page, sample, 'canonical-about-thread'));
   expect(canonical.thread!.rootRevision).toBe(page.targetRevision);
   expect(canonical.thread!.reply).toBe(opener.reply);
@@ -365,9 +370,7 @@ async function discussionState(person: PersonaSession, page: Page) {
   }));
   // Vote projection readiness may advance independently of these refused
   // writes; compare the retained discussion content and attribution instead.
-  const content = items.map(item => ({ reply: item.reply, revisionId: item.revisionId,
-    author: item.author, title: item.title, body: item.body, language: item.language, parent: item.parent }));
-  return { canonical, items: content, credits: credits.items, native };
+  return { canonical, items: contributions(items), credits: credits.items, native };
 }
 outcomeTest(discussion, 'visitor', async () => {
   const sample = recording.session('visitor', sessions.visitor);
