@@ -3,6 +3,7 @@ import type { ZoneMessages } from '../messages.ts';
 
 export default {
   catalogueIncomplete: 'Puede haber más coincidencias. Esta cifra es un mínimo.',
+  browseIncompleteTitle: 'No hay coincidencias en esta página',
   catalogueFreshness: insert('Catálogo actualizado hasta el cambio {{sequence}}', { sequence: String }),
   more: 'Ver más', shuffle: 'Mezclar',
   whyHere: insert('Por qué está aquí «{{title}}»', { title: String }),

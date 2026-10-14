@@ -98,11 +98,12 @@ const meta = { title: 'Zones/Catalogue discovery', component: CatalogueDiscovery
     const canvas = within(canvasElement);
     const { sample } = source(args);
     if (args.loading) await expect(await canvas.findByText(browseMessages[args.locale].loading)).toHaveAttribute('aria-busy', 'true');
-    else if (sample.status >= 400) await expect(await canvas.findByRole(sample.status === 409 ? 'status' : 'alert')).toBeVisible();
+    else if (sample.status >= 400) await expect(await canvas.findByRole('alert')).toBeVisible();
     else {
       const page = sample.answer as import('../realm/types.ts').ZoneBrowsePage;
       if (page.items.length) await expect(await canvas.findByRole('link', { name: page.items[0]!.title.value })).toBeVisible();
-      else await expect(await canvas.findByRole('status')).toBeVisible();
+      else await expect(await canvas.findByRole('heading', { name: page.window.complete
+        ? zoneMessagesFor(args.locale).browseEmptyTitle : zoneMessagesFor(args.locale).browseIncompleteTitle })).toBeVisible();
       if (page.nextCursor) {
         const next = await canvas.findByRole('link', { name: zoneMessagesFor(args.locale).next });
         await expect(new URL(next.getAttribute('href')!, 'https://recorded.invalid').searchParams.get('cursor')).toBe(page.nextCursor);

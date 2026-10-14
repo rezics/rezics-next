@@ -3,7 +3,7 @@ import type { ZoneContext } from '@rezics/zone-sdk';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { ZoneBrowsePage } from '../realm/types.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
-import { catalogueLabels, cataloguePersonas, catalogueRecords, missingCatalogueStates } from './catalogue-browse-fixtures.ts';
+import { catalogueContractSample, catalogueLabels, cataloguePersonas, catalogueRecords, missingCatalogueStates } from './catalogue-browse-fixtures.ts';
 import { catalogueRequest, catalogueSample, readCatalogueStory } from './catalogue-browse-records.ts';
 import { catalogueBrowseQuery, applyCatalogueYear } from './catalogue-browse.tsx';
 import { catalogueYearCondition } from './catalogue-year.ts';
@@ -11,7 +11,9 @@ import { zoneMessagesFor } from './fixtures.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import { uiLocales } from '../../i18n/define.ts';
 import { presetTokens } from './presentation.ts';
-import { isValidElement } from 'react';
+import { createElement, isValidElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { ZoneBrowse } from './browse.tsx';
 import { direction } from '@rezics/main/language';
 import { realmHref, siteHref } from '../realm/route.ts';
 
@@ -102,6 +104,22 @@ test('freshness and minimum-count copy exists in all eight interface locales', (
     expect(messages.catalogueFreshness).toBeDefined();
     if (locale !== 'en') expect(messages.catalogueIncomplete).not.toBe(zoneMessagesFor('en').catalogueIncomplete);
   }
+});
+
+test('an empty incomplete answer never claims that the catalogue has no matches', async () => {
+  const sample = catalogueContractSample('games', 'lagging');
+  const request = catalogueRequest(sample.path);
+  const main = browserMainApi('https://fixture.invalid', { anonymous: true,
+    fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      new Response(JSON.stringify(sample.answer), { headers: { 'content-type': 'application/json' } })) as typeof fetch });
+  const messages = zoneMessagesFor('en');
+  const page = await readCatalogueStory(main, sample.path, zone(request.realm), 'en', messages, false);
+  if (!page.ok) throw new Error('The incomplete answer did not build');
+  const html = renderToStaticMarkup(createElement(ZoneBrowse, { model: page.data, messages, card: () => null }));
+  expect(html).toContain(messages.browseIncompleteTitle);
+  expect(html).toContain(messages.catalogueIncomplete);
+  expect(html).toContain('0+ results');
+  expect(html).not.toContain(messages.browseEmptyTitle);
 });
 
 test('a year range stays on all generated links without fabricating card dates', async () => {
