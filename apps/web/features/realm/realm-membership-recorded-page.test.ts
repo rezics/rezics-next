@@ -178,7 +178,7 @@ test('the request refusal keeps the recorded problem code', async () => {
     expect(problem.status).toBe(404);
     expect(result.failure).toBe('missing');
     expect(result.code).toBe(problem.code);
-    expect('title' in result).toBe(false);
+    expect(result.title).toBe(problem.title);
   }
 });
 
