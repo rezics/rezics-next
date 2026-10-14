@@ -4328,7 +4328,7 @@ ${recovery.bind}
 export async function reconcileRetainedAdmissionCancellation(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
   coverage: RelayCoverage, sequence: string,
-): Promise<{ receipt: string; reason?: 'stale-head'; replayed: boolean }> {
+): Promise<{ receipt: string; reason?: 'stale-head' | 'scheme-unavailable'; replayed: boolean }> {
   const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
   const data = envelope?.data;
   const receipt = data?.receipt;
@@ -4347,6 +4347,9 @@ export async function reconcileRetainedAdmissionCancellation(
   const suppressionRejected = envelope.type === 'com.rezics.realm.suppression-rejected.v1';
   const suppressionCancelled = envelope.type === 'com.rezics.realm.suppression-cancelled.v1';
   const contextCancelled = envelope.type === 'com.rezics.classification.context-cancelled.v1';
+  const diagnostic = contextCancelled ? data.sourcePosition.sequence : sequence;
+  const delivery = data?.relayPosition ?? { streamScope: MAIN_RELAY_STREAM_SCOPE,
+    dataEpoch: data?.sourcePosition.dataEpoch, sequence: data?.sourcePosition.sequence };
   const propositionCancelled = envelope.type === 'com.rezics.classification.proposition-cancelled.v1';
   const decisionStale = envelope.type === 'com.rezics.classification.decision-stale.v1';
   const decisionCancelled = envelope.type === 'com.rezics.classification.decision-cancelled.v1';
@@ -4393,7 +4396,10 @@ export async function reconcileRetainedAdmissionCancellation(
       && !ratingObservationStale && !ratingObservationCancelled)
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
-    || data.sourcePosition.sequence !== sequence
+    || (contextCancelled ? !/^[1-9][0-9]*$/.test(diagnostic)
+      || delivery.streamScope !== (coverage.streamScope ?? MAIN_RELAY_STREAM_SCOPE)
+      || delivery.dataEpoch !== coverage.dataEpoch || delivery.sequence !== sequence
+      : data.sourcePosition.sequence !== sequence)
     || receipt.outcome !== 'cancelled' || !expectedReceipt || receipt.id !== expectedReceipt
     || (workRejected && (receipt.action !== 'work.edit' || receipt.reason !== 'stale-head'))
     || (contributionRejected && (receipt.action !== 'contribution.edit'
@@ -4415,7 +4421,8 @@ export async function reconcileRetainedAdmissionCancellation(
       || receipt.reason !== 'stale-head'))
     || (suppressionCancelled && (!['publication.reject', ORGANIZATION_MODERATION_ACTION].includes(receipt.action) || receipt.reason))
     || (contextCancelled && (receipt.action !== 'classification.context.configure'
-      || receipt.reason))
+      || !receipt.scope.startsWith('classification:context:')
+      || receipt.reason !== undefined && !['stale-head', 'scheme-unavailable'].includes(receipt.reason)))
     || (propositionCancelled && (receipt.action !== 'classification.proposition.define'
       || receipt.scope !== 'classification:define:global' || receipt.reason))
     || (decisionStale && (receipt.action !== 'classification.decision.set'
@@ -4471,13 +4478,16 @@ export async function reconcileRetainedAdmissionCancellation(
       || admitted.scope_id !== receipt.scope || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'cancelled'
-      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence) {
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== diagnostic) {
       throw new RetainedEffectConflict('current Access admission does not prove retained cancellation');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
     const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
-    const recovery = recoveryCursor(marker, sequence, paired);
-    const reasonTriple = terminalRejected ? 'rv:reason rv:StaleHead ;' : '';
+    if (contextCancelled && !paired && diagnostic !== sequence)
+      throw new RetainedEffectConflict('Context cancellation has separate positions without a scoped recovery cut');
+    const recovery = recoveryCursor(marker, sequence, paired, diagnostic);
+    const reasonTriple = terminalRejected ? 'rv:reason rv:StaleHead ;'
+      : contextCancelled && receipt.reason !== undefined ? `rv:reason ${lit(receipt.reason)} ;` : '';
     const eventType = workRejected ? 'WorkEditRejectedEvent'
       : contributionRejected ? 'ContributionDraftEditRejectedEvent'
       : publicationRejected ? 'ContributionPublicationRejectedEvent'
@@ -4512,11 +4522,12 @@ export async function reconcileRetainedAdmissionCancellation(
             rv:admissionId ${lit(receipt.admissionId)} ; rv:authorityEpoch ${lit(receipt.authorityEpoch)} ;
             rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Cancelled ; ${reasonTriple}
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} .
+            rv:sequence ${diagnostic} .
         }
         GRAPH ${iri(GRAPHS.outbox)} {
           ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+            rv:sequence ${diagnostic} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${contextCancelled && paired ? `${iri(data.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${sequence} .` : ''}
           ${iri(eventId)} a rv:${eventType} ; rv:ordinal 0 ;
             rv:action ${lit(receipt.action)} ; rv:receipt ${iri(receipt.id)}${admissionTriple} .
         }
@@ -4532,7 +4543,7 @@ export async function reconcileRetainedAdmissionCancellation(
         }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
-          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
     const readTerminal = () => receipt.action === 'work.create'
@@ -4574,21 +4585,25 @@ export async function reconcileRetainedAdmissionCancellation(
     const cursor = await reconciledCursor(env, marker);
     const graphCheck = await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
       GRAPH ${iri(GRAPHS.outbox)} { ${iri(data.batchId)} a rv:OutboxBatch ;
-        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} ;
         rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${contextCancelled && paired ? `${iri(data.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${sequence} .` : ''}
         ${iri(eventId)} a rv:${eventType} ; rv:receipt ${iri(receipt.id)} . }
     }`);
+    const mainCheck = contextCancelled && paired ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorMainSequence ?currentMain }
+      FILTER(?currentMain >= ${sequence}) }`) : { boolean: true };
     if (!terminal || terminal.outcome !== 'cancelled' || terminal.receipt !== receipt.id
       || terminal.requestDigest !== receipt.requestDigest || terminal.admissionId !== receipt.admissionId
       || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
-      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== diagnostic
       || ('reason' in terminal ? terminal.reason : undefined) !== receipt.reason
-      || cursor === null || cursor < BigInt(sequence) || graphCheck.boolean !== true) {
+      || cursor === null || cursor < BigInt(diagnostic) || graphCheck.boolean !== true || mainCheck.boolean !== true) {
       throw new RetainedEffectConflict(updateError
         ? 'retained cancellation update outcome is unknown' : 'retained cancellation did not reconcile');
     }
     await client.query('COMMIT');
-    return { receipt: receipt.id, ...(terminalRejected ? { reason: 'stale-head' as const } : {}),
+    return { receipt: receipt.id, ...(receipt.reason !== undefined ? { reason: receipt.reason } : {}),
       replayed: !!existing };
   } catch (error) {
     try { await client.query('ROLLBACK'); } catch { /* retain original error */ }

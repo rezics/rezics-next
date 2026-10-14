@@ -8,7 +8,8 @@ import { CommandOutcomeUnknown, FusekiClient, type CommandEnvelope,
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE,
   CLASSIFICATION_INHERIT_POLICY, classificationContextDigest,
-  createClassificationContext, readRealmClassificationContext,
+  createClassificationContext, readRealmClassificationContext, readClassificationContextReceipt,
+  sealClassificationContextAdmission,
   type CreateClassificationContextInput } from '../src/modules/classification/context.ts';
 import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionDigest,
@@ -21,7 +22,8 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, STATEMENT_PROFILE } from '..
 import { DATASET, GRAPHS, RV, hash, prepareComponent,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { readComponentState } from '../src/modules/work/history.ts';
-import { reconcileRetainedClassificationContext, reconcileRetainedClassificationDecision, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
+import { reconcileRetainedAdmissionCancellation, reconcileRetainedClassificationContext,
+  reconcileRetainedClassificationDecision, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const epoch = 'restored-epoch', routingEpoch = 'restored-routing', retainedEpoch = 'retained-epoch';
@@ -617,4 +619,155 @@ test('Context restore resolves a lost replacement response without changing its 
     expect(await run.reconcile(run.replaced.deliverySequence)).toMatchObject({ replayed: true });
     expect(run.fuseki.commands).toHaveLength(2);
   } finally { run.stop(); }
+});
+
+/** External graph boundary for the real cancellation writer, relay reader and
+ * restore owner; record only native effects, including the literal reason. */
+class ContextCancellationFuseki extends ContextRestoreFuseki {
+  outbox: { batchId: string; eventId: string; receipt: string; streamSequence?: string } | null = null;
+  dropReason = false;
+  override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
+    if (!envelope.update.includes('a rv:ClassificationContextCancelledEvent')) return super.commandWithReceipt(envelope);
+    this.commands.push(envelope);
+    const restoring = envelope.update.includes('rv:restoreCutover');
+    const insert = envelope.update.split('INSERT {')[1]!.split('WHERE {')[0]!;
+    const sourceSequence = restoring ? insert.match(/rv:sequence (\d+)\s*\./)![1]! : String(this.nextSequence);
+    const streamSequence = insert.match(/rv:streamSequence (\d+)/)?.[1];
+    if (this.receipts.has(envelope.receipt) || restoring && (!this.graphHeld
+      || (this.paired ? BigInt(sourceSequence) <= BigInt(this.cursor)
+        || streamSequence !== String(BigInt(this.mainCursor) + 1n)
+        : sourceSequence !== String(BigInt(this.cursor) + 1n)))) return { status: 'guard-unmatched' };
+    const literal = (predicate: string) => insert.match(new RegExp(`rv:${predicate} "([^"]*)"`))![1]!;
+    const reason = insert.match(/rv:reason "([^"]*)"/)?.[1];
+    this.receipts.set(envelope.receipt, { outcome: `${RV}Cancelled`, digest: envelope.digest,
+      id: literal('admissionId'), epoch: literal('authorityEpoch'), scope: literal('admittedScope'),
+      dataEpoch: literal('dataEpoch'), sequence: sourceSequence,
+      ...(reason !== undefined && !this.dropReason ? { reason } : {}) });
+    this.outbox = { batchId: insert.match(/<([^>]+)> a rv:OutboxBatch/)![1]!,
+      eventId: insert.match(/<([^>]+)> a rv:ClassificationContextCancelledEvent/)![1]!,
+      receipt: envelope.receipt, ...(streamSequence ? { streamSequence } : {}) };
+    if (restoring) {
+      this.cursor = sourceSequence;
+      if (this.paired) this.mainCursor = insert.match(/rv:reconciledPriorMainSequence (\d+)/)![1]!;
+    } else this.nextSequence++;
+    if (this.loseResponse) { this.loseResponse = false; throw new CommandOutcomeUnknown('lost cancellation response'); }
+    return { status: 'committed', position: { datasetId: DATASET, dataEpoch: epoch, sequence: '0' } };
+  }
+  override async query(sparql: string): Promise<SparqlResult> {
+    if (sparql.includes('?kind ?ordinal ?action ?receipt')) {
+      const terminal = this.outbox && this.receipts.get(this.outbox.receipt);
+      if (!terminal) return rows([]);
+      const result = rows([{ kind: `${RV}ClassificationContextCancelledEvent`, ordinal: '0',
+        action: 'classification.context.configure', receipt: this.outbox!.receipt,
+        admissionId: terminal.id!, digest: terminal.digest!, authorityEpoch: terminal.epoch!,
+        scope: terminal.scope!, outcome: terminal.outcome!, epoch: terminal.dataEpoch!, sequence: terminal.sequence!,
+        ...(terminal.reason !== undefined ? { reason: terminal.reason } : {}) }]);
+      if (result.results!.bindings[0]!.reason) Object.assign(result.results!.bindings[0]!.reason!, {
+        type: 'literal', datatype: 'http://www.w3.org/2001/XMLSchema#string' });
+      return result;
+    }
+    if (sparql.includes('SELECT ?saved ?savedMain WHERE'))
+      return rows([{ saved: '40', ...(this.paired ? { savedMain: '10' } : {}) }]);
+    if (sparql.includes('ASK') && sparql.includes(`GRAPH <${GRAPHS.outbox}>`)) {
+      return { boolean: !!this.outbox && sparql.includes(`<${this.outbox.eventId}>`)
+        && (!this.paired || sparql.includes(`rv:streamSequence ${this.outbox.streamSequence} .`)) };
+    }
+    return super.query(sparql);
+  }
+}
+
+async function cancellationRestoreFixture(reason?: 'stale-head' | 'scheme-unavailable', paired = false) {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync(join('.temp', 'context-cancellation-restore-'));
+  const fuseki = new ContextCancellationFuseki(); fuseki.graphHeld = false; fuseki.paired = paired;
+  const env: WorkActivationEnvironment = { fuseki, objectDirectory: directory, lineage: { dataEpoch: epoch, routingEpoch } };
+  const admission = { id: id(900).slice(-36), action: 'classification.context.configure', scope: `classification:context:${id(500)}`,
+    actingSubject: id(503), requestDigest: 'a'.repeat(64), authorityEpoch: '3', expiresAt: '2999-01-01T00:00:00Z' } as RegisteredAdmission;
+  const result = await sealClassificationContextAdmission({ ...env, lineage: { dataEpoch: retainedEpoch,
+    routingEpoch: 'retained-routing' } }, admission, reason);
+  const outbox = fuseki.outbox!;
+  const deliverySequence = paired ? '11' : result.sequence;
+  const batch: relay.MainOutboxBatch = { streamScope: MAIN_RELAY_STREAM_SCOPE, batchId: outbox.batchId,
+    dataEpoch: retainedEpoch, routingEpoch: 'retained-routing', graphSequence: result.sequence,
+    sequence: deliverySequence, eventIds: [outbox.eventId] };
+  const envelope = await relay.readMainOutboxEnvelope(fuseki, batch, outbox.eventId) as relay.MainCloudEvent;
+  const retained = spyOn(relay, 'relayRetainedEventAt').mockResolvedValue({ eventId: outbox.eventId, envelope,
+    batch: { batchId: batch.batchId, routingEpoch: batch.routingEpoch, eventCount: 1 } });
+  const admitted = { action: admission.action, state: 'sealed', scope_id: admission.scope,
+    request_digest: result.requestDigest, authority_epoch: '3', graph_receipt: result.receipt,
+    graph_outcome: 'cancelled', graph_data_epoch: retainedEpoch, graph_sequence: result.sequence };
+  const sql: string[] = [];
+  const pool = { connect: async () => ({ query: async (text: string) => {
+    sql.push(text);
+    if (text.includes('SELECT open')) return { rows: [{ open: false }] };
+    if (text.includes('FROM access.admission')) return { rows: [admitted] };
+    if (/^(BEGIN|COMMIT|ROLLBACK)/.test(text)) return { rows: [] };
+    throw new Error(`unexpected cancellation Access query: ${text}`);
+  }, release() {} }) } as unknown as Pool;
+  fuseki.receipts.clear(); fuseki.outbox = null; fuseki.commands = []; fuseki.graphHeld = true;
+  const coverage: relay.RelayCoverage = { streamScope: MAIN_RELAY_STREAM_SCOPE, consumer: 'restore', dataEpoch: retainedEpoch,
+    sequence: deliverySequence, batchCount: deliverySequence, eventCount: deliverySequence,
+    batchDigest: 'a'.repeat(64), eventDigest: 'b'.repeat(64) };
+  return { env, fuseki, result, envelope, admitted, sql, batch,
+    reconcile: () => reconcileRetainedAdmissionCancellation(env, pool, {} as Pool, coverage, deliverySequence),
+    read: () => readClassificationContextReceipt(env, admission.id),
+    stop: () => { retained.mockRestore(); rmSync(directory, { recursive: true, force: true }); } };
+}
+
+for (const reason of [undefined, 'stale-head', 'scheme-unavailable'] as const) for (const paired of [false, true]) {
+  test(`writer-sealed Context ${reason ?? 'v1 cancellation'} restores and replays its exact reason (${paired ? 'separate' : 'legacy'} positions)`, async () => {
+    const f = await cancellationRestoreFixture(reason, paired);
+    try {
+      expect(f.envelope.data.receipt.reason).toBe(reason);
+      f.fuseki.loseResponse = true;
+      expect(await f.reconcile()).toEqual({ receipt: f.result.receipt, replayed: false, ...(reason ? { reason } : {}) });
+      expect((await f.read())?.reason).toBe(reason);
+      expect(f.fuseki.cursor).toBe('41');
+      if (paired) expect(f.fuseki.mainCursor).toBe('11');
+      expect(f.fuseki.current).toBeNull();
+      const restored = await relay.readMainOutboxEnvelope(f.fuseki, f.batch, f.batch.eventIds[0]!);
+      expect(restored).toEqual(f.envelope);
+      expect(await f.reconcile()).toEqual({ receipt: f.result.receipt, replayed: true, ...(reason ? { reason } : {}) });
+      expect(f.fuseki.commands).toHaveLength(1);
+      if (reason) expect(f.fuseki.commands[0]!.update).toContain(`rv:reason "${reason}"`);
+      else expect(f.fuseki.commands[0]!.update).not.toContain('rv:reason');
+      if (paired) {
+        f.fuseki.mainCursor = '10';
+        await expect(f.reconcile()).rejects.toBeInstanceOf(RetainedEffectConflict);
+      }
+    } finally { f.stop(); }
+  });
+}
+
+test('Context cancellation restore refuses unknown reasons, mismatched receipts and positions before writing', async () => {
+  for (const change of ['unknown', 'empty', 'non-string', 'identity', 'scope', 'mixed', 'delivery', 'source', 'Access'] as const) {
+    const f = await cancellationRestoreFixture('stale-head', true);
+    try {
+      if (change === 'unknown') Object.assign(f.envelope.data.receipt, { reason: 'unknown' });
+      if (change === 'empty') Object.assign(f.envelope.data.receipt, { reason: '' });
+      if (change === 'non-string') Object.assign(f.envelope.data.receipt, { reason: { reason: 'stale-head' } });
+      if (change === 'identity') f.envelope.data.receipt.id = 'urn:rezics:receipt:wrong';
+      if (change === 'scope') f.envelope.data.receipt.scope = 'work:create';
+      if (change === 'mixed') f.envelope.data.receipt.expectedHead = id(99);
+      if (change === 'delivery') f.envelope.data.relayPosition!.sequence = '12';
+      if (change === 'source') f.envelope.data.sourcePosition.sequence = '0';
+      if (change === 'Access') f.admitted.graph_sequence = '11';
+      await expect(f.reconcile()).rejects.toBeInstanceOf(RetainedEffectConflict);
+      expect(f.fuseki.commands).toHaveLength(0);
+      expect(f.fuseki.receipts.size).toBe(0);
+    } finally { f.stop(); }
+  }
+});
+
+test('Context cancellation replay refuses a changed or dropped retained reason', async () => {
+  for (const dropped of [false, true]) {
+    const f = await cancellationRestoreFixture('scheme-unavailable');
+    try {
+      if (dropped) f.fuseki.dropReason = true;
+      else { await f.reconcile(); f.envelope.data.receipt.reason = 'stale-head'; }
+      await expect(f.reconcile()).rejects.toBeInstanceOf(RetainedEffectConflict);
+      expect(f.fuseki.commands).toHaveLength(1);
+      expect(f.sql.at(-1)).toBe('ROLLBACK');
+    } finally { f.stop(); }
+  }
 });

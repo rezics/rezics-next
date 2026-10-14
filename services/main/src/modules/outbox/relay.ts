@@ -445,7 +445,7 @@ export interface MainCloudEvent {
       outcome: 'succeeded' | 'cancelled';
       admissionId: string; requestDigest: string; authorityEpoch: string; scope: string;
       operation?: string; work?: string; mainVersion?: string; target?: string; workRevision?: string;
-      mainRevision?: string; expectedHead?: string; reason?: 'stale-head';
+      mainRevision?: string; expectedHead?: string; reason?: 'stale-head' | 'scheme-unavailable';
       workManifest?: string; mainManifest?: string;
       metadata?: { work: string; component: string; revision: string; manifest: string };
       component?: string; revision?: string; contentLanguages?: string[];
@@ -1685,7 +1685,10 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     || (type === 'com.rezics.classification.context-cancelled.v1'
       && (action !== 'classification.context.configure' || outcome !== `${RV}Cancelled`
         || !scope.startsWith('classification:context:')
-        || operation || realm || classificationContext || contextRevision || reason
+        || (reason !== undefined && (!['stale-head', 'scheme-unavailable'].includes(reason)
+          || !['literal', 'typed-literal'].includes(row.reason?.type ?? '') || row.reason?.['xml:lang'] !== undefined
+          || row.reason?.datatype !== undefined && row.reason.datatype !== 'http://www.w3.org/2001/XMLSchema#string'))
+        || operation || realm || classificationContext || contextRevision
         || work || main || space || contribution || selection || owner || slot
         || rejection || matchUnit || expectedHead || author || language))
     || (type === 'com.rezics.classification.proposition-defined.v1'
@@ -1799,7 +1802,8 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     ...(mainRevision ? { mainRevision,
       mainManifest: await revisionManifest(fuseki, mainRevision) } : {}),
     ...(expectedHead ? { expectedHead } : {}),
-    ...(reason ? { reason: 'stale-head' as const } : {}),
+    ...(reason ? { reason: type === 'com.rezics.classification.context-cancelled.v1'
+      ? reason as 'stale-head' | 'scheme-unavailable' : 'stale-head' as const } : {}),
     ...(contribution ? { contribution } : {}),
     ...(draftRevision ? { draftRevision,
       draftManifest: await revisionManifest(fuseki, draftRevision) } : {}),

@@ -42,7 +42,8 @@ function fixture() {
       } as Values,
     };
   });
-  const state = { checkpoint: '0', duplicateAnchor: false, missingAnchor: false, loseCheckpoint: false };
+  const state = { checkpoint: '0', duplicateAnchor: false, missingAnchor: false, loseCheckpoint: false,
+    reasonTerm: undefined as { type: string; datatype?: string; 'xml:lang'?: string } | undefined };
   const queries: string[] = [];
   const fuseki = { async query(query: string, maxResponseBytes?: number) {
     queries.push(query);
@@ -58,7 +59,12 @@ function fixture() {
     if (!event) throw new Error(`unexpected Context relay query: ${query}`);
     if (query.includes('SELECT ?event ?ordinal')) return bindings([{ event: event.batch.eventIds[0], ordinal: '0' }]);
     if (query.startsWith('ASK')) return { boolean: true };
-    if (query.includes('?kind ?ordinal ?action ?receipt')) return bindings([event.receipt]);
+    if (query.includes('?kind ?ordinal ?action ?receipt')) {
+      const result = bindings([event.receipt]);
+      if (state.reasonTerm && result.results!.bindings[0]!.reason)
+        Object.assign(result.results!.bindings[0]!.reason!, state.reasonTerm);
+      return result;
+    }
     if (query.includes('SELECT ?manifest ?component ?operation')) {
       expect(query).toContain('LIMIT 2');
       expect(maxResponseBytes).toBe(8192);
@@ -104,6 +110,12 @@ function fixture() {
     throw new Error(`unexpected Context relay SQL: ${sql}`);
   } } as unknown as Pool;
   return { fuseki, pool, events, state, queries, retained, batches, deliveries };
+}
+
+function cancel(event: ReturnType<typeof fixture>['events'][number], reason?: string) {
+  Object.assign(event.receipt, { kind: `${RV}ClassificationContextCancelledEvent`, outcome: `${RV}Cancelled`, reason,
+    eventOperation: undefined, eventRealm: undefined, operation: undefined, realm: undefined,
+    classificationContext: undefined, contextRevision: undefined, expectedHead: undefined });
 }
 
 test('relay accepts v1 creation, v2 creation, selection replacement and clear with exact manifests', async () => {
@@ -202,4 +214,46 @@ test('Context replacements relay in delivery order, replay after lost acknowledg
   await expect(relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay')).rejects.toBeInstanceOf(OutboxIncomplete);
   expect(f.state.checkpoint).toBe('1');
   expect(f.retained.size).toBe(3);
+});
+
+test('both Context cancellation reasons survive ordered relay and replay beside a v1 success', async () => {
+  const f = fixture();
+  cancel(f.events[1]!, 'stale-head');
+  cancel(f.events[2]!, 'scheme-unavailable');
+  await relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay');
+  f.state.loseCheckpoint = true;
+  await expect(relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay')).rejects.toThrow('lost checkpoint update');
+  expect(f.state.checkpoint).toBe('1');
+  await relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay');
+  await relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay');
+  expect(f.deliveries).toEqual(f.events.map(event => event.batch.eventIds[0]!));
+  expect([...f.retained.values()].map(event => [event.data.receipt.reason,
+    event.data.sourcePosition.sequence, event.data.relayPosition?.sequence]))
+    .toEqual([[undefined, '10', '1'], ['stale-head', '20', '2'], ['scheme-unavailable', '30', '3']]);
+  f.state.checkpoint = '2';
+  await relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay');
+  expect(f.retained.size).toBe(3);
+  expect(f.state.checkpoint).toBe('3');
+  const legacy = fixture(), event = legacy.events[0]!;
+  cancel(event);
+  const delivered = await readMainOutboxEnvelope(legacy.fuseki, event.batch, event.batch.eventIds[0]!);
+  expect(delivered.data.receipt).not.toHaveProperty('reason');
+});
+
+test('Context cancellation relay refuses unknown, malformed or mixed successful receipts without advancing', async () => {
+  for (const reason of ['', 'unknown', `${RV}StaleHead`, 'Stale-head', 'scheme-unavailable\n']) {
+    const f = fixture(); cancel(f.events[0]!, reason);
+    await expect(relayMainOutboxOnce(f.fuseki, f.pool, 'context-relay')).rejects.toBeInstanceOf(RelayEventBlocked);
+    expect(f.retained.size).toBe(0); expect(f.batches.size).toBe(0); expect(f.state.checkpoint).toBe('0');
+  }
+  for (const term of [{ type: 'uri' }, { type: 'literal', 'xml:lang': 'en' },
+    { type: 'literal', datatype: 'http://www.w3.org/2001/XMLSchema#integer' }]) {
+    const f = fixture(), event = f.events[0]!; cancel(event, 'stale-head'); f.state.reasonTerm = term;
+    await expect(readMainOutboxEnvelope(f.fuseki, event.batch, event.batch.eventIds[0]!)).rejects.toBeInstanceOf(OutboxIncomplete);
+  }
+  for (const override of [{ operation: id(99) }, { expectedHead: id(99) }, { classificationContext: id(99) },
+    { realm: id(99) }, { outcome: `${RV}Succeeded` }, { action: 'work.edit' }, { scope: 'work:create' }]) {
+    const f = fixture(), event = f.events[0]!; cancel(event, 'scheme-unavailable'); Object.assign(event.receipt, override);
+    await expect(readMainOutboxEnvelope(f.fuseki, event.batch, event.batch.eventIds[0]!)).rejects.toBeInstanceOf(OutboxIncomplete);
+  }
 });
