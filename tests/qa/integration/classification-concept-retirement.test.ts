@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { startHomeStack } from './feed-read-support.ts';
 import { CLASSIFIED_AS } from '../../../services/main/src/modules/statement/schema.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
+import { VOCABULARY_COST } from '../../../services/main/src/modules/classification/vocabulary.ts';
 
 interface Vocabulary { scheme: string; schemeHead: string; concept: string; conceptHead: string;
   path: string; expression: string; sense: string; definitionRevision: string; replayed: boolean }
@@ -50,11 +51,23 @@ test('Concept steward retires the exact current head without changing retained r
       ...retire, concept: { id: created.concept, expectedHead: `https://rezics.com/id/${randomUUID()}` } }), 409);
     expect(stale.code).toBe('operation_cancelled');
     const key = randomUUID();
+    const queriesBefore = stack.fuseki.queries;
     const retired = await home.json<Vocabulary>(await call('/v1/classification-vocabulary', retire, author.token, key), 201);
+    expect(stack.fuseki.queries - queriesBefore).toBeLessThanOrEqual(VOCABULARY_COST.graphReads);
     expect(retired).toMatchObject({ scheme: created.scheme, schemeHead: created.schemeHead,
       concept: created.concept, path: created.path, expression: created.expression,
       sense: created.sense, definitionRevision: created.definitionRevision });
     expect(retired.conceptHead).not.toBe(created.conceptHead);
+    const lifecycle = await stack.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+      PREFIX skos: <http://www.w3.org/2004/02/skos/core#> ASK {
+        GRAPH <urn:rezics:graph:current> { <${created.concept}> rv:conceptState rv:Retired ;
+          rv:head <${retired.conceptHead}> ; skos:prefLabel ${JSON.stringify(input.labels[0]!.value)}@en .
+          FILTER NOT EXISTS { <${created.concept}> rv:conceptState rv:Active }
+          <${created.sense}> rv:head <${created.definitionRevision}> . }
+        GRAPH <urn:rezics:graph:revisions> { <${created.conceptHead}> rv:component <${created.concept}> .
+          <${retired.conceptHead}> rv:predecessor <${created.conceptHead}> . }
+      }`);
+    expect(lifecycle.boolean).toBe(true);
     expect(await home.json<Vocabulary>(await call('/v1/classification-vocabulary', retire, author.token, key), 200))
       .toEqual({ ...retired, replayed: true });
     expect((await call('/v1/classification-vocabulary', { ...retire,
