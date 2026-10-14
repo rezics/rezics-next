@@ -31,6 +31,32 @@ use exact direct pins; Compose and Dockerfiles pin external images by digest.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
+`task jena:image` stamps and obtains that tag: an existing image returns immediately;
+otherwise callers share a host-wide lock keyed by tag and inspect again before
+building. Generation, stack startup, toolchain installation and dev refresh use
+the same implementation. Linux `flock` (util-linux 2.41.5 on the development host)
+holds the lock across its builder process and releases it when the descriptors
+close; lock files under `/tmp/rezics-fuseki-images` must not be deleted while a
+build is running. See the [flock manual](https://man7.org/linux/man-pages/man1/flock.1.html).
+
+The module packages with `-DskipTests`; `task jena:test` builds the separate
+`module-test` target with the original Maven options and locked fixture cache.
+The affected merge gate selects this native proof for every `infra/jena/**`
+change and module COPY input, including generated model files; wave regression
+runs it once per pinned tip. ExternalFixture cases retain their focused wrappers.
+[BuildKit](https://docs.docker.com/build/building/multi-stage/#differences-between-legacy-builder-and-buildkit)
+skips the test stage when building the runtime image. Jena downloads try
+`dlcdn.apache.org` before `archive.apache.org` and always verify the pinned SHA-512.
+This split removes the 16–40 minute native suite and slow archive download from
+ordinary image preparation without weakening the gate; simultaneous image
+builds previously repeated the suite while waiting on its fixture cache lock.
+On 2026-10-14, native Docker built the missing final tag in 33.6 seconds with
+Maven dependencies cached; a concurrent second caller waited 33.2 seconds and
+started no build, and an existing-tag call took 140 ms. A completely cold Maven
+dependency layer took 249 seconds in an earlier 277-second image build. The
+intentional Java failure probe rejected the gate's native-proof runner and
+retained the Maven failure output.
+
 Type checks run `bun check`, Bun's built-in checker (the same errors as `tsc` from
 TypeScript 7, in seconds instead of minutes), so the host needs Bun 1.4.3 or newer and
 `task <workspace>:typecheck` refuses an older one. `tsc` stays installed for the Eden gate
@@ -60,6 +86,30 @@ origin. `task env` masks local secrets;
 workspace `.env.example` files show variables. Personal overrides belong in
 the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
 unrelated processes.
+
+## Shared repository parser
+
+The repository guards share the native `tools/repo-index` package, built with
+Rust/Cargo 1.98.1 by `task repo-index:build`. Oxc parses TypeScript and TSX and
+resolves imports ([parser](https://docs.rs/oxc_parser/0.152.0/oxc_parser/),
+[resolver](https://docs.rs/oxc_resolver/11.24.3/oxc_resolver/));
+[`pg_query`](https://docs.rs/pg_query/6.2.0/pg_query/) embeds
+[`libpg_query`](https://github.com/pganalyze/libpg_query)'s PostgreSQL parser and scanner for SQL
+facts. Guard policy, messages and debt lists remain in TypeScript. The reader
+builds a missing or changed binary before use; its content digest reuses an
+unchanged JSON index under `.temp/`. `Cargo.lock` pins transitive crates.
+The index is one JSON file with a small header and byte ranges for independently
+read payloads. ASTs and SQL facts use compressed JSON strings so each guard
+materializes only the syntax trees and query facts it inspects.
+The pinned `oxc_estree` serializer preserves JavaScript string escapes while
+writing compact initializer syntax; opaque expressions retain their original
+kind and source range for the TypeScript rules to read.
+[`sha2`](https://docs.rs/sha2/0.10.9/sha2/) provides per-file SHA-256 content keys
+that let the reader register source identities without loading source payloads.
+Task keeps Cargo's registry and build output in this worktree's `.temp/`.
+Building needs a C compiler and libclang development headers for `pg_query`'s
+bindings. The Task command supplies the C compiler's system include directory
+when `BINDGEN_EXTRA_CLANG_ARGS` is unset.
 
 ## Turtle model compilation
 
@@ -250,6 +300,7 @@ by `goalctl` ([program](../goals/program/GOAL.md#how-managers-run-from-now-on));
 | Aspire SDK | 13.5.4 | aspire.config.json |
 | Go package oracle | 1.27.1 | scripts/package/go-oracle.ts |
 | Cargo package oracle | 1.98.1 | scripts/package/cargo-oracle.ts |
+| Repository index Rust/Cargo | 1.98.1 | tools/repo-index/Cargo.toml; Taskfile.yml |
 | npm package oracle | 11.19.1 | scripts/package/npm-oracle.ts |
 
 ### Direct workspace packages
@@ -397,16 +448,38 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | webpack | 5.110.3 | apps/accounts, apps/web |
 | wrangler | 4.137.0 | apps/about, apps/accounts, apps/web |
 
+### Repository index crates
+
+Exact direct pins from `tools/repo-index/Cargo.toml`; its Cargo.lock records the native parser dependencies.
+
+| Crate | Pin |
+| --- | --- |
+| base64 | 0.22.1 |
+| blake3 | 1.8.3 |
+| flate2 | 1.1.5 |
+| oxc_allocator | 0.152.0 |
+| oxc_ast | 0.152.0 |
+| oxc_ast_visit | 0.152.0 |
+| oxc_estree | 0.152.0 |
+| oxc_parser | 0.152.0 |
+| oxc_resolver | 11.24.3 |
+| oxc_span | 0.152.0 |
+| pg_query | 6.2.0 |
+| serde | 1.0.228 |
+| serde_json | 1.0.149 |
+| sha2 | 0.10.9 |
+
 ### Service and Fuseki build images
 
 | Source | Image and digest |
 | --- | --- |
 | Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
-| Compose | rezics/fuseki:6.2.0-cmd0.5.42-582e3df07bfd |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.42-8f3c8b802a2c |
 | Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
 | Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
 | Fuseki build | maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 |
+| Fuseki build | module |
 | Fuseki build | eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f |
 | Observability | oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 |
 | Observability | greptime/greptimedb:v1.2.1@sha256:9982e36cf3ddb6f2bc813f93ec164509dce59e8c0667c6c38b826f293ec09477 |
@@ -515,8 +588,15 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
 | `task gen` | Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory. |
 | `task gen:check` | Fail if generated artifacts are stale. |
+| `task repo-index:build` | Build the shared Rust repository parser with pinned Cargo 1.98.1. |
+| `task repo-index:lock` | Resolve and lock the exact direct Rust repository-index dependency pins. |
+| `task repo-index:format` | Format the shared Rust repository-index package. |
+| `task repo-index:test` | Test Rust source parsing, SQL facts and content-index invalidation. |
+| `task repo-index:run` | Parse repository sources once or reuse their content-digest index. |
 | `task operation` | Find Main API operation declarations, handlers and calling tests. |
 | `task jena:check` | Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI. |
+| `task jena:image` | Obtain the input-pinned Fuseki image, building once per tag under a host-wide lock. |
+| `task jena:test` | Run the full native Maven suite in the module-test Docker target. |
 | `task toolchain:inventory` | Regenerate the toolchain inventory from manifests and root commands. |
 | `task dataset:fetch` | Explicitly capture complete real-world series into the external local dataset store. |
 | `task dataset:verify` | Verify an external dataset snapshot and all referenced local bytes without network access. |

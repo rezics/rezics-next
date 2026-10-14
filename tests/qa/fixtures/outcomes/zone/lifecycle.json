@@ -1,0 +1,3620 @@
+{
+  "version": 1,
+  "row": "zone/lifecycle",
+  "personas": {
+    "visitor": [],
+    "stranger": [
+      {
+        "label": "lifecycle-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+              "displayName": "Outcome stranger",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome stranger",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+            "revision": "6592800c-e30d-448b-9d9c-b33bbafbfbd0",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/1f458cf8-de70-4d1c-9a60-2c40cef502ba?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+          "displayName": "Outcome stranger",
+          "kind": "person",
+          "revision": "https://rezics.com/id/fc43a941-9856-401c-9ef5-0e44e79a3c29-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome stranger",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "4ryHpezmnLDPViNLNEy88y",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "87"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/4ryHpezmnLDPViNLNEy88y",
+            "works": "/v1/agents/1f458cf8-de70-4d1c-9a60-2c40cef502ba/works",
+            "collections": "/v1/agents/1f458cf8-de70-4d1c-9a60-2c40cef502ba/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/488a8bdc-75d7-8356-aa15-08fea0cc1497/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=488a8bdc-75d7-8356-aa15-08fea0cc1497&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "488a8bdc-75d7-8356-aa15-08fea0cc1497",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-37a6-76f2-a29b-90b3bd09ec4f",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2MbSvqqgwGissaSfck6",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/488a8bdc-75d7-8356-aa15-08fea0cc1497"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/488a8bdc-75d7-8356-aa15-08fea0cc1497/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-lifecycle-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/488a8bdc-75d7-8356-aa15-08fea0cc1497/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/488a8bdc-75d7-8356-aa15-08fea0cc1497?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1f458cf8-de70-4d1c-9a60-2c40cef502ba",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "lifecycle-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+            "revision": "e3af1038-cad1-4128-bc0b-06ffabeacc60",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+              "displayName": "Outcome member",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome member",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+          "displayName": "Outcome member",
+          "kind": "person",
+          "revision": "https://rezics.com/id/5273f6e5-0fea-4fa7-b680-3f68300d6916-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome member",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "NWD8CbttY27z2aQtBNkKM3",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "90"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/NWD8CbttY27z2aQtBNkKM3",
+            "works": "/v1/agents/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a/works",
+            "collections": "/v1/agents/ae23f3f4-e4ff-4523-a1ee-dda4970d8f9a/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/90cdf6f0-a0fb-844b-b235-2f90629bf30f/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=90cdf6f0-a0fb-844b-b235-2f90629bf30f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "90cdf6f0-a0fb-844b-b235-2f90629bf30f",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-649c-763a-9b97-1d494623b7a1",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2McJ92tdiDERZHfoHpk",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/90cdf6f0-a0fb-844b-b235-2f90629bf30f"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/90cdf6f0-a0fb-844b-b235-2f90629bf30f/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-lifecycle-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/90cdf6f0-a0fb-844b-b235-2f90629bf30f/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/90cdf6f0-a0fb-844b-b235-2f90629bf30f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fae23f3f4-e4ff-4523-a1ee-dda4970d8f9a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "lifecycle-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+            "revision": "30dfa89b-c708-4435-9cdd-c165ca6c6d50",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome owner",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+          "displayName": "Outcome owner",
+          "kind": "person",
+          "revision": "https://rezics.com/id/f7c50169-4e61-44de-a10c-d01bd542e942-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome owner",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "TEeS95xhxsCwRcuXDE3Hfs",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "100"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/TEeS95xhxsCwRcuXDE3Hfs",
+            "works": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/works",
+            "collections": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-ac98-7693-a5a7-e3123c35429c",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+            "space": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+            "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13b00-8fc6-719b-8c7d-0c4504f2915e&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2Md7P9kZk6cj2A8HhDw",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+          "revision": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4",
+          "ownerRevision": "https://rezics.com/id/01a13b01-ac98-7693-a5a7-e3123c35429c",
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "predecessor": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644",
+          "mounts": [
+            {
+              "occurrence": "https://rezics.com/id/a19823c7-f4bc-8eb7-960b-a2ff3e9772fe",
+              "state": "active",
+              "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "mount",
+              "target": "https://rezics.com/id/6757654c-e5c6-46b9-90dd-4b30d460d140",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                "routeSegment": "published-guide",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644"
+            },
+            {
+              "occurrence": "https://rezics.com/id/88786ff0-6fec-87f0-8fd6-9b329ae32fa6",
+              "state": "active",
+              "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "mount",
+              "target": "https://rezics.com/id/1c99bbdc-e322-423f-9165-0de21263eaea",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                "routeSegment": "private-navigation-draft",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "95"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-ac98-7693-a5a7-e3123c35429c",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+            "space": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+            "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [],
+          "preview": {
+            "page": {
+              "document": {
+                "doc": {
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "101d2a86-8af5-4e26-9c31-0cd53487c443",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "Private retained later garden",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "doc"
+                },
+                "profile": "blocks",
+                "version": "rezics-document-v1"
+              },
+              "definitions": [
+                {
+                  "definition": "https://rezics.com/definition/showcase-block-v1",
+                  "version": "1",
+                  "payloadSchema": {
+                    "type": "object",
+                    "properties": {
+                      "rv:module": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                          "maxLength": 64
+                        },
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "blocks": [],
+              "showcases": [],
+              "showcaseData": {
+                "slides": [],
+                "slideMedia": []
+              },
+              "cost": {
+                "nodesVisited": 3,
+                "extensions": 0,
+                "showcases": 0,
+                "responseBytes": 791,
+                "graphReads": 0,
+                "definitionExecutions": 0
+              }
+            },
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            },
+            "moduleData": [],
+            "slideMedia": [],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#663322",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "cards",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "behind",
+            "navigation": {
+              "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "revision": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4",
+              "mounts": [
+                {
+                  "occurrence": "https://rezics.com/id/a19823c7-f4bc-8eb7-960b-a2ff3e9772fe",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+                  "segmentKey": "i",
+                  "orderKey": "i",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/6757654c-e5c6-46b9-90dd-4b30d460d140",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                    "routeSegment": "published-guide",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644"
+                },
+                {
+                  "occurrence": "https://rezics.com/id/88786ff0-6fec-87f0-8fd6-9b329ae32fa6",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+                  "segmentKey": "i",
+                  "orderKey": "r",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/1c99bbdc-e322-423f-9165-0de21263eaea",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                    "routeSegment": "private-navigation-draft",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4"
+                }
+              ],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+                "sequence": "95"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:6863763c-ecb6-8c55-b1ea-b5a1801dd6e5",
+            "revisionId": "e336205e-d4ec-4034-bb0e-a238309aea6a",
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "101d2a86-8af5-4e26-9c31-0cd53487c443",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private retained later garden",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "byteDigest": "426e072091e85e392953ab3a38d85771c3e4d025fb0617c0e3434d66696433ff",
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "c6a18306-9de6-4077-b10c-f2bc6dc90c26",
+              "sequence": "15"
+            }
+          },
+          "publishedPage": {
+            "page": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "variantId": "urn:rezics:variant:6863763c-ecb6-8c55-b1ea-b5a1801dd6e5",
+            "byteDigest": "bea3ec8fbc78a173116be06fe85df4801673ea9580560f27c10d6b933016c22e",
+            "revisionId": "8f44e6d7-653b-4022-a168-885b269b5b73",
+            "language": "en"
+          },
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-retire",
+        "operationId": "postV1ZonesByIdRetirements",
+        "method": "POST",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/retirements",
+        "body": {
+          "expectedHead": "https://rezics.com/id/01a13b01-ac98-7693-a5a7-e3123c35429c",
+          "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e"
+        },
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-c0ec-73d2-b4d4-c74e90588f56",
+          "receipt": "urn:rezics:receipt:4b41f69a77194b5871b1d98f574d3edb0fcd3af7c6e69dc99b1fd6797098dc38",
+          "replayed": false,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "101"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome owner",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+            "revision": "30dfa89b-c708-4435-9cdd-c165ca6c6d50",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+          "displayName": "Outcome owner",
+          "kind": "person",
+          "revision": "https://rezics.com/id/f7c50169-4e61-44de-a10c-d01bd542e942-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome owner",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "TEeS95xhxsCwRcuXDE3Hfs",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "101"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/TEeS95xhxsCwRcuXDE3Hfs",
+            "works": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/works",
+            "collections": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "retired-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-c0ec-73d2-b4d4-c74e90588f56",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+            "space": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+            "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+            "state": "retired",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "retired-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-recover",
+        "operationId": "postV1ZonesByIdRecoveries",
+        "method": "POST",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/recoveries",
+        "body": {
+          "expectedHead": "https://rezics.com/id/01a13b01-c0ec-73d2-b4d4-c74e90588f56",
+          "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e"
+        },
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-c45d-7512-807a-1ec236f3a262",
+          "receipt": "urn:rezics:receipt:f8dc6d2bae73226d9366ad19a17356db18aa620e2cc323b913a676cd9ca1ef96",
+          "replayed": false,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "102"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+            "revision": "30dfa89b-c708-4435-9cdd-c165ca6c6d50",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "displayName": "Outcome owner",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome owner",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/d47557e5-7eb4-4443-89bf-4902d025fd2e",
+          "displayName": "Outcome owner",
+          "kind": "person",
+          "revision": "https://rezics.com/id/f7c50169-4e61-44de-a10c-d01bd542e942-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome owner",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "TEeS95xhxsCwRcuXDE3Hfs",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "102"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/TEeS95xhxsCwRcuXDE3Hfs",
+            "works": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/works",
+            "collections": "/v1/agents/d47557e5-7eb4-4443-89bf-4902d025fd2e/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "recovered-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-c45d-7512-807a-1ec236f3a262",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+            "space": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+            "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13b00-8fc6-719b-8c7d-0c4504f2915e&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2Md7P9kZk6cj2A8HhDw",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+          "revision": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4",
+          "ownerRevision": "https://rezics.com/id/01a13b01-c45d-7512-807a-1ec236f3a262",
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "predecessor": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644",
+          "mounts": [
+            {
+              "occurrence": "https://rezics.com/id/a19823c7-f4bc-8eb7-960b-a2ff3e9772fe",
+              "state": "active",
+              "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "mount",
+              "target": "https://rezics.com/id/6757654c-e5c6-46b9-90dd-4b30d460d140",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                "routeSegment": "published-guide",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644"
+            },
+            {
+              "occurrence": "https://rezics.com/id/88786ff0-6fec-87f0-8fd6-9b329ae32fa6",
+              "state": "active",
+              "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "mount",
+              "target": "https://rezics.com/id/1c99bbdc-e322-423f-9165-0de21263eaea",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                "routeSegment": "private-navigation-draft",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "95"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/8de086b5-a836-8810-9412-6a25e5ea05ea/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd47557e5-7eb4-4443-89bf-4902d025fd2e",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+          "revision": "https://rezics.com/id/01a13b01-c45d-7512-807a-1ec236f3a262",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+            "space": "https://rezics.com/id/01a13b00-8fc6-719b-8c7d-0c4504f2915e",
+            "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [],
+          "preview": {
+            "page": {
+              "document": {
+                "doc": {
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "101d2a86-8af5-4e26-9c31-0cd53487c443",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "Private retained later garden",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "doc"
+                },
+                "profile": "blocks",
+                "version": "rezics-document-v1"
+              },
+              "definitions": [
+                {
+                  "definition": "https://rezics.com/definition/showcase-block-v1",
+                  "version": "1",
+                  "payloadSchema": {
+                    "type": "object",
+                    "properties": {
+                      "rv:module": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                          "maxLength": 64
+                        },
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "blocks": [],
+              "showcases": [],
+              "showcaseData": {
+                "slides": [],
+                "slideMedia": []
+              },
+              "cost": {
+                "nodesVisited": 3,
+                "extensions": 0,
+                "showcases": 0,
+                "responseBytes": 791,
+                "graphReads": 0,
+                "definitionExecutions": 0
+              }
+            },
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            },
+            "moduleData": [],
+            "slideMedia": [],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#663322",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "cards",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "behind",
+            "navigation": {
+              "navigation": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+              "revision": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4",
+              "mounts": [
+                {
+                  "occurrence": "https://rezics.com/id/a19823c7-f4bc-8eb7-960b-a2ff3e9772fe",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+                  "segmentKey": "i",
+                  "orderKey": "i",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/6757654c-e5c6-46b9-90dd-4b30d460d140",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                    "routeSegment": "published-guide",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/fd495436-6276-8e97-9a66-6d90e1154644"
+                },
+                {
+                  "occurrence": "https://rezics.com/id/88786ff0-6fec-87f0-8fd6-9b329ae32fa6",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/01ae0d6d-9872-81e3-a340-11fc99eb1473",
+                  "segmentKey": "i",
+                  "orderKey": "r",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/1c99bbdc-e322-423f-9165-0de21263eaea",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/8de086b5-a836-8810-9412-6a25e5ea05ea",
+                    "routeSegment": "private-navigation-draft",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/ad045a76-f24c-82e9-83c3-5c199f70bce4"
+                }
+              ],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+                "sequence": "95"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:6863763c-ecb6-8c55-b1ea-b5a1801dd6e5",
+            "revisionId": "e336205e-d4ec-4034-bb0e-a238309aea6a",
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "101d2a86-8af5-4e26-9c31-0cd53487c443",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private retained later garden",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "byteDigest": "426e072091e85e392953ab3a38d85771c3e4d025fb0617c0e3434d66696433ff",
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "c6a18306-9de6-4077-b10c-f2bc6dc90c26",
+              "sequence": "15"
+            }
+          },
+          "publishedPage": {
+            "page": "https://rezics.com/id/01a13b00-93c1-7738-9b3d-3684f9987772",
+            "variantId": "urn:rezics:variant:6863763c-ecb6-8c55-b1ea-b5a1801dd6e5",
+            "byteDigest": "bea3ec8fbc78a173116be06fe85df4801673ea9580560f27c10d6b933016c22e",
+            "revisionId": "8f44e6d7-653b-4022-a168-885b269b5b73",
+            "language": "en"
+          },
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "lifecycle-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/a9dcc1fd-b776-4c21-97a5-24928392cae0",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome moderator",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/a9dcc1fd-b776-4c21-97a5-24928392cae0",
+            "revision": "8806fd50-3ef3-4e3c-bc9c-21ef84130e21",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/a9dcc1fd-b776-4c21-97a5-24928392cae0",
+              "displayName": "Outcome moderator",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/a9dcc1fd-b776-4c21-97a5-24928392cae0?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/a9dcc1fd-b776-4c21-97a5-24928392cae0",
+          "displayName": "Outcome moderator",
+          "kind": "person",
+          "revision": "https://rezics.com/id/ce069275-7b43-4876-9294-4945578f70bb-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome moderator",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "MyZzfpF97STvsde9vCXmtb",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "105"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/MyZzfpF97STvsde9vCXmtb",
+            "works": "/v1/agents/a9dcc1fd-b776-4c21-97a5-24928392cae0/works",
+            "collections": "/v1/agents/a9dcc1fd-b776-4c21-97a5-24928392cae0/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/7d274e7d-a129-820d-9742-256af22d568e/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=7d274e7d-a129-820d-9742-256af22d568e&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "7d274e7d-a129-820d-9742-256af22d568e",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-c05e-715c-ad7a-cda5aae27a44",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2Me2ZxbXAAHRwz9aLyZ",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/7d274e7d-a129-820d-9742-256af22d568e"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/7d274e7d-a129-820d-9742-256af22d568e/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-lifecycle-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/7d274e7d-a129-820d-9742-256af22d568e/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/7d274e7d-a129-820d-9742-256af22d568e?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa9dcc1fd-b776-4c21-97a5-24928392cae0",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "lifecycle-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "displayName": "Outcome operator",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome operator",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+            "revision": "cc190afc-f642-4a5c-89b4-3c7fcdf7af1e",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+          "displayName": "Outcome operator",
+          "kind": "person",
+          "revision": "https://rezics.com/id/805c5b12-a4cb-4304-adbc-045651bcb87d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome operator",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "N5aa8pmKAaGQdHDnVJK6GC",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "115"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/N5aa8pmKAaGQdHDnVJK6GC",
+            "works": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/works",
+            "collections": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-1ce7-74af-a931-4f52e9d27978",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+            "space": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+            "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13b00-ef57-776a-b3e1-5ea313fd1ecb&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2Meuys39mB4kN8icqbp",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+          "revision": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369",
+          "ownerRevision": "https://rezics.com/id/01a13b02-1ce7-74af-a931-4f52e9d27978",
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "predecessor": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd",
+          "mounts": [
+            {
+              "occurrence": "https://rezics.com/id/1dbf8576-4773-8184-8f9c-234ea1bc87e2",
+              "state": "active",
+              "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "mount",
+              "target": "https://rezics.com/id/5fc6c559-66bc-4e48-adc0-b4491ea5d017",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                "routeSegment": "published-guide",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f007f89d-9be8-8679-a49e-abfcca2cc825",
+              "state": "active",
+              "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "mount",
+              "target": "https://rezics.com/id/3390d9e4-0d9b-4b28-8f24-a706414b4fde",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                "routeSegment": "private-navigation-draft",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "110"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "lifecycle-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-1ce7-74af-a931-4f52e9d27978",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+            "space": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+            "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [],
+          "preview": {
+            "page": {
+              "document": {
+                "doc": {
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "b92ec764-62f4-425e-9517-2e9d440e3e16",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "Private retained later garden",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "doc"
+                },
+                "profile": "blocks",
+                "version": "rezics-document-v1"
+              },
+              "definitions": [
+                {
+                  "definition": "https://rezics.com/definition/showcase-block-v1",
+                  "version": "1",
+                  "payloadSchema": {
+                    "type": "object",
+                    "properties": {
+                      "rv:module": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                          "maxLength": 64
+                        },
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "blocks": [],
+              "showcases": [],
+              "showcaseData": {
+                "slides": [],
+                "slideMedia": []
+              },
+              "cost": {
+                "nodesVisited": 3,
+                "extensions": 0,
+                "showcases": 0,
+                "responseBytes": 791,
+                "graphReads": 0,
+                "definitionExecutions": 0
+              }
+            },
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            },
+            "moduleData": [],
+            "slideMedia": [],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#663322",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "cards",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "behind",
+            "navigation": {
+              "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "revision": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369",
+              "mounts": [
+                {
+                  "occurrence": "https://rezics.com/id/1dbf8576-4773-8184-8f9c-234ea1bc87e2",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+                  "segmentKey": "i",
+                  "orderKey": "i",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/5fc6c559-66bc-4e48-adc0-b4491ea5d017",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                    "routeSegment": "published-guide",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd"
+                },
+                {
+                  "occurrence": "https://rezics.com/id/f007f89d-9be8-8679-a49e-abfcca2cc825",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+                  "segmentKey": "i",
+                  "orderKey": "r",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/3390d9e4-0d9b-4b28-8f24-a706414b4fde",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                    "routeSegment": "private-navigation-draft",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369"
+                }
+              ],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+                "sequence": "110"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:b35677f3-9f53-878b-82c7-48292f5612b8",
+            "revisionId": "d19da5bf-656d-4efa-af3e-56833f093840",
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "b92ec764-62f4-425e-9517-2e9d440e3e16",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private retained later garden",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "byteDigest": "c1ee29ce4c633afc7cfce6318fe269dd64c65bdc3d1b6801339d0eaa9efac29b",
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "c6a18306-9de6-4077-b10c-f2bc6dc90c26",
+              "sequence": "20"
+            }
+          },
+          "publishedPage": {
+            "page": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "variantId": "urn:rezics:variant:b35677f3-9f53-878b-82c7-48292f5612b8",
+            "byteDigest": "166d6048287615cb063bec4c816ae20190294187de4d43f2bc930255baf740c2",
+            "revisionId": "89e84bb3-e267-4802-a9bf-7f9b8a780a8a",
+            "language": "en"
+          },
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "lifecycle-retire",
+        "operationId": "postV1ZonesByIdRetirements",
+        "method": "POST",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/retirements",
+        "body": {
+          "expectedHead": "https://rezics.com/id/01a13b02-1ce7-74af-a931-4f52e9d27978",
+          "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5"
+        },
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-2e26-70e9-9f67-c83dd508df3d",
+          "receipt": "urn:rezics:receipt:6a2cd3b659d3d158c0cbe3cb1885a4d95d656035c59d33123333c0726eb7ffb6",
+          "replayed": false,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "116"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+            "revision": "cc190afc-f642-4a5c-89b4-3c7fcdf7af1e",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome operator",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "displayName": "Outcome operator",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+          "displayName": "Outcome operator",
+          "kind": "person",
+          "revision": "https://rezics.com/id/805c5b12-a4cb-4304-adbc-045651bcb87d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome operator",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "N5aa8pmKAaGQdHDnVJK6GC",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "116"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/N5aa8pmKAaGQdHDnVJK6GC",
+            "works": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/works",
+            "collections": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "retired-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-2e26-70e9-9f67-c83dd508df3d",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+            "space": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+            "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+            "state": "retired",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "retired-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "retired-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/zone_unavailable",
+          "title": "Zone is unavailable",
+          "status": 404,
+          "code": "zone_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "lifecycle-recover",
+        "operationId": "postV1ZonesByIdRecoveries",
+        "method": "POST",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/recoveries",
+        "body": {
+          "expectedHead": "https://rezics.com/id/01a13b02-2e26-70e9-9f67-c83dd508df3d",
+          "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5"
+        },
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-3083-72ef-bdc1-0631b020520f",
+          "receipt": "urn:rezics:receipt:61b05f41af2ac251590453a9d191ac42cd91789401247f57f11f8d8bd1f470ed",
+          "replayed": false,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "117"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-agents",
+        "operationId": "getV1MeAgents",
+        "method": "GET",
+        "path": "/v1/me/agents?languages=en",
+        "status": 200,
+        "answer": {
+          "profile": "agent-discovery-v1",
+          "complete": true,
+          "items": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "kind": "person",
+              "handle": null,
+              "displayName": {
+                "value": "Outcome operator",
+                "language": "und",
+                "direction": "ltr"
+              }
+            }
+          ]
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+            "revision": "cc190afc-f642-4a5c-89b4-3c7fcdf7af1e",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-acting-contexts",
+        "operationId": "getV1MeActing-contexts",
+        "method": "GET",
+        "path": "/v1/me/acting-contexts?task=work.create",
+        "status": 200,
+        "answer": {
+          "profile": "work-create-acting-contexts-v1",
+          "task": "work.create",
+          "scope": "work:create:root",
+          "authorityEpoch": "0",
+          "contexts": [
+            {
+              "actingSubject": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+              "displayName": "Outcome operator",
+              "handle": null,
+              "kind": "person"
+            }
+          ],
+          "directContexts": [],
+          "preferredActingSubject": null,
+          "savedPreference": null,
+          "preferenceRevision": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-language-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-agent-profile",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/aab39373-a023-49d5-8354-924791456ac5",
+          "displayName": "Outcome operator",
+          "kind": "person",
+          "revision": "https://rezics.com/id/805c5b12-a4cb-4304-adbc-045651bcb87d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome operator",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "N5aa8pmKAaGQdHDnVJK6GC",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "117"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": true
+          },
+          "links": {
+            "profile": "/a/N5aa8pmKAaGQdHDnVJK6GC",
+            "works": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/works",
+            "collections": "/v1/agents/aab39373-a023-49d5-8354-924791456ac5/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "recovered-binding-configuration",
+        "operationId": "getV1ZonesByIdConfiguration",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/configuration?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-3083-72ef-bdc1-0631b020520f",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+            "space": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+            "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13b00-ef57-776a-b3e1-5ea313fd1ecb&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+          "state": "current",
+          "canonical": {
+            "prefix": "/z/",
+            "key": "1Cg2Meuys39mB4kN8icqbp",
+            "suffixSource": "Retained original site"
+          },
+          "capabilities": {
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-zone",
+        "operationId": "getV1ZonesById",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+          "revision": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369",
+          "ownerRevision": "https://rezics.com/id/01a13b02-3083-72ef-bdc1-0631b020520f",
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "predecessor": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd",
+          "mounts": [
+            {
+              "occurrence": "https://rezics.com/id/1dbf8576-4773-8184-8f9c-234ea1bc87e2",
+              "state": "active",
+              "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "segmentKey": "i",
+              "orderKey": "i",
+              "role": "mount",
+              "target": "https://rezics.com/id/5fc6c559-66bc-4e48-adc0-b4491ea5d017",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                "routeSegment": "published-guide",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd"
+            },
+            {
+              "occurrence": "https://rezics.com/id/f007f89d-9be8-8679-a49e-abfcca2cc825",
+              "state": "active",
+              "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "segmentKey": "i",
+              "orderKey": "r",
+              "role": "mount",
+              "target": "https://rezics.com/id/3390d9e4-0d9b-4b28-8f24-a706414b4fde",
+              "qualifier": {
+                "type": "zone-mount",
+                "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                "routeSegment": "private-navigation-draft",
+                "key": "id",
+                "disclosure": "public"
+              },
+              "labels": [],
+              "introducedBy": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369"
+            }
+          ],
+          "next": null,
+          "sourcePosition": {
+            "datasetId": "product",
+            "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+            "sequence": "110"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "recovered-editor",
+        "operationId": "getV1ZonesByIdShowcase-editor",
+        "method": "GET",
+        "path": "/v1/zones/b137694d-d500-8773-9e79-6598294c53f7/showcase-editor?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Faab39373-a023-49d5-8354-924791456ac5",
+        "status": 200,
+        "answer": {
+          "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+          "revision": "https://rezics.com/id/01a13b02-3083-72ef-bdc1-0631b020520f",
+          "configuration": {
+            "format": "rezics-zone-config-v1",
+            "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+            "space": "https://rezics.com/id/01a13b00-ef57-776a-b3e1-5ea313fd1ecb",
+            "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+            "state": "active",
+            "disclosure": "public",
+            "budget": {
+              "timeMs": 2000,
+              "rows": 1000
+            },
+            "queryBlocks": [],
+            "model": "https://rezics.com/definition/zone-capability-v1",
+            "homeDocument": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            }
+          },
+          "name": "Retained original site",
+          "language": "en",
+          "direction": "ltr",
+          "slideMedia": [],
+          "preview": {
+            "page": {
+              "document": {
+                "doc": {
+                  "content": [
+                    {
+                      "attrs": {
+                        "dir": null,
+                        "id": "b92ec764-62f4-425e-9517-2e9d440e3e16",
+                        "lang": null,
+                        "textAlign": null
+                      },
+                      "content": [
+                        {
+                          "text": "Private retained later garden",
+                          "type": "text"
+                        }
+                      ],
+                      "type": "paragraph"
+                    }
+                  ],
+                  "type": "doc"
+                },
+                "profile": "blocks",
+                "version": "rezics-document-v1"
+              },
+              "definitions": [
+                {
+                  "definition": "https://rezics.com/definition/showcase-block-v1",
+                  "version": "1",
+                  "payloadSchema": {
+                    "type": "object",
+                    "properties": {
+                      "rv:module": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+                          "maxLength": 64
+                        },
+                        "minItems": 1,
+                        "maxItems": 1,
+                        "uniqueItems": true
+                      }
+                    },
+                    "additionalProperties": false
+                  }
+                }
+              ],
+              "blocks": [],
+              "showcases": [],
+              "showcaseData": {
+                "slides": [],
+                "slideMedia": []
+              },
+              "cost": {
+                "nodesVisited": 3,
+                "extensions": 0,
+                "showcases": 0,
+                "responseBytes": 791,
+                "graphReads": 0,
+                "definitionExecutions": 0
+              }
+            },
+            "presentation": {
+              "profile": "zone-presentation-v2",
+              "preset": "clean",
+              "tokens": {
+                "colorScheme": "system",
+                "accent": "#663322",
+                "density": "comfortable",
+                "cardRadius": "md",
+                "headingFontScale": "md",
+                "surfaceTint": "none",
+                "fontPairing": "sans",
+                "pageSurface": "cards",
+                "coverStyle": "portrait",
+                "titleEffect": "plain"
+              },
+              "navigation": [],
+              "modules": [],
+              "slides": []
+            },
+            "moduleData": [],
+            "slideMedia": [],
+            "renderTokens": {
+              "colorScheme": "system",
+              "accent": "#663322",
+              "density": "comfortable",
+              "cardRadius": "md",
+              "headingFontScale": "md",
+              "surfaceTint": "none",
+              "fontPairing": "sans",
+              "pageSurface": "cards",
+              "coverStyle": "portrait",
+              "titleEffect": "plain",
+              "textOnAccent": "#ffffff"
+            },
+            "publicationStatus": "behind",
+            "navigation": {
+              "navigation": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+              "revision": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369",
+              "mounts": [
+                {
+                  "occurrence": "https://rezics.com/id/1dbf8576-4773-8184-8f9c-234ea1bc87e2",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+                  "segmentKey": "i",
+                  "orderKey": "i",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/5fc6c559-66bc-4e48-adc0-b4491ea5d017",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                    "routeSegment": "published-guide",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/d5838a67-99b8-8269-9ba2-a232c8a214dd"
+                },
+                {
+                  "occurrence": "https://rezics.com/id/f007f89d-9be8-8679-a49e-abfcca2cc825",
+                  "state": "active",
+                  "parent": "https://rezics.com/id/0d5a43b0-2f63-8ece-8eef-a1e537ecc991",
+                  "segmentKey": "i",
+                  "orderKey": "r",
+                  "role": "mount",
+                  "target": "https://rezics.com/id/3390d9e4-0d9b-4b28-8f24-a706414b4fde",
+                  "qualifier": {
+                    "type": "zone-mount",
+                    "zone": "https://rezics.com/id/b137694d-d500-8773-9e79-6598294c53f7",
+                    "routeSegment": "private-navigation-draft",
+                    "key": "id",
+                    "disclosure": "public"
+                  },
+                  "labels": [],
+                  "introducedBy": "https://rezics.com/id/0c881b01-61c3-8b45-8bc7-c2b99cb99369"
+                }
+              ],
+              "next": null,
+              "sourcePosition": {
+                "datasetId": "product",
+                "dataEpoch": "0ea2b43b-5bf1-4829-b942-2a65d3e79491",
+                "sequence": "110"
+              }
+            }
+          },
+          "draft": {
+            "variantId": "urn:rezics:variant:b35677f3-9f53-878b-82c7-48292f5612b8",
+            "revisionId": "d19da5bf-656d-4efa-af3e-56833f093840",
+            "language": {
+              "kind": "tag",
+              "tag": "en",
+              "originalTag": "en"
+            },
+            "direction": "ltr",
+            "document": {
+              "doc": {
+                "content": [
+                  {
+                    "attrs": {
+                      "dir": null,
+                      "id": "b92ec764-62f4-425e-9517-2e9d440e3e16",
+                      "lang": null,
+                      "textAlign": null
+                    },
+                    "content": [
+                      {
+                        "text": "Private retained later garden",
+                        "type": "text"
+                      }
+                    ],
+                    "type": "paragraph"
+                  }
+                ],
+                "type": "doc"
+              },
+              "profile": "blocks",
+              "version": "rezics-document-v1"
+            },
+            "byteDigest": "c1ee29ce4c633afc7cfce6318fe269dd64c65bdc3d1b6801339d0eaa9efac29b",
+            "editable": true,
+            "sourcePosition": {
+              "owner": "content",
+              "dataEpoch": "c6a18306-9de6-4077-b10c-f2bc6dc90c26",
+              "sequence": "20"
+            }
+          },
+          "publishedPage": {
+            "page": "https://rezics.com/id/01a13b00-f257-73f4-aafd-12a7f791c70f",
+            "variantId": "urn:rezics:variant:b35677f3-9f53-878b-82c7-48292f5612b8",
+            "byteDigest": "166d6048287615cb063bec4c816ae20190294187de4d43f2bc930255baf740c2",
+            "revisionId": "89e84bb3-e267-4802-a9bf-7f9b8a780a8a",
+            "language": "en"
+          },
+          "cost": {
+            "graphReads": 1,
+            "objectReads": 2,
+            "maxSlides": 6,
+            "maxCampaignUses": 128,
+            "maxCampaignMediaReads": 4,
+            "authorityProbes": 2,
+            "maxModuleGraphReads": 128,
+            "maxResolvedBlocks": 8,
+            "maxResolvedCollections": 4,
+            "maxNavigation": 50,
+            "maxNavigationGraphReads": 2048,
+            "maxNavigationGraphBytes": 8388608,
+            "maxResponseBytes": 4194304
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json"
+        }
+      }
+    ]
+  }
+}

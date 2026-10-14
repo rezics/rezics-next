@@ -308,6 +308,19 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, loc
   const applied = useRef(wholeServings(initial));
   /** A newer scale or reload ignores a continuation that was already on its way. */
   const generation = useRef(0);
+  useEffect(() => {
+    generation.current++;
+    setPage(initial);
+    setServings(wholeServings(initial) ?? 1);
+    applied.current = wholeServings(initial);
+    setUnits('written');
+    setBusy(false);
+    setContinuing(false);
+    setError(false);
+    setContinueFailed(false);
+    setChanged(false);
+    setCooking(false);
+  }, [initial, href, actingSubject]);
   const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
     const open = () => setCooking(true);

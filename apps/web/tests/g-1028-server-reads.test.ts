@@ -37,6 +37,7 @@ import { page as feedPage } from '../features/feed/fixtures.ts';
 import { NextRequest } from 'next/server';
 import { proxy } from '../proxy.ts';
 import { mainBodyRead } from '../features/api/main-read-operation.ts';
+import { isOfflineError } from '../features/feed/types.ts';
 
 const nativeFetch = globalThis.fetch;
 const mainOrigin = process.env.MAIN_ORIGIN;
@@ -448,6 +449,30 @@ test('G1028: killing Main mid-response retries the read once on a new TCP connec
     expect(ports[1]).not.toBe(ports[0]);
   } finally {
     await stop(server);
+  }
+});
+
+test('a partial upstream response stays unavailable when its retry loses the connection', async () => {
+  for (const retryAnswers of [false, true]) {
+    let calls = 0;
+    const lost = Object.assign(new Error('Connection closed'), { code: 'ECONNRESET' });
+    const fetcher: FetchSender = async () => {
+      calls++;
+      if (calls === 2 && !retryAnswers) throw lost;
+      return new Response(new ReadableStream({
+        start(controller) { controller.enqueue(new TextEncoder().encode('{"items":')); },
+        pull(controller) { controller.error(lost); },
+      }));
+    };
+    try {
+      await serverFetch('http://main.test/v1/feed', {}, { fetch: fetcher });
+      throw new Error('An interrupted response succeeded');
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error);
+      expect((error as Error).cause).toBe(lost);
+      expect(isOfflineError(error)).toBe(false);
+    }
+    expect(calls).toBe(2);
   }
 });
 

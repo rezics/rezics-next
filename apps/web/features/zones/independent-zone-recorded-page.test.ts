@@ -3,7 +3,7 @@ import { afterEach, expect, spyOn, test } from 'bun:test';
 import { documentText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { answerPersonas, type AnswerPersona, type AnswerRecord, type AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import independentZone from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
-import { resolvedAddress } from '../address/client.ts';
+import { ADDRESS_HEADER, resolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -157,6 +157,13 @@ function actingPerson(persona: ManagedPersona): string {
   return acting;
 }
 
+/** The host now carries proxy admission instead of repeating public address and presentation reads. */
+function managementAdmission(persona: ManagedPersona, label: 'management-address' | 'saved-preview-address') {
+  const address = resolvedAddress(sample(persona, label).answer);
+  if (!address) throw new Error(`${persona} management address was not admitted`);
+  return { headers: { [ADDRESS_HEADER]: encodeURIComponent(JSON.stringify(address)) } };
+}
+
 function callOf(item: AnswerSample): SeenRequest {
   const url = new URL(item.path, 'https://recorded.invalid');
   return { method: item.method, path: url.pathname, query: Object.fromEntries(url.searchParams),
@@ -223,12 +230,11 @@ test('signed-in personas read the recorded management and saved preview', async 
     const acting = actingPerson(persona);
     const space = zoneSpace(persona);
     const owner = persona === 'owner';
-    const host = install(persona, ['management-configuration', 'management-address', 'management-site-presentation', 'management-editor', 'management-zone']);
+    const host = install(persona, ['management-configuration', 'management-editor', 'management-zone']);
     try {
-      const loaded = await pageRequest(() => loadZoneAuthoring(host.main, space, 'en', acting));
-      // The layout repeats this resolve. Outside a React render the request cache does not collapse it;
-      // the public address cache still suppresses the second resolve inside its recorded max-age.
-      expectVisit(host.requests, ['management-configuration', 'management-address', 'management-site-presentation'],
+      const loaded = await pageRequest(() => loadZoneAuthoring(host.main, space, 'en', acting),
+        managementAdmission(persona, 'management-address'));
+      expectVisit(host.requests, ['management-configuration'],
         ['management-editor', 'management-zone'], persona);
       expect(host.requests.some(item => item.path.endsWith('/routes'))).toBe(false);
       const address = sample(persona, 'management-address').answer as { capabilities?: { realm?: unknown }; canonical: CanonicalAddress };
@@ -250,18 +256,19 @@ test('signed-in personas read the recorded management and saved preview', async 
       }
     } finally { host.restore(); }
 
-    const again = install(persona, ['management-configuration', 'management-address', 'management-site-presentation', 'management-editor', 'management-zone']);
+    const again = install(persona, ['management-configuration']);
     try {
-      const lifecycle = await pageRequest(() => loadZoneLifecycle(again.main, space, 'en', acting));
+      const lifecycle = await pageRequest(() => loadZoneLifecycle(again.main, space, 'en', acting),
+        managementAdmission(persona, 'management-address'));
       expect(again.requests.some(item => item.path === '/v1/addresses/resolve')).toBe(false);
       if (!owner) {
-        expectVisit(again.requests, ['management-configuration', 'management-site-presentation', 'management-configuration'], [], persona);
+        expectVisit(again.requests, ['management-configuration', 'management-configuration'], [], persona);
         expect(lifecycle).toEqual({ kind: 'failure', failure: 'denied' });
         const repeated = sample(persona, 'management-lifecycle-configuration');
         expect(callOf(repeated).path).toBe(callOf(sample(persona, 'management-configuration')).path);
         expect(callOf(repeated).query).toEqual(callOf(sample(persona, 'management-configuration')).query);
       } else {
-        expectVisit(again.requests, ['management-configuration', 'management-site-presentation'], [], persona);
+        expectVisit(again.requests, ['management-configuration'], [], persona);
         expect(lifecycle.kind).toBe('ready');
         if (lifecycle.kind === 'ready') {
           const bound = new URL(sample(persona, 'management-address').path, 'https://recorded.invalid').searchParams.get('key');
@@ -272,7 +279,7 @@ test('signed-in personas read the recorded management and saved preview', async 
       }
     } finally { again.restore(); }
 
-    const previewLabels = ['saved-preview-configuration', 'saved-preview-address', 'saved-preview-site-presentation', 'saved-preview-editor', 'saved-preview-zone',
+    const previewLabels = ['saved-preview-configuration', 'saved-preview-editor', 'saved-preview-zone',
       ...(owner ? ['saved-preview-navigation'] : [])];
     const preview = install(persona, previewLabels);
     const unexpected: string[] = [];
@@ -287,18 +294,19 @@ test('signed-in personas read the recorded management and saved preview', async 
           load: async () => { unexpected.push('package'); return null; },
           declarations: async () => { unexpected.push('declarations'); return null; },
         },
-      }, { locale: 'en', homeName: realmMessages.home, lookEnabled: true }));
+      }, { locale: 'en', homeName: realmMessages.home, lookEnabled: true }),
+      managementAdmission(persona, 'saved-preview-address'));
       expect(unexpected).toEqual([]);
       expect(preview.requests.some(item => item.path === '/v1/addresses/resolve')).toBe(false);
       if (!owner) {
-        expectVisit(preview.requests, ['saved-preview-configuration', 'saved-preview-site-presentation'],
+        expectVisit(preview.requests, ['saved-preview-configuration'],
           ['saved-preview-editor', 'saved-preview-zone'], persona);
         expect(saved.kind).toBe('failure');
         if (saved.kind === 'failure') expect(saved.failure).toBe('denied');
       } else {
-        expectVisit(preview.requests.slice(0, 4), ['saved-preview-configuration', 'saved-preview-site-presentation'],
+        expectVisit(preview.requests.slice(0, 3), ['saved-preview-configuration'],
           ['saved-preview-editor', 'saved-preview-zone'], persona);
-        expect(preview.requests.slice(4).map(signature)).toEqual([signature(callOf(sample(persona, 'saved-preview-navigation')))]);
+        expect(preview.requests.slice(3).map(signature)).toEqual([signature(callOf(sample(persona, 'saved-preview-navigation')))]);
         expect(saved.kind).toBe('ready');
         if (saved.kind !== 'ready') continue;
         const draft = (sample(persona, 'saved-preview-editor').answer as { draft: { document: DocumentSnapshot } }).draft.document;

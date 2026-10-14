@@ -190,7 +190,7 @@ test('the chooser reads each persona’s recorded realizations and the availabil
     const id = workId(persona);
     expect<unknown>(await readWorkRealizations(main, actingSubject, id)).toEqual({ ok: true, data: realizations.answer });
     expect((realizations.answer as { items: unknown[] }).items).toHaveLength(0);
-    expect<unknown>(await readWorkParts(main, actingSubject, id, { limit: 1 })).toEqual({ ok: false, failure: 'missing' });
+    expect<unknown>(await readWorkParts(main, actingSubject, id, { limit: 1 })).toEqual({ ok: false, failure: 'missing', status: parts.status, problem: parts.answer });
     expect((parts.answer as { code: string }).code).toBe('work_unavailable');
   }
 });

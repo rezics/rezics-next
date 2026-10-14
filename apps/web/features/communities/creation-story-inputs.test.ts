@@ -37,11 +37,11 @@ test('Pending creation retains the 202 operation and definitive refusals retain 
   expect((await readForm('stranger', 'pending')).mapped).toEqual({ kind: 'pending', operationId: 'creation-pending' });
   for (const [state, persona, label] of [
     ['quota', 'owner', 'creation-quota-denied'],
-    ['conflict', 'stranger', 'creation-intent-conflict'],
-    ['expired', 'visitor', 'creation-sign-in-required'],
+    ['conflict', 'stranger', null],
+    ['expired', 'visitor', 'form-creation'],
   ] as const) {
-    const { mapped } = await readForm(state === 'quota' ? 'owner' : 'stranger', state);
-    const sample = creationSample(persona, label);
+    const { mapped, input } = await readForm(state === 'quota' ? 'owner' : 'stranger', state);
+    const sample = label ? creationSample(persona, label) : input.command;
     const problem = sample.answer as { title: string; code: string };
     expect(mapped).toEqual({ kind: 'refusal', problem: { status: sample.status, title: problem.title, code: problem.code } });
   }

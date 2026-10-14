@@ -48,6 +48,11 @@ makes, stop and report that instead of building it.
 
 ## Repository conventions
 
+- Obtain the pinned Fuseki image with `task jena:image`; never run `docker build`
+  for that image by hand. The command returns when the tag exists and otherwise
+  waits for one host-wide build per tag. `task gen`, stack startup and dev refresh
+  use the same command implementation. Native tests run separately in the gate
+  and wave proof through `module-test`.
 - Generated files (`generated/**`, `packages/model/src/generated/**`, the Fuseki
   image stamp in `infra/dev/compose.yaml`) are not committed: run `task gen`
   when you need them, restore them before handoff. A changed route contract

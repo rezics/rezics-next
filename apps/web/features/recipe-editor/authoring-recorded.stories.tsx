@@ -44,7 +44,7 @@ const owner: Story['play'] = async ({ canvasElement, args }) => {
 };
 const refused: Story['play'] = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement), t = editCopy(args.locale);
-  await expect(await canvas.findByText(args.persona === 'visitor' ? t.signInTitle : t.noAuthorityTitle)).toBeVisible();
+  await expect(await canvas.findByRole('heading', { name: args.persona === 'visitor' ? t.signInTitle : t.noAuthorityTitle })).toBeVisible();
   await expect(canvas.queryByRole('textbox', { name: copyOf(args.locale).title })).toBeNull();
   await expect(canvas.queryByRole('button', { name: copyOf(args.locale).publish })).toBeNull();
 };

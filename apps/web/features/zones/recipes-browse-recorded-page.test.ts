@@ -289,7 +289,7 @@ function findBrowse(node: ReactNode): BrowseModel {
 
 function frameLabels(page: string) {
   return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', page,
-    ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
+    ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban',
       'frame-follow', 'frame-platform-access'])];
 }
 

@@ -1,22 +1,23 @@
+import { recordedHomeNavigation } from './home-authoring-recorded-inputs.ts';
 import { expect, test } from 'vitest';
 import { serializeDocument } from '@rezics/document';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
-import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
+import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import publication from '../../../../tests/qa/fixtures/outcomes/zone/publication.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
-import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme } from './api.ts';
+import { browserZoneAuthoring, browserZoneTheme } from './api.ts';
 import { authoringModel, canPublish, draftChoice, draftWire, publicationChoice, publicationWire, reduceEditor, type DraftWire, type EditorState } from './model.ts';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview } from './publication-review.ts';
 import { recordedActingSubject, zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts';
 
-const record = navigationAndTheme as AnswerRecord;
+const record = homeRendering as AnswerRecord;
 const sample = (label: string) => {
   const found = record.personas.owner.find(item => item.label === label);
   if (!found) throw new Error(`Missing owner record: ${label}`);
   return found;
 };
-const editor = sample('showcase-editor');
+const editor = sample('management-editor');
 const zoneId = zoneIdFromRecordedPath(editor.path);
 const actor = recordedActingSubject(editor.path);
 const zoneIri = `https://rezics.com/id/${zoneId}`;
@@ -40,20 +41,19 @@ function savedDraft(label: string, state: EditorState): EditorState {
 }
 
 function publicationState() {
-  return savedDraft('save-home-draft-over-head', savedDraft('save-home-draft', opening().state));
+  return savedDraft('editor-save', opening().state);
 }
 
 function opening(showcase: unknown = editor.answer) {
-  const model = authoringModel(showcase, sample('draft-navigation').answer, zoneId, 'Recorded site');
+  const model = authoringModel(showcase, sample('management-zone').answer, zoneId, 'Recorded site');
   if (!model) throw new Error('Authorized recorded editor must load');
   return model;
 }
 
 function session() {
-  const replay = recordedFetch(record, 'owner', [{ label: 'mount-target-work', state: 'error' }, ...[
-    'showcase-editor', 'draft-navigation', 'draft-navigation-editor', 'draft-configuration',
-    'mount-target-collection-name', 'save-home-draft', 'save-home-draft-over-head', 'publish-site-bundle',
-  ].map(label => ({ label, state: 'populated' as const }))], { pathPrefix: BFF_PREFIX });
+  const replay = recordedFetch(record, 'owner', [
+    'editor-reopen-draft', 'editor-reopen-heads', 'management-lifecycle-configuration', 'editor-save', 'editor-publication',
+  ].map(label => ({ label, state: 'populated' as const })), { pathPrefix: BFF_PREFIX });
   const statuses: number[] = [];
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const answer = await replay.fetcher(input, init);
@@ -66,7 +66,7 @@ function session() {
 
 test('prepared home identity is distinct from the Zone and captured with the exact saved Content basis', () => {
   const state = publicationState();
-  const body = sample('publish-site-bundle').body as { pages: unknown[] };
+  const body = sample('editor-publication').body as { pages: unknown[] };
   expect(state.homeDocument).not.toBe(zoneIri);
   const draft = draftChoice(state, actor);
   expect(draftWire(draft)).toMatchObject({ resourceId: state.homeDocument, actingSubject: actor,
@@ -85,7 +85,7 @@ test.each([undefined, null, zoneId, 'https://rezics.com/id/---------------------
 ('missing or malformed prepared home identity is never replaced by the Zone (%j)', homeDocument => {
   const saved = editor.answer as { configuration: object };
   expect(authoringModel({ ...saved, configuration: { ...saved.configuration, homeDocument } },
-    sample('draft-navigation').answer, zoneId, 'Recorded site')).toBeNull();
+    sample('management-zone').answer, zoneId, 'Recorded site')).toBeNull();
   const invalid = { ...opening().state, homeDocument: homeDocument as string };
   expect(canPublish(invalid)).toBe(false);
   expect(publicationChoice(invalid)).toBeNull();
@@ -113,7 +113,7 @@ test('production publication accepts the unchanged owner 201 at the Zone endpoin
     const choice = publicationChoice(state);
     if (!choice) throw new Error('Saved recorded home is publishable');
     const result = await s.authoring.publish(choice, actor, crypto.randomUUID(), zoneId);
-    const answer = sample('publish-site-bundle').answer as { revision: string };
+    const answer = sample('editor-publication').answer as { revision: string };
     expect(result).toEqual({ ok: true, data: { zoneHead: answer.revision, replayed: false, receipt: answer } });
     expect(s.statuses).toEqual([201]);
     if (!result.ok) throw new Error('Recorded publication refused');
@@ -128,7 +128,7 @@ test('confirmed production review accepts the unchanged bundle and refuses a dif
   try {
     const state = publicationState();
     const selection = await readSavedPublicationSelection(zoneId, actor, {
-      authoring: s.authoring, navigation: browserZoneNavigation(s.main), theme: browserZoneTheme(s.main),
+      authoring: s.authoring, navigation: recordedHomeNavigation(s.main), theme: browserZoneTheme(s.main),
     });
     expect(selection.ok).toBe(true);
     if (!selection.ok) throw new Error('Recorded review refused');
@@ -139,19 +139,19 @@ test('confirmed production review accepts the unchanged bundle and refuses a dif
     expect(reviewedPublicationChoice({ ...state, homeDocument: zoneIri }, confirmed)).toBeNull();
     const choice = reviewedPublicationChoice(state, confirmed);
     if (!choice) throw new Error('Confirmed recorded review is publishable');
-    expect(publicationWire(choice, actor)).toEqual(sample('publish-site-bundle').body);
-    const answer = sample('publish-site-bundle').answer as { revision: string };
+    expect(publicationWire(choice, actor)).toEqual(sample('editor-publication').body);
+    const answer = sample('editor-publication').answer as { revision: string };
     expect(await s.authoring.publish(choice, actor, crypto.randomUUID(), zoneId))
       .toEqual({ ok: true, data: { zoneHead: answer.revision, replayed: false, receipt: answer } });
     expect(s.statuses.at(-1)).toBe(201);
   } finally { s.replay.dispose(); }
 });
 
-test('production saves accept both unchanged draft commands and carry their exact basis into publication', async () => {
+test('production saves accept the captured draft command and carry its exact basis into publication', async () => {
   const s = session();
   try {
-    let state: EditorState = { ...opening().state, savedValue: null, basis: null, expectedHead: null };
-    for (const label of ['save-home-draft', 'save-home-draft-over-head']) {
+    let state: EditorState = opening().state;
+    for (const label of ['editor-save']) {
       expect(state.expectedHead).toBe((sample(label).body as DraftWire).expectedHead);
       const edited = capturedDraft(label, state);
       const choice = draftChoice(edited, actor);
@@ -168,13 +168,13 @@ test('production saves accept both unchanged draft commands and carry their exac
     }
     const choice = publicationChoice(state);
     if (!choice) throw new Error('Recorded saved home is publishable');
-    expect(publicationWire(choice, actor)).toEqual(sample('publish-site-bundle').body);
+    expect(publicationWire(choice, actor)).toEqual(sample('editor-publication').body);
     const published = await s.authoring.publish(choice, actor, crypto.randomUUID(), zoneId);
     expect(published.ok).toBe(true);
     if (!published.ok) throw new Error('Recorded saved publication refused');
     expect(reduceEditor(state, { type: 'published', ...published.data }).publishedReceipt)
-      .toEqual(sample('publish-site-bundle').answer);
-    expect(s.statuses).toEqual([201, 201, 201]);
+      .toEqual(sample('editor-publication').answer);
+    expect(s.statuses).toEqual([201, 201]);
   } finally { s.replay.dispose(); }
 });
 

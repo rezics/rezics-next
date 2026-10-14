@@ -1597,7 +1597,10 @@ describe('independent tmux launcher', () => {
     try {
       const repository = join(f.dir,'repository');
       mkdirSync(repository);
-      expect(spawnSync('git',['init',repository],{encoding:'utf8'}).status).toBe(0);
+      expect(spawnSync('git',['init','-b','main',repository],{encoding:'utf8'}).status).toBe(0);
+      // The live pump settles against a committed Main snapshot before waking managers.
+      expect(spawnSync('git',['-c','user.name=Fixture','-c','user.email=fixture@example.invalid',
+        'commit','--allow-empty','-m','fixture'],{cwd:repository,encoding:'utf8'}).status).toBe(0);
       const bin = join(f.dir,'bin'); mkdirSync(bin);
       const agent = `#!${process.execPath}
         import { appendFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';

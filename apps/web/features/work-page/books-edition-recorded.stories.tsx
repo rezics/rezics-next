@@ -48,7 +48,7 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
     const actingSubject = new URL(headerSample.path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined;
     const id = new URL(headerSample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
     const releaseLabel = empty ? 'release-choices-empty' : row === 'hub' ? 'availability-releases' : 'release-choices';
-    const preferenceLabel = empty ? 'edition-preference-empty' : saved ? row === 'ambiguous' ? 'own-preference-audiobook'
+    const preferenceLabel = row === 'formats' && !empty && !saved && state !== 'stale' ? 'own-preference-paperback' : empty ? 'edition-preference-empty' : saved ? row === 'ambiguous' ? 'own-preference-audiobook'
       : row === 'hub' ? 'own-preference-paperback' : 'own-preference-ebook'
       : 'own-preference-before';
     const selections: RecordedSelection[] = [
@@ -57,7 +57,7 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
     ];
     if (persona === 'member') selections.push(
       { label: empty ? 'realization-choices-empty' : 'realization-choices', state: empty ? 'empty' : 'populated' },
-      { label: preferenceLabel, state: !empty && saved ? 'populated' : 'empty' },
+      { label: preferenceLabel, state: !empty && (saved || preferenceLabel === 'own-preference-paperback') ? 'populated' : 'empty' },
     );
     if (persona === 'member' && !empty) selections.push(
       { label: row === 'hub' ? 'release-detail-paperback' : 'selected-release-ebook', state: 'populated' },
@@ -67,6 +67,7 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
     );
     if (persona === 'member') selections.push({ label: empty ? 'progress-summary-empty' : 'progress-in-language',
       state: empty ? 'empty' : 'populated' });
+    if (persona === 'member' && row === 'formats' && preferenceLabel === 'own-preference-paperback') selections.push({ label: 'selected-release-paperback', state: 'populated' });
     if (row === 'ambiguous' && saved) selections.push({ label: 'selected-release-audiobook', state: 'populated' });
     const replay = recordedFetch(records[row], persona, selections, { pathPrefix: BFF_PREFIX });
     let mounted = true;
@@ -160,7 +161,7 @@ export const VisitorPhone: Story = { ...Visitor, globals: { viewport: { value: '
 export const VisitorMixedFormats: Story = { ...Visitor, args: { row: 'formats', persona: 'visitor' } };
 export const VisitorMixedFormatsPhone: Story = { ...VisitorMixedFormats, globals: { viewport: { value: 'phone' } } };
 
-export const SameTitleSave: Story = { args: { row: 'ambiguous', saved: true }, async play({ canvasElement, args }) {
+export const SameTitleSave: Story = { args: { row: 'ambiguous', saved: false }, async play({ canvasElement, args }) {
   await chooseRecordedEdition(canvasElement, args);
   await expect(within(canvasElement).findByRole('status')).resolves.toHaveTextContent(copyOf(args.locale).preferenceSaved);
   await expect(within(canvasElement).getByRole('combobox', { name: copyOf(args.locale).edition }))

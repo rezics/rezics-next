@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { nativeModuleTestInvocation } from '../../../scripts/dev/fuseki-image.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const classes = [
@@ -52,9 +53,7 @@ test('accepted semantic source prerequisites share one native TDB2 owner runtime
     if (!declaration) throw new Error(`missing native builder ${name}`);
     return `${name}=${declaration[1]!}`;
   });
-  const packageInvocation = /^RUN --mount=type=cache,id=rezics-native-test-files,target=\/build\/tmp,sharing=locked mvn (.+) package$/m.exec(moduleStage)?.[1];
-  if (!packageInvocation || !packageInvocation.split(' ').every((argument) => /^-[^\s"'`]+$/.test(argument)))
-    throw new Error('unsupported native builder Maven invocation');
+  const packageInvocation = nativeModuleTestInvocation(dockerfile);
   const mavenArguments = packageInvocation.split(' ');
   const cache = join(temporary, 'semantic-source-readiness-maven-cache');
   mkdirSync(cache, { recursive: true });

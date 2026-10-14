@@ -91,11 +91,20 @@ test('the program waits for live workers before starting a wide command', async 
     env: { GOAL_ID: 'program' }, slotDirectory: directory, workerGoals: () => workers,
     reap: () => {}, announce: message => messages.push(message), sleep: async () => { slept++; workers = []; },
     runCommand: async (_command, env, start) => {
-      expect(slept).toBe(1);
-      expect(readDirectoryLease(join(directory, 'heavy'))?.besideWorkers).toBe(0);
-      expect(env.GOAL_QA_HEAVY_RUN).toBe('1');
-      start();
-      return 0;
+      // Harness commands defer admission until after memory is ready. The
+      // dispatcher must pass the policy that the harness uses to take its turn.
+      expect(env.GOAL_QA_DEFERRED_HEAVY).toBe('1');
+      const release = await acquireHeavy(_command, { lockDir: env.GOAL_QA_HEAVY_LOCK,
+        waitForWorkers: env.GOAL_QA_WIDE_RUN === '1', besideWorkers: env.GOAL_QA_BESIDE_WORKERS === '1',
+        workerGoals: () => workers, bindExit: false, announce: message => messages.push(message),
+        sleep: async () => { slept++; workers = []; } });
+      try {
+        expect(slept).toBe(1);
+        expect(readDirectoryLease(join(directory, 'heavy'))?.besideWorkers).toBe(0);
+        expect(env.GOAL_QA_HEAVY_RUN).toBe('1');
+        start();
+        return 0;
+      } finally { release(); }
     },
   })).toBe(0);
   expect(messages).toEqual(['waiting for 1 live worker before wide QA; use --beside-workers to start alongside them']);
@@ -108,15 +117,24 @@ test('--beside-workers records the live count and is stripped before dispatch; n
     sleep: async () => { throw new Error('unnecessary wait'); },
     runCommand: async (command, env, start) => {
       expect(command).not.toContain('--beside-workers');
-      expect(readDirectoryLease(join(directory, 'heavy'))?.besideWorkers).toBe(3);
-      start();
-      const result = join(directory, 'batch.json');
-      const code = await withSlot(['bun', 'scripts/qa/test.ts', 'scripts/goal/admission.test.ts'], true, result, {
-        env, slotDirectory: directory, reap: () => { throw new Error('nested reap'); },
-        runCommand: async (_batch, _env, batchStart) => { batchStart(); return 0; },
-      });
-      expect(JSON.parse(readFileSync(result, 'utf8')).code).toBe(0);
-      return code;
+      expect(env.GOAL_QA_DEFERRED_HEAVY).toBe('1');
+      const release = await acquireHeavy(command, { lockDir: env.GOAL_QA_HEAVY_LOCK,
+        waitForWorkers: env.GOAL_QA_WIDE_RUN === '1', besideWorkers: env.GOAL_QA_BESIDE_WORKERS === '1',
+        workerGoals: () => ['a', 'a', 'b'], bindExit: false,
+        sleep: async () => { throw new Error('unnecessary wait'); } });
+      try {
+        const lease = readDirectoryLease(join(directory, 'heavy'))!;
+        expect(lease.besideWorkers).toBe(3);
+        env.GOAL_QA_HEAVY_LEASE = lease.token;
+        start();
+        const result = join(directory, 'batch.json');
+        const code = await withSlot(['bun', 'scripts/qa/test.ts', 'scripts/goal/admission.test.ts'], true, result, {
+          env, slotDirectory: directory, reap: () => { throw new Error('nested reap'); },
+          runCommand: async (_batch, _env, batchStart) => { batchStart(); return 0; },
+        });
+        expect(JSON.parse(readFileSync(result, 'utf8')).code).toBe(0);
+        return code;
+      } finally { release(); }
     },
   })).toBe(0);
 });

@@ -14,7 +14,7 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection, type RecordedState } from '../stories/recorded-fetch.ts';
 import { defaultPresentation } from '../zones/presentation.ts';
-import { loadPublishedFrame, zonePresentationReads } from '../realm/zone-presentation-read.ts';
+import { publishedFrameModel, zonePresentationReads } from '../realm/zone-presentation-read.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { messages as zoneMessagesCatalog } from '../zones/messages.ts';
 import { ZonePageMissing } from '../zones/page-missing.tsx';
@@ -96,7 +96,12 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
     const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
     const zoneMessages = zoneMessagesFor(locale);
-    const reads = zonePresentationReads(main);
+    const actingSubject = presentation ? new URL(recordedSample(record, persona, presentation).path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined : undefined;
+    const reads = zonePresentationReads(main, actingSubject);
+    async function loadFrame(zoneId: string) {
+      const read = await reads.readCompletePresentation(zoneId);
+      return read.ok ? { ok: true as const, data: publishedFrameModel(read.data, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel) } : read;
+    }
     async function load(): Promise<Screen> {
       if (save) {
         const sample = recordedSample(record, persona, save);
@@ -146,7 +151,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
       const zoneId = publicZoneId;
       if (route && routeState === 'error') {
         const [frame, read] = await Promise.all([
-          loadPublishedFrame(main, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel),
+          loadFrame(zoneId),
           reads.readZoneRoute(zoneId, path),
         ]);
         if (!frame.ok) throw new Error(`Recorded presentation read failed: ${frame.failure}`);
@@ -155,7 +160,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId
         }
         return { kind: 'missing', href: spaceHref(frame.data.ref, 'site') };
       }
-      const frame = await loadPublishedFrame(main, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel);
+      const frame = await loadFrame(zoneId);
       if (!frame.ok) throw new Error(`Recorded presentation read failed: ${frame.failure}`);
       if (!route) return { kind: 'frame', frame: frame.data, index: null };
       const read = await reads.readZoneRoute(zoneId, path);

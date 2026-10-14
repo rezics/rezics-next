@@ -14,6 +14,7 @@ import {
   type ContentsPage,
   directionOf,
   failureOf,
+  type ChapterPage,
   idOf,
   iri,
   type InventoryPage,
@@ -415,7 +416,7 @@ const workLanguages = cache(
 );
 
 export interface BookChaptersView {
-  page: Loaded<ContentsPage> | { ok: false; failure: 'none' };
+  page: ChapterPage;
   /** The language the chapters are written and published in. */
   language: string;
   facts: RawFact[];

@@ -108,6 +108,9 @@ def render(root: Path = ROOT) -> str:
     release = (root / "scripts/dev/release-manifest.ts").read_text()
     cli = (root / "scripts/dev/cli.ts").read_text()
     aspire = json.loads((root / "aspire.config.json").read_text())
+    repository_index = (root / "tools/repo-index/Cargo.toml").read_text()
+    rust_dependencies = required_match(r"\[dependencies\]\n([\s\S]*?)(?:\n\[|\Z)", repository_index, "repository index crates")
+    crates = re.findall(r'^([a-z0-9_]+)\s*=\s*(?:\{\s*version\s*=\s*)?"=([^"]+)"', rust_dependencies, re.MULTILINE)
     runtimes = [
         ("Bun", required_match(r"bun:\s*'([^']+)'", release, "Bun"), "scripts/dev/release-manifest.ts"),
         ("Node.js", (root / ".nvmrc").read_text().strip(), ".nvmrc"),
@@ -116,12 +119,15 @@ def render(root: Path = ROOT) -> str:
         ("Aspire SDK", aspire["sdk"]["version"], "aspire.config.json"),
         ("Go package oracle", required_match(r"const VERSION = '([^']+)'", (root / "scripts/package/go-oracle.ts").read_text(), "Go oracle"), "scripts/package/go-oracle.ts"),
         ("Cargo package oracle", required_match(r"Cargo ([0-9.]+) is not installed", (root / "scripts/package/cargo-oracle.ts").read_text(), "Cargo oracle"), "scripts/package/cargo-oracle.ts"),
+        ("Repository index Rust/Cargo", required_match(r'rust-version\s*=\s*"([^"]+)"', repository_index, "repository index Rust"), "tools/repo-index/Cargo.toml; Taskfile.yml"),
         ("npm package oracle", required_match(r"npm ([0-9.]+) must be installed", (root / "scripts/package/npm-oracle.ts").read_text(), "npm oracle"), "scripts/package/npm-oracle.ts"),
     ]
     sections = [
         "### Runtime pins", table(("Tool", "Pin", "Source"), runtimes),
         "### Direct workspace packages", "Exact direct pins from root and workspace manifests; `yarn.lock` resolves transitive dependencies.",
         table(("Package", "Pin", "Manifest directories"), direct_packages(root)),
+        "### Repository index crates", "Exact direct pins from `tools/repo-index/Cargo.toml`; its Cargo.lock records the native parser dependencies.",
+        table(("Crate", "Pin"), crates),
         "### Service and Fuseki build images", table(("Source", "Image and digest"), image_pins(root)),
         "### Other pinned images", table(("Use", "Image pin"), auxiliary_images(root)),
         "### Shared development ports", table(("Setting", "Port"), development_ports(root)),

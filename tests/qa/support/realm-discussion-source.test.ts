@@ -128,12 +128,13 @@ test('keys bind actual producer/helper/schema bytes, complete populations and na
   expect(sourceKey(spec)).not.toBe(sourceKey({ ...spec, inputs: { ...spec.inputs, population: { ...realmSourcePopulation, siblings: 192 } } }));
 });
 
+// Cold subprocess imports traverse Main and Account; allow host contention while retaining a bounded exit check.
 test('the explicit preparation entry imports outside the Bun test runner without starting an application', async () => {
   const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source-runtime.ts').then(m => { if (typeof m.realmSourceRuntime !== 'function') process.exit(2); })"],
     { cwd: join(import.meta.dir, '../../..'), env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
-});
+}, 30_000);
 
 test('Account diagnostics omit verification credentials without changing the actual public request', async () => {
   const script = String.raw`
@@ -152,7 +153,7 @@ test('Account diagnostics omit verification credentials without changing the act
     env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
-});
+}, 30_000);
 
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));

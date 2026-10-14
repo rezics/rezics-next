@@ -8,8 +8,11 @@ import { workUnitAsyncStorage, type RequestStore } from 'next/dist/server/app-re
 export const actingSubject = 'https://rezics.com/id/01944100-0000-7000-8000-0000000000aa';
 
 /** Run `run` as a page render; `signedIn` adds the access and session cookies the Agent lookup reads. */
-export async function pageRequest<T>(run: () => Promise<T>, { signedIn = false } = {}): Promise<T> {
-  const headers = new Headers({ 'x-rezics-page-url': 'https://rezics.test/en/discover' });
+export async function pageRequest<T>(run: () => Promise<T>,
+  { signedIn = false, headers: suppliedHeaders }: { signedIn?: boolean; headers?: HeadersInit } = {},
+): Promise<T> {
+  const headers = new Headers(suppliedHeaders);
+  if (!headers.has('x-rezics-page-url')) headers.set('x-rezics-page-url', 'https://rezics.test/en/discover');
   const cookies = {
     get: (name: string) =>
       !signedIn ? undefined

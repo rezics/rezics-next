@@ -161,6 +161,15 @@ test('service changes select service inventories without generated-contract web 
   expect(selected).toContain('scripts/static/web-acting-identity.test.ts');
 });
 
+test('native parser inputs select all four syntax consumers', () => {
+  for (const input of ['tools/repo-index/src/main.rs', 'tools/repo-index/Cargo.lock', 'scripts/lib/repo-index.ts']) {
+    const selected = guardFiles([input]);
+    for (const file of ['scripts/static/mechanism-dependencies.test.ts', 'scripts/static/web-acting-identity.test.ts',
+      'tests/qa/unit/serialization-points.test.ts', 'tests/qa/unit/g-1046-sql-relations.test.ts'])
+      expect(selected).toContain(file);
+  }
+});
+
 test('registry and main-wide runs retain all guards, empty changes run none, and each guard selects itself', () => {
   const all = repositoryGuards.map(guard => guard.file);
   expect(guardFiles(['scripts/qa/repository-guards.ts'])).toEqual(all);

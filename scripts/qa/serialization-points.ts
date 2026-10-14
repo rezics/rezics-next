@@ -1,6 +1,27 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import ts from 'typescript-6';
+import {
+  indexedSourceFile,
+  indexedOffsets,
+  indexedSourceNodes,
+  indexedScopedDeclarations,
+  indexedHasDeclaration,
+  indexedSqlNodes,
+  indexedTraceNodes,
+  indexedFragmentSourceFile,
+  indexedFragmentNodes,
+  indexedTraceSourceFile,
+  indexedLineStarts,
+} from '../lib/repo-index-ast.ts';
+import {
+  parseSources,
+  repositoryIndex,
+  prepareSql,
+  indexedSql,
+  indexedSource,
+  type IndexedFile,
+} from '../lib/repo-index.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import type { SqlSource } from './sql-relations.ts';
 
@@ -30,15 +51,20 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'access.event_temporal_checkpoint',
     class: 'projection checkpoint (background)',
-    reason: 'The background Event fold advances finite cold and journal cursors; request writers use scoped publication/window fences and never wait on this writer.',
-    writers: [access + '1769_event_temporal_projection.sql',
+    reason:
+      'The background Event fold advances finite cold and journal cursors; request writers use scoped publication/window fences and never wait on this writer.',
+    writers: [
+      access + '1769_event_temporal_projection.sql',
       access + '1770_event_temporal_relay_backfill.sql',
-      access + '1771_event_temporal_scoped_coverage.sql', main + 'modules/event/projection.ts'],
+      access + '1771_event_temporal_scoped_coverage.sql',
+      main + 'modules/event/projection.ts',
+    ],
   },
   {
     key: 'event-temporal-projection',
     class: 'projection checkpoint (background)',
-    reason: 'Only the background Event fold serializes its bounded cursor turn; request writers and readers never acquire this key.',
+    reason:
+      'Only the background Event fold serializes its bounded cursor turn; request writers and readers never acquire this key.',
     writers: [main + 'modules/event/projection.ts'],
   },
   {
@@ -187,8 +213,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
       access + migration,
       main + writer,
       // The upgrade seeds scan frontiers from the already-completed coverage.
-      ...(relation === 'access.read_ranking_checkpoint'
-        ? [access + '1399_read_rankings.sql'] : []),
+      ...(relation === 'access.read_ranking_checkpoint' ? [access + '1399_read_rankings.sql'] : []),
       ...(relation === 'access.realm_directory_position'
         ? [
             access + '1161_realm_directory_refresh.sql',
@@ -197,10 +222,15 @@ export const serializationAllowlist: SerializationAllowance[] = [
         : []),
       // Offline recovery invalidates the cursor while the owner fence is held.
       ...(relation === 'access.realm_directory_position'
-        ? [main + 'modules/work/access-recovery-coverage.ts', main + 'modules/access/fixture-erasure-recovery.ts'] : []),
+        ? [
+            main + 'modules/work/access-recovery-coverage.ts',
+            main + 'modules/access/fixture-erasure-recovery.ts',
+          ]
+        : []),
       // Held recovery restores scheduler eligibility without a retained live lease.
       ...(relation === 'access.discovery_refresh_catalog'
-        ? [main + 'modules/work/access-recovery-coverage.ts'] : []),
+        ? [main + 'modules/work/access-recovery-coverage.ts']
+        : []),
     ],
   })),
   {
@@ -223,9 +253,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'verification.assessment_producer_gate',
     class: 'operator/startup',
-    reason: 'Only maintenance closes the producer mode and drains in-flight DML with a table SHARE lock; ordinary producers read configuration without gate row locks or generation updates.',
-    writers: [content + '1704_verification_assessment_producer.sql',
-      main + 'modules/verification/store.ts'],
+    reason:
+      'Only maintenance closes the producer mode and drains in-flight DML with a table SHARE lock; ordinary producers read configuration without gate row locks or generation updates.',
+    writers: [
+      content + '1704_verification_assessment_producer.sql',
+      main + 'modules/verification/store.ts',
+    ],
   },
   {
     relation: 'access.recovery_fence',
@@ -350,25 +383,71 @@ interface Token {
   quoted?: boolean;
 }
 
-// Dollar bodies stay visible so migration functions are audited too.
-function lex(sql: string): Token[] {
-  const result: Token[] = [];
-  for (const match of sql.matchAll(
-    /--[^\n]*|\/\*[\s\S]*?\*\/|\$[a-z_0-9]*\$|'(?:''|[^'])*'|"(?:""|[^"])*"|\$\d+|\d+(?:\.\d+)?|[a-z_][a-z_0-9$]*|[^\s]/gi,
-  )) {
-    const raw = match[0];
-    if (raw.startsWith('--') || raw.startsWith('/*') || /^\$[a-z_0-9]*\$$/i.test(raw)) continue;
-    result.push({
-      text: raw.startsWith("'")
-        ? raw.slice(1, -1).replaceAll("''", "'")
-        : raw.startsWith('"')
-          ? raw.slice(1, -1).replaceAll('""', '"')
-          : raw.toLowerCase(),
-      offset: match.index,
-      literal: raw.startsWith("'"),
-      quoted: raw.startsWith('"'),
-    });
+const sqlTokenCache = new Map<string, Token[]>();
+let lexTimings:
+  | {
+      requests: number;
+      misses: number;
+      load: number;
+      normalize: number;
+      effects: number;
+      advisory: number;
+    }
+  | undefined;
+const textLineOffsets = new Map<string, number[]>();
+function textLine(text: string, offset: number): number {
+  let offsets = textLineOffsets.get(text);
+  if (!offsets) {
+    offsets = [];
+    for (let at = text.indexOf('\n'); at !== -1; at = text.indexOf('\n', at + 1)) offsets.push(at);
+    textLineOffsets.set(text, offsets);
   }
+  let low = 0,
+    high = offsets.length;
+  while (low < high) {
+    const middle = (low + high) >>> 1;
+    if (offsets[middle] < offset) low = middle + 1;
+    else high = middle;
+  }
+  return low + 1;
+}
+function sourceLine(text: string, offset: number): number {
+  const starts = indexedLineStarts(text);
+  let low = 0,
+    high = starts.length;
+  while (low + 1 < high) {
+    const middle = (low + high) >>> 1;
+    if (starts[middle] <= offset) low = middle;
+    else high = middle;
+  }
+  return low + 1;
+}
+function lex(sql: string): Token[] {
+  if (lexTimings) lexTimings.requests++;
+  const previous = sqlTokenCache.get(sql);
+  if (previous) return previous;
+  const loadStart = lexTimings ? performance.now() : 0;
+  const tokens = indexedSql(sql).serializationTokens;
+  if (lexTimings) {
+    lexTimings.misses++;
+    lexTimings.load += performance.now() - loadStart;
+  }
+  const normalizeStart = lexTimings ? performance.now() : 0;
+  const offset = indexedOffsets(sql);
+  const result: Token[] = [];
+  for (const token of tokens) {
+    const start = offset(token.offset);
+    if (!token.string && !token.quoted && /^[^a-z_0-9$\s]+$/i.test(token.text)) {
+      let at = 0;
+      for (const text of token.text) {
+        result.push({ text, offset: start + at });
+        at += text.length;
+      }
+    } else
+      result.push({ text: token.text, offset: start, literal: token.string, quoted: token.quoted });
+  }
+  if (lexTimings) lexTimings.normalize += performance.now() - normalizeStart;
+  sqlTokenCache.set(sql, result);
   return result;
 }
 const word = (token: Token | undefined, value: string) =>
@@ -441,7 +520,7 @@ export function singletonTables(
     const add = (name: string, offset: number) =>
       result.set(name, [
         ...(result.get(name) ?? []),
-        { file: source.file, line: source.text.slice(0, offset).split('\n').length },
+        { file: source.file, line: textLine(source.text, offset) },
       ]);
     for (let i = 0; i < input.length; i++) {
       if (word(input[i], 'drop') && word(input[i + 1], 'table')) {
@@ -524,24 +603,71 @@ interface SqlFragment extends SqlSource {
   bindings?: Map<string, string>;
 }
 
+let fragmentTimings:
+  | {
+      tree: number;
+      nodes: number;
+      visit: number;
+      initializer: number;
+      files: number;
+      initializers: number;
+    }
+  | undefined;
+const scopeDeclarations = new WeakMap<ts.Node, Map<string, ts.VariableDeclaration[]>>();
+const initializerValues = new WeakMap<ts.Node, Map<string, ts.Expression | undefined>>();
 function initializer(node: ts.Node, name: string): ts.Expression | undefined {
+  const start = fragmentTimings ? performance.now() : 0;
+  try {
+    const values = initializerValues.get(node) ?? new Map();
+    if (values.has(name)) return values.get(name);
+    const value = findInitializer(node, name);
+    values.set(name, value);
+    initializerValues.set(node, values);
+    return value;
+  } finally {
+    if (fragmentTimings) {
+      fragmentTimings.initializer += performance.now() - start;
+      fragmentTimings.initializers++;
+    }
+  }
+}
+function findInitializer(node: ts.Node, name: string): ts.Expression | undefined {
+  if (indexedHasDeclaration(node, name) === false) return;
   let scope: ts.Node | undefined = node;
   while (scope) {
-    const declarations: ts.VariableDeclaration[] = [];
-    const visit = (child: ts.Node) => {
-      if (ts.isVariableDeclaration(child) && child.name.getText() === name && child.initializer)
-        declarations.push(child);
-      if (child !== scope && ts.isFunctionLike(child)) return;
-      ts.forEachChild(child, visit);
-    };
-    visit(scope);
-    const declaration = declarations.find((candidate) => candidate.getStart() < node.getStart());
+    let declarations = scopeDeclarations.get(scope);
+    if (!declarations) {
+      declarations = new Map();
+      scopeDeclarations.set(scope, declarations);
+    }
+    let entries = declarations.get(name);
+    if (!entries) {
+      entries = indexedScopedDeclarations(scope, name);
+      declarations.set(name, entries);
+    }
+    const declaration = entries.find((candidate) => candidate.getStart() < node.getStart());
     if (declaration) return declaration.initializer;
     scope = scope.parent;
   }
   return undefined;
 }
+const expressionValues = new WeakMap<
+  ts.Expression,
+  Map<number, { text: string; constant: boolean }>
+>();
 function expressionValue(node: ts.Expression, depth = 0): { text: string; constant: boolean } {
+  const depths = expressionValues.get(node) ?? new Map();
+  const previous = depths.get(depth);
+  if (previous) return previous;
+  const value = computeExpressionValue(node, depth);
+  depths.set(depth, value);
+  expressionValues.set(node, depths);
+  return value;
+}
+function computeExpressionValue(
+  node: ts.Expression,
+  depth: number,
+): { text: string; constant: boolean } {
   if (depth > 8) return { text: node.getText(), constant: false };
   if (ts.isStringLiteralLike(node)) return { text: node.text, constant: true };
   if (
@@ -626,7 +752,23 @@ function substituteSymbols(
     },
   );
 }
+const sqlVariantValues = new WeakMap<
+  ts.Expression,
+  Map<number, { text: string; conditions: Condition[] }[]>
+>();
 function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions: Condition[] }[] {
+  const depths = sqlVariantValues.get(node) ?? new Map();
+  const previous = depths.get(depth);
+  if (previous) return previous;
+  const value = computeSqlVariants(node, depth);
+  depths.set(depth, value);
+  sqlVariantValues.set(node, depths);
+  return value;
+}
+function computeSqlVariants(
+  node: ts.Expression,
+  depth: number,
+): { text: string; conditions: Condition[] }[] {
   if (depth > 8) return [];
   if (ts.isConditionalExpression(node))
     return [true, false].flatMap((truth) =>
@@ -682,25 +824,161 @@ function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions
   const value = expressionValue(node);
   return value.constant ? [{ text: value.text, conditions: [] }] : [];
 }
+const sqlOperationLiteral =
+  /\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i;
+function requiresSqlInitializer(node: ts.Expression, names?: ReadonlySet<string>): boolean {
+  if (ts.isIdentifier(node)) return !names || names.has(node.text);
+  if (ts.isConditionalExpression(node))
+    return (
+      requiresSqlInitializer(node.whenTrue, names) || requiresSqlInitializer(node.whenFalse, names)
+    );
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  )
+    return requiresSqlInitializer(node.expression, names);
+  if (ts.isTemplateExpression(node))
+    return node.templateSpans.some((span) => requiresSqlInitializer(span.expression, names));
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
+    return requiresSqlInitializer(node.left, names) || requiresSqlInitializer(node.right, names);
+  if (ts.isArrayLiteralExpression(node))
+    return node.elements.some((element) => requiresSqlInitializer(element as ts.Expression, names));
+  if (
+    ts.isPrefixUnaryExpression(node) &&
+    (node.operator === ts.SyntaxKind.MinusToken || node.operator === ts.SyntaxKind.PlusToken)
+  )
+    return requiresSqlInitializer(node.operand, names);
+  if (
+    ts.isCallExpression(node) &&
+    /^(JSON\.stringify|String|Number|BigInt)$/.test(node.expression.getText()) &&
+    node.arguments.length === 1
+  )
+    return requiresSqlInitializer(node.arguments[0], names);
+  return false;
+}
+const sourceFragmentValues = new WeakMap<IndexedFile, Map<string, SqlFragment[]>>();
 function sourceFragments(source: SqlSource): SqlFragment[] {
-  const ast = ts.createSourceFile(
-    source.file,
-    source.text,
-    ts.ScriptTarget.Latest,
-    true,
-    /x$/.test(source.file) ? ts.ScriptKind.TSX : ts.ScriptKind.TS,
-  );
+  const indexed = indexedSource(source);
+  const files = sourceFragmentValues.get(indexed) ?? new Map<string, SqlFragment[]>();
+  const previous = files.get(source.file);
+  if (previous) return previous;
+  const result = computeSourceFragments(source, indexed);
+  files.set(source.file, result);
+  sourceFragmentValues.set(indexed, files);
+  return result;
+}
+function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFragment[] {
+  const syntax = indexed.syntax;
+  // Pure type/constant providers cannot contribute SQL or call effects. Their
+  // declarations and relative imports are loaded only when a traced key uses them.
+  if (
+    syntax &&
+    !syntax.hasSqlQueries &&
+    !syntax.hasSqlOperationLiterals &&
+    !syntax.hasInterpolatedTemplates
+  )
+    return [];
+  const candidates = syntax && !syntax.hasSqlQueries ? indexed.sqlCandidates : undefined;
+  if (syntax && !syntax.hasSqlQueries && candidates?.every((candidate) => candidate.literalKind)) {
+    const offset = indexedOffsets(source.text);
+    const templates: ts.TemplateExpression[] = [];
+    let projected = true;
+    if (syntax.hasInterpolatedTemplates) {
+      const outer = candidates.filter(
+        (candidate) =>
+          candidate.interpolated && candidate.enclosingTemplateStart === candidate.start,
+      );
+      const seen = new Set<number>();
+      for (const candidate of outer) {
+        if (seen.has(candidate.start)) continue;
+        seen.add(candidate.start);
+        if (!candidate.templateAst) {
+          projected = false;
+          break;
+        }
+        templates.push(
+          ...indexedSqlNodes(source, candidate.templateAst).filter(ts.isTemplateExpression),
+        );
+      }
+    }
+    const bindings = indexed.aliases && new Set(indexed.aliases.map((alias) => alias.name));
+    if (projected && !templates.some((node) => requiresSqlInitializer(node, bindings))) {
+      // Unrelated logging templates need no file scope. SQL-value identifiers
+      // still use the complete indexed scope to preserve lexical resolution.
+      const entries: { start: number; fragment: SqlFragment }[] = [];
+      for (const candidate of candidates)
+        if (
+          !candidate.interpolated &&
+          candidate.enclosingTemplateStart == null &&
+          !candidate.firstCallArgument &&
+          sqlOperationLiteral.test(candidate.text)
+        )
+          entries.push({
+            start: candidate.start,
+            fragment: {
+              file: source.file,
+              text: candidate.text,
+              line: sourceLine(source.text, offset(candidate.start)),
+              conditions: [],
+            },
+          });
+      const metadata = new Map(
+        candidates
+          .filter((candidate) => candidate.interpolated)
+          .map((candidate) => [offset(candidate.start), candidate]),
+      );
+      for (const node of templates) {
+        const candidate = metadata.get(node.getStart());
+        if (candidate?.firstCallArgument) continue;
+        for (const value of sqlVariants(node))
+          if (sqlOperationLiteral.test(value.text))
+            entries.push({
+              start: candidate?.start ?? node.getStart(),
+              fragment: {
+                file: source.file,
+                ...value,
+                line: node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1,
+              },
+            });
+      }
+      return entries.sort((left, right) => left.start - right.start).map((entry) => entry.fragment);
+    }
+  }
+  const treeStart = fragmentTimings ? performance.now() : 0;
+  const ast = indexedFragmentSourceFile(source);
+  if (fragmentTimings) {
+    fragmentTimings.tree += performance.now() - treeStart;
+    fragmentTimings.files++;
+  }
   const result: SqlFragment[] = [{ file: source.file, text: '', line: 1, ast }];
-  const add = (node: ts.Expression, parameters?: ts.Expression[]) => {
-    for (const value of sqlVariants(node))
-      result.push({
+  const add = (node: ts.Expression, parameters?: () => ts.Expression[] | undefined) => {
+    for (const value of sqlVariants(node)) {
+      if (
+        !/\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i.test(
+          value.text,
+        )
+      )
+        continue;
+      const fragment: SqlFragment = {
         file: source.file,
         ...value,
         line: ast.getLineAndCharacterOfPosition(node.getStart(ast)).line + 1,
         node,
         ast,
-        parameters,
-      });
+      };
+      if (parameters)
+        Object.defineProperty(fragment, 'parameters', {
+          configurable: true,
+          enumerable: true,
+          get: () => {
+            const value = parameters();
+            Object.defineProperty(fragment, 'parameters', { value, enumerable: true });
+            return value;
+          },
+        });
+      result.push(fragment);
+    }
   };
   const visit = (node: ts.Node) => {
     if (
@@ -709,27 +987,36 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
       /^(query|execute)$/.test(node.expression.name.text) &&
       node.arguments[0]
     ) {
-      const argument = node.arguments[1];
-      const parameters =
-        argument && ts.isIdentifier(argument) ? initializer(argument, argument.text) : argument;
-      add(
-        node.arguments[0],
-        parameters && ts.isArrayLiteralExpression(parameters)
-          ? ([...parameters.elements] as ts.Expression[])
-          : undefined,
-      );
+      let resolved = false;
+      let parameters: ts.Expression[] | undefined;
+      add(node.arguments[0], () => {
+        if (!resolved) {
+          const argument = node.arguments[1];
+          const value =
+            argument && ts.isIdentifier(argument) ? initializer(argument, argument.text) : argument;
+          parameters =
+            value && ts.isArrayLiteralExpression(value)
+              ? ([...value.elements] as ts.Expression[])
+              : undefined;
+          resolved = true;
+        }
+        return parameters;
+      });
     }
     // SQL constants also reach adapters indirectly. Ignore TS comments entirely.
     if (ts.isStringLiteralLike(node) || ts.isTemplateExpression(node)) {
       if (!ts.isCallExpression(node.parent) || node.parent.arguments[0] !== node) add(node);
       if (ts.isTemplateExpression(node)) {
-        for (const span of node.templateSpans) visit(span.expression);
         return;
       }
     }
-    ts.forEachChild(node, visit);
   };
-  visit(ast);
+  const nodeStart = fragmentTimings ? performance.now() : 0;
+  const nodes = indexedFragmentNodes(source);
+  if (fragmentTimings) fragmentTimings.nodes += performance.now() - nodeStart;
+  const visitStart = fragmentTimings ? performance.now() : 0;
+  for (const node of nodes) visit(node);
+  if (fragmentTimings) fragmentTimings.visit += performance.now() - visitStart;
   return result;
 }
 
@@ -742,7 +1029,21 @@ interface Effect {
   conditions?: Condition[];
   lock?: 'FOR SHARE' | 'FOR KEY SHARE';
 }
+const sqlEffectValues = new WeakMap<SqlFragment, Effect[]>();
 function sqlEffects(fragment: SqlFragment): Effect[] {
+  const previous = sqlEffectValues.get(fragment);
+  if (previous) return previous;
+  const start = lexTimings ? performance.now() : 0;
+  const result = computeSqlEffects(fragment);
+  if (lexTimings) lexTimings.effects += performance.now() - start;
+  sqlEffectValues.set(fragment, result);
+  return result;
+}
+function computeSqlEffects(fragment: SqlFragment): Effect[] {
+  // Every recognized effect contains one of these unquoted SQL keywords.
+  // Constants and plain reads need no token walk; the token rules below still
+  // decide whether a matching word actually denotes an effect.
+  if (!/\b(?:update|insert|for|commit|rollback|begin)\b/i.test(fragment.text)) return [];
   const input = lex(fragment.text);
   const effects: Effect[] = [];
   let start = 0;
@@ -750,8 +1051,7 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
     if (end < input.length && !word(input[end], ';')) continue;
     const statement = input.slice(start, end);
     start = end + 1;
-    const line = (offset: number) =>
-      fragment.line + fragment.text.slice(0, offset).split('\n').length - 1;
+    const line = (offset: number) => fragment.line + textLine(fragment.text, offset) - 1;
     const rowKey = (alias?: string) => {
       for (let i = 0; i < statement.length; i++) {
         if (
@@ -870,7 +1170,18 @@ function sqlEffects(fragment: SqlFragment): Effect[] {
   return effects;
 }
 
+const advisoryKeyValues = new WeakMap<SqlFragment, { key: string; line: number }[]>();
 function advisoryKeys(fragment: SqlFragment): { key: string; line: number }[] {
+  const previous = advisoryKeyValues.get(fragment);
+  if (previous) return previous;
+  const start = lexTimings ? performance.now() : 0;
+  const result = computeAdvisoryKeys(fragment);
+  if (lexTimings) lexTimings.advisory += performance.now() - start;
+  advisoryKeyValues.set(fragment, result);
+  return result;
+}
+function computeAdvisoryKeys(fragment: SqlFragment): { key: string; line: number }[] {
+  if (!/\bpg_(?:try_)?advisory_(?:xact_)?lock\b/i.test(fragment.text)) return [];
   const input = lex(fragment.text),
     result: { key: string; line: number }[] = [];
   for (let i = 0; i < input.length; i++) {
@@ -896,7 +1207,7 @@ function advisoryKeys(fragment: SqlFragment): { key: string; line: number }[] {
     const literals = replaced.filter((token) => token.literal);
     result.push({
       key: literals.length === 1 ? literals[0].text : rendered(replaced),
-      line: fragment.line + fragment.text.slice(0, input[i].offset).split('\n').length - 1,
+      line: fragment.line + textLine(fragment.text, input[i].offset) - 1,
     });
   }
   return result;
@@ -945,51 +1256,73 @@ function pathConditions(node: ts.Node): Condition[] {
 
 // Solve the small boolean formulas used to choose SHARE versus UPDATE. Atomic
 // comparisons stay symbolic; disjoint branches must never invent an upgrade.
+const compatibilityResults = new Map<string, boolean>();
+type BooleanFormula = {
+  test: (values: Map<string, boolean>) => boolean;
+  atoms: string[];
+};
+const booleanFormulas = new Map<string, BooleanFormula>();
 function compatible(conditions: Condition[]): boolean {
+  const key = JSON.stringify(
+    conditions.map((condition) => [condition.expression, condition.truth]).sort(),
+  );
+  const previous = compatibilityResults.get(key);
+  if (previous !== undefined) return previous;
+  const result = compatibleFormula(conditions);
+  compatibilityResults.set(key, result);
+  return result;
+}
+function booleanFormula(expression: string): BooleanFormula {
+  const previous = booleanFormulas.get(expression);
+  if (previous) return previous;
   const atoms = new Set<string>();
-  const formula = (expression: string): ((values: Map<string, boolean>) => boolean) => {
-    const ast = ts.createSourceFile(
-      'condition.ts',
-      `(${expression})`,
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const statement = ast.statements[0];
-    const visit = (node: ts.Expression): ((values: Map<string, boolean>) => boolean) => {
-      if (ts.isParenthesizedExpression(node)) return visit(node.expression);
-      if (node.kind === ts.SyntaxKind.TrueKeyword) return () => true;
-      if (node.kind === ts.SyntaxKind.FalseKeyword) return () => false;
-      if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
-        const operand = visit(node.operand);
-        return (values) => !operand(values);
-      }
-      if (
-        ts.isBinaryExpression(node) &&
-        (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-          node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
-      ) {
-        const left = visit(node.left),
-          right = visit(node.right);
-        return node.operatorToken.kind === ts.SyntaxKind.BarBarToken
-          ? (values) => left(values) || right(values)
-          : (values) => left(values) && right(values);
-      }
-      const atom = node.getText(ast).replace(/\s+/g, '');
-      atoms.add(atom);
-      return (values) => values.get(atom)!;
-    };
-    if (statement && ts.isExpressionStatement(statement)) return visit(statement.expression);
-    atoms.add(expression);
-    return (values) => values.get(expression)!;
+  const ast = ts.createSourceFile('condition.ts', `(${expression})`, ts.ScriptTarget.Latest, true);
+  const statement = ast.statements[0];
+  const visit = (node: ts.Expression): ((values: Map<string, boolean>) => boolean) => {
+    if (ts.isParenthesizedExpression(node)) return visit(node.expression);
+    if (node.kind === ts.SyntaxKind.TrueKeyword) return () => true;
+    if (node.kind === ts.SyntaxKind.FalseKeyword) return () => false;
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
+      const operand = visit(node.operand);
+      return (values) => !operand(values);
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+    ) {
+      const left = visit(node.left),
+        right = visit(node.right);
+      return node.operatorToken.kind === ts.SyntaxKind.BarBarToken
+        ? (values) => left(values) || right(values)
+        : (values) => left(values) && right(values);
+    }
+    const atom = node.getText(ast).replace(/\s+/g, '');
+    atoms.add(atom);
+    return (values) => values.get(atom)!;
   };
-  const formulas = conditions.map((condition) => ({
-    test: formula(condition.expression),
-    truth: condition.truth,
-  }));
+  let test: BooleanFormula['test'];
+  if (statement && ts.isExpressionStatement(statement)) test = visit(statement.expression);
+  else {
+    atoms.add(expression);
+    test = (values) => values.get(expression)!;
+  }
+  const result = { test, atoms: [...atoms] };
+  booleanFormulas.set(expression, result);
+  return result;
+}
+function compatibleFormula(conditions: Condition[]): boolean {
+  const atoms = new Set<string>();
+  const formulas = conditions.map((condition) => {
+    const formula = booleanFormula(condition.expression);
+    for (const atom of formula.atoms) atoms.add(atom);
+    return { test: formula.test, truth: condition.truth };
+  });
   if (atoms.size > 10) return true; // Unknown complexity fails conservatively.
   const names = [...atoms];
+  const values = new Map<string, boolean>();
   for (let bits = 0; bits < 2 ** names.length; bits++) {
-    const values = new Map(names.map((name, i) => [name, !!(bits & (1 << i))]));
+    for (let i = 0; i < names.length; i++) values.set(names[i], !!(bits & (1 << i)));
     if (formulas.every((item) => item.test(values) === item.truth)) return true;
   }
   return false;
@@ -1006,6 +1339,9 @@ function gateEffectFindings(
   const order = new Map<Effect, number>();
   let step = 0;
   for (const effect of effects) {
+    // Only gate effects can contribute to an upgrade; transaction boundaries
+    // still clear retained locks even when their helper writes no gate.
+    if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
     order.set(effect, step++);
     if (!compatible(effect.conditions ?? [])) continue;
     if (effect.kind === 'boundary') {
@@ -1052,14 +1388,69 @@ function gateEffectFindings(
   return findings;
 }
 
+function sqlNameHints(names: Iterable<string>, calls = false): (text: string) => boolean {
+  const pieces = [...names].map((name) => ({
+    text: (name.split('.').at(-1) ?? '')
+      .split('"')
+      .sort((left, right) => right.length - left.length)[0]
+      .toLowerCase(),
+    call: calls && /^[a-z_][a-z_0-9$]*\.[a-z_][a-z_0-9$]*$/i.test(name),
+    uncertain: /[^\x00-\x7f]/.test(name),
+  }));
+  // A quoted identifier can contain doubled quotes. Any unescaped segment is
+  // a necessary raw spelling. Empty segments and context-sensitive Unicode
+  // case folding give no usable exclusion after splitting a qualified name.
+  if (pieces.some((piece) => !piece.text || piece.uncertain)) return () => true;
+  if (!pieces.length) return () => false;
+  const spellings = [true, false].flatMap((call) => {
+    const matching = [
+      ...new Set(pieces.filter((piece) => piece.call === call).map((piece) => piece.text)),
+    ];
+    if (!matching.length) return [];
+    return [
+      new RegExp(
+        `(?:^|[^a-z_0-9$])(?:${matching
+          .map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|')})${call ? '"?\\s*\\(' : '(?=$|[^a-z_0-9$])'}`,
+      ),
+    ];
+  });
+  return (text: string) => spellings.some((spelling) => spelling.test(text));
+}
+
 /** Use migration-head function and trigger definitions, not superseded trigger
  * bodies. A write can update a gate without spelling UPDATE in TypeScript. */
+let lastDatabaseEffects:
+  | { inputs: { file: string; text: string }[]; effects: (fragment: SqlFragment) => Effect[] }
+  | undefined;
 function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Effect[] {
+  if (
+    lastDatabaseEffects &&
+    lastDatabaseEffects.inputs.length === migrations.length &&
+    migrations.every(
+      (source, index) =>
+        source.file === lastDatabaseEffects!.inputs[index].file &&
+        source.text === lastDatabaseEffects!.inputs[index].text,
+    )
+  )
+    return lastDatabaseEffects.effects;
+  const effects = computeDatabaseEffects(migrations);
+  lastDatabaseEffects = {
+    inputs: migrations.map(({ file, text }) => ({ file, text })),
+    effects,
+  };
+  return effects;
+}
+function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Effect[] {
   const functions = new Map<string, { fragment: SqlFragment; parameters: string[] }>();
-  const triggers = new Map<
-    string,
-    { relation: string; function: string; operations: Set<string>; phase: number; name: string }
-  >();
+  type Trigger = {
+    relation: string;
+    function: string;
+    operations: Set<string>;
+    phase: number;
+    name: string;
+  };
+  const triggers = new Map<string, Trigger>();
   for (const source of migrations) {
     const input = lex(source.text);
     for (let i = 0; i < input.length; i++) {
@@ -1094,7 +1485,7 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
           fragment: {
             file: source.file,
             text: match[2],
-            line: source.text.slice(0, offset).split('\n').length,
+            line: textLine(source.text, offset),
           },
           parameters: parts(input.slice(name.end + 1, end)).map((part) => part[0]?.text ?? ''),
         });
@@ -1138,7 +1529,132 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         });
     }
   }
+  const triggerTargets = new Map<string, Map<string, Trigger[]>>();
+  for (const trigger of triggers.values()) {
+    const operations = triggerTargets.get(trigger.relation) ?? new Map<string, Trigger[]>();
+    for (const operation of trigger.operations) {
+      const values = operations.get(operation) ?? [];
+      values.push(trigger);
+      operations.set(operation, values);
+    }
+    triggerTargets.set(trigger.relation, operations);
+  }
+  for (const operations of triggerTargets.values())
+    for (const values of operations.values())
+      values.sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name));
+  const dispatch = (
+    input: Token[],
+    call: (name: string, arguments_: Token[][]) => void,
+    triggered: (trigger: Trigger) => void,
+  ) => {
+    for (let i = 0; i < input.length; i++) {
+      const name = relationAt(input, i);
+      if (name && functions.has(name.name) && word(input[name.end], '(')) {
+        call(name.name, parts(input.slice(name.end + 1, close(input, name.end))));
+        i = close(input, name.end);
+      }
+      const operation = ['insert', 'update', 'delete'].find((value) => word(input[i], value));
+      if (!operation || word(input[i - 1], 'for') || word(input[i - 1], 'do')) continue;
+      const relation = relationAt(input, i + (operation === 'update' ? 1 : 2));
+      if (!relation) continue;
+      // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
+      // triggers, then sorts equal-kind triggers by name.
+      for (const trigger of triggerTargets.get(relation.name)?.get(operation) ?? [])
+        triggered(trigger);
+    }
+  };
+  // Bindings affect row keys, not relation names or function/trigger dispatch.
+  // Compute which current definitions can reach any gate once, including cycles,
+  // instead of expanding unrelated functions for every repository query.
+  const reachable = new Set<string>();
+  const callers = new Map<string, Set<string>>();
+  for (const [name, definition] of functions) {
+    if (sqlEffects(definition.fragment).some((effect) => /(?:^|[._])gate$/.test(effect.relation)))
+      reachable.add(name);
+    const edge = (target: string) => {
+      const parents = callers.get(target) ?? new Set<string>();
+      parents.add(name);
+      callers.set(target, parents);
+    };
+    const input = lex(definition.fragment.text);
+    let start = 0;
+    for (let end = 0; end <= input.length; end++)
+      if (end === input.length || word(input[end], ';')) {
+        dispatch(input.slice(start, end), edge, (trigger) => edge(trigger.function));
+        start = end + 1;
+      }
+  }
+  const pending = [...reachable];
+  for (let at = 0; at < pending.length; at++)
+    for (const name of callers.get(pending[at]) ?? [])
+      if (!reachable.has(name)) {
+        reachable.add(name);
+        pending.push(name);
+      }
+  const functionHint = sqlNameHints(reachable, true),
+    triggerHint = sqlNameHints(
+      [...triggers.values()]
+        .filter((trigger) => reachable.has(trigger.function))
+        .map((trigger) => trigger.relation),
+    );
+  const mayReachGate = (text: string) => {
+    // Unknown SQL holes remain literal marker tokens. Bindings substitute row
+    // keys only, so recognized relation/function names still need a raw hint.
+    if (/gate\b|\b(?:begin|commit|rollback)\b|\\|\/\*|--/i.test(text)) return true;
+    const lower = text.toLowerCase();
+    return (
+      functionHint(lower) || (/\b(?:insert|update|delete)\b/.test(lower) && triggerHint(lower))
+    );
+  };
+  const effectValues = new Map<string, Effect[]>();
+  const fragmentTexts = new Map<string, number>();
+  const parameterSlots = new Map<string, number[]>();
   const expand = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
+    // Plain reads cannot add a gate or a transaction boundary. Reject them
+    // before evaluating parameter syntax solely to construct a cache key.
+    if (!mayReachGate(fragment.text)) return [];
+    let text = fragmentTexts.get(fragment.text);
+    if (text === undefined) {
+      text = fragmentTexts.size;
+      fragmentTexts.set(fragment.text, text);
+    }
+    // Parameters affect effects only through a numbered SQL token. Escapes
+    // can decode such a token from a string, so keep the complete key then.
+    let parameters: unknown[] = [];
+    if (fragment.text.includes('\\')) parameters = fragment.parameters?.map(symbolValue) ?? [];
+    else {
+      let slots = parameterSlots.get(fragment.text);
+      if (!slots) {
+        slots = [
+          ...new Set([...fragment.text.matchAll(/\$(\d+)/g)].map((match) => Number(match[1]))),
+        ]
+          .filter((slot) => slot > 0)
+          .sort((left, right) => left - right);
+        parameterSlots.set(fragment.text, slots);
+      }
+      if (slots.length) {
+        const values = fragment.parameters;
+        parameters = slots.map((slot) => [
+          slot,
+          values?.[slot - 1] ? symbolValue(values[slot - 1]) : undefined,
+        ]);
+      }
+    }
+    const key = JSON.stringify([
+      text,
+      fragment.file,
+      fragment.line,
+      parameters,
+      [...(fragment.bindings ?? [])].sort(),
+      [...chain].sort(),
+    ]);
+    const previous = effectValues.get(key);
+    if (previous) return previous;
+    const result = computeEffects(fragment, chain);
+    effectValues.set(key, result);
+    return result;
+  };
+  const computeEffects = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
     const input = lex(fragment.text);
     if (input.some((token) => word(token, ';'))) {
       let start = 0;
@@ -1148,13 +1664,19 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         fragment.text.length,
       ]) {
         const text = fragment.text.slice(start, end);
+        sqlTokenCache.set(
+          text,
+          input
+            .filter((token) => token.offset >= start && token.offset < end)
+            .map((token) => ({ ...token, offset: token.offset - start })),
+        );
         if (text.trim())
           result.push(
             ...expand(
               {
                 ...fragment,
                 text,
-                line: fragment.line + fragment.text.slice(0, start).split('\n').length - 1,
+                line: fragment.line + textLine(fragment.text, start) - 1,
               },
               chain,
             ),
@@ -1163,7 +1685,7 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
       }
       return result;
     }
-    const result = sqlEffects(fragment);
+    const result = [...sqlEffects(fragment)];
     const before: Effect[] = [];
     const invoke = (name: string, arguments_: Token[][] = []): Effect[] => {
       if (chain.has(name)) return [];
@@ -1188,31 +1710,291 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         .filter((effect) => effect.kind !== 'boundary')
         .map((effect) => ({ ...effect, file: effect.file ?? definition.fragment.file }));
     };
-    for (let i = 0; i < input.length; i++) {
-      const name = relationAt(input, i);
-      if (name && functions.has(name.name) && word(input[name.end], '(')) {
-        result.push(...invoke(name.name, parts(input.slice(name.end + 1, close(input, name.end)))));
-        i = close(input, name.end);
-      }
-      const operation = ['insert', 'update', 'delete'].find((value) => word(input[i], value));
-      if (!operation || word(input[i - 1], 'for') || word(input[i - 1], 'do')) continue;
-      const relation = relationAt(input, i + (operation === 'update' ? 1 : 2));
-      if (!relation) continue;
-      // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
-      // triggers, then sorts equal-kind triggers by name. Migration order is not
-      // execution order: an AFTER bump can depend on a later-defined BEFORE lock.
-      for (const trigger of [...triggers.values()]
-        .filter(
-          (trigger) => trigger.relation === relation.name && trigger.operations.has(operation),
-        )
-        .sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name))) {
+    dispatch(
+      input,
+      (name, arguments_) => result.push(...invoke(name, arguments_)),
+      (trigger) => {
         const target = trigger.phase < 2 ? before : result;
         target.push(...invoke(trigger.function));
-      }
-    }
+      },
+    );
     return [...before, ...result];
   };
   return (fragment) => expand(fragment, new Set());
+}
+
+type NativeFunctionSelection = {
+  functions: Map<string, Set<number | null>>;
+  names: Map<string, string>;
+};
+type NativeCallGraph = {
+  files: string[];
+  facts: IndexedFile[];
+  names: Map<string, string>;
+  definitions: Map<string, { file: string; start: number | null; parameters: string[] }>;
+  incoming: Map<string, Set<string>>;
+  outgoing: Map<string, Set<string>>;
+};
+let lastNativeGraph: NativeCallGraph | undefined;
+const referenceWhitespace = /\s/;
+function compactReference(
+  text: string,
+  start: number,
+  end: number,
+  maximum: number,
+): string | undefined {
+  let result = '';
+  for (let at = start; at < end; at++)
+    if (!referenceWhitespace.test(text[at])) {
+      if (result.length === maximum) return;
+      result += text[at];
+    }
+  return result;
+}
+
+/** Build the call graph from parser facts before decoding source trees. Defaults
+ * and aliases widen the graph; actual expansion still evaluates the TS rules. */
+function nativeFunctionSelection(
+  sources: SqlSource[],
+  seeds: Set<string>,
+  profile?: (phase: string) => void,
+): NativeFunctionSelection | undefined {
+  if (new Set(sources.map((source) => source.file)).size !== sources.length) {
+    profile?.('native-graph-fallback:duplicate-file');
+    return;
+  }
+  const records = sources.map((source) => ({
+    source,
+    facts: indexedSource(source),
+    offset: indexedOffsets(source.text),
+  }));
+  const missing = records.find(
+    ({ facts }) =>
+      !facts.functionFacts || !facts.callFacts || !facts.aliases || !facts.namedImports,
+  );
+  if (missing) {
+    profile?.(`native-graph-fallback:missing-facts:${missing.source.file}`);
+    return;
+  }
+  profile?.('native-graph-facts');
+  if (
+    lastNativeGraph &&
+    records.length === lastNativeGraph.files.length &&
+    records.every(
+      (record, index) =>
+        record.source.file === lastNativeGraph!.files[index] &&
+        record.facts === lastNativeGraph!.facts[index],
+    )
+  ) {
+    profile?.('native-graph-cached');
+    return selectNativeFunctions(lastNativeGraph, seeds);
+  }
+  const names = new Map<string, string>();
+  const definitions = new Map<
+    string,
+    { file: string; start: number | null; parameters: string[] }
+  >();
+  const imports = new Map<string, Map<string, string>>();
+  const aliases = new Map<
+    string,
+    Map<string, NonNullable<(typeof records)[number]['facts']['aliases']>>
+  >();
+  const functionInitializers = new Map<string, Set<string>>();
+  const possibleKeys = new Map<string, Set<string>>();
+  const maximumKeys = new Map<string, number>();
+  const recordsByFile = new Map(records.map((record) => [record.source.file, record]));
+  for (const { source, facts, offset } of records) {
+    const initializers = new Set<string>();
+    const keys = new Set<string>();
+    let maximum = 0;
+    const remember = (key: string) => {
+      keys.add(key);
+      maximum = Math.max(maximum, key.length);
+    };
+    definitions.set(`${source.file}:module`, { file: source.file, start: null, parameters: [] });
+    for (const fn of facts.functionFacts!) {
+      const id = `${source.file}:${offset(fn.start)}`;
+      definitions.set(id, { file: source.file, start: fn.start, parameters: fn.parameters });
+      initializers.add(`${fn.start}:${fn.end}`);
+      if (fn.name) {
+        const name = `${fn.className ? fn.className + '.' : ''}${fn.name}`;
+        names.set(`${source.file}#${name}`, id);
+        remember(name);
+      }
+    }
+    const imported = new Map<string, string>();
+    for (const binding of facts.namedImports!) {
+      remember(binding.local);
+      if (binding.source.startsWith('.')) {
+        const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+        imported.set(binding.local, `${module}#${binding.imported}`);
+      }
+    }
+    imports.set(source.file, imported);
+    const declarations = new Map<string, NonNullable<typeof facts.aliases>>();
+    for (const alias of facts.aliases!) {
+      remember(alias.name);
+      const values = declarations.get(alias.name) ?? [];
+      values.push(alias);
+      declarations.set(alias.name, values);
+    }
+    aliases.set(source.file, declarations);
+    functionInitializers.set(source.file, initializers);
+    possibleKeys.set(source.file, keys);
+    maximumKeys.set(source.file, maximum);
+  }
+  const missingSeed = [...seeds].find((id) => !definitions.has(id));
+  if (missingSeed) {
+    profile?.(`native-graph-fallback:missing-seed:${missingSeed}`);
+    return;
+  }
+  const aliasText = new WeakMap<object, string | undefined>();
+  const resolvedNames = new Map<string, Set<string>>();
+  const targets = (file: string, inputs: string[]): Set<string> => {
+    const result = new Set<string>();
+    for (const input of inputs) {
+      if (!possibleKeys.get(file)!.has(input)) continue;
+      const cacheKey = `${file}#${input}`;
+      let resolved = resolvedNames.get(cacheKey);
+      if (!resolved) {
+        resolved = new Set<string>();
+        const seen = new Set<string>(),
+          pending = [input];
+        for (let at = 0; at < pending.length; at++) {
+          const name = pending[at];
+          if (seen.has(name) || !possibleKeys.get(file)!.has(name)) continue;
+          seen.add(name);
+          const local = names.get(`${file}#${name}`);
+          const imported = imports.get(file)?.get(name);
+          const id = local ?? (imported && names.get(imported));
+          if (id) resolved.add(id);
+          for (const alias of aliases.get(file)?.get(name) ?? []) {
+            if (
+              functionInitializers
+                .get(file)
+                ?.has(`${alias.initializerStart}:${alias.initializerEnd}`)
+            )
+              continue;
+            pending.push(...alias.references);
+            let text = aliasText.get(alias);
+            if (!aliasText.has(alias)) {
+              const record = recordsByFile.get(file)!;
+              text = compactReference(
+                record.source.text,
+                record.offset(alias.initializerStart),
+                record.offset(alias.initializerEnd),
+                maximumKeys.get(file)!,
+              );
+              aliasText.set(alias, text);
+            }
+            if (text) pending.push(text);
+          }
+        }
+        resolvedNames.set(cacheKey, resolved);
+      }
+      for (const id of resolved) result.add(id);
+    }
+    return result;
+  };
+  const outgoing = new Map<string, Set<string>>(),
+    incoming = new Map<string, Set<string>>();
+  const edge = (from: string, to: string) => {
+    const children = outgoing.get(from) ?? new Set<string>();
+    children.add(to);
+    outgoing.set(from, children);
+    const parents = incoming.get(to) ?? new Set<string>();
+    parents.add(from);
+    incoming.set(to, parents);
+  };
+  for (const { source, facts, offset } of records) {
+    for (const fn of facts.functionFacts!)
+      if (fn.defaultReferences.length)
+        for (const target of targets(source.file, fn.defaultReferences))
+          edge(`${source.file}:${offset(fn.start)}`, target);
+    for (const call of facts.callFacts!) {
+      if (!call.calleeName) continue;
+      const ownerId =
+        call.functionStart === undefined
+          ? `${source.file}:module`
+          : `${source.file}:${offset(call.functionStart)}`;
+      if (!definitions.has(ownerId)) {
+        profile?.(`native-graph-fallback:missing-owner:${ownerId}:call-${call.start}`);
+        return;
+      }
+      const callee =
+        call.calleeKind === 'this-member'
+          ? `${call.className ?? ''}.${call.calleeName}`
+          : call.calleeName;
+      const local = names.get(`${source.file}#${callee}`),
+        imported = imports.get(source.file)?.get(callee);
+      const target = local ?? (imported && names.get(imported));
+      const importedFile = imported?.slice(0, imported.lastIndexOf('#'));
+      if (
+        !target &&
+        !(importedFile && recordsByFile.has(importedFile)) &&
+        !definitions.get(ownerId)?.parameters.includes(callee)
+      )
+        continue;
+      if (target) edge(ownerId, target);
+      const callbackNames = [...call.argumentNames];
+      for (const span of call.argumentSpans) {
+        if (call.inlineFunctionSpans.some((fn) => fn.start === span.start && fn.end === span.end))
+          continue;
+        const text = compactReference(
+          source.text,
+          offset(span.start),
+          offset(span.end),
+          maximumKeys.get(source.file)!,
+        );
+        if (text) callbackNames.push(text);
+      }
+      for (const target of targets(source.file, callbackNames)) edge(ownerId, target);
+      for (const fn of call.inlineFunctionSpans) {
+        const id = `${source.file}:${offset(fn.start)}`;
+        if (definitions.has(id)) edge(ownerId, id);
+      }
+    }
+  }
+  lastNativeGraph = {
+    files: records.map((record) => record.source.file),
+    facts: records.map((record) => record.facts),
+    names,
+    definitions,
+    incoming,
+    outgoing,
+  };
+  return selectNativeFunctions(lastNativeGraph, seeds);
+}
+function selectNativeFunctions(
+  graph: NativeCallGraph,
+  seeds: Set<string>,
+): NativeFunctionSelection | undefined {
+  const { definitions, incoming, outgoing, names } = graph;
+  if ([...seeds].some((id) => !definitions.has(id))) return;
+  const relevant = new Set(seeds),
+    callers = [...seeds];
+  for (let at = 0; at < callers.length; at++)
+    for (const id of incoming.get(callers[at]) ?? [])
+      if (!relevant.has(id)) {
+        relevant.add(id);
+        callers.push(id);
+      }
+  const callees = [...relevant];
+  for (let at = 0; at < callees.length; at++)
+    for (const id of outgoing.get(callees[at]) ?? [])
+      if (!relevant.has(id)) {
+        relevant.add(id);
+        callees.push(id);
+      }
+  const functions = new Map<string, Set<number | null>>();
+  for (const id of relevant) {
+    const definition = definitions.get(id);
+    if (!definition) continue;
+    const starts = functions.get(definition.file) ?? new Set<number | null>();
+    starts.add(definition.start);
+    functions.set(definition.file, starts);
+  }
+  return { functions, names };
 }
 
 /** Follow named/imported helpers and inline transaction callbacks. This is a
@@ -1222,19 +2004,143 @@ function gateUpgrades(
   sources: SqlSource[],
   byFile: Map<string, SqlFragment[]>,
   effects: (fragment: SqlFragment) => Effect[],
+  profile?: (phase: string) => void,
 ): SerializationFinding[] {
-  const traces = new Map<string, FunctionTrace>();
-  const named = new Map<string, string>();
-  const imports = new Map<string, Map<string, string>>();
-  const functionNodes = new Map<ts.Node, string>();
+  const sourceByFile = new Map(sources.map((source) => [source.file, source]));
+  const sourceFiles = new Set(sourceByFile.keys());
   const owner = (node: ts.Node | undefined): ts.Node | undefined => {
     while (node && !ts.isFunctionLike(node) && !ts.isSourceFile(node)) node = node.parent;
     return node;
   };
+  const fragmentEffects = new WeakMap<SqlFragment, Effect[]>();
+  const expandedEffects = (fragment: SqlFragment): Effect[] => {
+    const previous = fragmentEffects.get(fragment);
+    if (previous) return previous;
+    const result = effects(fragment);
+    fragmentEffects.set(fragment, result);
+    return result;
+  };
+  const seeds = new Set<string>(),
+    functionSeeds = new Set<string>();
+  for (const [file, fragments] of byFile)
+    for (const fragment of fragments) {
+      if (
+        !fragment.node ||
+        !ts.isCallExpression(fragment.node.parent) ||
+        fragment.node.parent.arguments[0] !== fragment.node
+      )
+        continue;
+      if (
+        !expandedEffects(fragment).some(
+          (effect) => effect.kind !== 'boundary' && /(?:^|[._])gate$/.test(effect.relation),
+        )
+      )
+        continue;
+      seeds.add(file);
+      const fn = owner(fragment.node);
+      if (fn)
+        functionSeeds.add(ts.isSourceFile(fn) ? `${file}:module` : `${file}:${fn.getStart()}`);
+    }
+  profile?.('gate-seeds');
+  if (!seeds.size) return [];
+  const selection = nativeFunctionSelection(sources, functionSeeds, profile);
+  const outgoing = new Map<string, Set<string>>();
+  const incoming = new Map<string, Set<string>>();
+  let completeGraph = !selection;
+  for (const source of selection ? [] : sources) {
+    const indexed = indexedSource(source);
+    if (!indexed.namedImports || !indexed.directCallNames) {
+      completeGraph = false;
+      break;
+    }
+    const calls = new Set(indexed.directCallNames);
+    for (const binding of indexed.namedImports) {
+      if (!calls.has(binding.local) || !binding.source.startsWith('.')) continue;
+      const target = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+      if (!sourceFiles.has(target)) continue;
+      const callees = outgoing.get(source.file) ?? new Set<string>();
+      callees.add(target);
+      outgoing.set(source.file, callees);
+      const callers = incoming.get(target) ?? new Set<string>();
+      callers.add(source.file);
+      incoming.set(target, callers);
+    }
+  }
+  // Only callers of a gate effect can produce an upgrade. Include all their
+  // callees as well: locks, boundaries and callback execution live in helpers.
+  const relevant = new Set(seeds);
+  if (completeGraph) {
+    const callers = [...relevant];
+    for (let index = 0; index < callers.length; index++)
+      for (const file of incoming.get(callers[index]) ?? []) {
+        if (!relevant.has(file)) {
+          relevant.add(file);
+          callers.push(file);
+        }
+      }
+    const callees = [...relevant];
+    for (let index = 0; index < callees.length; index++)
+      for (const file of outgoing.get(callees[index]) ?? []) {
+        if (!relevant.has(file)) {
+          relevant.add(file);
+          callees.push(file);
+        }
+      }
+  }
+  profile?.(
+    `gate-files:${selection ? selection.functions.size : completeGraph ? relevant.size : sources.length}/${sources.length}`,
+  );
+  const traces = new Map<string, FunctionTrace>();
+  const named = new Map(selection?.names);
+  const imports = new Map<string, Map<string, string>>();
+  const functionNodes = new Map<ts.Node, string>();
+  const loadImports = (source: SqlSource): Map<string, string> => {
+    const previous = imports.get(source.file);
+    if (previous) return previous;
+    const values = new Map<string, string>();
+    imports.set(source.file, values);
+    const namedImports = indexedSource(source).namedImports;
+    if (namedImports) {
+      for (const binding of namedImports)
+        if (binding.source.startsWith('.')) {
+          const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+          values.set(binding.local, `${module}#${binding.imported}`);
+        }
+      return values;
+    }
+    for (const node of indexedSourceNodes(source)) {
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteral(node.moduleSpecifier) ||
+        !node.moduleSpecifier.text.startsWith('.')
+      )
+        continue;
+      const module = posix.normalize(
+        posix.join(posix.dirname(source.file), node.moduleSpecifier.text),
+      );
+      const bindings = node.importClause?.namedBindings;
+      if (bindings && ts.isNamedImports(bindings))
+        for (const binding of bindings.elements) {
+          values.set(
+            binding.name.text,
+            `${module}#${binding.propertyName?.text ?? binding.name.text}`,
+          );
+        }
+    }
+    return values;
+  };
   for (const source of sources) {
+    if (
+      selection
+        ? !selection.functions.has(source.file)
+        : completeGraph && !relevant.has(source.file)
+    )
+      continue;
+    const selectedNodes = selection
+      ? indexedTraceNodes(source, selection.functions.get(source.file)!)
+      : indexedSourceNodes(source);
     const fragments = byFile.get(source.file) ?? [];
-    const ast = fragments[0]?.ast;
-    if (!ast) continue;
+    const ast = selection ? indexedTraceSourceFile(source) : indexedSourceFile(source);
     const moduleId = `${source.file}:module`;
     functionNodes.set(ast, moduleId);
     traces.set(moduleId, {
@@ -1245,25 +2151,8 @@ function gateUpgrades(
       defaults: new Map(),
       events: [],
     });
-    const fileImports = new Map<string, string>();
-    imports.set(source.file, fileImports);
+    const fileImports = loadImports(source);
     const visit = (node: ts.Node) => {
-      if (
-        ts.isImportDeclaration(node) &&
-        ts.isStringLiteral(node.moduleSpecifier) &&
-        node.moduleSpecifier.text.startsWith('.')
-      ) {
-        const module = posix.normalize(
-          posix.join(posix.dirname(source.file), node.moduleSpecifier.text),
-        );
-        const bindings = node.importClause?.namedBindings;
-        if (bindings && ts.isNamedImports(bindings))
-          for (const binding of bindings.elements)
-            fileImports.set(
-              binding.name.text,
-              `${module}#${binding.propertyName?.text ?? binding.name.text}`,
-            );
-      }
       if (ts.isFunctionLike(node) && 'body' in node && node.body) {
         const parent = node.parent;
         const name =
@@ -1298,11 +2187,11 @@ function gateUpgrades(
           ),
           events: [],
         });
-        if (name) named.set(`${source.file}#${className ? className + '.' : ''}${name}`, id);
+        if (name && !selection)
+          named.set(`${source.file}#${className ? className + '.' : ''}${name}`, id);
       }
-      ts.forEachChild(node, visit);
     };
-    visit(ast);
+    for (const node of selectedNodes) visit(node);
     // Module-level SQL constants are checked for serialization above, but only
     // their invocation belongs to a transaction's effect trace.
     for (const fragment of fragments) {
@@ -1312,9 +2201,12 @@ function gateUpgrades(
         fragment.node.parent.arguments[0] !== fragment.node
       )
         continue;
-      const id = functionNodes.get(owner(fragment.node)!);
-      if (!id) continue;
-      for (const effect of effects(fragment))
+      const fn = owner(fragment.node);
+      const id =
+        fn && (ts.isSourceFile(fn) ? `${source.file}:module` : `${source.file}:${fn.getStart()}`);
+      if (!id || !traces.has(id)) continue;
+      for (const effect of expandedEffects(fragment)) {
+        if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
         traces.get(id)!.events.push({
           effect: {
             ...effect,
@@ -1323,6 +2215,7 @@ function gateUpgrades(
           },
           offset: fragment.node.getStart(ast),
         });
+      }
     }
     const calls = (node: ts.Node) => {
       if (ts.isCallExpression(node)) {
@@ -1345,7 +2238,13 @@ function gateUpgrades(
               : undefined;
           // A transaction callback executes where the helper calls its run/work
           // parameter, after BEGIN and the initial exclusive fences.
-          if (call)
+          const imported = call && fileImports.get(call);
+          const knownImport =
+            imported && sourceFiles.has(imported.slice(0, imported.lastIndexOf('#')));
+          if (
+            call &&
+            (named.has(`${source.file}#${call}`) || knownImport || trace.parameters.includes(call))
+          )
             trace.events.push({
               call,
               args: node.arguments.map(
@@ -1356,10 +2255,10 @@ function gateUpgrades(
             });
         }
       }
-      ts.forEachChild(node, calls);
     };
-    calls(ast);
+    for (const node of selectedNodes) calls(node);
   }
+  profile?.('gate-traces');
   const embeddedCallbacks = new Set<string>();
   for (const trace of traces.values())
     for (const event of trace.events) {
@@ -1370,39 +2269,81 @@ function gateUpgrades(
       }
     }
   const importedSymbols = new Map<string, Map<string, string>>();
+  const constants = new Map<string, string | undefined>();
+  const moduleDeclarations = new Map<string, Map<string, ts.VariableDeclaration[]>>();
   const constant = (file: string, name: string, seen = new Set<string>()): string | undefined => {
     const key = `${file}#${name}`;
     if (seen.has(key)) return;
+    if (constants.has(key)) return constants.get(key);
     const next = new Set(seen).add(key);
-    const imported = imports.get(file)?.get(name);
+    const provider = sourceByFile.get(file);
+    const imported = (provider ? loadImports(provider) : imports.get(file))?.get(name);
     if (imported) {
       const separator = imported.lastIndexOf('#');
-      return constant(imported.slice(0, separator), imported.slice(separator + 1), next);
+      const value = constant(imported.slice(0, separator), imported.slice(separator + 1), next);
+      constants.set(key, value);
+      return value;
     }
-    const ast = byFile.get(file)?.[0]?.ast;
+    const aliases = provider && indexedSource(provider).aliases;
+    if (aliases && !aliases.some((alias) => alias.name === name)) {
+      constants.set(key, undefined);
+      return;
+    }
+    const ast = provider && indexedSourceFile(provider);
     if (!ast) return;
+    let declarations = moduleDeclarations.get(file);
+    if (!declarations) {
+      declarations = new Map();
+      for (const node of indexedScopedDeclarations(ast))
+        if (node.initializer) {
+          const name = node.name.getText(ast);
+          const entries = declarations.get(name) ?? [];
+          entries.push(node);
+          declarations.set(name, entries);
+        }
+      moduleDeclarations.set(file, declarations);
+    }
     let value: string | undefined;
-    const visit = (node: ts.Node) => {
-      if (ts.isFunctionLike(node)) return;
-      if (ts.isVariableDeclaration(node) && node.name.getText(ast) === name && node.initializer) {
-        const resolved = expressionValue(node.initializer);
-        if (resolved.constant) value = symbolValue(node.initializer);
-        else if (ts.isIdentifier(node.initializer))
-          value = constant(file, node.initializer.text, next);
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(ast);
+    for (const declaration of declarations.get(name) ?? []) {
+      const resolved = expressionValue(declaration.initializer!);
+      if (resolved.constant) value = symbolValue(declaration.initializer!);
+      else if (declaration.initializer && ts.isIdentifier(declaration.initializer))
+        value = constant(file, declaration.initializer.text, next);
+    }
+    constants.set(key, value);
     return value;
   };
+  const neededConstants = new Map<string, Set<string>>();
+  for (const trace of traces.values()) {
+    const needed = neededConstants.get(trace.file) ?? new Set<string>();
+    const remember = (value: string) => {
+      for (const match of value.matchAll(
+        /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?<![.\w])[a-z_$][a-z_0-9$]*/gi,
+      ))
+        if (imports.get(trace.file)?.has(match[0])) needed.add(match[0]);
+    };
+    for (const value of trace.defaults.values()) remember(value);
+    for (const event of trace.events) {
+      if ('effect' in event) {
+        remember(event.effect.key);
+        for (const condition of event.effect.conditions ?? []) remember(condition.expression);
+      } else {
+        for (const value of event.args) remember(value);
+        for (const condition of event.conditions) remember(condition.expression);
+      }
+    }
+    neededConstants.set(trace.file, needed);
+  }
   for (const [file, names] of imports) {
     const values = new Map<string, string>();
     for (const name of names.keys()) {
+      if (!neededConstants.get(file)?.has(name)) continue;
       const value = constant(file, name);
       if (value !== undefined) values.set(name, value);
     }
     importedSymbols.set(file, values);
   }
+  profile?.('gate-imports');
   const expand = (
     trace: FunctionTrace,
     chain: Set<string>,
@@ -1422,7 +2363,7 @@ function gateUpgrades(
       })),
     ];
     const result: Effect[] = [];
-    for (const event of trace.events.sort((a, b) => a.offset - b.offset)) {
+    for (const event of trace.events) {
       if ('effect' in event) {
         result.push({
           ...event.effect,
@@ -1446,13 +2387,54 @@ function gateUpgrades(
     }
     return result;
   };
+  // An upgrade needs a write. Walk reverse call/argument edges once to choose
+  // roots that can reach one; their expansion still includes read locks and
+  // COMMIT/ROLLBACK helpers that establish the transaction's exact ordering.
+  const parents = new Map<string, Set<string>>();
+  const writes = new Set<string>();
+  for (const trace of traces.values()) {
+    trace.events.sort((a, b) => a.offset - b.offset);
+    for (const event of trace.events) {
+      if ('effect' in event) {
+        if (event.effect.kind === 'write') writes.add(trace.id);
+        continue;
+      }
+      const imported = imports.get(trace.file)?.get(event.call);
+      const targets = [
+        event.call,
+        named.get(`${trace.file}#${event.call}`),
+        named.get(`${trace.file}#${trace.defaults.get(event.call)}`),
+        imported ? named.get(imported) : undefined,
+        ...event.args.flatMap((argument) => [
+          argument,
+          named.get(`${trace.file}#${argument}`),
+          named.get(`${trace.file}#${trace.defaults.get(argument)}`),
+        ]),
+      ];
+      for (const target of targets)
+        if (target && traces.has(target)) {
+          const callers = parents.get(target) ?? new Set<string>();
+          callers.add(trace.id);
+          parents.set(target, callers);
+        }
+    }
+  }
+  const pending = [...writes];
+  for (let index = 0; index < pending.length; index++) {
+    for (const parent of parents.get(pending[index]) ?? [])
+      if (!writes.has(parent)) {
+        writes.add(parent);
+        pending.push(parent);
+      }
+  }
   const findings: SerializationFinding[] = [];
   for (const trace of traces.values()) {
-    if (embeddedCallbacks.has(trace.id)) continue;
+    if (embeddedCallbacks.has(trace.id) || !writes.has(trace.id)) continue;
     findings.push(
       ...gateEffectFindings(expand(trace, new Set()), trace.file, trace.name ?? 'callback'),
     );
   }
+  profile?.('gate-expand');
   return findings;
 }
 
@@ -1461,6 +2443,25 @@ export function serializationFindings(
   migrations: SqlSource[],
   sources: SqlSource[],
   allowlist: SerializationAllowance[] = serializationAllowlist,
+  profile?: (phase: string) => void,
+): SerializationFinding[] {
+  const previous = lexTimings;
+  const timings = profile
+    ? { requests: 0, misses: 0, load: 0, normalize: 0, effects: 0, advisory: 0 }
+    : undefined;
+  lexTimings = timings;
+  try {
+    return computeSerializationFindings(migrations, sources, allowlist, profile);
+  } finally {
+    lexTimings = previous;
+    if (timings) profile?.(`lex-detail:${JSON.stringify(timings)}`);
+  }
+}
+function computeSerializationFindings(
+  migrations: SqlSource[],
+  sources: SqlSource[],
+  allowlist: SerializationAllowance[],
+  profile?: (phase: string) => void,
 ): SerializationFinding[] {
   for (const entry of allowlist) {
     if (
@@ -1473,9 +2474,41 @@ export function serializationFindings(
         'Serialization allowance requires one relation or key, writers and a one-line reason',
       );
   }
+  parseSources(sources);
+  profile?.('source-index');
+  prepareSql(migrations.map((source) => source.text));
+  // Loading each migration registers its indexed dollar bodies before asking
+  // for procedural fragments, so they reuse the parent parse rather than spawn.
+  for (const source of migrations) indexedSql(source.text);
+  prepareSql(
+    migrations.flatMap((source) => [
+      source.text,
+      ...[...source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)].map(
+        (body) => body[2],
+      ),
+    ]),
+  );
+  profile?.('sql-index');
   const singletons = singletonTables(migrations),
     findings: SerializationFinding[] = [];
-  const byFile = new Map<string, SqlFragment[]>();
+  profile?.('singletons');
+  const detail = profile
+    ? { tree: 0, nodes: 0, visit: 0, initializer: 0, files: 0, initializers: 0 }
+    : undefined;
+  let bySource: Map<SqlSource, SqlFragment[]>;
+  fragmentTimings = detail;
+  try {
+    bySource = new Map(sources.map((source) => [source, sourceFragments(source)]));
+  } finally {
+    fragmentTimings = undefined;
+  }
+  profile?.('source-fragments');
+  if (detail) profile?.(`fragment-detail:${JSON.stringify(detail)}`);
+  const byFile = new Map(sources.map((source) => [source.file, bySource.get(source)!]));
+  prepareSql(
+    [...bySource.values()].flatMap((fragments) => fragments.map((fragment) => fragment.text)),
+  );
+  profile?.('fragment-index');
   const allowed = (target: string, file: string, key = false) =>
     allowlist.some(
       (entry) => (key ? entry.key : entry.relation) === target && entry.writers.includes(file),
@@ -1489,11 +2522,11 @@ export function serializationFindings(
           target,
           detail: 'One-row design needs a classified reason and explicit writers',
         });
+  const singletonHint = sqlNameHints(singletons.keys());
   for (const source of [...migrations, ...sources]) {
     const fragments = source.file.endsWith('.sql')
       ? [{ ...source, line: 1 }]
-      : sourceFragments(source);
-    if (!source.file.endsWith('.sql')) byFile.set(source.file, fragments);
+      : bySource.get(source)!;
     for (const fragment of fragments) {
       for (const lock of advisoryKeys(fragment))
         if (!allowed(lock.key, source.file, true))
@@ -1504,7 +2537,14 @@ export function serializationFindings(
             target: lock.key,
             detail: 'Advisory key has no per-object value',
           });
-      for (const effect of sqlEffects(fragment))
+      // This rule can only report a current singleton target. Uncertain SQL
+      // spellings retain token analysis; gate traces evaluate their own effects.
+      const singletonEffects =
+        singletons.size > 0 &&
+        (/\\|\/\*|--|__dynamic__/.test(fragment.text) || singletonHint(fragment.text.toLowerCase()))
+          ? sqlEffects(fragment)
+          : [];
+      for (const effect of singletonEffects)
         if (
           (effect.kind === 'write' || effect.kind === 'exclusive') &&
           singletons.has(effect.relation) &&
@@ -1523,15 +2563,19 @@ export function serializationFindings(
     // two different function definitions in the same historical migration.
     if (source.file.endsWith('.sql'))
       for (const body of source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)) {
+        if (!/gate\b|\\/i.test(body[2])) continue;
         const effects = sqlEffects({
           file: source.file,
           text: body[2],
-          line: source.text.slice(0, body.index! + body[0].indexOf(body[2])).split('\n').length,
+          line: textLine(source.text, body.index! + body[0].indexOf(body[2])),
         });
         findings.push(...gateEffectFindings(effects, source.file));
       }
   }
-  findings.push(...gateUpgrades(sources, byFile, databaseEffects(migrations)));
+  profile?.('source-rules');
+  const effects = databaseEffects(migrations);
+  profile?.('database-effects');
+  findings.push(...gateUpgrades(sources, byFile, effects, profile));
   return [
     ...new Map(
       findings.map((finding) => [
@@ -1543,6 +2587,7 @@ export function serializationFindings(
 }
 
 export function repositorySerializationSources(root: string): SqlSource[] {
+  repositoryIndex(root);
   return [
     ...new Bun.Glob('*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}').scanSync({
       cwd: join(root, 'services'),

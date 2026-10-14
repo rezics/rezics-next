@@ -33,11 +33,12 @@ for (const state of ['accepted', 'declined'] as const) {
 }
 test('G-948: lost decision responses retry the exact generations and key', async () => {
   let attempt = 0;
+  const lost = new Error('Lost response');
   const { api, calls } = client(() => {
-    if (attempt++ === 0) throw new Error('Lost response');
+    if (attempt++ === 0) throw lost;
     return Response.json({ state: 'accepted', replayed: true, generation: '13' });
   });
-  expect(await api.decide(requestFixture.id, decision, 'lost-decision')).toEqual({ ok: false, failure: 'unavailable' });
+  expect(await api.decide(requestFixture.id, decision, 'lost-decision')).toEqual({ ok: false, failure: 'unavailable', problem: lost });
   expect(await api.decide(requestFixture.id, decision, 'lost-decision')).toMatchObject({ ok: true, data: { replayed: true } });
   expect(calls[1]).toEqual(calls[0]);
 });
@@ -63,7 +64,7 @@ for (const [status, code, failure] of [[403, 'realm_management_denied', 'denied'
   [503, 'realm_management_unavailable', 'unavailable']] as const) {
   test(`G-948: withdrawal preserves ${failure} as a failed outcome`, async () => {
     const { api } = client(() => Response.json({ code }, { status }));
-    expect(await api.withdraw(requestFixture.id, withdraw, 'withdraw-intent')).toEqual({ ok: false, failure, code });
+    expect(await api.withdraw(requestFixture.id, withdraw, 'withdraw-intent')).toEqual({ ok: false, failure, code, problem: { code } });
   });
 }
 test('G-948: legacy cached receipts are discarded on reload', () => {

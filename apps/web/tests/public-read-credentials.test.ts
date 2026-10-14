@@ -9,9 +9,8 @@ import { callEnd, edenCalls, operationPattern, readWebSources } from './support/
 
 // Every browser call to a Main read is one of three classes, taken from the route:
 // `anonymous` ignores the bearer, `credential` personalises from it and takes no subject,
-// `acting-subject` names the reader when authenticated, and can be anonymous only
-// when the route permits it. An unlisted operation fails; credential reads keep the
-// cookie, and an authenticated acting-subject read must name its subject.
+// `acting-subject` names the reader. An unlisted operation fails. Anonymous reads require
+// the route's explicit public branch; authenticated acting-subject reads must name the reader.
 
 const repoRoot = join(import.meta.dir, '../../..');
 
@@ -165,34 +164,32 @@ function clientArgs(text: string, call: PublicCall): string | null {
 }
 
 type ReadClass = 'anonymous' | 'credential' | 'acting-subject';
-interface ReadRule { kind: ReadClass; anonymousWhen?: (args: string) => boolean }
+interface ReadRule {
+  kind: ReadClass;
+  /** A public branch accepts no bearer and no acting subject. */
+  anonymous?: boolean;
+  /** Some operations use authority only for particular named scopes. */
+  scopes?: Readonly<Record<string, ReadClass>>;
+}
 
 /** Route evidence for every Main read a browser call can reach. An id missing here fails the scan. */
 const readClasses: Readonly<Record<string, ReadRule & { evidence: string }>> = {
-  getV1AddressesAvailability: {
-    kind: 'acting-subject',
-    anonymousWhen: (args) => /\bscope\s*:\s*['"](?:agent|space|work)['"]/.test(args),
-    evidence: 'services/main/src/modules/address/write.ts:157 ignores the bearer for non-Zone scopes; a Zone requires its editor',
-  },
-  'getV1AgentsByIdLibrary-visibility': {
-    kind: 'credential',
-    evidence: 'services/main/src/routes/profiles.ts:119 verifies the bearer and reads visibility for the owning principal',
-  },
-  getV1OnboardingChoices: {
+  getV1Zones: {
     kind: 'anonymous',
-    evidence: 'services/main/src/routes/onboarding-interests.ts:27 strips the bearer before workRead',
+    evidence: 'services/main/src/routes/zones.ts:334 lists official Zones without reading the request or bearer',
   },
-  getV1ZonesByIdPresentation: {
+  getV1RealmsByRealmZone: {
     kind: 'acting-subject',
-    evidence: 'services/main/src/routes/zones.ts:349 reads the public presentation or the named member’s presentation',
+    anonymous: true,
+    evidence: 'services/main/src/routes/realm-reads.ts:110 workRead accepts a public visitor or the named member',
   },
-  getV1ZonesByIdRoutes: {
+  getV1ZonesById: {
     kind: 'acting-subject',
-    evidence: 'services/main/src/routes/zones.ts:551 resolves the public route or the named member’s route',
+    evidence: 'services/main/src/routes/zones.ts:646 requires actingSubject and zonePage verifies the viewer',
   },
-  'getV1Content-revisionsByRevision': {
+  'getV1ZonesByIdShowcase-editor': {
     kind: 'acting-subject',
-    evidence: 'services/main/src/routes/content.ts:428 serves published revisions anonymously and otherwise requires actingSubject',
+    evidence: 'services/main/src/routes/zones.ts:409 requires actingSubject and requireZoneEditor verifies zone.edit',
   },
   getV1Facets: {
     kind: 'anonymous',
@@ -240,7 +237,36 @@ const readClasses: Readonly<Record<string, ReadRule & { evidence: string }>> = {
   },
   getV1AddressesResolve: {
     kind: 'acting-subject',
+    anonymous: true,
     evidence: 'services/main/src/routes/addresses.ts:216 resolves as query.actingSubject when the bearer is present',
+  },
+  getV1AddressesAvailability: {
+    kind: 'acting-subject',
+    scopes: { agent: 'anonymous', space: 'anonymous', work: 'anonymous' },
+    evidence: 'services/main/src/modules/address/write.ts:157 ignores authority outside the Zone scope; Zone requires its editor',
+  },
+  getV1OnboardingChoices: {
+    kind: 'anonymous',
+    evidence: 'services/main/src/routes/onboarding-interests.ts:27 drops request headers before workRead',
+  },
+  'getV1AgentsByIdLibrary-visibility': {
+    kind: 'credential',
+    evidence: 'services/main/src/routes/profiles.ts:119 verifies the owner bearer and takes no acting subject',
+  },
+  getV1ZonesByIdPresentation: {
+    kind: 'acting-subject',
+    anonymous: true,
+    evidence: 'services/main/src/modules/zone/route.ts:68 reads the public publication without a subject; verifies the subject when present',
+  },
+  getV1ZonesByIdRoutes: {
+    kind: 'acting-subject',
+    anonymous: true,
+    evidence: 'services/main/src/modules/zone/route.ts:68 reads public routes without a subject; verifies the subject when present',
+  },
+  'getV1Content-revisionsByRevision': {
+    kind: 'acting-subject',
+    anonymous: true,
+    evidence: 'services/main/src/routes/content.ts:427 permits public published revisions; unpublished revisions require an acting subject',
   },
   'getV1MePerson-preferences': {
     kind: 'acting-subject',
@@ -276,6 +302,7 @@ const readClasses: Readonly<Record<string, ReadRule & { evidence: string }>> = {
   },
   getV1RealmsByRealm: {
     kind: 'acting-subject',
+    anonymous: true,
     evidence: 'services/main/src/routes/realm-reads.ts:77 workRead takes the optional member on the header',
   },
   'getV1RealmsByRealmZone-attachments': {
@@ -403,19 +430,22 @@ function judge(
       found.push(`${file}: ${label} reaches ${operation}, which has no read class`);
       continue;
     }
-    const kind = entry.anonymousWhen?.(apiArgs) ? 'anonymous' : entry.kind;
+    const scope = /\bscope\s*:\s*(['"])([^'"]+)\1/.exec(apiArgs)?.[2];
+    const kind = (scope ? entry.scopes?.[scope] : undefined) ?? entry.kind;
     if (kind === 'anonymous') {
       if (!anonymousTrue(client))
         found.push(
           `${file}: ${label} reaches ${operation} with the session cookie; the route ignores the bearer`,
         );
+    } else if (entry.anonymous && anonymousTrue(client) && !subject) {
+      // Explicit public reads cannot accidentally carry a session or an actor.
+      continue;
     } else if (
-      (kind === 'credential' && anonymousOption(client)) ||
-      (kind === 'acting-subject' && anonymousTrue(client) &&
-        (bearerRequired.has(operation) || subject || entry.anonymousWhen !== undefined))
+      anonymousTrue(client) ||
+      (kind === 'credential' && anonymousOption(client))
     ) {
       found.push(`${file}: ${label} reaches ${operation} anonymously; the route reads the bearer`);
-    } else if (kind === 'acting-subject' && !anonymousTrue(client) && !subject) {
+    } else if (kind === 'acting-subject' && !subject) {
       found.push(`${file}: ${label} reaches ${operation} with no acting subject`);
     }
   }
@@ -524,31 +554,42 @@ test('an unlisted Main read fails', () => {
   ).toEqual(['features/new.tsx: .v1.works.get( reaches getV1Works, which has no read class']);
 });
 
-test('an optional acting-subject read permits an anonymous visitor but preserves the authority pairing', () => {
-  expect(violations({ visitor: `
-    void browserMainApi(undefined, { anonymous: true }).v1.addresses.resolve.get({ query: { scope: 'work', key } });
-    void browserMainApi(undefined, { anonymous: true }).v1.zones({ id }).presentation.get();
-    void browserMainApi(undefined, { anonymous: true }).v1.zones({ id }).routes.get({ query: { path } });
-    void browserMainApi(undefined, { anonymous: true }).v1['content-revisions']({ revision }).get();
-  ` })).toEqual([]);
-  expect(violations({ invalid: `
-    void browserMainApi().v1.addresses.resolve.get({ query: { scope: 'work', key } });
-    void browserMainApi(undefined, { anonymous: true }).v1.addresses.resolve.get({ query: { scope: 'work', key, actingSubject } });
-    void browserMainApi(undefined, { anonymous: true }).v1.me['person-preferences'].get({ query: { actingSubject } });
-    void browserMainApi(undefined, { anonymous: true }).v1.me['person-preferences'].get({ query: {} });
-  ` })).toHaveLength(4);
+test('optional public branches accept anonymous reads only without an acting subject', () => {
+  for (const route of ['realms({ realm })', 'realms({ realm }).zone', 'addresses.resolve', 'zones({ id }).presentation',
+    'zones({ id }).routes', "['content-revisions']({ revision })"]) {
+    const client = 'browserMainApi(undefined, { anonymous: true })';
+    const endpoint = route.startsWith('[') ? route : `.${route}`;
+    expect(violations({ fixture: `void ${client}.v1${endpoint}.get({ query: {} });` })).toEqual([]);
+    expect(violations({ fixture: `void ${client}.v1${endpoint}.get({ query: { actingSubject } });` }))
+      .toHaveLength(1);
+    expect(violations({ fixture: `void browserMainApi().v1${endpoint}.get({ query: {} });` }))
+      .toHaveLength(1);
+    expect(violations({ fixture: `void browserMainApi().v1${endpoint}.get({ query: { actingSubject } });` }))
+      .toEqual([]);
+  }
 });
 
-test('address availability uses anonymous global scopes and the named Zone editor', () => {
-  expect(violations({ scopes: `
-    void browserMainApi(undefined, { anonymous: true }).v1.addresses.availability.get({ query: { scope: 'agent', alias } });
-    void browserMainApi().v1.addresses.availability.get({ query: { scope: zoneScope, alias, actingSubject } });
+test('Zone directory reads omit credentials and editor reads name their authenticated subject', () => {
+  expect(violations({ fixture: `
+    void browserMainApi(undefined, { anonymous: true }).v1.zones.get({ query: { official: 'true' } });
+    void browserMainApi().v1.zones({ id }).get({ query: { actingSubject } });
+    void browserMainApi().v1.zones({ id })['showcase-editor'].get({ query: { actingSubject } });
   ` })).toEqual([]);
-  expect(violations({ invalid: `
-    void browserMainApi().v1.addresses.availability.get({ query: { scope: 'agent', alias } });
-    void browserMainApi().v1.addresses.availability.get({ query: { scope: zoneScope, alias } });
-    void browserMainApi(undefined, { anonymous: true }).v1.addresses.availability.get({ query: { scope: zoneScope, alias } });
+  expect(violations({ fixture: `
+    void browserMainApi().v1.zones.get({ query: { official: 'true' } });
+    void browserMainApi().v1.zones({ id }).get();
+    void browserMainApi(undefined, { anonymous: true }).v1.zones({ id })['showcase-editor'].get({ query: { actingSubject } });
   ` })).toHaveLength(3);
+});
+
+test('address availability uses its public scope while Zone availability requires the editor', () => {
+  const call = (client: string, scope: string, actor = '') => ({ fixture:
+    `void ${client}.v1.addresses.availability.get({ query: { scope: '${scope}', alias: handle ${actor} } });` });
+  const anonymous = 'browserMainApi(undefined, { anonymous: true })';
+  expect(violations(call(anonymous, 'agent'))).toEqual([]);
+  expect(violations(call('browserMainApi()', 'agent'))).toHaveLength(1);
+  expect(violations(call(anonymous, 'zone:urn:zone'))).toHaveLength(1);
+  expect(violations(call('browserMainApi()', 'zone:urn:zone', ', actingSubject'))).toEqual([]);
 });
 
 test('browser Main reads match the route class', () => {

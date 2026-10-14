@@ -12,7 +12,7 @@ import type { FeedCheckpoint } from '../src/modules/feed/store.ts';
 import { RealmReplyStore } from '../src/modules/realm-reply/store.ts';
 import { RealmReplyStale, RealmReplyUnavailable, type PlacementPreparation,
   type RealmReplyContentStore } from '../src/modules/realm-reply/content-store.ts';
-import { replyReceiptIri } from '../src/modules/realm-reply/graph.ts';
+import { replyReceiptIri, replySlotIri } from '../src/modules/realm-reply/graph.ts';
 import { RealmReplyThreadStore } from '../src/modules/realm-reply/thread-store.ts';
 import { RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
@@ -638,6 +638,19 @@ function placementReplay(realm: string, parent: string | null, work: string, own
         if (sql.includes('SELECT ?space ?realmRevision ?disclosure')) return { results: { bindings: [{
           space: { type: 'uri', value: native() }, disclosure: { type: 'uri', value: `${RV}Public` },
         }] } };
+        // Terminal replay rechecks this exact slot before maintaining its board-aware index.
+        if (sql.includes('?placement ?revision ?review ?root ?author ?preparation ?rootRevision')) {
+          expect(sql).toContain(`<${replySlotIri(realm, reply)}>`);
+          const values = { placement, revision: `urn:rezics:content:revision:${revisionId}`,
+            review: `urn:rezics:realm-review:${prepared.reviewDecisionId}`, root: work,
+            author: prepared.author, preparation: prepared.operationId, rootRevision: prepared.rootRevision };
+          return { results: { bindings: [Object.fromEntries(Object.entries(values)
+            .map(([key, value]) => [key, { type: 'uri', value }]))] } };
+        }
+        if (sql.includes('SELECT ?concept ?primary')) {
+          expect(sql).toContain(`<${placement}> a rv:RealmReplyPlacement`);
+          return { results: { bindings: [{}] } };
+        }
         throw new Error('Placement performed an unrelated graph inventory read');
       },
       commandWithReceipt: async () => {
@@ -760,6 +773,25 @@ for (const [source, removal] of [
       .resolves.toBeUndefined();
   });
 }
+
+test('board ranking replay preserves its revision and clearing removes only the selected board keys', async () => {
+  const realm = native(), root = await reference(realm), concept = native();
+  const setBoards = (concepts: string[]) => access.query(`UPDATE access.realm_thread_reference SET concepts=$4
+    WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, root.reply, concepts]);
+  const revision = async () => (await access.query<{ revision: string }>(
+    `SELECT revision::text FROM access.realm_thread_state WHERE data_epoch=$1 AND realm=$2`, [epoch, realm])).rows[0]!.revision;
+  const keys = async () => (await access.query(`SELECT sort,period,concept,placement,rank_key,time_key,expires_at
+    FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 ORDER BY concept,sort,period`, [epoch, realm])).rows;
+  await setBoards([concept]);
+  const before = await keys(), selectedRevision = await revision();
+  expect(before.filter(row => row.concept === concept)).toHaveLength(5);
+  await setBoards([concept]);
+  expect(await keys()).toEqual(before);
+  expect(await revision()).toBe(selectedRevision);
+  await setBoards([]);
+  expect(await keys()).toEqual(before.filter(row => row.concept === ''));
+  expect(BigInt(await revision())).toBeGreaterThan(BigInt(selectedRevision));
+});
 
 test('acknowledged placement publishes its exact index, aggregate, order and revision with bounded work', async () => {
   const unrelated = native();

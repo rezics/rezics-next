@@ -58,7 +58,7 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
       }
       queries.push(query);
       if (query.includes('SELECT ?space ?realmRevision')) return rows(input.closedRealm ? []
-        : [{ space, disclosure: `${RV}Public` }]);
+        : [{ space, realmRevision: head, disclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?spaceDisclosure')) return rows([{ spaceDisclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
         const requested = [collection, resource].filter(target => query.includes(`<${target}>`));

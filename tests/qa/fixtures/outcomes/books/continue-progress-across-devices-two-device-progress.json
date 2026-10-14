@@ -7,7 +7,7 @@
         "label": "chapter-progress-refused",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -24,7 +24,7 @@
         "label": "completions-refused",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -43,7 +43,7 @@
         "label": "chapter-progress-refused",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -60,7 +60,7 @@
         "label": "completions-refused",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -79,7 +79,7 @@
         "label": "chapter-progress-refused",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -96,7 +96,7 @@
         "label": "completions-refused",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -113,11 +113,11 @@
         "label": "empty-chapter-progress",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd91c88e6-9854-485b-894e-6db73b9c8337",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10389d75-c16e-4c8d-920a-ef687584e7aa",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
           "selectedRevision": null,
           "completed": false,
           "position": null,
@@ -132,15 +132,15 @@
         "label": "empty-completions",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd91c88e6-9854-485b-894e-6db73b9c8337&limit=20",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10389d75-c16e-4c8d-920a-ef687584e7aa&limit=20",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
           "items": [],
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 0,
@@ -162,19 +162,19 @@
         "label": "no-saved-position",
         "operationId": "getV1Reading-positionsByWork",
         "method": "GET",
-        "path": "/v1/reading-positions/01a135f8-0600-7243-8a2b-3b9c97fbe344?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd91c88e6-9854-485b-894e-6db73b9c8337&position=mine&limit=20",
+        "path": "/v1/reading-positions/01a13af5-447a-768a-9dd7-365928423f2f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10389d75-c16e-4c8d-920a-ef687584e7aa&position=mine&limit=20",
         "status": 200,
         "answer": {
           "profile": "reading-positions-v1",
-          "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
           "resolved": "start",
           "items": [
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "i",
               "role": "chapter",
@@ -187,11 +187,11 @@
               ]
             },
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "r",
               "role": "chapter",
@@ -210,8 +210,8 @@
           "scope": "positions",
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 2,
@@ -242,11 +242,11 @@
         "label": "device-two-before-save",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": true,
           "position": null,
@@ -261,17 +261,17 @@
         "label": "device-one-save",
         "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "PUT",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress",
         "body": {
-          "actingSubject": "https://rezics.com/id/fa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1,
           "completed": true,
           "position": "device one paragraph"
         },
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": true,
           "position": "device one paragraph",
@@ -287,11 +287,11 @@
         "label": "device-two-resumed-chapter",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": true,
           "position": "device one paragraph",
@@ -306,19 +306,19 @@
         "label": "device-two-series-resume",
         "operationId": "getV1Reading-positionsByWork",
         "method": "GET",
-        "path": "/v1/reading-positions/01a135f8-10d6-7587-baa6-fc82e5b18714?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&position=mine&limit=1",
+        "path": "/v1/reading-positions/01a13af5-561d-7460-9ce3-45084c0a8169?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&position=mine&limit=1",
         "status": 200,
         "answer": {
           "profile": "reading-positions-v1",
-          "work": "https://rezics.com/id/01a135f8-10d6-7587-baa6-fc82e5b18714",
-          "resolved": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "work": "https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
+          "resolved": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "items": [
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "r",
               "role": "chapter",
@@ -337,8 +337,8 @@
           "visibility": "visible",
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 1,
@@ -367,9 +367,9 @@
         "label": "device-two-stale-save-refused",
         "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "PUT",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress",
         "body": {
-          "actingSubject": "https://rezics.com/id/fa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1,
           "completed": false,
           "position": null
@@ -390,11 +390,11 @@
         "label": "device-two-conflict-current",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": true,
           "position": "device one paragraph",
@@ -409,17 +409,17 @@
         "label": "device-two-recovered-save",
         "operationId": "putV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "PUT",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress",
         "body": {
-          "actingSubject": "https://rezics.com/id/fa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 2,
           "completed": false,
           "position": null
         },
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": false,
           "position": null,
@@ -435,11 +435,11 @@
         "label": "device-one-sees-recovery",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/ef89335c-96df-86d6-a894-9741a523d2ed/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/dcdfdeb4-3872-8576-81b6-61b492acf84a/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-          "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
           "selectedRevision": null,
           "completed": false,
           "position": null,
@@ -454,13 +454,13 @@
         "label": "book-type",
         "operationId": "getV1WorksById",
         "method": "GET",
-        "path": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
           "profile": "work-read-v1",
-          "id": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-          "revision": "https://rezics.com/id/01a135f8-0600-7245-92ca-24e133acb359",
-          "mainVersion": "https://rezics.com/id/01a135f8-0600-7244-bd8d-915d5b407ca4",
+          "id": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "revision": "https://rezics.com/id/01a13af5-447a-768c-853b-2ff945041438",
+          "mainVersion": "https://rezics.com/id/01a13af5-447a-768b-bd1c-dbd2d2d78c19",
           "title": {
             "value": "Original outcome volume",
             "language": "en",
@@ -471,7 +471,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "82ec135d448c18999b7a2af5f20aca43"
+            "key": "1586e40a5de2ce2cf0c2f42d894dde43"
           },
           "types": [
             "https://schema.org/Book"
@@ -483,29 +483,30 @@
           "lastUpdatedAt": null,
           "disclosure": "public",
           "publicationState": "unpublished",
+          "structurePublicationHead": null,
           "descriptionObligations": {
             "status": "unassessed"
           },
           "description": null,
           "metadataRevision": null,
           "originalTitle": null,
-          "mainVersionRevision": "https://rezics.com/id/01a135f8-0eab-76c6-8d02-efb255d96a1f",
+          "mainVersionRevision": "https://rezics.com/id/01a13af5-51d5-7318-ac6c-f39ffba8b888",
           "mainVersionLabel": null,
           "selectedLanguage": "en",
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26",
-            "dependencyToken": "ac55e7ff18ec3f29564775c78d2287ba447c087d22ab0cd4a1d5d81f0d09d565"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27",
+            "dependencyToken": "2a3d01eef1639cf744a5304dfeed9f9eec17f1f66f703585b4618da19ab85803"
           },
           "links": {
             "versions": "/v1/query#work-versions",
-            "classifications": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/classifications",
+            "classifications": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/classifications",
             "adoptions": "/v1/query#work-adoptions",
-            "ratings": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/ratings",
-            "history": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/history",
-            "credits": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/credits",
-            "metadata": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/metadata",
-            "editions": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/editions"
+            "ratings": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/ratings",
+            "history": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/history",
+            "credits": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/credits",
+            "metadata": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/metadata",
+            "editions": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/editions"
           }
         },
         "headers": {
@@ -514,48 +515,30 @@
         }
       },
       {
-        "label": "book-contents",
-        "operationId": "getV1WorksByIdContents",
-        "method": "GET",
-        "path": "/v1/works/01a135f8-0600-7243-8a2b-3b9c97fbe344/contents?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&limit=20",
-        "status": 503,
-        "answer": {
-          "type": "https://rezics.com/problems/dependency_unavailable",
-          "title": "Work operation could not be completed",
-          "status": 503,
-          "code": "dependency_unavailable"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/problem+json",
-          "retry-after": "1"
-        }
-      },
-      {
         "label": "series-volumes",
         "operationId": "getV1ResourcesByResourceParts",
         "method": "GET",
-        "path": "/v1/resources/01a135f8-10d6-7587-baa6-fc82e5b18714/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&limit=20",
+        "path": "/v1/resources/01a13af5-561d-7460-9ce3-45084c0a8169/parts?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
         "status": 200,
         "answer": {
-          "resource": "https://rezics.com/id/01a135f8-10d6-7587-baa6-fc82e5b18714",
-          "mainVersion": "https://rezics.com/id/01a135f8-10d6-7588-8d9f-ce4347f14548",
-          "structure": "https://rezics.com/id/b1c84d15-3fe7-836e-a7c7-67fa93ab9272",
-          "revision": "https://rezics.com/id/95ea258d-eb6b-8c99-803f-7def74a01a26",
+          "resource": "https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
+          "mainVersion": "https://rezics.com/id/01a13af5-561d-7461-af9b-34231e28cc35",
+          "structure": "https://rezics.com/id/54f69a67-7eca-8e4a-b568-fc6e4a5955c9",
+          "revision": "https://rezics.com/id/bf2b9b9f-d0a0-80a7-8920-f4a3c4474905",
           "completion": {
             "status": "unknown",
             "evidence": []
           },
           "parts": [
             {
-              "occurrence": "https://rezics.com/id/21c90525-0632-81d8-872c-d24b282e9429",
+              "occurrence": "https://rezics.com/id/90880f7e-dd9c-837b-a2b8-59cd0888cccd",
               "role": "part",
-              "parent": "https://rezics.com/id/b1c84d15-3fe7-836e-a7c7-67fa93ab9272",
+              "parent": "https://rezics.com/id/54f69a67-7eca-8e4a-b568-fc6e4a5955c9",
               "segmentKey": "i",
               "orderKey": "i",
               "labels": [],
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "mainVersion": "https://rezics.com/id/01a135f8-0600-7244-bd8d-915d5b407ca4",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "mainVersion": "https://rezics.com/id/01a13af5-447a-768b-bd1c-dbd2d2d78c19",
               "displayLabel": "1",
               "inclusion": "required"
             }
@@ -563,8 +546,8 @@
           "next": null,
           "sourcePosition": {
             "datasetId": "product",
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "24"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "25"
           }
         },
         "headers": {
@@ -576,19 +559,19 @@
         "label": "chapter-resume",
         "operationId": "getV1Reading-positionsByWork",
         "method": "GET",
-        "path": "/v1/reading-positions/01a135f8-0600-7243-8a2b-3b9c97fbe344?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&position=mine&limit=20",
+        "path": "/v1/reading-positions/01a13af5-447a-768a-9dd7-365928423f2f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&position=mine&limit=20",
         "status": 200,
         "answer": {
           "profile": "reading-positions-v1",
-          "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-          "resolved": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "resolved": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
           "items": [
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "i",
               "role": "chapter",
@@ -607,8 +590,8 @@
           "visibility": "visible",
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 1,
@@ -637,19 +620,19 @@
         "label": "chapter-choices",
         "operationId": "getV1Reading-positionsByWork",
         "method": "GET",
-        "path": "/v1/reading-positions/01a135f8-0600-7243-8a2b-3b9c97fbe344?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&position=start&limit=20",
+        "path": "/v1/reading-positions/01a13af5-447a-768a-9dd7-365928423f2f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&position=start&limit=20",
         "status": 200,
         "answer": {
           "profile": "reading-positions-v1",
-          "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
           "resolved": "start",
           "items": [
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "i",
               "role": "chapter",
@@ -663,11 +646,11 @@
               "ordinal": 1
             },
             {
-              "work": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "revision": "https://rezics.com/id/172b92b6-17f5-882f-a62d-6506c0dd487e",
-              "occurrence": "https://rezics.com/id/ef89335c-96df-86d6-a894-9741a523d2ed",
-              "parent": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "revision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+              "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
               "segmentKey": "i",
               "orderKey": "r",
               "role": "chapter",
@@ -687,8 +670,8 @@
           "scope": "positions",
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 2,
@@ -717,14 +700,14 @@
         "label": "completed-chapters",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&limit=20",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
+          "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
           "items": [
             {
-              "structure": "https://rezics.com/id/9b345884-d405-8645-899f-257d1a80a051",
-              "occurrence": "https://rezics.com/id/08484865-75f4-8fb6-8c73-087170fb2ca2",
+              "structure": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
               "selectedRevision": null,
               "completed": true,
               "position": null,
@@ -733,8 +716,8 @@
           ],
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "26"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
           },
           "count": {
             "value": 1,
@@ -756,47 +739,110 @@
         "label": "series-composition",
         "operationId": "getV1CompositionsById",
         "method": "GET",
-        "path": "/v1/compositions/b1c84d15-3fe7-836e-a7c7-67fa93ab9272?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28&limit=20",
+        "path": "/v1/compositions/54f69a67-7eca-8e4a-b568-fc6e4a5955c9?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
         "status": 200,
         "answer": {
-          "structure": "https://rezics.com/id/b1c84d15-3fe7-836e-a7c7-67fa93ab9272",
-          "owner": "https://rezics.com/id/01a135f8-10d6-7587-baa6-fc82e5b18714",
-          "component": "https://rezics.com/id/01a135f8-10d6-7588-8d9f-ce4347f14548",
-          "work": "https://rezics.com/id/01a135f8-10d6-7587-baa6-fc82e5b18714",
-          "mainVersion": "https://rezics.com/id/01a135f8-10d6-7588-8d9f-ce4347f14548",
-          "revision": "https://rezics.com/id/95ea258d-eb6b-8c99-803f-7def74a01a26",
-          "predecessor": "https://rezics.com/id/655bbca6-f5f4-815f-aff0-39453efd83a3",
+          "structure": "https://rezics.com/id/54f69a67-7eca-8e4a-b568-fc6e4a5955c9",
+          "owner": "https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
+          "component": "https://rezics.com/id/01a13af5-561d-7461-af9b-34231e28cc35",
+          "work": "https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
+          "mainVersion": "https://rezics.com/id/01a13af5-561d-7461-af9b-34231e28cc35",
+          "revision": "https://rezics.com/id/bf2b9b9f-d0a0-80a7-8920-f4a3c4474905",
+          "predecessor": "https://rezics.com/id/3726e30a-35b7-8fb2-8033-4807eae3bc43",
           "completion": {
             "status": "unknown",
             "evidence": []
           },
           "occurrences": [
             {
-              "occurrence": "https://rezics.com/id/21c90525-0632-81d8-872c-d24b282e9429",
+              "occurrence": "https://rezics.com/id/90880f7e-dd9c-837b-a2b8-59cd0888cccd",
               "state": "active",
-              "parent": "https://rezics.com/id/b1c84d15-3fe7-836e-a7c7-67fa93ab9272",
+              "parent": "https://rezics.com/id/54f69a67-7eca-8e4a-b568-fc6e4a5955c9",
               "segmentKey": "i",
               "orderKey": "i",
               "role": "part",
-              "target": "https://rezics.com/id/01a135f8-0600-7243-8a2b-3b9c97fbe344",
+              "target": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
               "qualifier": {
                 "type": "work-part",
                 "displayLabel": "1",
                 "inclusion": "required"
               },
               "labels": [],
-              "introducedBy": "https://rezics.com/id/95ea258d-eb6b-8c99-803f-7def74a01a26"
+              "introducedBy": "https://rezics.com/id/bf2b9b9f-d0a0-80a7-8920-f4a3c4474905"
             }
           ],
           "next": null,
           "sourcePosition": {
             "datasetId": "product",
-            "dataEpoch": "b7a35839-8215-407b-b27a-6a0645aa1d07",
-            "sequence": "24"
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "25"
           }
         },
         "headers": {
           "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "book-contents",
+        "operationId": "getV1WorksByIdContents",
+        "method": "GET",
+        "path": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/contents?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
+        "status": 200,
+        "answer": {
+          "profile": "work-contents-v1",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "version": "https://rezics.com/id/01a13af5-447a-768b-bd1c-dbd2d2d78c19",
+          "composition": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+          "compositionRevision": "https://rezics.com/id/53cfc7d3-7f11-822e-b517-4129357a2d35",
+          "language": "en",
+          "items": [
+            {
+              "occurrence": "https://rezics.com/id/fbfc676c-840e-8b03-a24a-32efd9869efb",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "role": "chapter",
+              "label": {
+                "value": "Chapter 1",
+                "language": "en"
+              },
+              "division": null,
+              "number": 1,
+              "childCount": null,
+              "target": null,
+              "selectedRevision": null,
+              "progress": null,
+              "availability": "unavailable"
+            },
+            {
+              "occurrence": "https://rezics.com/id/dcdfdeb4-3872-8576-81b6-61b492acf84a",
+              "parent": "https://rezics.com/id/93b05654-2556-894c-85c1-0099a094c950",
+              "role": "chapter",
+              "label": {
+                "value": "Chapter 2",
+                "language": "en"
+              },
+              "division": null,
+              "number": 2,
+              "childCount": null,
+              "target": null,
+              "selectedRevision": null,
+              "progress": null,
+              "availability": "unavailable"
+            }
+          ],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
+            "sequence": "27"
+          },
+          "count": {
+            "value": 2,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8"
         }
       }
@@ -806,7 +852,7 @@
         "label": "chapter-progress-refused",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -823,7 +869,7 @@
         "label": "completions-refused",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -842,7 +888,7 @@
         "label": "chapter-progress-refused",
         "operationId": "getV1CompositionsByIdOccurrencesByOccurrenceProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/occurrences/08484865-75f4-8fb6-8c73-087170fb2ca2/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/occurrences/fbfc676c-840e-8b03-a24a-32efd9869efb/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",
@@ -859,7 +905,7 @@
         "label": "completions-refused",
         "operationId": "getV1CompositionsByIdProgress",
         "method": "GET",
-        "path": "/v1/compositions/9b345884-d405-8645-899f-257d1a80a051/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffa5032f3-fc0f-4964-92b9-e9e0422b1c28",
+        "path": "/v1/compositions/93b05654-2556-894c-85c1-0099a094c950/progress?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/authority_denied",

@@ -557,7 +557,9 @@ test('G-955: all QA stacks inherit heap/direct-memory settings below their conta
   expect(override.REZICS_FUSEKI_MEMORY_LIMIT).toBe('3g');
   expect(override.REZICS_FUSEKI_JVM_ARGS).toBe('-Xmx1g');
   const compose = readFileSync(join(root, 'infra/dev/compose.qa.yaml'), 'utf8');
-  expect(compose).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}');
+  // Both disk and disposable native-Docker stacks receive the same resource overlay.
+  const resources = readFileSync(join(root, 'infra/dev/compose.qa-resources.yaml'), 'utf8');
+  expect(resources).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}');
   expect(compose).toContain(
     'JVM_ARGS: ${REZICS_FUSEKI_JVM_ARGS:--Xms64m -Xmx512m -XX:MaxDirectMemorySize=128m}',
   );

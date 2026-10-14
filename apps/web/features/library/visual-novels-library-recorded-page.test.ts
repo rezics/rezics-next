@@ -184,7 +184,7 @@ for (const persona of ['member', 'owner'] as const) {
     const media = mainTrackingApi(actingSubject(current.path), () => main).media;
     if (!media) throw new Error('tracking api has no work progress');
     expect(await media.markWork(mark.work, body.standing)).toEqual({
-      ok: false, failure: 'stale', current: { standing: mark.standing, version: mark.version }, submitted: body.standing });
+      ok: false, failure: 'stale', status: refused.status, problem: refused.answer, current: { standing: mark.standing, version: mark.version }, submitted: body.standing });
     expect(body.expectedVersion).toBe(mark.version);
     expect(refused.status).toBe(409);
     expect(missed).toEqual([]);
@@ -218,7 +218,7 @@ for (const persona of ['visitor', 'stranger', 'owner', 'moderator', 'operator'] 
     const main = client(devices, persona, [{ label: refused.label, state: 'error' }], missed);
     const media = mainTrackingApi(actingSubject(refused.path), () => main).media;
     if (!media) throw new Error('tracking api has no work progress');
-    expect(await media.workStanding(workIri(refused.path))).toEqual({ ok: false, failure: 'sign-in' });
+    expect(await media.workStanding(workIri(refused.path))).toEqual({ ok: false, failure: 'sign-in', status: refused.status, problem: refused.answer });
     expect(missed).toEqual([]);
   });
 

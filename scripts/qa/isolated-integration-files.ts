@@ -534,6 +534,9 @@ export function scanRawSparqlIntegrationFiles(root = resolve(import.meta.dir, '.
 
   const files = new Set<string>();
   const sites = new Map<string, readonly string[]>();
+  // Helpers are shared by hundreds of roots. Parse each source once per scan,
+  // while keeping a fresh dependency traversal and provenance for every root.
+  const sources = new Map<string, { sites: string[]; references: ImportReference[] }>();
   for (const rootFile of [...roots].sort()) {
     const visited = new Set<string>();
     const pending = [resolve(root, rootFile)];
@@ -542,10 +545,14 @@ export function scanRawSparqlIntegrationFiles(root = resolve(import.meta.dir, '.
       const file = pending.pop()!;
       if (visited.has(file)) continue;
       visited.add(file);
-      const source = readFileSync(file, 'utf8');
-      const tokens = tokensOf(source);
-      rootSites.push(...rawUpdateCallSites(tokens).map(site => `${sourcePath(root, file)}:${site}`));
-      for (const reference of importReferences(tokens)) {
+      let analysis = sources.get(file);
+      if (!analysis) {
+        const tokens = tokensOf(readFileSync(file, 'utf8'));
+        analysis = { sites: rawUpdateCallSites(tokens), references: importReferences(tokens) };
+        sources.set(file, analysis);
+      }
+      rootSites.push(...analysis.sites.map(site => `${sourcePath(root, file)}:${site}`));
+      for (const reference of analysis.references) {
         if (reference.unresolved) {
           throw new Error(`Cannot resolve imported test helper at ${sourcePath(root, file)}:${reference.line}: ${reference.unresolved}`);
         }

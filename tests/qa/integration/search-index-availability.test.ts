@@ -74,7 +74,7 @@ test('public search retains exact Realm membership and bounded work across four 
     writeFileSync(resolve(directory, 'growth.json'), JSON.stringify({ source, servedSource: source,
       runId: Bun.env.REZICS_QA_RUN_ID, lineage: stack.env.lineage, boundMs: MAX_SEARCH_REQUEST_MS,
       matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals,
-      browseDependency: 'G-2268 owns browse preparation. Retained three-size baseline remains; post-repair browse HTTP capture unresolved.',
+      browseDependency: 'Zone browse preparation is proved by the catalogue browse outcomes. Retained three-size baseline remains; post-repair browse HTTP capture unresolved.',
       durationConvention: 'Nested phase durations overlap. atAnswer is copied at HTTP answer; eventual phases may include work after refusal. Client/native internal intervals remain unobserved; elapsed time is not native CPU or an operator cause.',
       missingHistoricalWitnesses: 'Both retained sequence-25 503s lack index checkpoint and native phase witnesses.' }, null, 2));
   }

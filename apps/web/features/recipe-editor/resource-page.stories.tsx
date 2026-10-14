@@ -1,3 +1,6 @@
+import { Button } from '@rezics/ui/button';
+import { RecipeExperience } from '../work-page/types/recipe.tsx';
+import type { RecipeWorkPage } from '../work-page/types.ts';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { useEffect, useState } from 'react';
@@ -60,12 +63,14 @@ function ContractResource({ state }: { state: 'empty' | 'error' }) {
   const [fake] = useState(() => {
     const model = fakeMain({ recipe: emptyStart });
     if (state === 'error') {
-      const recipes = model.main().v1.recipes;
-      model.main().v1.recipes.works = ((target: Parameters<typeof recipes.works>[0]) => ({ ...recipes.works(target),
+      const originalWorks = model.main().v1.recipes.works;
+      model.main().v1.recipes.works = ((target: Parameters<typeof originalWorks>[0]) => ({ ...originalWorks(target),
         get: async () => fixtureAnswer(503, { type: 'about:blank', status: 503 as const,
           title: 'Recipe unavailable', code: 'read_unavailable' }),
       })) as MainClient['v1']['recipes']['works'];
     }
+    // The projection reader follows the supplied href through Eden's indexed route shape.
+    Object.assign(model.main().v1.recipes.works, { [work.slice(-36)]: model.main().v1.recipes.works({ id: work.slice(-36) }) });
     return model;
   });
   const [content, setContent] = useState<Awaited<ReturnType<typeof loadRecipeReading>> | null>(null);
@@ -136,3 +141,23 @@ export const Unavailable: Story = { render: () => <ContractResource state="error
   play: async ({ canvasElement }) => { await expect(await within(canvasElement).findByRole('alert')).toBeVisible(); },
 };
 export const UnavailablePhone: Story = { ...Unavailable, ...phone };
+
+function RetargetRecipe() {
+  const [empty, setEmpty] = useState(false);
+  const page = record.personas.visitor.find(sample => sample.label === 'public-recipe')!.answer as RecipeWorkPage;
+  return <PageContainer>
+    <Button onClick={() => setEmpty(true)}>Open empty recipe</Button>
+    <RecipeExperience initial={empty ? null : page} href={`/v1/recipes/works/${work.slice(-36)}`}
+      actingSubject={null} text={null} locale="en" messages={englishMessages} />
+  </PageContainer>;
+}
+
+export const RetargetProvidedRecipe: Story = { render: () => <RetargetRecipe />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.queryByText(englishMessages.recipeUnstructured)).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Open empty recipe' }));
+    await expect(await canvas.findByText(englishMessages.recipeUnstructured)).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: englishMessages.scaleRecipe })).toBeNull();
+  },
+};

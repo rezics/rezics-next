@@ -283,10 +283,15 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
       throw new Error(`${task.id} names tasks in the tree; task IDs belong in commit messages:\n  ${history.join('\n  ')}`);
     }
     if (landing) startLandingRebase(runDir, task, git(root, ['rev-parse', 'main']));
-    const rebase = spawnSync('git', ['rebase', 'main'], { cwd: task.worktree, encoding: 'utf8' });
+    // A branch that already resolved main by merging (a wave) would replay every commit under a linear
+    // rebase and meet conflicts its merges settled; it takes main by merge instead.
+    const merging = git(task.worktree, ['rev-list', '--merges', '--count', 'main..HEAD']) !== '0';
+    const rebase = merging
+      ? spawnSync('git', ['-c', 'core.editor=true', 'merge', '--no-edit', 'main'], { cwd: task.worktree, encoding: 'utf8' })
+      : spawnSync('git', ['rebase', 'main'], { cwd: task.worktree, encoding: 'utf8' });
     if (rebase.status !== 0) {
       const conflicted = git(task.worktree, ['diff', '--name-only', '--diff-filter=U'], true);
-      git(task.worktree, ['rebase', '--abort'], true);
+      git(task.worktree, merging ? ['merge', '--abort'] : ['rebase', '--abort'], true);
       if (landing && !existsSync(join(git(task.worktree, ['rev-parse', '--absolute-git-dir']), 'rebase-merge'))
         && !existsSync(join(git(task.worktree, ['rev-parse', '--absolute-git-dir']), 'rebase-apply'))) finishLandingRebase(runDir);
       const message = `${task.id} does not rebase onto main; conflicts:\n  ${conflicted.split('\n').filter(Boolean).join('\n  ')}`;

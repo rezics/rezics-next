@@ -263,8 +263,8 @@ export const CompetingOwnerDesktop: Story = at(competingOwner, 'desktop');
 export const UnchangedCompetingOwnerPhone: Story = at(unchangedCompetingOwner, 'phone');
 export const UnchangedCompetingOwnerDesktop: Story = at(unchangedCompetingOwner, 'desktop');
 
-const zoneId = '364474ce-9de9-8d5c-8550-f35240d6d598';
-const ownerActing = 'https://rezics.com/id/07b24c79-f11f-48f4-ac74-3dd865f75d3c';
+const zoneId = new URL(sample('owner', 'manage-configuration').path, 'https://recorded.invalid').pathname.split('/')[3]!;
+const ownerActing = new URL(sample('owner', 'manage-configuration').path, 'https://recorded.invalid').searchParams.get('actingSubject')!;
 const managementReady = [
   { label: 'manage-configuration', state: 'populated' },
   { label: 'manage-space-address', state: 'populated' },
@@ -305,7 +305,7 @@ function showOwnerEditor({ canvasElement }: { canvasElement: HTMLElement }) {
   const line = editorLine();
   return expect(canvas.findByRole('region', { name: 'owner' })).resolves.toBeVisible().then(async () => {
     await expect(canvas.getByText(ownerActing)).toBeVisible();
-    await expect(canvas.findByRole('heading', { level: 1, name: 'Published site' })).resolves.toBeVisible();
+    await expect(canvas.findByRole('heading', { level: 1, name: (sample('owner', 'manage-configuration').answer as { name: string }).name })).resolves.toBeVisible();
     await expect(canvas.getByRole('heading', { level: 2, name: editorMessages.en.homeTitle })).toBeVisible();
     await waitFor(() => expect(canvas.getByRole('textbox', { name: editorMessages.en.editorLabel })).toHaveTextContent(line));
     await expect(canvas.getByText(editorMessages.en.statusBehind)).toBeVisible();

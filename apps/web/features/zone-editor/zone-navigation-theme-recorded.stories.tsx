@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
 import { addressKey, spaceHref } from '../address/path.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
@@ -16,13 +17,13 @@ import { zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts
 
 const record = navigationAndTheme as AnswerRecord;
 const locale = 'en';
-// Route parameters stay independent of the answer selected for this Zone.
-const publishedZoneId = '6fb6dc7e-79f0-8b61-8d2e-96f29bf19977';
-const emptyZoneId = '0343da38-4096-8bfb-8e4d-4f9644c76f72';
+const emptyRecord = homeRendering as AnswerRecord;
+const publishedZoneId = zoneIdFromRecordedPath(sample('visitor', 'published-presentation').path);
+const emptyZoneId = zoneIdFromRecordedPath(sample('visitor', 'frame-empty-presentation').path);
 const copy = editorMessages[locale];
 
 function sample(persona: AnswerPersona, label: string) {
-  const found = record.personas[persona].find(item => item.label === label);
+  const found = (label === 'frame-empty-presentation' ? emptyRecord : record).personas[persona].find(item => item.label === label);
   if (!found) throw new Error(`Missing recorded sample ${persona}/${label}`);
   return found;
 }
@@ -105,11 +106,11 @@ export const RepublishedOwner: Story = {
 export const RepublishedOwnerPhone: Story = { ...RepublishedOwner, globals: phone };
 
 export const EmptyHomeVisitor: Story = {
-  args: { persona: 'visitor', zoneId: emptyZoneId, presentation: 'empty-home-presentation', presentationState: 'empty' },
-  parameters: { route: { pathname: sitePath('visitor', 'empty-home-presentation') } },
+  args: { persona: 'visitor', zoneId: emptyZoneId, record: emptyRecord, presentation: 'frame-empty-presentation', presentationState: 'empty' },
+  parameters: { route: { pathname: sitePath('visitor', 'frame-empty-presentation') } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const answer = presentationOf('visitor', 'empty-home-presentation');
+    const answer = presentationOf('visitor', 'frame-empty-presentation');
     await expect(await canvas.findByRole('heading', { level: 1, name: answer.name! })).toBeVisible();
     const navigation = within(canvas.getByRole('navigation', { name: answer.name! }));
     await expect(navigation.getAllByRole('link').map(link => link.textContent)).toEqual([realmMessages.home]);
@@ -169,11 +170,11 @@ export const ThemeRefusedStrangerPhone: Story = { ...ThemeRefusedStranger, globa
 export const ThemeStaleOwner: Story = {
   args: {
     persona: 'owner', save: 'stale-configuration-refused',
-    presentation: 'published-presentation', presentationState: 'populated',
+    presentation: 'management-site-presentation', presentationState: 'populated',
   },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
-    const answer = presentationOf('owner', 'published-presentation');
+    const answer = presentationOf('owner', 'management-site-presentation');
     await expect(await canvas.findByRole('heading', { level: 1, name: answer.name! })).toBeVisible();
     const alert = await canvas.findByRole('alert');
     await expect(alert).toHaveTextContent(copy.themeStaleTitle);

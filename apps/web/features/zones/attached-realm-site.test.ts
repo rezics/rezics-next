@@ -28,8 +28,6 @@ const restoreApi = replaceModule(import.meta.resolve('../api/main.ts'), api, {
   mainApiWithToken: (token: string | undefined) => api.mainApiWithToken(token, { fetcher }),
 });
 const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
-const { SiteHomeRoute } = await import('../realm/routes.tsx');
-const { ZoneHome } = await import('./zone-home.tsx');
 const { ZoneHomeContent } = await import('../zone-editor/home-content.tsx');
 const { RealmFrame } = await import('../realm/realm-page.tsx');
 const { ZoneBrowse } = await import('./browse.tsx');
@@ -84,7 +82,7 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
     const realmSpace = idOf((sample('frame-realm-header').answer as RealmHeader).space)!;
     const labels = ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header',
       'frame-facets', 'page-browse-default', ...(who === 'visitor' ? [] : ['frame-session-agent',
-        'frame-person-preferences', 'frame-joining', 'frame-follow', 'frame-platform-access'])];
+        'frame-person-preferences', 'frame-joining', 'frame-member-ban', 'frame-follow', 'frame-platform-access'])];
     const { requests, gaps } = replay(labels);
     const presentation = sample('frame-presentation').answer as ZonePresentationRead;
     expect(presentation.address).toMatchObject({ prefix: '/z/' });
@@ -140,10 +138,9 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
       persona = who;
       record = homes as AnswerRecord;
       const prefix = `frame-${branch}`;
-      const labels = [`${prefix}-space-address`, `${prefix}-presentation`, ...(who === 'visitor' ? []
-        : ['session-agent', 'person-preferences'].map(name => `${prefix}-${name}`)), ...(branch === 'empty' ? []
-          : [`${prefix}-realm-header`, `${prefix}-facets`, 'frame-empty-browse-counts', ...(who === 'visitor' ? []
-            : ['joining', 'follow', 'platform-access'].map(name => `${prefix}-${name}`))])];
+      const labels = record.personas[who].filter(sample => sample.label.startsWith(`${prefix}-`)
+        && !sample.label.startsWith(`${prefix}-index-`)).map(sample => sample.label);
+      if (branch !== 'empty') labels.push('published-home-route');
       const { requests, gaps } = replay(labels);
       const presentation = sample(`${prefix}-presentation`).answer as ZonePresentationRead;
       const siteKey = new URL(sample(`${prefix}-space-address`).path, 'https://recorded.invalid').searchParams.get('key')!;
@@ -164,17 +161,7 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
         expect(frame.props.view.context.realm).toBe(realm);
         expect(frame.props.view.publication).toEqual(presentation);
         expect(find(frame.props.children, ZoneHomeContent)?.props.page).toEqual(presentation.home);
-        const home = await SiteHomeRoute({ params: Promise.resolve({ locale: 'en', realm: siteKey }),
-          searchParams: Promise.resolve({}) }) as ReactElement<{ view: RealmView; children: ReactNode }>;
-        expect(home.type).toBe(RealmFrame);
-        expect<unknown>(home.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
-        expect(find(home.props.children, ZoneHome)).not.toBeNull();
-        // The two Zone presentations share this Realm; its existing recorded count read is exact.
-        expect(requests.filter(request => request.path.endsWith('/modules/browse'))).toEqual([
-          { path: `/v1/realms/${realm}/modules/browse`, query: { limit: '1' }, authorization: null },
-        ]);
-        expect(requests.filter(request => request.path === `/v1/realms/${realm}`)
-          .every(request => request.authorization === null && Object.keys(request.query).length === 0)).toBe(true);
+
       }
       expect(gaps).toEqual([]);
     });

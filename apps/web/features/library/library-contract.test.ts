@@ -52,7 +52,7 @@ for (const medium of ['books', 'recipes', 'games', 'visual-novels'] as LibraryMe
       expect(denied.error?.status).toBe(403);
       const work = loaded.view.data.rows[0]!.work.id;
       const progress = await mainTrackingApi(foreign, () => fixture.main).media!.markWork(work, 'completed');
-      expect(progress).toEqual({ ok: false, failure: 'sign-in' });
+      expect(progress).toEqual({ ok: false, failure: 'sign-in', status: 403, problem: { code: 'acting_subject_denied' } });
       expect(fixture.marks.get(work)).toMatchObject({ standing: 'not-started', version: 0 });
     });
   }
@@ -95,7 +95,7 @@ test('VN stale recovery reads the winner and a later undo is visible to another 
   const work = loaded.view.data.rows[0]!.work.id;
   const first = mainTrackingApi(fixture.actor, () => fixture.main).media!;
   const second = mainTrackingApi(fixture.actor, () => fixture.main).media!;
-  expect(await first.markWork(work, 'completed')).toEqual({ ok: false, failure: 'stale',
+  expect(await first.markWork(work, 'completed')).toEqual({ ok: false, failure: 'stale', status: 409, problem: { code: 'stale_progress' },
     current: { standing: 'started', version: 1 }, submitted: 'completed' });
   expect(await second.workStanding(work)).toMatchObject({ ok: true, data: { standing: 'started', version: 1 } });
   expect(await first.markWork(work, 'completed')).toMatchObject({ ok: true, data: { standing: 'completed', version: 2 } });
@@ -126,7 +126,7 @@ test('the Read shelf carries the owner’s private imported review through the p
   const fixture = contractFixture('books', 'private-review', 'owner');
   const loaded = await load(fixture);
   if (!loaded.view.ok) throw new Error('Library did not load');
-  expect(loaded.view.data.rows[0]).toMatchObject({ status: 'read', startedOn: '2026-10-13', finishedOn: '2026-10-13' });
+  expect(loaded.view.data.rows[0]).toMatchObject({ status: 'read', startedOn: fixture.entries[0]!.status.startedOn, finishedOn: fixture.entries[0]!.status.finishedOn });
   expect(loaded.view.data.rows[0]!.privateReview).toMatchObject({ ok: true, data: {
     work: loaded.view.data.rows[0]!.work.id, text: 'Original author — private imported reading note.', language: 'en',
   } });

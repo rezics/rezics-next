@@ -5,7 +5,8 @@ import type { Attempt, Task } from './types.ts';
 import { recoverDiedPreparations, settlementOwed } from './settle.ts';
 
 const ended = spawnSync('true').pid!;
-const attempt = (n: number) => ({ n, pid: ended, engine: 'codex' }) as Attempt;
+const attempt = (n: number) => ({ n, pid: ended, engine: 'codex',
+  output: `${import.meta.dir}/../../.temp/settle-pass-missing-${ended}-${n}.json` }) as Attempt;
 const task = (fields: Partial<Task>) => ({ id: 'G-001', state: 'exited', attempts: [attempt(1)], ...fields }) as Task;
 
 test('a pass takes the ledger lock only for a task whose ended attempt nobody is settling', () => {

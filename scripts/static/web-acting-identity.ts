@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { indexedFiles, type AstNode } from '../lib/repo-index.ts';
 
 interface Schema { properties?: Record<string, Schema>; required?: string[]; anyOf?: Schema[]; oneOf?: Schema[]; allOf?: Schema[] }
 interface Operation {
@@ -62,14 +63,83 @@ interface Match {
   metaVariables?: { single: Record<string, Capture>; multi: Record<string, Capture[]> };
 }
 
-// Use the repository's pinned parser, so comments, strings and TSX are not calls.
-function matches(root: string, files: string[], pattern: string, kind = false): Match[] {
-  if (!files.length) return [];
-  const result = Bun.spawnSync({ cwd: root, cmd: [resolve(root, 'node_modules/.bin/ast-grep'),
-    'run', kind ? '--kind' : '--pattern', pattern, '--json=compact', ...files], stdout: 'pipe', stderr: 'pipe' });
-  if (result.exitCode !== 0 && result.exitCode !== 1) throw new Error(Buffer.from(result.stderr).toString());
-  return (JSON.parse(Buffer.from(result.stdout).toString() || '[]') as Match[])
-    .map(item => ({ ...item, text: withoutComments(item.text) }));
+interface Inventory {
+  declarations: Match[]; blocks: Match[]; pairs: Match[];
+  parameters: Match[]; typedParameters: Match[]; functions: Match[]; calls: Match[];
+  source: Buffer; declarationsByName: Map<string, Match[]>;
+}
+const isNode = (value: unknown): value is AstNode => Boolean(value && typeof value === 'object'
+  && 'type' in value && typeof value.type === 'string' && 'start' in value && typeof value.start === 'number');
+
+/** The index parses once; the guard owns the meaning of each syntax fact. Byte
+ * spans preserve the source text used by the exact, named debt inventory. */
+function inventory(file: string, source: string, ast: unknown): Inventory {
+  const result: Inventory = { declarations: [], blocks: [], pairs: [], parameters: [],
+    typedParameters: [], functions: [], calls: [], source: Buffer.from(source), declarationsByName: new Map() };
+  const textOf = (node: AstNode) => result.source.subarray(node.start, node.end).toString();
+  const match = (node: AstNode, text?: string): Match => {
+    let cleaned: string | undefined;
+    return { file, get text() { return cleaned ??= withoutComments(text ?? textOf(node)); },
+      range: { byteOffset: { start: node.start, end: node.end } } };
+  };
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) { value.forEach(visit); return; }
+    if (!isNode(value)) return;
+    switch (value.type) {
+      case 'VariableDeclarator': result.declarations.push(match(value)); break;
+      case 'BlockStatement': result.blocks.push(match(value)); break;
+      case 'Property':
+        if (!value.shorthand && !value.method) result.pairs.push(match(value));
+        break;
+      case 'FunctionDeclaration':
+      case 'FunctionExpression':
+      case 'ArrowFunctionExpression': {
+        result.functions.push(match(value));
+        const params = (value.params as unknown[]).filter(isNode).map(parameter => {
+          // ESTree identifiers cover only the binding name; tree-sitter's
+          // required_parameter also includes its TypeScript annotation.
+          const annotation = parameter.typeAnnotation;
+          return isNode(annotation) ? { ...parameter, end: Math.max(parameter.end, annotation.end) } : parameter;
+        });
+        if (params.length) {
+          // Aggregate parameters need the same containing span as their typed
+          // members, including comments and optional/default parameter syntax.
+          const span = { ...value, start: params[0]!.start, end: params.at(-1)!.end };
+          result.parameters.push(match(span, `(${textOf(span)})`));
+          for (const parameter of params) if (!parameter.optional) result.typedParameters.push(match(parameter));
+        }
+        break;
+      }
+      case 'CallExpression': {
+        const callee = value.callee;
+        if (isNode(callee)) {
+          const call = match(value);
+          call.metaVariables = {
+            single: { CALLEE: { get text() { return textOf(callee); } } },
+            multi: { ARGS: (value.arguments as unknown[]).filter(isNode).map(node => ({ get text() { return textOf(node); } })) },
+          };
+          result.calls.push(call);
+        }
+        break;
+      }
+    }
+    for (const child of Object.values(value)) if (typeof child === 'object' && child !== null) visit(child);
+  };
+  visit(ast);
+  // Oxc traversal follows source order, including nested functions. Declaration
+  // expansion depends on the nearest preceding binding, not traversal order.
+  result.declarations.sort((left, right) => left.range.byteOffset.start - right.range.byteOffset.start);
+  for (const declaration of result.declarations) {
+    const binding = declaration.text.split('=')[0]!;
+    const names = binding.startsWith('{') ? binding.match(/[A-Za-z_$][\w$]*/g) ?? []
+      : binding.match(/^[A-Za-z_$][\w$]*/g) ?? [];
+    for (const name of new Set(names)) {
+      const declarations = result.declarationsByName.get(name) ?? [];
+      declarations.push(declaration);
+      result.declarationsByName.set(name, declarations);
+    }
+  }
+  return result;
 }
 
 // Strip balanced call arguments, retaining the Eden member path.
@@ -102,51 +172,59 @@ const hasActor = (text: string) => /(?:[,{])\s*actingSubject\s*(?:[:,}])/.test(
  * This checks identity transport, not which Agent is eligible (the session owner decides that).
  */
 export function webActingIdentityViolations(root: string, files: string[], contract: ReadContract): ActingReadViolation[] {
+  if (!files.length) return [];
   const routes = Object.entries(contract.paths).flatMap(([path, methods]) => Object.entries(methods)
     .filter(([method, operation]) => method === 'get'
       ? operation.parameters?.some(parameter => parameter.in === 'query' && parameter.name === 'actingSubject')
       : method === 'post' && !operation.parameters?.some(parameter => parameter.name.toLowerCase() === 'idempotency-key')
         && Object.values(operation.requestBody?.content ?? {}).some(content => content.schema && schemaActor(content.schema)))
     .map(([method, operation]) => ({ path, method, operation })));
-  const declarations = matches(root, files, 'variable_declarator', true);
-  const blocks = matches(root, files, 'statement_block', true);
-  const pairs = matches(root, files, 'pair', true);
-  const parameters = matches(root, files, 'formal_parameters', true);
-  const typedParameters = matches(root, files, 'required_parameter', true);
-  const functions = ['function_declaration', 'function_expression', 'arrow_function', 'method_definition']
-    .flatMap(kind => matches(root, files, kind, true));
-  const calls = matches(root, files, '$CALLEE($$$ARGS)');
-  const perFile = new Map(files.map(file => [file, {
-    declarations: declarations.filter(item => item.file === file),
-    blocks: blocks.filter(item => item.file === file),
-    pairs: pairs.filter(item => item.file === file),
-    parameters: parameters.filter(item => item.file === file),
-    typedParameters: typedParameters.filter(item => item.file === file),
-    functions: functions.filter(item => item.file === file),
-  }]));
+  const indexed = indexedFiles(root, files);
+  // Every path this local analyzer can resolve contains a literal API version.
+  // Other files can carry aliases, but without that local path they cannot
+  // produce a recognized read. Avoid materializing their repository ASTs.
+  const readable = files.filter(file => /\bv\d+\b/.test(withoutComments(indexed[file]!.text)));
+  const perFile = new Map(readable.map(file => {
+    const entry = indexed[file]!;
+    return [file, inventory(file, entry.text, entry.ast)] as const;
+  }));
+  const calls = [...perFile.values()].flatMap(item => item.calls);
   const violations: ActingReadViolation[] = [];
+  const containingFunction = new WeakMap<Match, Match | undefined>();
+  const containingBlocks = new WeakMap<Match, Match[]>();
   for (const call of calls) {
+    const rawCallee = code(call.metaVariables?.single.CALLEE?.text ?? '');
+    // Only read-shaped members and bare aliases can become recognized reads
+    // through binding expansion. Skip lexical scope work for unrelated calls.
+    if (!/\.(?:get|post|fetch|fetcher|serverRead|serverFetch)$/.test(rawCallee)
+      && !/^(?:(?:globalThis|window)\.)?[A-Za-z_$][\w$]*$/.test(rawCallee)) continue;
     const offset = call.range.byteOffset.start;
     const inventory = perFile.get(call.file)!;
-    const scopeOf = (item: Match) => inventory.functions.filter(scope =>
-      scope.range.byteOffset.start <= item.range.byteOffset.start && scope.range.byteOffset.end >= item.range.byteOffset.end)
-      .sort((a, b) => (a.range.byteOffset.end - a.range.byteOffset.start) - (b.range.byteOffset.end - b.range.byteOffset.start))[0];
+    const scopeOf = (item: Match) => {
+      if (!containingFunction.has(item)) containingFunction.set(item, inventory.functions.filter(scope =>
+        scope.range.byteOffset.start <= item.range.byteOffset.start && scope.range.byteOffset.end >= item.range.byteOffset.end)
+        .sort((a, b) => (a.range.byteOffset.end - a.range.byteOffset.start) - (b.range.byteOffset.end - b.range.byteOffset.start))[0]);
+      return containingFunction.get(item);
+    };
     const parameterOf = (name: string) => [...inventory.parameters.filter(parameter =>
       new RegExp(`(?:\\(|,)\\s*${name}\\s*[:,)]`).test(parameter.text)
       && parameter.range.byteOffset.end < offset && (scopeOf(parameter)?.range.byteOffset.end ?? 0) > offset),
       ...inventory.functions.filter(scope => new RegExp(`^(?:async\\s+)?${name}\\s*=>`).test(scope.text)
         && scope.range.byteOffset.start < offset && scope.range.byteOffset.end > offset)]
       .sort((a, b) => b.range.byteOffset.start - a.range.byteOffset.start)[0];
-    const local = inventory.declarations.filter(item => item.range.byteOffset.start < offset
-      && inventory.blocks.filter(block => block.range.byteOffset.start < item.range.byteOffset.start
-        && block.range.byteOffset.end > item.range.byteOffset.end)
-        .every(block => block.range.byteOffset.start < offset && block.range.byteOffset.end > offset));
+    const isLocal = (item: Match) => {
+      if (item.range.byteOffset.start >= offset) return false;
+      if (!containingBlocks.has(item)) containingBlocks.set(item, inventory.blocks.filter(block =>
+        block.range.byteOffset.start < item.range.byteOffset.start && block.range.byteOffset.end > item.range.byteOffset.end));
+      return containingBlocks.get(item)!.every(block => block.range.byteOffset.start < offset && block.range.byteOffset.end > offset);
+    };
     const expand = (text: string, seen = new Set<string>()): string => {
       text = withoutComments(text);
       const name = text.trim().match(/^[A-Za-z_$][\w$]*/)?.[0];
       if (!name || seen.has(name)) return text;
-      const declaration = [...local].reverse().find(item => new RegExp(`^${name}\\s*(?::[^=]+)?=`).test(item.text)
-        || (item.text.startsWith('{') && new RegExp(`\\b${name}\\b`).test(item.text.split('=')[0]!)));
+      const declaration = [...inventory.declarationsByName.get(name) ?? []].reverse().find(item => isLocal(item)
+        && (new RegExp(`^${name}\\s*(?::[^=]+)?=`).test(item.text)
+          || (item.text.startsWith('{') && new RegExp(`\\b${name}\\b`).test(item.text.split('=')[0]!))));
       const parameter = parameterOf(name);
       if (parameter && (!declaration || declaration.range.byteOffset.start < parameter.range.byteOffset.end)) return text;
       if (!declaration) return text;
@@ -157,7 +235,6 @@ export function webActingIdentityViolations(root: string, files: string[], contr
         || /\bactingSubject\b/.test(binding))) return text;
       return expand(value, new Set([...seen, name])) + text.trim().slice(name.length);
     };
-    const rawCallee = code(call.metaVariables?.single.CALLEE?.text ?? '');
     const callee = /\.(?:get|post)$/.test(rawCallee) ? rawCallee : code(expand(rawCallee));
     const arguments_ = (call.metaVariables?.multi.ARGS ?? []).filter(item => item.text !== ',');
     const args = arguments_.map(item => withoutComments(item.text));
@@ -198,11 +275,10 @@ export function webActingIdentityViolations(root: string, files: string[], contr
       if (method !== 'get' && method !== 'post') continue;
       path = url.replace(/\$\{[^}]*\}/g, '{parameter}').match(/\/v\d+\/[^`'"?\s),]+/)?.[0] ?? null;
       if (!path) continue;
-      const source = readFileSync(resolve(root, call.file), 'utf8');
       const variable = args[0]?.trim();
       actor = /[?&]actingSubject=/.test(url) || /new URLSearchParams\([^]*\bactingSubject\b/.test(url + queryText)
         || Boolean(variable && new RegExp(`${variable.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\.searchParams\\.set\\(['"]actingSubject['"]`)
-          .test(Buffer.from(source).subarray(0, offset).toString()));
+          .test(inventory.source.subarray(0, offset).toString()));
       if (method === 'post') {
         const body = inventory.pairs.find(item => /^body\s*:/.test(item.text)
           && item.range.byteOffset.start > offset && item.range.byteOffset.end < call.range.byteOffset.end)?.text ?? '';

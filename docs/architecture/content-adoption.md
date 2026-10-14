@@ -385,6 +385,36 @@ admitted recording/Post without misidentifying it as a RecipeStep or Work.
 
 ### Existing data and retained history
 
+#### Existing data inventory (2026-10-14)
+
+Read-only inspection of the shared local dev backend, authorized by the program
+manager, resolved the initial public-read gaps. Main is at
+`http://localhost:3001` (`task urls`), Fuseki SELECT at
+`http://127.0.0.1:3030/rezics/query`, data epoch
+`8c483e38-59e7-4d95-b27b-de9cd6742a3e`. PostgreSQL reads ran in
+`BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY; …; ROLLBACK`
+through `docker exec rezics-dev-postgres-1 psql -U postgres -d content`.
+Repeated graph reads returned the same Work, draft, publication and Structure
+revision counts. These are live dev observations, not an atomic cross-owner
+recovery cut; no owner writes, migrations, backup or restore were performed.
+Counts overlap and must not be added.
+
+| Item and count | Read producing the count | Classification and reason |
+| --- | --- | --- |
+| **34 Recipe Works; 34 owned TextContributions, 34 draft revisions, 34 public publication decisions, 2 author Agents; 0 unpublished text heads** | Fuseki current graph: `?work a schema:Recipe`, `?text a rv:TextContribution; rv:work ?work; rv:draftHead ?head`; revisions graph: `rv:RevisionAnchor/rv:component` (excluding publication decisions) and `rv:PublicationDecision/rv:work/rv:selectedDraft/rv:disclosure`. All draft heads equal their published selected draft. SQL `content.variant.resource_id` matched to these Work/text IDs returns **0**: these are legacy graph TextContributions, not Content variants. | **Needs conversion/preservation** of identities, authored text manifests, authorship and publication decisions. Retained imports can recreate words, not the owned history or selections. |
+| **31 unpublished Recipe Structures, 71 revisions; 434 active occurrences (180 ingredients, 254 steps); 0 structured publication decisions** | Fuseki current `rv:structureProfile rv:RecipeComposition`, `rv:structureHead`, selected generation placements with `rv:occurrenceRole`; revisions `rv:StructureRevision/rv:component` and Recipe Work `rv:WorkStructurePublicationDecision`. The Structures belong to the 30 Gutenberg Works and seeded pancakes. | **Needs conversion** of retained revisions, ordered occurrences, quantities, measures and instruction payloads. Reimport is suitable for disposable replacements, but does not recreate these identities/history. The earlier **34** `GET /v1/recipes/works/{id}` reads returning 200/null reflect missing structured publications, not absent drafts. |
+| **0 field supports, native-child supports, native Work bindings, title applications/attachments or author-credit supports; 0 associated withdrawals** | SQL against `source.field_support` with `field_support_withdrawal`, `native_child_intent` with `native_child_withdrawal`, `native_work_binding`, `native_work_title_application`, `native_work_support_attachment` and `author_credit_intent`, restricted to the enumerated Recipe Work/Structure/text IDs. | No support rows need conversion at this cut. This does not establish source clearance: the **30** Recipe-file observations have rights basis **unknown**, not public-domain. Preserve that distinction when rebuilding support. |
+| **34 publication decisions and 68 publication selections pin 34 exact text revisions; 30 Source observations pin import basis revisions. 0 Recipe pins in Structure seals, fixed releases, fixed placements, exports, progress or verification dependencies** | Fuseki reverse SELECT of every triple referencing the **71** Structure and **34** text revisions, grouped by predicate/type: `rv:selectedDraft` identifies decisions/selections; no seal/release/`rv:pinnedRevision` hits. SQL `source.observation.source_revision` joined through `source.record.external_id`; `export.member`, `structure.progress/progress_scope`, `reader.library_copy.release`, `verification.derivation_input/active_dependency` matched to Recipe IDs/revisions all return 0. | **Needs conversion/preservation** of exact selected text and source-basis references. Retain old-to-new correspondence and receipt custody; never substitute a new head. Search and occurrence-index revision references are **rebuildable projections**, not authored pins. |
+| **30 retained Recipe-file records/observations; 30 byte payloads; 0 erased observations** | SQL `source.record` (`provider=rezics, namespace=recipe-file`) joined to `source.observation`, counting retained bytes and erasure markers; all 30 external IDs match the enumerated Recipe Works. | File payloads are **rebuildable by reimport**; observation identity, recorded rights, exact source basis and replay/erasure custody **need conversion/preservation** if retaining the existing resources. |
+| **30 Gutenberg extracts from 2 editions: 20 English / 10 Italian, 173 ingredient lines (111 / 62)** | Read [extract pins](../../tests/fixtures/gutenberg/recipe-extract-pins.json) and [fixture lock](../../tests/fixtures/fixtures.lock.json); `launchRecipeSources()` in [the corpus builder](../../scripts/load/launch-corpus.ts) verified retained byte sizes/digests, source digests and extract counts. | **Rebuildable by reimport** of retained full text and exact line pins under the revised mapping; keep credit, language and unparsed wording. This classifies inputs, not all live descendants. |
+| **6 Recipe answer records, 1,156 samples; 116 samples embedding Recipe payloads** | Read all `tests/qa/fixtures/outcomes/**/*.json`: recursively detect `@type:Recipe`, `recipe-work-page-v1`, `recipe-composition`, `ingredient-line` or `recipe-step` in request bodies/answers. Payload counts: [author](../../tests/qa/fixtures/outcomes/recipes/author-a-recipe.json) 41, [exchange](../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json) 44, [reading](../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json) 31; the other three Recipe records contain none of these payloads. | **Needs conversion and re-recording** through replacement API proofs. Keep existing evidence until equivalent outcomes are proved; recorded answers are not source imports. |
+| **4 demo Recipe definitions; 1 editor fixture with 6 nodes/3 measures; 1 JSON import fixture** | Read [demo plan](../../scripts/dev/seed/plan.ts), [pancake seed](../../scripts/dev/seed/recipes-step.ts), [editor fixture](../../apps/web/features/recipe-editor/fixtures.ts), [import file](../../tests/qa/integration/recipe-file-import.fixture.json). | Demo/import inputs are **rebuildable** by seed/reimport. The editor fixture **needs conversion** to preserve authored occurrence/reference and measurement cases; runtime test builders need revised fixtures and proofs. |
+
+Decision 4 now has an inventory for the shared dev population. Choose reimport
+for retained inputs and explicitly disposable fixtures; preserve/convert the
+owned resource history and exact references above when keeping those resources.
+This inspection neither converts data nor proves recovery or replacement APIs.
+
 [Recipe exchange practice](../contracts/recipe-exchange.md) says there is no
 production Recipe data requiring a compatibility reader/migration and that
 retained corpora, including thirty Gutenberg recipes, are reimported. This note
@@ -495,3 +525,5 @@ Accepted, as a pre-public change. Recipes stay in the first public scope and ope
 4. **Data first.** Inventory owned Recipe drafts, publications, supports and revision pins before choosing between conversion and reimport.
 
 Sequence: the inventory starts now. The vertical slice (an exact quantity with a note; Post, recording and procedure instructions; a tomato occurrence mention; a referenced intermediate recipe) starts once wave/1 has merged into main, and it is the acceptance gate. Its outcomes revise the estimate, then the fixtures, consumers and affected rows migrate and are reproved. The behaviours listed under "Behaviours a replacement must preserve" are the slice's falsifiers.
+
+**Decision 4 settled (supermanager, 2026-10-14, from the inventory above).** Every Recipe in the shared dev population comes from seeds or retained imports: 34 Works by 2 seeded author Agents, 30 Gutenberg extracts, no field supports, and no pins beyond each Work's own publications. Reimport: after the slice, rebuild the Recipe population from the retained sources and seeds through the revised mapping and normal Main commands, and re-record the six Recipe answer records. No conversion code and no compatibility reader.

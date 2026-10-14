@@ -4,6 +4,7 @@ import { Pool } from 'pg';
 import { CommandRejected, FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { initializeFreshGraph } from '../../services/main/src/modules/work/activate.ts';
 import { appEnvironment, composeProcessEnvironment, createSecrets, readEnv, savePrivate } from '../dev/config.ts';
+import { ensureFusekiImage } from '../dev/fuseki-image-build.ts';
 import { type Corpus, type FixtureProfile, fixtureCorpus, stable } from './corpus.ts';
 import { FixtureWorkBudget } from './budget.ts';
 import { type FixtureManifest, type FixtureManifestCore, manifestCore, manifestIdentity } from './manifest.ts';
@@ -139,6 +140,7 @@ async function buildLocked(
   savePrivate(envFile, saved);
   const apps = appEnvironment(saved, dir);
   const env = composeProcessEnvironment(docker, readEnv(envFile));
+  await ensureFusekiImage(root, { env });
   const compose = (command: string[], timeout = 300_000) =>
     run('docker', composeArgs(project, envFile, command), env, Math.min(timeout, remaining()));
   // Pools connect lazily, only once PostgreSQL is up for the online owners.
@@ -165,7 +167,7 @@ async function buildLocked(
       onAdmissionWait?.(ms);
     } };
     await phase('start', () => budget.startup(root, env,
-      () => { compose(['up', '-d', '--wait', ...ONLINE_SERVICES]); }, admission));
+      () => { compose(['up', '--no-build', '-d', '--wait', ...ONLINE_SERVICES]); }, admission));
     await phase('migrate', async () => { await migrateFixtureOwners(apps); });
     // The command module bootstraps only an empty dataset, so the real bootstrap
     // commits first and the offline owners then load into the stopped TDB2.
@@ -182,7 +184,7 @@ async function buildLocked(
       loads[owner.name] = await phase(`load:${owner.name}`, () => owner.load(corpus, target));
     }
     await phase('restart-graph', () => budget.startup(root, env,
-      () => { compose(['up', '-d', '--wait', 'fuseki']); }, { ...admission, services: ['fuseki'] }));
+      () => { compose(['up', '--no-build', '-d', '--wait', 'fuseki']); }, { ...admission, services: ['fuseki'] }));
     // Refuse an unqualified native generation before loading online owners.
     const index = await phase('graph-ready', () => assertGraphReady(apps, core));
     await phase('load:online', async () => {

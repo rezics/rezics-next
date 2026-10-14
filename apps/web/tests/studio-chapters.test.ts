@@ -328,7 +328,7 @@ describe('Studio chapters in the language they are written in', () => {
       bookWriter: pen, mainLanguage: null, mainTexts: [] });
     const read = await readChapters(self, serialHeader(), { main,
       agents: [person(self, 'Reader'), person(stranger, 'Unrelated')] });
-    expect(read.page).toEqual({ ok: false, failure: 'none' });
+    expect(read.page).toEqual({ ok: false, failure: 'none', status: 404, problem: { code: 'work_unavailable' } });
     expect(calls.filter(call => call.startsWith('chapter-agent'))).toEqual([
       `chapter-agent ${self.slice(-36)}`, `chapter-agent ${stranger.slice(-36)}`]);
   });

@@ -4,10 +4,690 @@
   "personas": {
     "visitor": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b",
+        "status": 401,
+        "answer": {
+          "type": "https://rezics.com/problems/account_assertion_denied",
+          "title": "Account assertion is invalid or inactive",
+          "status": 401,
+          "code": "account_assertion_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -24,7 +704,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -41,7 +721,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -57,10 +737,690 @@
     ],
     "stranger": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -82,8 +1442,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/53fd6a50-048d-43e0-92ef-76ffe45b2cc1",
-            "revision": "c45e8672-3ee9-4d35-a062-a3b7701da6d0",
+            "actingSubject": "https://rezics.com/id/a4f2651e-a306-47dc-9421-0c90fc3518eb",
+            "revision": "03a29f13-0145-46ea-ba97-a672f8d9bfc4",
             "eligible": true
           },
           "mainAgent": {
@@ -102,7 +1462,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53fd6a50-048d-43e0-92ef-76ffe45b2cc1",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa4f2651e-a306-47dc-9421-0c90fc3518eb",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -119,7 +1479,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -135,10 +1495,690 @@
     ],
     "member": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -160,8 +2200,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/35e57ab0-782e-4a04-af13-3efd770c1422",
-            "revision": "a205d4d0-3cb7-48eb-b1e3-aeff6f4896ae",
+            "actingSubject": "https://rezics.com/id/fbe402a2-18b9-484e-87d7-40cd9efd58e8",
+            "revision": "d003b60f-c4f0-47d7-9175-7be23c5dd6aa",
             "eligible": true
           },
           "mainAgent": {
@@ -180,7 +2220,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F35e57ab0-782e-4a04-af13-3efd770c1422",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffbe402a2-18b9-484e-87d7-40cd9efd58e8",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -197,7 +2237,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -213,10 +2253,690 @@
     ],
     "owner": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -238,8 +2958,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/60195d15-1ac1-439f-a550-d7746b97cd09",
-            "revision": "eab7c29e-dc97-4416-9b91-a32bdd003cc5",
+            "actingSubject": "https://rezics.com/id/12de9233-2a56-4897-9631-289fd42cc577",
+            "revision": "2309dd69-eda2-4b69-89ef-50f04cdf07d2",
             "eligible": true
           },
           "mainAgent": {
@@ -258,7 +2978,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F60195d15-1ac1-439f-a550-d7746b97cd09",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F12de9233-2a56-4897-9631-289fd42cc577",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -275,7 +2995,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -291,10 +3011,690 @@
     ],
     "moderator": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -316,8 +3716,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/c3e2969d-c17a-44cf-b95e-959d7a5c6fcc",
-            "revision": "aa408ca2-3352-42bc-b80c-5d69c3c9cdc0",
+            "actingSubject": "https://rezics.com/id/cabce77a-464d-45c5-98a8-4145bd603927",
+            "revision": "79ff05f4-11b2-4275-b12a-9a1221792aab",
             "eligible": true
           },
           "mainAgent": {
@@ -336,7 +3736,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fc3e2969d-c17a-44cf-b95e-959d7a5c6fcc",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fcabce77a-464d-45c5-98a8-4145bd603927",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -353,7 +3753,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -369,10 +3769,690 @@
     ],
     "operator": [
       {
+        "label": "closed-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-0",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-1",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-2",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-3",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-4",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-5",
+        "operationId": "getV1RealmsByRealmAbout-thread",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/about-thread?about=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-6",
+        "operationId": "getV1RealmsByRealmRepliesByReply",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/replies/https%3A%2F%2Frezics.com%2Fid%2F57c21724-3df2-428a-8a3b-117372d95aa5?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_unavailable",
+          "title": "Reply is unavailable",
+          "status": 404,
+          "code": "realm_reply_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-7f9f-7518-b859-b21640c772d7/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-discussion-proof-7",
+        "operationId": "getV1RealmsByRealmReply-rootsByRootTargetCount",
+        "method": "GET",
+        "path": "/v1/realms/https%3A%2F%2Frezics.com%2Fid%2F0842d9c2-4493-4622-886e-2948b3b3fd3b/reply-roots/https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a2ee-714c-b9f1-5335c3974b40/count?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_reply_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_reply_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-best",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=best&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-best",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-new",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=new&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-new",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=new&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-board-threads-top",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads?sort=top&window=week&concept=https%3A%2F%2Frezics.com%2Fid%2F01a13af9-a02b-7377-ab91-3c77bbf1d60f&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-thread-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/ebe93c3c-21fc-4053-8f22-7d7d970d1b61?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-descendant-top",
+        "operationId": "getV1RealmsByRealmThreadsByReply",
+        "method": "GET",
+        "path": "/v1/realms/0842d9c2-4493-4622-886e-2948b3b3fd3b/threads/57c21724-3df2-428a-8a3b-117372d95aa5?sort=top&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "discussion-space-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a138c6-a820-76bc-8831-f0c359f578ad",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-7f9f-7518-b859-b21640c772d7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -394,8 +4474,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/5c5a4c9d-421e-4d4b-b256-739f68cb2dd7",
-            "revision": "bbbbd4e5-980b-406a-aef2-2239e0461240",
+            "actingSubject": "https://rezics.com/id/a6f0931d-159e-49ed-8732-945804f21b1a",
+            "revision": "b7729721-ee8a-4947-8a37-eb18b6f7e8c5",
             "eligible": true
           },
           "mainAgent": {
@@ -414,7 +4494,7 @@
         "label": "discussion-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5c5a4c9d-421e-4d4b-b256-739f68cb2dd7",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa6f0931d-159e-49ed-8732-945804f21b1a",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -431,7 +4511,7 @@
         "label": "discussion-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a138c6-a820-76bc-8831-f0c359f578ad/join-page",
+        "path": "/v1/realms/01a13af9-7f9f-7518-b859-b21640c772d7/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
