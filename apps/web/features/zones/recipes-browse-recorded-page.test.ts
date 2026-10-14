@@ -33,6 +33,11 @@ function pageAnswer(sample: { answer: unknown }): ZoneBrowsePage {
   return sample.answer as ZoneBrowsePage;
 }
 
+/** A recorded cursor is null when the page ends; a query omits it. Both mean the same absence. */
+function expectSameCursor(actual: string | null | undefined, expected: string | null | undefined) {
+  expect(actual ?? null).toBe(expected ?? null);
+}
+
 function resultsText(answer: ZoneBrowsePage) {
   const t = materializeData(messages, { locale: 'en' });
   return answer.matches.kind === 'exact'
@@ -419,7 +424,7 @@ for (const who of personas) {
     expect(requests.find(request => request.path.endsWith('/routes'))?.query).toEqual({
       path: 'browse', cursor: first.nextCursor!, ...(actor ? { actingSubject: actor } : {}),
     });
-    expect(requests.filter(request => request.path.endsWith('/modules/browse')).at(-1)?.query.cursor).toBe(first.nextCursor);
+    expectSameCursor(requests.filter(request => request.path.endsWith('/modules/browse')).at(-1)?.query.cursor, first.nextCursor);
     expect(answer.nextCursor).toBeNull();
     expect(answer.matches).toEqual({ value: 23, kind: 'exact' });
   });
@@ -466,7 +471,7 @@ for (const who of personas) {
       expect(requests.filter(request => request.path.endsWith('/modules/browse')).at(-1)?.query)
         .toEqual(searchFromRecord(pagination, page));
       if (requested) {
-        expect(requested).toBe(pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
+        expectSameCursor(requested, pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
         expect(answer.items).toHaveLength(3);
         expect(answer.matches).toEqual({ value: 23, kind: 'exact' });
         expect(answer.nextCursor).toBeNull();
@@ -502,7 +507,7 @@ for (const who of personas) {
     expect(gaps).toEqual([]);
     expectRecordedPage(model, answer);
     expectSiteGraph(requests, browse, 'frame-address');
-    expect(requests.find(request => request.path.endsWith('/routes'))?.query.cursor).toBe(first.nextCursor);
+    expectSameCursor(requests.find(request => request.path.endsWith('/routes'))?.query.cursor, first.nextCursor);
   });
 
   test(`${who} site route follows the recorded search continuation with the supplied client`, async () => {
@@ -516,8 +521,8 @@ for (const who of personas) {
     expect(gaps).toEqual([]);
     expectRecordedPage(model, answer);
     expectSiteGraph(requests, pagination, 'site-address');
-    expect(requests.find(request => request.path.endsWith('/routes'))?.query.cursor)
-      .toBe(pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
+    expectSameCursor(requests.find(request => request.path.endsWith('/routes'))?.query.cursor,
+      pageAnswer(sampleOf(pagination, who, 'page-search-newest')).nextCursor);
   });
 }
 
@@ -543,27 +548,31 @@ async function visitInjected(page: string) {
 
 const knownFollow = { policy: null, following: false, followRevision: null, level: null, source: null, pinPosition: null };
 
+function fetchDouble(send: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>): typeof fetch {
+  return Object.assign(send, { preconnect: globalThis.fetch.preconnect });
+}
+
 test('an unmatched follow-state refresh keeps the follow the page already read', async () => {
-  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => {
+  const api = recordedFollowRefresh('https://rezics.com/id/person', fetchDouble(async () => {
     throw new Error('Unmatched recorded request (recipes/catalogue-browse-and-search-in-its-zone/stranger): {}');
-  }, knownFollow);
+  }), knownFollow);
   expect(await api.state('https://rezics.com/id/realm')).toEqual({
     following: false, revision: null, level: null, source: null, pinPosition: null,
   });
 });
 
 test('a recorded follow-state answer is returned unchanged', async () => {
-  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => Response.json({
+  const api = recordedFollowRefresh('https://rezics.com/id/person', fetchDouble(async () => Response.json({
     following: true, revision: 'r', level: 'highlights', source: 'explicit', pinPosition: 1,
-  }), knownFollow);
+  })), knownFollow);
   expect(await api.state('https://rezics.com/id/realm')).toEqual({
     following: true, revision: 'r', level: 'highlights', source: 'explicit', pinPosition: 1,
   });
 });
 
 test('a follow-state failure other than a missing record still fails', async () => {
-  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => {
+  const api = recordedFollowRefresh('https://rezics.com/id/person', fetchDouble(async () => {
     throw new Error('network down');
-  }, knownFollow);
+  }), knownFollow);
   await expect(api.state('https://rezics.com/id/realm')).rejects.toThrow('network down');
 });
