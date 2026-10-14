@@ -95,6 +95,8 @@ async function refusedInboxReads(name: 'stranger' | 'member' | 'moderator' | 'op
   const root = rootOf(sessions.realm), id = sessions.realm.slice(-36);
   await answer(sample('requests-address-space-missing', 'GET', `/v1/spaces/${id}`), 404);
   await answer(sample('requests-address-settings-refused', 'GET', `/v1/spaces/${id}/settings?${acting(person)}`), 403);
+  await answer(sample('management-refused-realm-header', 'GET', `${root}?${acting(person)}&language=en`),
+    name === 'member' || name === 'moderator' ? 200 : 404);
   await answer(sample('requests-access-realm', 'GET', `${root}?${acting(person)}`),
     name === 'member' || name === 'moderator' ? 200 : 404);
   if (name === 'member' || name === 'moderator')
@@ -205,6 +207,18 @@ outcomeTest(admission, 'stranger', async () => {
   ).toMatchObject({ state: 'withdrawn', reason: first.input.reason });
   await answer(sample('join-own-request-withdrawn', 'GET', `${path}/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
+  // The confirm step takes its generation from mine, and trims the entered reason.
+  await submit(person, root);
+  const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
+    sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
+  );
+  const pending = confirmPage.items.find(item => item.state === 'pending')!;
+  await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
+    actingSubject: person.actingSubject,
+    expectedRequestGeneration: pending.requestGeneration,
+    reason: 'I cannot join this month.',
+  }, randomUUID()), 201);
+  await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
 }, recording);
 
 async function joined(name: 'member' | 'moderator') {
@@ -361,6 +375,33 @@ outcomeTest(admission, 'owner', async () => {
   expect(await answer(owner.main('GET', `${settingsPath}?${acting(owner)}`))).toMatchObject({
     settings: { history: 'from-admission' },
   });
+  // RequestsView confirms against the inbox generation and the selected row.
+  // Use later requests so the original concurrent-decision samples stay intact.
+  for (const decision of ['declined', 'accepted'] as const) {
+    const submitted = await submit(sessions.stranger, root);
+    const page = await answer<RequestPage & { generation: string; items: { id: string; requestGeneration: string }[] }>(
+      sample(`decision-confirm-inbox-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`),
+    );
+    const selected = page.items.find(item => item.id === submitted.receipt.requestId)!;
+    await answer(sample(`decision-confirm-${decision}`, 'POST', `${path}/${selected.id}/decisions`, {
+      actingSubject: owner.actingSubject,
+      expectedGeneration: page.generation,
+      expectedRequestGeneration: selected.requestGeneration,
+      decision,
+      reason: 'Decision reason.',
+    }, randomUUID()), 201);
+    await answer(sample(`decision-confirm-inbox-after-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`));
+  }
+  // Only the owner reaches MembersView in this private Realm. Its invite
+  // dialog defaults to seven days and sends no reason or generation.
+  const invitationInput = {
+    actingSubject: owner.actingSubject,
+    member: sessions.member.actingSubject,
+    expiresInSeconds: 604_800,
+  };
+  const invitationKey = randomUUID();
+  await answer(sample('invitation-confirm', 'POST', `${root}/invitations`, invitationInput, invitationKey));
+  await answer(sample('outgoing-invitations-after-confirm', 'GET', `${root}/invitations?${acting(owner)}`));
 }, recording);
 
 outcomeTest(admission, 'moderator', async () => {
@@ -406,4 +447,17 @@ outcomeTest(admission, 'operator', async () => {
   );
   await answer(sample('own-request-withdrawn', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
+  const path = `${root}/join-requests`;
+  // The confirm step takes its generation from mine, and trims the entered reason.
+  await submit(person, root);
+  const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
+    sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
+  );
+  const pending = confirmPage.items.find(item => item.state === 'pending')!;
+  await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
+    actingSubject: person.actingSubject,
+    expectedRequestGeneration: pending.requestGeneration,
+    reason: 'I cannot join this month.',
+  }, randomUUID()), 201);
+  await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
 }, recording);

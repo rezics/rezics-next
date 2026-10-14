@@ -676,6 +676,131 @@
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8"
         }
+      },
+      {
+        "label": "management-refused-realm-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F530d8fc9-c9c1-4cbf-8efc-9c546778fda5&language=en",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "withdraw-confirm-own-request",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F530d8fc9-c9c1-4cbf-8efc-9c546778fda5&limit=50",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "19503584-9168-4074-856a-d197d1c19c7b",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:41.225Z",
+              "state": "pending",
+              "decidedAt": null
+            },
+            {
+              "id": "6e1da551-bef7-4537-83db-f27711472245",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:40.741Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:41.044Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "withdraw-confirm",
+        "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
+        "method": "POST",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/19503584-9168-4074-856a-d197d1c19c7b/withdraw",
+        "body": {
+          "actingSubject": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+          "expectedRequestGeneration": "0",
+          "reason": "I cannot join this month."
+        },
+        "status": 201,
+        "answer": {
+          "receiptId": "e13eedb9-ef15-4dbd-9b9e-95461cbfcf6e",
+          "requestId": "19503584-9168-4074-856a-d197d1c19c7b",
+          "requestGeneration": "1",
+          "generation": "6",
+          "state": "withdrawn",
+          "membershipId": null,
+          "membershipGeneration": null,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "withdraw-confirm-own-request-after",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F530d8fc9-c9c1-4cbf-8efc-9c546778fda5&limit=50",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "19503584-9168-4074-856a-d197d1c19c7b",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:41.225Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:41.288Z"
+            },
+            {
+              "id": "6e1da551-bef7-4537-83db-f27711472245",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:40.741Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:41.044Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
       }
     ],
     "member": [
@@ -1467,6 +1592,76 @@
           "content-type": "application/json;charset=utf-8",
           "etag": "\"51893a63cd658b8219faf3f50a949500166879c362b54f7a87fcef8bec6a9f65\""
         }
+      },
+      {
+        "label": "management-refused-realm-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F43707aa8-25e5-48ce-b3fe-0d67bba33964&language=en",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a1372a-7651-7668-9a42-11282f6c2dbc",
+          "space": "https://rezics.com/id/01a1372a-757d-73b5-8b9a-8851fd60d77b",
+          "revision": "https://rezics.com/id/01a1372a-7651-766a-8564-8ff0dc34f0b2",
+          "visibility": "private",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:5f3c8c2b91076ca00289889339eae61052aec90639bba80962c132c19ac1be70",
+          "history": "from-admission",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "b5d8f8c52fa4eaff80f8285d7df4e79b"
+          },
+          "originalName": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "request",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2543e0b0-892a-4313-adf7-88e74c29a3ea",
+            "sequence": "11"
+          },
+          "links": {
+            "works": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/works",
+            "decisions": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
       }
     ],
     "owner": [
@@ -2149,6 +2344,211 @@
           "items": [],
           "nextCursor": null,
           "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-inbox-declined",
+        "operationId": "getV1RealmsByRealmJoin-requests",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd1039a05-1d56-4058-ac11-5b6ee98e374a&limit=50&q=",
+        "status": 200,
+        "answer": {
+          "generation": "4",
+          "items": [
+            {
+              "id": "6ad46ef6-96a8-42f1-8e12-72e9492d98bf",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:50.480Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-declined",
+        "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
+        "method": "POST",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests/6ad46ef6-96a8-42f1-8e12-72e9492d98bf/decisions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d1039a05-1d56-4058-ac11-5b6ee98e374a",
+          "expectedGeneration": "4",
+          "expectedRequestGeneration": "0",
+          "decision": "declined",
+          "reason": "Decision reason."
+        },
+        "status": 201,
+        "answer": {
+          "receiptId": "a4b88fc3-0ac7-41a3-a3b5-e947582c9b52",
+          "requestId": "6ad46ef6-96a8-42f1-8e12-72e9492d98bf",
+          "requestGeneration": "1",
+          "generation": "5",
+          "state": "declined",
+          "membershipId": null,
+          "membershipGeneration": null,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-inbox-after-declined",
+        "operationId": "getV1RealmsByRealmJoin-requests",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd1039a05-1d56-4058-ac11-5b6ee98e374a&limit=50&q=",
+        "status": 200,
+        "answer": {
+          "generation": "5",
+          "items": [],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-inbox-accepted",
+        "operationId": "getV1RealmsByRealmJoin-requests",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd1039a05-1d56-4058-ac11-5b6ee98e374a&limit=50&q=",
+        "status": 200,
+        "answer": {
+          "generation": "5",
+          "items": [
+            {
+              "id": "979ae5c9-e640-4ed9-9d0e-2332fbc99b96",
+              "member": "https://rezics.com/id/530d8fc9-c9c1-4cbf-8efc-9c546778fda5",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:50.679Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-accepted",
+        "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
+        "method": "POST",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests/979ae5c9-e640-4ed9-9d0e-2332fbc99b96/decisions",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d1039a05-1d56-4058-ac11-5b6ee98e374a",
+          "expectedGeneration": "5",
+          "expectedRequestGeneration": "0",
+          "decision": "accepted",
+          "reason": "Decision reason."
+        },
+        "status": 201,
+        "answer": {
+          "receiptId": "6e77e8db-263b-4cea-a61b-4de641315bda",
+          "requestId": "979ae5c9-e640-4ed9-9d0e-2332fbc99b96",
+          "requestGeneration": "1",
+          "generation": "6",
+          "state": "accepted",
+          "membershipId": "cf77d4df-0e44-4c3f-8537-60c0e2019755",
+          "membershipGeneration": "1",
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "decision-confirm-inbox-after-accepted",
+        "operationId": "getV1RealmsByRealmJoin-requests",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd1039a05-1d56-4058-ac11-5b6ee98e374a&limit=50&q=",
+        "status": 200,
+        "answer": {
+          "generation": "6",
+          "items": [],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "invitation-confirm",
+        "operationId": "postV1RealmsByRealmInvitations",
+        "method": "POST",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/invitations",
+        "body": {
+          "actingSubject": "https://rezics.com/id/d1039a05-1d56-4058-ac11-5b6ee98e374a",
+          "member": "https://rezics.com/id/43707aa8-25e5-48ce-b3fe-0d67bba33964",
+          "expiresInSeconds": 604800
+        },
+        "status": 200,
+        "answer": {
+          "invitation": {
+            "id": "c288bbbc-826f-4707-927a-262ba5c927a6",
+            "realm": "https://rezics.com/id/01a1372a-a8a6-7256-86c6-72df951a7c48",
+            "member": "https://rezics.com/id/43707aa8-25e5-48ce-b3fe-0d67bba33964",
+            "inviter": "https://rezics.com/id/d1039a05-1d56-4058-ac11-5b6ee98e374a",
+            "state": "pending",
+            "createdAt": "2026-10-14T00:05:50.898Z",
+            "expiresAt": "2026-10-21T00:05:50.891Z",
+            "membershipGeneration": "0",
+            "policyRevision": "1",
+            "termsRevision": "realm-membership-v1"
+          },
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "outgoing-invitations-after-confirm",
+        "operationId": "getV1RealmsByRealmInvitations",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-a8a6-7256-86c6-72df951a7c48/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd1039a05-1d56-4058-ac11-5b6ee98e374a",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "c288bbbc-826f-4707-927a-262ba5c927a6",
+              "realm": "https://rezics.com/id/01a1372a-a8a6-7256-86c6-72df951a7c48",
+              "member": "https://rezics.com/id/43707aa8-25e5-48ce-b3fe-0d67bba33964",
+              "inviter": "https://rezics.com/id/d1039a05-1d56-4058-ac11-5b6ee98e374a",
+              "state": "pending",
+              "createdAt": "2026-10-14T00:05:50.898Z",
+              "expiresAt": "2026-10-21T00:05:50.891Z",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1"
+            }
+          ],
+          "nextCursor": null
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -2945,6 +3345,76 @@
           "content-type": "application/json;charset=utf-8",
           "etag": "\"51893a63cd658b8219faf3f50a949500166879c362b54f7a87fcef8bec6a9f65\""
         }
+      },
+      {
+        "label": "management-refused-realm-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2b2ae3a9-105b-42e5-a6c5-74da6cd6bf12&language=en",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a1372a-7651-7668-9a42-11282f6c2dbc",
+          "space": "https://rezics.com/id/01a1372a-757d-73b5-8b9a-8851fd60d77b",
+          "revision": "https://rezics.com/id/01a1372a-7651-766a-8564-8ff0dc34f0b2",
+          "visibility": "private",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:5f3c8c2b91076ca00289889339eae61052aec90639bba80962c132c19ac1be70",
+          "history": "from-admission",
+          "name": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "b5d8f8c52fa4eaff80f8285d7df4e79b"
+          },
+          "originalName": {
+            "value": "Outcome private Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "requested"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "request",
+          "discovery": {
+            "indexable": false,
+            "robots": "noindex",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2543e0b0-892a-4313-adf7-88e74c29a3ea",
+            "sequence": "13"
+          },
+          "links": {
+            "works": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/works",
+            "decisions": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
       }
     ],
     "operator": [
@@ -3456,6 +3926,131 @@
               "createdAt": "2026-10-13T21:28:34.402Z",
               "state": "withdrawn",
               "decidedAt": "2026-10-13T21:28:34.600Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "management-refused-realm-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff0548735-a672-4580-a7e9-f97e97d41750&language=en",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "withdraw-confirm-own-request",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff0548735-a672-4580-a7e9-f97e97d41750&limit=50",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "87f3c298-a70d-4612-b278-b2dc7c491e7b",
+              "member": "https://rezics.com/id/f0548735-a672-4580-a7e9-f97e97d41750",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:58.317Z",
+              "state": "pending",
+              "decidedAt": null
+            },
+            {
+              "id": "d7ae3c9e-a2ce-4677-aba5-941c5dcd4f35",
+              "member": "https://rezics.com/id/f0548735-a672-4580-a7e9-f97e97d41750",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:57.892Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:58.151Z"
+            }
+          ],
+          "nextCursor": null,
+          "complete": true
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "withdraw-confirm",
+        "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
+        "method": "POST",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/87f3c298-a70d-4612-b278-b2dc7c491e7b/withdraw",
+        "body": {
+          "actingSubject": "https://rezics.com/id/f0548735-a672-4580-a7e9-f97e97d41750",
+          "expectedRequestGeneration": "0",
+          "reason": "I cannot join this month."
+        },
+        "status": 201,
+        "answer": {
+          "receiptId": "92c128e6-3240-4059-8eef-ecccee0814fb",
+          "requestId": "87f3c298-a70d-4612-b278-b2dc7c491e7b",
+          "requestGeneration": "1",
+          "generation": "6",
+          "state": "withdrawn",
+          "membershipId": null,
+          "membershipGeneration": null,
+          "replayed": false
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "withdraw-confirm-own-request-after",
+        "operationId": "getV1RealmsByRealmJoin-requestsMine",
+        "method": "GET",
+        "path": "/v1/realms/01a1372a-7651-7668-9a42-11282f6c2dbc/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ff0548735-a672-4580-a7e9-f97e97d41750&limit=50",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "id": "87f3c298-a70d-4612-b278-b2dc7c491e7b",
+              "member": "https://rezics.com/id/f0548735-a672-4580-a7e9-f97e97d41750",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:58.317Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:58.377Z"
+            },
+            {
+              "id": "d7ae3c9e-a2ce-4677-aba5-941c5dcd4f35",
+              "member": "https://rezics.com/id/f0548735-a672-4580-a7e9-f97e97d41750",
+              "requestGeneration": "1",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T00:05:57.892Z",
+              "state": "withdrawn",
+              "decidedAt": "2026-10-14T00:05:58.151Z"
             }
           ],
           "nextCursor": null,
