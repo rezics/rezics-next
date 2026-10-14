@@ -15,6 +15,11 @@ const plenty = { vmTotal: 24 * GiB, vmUsed: 0, hostAvailable: 20 * GiB };
 // Memory and ordering cases control load too: a real busy host otherwise adds
 // deadline admission and a 20-second load queue to their injected timelines.
 const idleHost = { readLoad: () => 0, processors: 1 };
+// Admission policy lookup must stay in the fixture too. Its worktree fallback
+// shells out to Git on every poll and reads the live orchestration policy.
+const startupEnvironment = (dir: string): NodeJS.ProcessEnv => ({
+  REZICS_STACK_PROFILE: 'qa', GOAL_QA_SLOT_DIRECTORY: join(dir, 'slots'),
+});
 
 for (const [name, start, readinessMs] of [
   ['dev CLI', startDevCompose, 180_000],
@@ -25,7 +30,7 @@ for (const [name, start, readinessMs] of [
     let now = 0;
     const readings: number[] = [];
     try {
-      const result = await start(root, { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '900000' },
+      const result = await start(root, { ...startupEnvironment(dir), REZICS_QA_MEMORY_DEADLINE: '900000' },
         'qa', timeout => {
           expect(now).toBe(400_000);
           expect(timeout).toBe(readinessMs);
@@ -47,7 +52,7 @@ for (const [name, start, readinessMs] of [
     const dir = mkdtempSync(join(scratch, 'qa-startup-deadline-'));
     let now = 0, starts = 0;
     try {
-      await expect(start(root, { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '900000' },
+      await expect(start(root, { ...startupEnvironment(dir), REZICS_QA_MEMORY_DEADLINE: '900000' },
         'qa', () => { starts++; }, { ...idleHost, lockFile: join(dir, 'mutex.sqlite'), now: () => now,
           pollMs: 400_000, sleep: async ms => { now += ms; }, announce: () => {},
           read: async () => ({ ...plenty, vmUsed: plenty.vmTotal }) })).rejects.toThrow('Memory admission deadline');
@@ -75,7 +80,7 @@ function orderedStartups() {
     const paused = deferred<void>();
     sleeping.set(id, paused);
     const run = withMemoryStartup({ vm, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
-      env: { REZICS_STACK_PROFILE: 'qa' }, root, lockFile, deadline: 1_000,
+      env: startupEnvironment(dir), root, lockFile, deadline: 1_000,
       ...idleHost, now: () => now, pollMs: 1, readingMaxAgeMs: 0, announce: () => {},
       read: async () => {
         // A slow Docker reader must not block another request's registration.
@@ -163,7 +168,7 @@ test('a provisional ordinary slot is returned when memory no longer fits before 
   writeFileSync(gatePath, JSON.stringify({ token: 'test', status: 'pending' }));
   try {
     await withMemoryStartup({ vm: GiB, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
-      root, env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_STARTUP_SLOT_GATE: gatePath },
+      root, env: { ...startupEnvironment(dir), REZICS_QA_STARTUP_SLOT_GATE: gatePath },
       ...idleHost, lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
       read: async () => ({ ...plenty, vmUsed: ++reads === 2 ? plenty.vmTotal : 0 }),
       announce: line => {
