@@ -52,6 +52,8 @@ export const commandCounters = [
   'exact_unit_rdf_rows_visited',
   'public_name_heads_visited',
   'public_name_labels_visited',
+  'also_enjoyed_candidate_rows_visited',
+  'also_enjoyed_source_rows_visited',
   'rank_group_candidates_visited',
   'rank_live_witnesses_visited',
   'rank_metadata_values_visited',

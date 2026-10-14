@@ -34,10 +34,19 @@ const covers = (fence: AlsoEnjoyedSourceFence, basis: string) => !fence.changed 
 const privacyCovers = (fence: AlsoEnjoyedSourceFence, basis: string) =>
   !fence.changed && BigInt(fence.revision) <= BigInt(basis);
 
+// A cheap sequential/bitmap plan on a small store can conceal population or
+// backlog scans. These owner reads require the existing equality-prefix and
+// partial indexes, including the no-private-change (zero-row) case.
+const preferPointReads = (client: PoolClient) => client.query(
+  'SET LOCAL enable_seqscan = off; SET LOCAL enable_bitmapscan = off');
+const indexedRead = <T>(pool: Pool, read: (client: PoolClient) => Promise<T>) =>
+  inAccess(pool, async client => { await preferPointReads(client); return read(client); });
+
 async function privacyFence(owner: Pool | PoolClient, schema: 'access' | 'reader') {
-  const row = (await owner.query<AlsoEnjoyedSourceFence>(`SELECT privacy_revision::text AS revision,
+  const read = (client: Pool | PoolClient) => client.query<AlsoEnjoyedSourceFence>(`SELECT privacy_revision::text AS revision,
     EXISTS (SELECT 1 FROM ${schema}.also_enjoyed_source_change WHERE privacy) AS changed
-    FROM ${schema}.also_enjoyed_source_fence WHERE id`)).rows[0];
+    FROM ${schema}.also_enjoyed_source_fence WHERE id`);
+  const row = (schema === 'reader' ? await indexedRead(owner as Pool, read) : await read(owner)).rows[0];
   if (!row) throw new RecommendationUnavailable('Co-reader privacy fence is unavailable');
   return row;
 }
@@ -45,10 +54,11 @@ async function privacyFence(owner: Pool | PoolClient, schema: 'access' | 'reader
 /** Content shelf fence. Folding records the basis of a new generation; a shelf
  * change that has not committed yet keeps its row and outdates that basis. */
 export async function alsoEnjoyedContentFence(content: Pool, fold = false): Promise<AlsoEnjoyedSourceFence> {
-  const row = (await content.query<AlsoEnjoyedSourceFence>(fold
-    ? 'SELECT basis::text AS revision, changed FROM reader.fold_also_enjoyed_source_changes()'
-    : `SELECT revision::text, EXISTS (SELECT 1 FROM reader.also_enjoyed_source_change) AS changed
-      FROM reader.also_enjoyed_source_fence WHERE id`)).rows[0];
+  const row = (fold ? await content.query<AlsoEnjoyedSourceFence>(
+    'SELECT basis::text AS revision, changed FROM reader.fold_also_enjoyed_source_changes()')
+    : await indexedRead(content, client => client.query<AlsoEnjoyedSourceFence>(
+      `SELECT revision::text, EXISTS (SELECT 1 FROM reader.also_enjoyed_source_change) AS changed
+      FROM reader.also_enjoyed_source_fence WHERE id`))).rows[0];
   if (!row) throw new RecommendationUnavailable('Content shelf fence is unavailable');
   return row;
 }
@@ -416,7 +426,7 @@ export class AlsoEnjoyedStore {
   async candidates(source: string, limit: number = ALSO_ENJOYED_COST.pageRows) {
     if (limit > ALSO_ENJOYED_COST.pageRows) throw new RecommendationUnavailable('Candidate page is out of bounds');
     const contentFence = await alsoEnjoyedContentFence(this.content);
-    const result = await inAccess(this.access, async client => {
+    const result = await indexedRead(this.access, async client => {
       await requireRecoveryOpen(client);
       const head = (await client.query<{ generation: string; graph_epoch: string; graph_sequence: string;
         access_revision: string;
@@ -432,9 +442,13 @@ export class AlsoEnjoyedStore {
       if (!privacyCovers(await privacyFence(client, 'access'), head.access_revision)
         || !privacyCovers(await privacyFence(this.content, 'reader'), head.content_revision)) return { generation: null,
           graphEpoch: null, graphSequence: null, stale: true, sourceReaders: 0, rows: [] };
+      // Only the four-reader admission threshold is consumed by this read.
+      // The existing partial Work index stops once that threshold is met.
       const sourceReaders = Number((await client.query<{ readers: string }>(`
-        SELECT count(*)::text AS readers FROM access.also_enjoyed_signal
-        WHERE generation_id = $1 AND work = $2 AND source_eligible`,
+        SELECT count(*)::text AS readers FROM (
+          SELECT 1 FROM access.also_enjoyed_signal
+          WHERE generation_id = $1 AND work = $2 AND source_eligible LIMIT 4
+        ) threshold`,
       [head.generation, source])).rows[0]?.readers ?? 0);
       const rows = (await client.query<{ candidate_work: string; shared_readers: number; score: string }>(`
         SELECT candidate_work, shared_readers, score::text FROM access.also_enjoyed_pair
@@ -463,7 +477,7 @@ export class AlsoEnjoyedStore {
   /** Recheck privacy after graph hydration; revocation during a read cannot
    * publish retained overlaps computed from the newly private library. */
   async privacyCurrent(id: string): Promise<boolean> {
-    const result = await inAccess(this.access, async client => {
+    const result = await indexedRead(this.access, async client => {
       await requireRecoveryOpen(client);
       const row = (await client.query<{ access_revision: string; content_revision: string }>(`
         SELECT access_revision::text,content_revision::text FROM access.also_enjoyed_generation

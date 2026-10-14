@@ -9,7 +9,7 @@ import { SearchSnapshotMoved } from '../work/search-readiness.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
 import { EMPTY_SERIAL_SUMMARY } from '../work/summary-serial.ts';
 import { RatingAggregateBudgetExceeded } from '../rating/aggregate.ts';
-import { GRAPHS, iri, lit, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
+import { GRAPHS, iri, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readWorkClassifications } from '../work/read-classifications.ts';
 import { readWorkBasis } from '../work/read-header.ts';
 import { executeTemplate } from '../query/template-read.ts';
@@ -68,20 +68,25 @@ async function classCandidates(session: WorkReadSession, source: string): Promis
   return [...new Set(found)].slice(0, 24);
 }
 
-/** A type and selected-language relation is bounded to 64 Work identities.
- * This still works before Discovery has its first active generation. */
+/** The writer-maintained physical directory supplies lexical Work order.
+ * A LIMIT after graph ORDER BY would still sort the full stored population. */
 async function typeCandidates(session: WorkReadSession, source: Awaited<ReturnType<typeof readWorkBasis>>) {
   const typeValues = source.card.types.filter(type => WORK_SEMANTIC_TYPES.includes(type as typeof WORK_SEMANTIC_TYPES[number]));
   if (!typeValues.length) return [];
-  const rows = await session.query(`SELECT DISTINCT ?work WHERE {
-    VALUES ?type { ${typeValues.map(type => `<${type}>`).join(' ')} }
-    ${publicWork('?work', '?main')}
-    GRAPH ${iri(GRAPHS.current)} { ?work a ?type }
-    ${source.selectedLanguage ? `GRAPH ${iri(GRAPHS.current)} { ?main rv:selectionHead ?selection }
-      GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:language ${lit(source.selectedLanguage)} }` : ''}
-    FILTER(?work != ${iri(source.card.id)})
-  } ORDER BY STR(?work) LIMIT 65`, 65);
-  return rows.flatMap(row => row.work ? [row.work.value] : []).slice(0, 32);
+  return (await candidatePage(session, { source: source.card.id, types: typeValues,
+    language: source.selectedLanguage ?? null, realm: null, limit: 32 })).works;
+}
+
+async function candidatePage(session: WorkReadSession,
+  input: Parameters<typeof session.deps.environment.fuseki.alsoEnjoyedCandidates>[0]) {
+  try {
+    const read = () => session.deps.environment.fuseki.alsoEnjoyedCandidates(input);
+    const page = await read();
+    session.observeDependency(`also-enjoyed-candidates:${JSON.stringify(input)}`, page.works,
+      async () => (await read()).works);
+    return page;
+  }
+  catch (error) { throw new WorkReadUnavailable('Recommendation candidate directory is unavailable', { cause: error }); }
 }
 
 async function realmCandidates(session: WorkReadSession, source: string) {
@@ -93,15 +98,8 @@ async function realmCandidates(session: WorkReadSession, source: string) {
   const works: string[] = [];
   for (const adoption of adoptions.items.slice(0, 2)) {
     if (!('realm' in adoption)) continue;
-    const rows = await session.query(`SELECT DISTINCT ?work WHERE {
-      GRAPH ${iri(GRAPHS.current)} { ?slot a rv:RealmPublicationSlot ;
-        rv:realm ${iri(adoption.realm)} ; rv:work ?work ; rv:selectionHead ?selection . }
-      GRAPH ${iri(GRAPHS.revisions)} { ?selection a rv:PublicationSelection ;
-        rv:work ?work ; rv:publicationDecision ?decision . ?decision rv:disclosure rv:Public . }
-      ${publicWork('?work', '?main')}
-      FILTER(?work != ${iri(source)})
-    } ORDER BY STR(?work) LIMIT 21`, 21);
-    works.push(...rows.flatMap(row => row.work ? [row.work.value] : []));
+    const page = await candidatePage(session, { source, types: [], language: null, realm: adoption.realm, limit: 21 });
+    works.push(...page.works);
   }
   return [...new Set(works)].slice(0, 24);
 }

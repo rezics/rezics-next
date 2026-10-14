@@ -145,6 +145,16 @@ final class PublicNameProjection {
         } } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
         return publishedStructuredWork(data, work, main);
     }
+    /** Publication eligibility for candidate directories, independent of a
+     * name-copy generation. Audience disclosure still belongs to Main's cards. */
+    static boolean candidateWork(DatasetGraph data, Node work) {
+        if (!productResource(work) || withdrawn(data, work)
+            || !type(data, work, "https://schema.org/CreativeWork")) return false;
+        Node main = exactlyOne(data, CURRENT, work, "mainVersion");
+        return main != null && type(data, main, RV + "MainVersion") && has(data, main, "work", work)
+            && (has(data, work, "catalogueVisible", NodeFactory.createLiteralByValue(true,
+                org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)) || publishedWork(data, work));
+    }
     /** Generic structured publication contributes only a Work name candidate.
      * The exact source revision must belong to this Work/Main and remain unerased. */
     private static boolean publishedStructuredWork(DatasetGraph data, Node work, Node main) {
@@ -256,6 +266,7 @@ final class PublicNameProjection {
             plan.current().contains(resource.getURI()) || changes.stream().anyMatch(change ->
                 resource.equals(change.work()) || data.contains(PUBLIC, uri(change.unit()), p("work"), resource))
             || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
+        AlsoEnjoyedCandidates.refresh(data, resources, deadline);
         refreshPrefixResources(data, resources, deadline, changes);
         if (plan.bootstrap() && !prefixWalkAvailable(data)) {
             var existingUnits = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), p("MatchUnit"));
@@ -277,6 +288,7 @@ final class PublicNameProjection {
         if (!productResource(resource)) return;
         invalidate(data, resource, uri(PREFIX + "generation:" + java.util.UUID.randomUUID()));
         project(data, resource, true);
+        AlsoEnjoyedCandidates.refresh(data, Set.of(resource), Long.MAX_VALUE);
         refreshPrefixResources(data, Set.of(resource));
     }
 

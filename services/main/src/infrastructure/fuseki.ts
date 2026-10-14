@@ -383,6 +383,32 @@ function safeIri(value: string): string {
 }
 
 export class FusekiClient {
+  /** Existing also-enjoyed owner's physical page. No writes or lazy rebuilds. */
+  async alsoEnjoyedCandidates(input: { source: string; types: string[]; language: string | null;
+    realm: string | null; limit: number }): Promise<{ works: string[]; examined: number }> {
+    if (!this.commandCapability?.match(/^[0-9a-f]{64}$/u)) throw new Error('Candidate directory capability is required');
+    const signal = readSignal(this.preparationSignal);
+    signal.throwIfAborted(); takeReadCall();
+    const diagnostic = beginReadCall('query');
+    let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
+    let examined: number | undefined;
+    try {
+      const response = await fetch(new URL('command', this.baseUrl), {
+        method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${this.commandCapability}` },
+        body: JSON.stringify({ alsoEnjoyedCandidates: input }), signal,
+      });
+      if (!response.ok) throw new Error(`Candidate directory returned ${response.status}`);
+      const result = await boundedJson<{ works: string[]; examined: number }>(response, 65_536, signal);
+      if (!Array.isArray(result.works) || result.works.length > input.limit
+        || result.works.some((work, index) => !/^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u.test(work)
+          || work === input.source || index > 0 && result.works[index - 1]! >= work)
+        || new Set(result.works).size !== result.works.length || !Number.isSafeInteger(result.examined)
+        || result.examined < 0 || result.examined > 3 * 65 * 32 * 16)
+        throw new Error('Malformed candidate directory page');
+      examined = result.examined; status = 'complete'; return result;
+    } catch (error) { if (signal.aborted) status = 'aborted'; throw error; }
+    finally { finishReadCall(diagnostic, status, examined); }
+  }
   /** Effect-free native directory read; shares the public search call, byte and wall budget. */
   async prefixWalk(input: { prefix: string; language: string | null; pageSize: number;
     cursor: string | null }): Promise<unknown> {

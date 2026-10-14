@@ -306,11 +306,14 @@ final class TemplateIndexService {
     /** Existing GPOS range machinery, used only by the closed cold preparer.
      * The cursor advances over actual tuples, with no prefix replay/offset. */
     static RealmOwnerPage realmOwnerPage(DatasetGraph data, String after, long deadline) {
+        return ownerTypePage(data, RV + "RealmPublicationSlot", after, deadline);
+    }
+    static RealmOwnerPage ownerTypePage(DatasetGraph data, String type, String after, long deadline) {
         workScopeBudget(deadline);
         var tdb = membershipStorage(data);
         var index = (TupleIndexRecord) TDBInternal.findIndex(tdb, "GPOS").baseTupleIndex();
         var factory = new RecordFactory(32, 0); var start = factory.createKeyOnly(); var end = factory.createKeyOnly();
-        Node[] prefix = {uri(CURRENT), RDF.type.asNode(), uri(RV + "RealmPublicationSlot")};
+        Node[] prefix = {uri(CURRENT), RDF.type.asNode(), uri(type)};
         for (int i = 0; i < 3; i++) {
             var id = TDBInternal.getNodeId(tdb, prefix[i]);
             if (org.apache.jena.tdb2.store.NodeId.isDoesNotExist(id)) return new RealmOwnerPage(List.of(), "", false);
@@ -328,7 +331,8 @@ final class TemplateIndexService {
         try {
             while (owners.size() < PublicNameProjection.REPAIR_BATCH_SIZE && rows.hasNext()) {
                 workScopeBudget(deadline);
-                var row = rows.next(); CommandWork.count("work_name_scope_cold_tuples", 1);
+                var row = rows.next(); CommandWork.count(type.equals("https://schema.org/CreativeWork")
+                    ? "also_enjoyed_source_rows_visited" : "work_name_scope_cold_tuples", 1);
                 owners.add(tdb.getQuadTable().getNodeTupleTable().getNodeTable().getNodeForNodeId(NodeIdFactory.get(row.getKey(), 24)));
                 last = HexFormat.of().formatHex(row.getKey());
             }

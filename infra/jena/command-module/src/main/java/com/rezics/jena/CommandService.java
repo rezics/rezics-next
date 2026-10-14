@@ -137,6 +137,21 @@ final class CommandService extends ActionService {
             String requestJSON = new String(bytes, java.nio.charset.StandardCharsets.UTF_8);
             TitleControlPolicy.commandJSONDepth(requestJSON);
             JsonObject body = JSON.parse(requestJSON);
+            if (body.get("alsoEnjoyedCandidates") != null) {
+                if (!authorized(action, admittedCapability)) {
+                    respond(action, 403, Map.of("status", "forbidden")); return;
+                }
+                if (bytes.length > 8192 || !body.keys().equals(Set.of("alsoEnjoyedCandidates"))
+                    || !body.get("alsoEnjoyedCandidates").isObject())
+                    throw new IllegalArgumentException("invalid also-enjoyed candidate envelope");
+                // This endpoint owns only a READ transaction. Cold preparation
+                // belongs to the existing bounded startup maintenance turn.
+                Map<String,Object> result = AlsoEnjoyedCandidates.read(action.getDataService().getDataset(),
+                    body.get("alsoEnjoyedCandidates").getAsObject());
+                action.getResponse().setHeader("Server-Timing", work.serverTiming());
+                action.getResponse().setHeader("X-Rezics-Command-Work", work.counters());
+                respond(action, 200, result); return;
+            }
             if (body.get("exactUnitProbe") != null) {
                 if (!authorized(action, admittedCapability)) {
                     respond(action, 403, Map.of("status", "forbidden")); return;
@@ -598,6 +613,7 @@ final class CommandService extends ActionService {
                 var delta = new SearchDeltaJournal.Capture(dataset, false, deadline);
                 PublicNameProjection.prepareWorkScopeDirectory(delta.observed(), deadline);
                 String phase = PublicNameProjection.workScopeDirectoryPhase(dataset);
+                if ("complete".equals(phase) && !AlsoEnjoyedCandidates.prepare(delta.observed(), deadline)) phase = "owners";
                 if (tracksIndex) SearchDeltaJournal.append(dataset, delta, publicSearchWriteEpoch.get() + 1, deadline);
                 TemplateIndexService.workScopeBudget(deadline);
                 commitPublished(dataset, tracksIndex, false, false, false);

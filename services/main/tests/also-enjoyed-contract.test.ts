@@ -45,7 +45,8 @@ function retainedPopulation() {
   };
   const client = { query, release: () => {} };
   const access = { connect: async () => client } as unknown as Pool;
-  const content = { query: (sql: string) => query(sql, true) } as unknown as Pool;
+  const content = { query: (sql: string) => query(sql, true),
+    connect: async () => ({ query: (sql: string) => query(sql, true), release: () => {} }) } as unknown as Pool;
   return { store: new AlsoEnjoyedStore(access, content), state, queries };
 }
 
@@ -54,6 +55,8 @@ test('ordinary pending source changes retain co-readers without folding or build
   expect(await fixture.store.candidates('source', 12)).toMatchObject({ generation: 'retained-generation',
     stale: true, sourceReaders: 4, candidates: [{ work: 'candidate', sharedReaders: 4, score: 1 }] });
   expect(await fixture.store.privacyCurrent('retained-generation')).toBe(true);
+  expect(fixture.queries.some(sql => /source_eligible LIMIT 4/.test(sql))).toBe(true);
+  expect(fixture.queries.some(sql => /enable_seqscan = off/.test(sql))).toBe(true);
   expect(fixture.queries.some(sql => /fold_also_enjoyed|\b(INSERT|UPDATE|DELETE)\b/i.test(sql))).toBe(false);
 });
 

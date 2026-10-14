@@ -50,6 +50,7 @@ export function qaResourceHeapBytes(name: QaResourceClass): number {
 
 /** Heavy files own one project each; retained data cannot accumulate in a 2 GiB shard. */
 export const integrationResourceClasses: ReadonlyMap<string, QaResourceClass> = new Map([
+  ['services/main/tests/also-enjoyed-read-cost.integration.test.ts', 'catalogue-disk'],
   // The thousand-entry outcome owns its projection build and six complete traversals.
   ['tests/qa/integration/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.test.ts', 'large-tmpfs'],
   // Operator custody maintenance verifies harness-owned persistent owner volumes.
