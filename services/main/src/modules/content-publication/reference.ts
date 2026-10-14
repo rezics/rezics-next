@@ -17,6 +17,32 @@ import { CompositionUnavailable } from '../structure/graph.ts';
 import { readWorkComponentState } from '../work/history.ts';
 import { bindNativeAssetAudience } from '../media/visibility.ts';
 
+async function mediaSelection(session: WorkReadSession, target: string, revision?: string,
+  representation?: string): Promise<{ duration?: number } | null> {
+  const { deps, principal } = session, actingSubject = session.options.actingSubject;
+  const media = deps.media;
+  if (!media) throw new WorkReadUnavailable('Media owner is unavailable');
+  const asset = target.slice('urn:rezics:media:asset:'.length);
+  const read = async () => {
+    const state = await media.store.readAsset(asset);
+    if (!state || state.lifecycle !== 'active' || state.moderation !== 'none') return null;
+    const owner = !!principal && !!actingSubject && state.owner === actingSubject
+      && await deps.access.canManageMedia?.(principal, actingSubject);
+    if (!owner && state.disclosure !== 'public') return null;
+    const viewer = disclosureViewer(principal, actingSubject);
+    if (owner) bindNativeAssetAudience(viewer, asset);
+    const visible = await discloseInventory(deps.environment, [{ owner: 'media',
+      resource: `https://rezics.com/id/${asset}`, component: 'cover',
+      ...(revision ? { revision: `https://rezics.com/id/${revision}` } : {}) }], viewer, 'read');
+    if (visible[0] !== 'visible') return null;
+    const selected = revision && representation ? await media.store.referenceSelection(asset, revision, representation) : {};
+    const fresh = await media.store.readAsset(asset);
+    return fresh?.state === state.state ? selected : null;
+  };
+  const selected = await read(); session.observeDependency(`media-reference:${asset}:${revision ?? ''}:${representation ?? ''}`, selected, read);
+  return selected;
+}
+
 /** Main connects Content's closed selectors to existing Semantic, Structure and Media owners. */
 export function contentReferenceOwners(session: WorkReadSession): ReferenceOwners {
   const deps = session.deps, env = deps.environment, principal = session.principal;
@@ -27,7 +53,8 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
       && (!!await deps.access.canReadSemanticResource?.(principal, actingSubject, target)
         || await deps.access.canReadWork(principal, actingSubject, target)));
   const resource = async (target: string) => {
-    const read = async () => (await disclosed([target])).has(target);
+    const read = async () => target.startsWith('urn:rezics:media:asset:')
+      ? (await mediaSelection(session, target)) !== null : (await disclosed([target])).has(target);
     const available = await read(); session.observeDependency(`resource-reference:${target}`, available, read);
     return available;
   };
@@ -46,9 +73,10 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
     resource,
     revision: async (target, revision) => {
       if (!await resource(target)) return false;
+      if (await readSemanticRevision(env, target, revision, disclosed)) return resource(target);
+      if (!/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(target)) return false;
       const header = await readCompositionHeader(env, target);
       if (header) return structure(target, target, revision);
-      if (await readSemanticRevision(env, target, revision, disclosed)) return true;
       const anchors = await session.query(`SELECT ?manifest ?model WHERE {
         GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a <https://rezics.com/vocab/RevisionAnchor> ;
           <https://rezics.com/vocab/component> ${iri(target)} ; <https://rezics.com/vocab/manifest> ?manifest ;
@@ -89,28 +117,7 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
       } else if (!await published()) return null;
       return retainedDocumentBody(result.body);
     },
-    representation: async (target, revision, representation) => {
-      if (!deps.media) throw new WorkReadUnavailable('Media owner is unavailable');
-      const asset = target.slice('urn:rezics:media:asset:'.length);
-      const read = async () => {
-        const state = await deps.media.store.readAsset(asset);
-        if (!state || state.lifecycle !== 'active' || state.moderation !== 'none') return null;
-        const owner = !!principal && !!actingSubject && state.owner === actingSubject
-          && await deps.access.canManageMedia?.(principal, actingSubject);
-        if (!owner && state.disclosure !== 'public') return null;
-        const mediaViewer = disclosureViewer(principal, actingSubject);
-        if (owner) bindNativeAssetAudience(mediaViewer, asset);
-        const visible = await discloseInventory(env, [{ owner: 'media', resource: `https://rezics.com/id/${asset}`,
-          component: 'cover', revision: `https://rezics.com/id/${revision}` }], mediaViewer, 'read');
-        if (visible[0] !== 'visible') return null;
-        const result = await deps.media.store.referenceSelection(asset, revision, representation);
-        const fresh = await deps.media.store.readAsset(asset);
-        if (!fresh || fresh.state !== state.state) return null;
-        return result;
-      };
-      const selected = await read(); session.observeDependency(`media-reference:${asset}:${revision}:${representation}`, selected, read);
-      return selected;
-    },
+    representation: (target, revision, representation) => mediaSelection(session, target, revision, representation),
   };
 }
 export async function resolveContentReference(session: WorkReadSession, reference: ResourceReference): Promise<ReferenceResolution> {

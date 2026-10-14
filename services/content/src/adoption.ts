@@ -152,8 +152,9 @@ export function resourceReferenceProjection(reference: ResourceReference): Recor
   checkedResourceReference(reference);
   const oa = 'http://www.w3.org/ns/oa#', s = reference.selector;
   if (s.grain === 'resource') return { '@id': reference.target };
+  // Media asset revisions use Content's immutable revision custody too.
   const selectedRevision = s.grain === 'content' || s.grain === 'representation'
-    ? `urn:rezics:${s.grain === 'content' ? 'content' : 'media'}:revision:${s.revision}` : s.revision;
+    ? `urn:rezics:content:revision:${s.revision}` : s.revision;
   const selector = s.grain === 'occurrence' ? { '@type': `${oa}FragmentSelector`,
     'http://www.w3.org/1999/02/22-rdf-syntax-ns#value': s.occurrence }
     : s.grain === 'representation' && s.fragment ? { '@type': `${oa}FragmentSelector`,
