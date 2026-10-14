@@ -152,6 +152,20 @@ export const profileRegistry = {
       "context"
     ]
   },
+  "classification-context-v2": {
+    "sha256": "c1bf6289c53dfdb53e81ce6f40738014cf77175767a3a0ca638ecaffe0755d95",
+    "file": "shapes/classification-context-v2.ttl",
+    "shapes": [
+      "https://rezics.com/definition/classification-context-v2/global-shape",
+      "https://rezics.com/definition/classification-context-v2/realm-shape",
+      "https://rezics.com/definition/classification-context-v2/context-shape"
+    ],
+    "focusRoles": [
+      "global",
+      "realm",
+      "context"
+    ]
+  },
   "classification-direct-decision-v1": {
     "sha256": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
     "file": "shapes/classification-direct-decision-v1.ttl",

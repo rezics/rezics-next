@@ -114,6 +114,18 @@ export const ClassificationContextV1ContextShapeSchema = Type.Object({ "@id": Ty
 
 export type ClassificationContextV1ContextShape = Static<typeof ClassificationContextV1ContextShapeSchema>;
 
+export const ClassificationContextV2GlobalShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/ClassificationContext") }), "rv:contextRole": Type.Array(Type.Literal("https://rezics.com/vocab/GlobalClassification"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:contextState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:inheritancePolicy": Type.Array(Type.Literal("https://rezics.com/definition/classification-isolate-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:fallbackContext": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })), "rv:realm": Type.Optional(Type.Array(Type.Unknown(), { maxItems: 0 })) }, { additionalProperties: true });
+
+export type ClassificationContextV2GlobalShape = Static<typeof ClassificationContextV2GlobalShapeSchema>;
+
+export const ClassificationContextV2RealmShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/Realm") }), "rv:realmState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:classificationContext": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
+
+export type ClassificationContextV2RealmShape = Static<typeof ClassificationContextV2RealmShapeSchema>;
+
+export const ClassificationContextV2ContextShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://rezics.com/vocab/ClassificationContext") }), "rv:contextRole": Type.Array(Type.Literal("https://rezics.com/vocab/RealmClassification"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:contextState": Type.Array(Type.Literal("https://rezics.com/vocab/Active"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:realm": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:inheritancePolicy": Type.Array(Type.Literal("https://rezics.com/definition/classification-inherit-global-v1"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:fallbackContext": Type.Array(Type.Literal("urn:rezics:classification-context:global"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:definitionProfile": Type.Array(Type.Literal("https://rezics.com/definition/classification-context-v2"), { uniqueItems: true, maxItems: 1, minItems: 1 }), "rv:head": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }), "rv:classificationScheme": Type.Optional(Type.Array(Type.String({}), { uniqueItems: true, maxItems: 1 })) }, { additionalProperties: true });
+
+export type ClassificationContextV2ContextShape = Static<typeof ClassificationContextV2ContextShapeSchema>;
+
 export const ClassificationDirectDecisionV1WorkShapeSchema = Type.Object({ "@id": Type.String({ minLength: 1 }), "rdf:type": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, contains: Type.Literal("https://schema.org/CreativeWork") }), "rv:mainVersion": Type.Array(Type.String({}), { uniqueItems: true, minItems: 1, maxItems: 1 }) }, { additionalProperties: true });
 
 export type ClassificationDirectDecisionV1WorkShape = Static<typeof ClassificationDirectDecisionV1WorkShapeSchema>;
@@ -1343,6 +1355,9 @@ export const shapeSchemas = {
   "https://rezics.com/definition/classification-context-v1/global-shape": ClassificationContextV1GlobalShapeSchema,
   "https://rezics.com/definition/classification-context-v1/realm-shape": ClassificationContextV1RealmShapeSchema,
   "https://rezics.com/definition/classification-context-v1/context-shape": ClassificationContextV1ContextShapeSchema,
+  "https://rezics.com/definition/classification-context-v2/global-shape": ClassificationContextV2GlobalShapeSchema,
+  "https://rezics.com/definition/classification-context-v2/realm-shape": ClassificationContextV2RealmShapeSchema,
+  "https://rezics.com/definition/classification-context-v2/context-shape": ClassificationContextV2ContextShapeSchema,
   "https://rezics.com/definition/classification-direct-decision-v1/work-shape": ClassificationDirectDecisionV1WorkShapeSchema,
   "https://rezics.com/definition/classification-direct-decision-v1/main-shape": ClassificationDirectDecisionV1MainShapeSchema,
   "https://rezics.com/definition/classification-direct-decision-v1/sense-shape": ClassificationDirectDecisionV1SenseShapeSchema,

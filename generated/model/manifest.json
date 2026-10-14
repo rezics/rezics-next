@@ -74,6 +74,23 @@
       }
     },
     {
+      "id": "classification-context-v2",
+      "sha256": "c1bf6289c53dfdb53e81ce6f40738014cf77175767a3a0ca638ecaffe0755d95",
+      "file": "shapes/classification-context-v2.ttl",
+      "binding": {
+        "required": [
+          "realm",
+          "context"
+        ],
+        "optional": [],
+        "roles": [
+          "global",
+          "realm",
+          "context"
+        ]
+      }
+    },
+    {
       "id": "classification-direct-decision-v1",
       "sha256": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
       "file": "shapes/classification-direct-decision-v1.ttl",
@@ -1761,6 +1778,20 @@
     {
       "type": "https://rezics.com/vocab/ClassificationContext",
       "routes": [
+        {
+          "profile": "classification-context-v2",
+          "shape": "https://rezics.com/definition/classification-context-v2/context-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/contextRole",
+              "value": "https://rezics.com/vocab/RealmClassification"
+            },
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/classification-context-v2"
+            }
+          ]
+        },
         {
           "profile": "classification-context-v1",
           "shape": "https://rezics.com/definition/classification-context-v1/global-shape",
@@ -3948,6 +3979,7 @@
     "contexts/charter-revision-v1.jsonld": "952263e3ba0eee5b4633029b4169d9cf7d9e668176eed296a211604eb222bed7",
     "contexts/claim-v1.jsonld": "3b549a954e24ec1c64681f0acd9e145e6cf18146667ce9b01b086eef5b669f8f",
     "contexts/classification-context-v1.jsonld": "2ee5a806b296291b7a9c17cd4a624fadd2cd1358aa74505da03143430b066ecc",
+    "contexts/classification-context-v2.jsonld": "621843cf34d722189a3fcdab0e561c692d74c9cb50ad155948a4f65fb6825262",
     "contexts/classification-direct-decision-v1.jsonld": "0047318fab769e767f13971aebbf24013212cdc1002104ab3642b403efd5943a",
     "contexts/classification-global-context-v1.jsonld": "f593ba44aca5034c5805bb6ef22773e1ed5a20d348b64076f4badb2bebedde74",
     "contexts/classification-proposition-v1.jsonld": "7ab9c49c7ef448e67b8f4b76ba43a74437d60ef7953ed82b02b5c0057e7b75e9",
@@ -4084,6 +4116,7 @@
     "shapes/charter-revision-v1.ttl": "7d3903702c3767fd57874688413fa8bd1501c5c0ae3abba04e87dd7c80b78169",
     "shapes/claim-v1.ttl": "e028a8f74d433a28cd3860fec7bbaa468afe259b50e82d72fa276fe34c27e36f",
     "shapes/classification-context-v1.ttl": "41aa65a8f1f780d5902b858a8e9238d7e932afc88add4b23d731c51cfcd0bd20",
+    "shapes/classification-context-v2.ttl": "c1bf6289c53dfdb53e81ce6f40738014cf77175767a3a0ca638ecaffe0755d95",
     "shapes/classification-direct-decision-v1.ttl": "c33d12713979c86a3d29aa2fc6ebd4952f37bdece02a5aa6ba485fc48bda468b",
     "shapes/classification-global-context-v1.ttl": "b54360592563a2f10b526fc9f8f6441727da2b941d351d31720e675df9242f07",
     "shapes/classification-proposition-v1.ttl": "8bc799783d7d2c43da737b01d2b1f10bba4dc643716f1ac09524d1ef0e86dbd0",
@@ -4208,8 +4241,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "f70d5f417d72dd4005c05c0605c06dce2c16bfa1443e00dd0d7cbd4b511017bb",
-    "packages/model/src/generated/schemas.ts": "6e8c9ec9e49a8d1e6a03602b20acf1cf7f47b16625e9e852f4929aca0e64faca",
-    "packages/model/src/generated/vocabulary.ts": "92fe49757a31d8cb8374ba20b8ddc4acaa2019be29b0d6b555844427a9c3b5d1"
+    "packages/model/src/generated/profiles.ts": "f5fcfab407c8e88ef9ca1b7d664d9a198c7eb9a8c0aece31ec93b6c8b1bf7947",
+    "packages/model/src/generated/schemas.ts": "4fb7524a539f99acd4a4856fae614bab56786f77cab329f79027da1a5886c392",
+    "packages/model/src/generated/vocabulary.ts": "0ab3220f5d13708ce9e2097bbb1f498caf3f966bc06a4b4051a07e95d3b247cc"
   }
 }
