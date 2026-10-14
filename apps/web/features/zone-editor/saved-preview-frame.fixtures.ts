@@ -69,7 +69,7 @@ export const savedPreviewPackage: ZonePackage = { slug: 'fiction', css: '', slot
 export function savedPreviewRealmHeader(): RealmHeader {
   return { profile: 'realm-read-v1', id: previewCollection, space: savedPreviewRealmSpace, revision: zoneHead,
     name: { value: 'Tides community', language: 'en', direction: direction('en', 'Tides community'),
-      basis: { requested: ['en'], selected: 'en', matchedRange: 'en', original: false, untagged: false } },
+      basis: 'requested' },
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: previewCollection, resourceType: 'realm' },
     visibility: 'public', reviewMode: 'mandatory', policyRevision: null, profileRevision: null,
     description: null, banner: null, rules: null, membership: { count: { kind: 'unknown', value: null }, publicMembers: null },
