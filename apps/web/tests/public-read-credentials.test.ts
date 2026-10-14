@@ -174,6 +174,23 @@ interface ReadRule {
 
 /** Route evidence for every Main read a browser call can reach. An id missing here fails the scan. */
 const readClasses: Readonly<Record<string, ReadRule & { evidence: string }>> = {
+  getV1Zones: {
+    kind: 'anonymous',
+    evidence: 'services/main/src/routes/zones.ts:334 lists official Zones without reading the request or bearer',
+  },
+  getV1RealmsByRealmZone: {
+    kind: 'acting-subject',
+    anonymous: true,
+    evidence: 'services/main/src/routes/realm-reads.ts:110 workRead accepts a public visitor or the named member',
+  },
+  getV1ZonesById: {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/zones.ts:646 requires actingSubject and zonePage verifies the viewer',
+  },
+  'getV1ZonesByIdShowcase-editor': {
+    kind: 'acting-subject',
+    evidence: 'services/main/src/routes/zones.ts:409 requires actingSubject and requireZoneEditor verifies zone.edit',
+  },
   getV1Facets: {
     kind: 'anonymous',
     evidence: 'services/main/src/routes/facets.ts:7 drops the bearer; one body per deploy',
@@ -538,7 +555,7 @@ test('an unlisted Main read fails', () => {
 });
 
 test('optional public branches accept anonymous reads only without an acting subject', () => {
-  for (const route of ['realms({ realm })', 'addresses.resolve', 'zones({ id }).presentation',
+  for (const route of ['realms({ realm })', 'realms({ realm }).zone', 'addresses.resolve', 'zones({ id }).presentation',
     'zones({ id }).routes', "['content-revisions']({ revision })"]) {
     const client = 'browserMainApi(undefined, { anonymous: true })';
     const endpoint = route.startsWith('[') ? route : `.${route}`;
@@ -550,6 +567,19 @@ test('optional public branches accept anonymous reads only without an acting sub
     expect(violations({ fixture: `void browserMainApi().v1${endpoint}.get({ query: { actingSubject } });` }))
       .toEqual([]);
   }
+});
+
+test('Zone directory reads omit credentials and editor reads name their authenticated subject', () => {
+  expect(violations({ fixture: `
+    void browserMainApi(undefined, { anonymous: true }).v1.zones.get({ query: { official: 'true' } });
+    void browserMainApi().v1.zones({ id }).get({ query: { actingSubject } });
+    void browserMainApi().v1.zones({ id })['showcase-editor'].get({ query: { actingSubject } });
+  ` })).toEqual([]);
+  expect(violations({ fixture: `
+    void browserMainApi().v1.zones.get({ query: { official: 'true' } });
+    void browserMainApi().v1.zones({ id }).get();
+    void browserMainApi(undefined, { anonymous: true }).v1.zones({ id })['showcase-editor'].get({ query: { actingSubject } });
+  ` })).toHaveLength(3);
 });
 
 test('address availability uses its public scope while Zone availability requires the editor', () => {

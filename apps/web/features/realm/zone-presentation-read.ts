@@ -68,6 +68,11 @@ export function zonePresentationReads(main: MainClient, actingSubject?: string, 
   };
 }
 
+/** Attachment visibility follows the member client, independently of the public frame's client. */
+function readMemberRealmZone(personal: MainClient, realm: string, actingSubject?: string, keepProblem = true): Promise<RealmFrameRead<RealmZoneRead>> {
+  return settleFrame(() => personal.v1.realms({ realm }).zone.get({ query: { actingSubject } }), undefined, keepProblem);
+}
+
 export interface PublishedFrameModel {
   zoneId: string;
   ref: string;
@@ -251,12 +256,11 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
   return {
     readRealmHeader,
     readRealmZone: (realm: string): Promise<RealmFrameRead<RealmZoneRead>> =>
-      settleFrame(() => personal.v1.realms({ realm }).zone.get({ query: { actingSubject } }), undefined, keepProblem),
+      readMemberRealmZone(personal, realm, actingSubject, keepProblem),
     readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get(), undefined, keepProblem),
     readAddress: (ref: string, locale: UiLocale, fresh = false) => resolve('space', ref, locale, fresh),
     ...presentation,
-    readZoneRoute: (zone: string, path: string, cursor?: string): Promise<RealmFrameRead<ZoneRouteRead>> =>
-      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor),
+    readZoneRoute: zonePresentationReads(personal, actingSubject).readZoneRoute,
     resolveRealm: async (ref: string, locale: UiLocale, surface: 'community' | 'site' = 'community'): Promise<RealmResolution> => {
       const resolved = await resolve('space', ref, locale);
       if (resolved.kind !== 'resolved') {
