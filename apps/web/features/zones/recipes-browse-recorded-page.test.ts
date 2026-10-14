@@ -84,6 +84,95 @@ function expectCatalogue(built: Loaded<BrowseModel>, answer: ZoneBrowsePage) {
   expect(next?.searchParams.get('cursor') ?? null).toBe(answer.nextCursor);
 }
 
+// API probes retain coverage independently of the production route's reached states.
+test('the owner browse answer keeps titles, credit, lower-bound count, sorts and the opaque continuation', async () => {
+  const { sample, page, built } = await readRecorded(browse, 'owner', 'browse-newest-0', 'populated', true);
+  const answer = pageAnswer(sample);
+  expect(page.ok).toBe(true);
+  if (!built) throw new Error('The owner page was not built');
+  expectCatalogue(built, answer);
+  if (!built.ok) return;
+  expect(built.data.sorts.map(item => [item.sort, item.current])).toEqual([['newest', true], ['updated', false]]);
+  expect(built.data.state.text).toBeNull();
+  expect(new URL(built.data.next!, 'https://recorded.invalid').searchParams.get('type')).toBe('schema:Recipe');
+  expect(built.data.first).toBeNull();
+});
+
+test('the owner search answer keeps the recorded text, relevance sort and lower-bound count', async () => {
+  const { sample, built } = await readRecorded(browse, 'owner', 'search-relevance-0', 'populated', true);
+  const answer = pageAnswer(sample);
+  if (!built) throw new Error('The owner page was not built');
+  expectCatalogue(built, answer);
+  if (!built.ok) return;
+  expect(built.data.state.text).toBe(answer.query.text);
+  expect(built.data.sorts.map(item => [item.sort, item.current])).toEqual([
+    ['relevance', true], ['newest', false], ['updated', false],
+  ]);
+});
+
+test('the owner empty search stays an exact zero catalogue', async () => {
+  const { sample, built } = await readRecorded(browse, 'owner', 'search-no-match', 'empty', true);
+  const answer = pageAnswer(sample);
+  expect(answer.items).toEqual([]);
+  expect(answer.matches).toEqual({ value: 0, kind: 'exact' });
+  if (!built) throw new Error('The owner page was not built');
+  expectCatalogue(built, answer);
+  if (!built.ok) return;
+  expect(built.data.items).toEqual([]);
+  expect(built.data.next).toBeNull();
+  expect(built.data.first).toBeNull();
+});
+
+test('the owner unsupported query refusal stays a failure rather than an empty catalogue', async () => {
+  const { sample, page, built } = await readRecorded(browse, 'owner', 'unsupported-query-shape', 'error', true);
+  expect(sample.status).toBe(400);
+  expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
+  expect(page).toEqual({ ok: false, failure: 'invalid' });
+  expect(built).toBe(page as typeof built);
+});
+
+test('the owner next page is the recorded continuation, with an exact count and no further cursor', async () => {
+  const { sample, built } = await readRecorded(browse, 'owner', 'browse-newest-1', 'populated', true);
+  const answer = pageAnswer(sample);
+  expect(answer.matches).toEqual({ value: 21, kind: 'exact' });
+  expect(answer.nextCursor).toBeNull();
+  if (!built) throw new Error('The owner page was not built');
+  expectCatalogue(built, answer);
+  if (!built.ok) return;
+  expect(built.data.next).toBeNull();
+  expect(built.data.first).not.toBeNull();
+  expect(new URL(built.data.first!, 'https://recorded.invalid').searchParams.has('cursor')).toBe(false);
+});
+
+test('the visitor browse reader keeps titles, language and the opaque continuation', async () => {
+  const { sample, page } = await readRecorded(browse, 'visitor', 'browse-newest-0', 'populated', false);
+  const answer = pageAnswer(sample);
+  expect(page.ok).toBe(true);
+  if (!page.ok) return;
+  expect(page.data.items.map(item => item.title.value)).toEqual(answer.items.map(item => item.title.value));
+  expect(page.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
+  expect(page.data.matches).toEqual(answer.matches);
+  expect(page.data.nextCursor).toBe(answer.nextCursor);
+  expect(page.data.items[0]?.title.language).toBe('en');
+});
+
+test('the visitor next page is the recorded terminal continuation', async () => {
+  const { sample, page } = await readRecorded(browse, 'visitor', 'browse-newest-1', 'populated', false);
+  const answer = pageAnswer(sample);
+  expect(page.ok).toBe(true);
+  if (!page.ok) return;
+  expect(page.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
+  expect(page.data.matches).toEqual({ value: 21, kind: 'exact' });
+  expect(page.data.nextCursor).toBeNull();
+});
+
+test('the visitor unsupported query stays a failure', async () => {
+  const { sample, page } = await readRecorded(browse, 'visitor', 'unsupported-query-shape', 'error', false);
+  expect(sample.status).toBe(400);
+  expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
+  expect(page).toEqual({ ok: false, failure: 'invalid' });
+});
+
 test('the owner filtered first page keeps the recorded query and continuation', async () => {
   const { sample, built } = await readRecorded(pagination, 'owner', 'browse-newest-first', 'populated', true);
   const answer = pageAnswer(sample);
