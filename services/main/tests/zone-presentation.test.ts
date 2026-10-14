@@ -44,7 +44,7 @@ test('every built-in Realm module source is unavailable without a live public Re
         expect(query).toContain(`rv:realmState rv:Active`);
         expect(query).toContain(`<${three}>`);
         return { results: { bindings: visibility === 'absent' ? [] : [{
-          space: { value: two }, visibility: { value: visibility },
+          space: { value: two }, visibility: { value: visibility === 'closed' ? 'public' : visibility },
           disclosure: { value: `${RV}${visibility === 'private' ? 'Private' : 'Public'}` },
         }] } };
       },

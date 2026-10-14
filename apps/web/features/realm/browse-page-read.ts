@@ -25,7 +25,9 @@ export async function settleRealmRead<T>(call: () => Promise<Answer<T>>, cursor?
 
 /** The route and recorded stories read through the same typed client and failure adapter. */
 export function readBrowseAnswer(main: MainClient, realm: string, query: ZoneBrowseQuery): Promise<Loaded<ZoneBrowsePage>> {
-  return settleRealmRead(() => main.v1.realms({ realm }).modules.browse.get({ query }), query.cursor);
+  return settleRealmRead(() => main.v1.realms({ realm }).modules.browse.get({
+    query: { ...query, actingSubject: query.actingSubject },
+  }), query.cursor);
 }
 
 export function readFacetAnswer(main: MainClient): Promise<Loaded<FacetList>> {

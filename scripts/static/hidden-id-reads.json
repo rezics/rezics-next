@@ -1748,21 +1748,24 @@
   {
     "operation": "GET /v1/realms/{realm}/modules/browse",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/discussions",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/editor-lists",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
@@ -1770,42 +1773,48 @@
     "operation": "GET /v1/realms/{realm}/modules/genres/{context}",
     "ids": [
       "path:context",
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/latest-chapters",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/new-adoptions",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/reader-quotes",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/recent-decisions",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
   {
     "operation": "GET /v1/realms/{realm}/modules/recently-completed",
     "ids": [
-      "path:realm"
+      "path:realm",
+      "query:actingSubject"
     ],
     "status": "unregistered"
   },
