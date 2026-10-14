@@ -207,7 +207,7 @@ const unitOwnerDirectories = [
 function bunOwnerFiles(root = join(import.meta.dir, '../..')): string[] {
   const reserved = new Set<string>([...integrationGateFiles, ...modelGateFiles, ...faultGateFiles,
     ...testExclusions.map(item => item.file)]);
-  return repositoryFiles(root).filter(path => unitOwnerDirectories.some(directory => path.startsWith(`${directory}/`))
+  return repositoryFiles(root, path => unitOwnerDirectories.some(directory => path.startsWith(`${directory}/`))
     && !path.split('/').some(part => ['node_modules', '.temp', '.artifacts', 'dist', '.git'].includes(part))
     && /\.test\.tsx?$/.test(path) && !/\.integration\.test\.tsx?$/.test(path) && !reserved.has(path));
 }
