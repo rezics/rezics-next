@@ -20,7 +20,7 @@ run boundary.
 
 ## Decision (program, 2026-10-14)
 
-Deferred. On the native Docker engine an empty QA stack reached both HTTP services 8.7 s after admission and used 1.34 GiB, so per-run startup no longer limits a prove wave. The measured costs are fixture preparation: the medium restore's 292 s RustFS copy, the medium build failing on default `max_locks_per_transaction` (`53200`), and persistent restores running PostgreSQL, RustFS, toxiproxy and Mailpit without the caps admission charges for. Those are repaired first. The shared substrate's isolation work (per-run roles and ACLs, a multi-dataset Fuseki JVM, crash reaping) is weighed again only if repeated prove waves still show preparation, not tests, as the limit.
+Deferred. On the native Docker engine an empty QA stack reached both HTTP services 8.7 s after admission and used 1.34 GiB, so per-run startup no longer limits a prove wave. The measured costs are fixture preparation: the medium restore's 292 s RustFS copy, the medium build failing on default `max_locks_per_transaction` (`53200`), and persistent restores running PostgreSQL, RustFS, toxiproxy and Mailpit without the caps admission charges for. The native follow-up below repairs the cap mismatch and measures a 68.765 s medium copy; the fixture costs are addressed before shared-substrate work. The shared substrate's isolation work (per-run roles and ACLs, a multi-dataset Fuseki JVM, crash reaping) is weighed again only if repeated prove waves still show preparation, not tests, as the limit.
 
 ## Host measurements and reproduction
 
@@ -117,8 +117,8 @@ processes; they are not comparable to the earlier HTTP-ready component sum.
 | Admission to fixture ready, uninterrupted wall minus queue | 18.592 | 10.412 |
 | Total active fixture restore | 24.434 | 80.056 |
 
-The small and medium backup volume roots and their immediate children showed no `C`
-(no-copy-on-write) attribute under `lsattr`. This checks the attribute; copy
+The small and medium backup volume roots and their immediate children showed
+no `C` (no-copy-on-write) attribute under `lsattr`. This checks the attribute; copy
 latency alone does not prove that every file was reflinked. There was no cache
 eviction or host exclusivity. The small invocation reached readiness and passed
 all five cap assertions, then its overall 600-second test clock expired in
@@ -140,6 +140,8 @@ not a latency distribution or a qualification of the default medium build.
 
 Evidence is under this worktree's `.temp/restore-measure/`: `small.json`, `medium.json`,
 `restores/<run-id>/run.json` and `fixtures/<fixture-id>/manifest.json`.
+The QA reaper removes run-owned backup volumes at exit; retained manifests
+are provenance rather than reusable backups after the invocation.
 The temporary `measure.test.ts` calls `restoreFixture` with a `runPhase` hook
 around startup and final smoke, subtracts `admissionWaitMs`, inspects caps,
 and records `copyMs`. It is invoked through:
