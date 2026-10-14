@@ -32,7 +32,7 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
 export async function realmMembersBody({ main, anonymous, principal, realm, address = realm, actingSubject, role = null,
   locale, signInHref, api, refresh, now }: {
   main: MainClient; anonymous: MainClient; principal: string; realm: string; address?: string; actingSubject: string;
-  role?: string | null; locale: UiLocale; signInHref: string; api?: AdminApi; refresh?: () => void; now?: number;
+  role?: string | null; locale: UiLocale; signInHref: string; api?: AdminApi; refresh?: () => void | Promise<void>; now?: number;
 }) {
   const back = membersHref(address, role);
   const [messages, loaded] = await Promise.all([getMessages('manage', locale),

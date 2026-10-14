@@ -108,9 +108,10 @@ export async function recordedRealmRoute(replay: RealmReplay, realm: string, loc
 }
 
 /** The request route inside its management frame. Both use the production readers. */
-export async function recordedRequestsRoute(main: MainClient, fetcher: typeof fetch, realm: string, locale: UiLocale):
+export async function recordedRequestsRoute(main: MainClient, fetcher: typeof fetch, realm: string, locale: UiLocale,
+  session?: Awaited<ReturnType<typeof recordedManagementAgent>>):
   Promise<ReactNode> {
-  const { agent, actingSubject } = await recordedManagementAgent(fetcher, locale);
+  const { agent, actingSubject } = session ?? await recordedManagementAgent(fetcher, locale);
   const href = `/manage/r/${realm}/requests`;
   const body = await joinRequestsBody({
     main, realm, actingSubject, locale, signInHref: '/auth/start', href,
@@ -123,8 +124,9 @@ export { readRequestsAtAddress };
 
 /** The reached invitation page uses the members route and its management frame. */
 export async function recordedMembersRoute(main: MainClient, fetcher: typeof fetch, realm: string, locale: UiLocale,
-  refresh?: () => void, now?: number): Promise<ReactNode> {
-  const { agent, actingSubject } = await recordedManagementAgent(fetcher, locale);
+  refresh?: () => void | Promise<void>, now?: number,
+  session?: Awaited<ReturnType<typeof recordedManagementAgent>>): Promise<ReactNode> {
+  const { agent, actingSubject } = session ?? await recordedManagementAgent(fetcher, locale);
   const anonymous = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
   const body = await realmMembersBody({ main, anonymous, realm, actingSubject, locale,
     principal: actingSubject, signInHref: '/auth/start', api: adminApi(() => main, realm, actingSubject), refresh, now });

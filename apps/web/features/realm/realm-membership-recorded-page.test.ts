@@ -68,6 +68,7 @@ const joinedFrame = [
   { label: 'frame-joining', state: 'populated' },
   { label: 'frame-follow', state: 'populated' },
   { label: 'frame-platform-access', state: 'populated' },
+  { label: 'frame-own-ban', state: 'error' },
 ] as const satisfies readonly RecordedSelection[];
 
 const ownerSession = [

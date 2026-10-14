@@ -1,5 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
-import { newKey, send, type Outcome } from './commands.ts';
+import { newKey, send as commandSend, type Outcome } from './commands.ts';
 import { readAgents } from './read.ts';
 import { type AgentSummary, type MainClient, type SettingsView, uuidOf } from './types.ts';
 
@@ -35,6 +35,8 @@ export type JoinWithdraw = Body<Request['withdraw']['post']>;
 export type JoinDecisionReceipt = Ok<Request['decisions']['post']>;
 export type JoinPage = Ok<Realm['join-page']['get']>;
 export type Discovery = JoinPage['discovery'];
+const send = <T>(call: Parameters<typeof commandSend<T>>[0]) => commandSend(call, { keepProblem: true });
+
 const keyed = (key: string) => ({ headers: { 'idempotency-key': key } });
 function isRealmArm<T extends { realm: string } | { zone: string }>(
   value: T,

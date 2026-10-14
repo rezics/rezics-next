@@ -21,7 +21,7 @@ export type CommandFailure =
   | 'unavailable';
 
 export type Outcome<T> = { ok: true; data: T } | {
-  ok: false; failure: CommandFailure; code?: string; status?: number; title?: string;
+  ok: false; failure: CommandFailure; code?: string; status?: number; title?: string; problem?: unknown;
 };
 
 type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; status?: number };
@@ -38,7 +38,7 @@ export function commandFailure(status: number, code: string | undefined): Comman
 }
 
 /** Receipt consumers must examine operation.status before confirming effects. */
-export async function send<T>(call: () => Promise<Answer<T>>, options: { receipt?: true } = {}): Promise<Outcome<T>> {
+export async function send<T>(call: () => Promise<Answer<T>>, options: { receipt?: true; keepProblem?: true } = {}): Promise<Outcome<T>> {
   try {
     const { data, error, status } = await call();
     if (error && recordedReplayGap(error.value)) throw error.value;
@@ -46,7 +46,8 @@ export async function send<T>(call: () => Promise<Answer<T>>, options: { receipt
       const problem = problemOf(error.status, error.value);
       const code = problem?.code ?? problemCode(error.value);
       return { ok: false, failure: commandFailure(error.status, code), ...code ? { code } : {},
-        ...problem ? { status: problem.status, title: problem.title } : {} };
+        ...problem ? { status: problem.status, title: problem.title } : {},
+        ...options.keepProblem ? { problem: error.value } : {} };
     }
     const operation = decisionStatus(data);
     const receipt = options.receipt && (operation === 'accepted' || operation === 'partial' || operation === 'cancelled');

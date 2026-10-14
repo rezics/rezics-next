@@ -112,8 +112,8 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
       <p dir="auto" className="break-words font-medium">{selected ? names[selected.member]?.label ?? selected.member : null}</p>
       <Field><FieldLabel>{t.reason}</FieldLabel><Textarea value={reason} maxLength={2000}
         onChange={event => setReason(event.currentTarget.value)} /></Field>
-      {stale ? <Button type="button" variant="outline" disabled={busy}
-        onClick={() => void load(false)}>{t.refresh}</Button> : null}
+      <Button type="button" variant="outline" disabled={busy}
+        onClick={() => void load(false)}>{t.refresh}</Button>
     </CommandDialog>
   </section>;
 }

@@ -69,7 +69,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   roles: readonly Role[] | null;
   /** When set, the list is people who hold this role. `name` is null when the role list could not name it. */
   roleFilter?: { id: string; name: string | null } | null;
-  now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi; refresh?: () => void;
+  now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi; refresh?: () => void | Promise<void>;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
@@ -120,7 +120,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   async function done(message: string) {
     setOpen(null);
     setStatus(message);
-    if (refresh) refresh();
+    if (refresh) await refresh();
     else router.refresh();
     await load(memberReads.current.search);
     const refreshed = await api.invitations(null);
