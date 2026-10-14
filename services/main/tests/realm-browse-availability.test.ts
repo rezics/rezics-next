@@ -9,6 +9,10 @@ import { ZoneBrowseProjection } from '../src/modules/zone-browse/store.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import type { RealmPolicy } from '../src/modules/space/policy.ts';
+import { fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const term = (value: string) => ({ type: 'literal', value });
@@ -88,9 +92,23 @@ test('a restored media owner still rejects the retained summary basis', async ()
 
 test('stale classification cannot assert an exact empty Condition inventory', async () => {
   const eligible = [id(1)], concept = id(2), realm = id(3);
+  const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
+    query: async (body: string) => {
+      if (!body.includes('SELECT ?work ?head ?owningWork') || !body.includes(`<${realm}>`)) {
+        throw new Error('Unexpected Realm disclosure query');
+      }
+      return { results: { bindings: [{ work: uri(realm), head: uri(id(4)) }] } };
+    },
+  } } as unknown as WorkActivationEnvironment;
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    target.owner === 'graph' && target.resource === realm && target.component === 'record' ? 'visible' : 'hidden')));
   const session = { options: { limit: 5 }, position: { dataEpoch: 'epoch', sequence: '7' },
+    viewer: ANONYMOUS_VIEWER,
     checkDeadline: () => {},
-    realm: async () => ({ visibility: 'public', realmRevision: id(4) }),
+    observeDependency: () => {},
+    realm: async (): Promise<RealmPolicy> => ({ realmRevision: id(4), space: id(9),
+      visibility: 'public', reviewMode: 'mandatory', revision: id(10), listing: 'listed',
+      history: 'everything', admission: 'open' }),
     query: async (body: string) => body.includes('?evidence')
       ? eligible.map(work => ({ work: uri(work), main: uri(id(5)), head: uri(id(6)),
         evidence: uri(id(7)), revisionEpoch: term('epoch'), sequence: term('1') }))
@@ -98,7 +116,7 @@ test('stale classification cannot assert an exact empty Condition inventory', as
     summaries: async (resources: string[]) => resources.map(reference => ({ reference, status: 'available',
       disclosure: 'public', type: reference === concept ? 'concept' : 'work',
       name: { value: 'Selected animation', language: 'en', direction: 'ltr', basis: 'requested' } })),
-    deps: { zoneBrowse: { current: () => true, batch: async (_realm: string, _sort: string, after: unknown) => after ? []
+    deps: { environment, zoneBrowse: { current: () => true, batch: async (_realm: string, _sort: string, after: unknown) => after ? []
       : eligible.map(work => ({ work, adoptedOrder: '1', updatedAt: null, words: null })) },
     discovery: { active: async () => ({ stale: true }), workTerms: async () => eligible.map(work => ({ work, concept })) } },
   } as unknown as WorkReadSession;

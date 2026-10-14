@@ -6,6 +6,10 @@ import type { Pool } from 'pg';
 import { SerialStatisticsProjection } from '../src/modules/work/serial-projection.ts';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
+import type { RealmPolicy } from '../src/modules/space/policy.ts';
+import { fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const realm = id(9000), concept = id(9001), book = 'https://schema.org/Book';
@@ -15,6 +19,16 @@ function fixture(count = 1000) {
   const entries: BrowseEntry[] = Array.from({ length: count }, (_, n) => ({ work: id(n + 1),
     adoptedOrder: String(count - n), words: n, updatedAt: n < 700 ? '2026-09-20T00:00:00.000001Z' : null }));
   const hidden = new Set<string>(), reads: number[] = [];
+  const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' }, fuseki: {
+    query: async (sparql: string) => {
+      if (!sparql.includes('SELECT ?work ?head ?owningWork') || !sparql.includes(`<${realm}>`)) {
+        throw new Error('Unexpected Realm disclosure query');
+      }
+      return { results: { bindings: [{ work: binding(realm), head: binding(id(9002)) }] } };
+    },
+  } } as unknown as WorkActivationEnvironment;
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
+    target.owner === 'graph' && target.resource === realm && target.component === 'record' ? 'visible' : 'hidden')));
   const ordinal = (work: string) => Number(work.slice(-12));
   const basis = (work: string) => ({ main: id(10000 + ordinal(work)), structure: id(20000 + ordinal(work)),
     head: id(30000 + ordinal(work)), occurrence: id(40000 + ordinal(work)),
@@ -49,9 +63,12 @@ function fixture(count = 1000) {
   let tagState: 'current' | 'stale' | 'unavailable' = 'current';
   const make = (cursor?: string, sequence = '10000') => ({
     options: { cursor, limit: 20, language: 'en' }, position: { dataEpoch: 'epoch', sequence },
+    viewer: ANONYMOUS_VIEWER,
     checkDeadline: () => {},
     observeDependency: () => {},
-    realm: async () => ({ realmRevision: id(9002), visibility: 'public' }),
+    realm: async (): Promise<RealmPolicy> => ({ realmRevision: id(9002), space: id(9006),
+      visibility: 'public', reviewMode: 'mandatory', revision: id(9007), listing: 'listed',
+      history: 'everything', admission: 'open' }),
     query: async (sparql: string) => {
       const ids = [...sparql.matchAll(/<(https:\/\/rezics\.com\/id\/[^>]+)>/g)]
         .map(match => match[1]!).filter(value => entries.some(entry => entry.work === value));
@@ -67,6 +84,7 @@ function fixture(count = 1000) {
       type: work === concept ? 'concept' : 'work', name: { value: `Story ${work}`, language: 'en',
         direction: 'ltr', basis: 'requested' }, avatar: { kind: 'fallback', policy: 'test', key: work, resourceType: 'work' } })),
     deps: {
+      environment,
       serialStats,
       zoneBrowse: { current: () => true, batch: async (_: string, sort: 'newest' | 'updated', after: { work: string; key: string | null } | null) => {
         const ordered = [...entries].sort((a, b) => sort === 'newest' ? Number(b.adoptedOrder) - Number(a.adoptedOrder)
