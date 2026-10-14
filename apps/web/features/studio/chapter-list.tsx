@@ -36,7 +36,7 @@ import { type ChapterFact, type ChapterFacts, type ChapterState, chapterFacts, d
   type Destination, dropEdge, groupsOf, moveOperation, publishable, stepDestination } from './outline.ts';
 import { lengthLabel } from './parts.tsx';
 import { studioAgentName } from './studio-frame.tsx';
-import type { ChapterPage, ContentsItem, ContentsPage, Loaded, MainClient } from './types.ts';
+import type { ChapterPage, ContentsItem, ContentsPage, MainClient } from './types.ts';
 import { idOf } from './types.ts';
 
 type T = ContractOf<StudioMessages>;
