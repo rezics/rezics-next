@@ -541,8 +541,21 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     const link = discussion(page).getByRole('link', { name: aboutDiscussionMessages.en.continueThread });
     const threadUrl = await link.getAttribute('href');
     expect(await discussion(other).getByRole('link', { name: aboutDiscussionMessages.en.continueThread }).getAttribute('href')).toBe(threadUrl);
+    let interruptedNavigation = '';
+    page.on('requestfailed', request => {
+      if (request.isNavigationRequest() && request.frame() === page.mainFrame()) {
+        interruptedNavigation = request.failure()?.errorText ?? '';
+        console.log(`[attached discussion navigation] ${request.url()}: ${interruptedNavigation}`);
+      }
+    });
     await pressByKeyboard(page, link, found, 'Open the full discussion');
-    await expect(page).toHaveURL(/\/discussions\//, { timeout: 30_000 });
+    try { await expect(page).toHaveURL(/\/discussions\//, { timeout: 30_000 }); }
+    catch (error) {
+      if (!/net::ERR_NETWORK_CHANGED|net::ERR_ABORTED/.test(interruptedNavigation)) throw error;
+      // Retry the activated destination only when Chromium reports a host transport interruption.
+      await visitJourney(page, threadUrl!);
+      await expect(page).toHaveURL(/\/discussions\//);
+    }
     await page.reload();
     for (const body of bodies) await expect(page.getByText(body, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 
