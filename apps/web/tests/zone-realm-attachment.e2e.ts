@@ -11,6 +11,7 @@ import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { retainedAboutPost } from '../features/zones/about-discussion-intent.ts';
 import { aboutDiscussionMessages } from '../features/zones/about-discussion-messages.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
+import { visitJourney } from './journey-navigation.ts';
 import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 
 // An editor attaches a Realm from another Space and publishes a routable Work page.
@@ -466,7 +467,8 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     });
     expect(selected.ok()).toBe(true);
     expect(visitor.agent).not.toBe(actingSubject);
-    await Promise.all([page.goto(zoneUrl), other.goto(zoneUrl)]);
+    await Promise.all([page.waitForLoadState('networkidle'), other.waitForLoadState('networkidle')]);
+    await Promise.all([visitJourney(page, zoneUrl), visitJourney(other, zoneUrl)]);
     const bodies = ['The harbor guide helped me find the pier.', '港の案内について話し合いましょう。'];
     try {
       for (const tab of [page, other]) {
@@ -539,7 +541,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     for (const body of bodies) await expect(page.getByText(body, { exact: true })).toBeVisible({ timeout: 30_000 });
 
     // Interface locale changes preserve the attached Realm and canonical discussion.
-    await other.goto(localizedPath(new URL(other.url()).pathname, 'ja'));
+    await visitJourney(other, localizedPath(new URL(other.url()).pathname, 'ja'));
     await expect(other.locator('html')).toHaveAttribute('lang', 'ja');
     const japanese = other.getByRole('region', { name: aboutDiscussionMessages.ja.title, exact: true })
       .filter({ has: other.getByRole('link', { name: 'North realm', exact: true }) });

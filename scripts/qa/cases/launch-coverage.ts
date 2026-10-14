@@ -707,6 +707,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.test.ts',
       'anime/navigate-a-thousand-episode-inventory-thousand-chapters / visitor: finds distant numbered and CJK episodes through label search and traverses all 1000 disclosed entries with credit',
       'Searches distant numbered and CJK episode labels and traverses all 1000 distinct occurrences of an identified Anime series, retaining original author credit and identity-bound continuations.'),
-    browser: missing('L21'),
+    browser: journeyBrowser('apps/web/tests/tracking-media.e2e.ts', 'thousand-episodes',
+      'thousand-episodes: an Anime reader reaches the inventory end by keyboard and returns after reload in English and Japanese',
+      'An identified Anime reader reaches episodes 1, 21, 1000, 1001 and 1002 by keyboard, sees that 1003 is outside the inventory, marks 1002 watched and reloads its persisted progress in English and Japanese.'),
   },
 ];

@@ -8,6 +8,7 @@ import { signInAtAccounts } from './account-sign-in.ts';
 import type { MediaFixture } from './tracking-media-seed.ts';
 import { copyOf } from '../features/tracking/messages.ts';
 import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
+import { visitJourney } from './journey-navigation.ts';
 
 // A manga chapter, a game and an identified anime episode past a thousand, on the real stack. Two browser contexts
 // are two devices of one reader. The records are written once through Main's routes
@@ -98,25 +99,14 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
   test.setTimeout(600_000);
   const found: Findings = [];
   const page = await device(browser, info, phone, seeded.episodes.work);
-  const visit = async (path: string) => {
-    for (let attempt = 0; ; attempt++) {
-      try { await page.goto(path); return; }
-      catch (error) {
-        if (attempt === 2 || !(error instanceof Error)
-          || !/net::ERR_NETWORK_CHANGED|another navigation to "chrome-error:\/\//.test(error.message)) throw error;
-        // Chromium first commits its error document after a host network change.
-        await page.waitForTimeout(1000);
-      }
-    }
-  };
   try {
     for (const locale of ['en', 'ja'] as const) {
       const t = copyOf(locale);
-      await visit(localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
+      await visitJourney(page, localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('link', { name: 'Anime', exact: true })).toBeVisible();
       await page.waitForLoadState('networkidle');
-      await visit(`${new URL(page.url()).pathname}/connections`);
+      await visitJourney(page, `${new URL(page.url()).pathname}/connections`);
       await loaded(page, '[data-episode-progress]', 180_000);
       const panel = page.locator('[data-episode-progress]');
       const jump = async (number: number) => {
