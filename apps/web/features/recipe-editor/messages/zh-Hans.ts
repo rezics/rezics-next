@@ -27,7 +27,7 @@ export default {
   detailsHeading: '关于这道食谱',
   title: '标题', description: '简介',
   descriptionHelp: '显示在标题下方的一两句话。',
-  notes: '备注', notesHelp: '来历、小技巧和变化做法。备注会随食谱一起发布。',
+  notes: '备注', notesHelp: '可选填来历、小技巧和变化做法。填写的备注会随食谱一起发布。',
   language: insert('使用{{language}}撰写', { language: String }),
 
   measuresHeading: '份量与时间',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: '备注写下后就不能留空。请改为编辑。',
   mainSays: '原因',
 
+  publicationChanged: '这份菜谱已变更。请加载最新版本，确认后再发布。',
+  loadingRecipe: '正在加载菜谱…',
   loadingRest: '正在加载这道食谱的其余部分…',
   loadingRestCount: insert('已加载 {{count}} 个部分', { count: String }),
   loadingRestFailed: '无法加载这道食谱的其余部分，因此还不能编辑。',

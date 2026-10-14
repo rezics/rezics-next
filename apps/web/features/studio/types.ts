@@ -42,7 +42,7 @@ export type TextHead = Ok<ReturnType<Main['v1']['contributions']>['get']>;
 
 /** Why a read gave nothing: Main refused this Agent, the thing is gone, or Main could not answer. */
 export type ReadFailure = 'denied' | 'missing' | 'unavailable';
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; status?: number; problem?: unknown };
 
 export function failureOf(status: number): ReadFailure {
   if (status === 401 || status === 403) return 'denied';

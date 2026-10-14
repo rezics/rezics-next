@@ -1,3 +1,5 @@
+import type { MainClient } from '../studio/types.ts';
+
 // Whether the viewer may edit a Work is Main's answer, never the page's: the Work's generic page
 // read (`/v1/resources/{id}/page`) lists the actions the viewer may take on each section, and
 // `work.edit` is there only when Access admits the viewer's Agent to edit this Work. Pure, so the
@@ -12,3 +14,12 @@ export function allowedActionsOf(page: { sections?: readonly { actions: readonly
 }
 
 export const mayEdit = (allowed: readonly string[]) => allowed.includes(EDIT_ACTION);
+
+/** Read the actions Main admits; a transport failure grants none. Shared by host and supplied-client visits. */
+export async function readSuppliedAllowedActions(main: MainClient, id: string, actingSubject?: string): Promise<readonly string[]> {
+  if (!actingSubject) return [];
+  try {
+    const { data } = await main.v1.resources({ resource: id }).page.get({ query: { actingSubject } });
+    return allowedActionsOf(data);
+  } catch { return []; }
+}

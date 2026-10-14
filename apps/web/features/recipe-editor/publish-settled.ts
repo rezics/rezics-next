@@ -1,4 +1,4 @@
-import type { PublishOutcome } from './saves.ts';
+import type { PublishOutcome, SaveRefusal } from './saves.ts';
 
 /**
  * Publication is of the recipe a reader will open. Composition and details writes still in
@@ -12,10 +12,17 @@ export async function publishWhenSettled(input: {
   notes: { whenIdle(): Promise<void>; publish(body: string): Promise<PublishOutcome> };
   /** Read after the writes ahead of publication have settled, so the field is what gets published. */
   body: string | (() => string);
+  /** The Structure publication is separate from optional notes publication. */
+  /** An unsaved/refused lane cannot become a successful publication. */
+  failure?: () => SaveRefusal | null;
+  publishRecipe?: () => Promise<PublishOutcome>;
 }): Promise<PublishOutcome> {
-  await Promise.all([input.recipe.whenIdle(), input.details.whenIdle()]);
+  await Promise.all([input.recipe.whenIdle(), input.details.whenIdle(), input.notes.whenIdle()]);
+  const failure = input.failure?.();
+  if (failure) return { kind: 'refused', refusal: failure };
   const body = typeof input.body === 'function' ? input.body() : input.body;
-  const outcome = await input.notes.publish(body);
+  const notes = input.publishRecipe && !body.trim() ? { kind: 'published' as const } : await input.notes.publish(body);
+  const outcome = notes.kind === 'published' && input.publishRecipe ? await input.publishRecipe() : notes;
   await Promise.all([input.recipe.whenIdle(), input.details.whenIdle(), input.notes.whenIdle()]);
   return outcome;
 }

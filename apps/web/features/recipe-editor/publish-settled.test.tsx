@@ -76,7 +76,7 @@ test('leaving the editor waits while a write is still outstanding', () => {
   expect(source).toContain('pending={saving || held}');
   expect(source).toContain('held={held}');
   expect(source).toContain('if (saving) event.preventDefault()');
-  expect(source).toContain('written.published && !saving');
+  expect(source).toContain('publicationState.revision === state.head && publishedNotesHead === written.notes.head && !saving');
   expect(source).not.toMatch(/await notes\.publish\(/);
 });
 

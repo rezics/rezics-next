@@ -27,7 +27,7 @@ export default {
   detailsHeading: 'このレシピについて',
   title: 'タイトル', description: '説明',
   descriptionHelp: 'タイトルの下に表示される一、二行の文です。',
-  notes: 'メモ', notesHelp: '由来、コツ、アレンジなど。メモはレシピと一緒に公開されます。',
+  notes: 'メモ', notesHelp: '由来、コツ、アレンジなどを任意で記入できます。記入したメモはレシピと一緒に公開されます。',
   language: insert('{{language}}で記述', { language: String }),
 
   measuresHeading: '分量と時間',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: 'メモは、書いたあとに空にはできません。代わりに編集してください。',
   mainSays: '理由',
 
+  publicationChanged: 'レシピが変更されました。最新版を読み込み、確認してから公開してください。',
+  loadingRecipe: 'レシピを読み込み中…',
   loadingRest: 'このレシピの続きを読み込んでいます…',
   loadingRestCount: insert('{{count}} 件を読み込みました', { count: String }),
   loadingRestFailed: 'このレシピの続きを読み込めなかったため、まだ編集できません。',

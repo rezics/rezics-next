@@ -27,7 +27,7 @@ export default {
   detailsHeading: 'À propos de cette recette',
   title: 'Titre', description: 'Description',
   descriptionHelp: 'Une ou deux lignes affichées sous le titre.',
-  notes: 'Notes', notesHelp: 'D’où elle vient, astuces et variantes. Les notes sont publiées avec la recette.',
+  notes: 'Notes', notesHelp: 'Origine, astuces et variantes facultatives. Les notes saisies sont publiées avec la recette.',
   language: insert('Rédigée en {{language}}', { language: String }),
 
   measuresHeading: 'Quantité et temps',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: 'Les notes ne peuvent pas être vides une fois écrites. Modifiez-les plutôt.',
   mainSays: 'Raison',
 
+  publicationChanged: 'Cette recette a changé. Chargez la dernière version et vérifiez-la avant de publier.',
+  loadingRecipe: 'Chargement de la recette…',
   loadingRest: 'Chargement de la suite de cette recette…',
   loadingRestCount: insert('{{count}} parties chargées', { count: String }),
   loadingRestFailed: 'La suite de cette recette n’a pas pu être chargée, elle ne peut donc pas encore être modifiée.',

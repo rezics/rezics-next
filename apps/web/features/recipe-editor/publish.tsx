@@ -9,7 +9,8 @@ import type { NotesSnapshot } from './saves.ts';
 
 /** What a recipe still lacks before it can be read by everyone. */
 export function missingBeforePublishing({ title, ingredients, steps, notes }: { title: string; ingredients: number; steps: number; notes: string }) {
-  return { title: !title.trim(), ingredients: ingredients === 0, steps: steps === 0, notes: !notes.trim() };
+  void notes;
+  return { title: !title.trim(), ingredients: ingredients === 0, steps: steps === 0, notes: false };
 }
 
 /**
@@ -18,7 +19,7 @@ export function missingBeforePublishing({ title, ingredients, steps, notes }: { 
  * save, and the publish waits for it.
  */
 export function PublishBar({ snapshot, missing, onPublish, workHref, t, pending, held = false, closed = false }: {
-  snapshot: NotesSnapshot; missing: ReturnType<typeof missingBeforePublishing>; onPublish: () => void; workHref: string; t: Copy;
+  snapshot: Pick<NotesSnapshot, 'published' | 'publishing'>; missing: ReturnType<typeof missingBeforePublishing>; onPublish: () => void; workHref: string; t: Copy;
   /** True while any recipe write is still in flight. Published, and the link that leaves, wait until it settles. */
   pending: boolean;
   /** The recipe is not all here yet, so publishing would describe a recipe the editor has not read. */

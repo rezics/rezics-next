@@ -22,6 +22,7 @@ export const MAX_OPERATIONS = 16;
 
 export type Direction = 'up' | 'down';
 export type Intent =
+  | { kind: 'ensureRecipe' }
   | { kind: 'addSection'; label: string; language: string }
   | { kind: 'renameSection'; occurrence: string; label: string; language: string }
   | { kind: 'removeSection'; occurrence: string }
@@ -107,6 +108,7 @@ const sameMeasure = (stored: Measure | undefined, value: Rational | undefined, u
 export function plan(state: RecipeState, intent: Intent): Plan {
   const root = state.structure ?? '';
   switch (intent.kind) {
+    case 'ensureRecipe': return moot;
     case 'addSection':
       return changes([{ op: 'insert', parent: root, position: 'last', role: 'group',
         label: { value: intent.label.trim(), language: intent.language } }]);
@@ -114,7 +116,7 @@ export function plan(state: RecipeState, intent: Intent): Plan {
       const node = nodeOf(state, intent.occurrence);
       if (node?.role !== 'group') return invalid('gone');
       return node.label?.value === intent.label.trim() ? moot
-        : changes([{ op: 'update', occurrence: node.occurrence, label: { value: intent.label.trim(), language: intent.language } }]);
+        : changes([{ op: 'update', occurrence: node.occurrence, label: { value: intent.label.trim(), language: node.label?.language ?? intent.language } }]);
     }
     case 'moveSection': case 'moveLine': case 'moveStep': {
       const node = nodeOf(state, intent.occurrence);

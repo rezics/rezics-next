@@ -21,6 +21,7 @@ import { ingredients, type RecipeState, steps } from './model.ts';
 import { readRecipe } from './api.ts';
 import { Preview } from './preview.tsx';
 import { missingBeforePublishing, PublishBar } from './publish.tsx';
+import { createRecipePublisher } from './publication.ts';
 import { publishWhenSettled } from './publish-settled.ts';
 import { mainRecipeExportApi, type RecipeExport } from './export-api.ts';
 import type { RecipeImportApi } from './import-api.ts';
@@ -79,11 +80,15 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   const notesField = useRef<HTMLTextAreaElement>(null);
   const [typedNotes, setTypedNotes] = useState(initial.notes.body);
   const [view, setView] = useState<'edit' | 'preview'>('edit');
+  const [publication] = useState(() => createRecipePublisher({ main: client, work, actingSubject,
+    recipe: () => store.snapshot().state }));
+  const publicationState = useSnapshot(publication);
   const [published, setPublished] = useState(false);
+  const [publishedNotesHead, setPublishedNotesHead] = useState<string | null>(null);
   const [dismissed, setDismissed] = useState<{ details: typeof saved.failure; notes: typeof written.failure }>({ details: null, notes: null });
   const state = recipe.state;
   const entry = entryOf(saved.values, language);
-  const saving = recipe.busy || saved.busy || written.busy || importing;
+  const saving = recipe.busy || saved.busy || written.busy || importing || publicationState.busy;
   const held = recipe.loading || recipe.loadFailure !== null;
   const loadMessage = recipe.loadFailure === 'too-large' ? t.recipeTooLong
     : recipe.loadFailure === 'stale' ? t.recipeChangedWhileLoading
@@ -105,8 +110,11 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
     const outcome = await publishWhenSettled({
       recipe: store, details, notes,
       body: () => (notesField.current?.value ?? notes.snapshot().notes.body).trim(),
+      failure: () => details.snapshot().failure ?? notes.snapshot().failure
+        ?? (store.snapshot().failure ? 'unavailable' : null),
+      publishRecipe: () => publication.publish(),
     });
-    if (outcome.kind === 'published') setPublished(true);
+    if (outcome.kind === 'published') { setPublished(true); setPublishedNotesHead(notes.snapshot().notes.head); }
   };
 
   return <div className="grid gap-6">
@@ -119,6 +127,12 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
           <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
             messages={catalog} disabled={saving || recipe.loading || accessRemoved} api={exportApi}
             importApi={importApi} save={saveExport}
+            prepareImport={async () => {
+              const result = await store.submit({ kind: 'ensureRecipe' });
+              const current = store.snapshot().state;
+              return (result.kind === 'saved' || result.kind === 'unchanged') && current.structure && current.head
+                ? { structure: current.structure, revision: current.head } : null;
+            }}
             contentLanguage={language} recipeName={entry.title}
             onImportBusyChange={setImporting}
             onStaleRefresh={async () => await store.reload() ? store.snapshot().state.head : null}
@@ -132,11 +146,16 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
               : <><CircleCheckIcon aria-hidden="true" className="size-4" />{t.allSaved}</>}</p>
         </div>
       </div>
-      <PublishBar snapshot={written} missing={missing} pending={saving || held} held={held} closed={accessRemoved}
+      <PublishBar snapshot={{ published: publicationState.revision === state.head && state.head !== null && publishedNotesHead === written.notes.head,
+        publishing: publicationState.busy }} missing={missing} pending={saving || held} held={held} closed={accessRemoved}
         onPublish={() => void publish()} workHref={workHref} t={t} />
     </div>
-    {published && written.published && !saving ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
+    {published && publicationState.revision === state.head && publishedNotesHead === written.notes.head && !saving ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
       <AlertDescription>{t.publishedNotice}</AlertDescription></Alert> : null}
+    {publicationState.failure ? <FailureAlert t={t} refusal={{ kind: publicationState.failure }} detail={publicationState.detail}
+      title={publicationState.failure === 'moved' ? t.publicationChanged : undefined}
+      onRefresh={publicationState.failure === 'moved' ? () => void store.reload().then(loaded => { if (loaded) publication.dismiss(); }) : undefined}
+      onRetry={() => void publish()} onDismiss={publication.dismiss} /> : null}
     {recipe.failure ? <FailureAlert t={t} refusal={recipe.failure.refusal}
       detail={'detail' in recipe.failure.refusal ? recipe.failure.refusal.detail : null}
       onRetry={() => void store.retry()} onDismiss={() => store.dismiss()} /> : null}

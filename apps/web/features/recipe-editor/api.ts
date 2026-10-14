@@ -14,7 +14,8 @@ type Raw = { data: unknown; error: { status: number; value?: unknown } | null; s
 
 function settle<T>(raw: Raw): Answer<T> {
   if (raw.error) return { ok: false, status: raw.error.status, ...problemOf(raw.error) };
-  if (raw.status === 202 || isPending(raw.data)) return { ok: false, status: 202, problem: 'pending', detail: null };
+  if (raw.status === 202) return { ok: false, status: 202, problem: 'pending', detail: null };
+  if (isPending(raw.data)) return { ok: false, status: raw.status ?? 503, problem: 'unavailable', detail: null };
   if (raw.data === null || raw.data === undefined) return { ok: false, status: 503, problem: 'unavailable', detail: null };
   return { ok: true, data: raw.data as T };
 }

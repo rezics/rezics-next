@@ -22,8 +22,10 @@ type ImportStage = { kind: 'idle' } | { kind: 'importing' }
 
 /** Downloads the selected saved revision and imports a local Schema.org Recipe into the current head. */
 export function RecipeExchange({ structure, revision, actingSubject, locale, messages: catalog, disabled = false,
-  api, importApi, save = downloadRecipeExport, contentLanguage, recipeName, onImportBusyChange, onStaleRefresh, onImported,
+  api, importApi, allowImport = true, prepareImport, save = downloadRecipeExport, contentLanguage, recipeName, onImportBusyChange, onStaleRefresh, onImported,
   newId = () => crypto.randomUUID() }: {
+  allowImport?: boolean;
+  prepareImport?: () => Promise<{ structure: string; revision: string } | null>;
   structure: string | null; revision: string | null; actingSubject: string; locale: UiLocale;
   messages: RecipeEditorMessages; disabled?: boolean; api?: RecipeExportApi; importApi?: RecipeImportApi;
   contentLanguage?: string; recipeName?: string;
@@ -92,20 +94,31 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
         await readLatestAfterStale(request.file, refusal.detail);
       } else {
         setImportStage({ kind: 'failed', failure: refusal.failure, detail: refusal.detail,
-          retry: refusal.failure === 'unavailable' ? request : null });
+          retry: refusal.failure === 'unavailable' || refusal.failure === 'pending' ? request : null });
       }
     } finally {
       onImportBusyChange?.(false);
     }
   }
 
-  function selectFile(file: File | undefined) {
-    if (!file || !hydrated || disabled || !structure || !revision) return;
+  async function selectFile(file: File | undefined) {
+    if (!file || !hydrated || disabled || importBusy) return;
     if (file.size > RECIPE_FILE_MAX_BYTES) {
       setImportStage({ kind: 'failed', failure: 'too-large', detail: null, retry: null });
       return;
     }
-    void runImport(requestFor(file, revision));
+    let target = structure && revision ? { structure, revision } : null;
+    if (!target && prepareImport) {
+      setImportStage({ kind: 'importing' });
+      onImportBusyChange?.(true);
+      try { target = await prepareImport(); } catch { /* The editor keeps its refused creation. */ }
+      onImportBusyChange?.(false);
+    }
+    if (!target) {
+      setImportStage({ kind: 'failed', failure: 'unavailable', detail: null, retry: null });
+      return;
+    }
+    await runImport({ ...requestFor(file, target.revision), structure: target.structure });
   }
 
   async function refreshStale(file: File, detail: string | null) {
@@ -136,6 +149,7 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
     ? importStage.failure === 'too-large' ? importStage.detail ?? t.importTooLarge
       : importStage.failure === 'invalid' ? importStage.detail ?? t.importInvalid
         : importStage.failure === 'conflict' ? t.importConflict
+          : importStage.failure === 'pending' ? t.failPending
           : importStage.failure === 'denied' ? t.importDenied : t.importUnavailable
     : null;
 
@@ -156,16 +170,16 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
       </p> : null}
     </div>
 
-    <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
+    {allowImport ? <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
       <input ref={fileInput} type="file" accept=".json,application/json,application/ld+json" className="sr-only"
-        aria-label={t.importAction} disabled={!hydrated || disabled || importBusy || !structure || !revision}
+        aria-label={t.importAction} disabled={!hydrated || disabled || importBusy || (!(structure && revision) && !prepareImport)}
         onChange={event => {
           const file = event.currentTarget.files?.[0];
           event.currentTarget.value = '';
-          selectFile(file);
+          void selectFile(file);
         }} />
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="button" size="sm" variant="outline" disabled={!hydrated || disabled || importBusy || !structure || !revision}
+        <Button type="button" size="sm" variant="outline" disabled={!hydrated || disabled || importBusy || (!(structure && revision) && !prepareImport)}
           data-hydrated={hydrated ? 'true' : undefined} aria-busy={importBusy || undefined}
           className="pointer-coarse:min-h-11" onClick={() => fileInput.current?.click()}>
           {importBusy ? <LoaderCircleIcon aria-hidden="true" className="animate-spin motion-reduce:animate-none" />
@@ -201,6 +215,6 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
         {importStage.refreshFailed ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
           {t.importRefreshFailed}</p> : null}
       </> : null}
-    </div>
+    </div> : null}
   </div>;
 }

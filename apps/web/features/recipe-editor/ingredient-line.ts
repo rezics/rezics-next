@@ -115,11 +115,11 @@ export function qualifierOf(parts: IngredientParts, language: string, previous?:
   const keepsUnit = previous?.unit !== undefined && previous.unitText === (unitText || undefined);
   return {
     type: 'ingredient-line',
-    originalText: { value: written, language },
+    originalText: { value: written, language: previous?.originalText.language ?? language },
     ...(typed ? { amountLexical: typed.lexical, amount: typed.amount, ...(typed.amountUpper ? { amountUpper: typed.amountUpper } : {}) } : {}),
     ...(keepsUnit ? { unit: previous!.unit } : {}),
     ...(unitText ? { unitText } : {}),
-    ...(note ? { preparation: { value: note, language } } : {}),
+    ...(note ? { preparation: { value: note, language: previous?.preparation?.language ?? previous?.originalText.language ?? language } } : {}),
     optional: previous?.optional ?? false,
     // Without an amount there is nothing to scale; Main shows such a line as written.
     scaling: typed ? (previous?.scaling === 'not-scalable' || previous?.scaling === 'non-linear' ? previous.scaling : 'linear') : 'not-scalable',

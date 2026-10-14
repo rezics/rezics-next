@@ -1,3 +1,5 @@
+import { workHeader } from '../studio/fixtures.ts';
+import { projectionFor } from '../entity-page/fixtures.ts';
 import type { DetailsValues } from '../studio/details-form.tsx';
 import type { MainClient } from '../studio/types.ts';
 import { parseLine, qualifierOf } from './ingredient-line.ts';
@@ -49,6 +51,7 @@ export interface Call { name: string; body?: unknown; key?: string }
 export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; details?: DetailsValues; metadataHead?: string }) {
   let recipe = start.recipe;
   let revisions = 1000;
+  let structurePublicationHead: string | null = null;
   const next = () => id(revisions++);
   let metadata = { head: start.metadataHead ?? id(700), values: start.details ?? detailsValues };
   let notes = { ...(start.notes ?? noNotes), text: start.notes?.text ?? null };
@@ -164,6 +167,15 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
   };
 
   const main = { v1: {
+    me: { contributions: { get: async () => answer({ items: notes.text && notes.head
+      ? [{ id: notes.text, revision: notes.head, language: 'en', work: { id: work }, publication: notes.publicationHead ? 'public' : 'draft' }]
+      : [], nextCursor: null }) } },
+    resources: (_: { resource: string }) => ({
+      get: async () => answer({ name: { value: metadata.values.entries[0]?.title ?? '', language: 'en' } }),
+      page: { get: async () => answer({ ...projectionFor({ id: work.slice(-36), base: 'work', types: ['https://schema.org/Recipe'],
+        name: metadata.values.entries[0]?.title ?? '' }), sections: [{ id: 'recipe', href: `/v1/recipes/works/${work.slice(-36)}`,
+        actions: ['work.edit'] }] }) },
+    }),
     recipes: Object.assign((_: { id: string }) => ({ measures: { post: measurePost('measures') }, timings: { post: measurePost('timings') } }), {
       works: (_: { id: string }) => ({ get: async () => {
         if (!interference.recipe) return answer(page());
@@ -178,7 +190,19 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
         if (!recipe.structure) recipe = { ...recipe, structure, head: next() };
         return answer({ structure, revision: recipe.head, receipt: 'receipt', replayed: false });
       } }),
-    works: (_: { id: string }) => ({ metadata: {
+    'work-publications': { post: async (body: { work: string; structure: string; expectedStructureHead: string; expectedPublicationHead: string | null }, options?: never) => {
+      await record('recipe-publish', body, options);
+      const denied = removed();
+      if (denied) return denied;
+      if (body.expectedStructureHead !== recipe.head || body.expectedPublicationHead !== structurePublicationHead)
+        return refuse(409, 'stale_publication_head');
+      structurePublicationHead = next();
+      return answer({ work: body.work, structure: body.structure, structureRevision: recipe.head, publicationDecision: structurePublicationHead });
+    } },
+    works: (_: { id: string }) => ({
+      get: async () => answer({ ...workHeader(work, metadata.values.entries[0]?.title ?? '', 'en', 'recipe'),
+        revision: id(701), mainVersion, structurePublicationHead }),
+      metadata: {
       get: async () => answer({ revision: metadata.head, originalTitle: null, completionStatus: null,
         localized: metadata.values.entries.map(entry => ({ ...entry, mainVersionLabel: entry.label })) }),
       put: async (body: { expectedHead: string | null; state: { localized: { language: string; title: string | null; description: string | null; tagline: string | null; mainVersionLabel: string | null }[] } },
@@ -231,6 +255,7 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
     } },
   } } as unknown as MainClient;
   return { main: () => main, calls, interference, world: () => ({ recipe, notes, metadata }),
+    replaceRecipe: (nextRecipe: RecipeState) => { recipe = nextRecipe; },
     /** Another tab's write: the head moves under the editor. */
     elsewhere: (change: (state: RecipeState) => RecipeState) => { recipe = { ...change(recipe), head: next() }; },
     /** Another tab's notes: a new draft head holding `body`. */

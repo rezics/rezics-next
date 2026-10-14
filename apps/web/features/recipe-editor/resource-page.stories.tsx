@@ -1,0 +1,95 @@
+import type { Meta, StoryObj } from '@storybook/react-vite';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useEffect, useState } from 'react';
+import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
+import exchangeJson from '../../../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json';
+import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { PageContainer } from '../shell/page.tsx';
+import { recordedFetch } from '../stories/recorded-fetch.ts';
+import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
+import { englishMessages } from '../work-page/messages.ts';
+import { RegionSkeleton } from '../work-page/region.tsx';
+import { mainRecipeExportApi } from './export-api.ts';
+import { copyOf } from './messages.ts';
+import { recipeProveStates } from './prove-states.ts';
+import { loadRecipeReading } from './resource-page.ts';
+import { RecipeResourceBody } from './resource-page.tsx';
+
+const record = exchangeJson as AnswerRecord;
+/** Unchanged public recipe/authority/header/export answers; optional notes use a named unrecorded contract 404. */
+function ResourceVisit({ persona, state }: { persona: AnswerPersona; state: 'populated' | 'loading' }) {
+  const sample = record.personas[persona].find(item => item.label === 'public-recipe')!;
+  const path = new URL(sample.path, 'https://recorded.invalid'), id = path.pathname.split('/').pop()!;
+  const actingSubject = path.searchParams.get('actingSubject') ?? undefined;
+  const [ready, setReady] = useState<{ content: Awaited<ReturnType<typeof loadRecipeReading>>;
+    exportApi: ReturnType<typeof mainRecipeExportApi> } | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    const replay = recordedFetch(record, persona, [
+      { label: 'editor-work-header', state: 'populated' }, { label: 'public-recipe', state },
+      ...(actingSubject ? [{ label: 'editor-authority', state: 'populated' as const }, { label: 'schema-org-export', state: 'populated' as const }] : []),
+    ], { pathPrefix: BFF_PREFIX });
+    const header = record.personas[persona].find(item => item.label === 'editor-work-header')!.answer as { mainVersion: string };
+    const selection = `${BFF_PREFIX}/v1/main-versions/${header.mainVersion.slice(-36)}/selection`;
+    const fetcher: typeof fetch = async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      const url = new URL(request.url);
+      // This exact production request has no recorded answer. An explicitly identified contract
+      // state keeps optional notes absent; it never borrows another person's notes or frame.
+      if (request.method === 'GET' && url.pathname === selection && url.search === '') {
+        return Response.json({ type: 'about:blank', status: 404, title: 'No selected text', code: 'not_found' }, { status: 404 });
+      }
+      return replay.fetcher(input, init);
+    };
+    const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher });
+    void booksEditionReads({ main, actingSubject }).readWorkHeader(id).then(async loaded => {
+      if (!loaded.ok) throw new Error('Recorded header failed');
+      const content = await loadRecipeReading(main, actingSubject, loaded.data, path.pathname);
+      if (mounted) setReady({ content, exportApi: mainRecipeExportApi(() => main) });
+    });
+    return () => { mounted = false; replay.dispose(); };
+  }, [actingSubject, id, path.pathname, persona, state]);
+  return <PageContainer>{ready ? <RecipeResourceBody {...ready.content} href={path.pathname} actingSubject={actingSubject ?? null}
+    work={id} locale="en" messages={englishMessages} exportApi={ready.exportApi} saveExport={() => { /* Local story download is discarded. */ }} />
+    : <RegionSkeleton id="recipe-experience" title={englishMessages.recipeMethod} label={englishMessages.loading} />}</PageContainer>;
+}
+const meta = { title: 'Recipe resource/Production region visit', component: ResourceVisit,
+  args: { persona: 'member' as AnswerPersona, state: 'populated' }, globals: { viewport: { value: 'desktop' }, locale: 'en' },
+  parameters: { recipeProveStates, docs: { description: { component: 'Production resource-region loader and body. Recipe and authority use unchanged records. The Main Version selection 404 is an unrecorded contract state; the complete locale/Work frame and original Person credit reads remain listed prove seams.' } } },
+} satisfies Meta<typeof ResourceVisit>;
+export default meta;
+type Story = StoryObj<typeof meta>;
+const phone = { globals: { viewport: { value: 'phone' as const }, locale: 'en' } };
+const readable: Story['play'] = async ({ canvasElement, args }) => {
+  const canvas = within(canvasElement), t = copyOf('en');
+  await expect(await canvas.findByText('Mix the first portion.')).toBeVisible();
+  await expect(canvas.getAllByText('1 ½ cup flour')).toHaveLength(1);
+  await expect(canvas.getAllByText('¼ cup flour')).toHaveLength(1);
+  await expect(canvas.queryByRole('button', { name: t.importAction })).toBeNull();
+  await expect(canvas.queryByText('Private draft note.')).toBeNull();
+  if (args.persona === 'owner') await expect(canvas.getByRole('link', { name: t.editRecipe })).toBeVisible();
+  else await expect(canvas.queryByRole('link', { name: t.editRecipe })).toBeNull();
+  if (args.persona !== 'visitor') {
+    const download = canvas.getByRole('button', { name: t.exportAction });
+    await waitFor(() => expect(download).toHaveAttribute('data-hydrated', 'true'));
+    await userEvent.click(download);
+    const exported = record.personas[args.persona].find(item => item.label === 'schema-org-export')!.answer as { revision: string };
+    await expect(await canvas.findByText(t.exportedRevision({ revision: exported.revision.slice(-36) }))).toBeVisible();
+  } else await expect(canvas.queryByRole('button', { name: t.exportAction })).toBeNull();
+};
+export const Visitor: Story = { args: { persona: 'visitor' }, play: readable };
+export const VisitorPhone: Story = { ...Visitor, ...phone };
+export const Stranger: Story = { args: { persona: 'stranger' }, play: readable };
+export const StrangerPhone: Story = { ...Stranger, ...phone };
+export const Member: Story = { play: readable };
+export const MemberPhone: Story = { ...Member, ...phone };
+export const Owner: Story = { args: { persona: 'owner' }, play: readable };
+export const OwnerPhone: Story = { ...Owner, ...phone };
+export const Moderator: Story = { args: { persona: 'moderator' }, play: readable };
+export const ModeratorPhone: Story = { ...Moderator, ...phone };
+export const Operator: Story = { args: { persona: 'operator' }, play: readable };
+export const OperatorPhone: Story = { ...Operator, ...phone };
+export const Loading: Story = { args: { state: 'loading' }, play: async ({ canvasElement }) => {
+  await expect(await within(canvasElement).findByRole('status')).toHaveAttribute('aria-busy', 'true');
+} };
+export const LoadingPhone: Story = { ...Loading, ...phone };

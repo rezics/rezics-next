@@ -31,7 +31,7 @@ import { publicationSource } from './publication-source.tsx';
 import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
-  readReviewer, readReviews, readVersions, readWorkStats, readRecipeWorkPage,
+  readReviewer, readReviews, readVersions, readWorkStats,
   readHubWorkPage, readText, readRatingPopulations, reader } from './read.ts';
 import { Region, RegionFailure, RegionSkeleton } from './region.tsx';
 import { WorkRecord } from './record.tsx';
@@ -55,11 +55,8 @@ import { readEntityProjection } from '../entity-page/read.ts';
 import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
-import { RecipeRegionView } from './recipe-reading-recorded-page.tsx';
-import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
-import { recipeEditHref } from '../recipe-editor/route.ts';
-import { mayEdit } from '../work-levels-edit/allowed.ts';
-import { readAllowedActions } from '../work-levels-edit/authority.ts';
+import { RecipeResourceBody } from '../recipe-editor/resource-page.tsx';
+import { loadRecipeReading } from '../recipe-editor/resource-page.ts';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
 
@@ -334,11 +331,10 @@ export async function TypeExperience({ id, work, experience, locale, messages }:
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
-    const [recipe, text, agent, allowed] = await Promise.all([readRecipeWorkPage(section.href),
-      readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent(), readAllowedActions(id)]);
-    return <RecipeRegionView recipe={recipe} href={section.href} actingSubject={agent.actingSubject}
-      edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
-      text={text.ok ? text.data.body : null} locale={locale} messages={messages} />;
+    const agent = await reader();
+    const content = await loadRecipeReading(agent.main, agent.actingSubject, work, section.href);
+    return <RecipeResourceBody {...content} href={section.href} actingSubject={agent.actingSubject ?? null}
+      work={id} locale={locale} messages={messages} />;
   }
   if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
     const hub = await readHubWorkPage(section.href);

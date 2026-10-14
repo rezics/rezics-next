@@ -19,6 +19,7 @@ export interface WorkBasis { card: WorkCard; mainRevision: string; selectedLangu
   disclosure: 'public' | 'restricted'; publicationState: 'published' | 'unpublished';
   structuredPublication: PublishedStructuredWorkSource | null;
   structuredPublicationCandidate: boolean;
+  structurePublicationHead: string | null;
   fieldProvenance?: Static<typeof workHeader>['fieldProvenance'] }
 
 /** Structure visibility is exact to the admitted revision and its Work. Work
@@ -79,12 +80,13 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   const types = `OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
     ${iri(work)} a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } } }`;
   const maximumRows = 9;
-  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?type ?public ?provisional ?provenance
+  const rows = await session.query(`SELECT ?head ?main ?mainHead ?metadataHead ?publicationHead ?type ?public ?provisional ?provenance
     WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(work)} a schema:CreativeWork ; rv:head ?head ; rv:mainVersion ?main .
       ?main a rv:MainVersion ; rv:work ${iri(work)} ; rv:head ?mainHead .
       OPTIONAL { ${iri(work)} rv:descriptiveMetadataHead ?metadataHead }
+      OPTIONAL { ${iri(work)} rv:workStructurePublicationHead ?publicationHead }
       OPTIONAL { ${iri(work)} rv:provisional ?provisional }
       OPTIONAL { ${iri(work)} rv:fieldProvenance ?provenance }
     }
@@ -95,7 +97,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   const row = rows[0];
   if (!row) throw new WorkReadMissing('Work is unavailable');
   if (!row.head || !row.main || !row.mainHead || !row.public
-    || ['head', 'main', 'mainHead', 'metadataHead', 'public', 'provenance'].some(key =>
+    || ['head', 'main', 'mainHead', 'metadataHead', 'publicationHead', 'public', 'provenance'].some(key =>
       new Set(rows.map(item => item[key]?.value)).size !== 1)) {
     throw new WorkReadUnavailable('Work basis is ambiguous');
   }
@@ -156,7 +158,7 @@ export async function readWorkBasis(session: WorkReadSession, work: string): Pro
   selectedLanguage: selected?.language ?? null,
   disclosure: isPublic ? 'public' : 'restricted',
   publicationState: source ? 'published' : 'unpublished', structuredPublication: source,
-  structuredPublicationCandidate,
+  structuredPublicationCandidate, structurePublicationHead: row.publicationHead?.value ?? null,
   ...(row.provenance ? { fieldProvenance: JSON.parse(row.provenance.value) as Static<typeof workHeader>['fieldProvenance'] } : {}) };
 }
 
@@ -199,6 +201,9 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const path = `/v1/works/${work.slice(-36)}`;
   return { profile: 'work-read-v1' as const, ...basis.card, disclosure: basis.disclosure,
     publicationState: basis.publicationState,
+    ...(session.principal && session.options.actingSubject
+      && await session.deps.access.canEditWork(session.principal, session.options.actingSubject, work)
+      ? { structurePublicationHead: basis.structurePublicationHead } : {}),
     descriptionObligations,
     ...(basis.fieldProvenance ? { fieldProvenance: basis.fieldProvenance } : {}),
     title: selected.title ?? basis.card.title, description: selected.description,

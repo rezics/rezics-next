@@ -27,7 +27,7 @@ export default {
   detailsHeading: 'Über dieses Rezept',
   title: 'Titel', description: 'Beschreibung',
   descriptionHelp: 'Ein bis zwei Zeilen unter dem Titel.',
-  notes: 'Anmerkungen', notesHelp: 'Woher es stammt, Tipps und Variationen. Die Anmerkungen werden mit dem Rezept veröffentlicht.',
+  notes: 'Anmerkungen', notesHelp: 'Optionale Hinweise zur Herkunft, Tipps und Variationen. Geschriebene Anmerkungen werden mit dem Rezept veröffentlicht.',
   language: insert('Geschrieben auf {{language}}', { language: String }),
 
   measuresHeading: 'Menge und Zeit',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: 'Anmerkungen dürfen nach dem Schreiben nicht leer sein. Bearbeite sie stattdessen.',
   mainSays: 'Grund',
 
+  publicationChanged: 'Dieses Rezept wurde geändert. Lade die neueste Version und prüfe sie vor dem Veröffentlichen.',
+  loadingRecipe: 'Rezept wird geladen…',
   loadingRest: 'Der Rest dieses Rezepts wird geladen…',
   loadingRestCount: insert('{{count}} Teile geladen', { count: String }),
   loadingRestFailed: 'Der Rest dieses Rezepts konnte nicht geladen werden, deshalb kann es noch nicht bearbeitet werden.',

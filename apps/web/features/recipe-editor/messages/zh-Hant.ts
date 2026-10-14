@@ -27,7 +27,7 @@ export default {
   detailsHeading: '關於這道食譜',
   title: '標題', description: '簡介',
   descriptionHelp: '顯示在標題下方的一兩句話。',
-  notes: '備註', notesHelp: '來歷、小技巧和變化做法。備註會隨食譜一起發布。',
+  notes: '備註', notesHelp: '可選填來歷、小技巧和變化做法。填寫的備註會隨食譜一起發布。',
   language: insert('使用{{language}}撰寫', { language: String }),
 
   measuresHeading: '份量與時間',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: '備註寫下後就不能留空。請改為編輯。',
   mainSays: '原因',
 
+  publicationChanged: '這份食譜已變更。請載入最新版本，確認後再發布。',
+  loadingRecipe: '正在載入食譜…',
   loadingRest: '正在載入這道食譜的其餘部分…',
   loadingRestCount: insert('已載入 {{count}} 個部分', { count: String }),
   loadingRestFailed: '無法載入這道食譜的其餘部分，因此還不能編輯。',

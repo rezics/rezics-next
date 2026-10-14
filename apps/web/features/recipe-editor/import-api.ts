@@ -2,7 +2,7 @@ import { BFF_PREFIX } from '../api/browser.ts';
 
 export const RECIPE_FILE_MAX_BYTES = 256 * 1024;
 
-export type RecipeImportFailure = 'conflict' | 'denied' | 'invalid' | 'stale' | 'too-large' | 'unavailable';
+export type RecipeImportFailure = 'pending' | 'conflict' | 'denied' | 'invalid' | 'stale' | 'too-large' | 'unavailable';
 
 export class RecipeImportError extends Error {
   constructor(readonly failure: RecipeImportFailure, readonly detail: string | null = null) {
@@ -97,6 +97,7 @@ export function mainRecipeImportApi(options: {
         });
         let answer: unknown = null;
         try { answer = await response.json(); } catch { /* A lost or malformed reply is safe to retry with this key. */ }
+        if (response.status === 202) throw new RecipeImportError('pending');
         if (!response.ok) throw refusal(response.status, answer);
         if (!imported(answer, input.structure)) throw new RecipeImportError('unavailable');
         return answer;

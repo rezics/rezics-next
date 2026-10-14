@@ -37,14 +37,15 @@ import {
 // never silently as the session Agent, and returns a `Loaded` result so one
 // region's failure leaves the others standing.
 
-type Answer<T> = { data: T | null; error: { status: number } | null };
+type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 
 /** Main answers 409 when its graph moved during a read that started from scratch; ask once more. */
-async function settle<T>(call: () => Promise<Answer<T>>, again = true): Promise<Loaded<T>> {
+export async function settle<T>(call: () => Promise<Answer<T>>, again = true): Promise<Loaded<T>> {
   try {
     let { data, error } = await call();
     if (again && error?.status === 409) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status) };
+    if (error) return { ok: false, failure: failureOf(error.status), status: error.status,
+      ...(error.value !== undefined ? { problem: error.value } : {}) };
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };
@@ -77,13 +78,14 @@ async function scan<T>(
   let cursor: string | undefined;
   for (let index = 0; index < SCAN_PAGES; index += 1) {
     const loaded = await page(cursor);
-    if (!loaded.ok) return found.length ? { ok: true, data: found } : loaded;
+    if (!loaded.ok) return loaded;
     found.push(...loaded.data.items.filter(keep));
-    if (stopAtFirst && found.length) break;
-    if (!loaded.data.nextCursor) break;
+    if (stopAtFirst && found.length) return { ok: true, data: found };
+    if (!loaded.data.nextCursor) return { ok: true, data: found };
     cursor = loaded.data.nextCursor;
   }
-  return { ok: true, data: found };
+  // An unfinished scan cannot establish that a language has no draft.
+  return cursor ? { ok: false, failure: 'unavailable' } : { ok: true, data: found };
 }
 
 const myTexts = (main: MainClient, actingSubject: string) => (cursor: string | undefined) =>
@@ -185,8 +187,9 @@ export async function readInventory(
   actingSubject: string,
   filter: { state?: InventoryState; view?: InventoryWork['relationship'] },
   cursor: string | undefined,
+  client?: MainClient,
 ): Promise<Loaded<InventoryView>> {
-  const main = await mainApi();
+  const main = client ?? await mainApi();
   const page = await settle(() =>
     main.v1.me
       .agents({ agent: idOf(actingSubject) })
@@ -478,7 +481,7 @@ export async function readChapters(
   const page = loaded.ok
     ? { ok: true as const, data: loaded.data.page }
     : !cursor && !parent && loaded.failure === 'missing'
-      ? { ok: false as const, failure: 'none' as const }
+      ? { ...loaded, failure: 'none' as const }
       : loaded;
   return { language, page, facts: loaded.ok ? loaded.data.facts : [], readAs: reader };
 }
@@ -500,8 +503,9 @@ export async function readChapterFacts(
 export async function readWorkTexts(
   actingSubject: string,
   work: string,
+  client?: MainClient,
 ): Promise<Loaded<MyText[]>> {
-  const main = await mainApi();
+  const main = client ?? await mainApi();
   return scan(myTexts(main, actingSubject), (item) => item.work?.id === work);
 }
 
@@ -608,8 +612,9 @@ export async function readStudioText(
   actingSubject: string,
   contribution: string,
   revision: string | null,
+  client?: MainClient,
 ): Promise<StudioText> {
-  const main = await mainApi();
+  const main = client ?? await mainApi();
   const current: Loaded<TextHead> = await settle(() =>
     main.v1.contributions({ contribution }).get({ query: { actingSubject } }),
   );
@@ -620,7 +625,7 @@ export async function readStudioText(
       head: null,
       publication: null,
       publicationHead: null,
-      draft: { ok: false, failure: current.ok ? 'missing' : current.failure },
+      draft: current.ok ? { ok: false, failure: 'missing' } : current,
     };
   const draft = await settle(() =>
     main.v1

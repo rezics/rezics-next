@@ -41,15 +41,17 @@ export function refusalTitle(t: Copy, refusal: Refusal | { kind: SaveRefusal }):
   }
 }
 
-export function FailureAlert({ t, refusal, detail, onRetry, onDismiss }: {
+export function FailureAlert({ t, refusal, detail, title, onRefresh, onRetry, onDismiss }: {
+  title?: string; onRefresh?: () => void;
   t: Copy; refusal: Refusal | { kind: SaveRefusal }; detail?: string | null; onRetry?: () => void; onDismiss: () => void;
 }) {
   const retryable = refusal.kind === 'unavailable' || refusal.kind === 'pending';
   return <Alert variant="warning" role="alert" data-recipe-alert>
     <TriangleAlertIcon aria-hidden="true" />
-    <AlertTitle>{refusalTitle(t, refusal)}</AlertTitle>
+    <AlertTitle>{title ?? refusalTitle(t, refusal)}</AlertTitle>
     {detail ? <AlertDescription><span className="font-medium">{t.mainSays}: </span>{detail}</AlertDescription> : null}
     <div className="col-start-2 mt-2 flex flex-wrap gap-2">
+      {onRefresh ? <Button type="button" size="sm" variant="outline" onClick={onRefresh}>{t.reload}</Button> : null}
       {retryable && onRetry ? <Button type="button" size="sm" variant="outline" onClick={onRetry}>{t.retry}</Button> : null}
       <Button type="button" size="sm" variant="ghost" onClick={onDismiss}>{t.dismiss}</Button>
     </div>

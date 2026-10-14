@@ -94,7 +94,7 @@ function LineEditor({ node, store, state, language, t, closed, onDone }: Common 
   const save = async () => {
     if (closed || problem) return;
     const moved = (section || null) !== (node.parent === state.structure ? null : node.parent);
-    const edited = await store.submit({ kind: 'editLine', occurrence: node.occurrence, qualifier: qualifierOf(parts, language, node.qualifier) });
+    const edited = await store.submit({ kind: 'editLine', occurrence: node.occurrence, qualifier: qualifierOf(parts, node.qualifier.originalText.language, node.qualifier) });
     if (edited.kind === 'refused') return;
     if (moved) {
       const outcome = await store.submit({ kind: 'moveLineTo', occurrence: node.occurrence, section: section || null });
@@ -105,7 +105,7 @@ function LineEditor({ node, store, state, language, t, closed, onDone }: Common 
   const sections = groups(state);
   return <form onSubmit={event => { event.preventDefault(); void save(); }} aria-label={t.edit({ name: readingLine(node.qualifier) })}
     className="grid gap-3 rounded-2xl border border-primary/30 bg-card p-3">
-    <LineFields line={line} parts={parts} idPrefix={id} t={t} language={language} autoFocus onSubmit={() => void save()} onCancel={onDone}
+    <LineFields line={line} parts={parts} idPrefix={id} t={t} language={node.qualifier.originalText.language} autoFocus onSubmit={() => void save()} onCancel={onDone}
       onLine={value => { setLine(value); setParts(parseLine(value)); }}
       onParts={value => { setParts(value); setLine(composeLine(value)); }} />
     {sections.length ? <div className={fieldClass}><span>{t.moveToSection}</span>
@@ -120,11 +120,11 @@ function LineEditor({ node, store, state, language, t, closed, onDone }: Common 
 
 function LineRow({ node, index, count, ...common }: Common & { node: IngredientNode; index: number; count: number }) {
   const [editing, setEditing] = useState(false);
-  const { store, t, language, busy } = common;
+  const { store, t, busy } = common;
   const text = readingLine(node.qualifier);
   if (editing) return <li data-line={node.occurrence}><LineEditor node={node} {...common} onDone={() => setEditing(false)} /></li>;
   return <li data-line={node.occurrence} className="flex items-center gap-1 border-border/60 border-b py-1 last:border-0">
-    <span lang={language} dir={directionOf(language)} className="min-w-0 flex-1 text-pretty break-words py-1.5 font-medium">{text}</span>
+    <span lang={node.qualifier.originalText.language} dir={directionOf(node.qualifier.originalText.language)} className="min-w-0 flex-1 text-pretty break-words py-1.5 font-medium">{text}</span>
     {common.closed ? null : <>
     <IconAction label={t.moveUp({ name: text })} disabled={busy || index === 0}
       onClick={() => void store.submit({ kind: 'moveLine', occurrence: node.occurrence, direction: 'up' })}><ArrowUpIcon aria-hidden="true" /></IconAction>
@@ -144,12 +144,12 @@ function SectionHeader({ group, index, count, store, state, t, busy, language, c
   const rename = (value: string) => {
     if (closed) return;
     const next = value.trim();
-    if (next && next !== name) void store.submit({ kind: 'renameSection', occurrence: group.occurrence, label: next, language });
+    if (next && next !== name) void store.submit({ kind: 'renameSection', occurrence: group.occurrence, label: next, language: (group.label?.language ?? language) });
   };
   const remove = () => { if (!closed) void store.submit({ kind: 'removeSection', occurrence: group.occurrence }).then(() => setConfirming(false)); };
   return <div className="grid gap-2">
     <div className="flex items-center gap-1">
-      <SyncedInput value={name} aria-label={t.sectionName} maxLength={500} lang={language} dir={directionOf(language)}
+      <SyncedInput value={name} aria-label={t.sectionName} maxLength={500} lang={(group.label?.language ?? language)} dir={directionOf((group.label?.language ?? language))}
         className="font-semibold" autoComplete="off"
         onBlur={event => rename(event.target.value)}
         onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); event.currentTarget.blur(); } }} />

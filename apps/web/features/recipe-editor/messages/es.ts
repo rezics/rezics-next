@@ -27,7 +27,7 @@ export default {
   detailsHeading: 'Sobre esta receta',
   title: 'Título', description: 'Descripción',
   descriptionHelp: 'Una o dos líneas que se muestran bajo el título.',
-  notes: 'Notas', notesHelp: 'De dónde viene, consejos y variantes. Las notas se publican con la receta.',
+  notes: 'Notas', notesHelp: 'Origen, consejos y variantes opcionales. Las notas que escribas se publican con la receta.',
   language: insert('Escrita en {{language}}', { language: String }),
 
   measuresHeading: 'Rendimiento y tiempo',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: 'Las notas no pueden quedar en blanco una vez escritas. Edítalas en su lugar.',
   mainSays: 'Motivo',
 
+  publicationChanged: 'Esta receta ha cambiado. Carga la última versión y revísala antes de publicar.',
+  loadingRecipe: 'Cargando receta…',
   loadingRest: 'Cargando el resto de esta receta…',
   loadingRestCount: insert('{{count}} partes cargadas', { count: String }),
   loadingRestFailed: 'No se pudo cargar el resto de esta receta, así que todavía no se puede editar.',

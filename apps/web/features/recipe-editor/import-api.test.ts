@@ -110,3 +110,19 @@ test('import controls are translated in all eight editor locales', () => {
     for (const key of keys) expect(catalog[key]).toBeTruthy();
   }
 });
+
+
+test('only HTTP 202 is pending; retry retains the file, head, actor and command key', async () => {
+  const sent: unknown[] = [];
+  const api = mainRecipeImportApi({ origin: 'https://web.rezics.test', fetch: async (url, init) => {
+    sent.push({ url: String(url), key: new Headers(init?.headers).get('idempotency-key'), body: init?.body });
+    if (sent.length === 1) return response(202, { operationId: 'queued', status: 'reconciling', phase: 'dispatch',
+      result: null, retry: { allowed: true, afterMs: 100 } });
+    return response(200, { ...answer, replayed: true });
+  } });
+  await expect(api.importFile(input)).rejects.toMatchObject({ failure: 'pending' });
+  await expect(api.importFile(input)).resolves.toMatchObject({ replayed: true });
+  expect(sent[1]).toEqual(sent[0]);
+  const malformed = mainRecipeImportApi({ fetch: async () => response(200, { operationId: 'unexpected' }) });
+  await expect(malformed.importFile(input)).rejects.toMatchObject({ failure: 'unavailable' });
+});

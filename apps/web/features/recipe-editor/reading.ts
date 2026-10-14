@@ -9,7 +9,7 @@ export function readingOf(state: RecipeState): ReadableRecipe {
       occurrence: node.occurrence,
       role: node.role,
       parent: node.parent,
-      labels: node.role === 'group' && node.label ? [{ value: node.label.value }] : [],
+      labels: node.role === 'group' && node.label ? [{ value: node.label.value, language: node.label.language }] : [],
       ...(node.role === 'step' ? { qualifier: {
         type: 'recipe-step' as const,
         instructionText: node.qualifier.instructionText,
@@ -20,6 +20,7 @@ export function readingOf(state: RecipeState): ReadableRecipe {
       occurrence: node.occurrence,
       originalText: node.qualifier.originalText.value,
       line: readingLine(node.qualifier),
+      language: node.qualifier.originalText.language,
     }] : []),
     measures: state.measures.map(measure => ({
       kind: measure.kind,

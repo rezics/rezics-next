@@ -27,7 +27,7 @@ export default {
   detailsHeading: '이 레시피 소개',
   title: '제목', description: '설명',
   descriptionHelp: '제목 아래에 보이는 한두 줄입니다.',
-  notes: '메모', notesHelp: '유래, 팁, 응용법을 적어 주세요. 메모는 레시피와 함께 게시됩니다.',
+  notes: '메모', notesHelp: '유래, 팁, 응용법은 선택 사항입니다. 작성한 메모는 레시피와 함께 게시됩니다.',
   language: insert('{{language}}로 작성', { language: String }),
 
   measuresHeading: '분량과 시간',
@@ -93,6 +93,8 @@ export default {
   failEmptyNotes: '메모는 한번 쓰면 비워 둘 수 없습니다. 대신 편집하세요.',
   mainSays: '이유',
 
+  publicationChanged: '레시피가 변경되었습니다. 최신 버전을 불러와 확인한 후 게시해 주세요.',
+  loadingRecipe: '레시피 불러오는 중…',
   loadingRest: '이 레시피의 나머지를 불러오는 중…',
   loadingRestCount: insert('{{count}}개 부분을 불러왔습니다', { count: String }),
   loadingRestFailed: '이 레시피의 나머지를 불러오지 못해 아직 편집할 수 없습니다.',

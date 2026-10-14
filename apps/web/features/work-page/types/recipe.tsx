@@ -8,6 +8,11 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'rea
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { appendRecipePage, readRecipePage } from '../../recipe-editor/pages.ts';
+import { directionOf } from '../../studio/types.ts';
+import type { RecipeExport, RecipeExportApi } from '../../recipe-editor/export-api.ts';
+import { RecipeExchange } from '../../recipe-editor/recipe-exchange.tsx';
+import { messages as exchangeMessages } from '../../recipe-editor/messages.ts';
+import { readingLine, type IngredientQualifier } from '../../recipe-editor/ingredient-line.ts';
 import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
 import { recipePageReader } from '../recipe-reading-recorded-page.ts';
@@ -25,6 +30,8 @@ export interface ReadableRecipe {
 interface ReadableIngredient {
   occurrence: string;
   originalText: string;
+  language?: string;
+  amount?: { numerator: number; denominator: number };
   line: string;
   alternateLine?: string;
   alternateSystem?: 'us' | 'metric';
@@ -37,10 +44,11 @@ interface ReadableOccurrence {
   occurrence: string;
   role: string;
   parent: string;
-  labels: readonly { value: string }[];
+  labels: readonly { value: string; language?: string }[];
   qualifier?: {
     type: string;
-    instructionText?: { value: string };
+    instructionText?: { value: string; language?: string };
+    originalText?: { value: string; language?: string };
     usesIngredient?: readonly string[];
   };
 }
@@ -79,8 +87,15 @@ function StepTimer({ seconds, messages: t }: { seconds: number; messages: WorkPa
 /** The units a reader sees: each line as its cook wrote it, or all of them converted to one system. */
 type Units = 'written' | 'us' | 'metric';
 
-function shownLine(item: ReadableIngredient, units: Units): string {
+function shownLine(item: ReadableIngredient, units: Units, page: ReadableRecipe): string {
   if (units !== 'written' && item.alternateSystem === units && item.alternateLine) return item.alternateLine;
+  const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
+  // An exchanged line may carry its quantity separately from its name. Render the retained
+  // exact quantity, using Main's scaled amount when present; never merge duplicate occurrences.
+  if (qualifier?.type === 'ingredient-line' && qualifier.originalText?.language) {
+    const ingredient = qualifier as unknown as IngredientQualifier;
+    return readingLine({ ...ingredient, ...(item.amount ? { amount: item.amount } : {}) });
+  }
   return item.line ?? item.originalText;
 }
 
@@ -110,16 +125,18 @@ function IngredientList({ page, units, messages: t }: {
   page: ReadableRecipe; units: Units; messages: WorkPageMessages;
 }) {
   return <div className="grid gap-4">{sectioned(page).map(block => <div key={block.key} className="grid gap-1">
-    {block.heading !== null ? <h4 className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
+    {block.heading !== null ? <h4 lang={page.occurrences.find(item => item.occurrence === block.key)?.labels[0]?.language}
+      className="font-medium text-muted-foreground text-sm">{block.heading}</h4> : null}
     {block.items.length ? <ul className="grid gap-2">{block.items.map(item => {
-      const text = shownLine(item, units);
+      const text = shownLine(item, units, page);
+      const language = item.language ?? page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier?.originalText?.language;
       const quiet = text !== item.originalText && (units !== 'written' || item.hint) ? item.originalText : null;
       const note = item.judgment ? t.scaleByTaste
         : item.reason === 'unparsed' ? t.scaleUnparsed
           : item.reason ? t.scaleHeld : null;
       return <li key={item.occurrence} className="border-border/60 flex flex-col gap-0.5 border-b py-2 last:border-0">
-        <span className="font-medium text-pretty">{text}</span>
-        {quiet ? <span className="text-muted-foreground text-sm">{quiet}</span> : null}
+        <span lang={language} dir={language ? directionOf(language) : undefined} className="font-medium text-pretty">{text}</span>
+        {quiet ? <span lang={language} dir={language ? directionOf(language) : undefined} className="text-muted-foreground text-sm">{quiet}</span> : null}
         {note ? <span className="text-muted-foreground text-xs">{note}</span> : null}
       </li>;
     })}</ul> : null}
@@ -143,7 +160,7 @@ function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Unit
   const ids = step.qualifier?.type === 'recipe-step' ? step.qualifier.usesIngredient ?? [] : [];
   return ids.flatMap(id => {
     const item = page.ingredients.find(ingredient => ingredient.occurrence === id);
-    return item ? [shownLine(item, units)] : [];
+    return item ? [shownLine(item, units, page)] : [];
   });
 }
 
@@ -152,11 +169,12 @@ function Steps({ page, units, messages: t }: { page: ReadableRecipe; units: Unit
   return <ol className="grid gap-5">{steps.map((step, index) => {
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';
     const linked = linkedLines(step, page, units);
+    const language = step.qualifier?.instructionText?.language;
     const seconds = stepSeconds(instruction);
     return <li key={step.occurrence} className="grid grid-cols-[2rem_minmax(0,1fr)] gap-3">
       <span aria-hidden="true" className="bg-primary/10 flex size-8 items-center justify-center rounded-full font-semibold">
         {index + 1}</span>
-      <div className="grid gap-2"><p className="leading-7">{instruction}</p>
+      <div className="grid gap-2"><p lang={language} dir={language ? directionOf(language) : undefined} className="leading-7">{instruction}</p>
         {linked.length ? <p className="text-muted-foreground text-sm">{linked.join(' · ')}</p> : null}
         {seconds ? <StepTimer seconds={seconds} messages={t} /> : null}</div>
     </li>;
@@ -268,7 +286,8 @@ function wholeServings(page: RecipeWorkPage | null): number | null {
   return Number.isInteger(amount) && amount >= 1 && amount <= 100 ? amount : null;
 }
 
-export function RecipeExperience({ initial, href, actingSubject, text, edit, messages: t, readPage }: {
+export function RecipeExperience({ initial, href, actingSubject, text, edit, locale, messages: t, readPage, exportApi, saveExport }: {
+  exportApi?: RecipeExportApi; saveExport?: (value: RecipeExport) => void;
   initial: RecipeWorkPage | null; /** The recipe section's link in the Work's page projection. */ href: string;
   actingSubject: string | null; /** The way into the recipe editor, for a viewer who may edit it. */ edit?: { href: string; label: string } | null;
   text: string | null; locale: UiLocale; messages: WorkPageMessages;
@@ -376,7 +395,10 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
       </form> : null}
       {convertible ? <UnitToggle value={units} onChange={setUnits} messages={t} /> : null}
     </div>
-    <div className="flex flex-wrap gap-2">{editorLink}</div>
+    <div className="flex flex-wrap gap-2">{editorLink}
+      {page && actingSubject ? <RecipeExchange structure={page.structure} revision={page.revision} actingSubject={actingSubject}
+        locale={locale} messages={exchangeMessages[locale]} allowImport={false} api={exportApi} save={saveExport} /> : null}
+    </div>
   </div>;
   return <Region id="recipe-experience" title={t.recipeMethod}>
     {page ? <>

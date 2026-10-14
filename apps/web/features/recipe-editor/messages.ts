@@ -36,7 +36,7 @@ const en = {
   detailsHeading: 'About this recipe',
   title: 'Title', description: 'Description',
   descriptionHelp: 'A line or two shown under the title.',
-  notes: 'Notes', notesHelp: 'Where it comes from, tips and variations. Notes are what gets published with the recipe.',
+  notes: 'Notes', notesHelp: 'Optional tips, origins and variations. Any notes you write are published with the recipe.',
   language: insert('Written in {{language}}', { language: String }),
 
   measuresHeading: 'Yield and time',
@@ -89,6 +89,8 @@ const en = {
   publishNeeds: 'To publish:',
   needTitle: 'give it a title', needIngredient: 'add an ingredient', needStep: 'add a step', needNotes: 'write a note',
 
+  publicationChanged: 'This recipe changed. Load the latest version and review it before publishing.',
+  loadingRecipe: 'Loading recipe…',
   loadingRest: 'Loading the rest of this recipe…',
   loadingRestCount: insert('{{count}} parts loaded', { count: String }),
   loadingRestFailed: 'The rest of this recipe couldn’t be loaded, so it can’t be edited yet.',

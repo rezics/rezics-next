@@ -1,3 +1,4 @@
+import { Skeleton } from '@rezics/ui/skeleton';
 import { Badge } from '@rezics/ui/badge';
 import { buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
@@ -161,4 +162,11 @@ export function StudioHome({ agent, content, moreHref, now, locale, messages }: 
       </section>
     </>}
   </PageContainer>;
+}
+
+/** The route streams its inventory or review reads under the same native loading region. */
+export function StudioHomePending({ label }: { label: string }) {
+  return <PageContainer><div role="status" aria-label={label} aria-busy="true" className="grid gap-5">
+    <Skeleton className="h-10 w-48" /><Skeleton className="h-24 rounded-2xl" /><Skeleton className="h-24 rounded-2xl" />
+  </div></PageContainer>;
 }
