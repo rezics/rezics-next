@@ -461,6 +461,7 @@ export class RealmReplyStore {
     });
     await settleRealmThreadPlacement(this.rankingAccess, terminal.dataEpoch, prepared, terminal.placement, client);
     return { terminal, body: { placement: terminal.placement, reply: input.reply, realm: input.realm,
+      ...(boards ?? {}),
       revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,
       replayed: admission.replayed || prepared.replayed } };
   }

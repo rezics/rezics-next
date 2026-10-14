@@ -52,6 +52,8 @@ const placementBody = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
 }, { additionalProperties: false });
 const placementResult = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
   placement: native, realm: native, reply: native, revisionId: uuid,
+  concepts: t.Optional(t.Array(native, { maxItems: 8, uniqueItems: true })),
+  primaryConcept: t.Optional(t.Nullable(native)),
   reviewDecisionId: uuid, reviewGeneration: generation, replayed: t.Boolean() });
 const visibleResult = t.Object({ profile: t.Literal('realm-reply-placement-v1'),
   placement: native, realm: native, reply: native, revisionId: uuid,
