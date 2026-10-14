@@ -182,6 +182,8 @@ struct IndexedFile {
     ast_deflate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     runtime_ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sql_ast_deflate: Option<String>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -229,6 +231,8 @@ struct FileHeader {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     parse_errors: Vec<String>,
     payloads: BTreeMap<&'static str, [u64; 2]>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    sql_hashes: Vec<(String, usize)>,
 }
 fn payload(
     value: &impl Serialize,
@@ -252,10 +256,23 @@ fn file_header(
 ) -> Result<FileHeader> {
     let mut payloads = BTreeMap::new();
     let content_hash = format!("{:x}", Sha256::digest(facts.text.as_bytes()));
+    let sql_hashes = facts
+        .sql_candidates
+        .iter()
+        .enumerate()
+        .filter(|(_, candidate)| candidate.sql_deflate.is_some())
+        .map(|(index, candidate)| {
+            (
+                format!("{:x}", Sha256::digest(candidate.text.as_bytes())),
+                index,
+            )
+        })
+        .collect();
     payloads.insert("text", payload(&facts.text, writer, position)?);
     for (name, value) in [
         ("astDeflate", facts.ast_deflate),
         ("runtimeAstDeflate", facts.runtime_ast_deflate),
+        ("sqlAstDeflate", facts.sql_ast_deflate),
         ("graphDeflate", facts.graph_deflate),
         ("sqlDeflate", facts.sql_deflate),
     ] {
@@ -278,6 +295,7 @@ fn file_header(
         direct_call_names: facts.direct_call_names,
         parse_errors: facts.parse_errors,
         payloads,
+        sql_hashes,
     })
 }
 #[derive(Serialize)]
@@ -632,6 +650,7 @@ fn indexed_mode(
             text: source.text,
             ast_deflate: None,
             runtime_ast_deflate: None,
+            sql_ast_deflate: None,
             imports: vec![],
             sql_candidates: vec![],
             sql_deflate: Some(compressed_sql(&sql)?),
@@ -715,6 +734,18 @@ fn indexed_mode(
     } else {
         None
     };
+    let sql_ast_deflate = if keep_runtime || service_graph_domain(&source.file) {
+        let mut sql_program = parsed.program.clone_in(&allocator);
+        let mut selection = SqlSyntaxSelection::default();
+        selection.visit_program(&sql_program);
+        SqlSyntaxProjection {
+            marked: selection.marked,
+        }
+        .visit_program(&mut sql_program);
+        Some(compressed_ast(&sql_program.to_estree_json(true, false))?)
+    } else {
+        None
+    };
     let runtime = if compact_only || keep_runtime {
         RuntimeProjection {
             allocator: &allocator,
@@ -739,6 +770,7 @@ fn indexed_mode(
             None => runtime.as_ref().unwrap().clone(),
         }),
         runtime_ast_deflate: if compact_only { None } else { runtime },
+        sql_ast_deflate,
         imports,
         sql_candidates: candidates,
         sql_deflate: None,
@@ -1145,6 +1177,26 @@ mod tests {
             .unwrap()
         };
         assert_eq!(get("text"), text);
+        let candidates = get("sqlCandidates");
+        let candidates = candidates.as_array().unwrap();
+        for (hash, index) in &header.sql_hashes {
+            let candidate = &candidates[*index];
+            assert!(candidate.get("sqlDeflate").is_some());
+            assert_eq!(
+                hash,
+                &format!(
+                    "{:x}",
+                    Sha256::digest(candidate["text"].as_str().unwrap().as_bytes())
+                )
+            );
+        }
+        assert_eq!(
+            header.sql_hashes.len(),
+            candidates
+                .iter()
+                .filter(|candidate| candidate.get("sqlDeflate").is_some())
+                .count()
+        );
         assert!(get("astDeflate").is_string());
         assert!(get("graphDeflate").is_string());
         assert!(
@@ -1586,6 +1638,81 @@ mod tests {
                 .iter()
                 .filter(|candidate| candidate.start == nested_start)
                 .all(|candidate| candidate.template_ast_deflate.is_none())
+        );
+    }
+    #[test]
+    fn sparse_sql_syntax_preserves_scopes_initializers_types_and_full_query_arguments() {
+        let root = env::current_dir().unwrap();
+        let text = r#"type Query = 'SELECT * FROM owner.types';
+const table = 'owner.records';
+const plugin = router.get('/plain', () => { debug('ignored'); }).get('/query', async () => {
+  debug('ignored'); const local = flag ? table : 'owner.other';
+  if (allowed) { debug('ignored'); db.query(`SELECT * FROM ${local}`); }
+  db.execute(() => { debug('retained-query-argument'); return value; });
+  db.query(`value=${key as 'SELECT * FROM owner.cast'}`);
+});
+function unused(){ debug('ignored'); }
+class Owner { write(){ debug('ignored'); db.query('UPDATE owner.records SET value=1'); } }
+"#;
+        let facts = indexed(
+            Source {
+                file: "scope.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let full = decode(facts.ast_deflate.as_ref().unwrap());
+        let sparse = decode(facts.sql_ast_deflate.as_ref().unwrap());
+        let sparse_text = serde_json::to_string(&sparse).unwrap();
+        assert!(!sparse_text.contains("ignored"));
+        assert!(!sparse_text.contains("unused"));
+        assert!(sparse_text.contains("retained-query-argument"));
+        assert!(sparse_text.contains("TSAsExpression"));
+        assert!(sparse_text.contains("TSTypeAliasDeclaration"));
+        assert!(sparse_text.len() < serde_json::to_string(&full).unwrap().len());
+        let mut calls = Vec::new();
+        let mut literals = Vec::new();
+        let mut variables = Vec::new();
+        visit(&sparse, &mut |node| match node["type"].as_str() {
+            Some("CallExpression") => calls.push(node["start"].as_u64().unwrap() as usize),
+            Some("Literal") => literals.push((
+                node["value"].as_str().unwrap_or("").to_string(),
+                node["start"].as_u64().unwrap(),
+            )),
+            Some("VariableDeclarator") => {
+                variables.push(node["id"]["name"].as_str().unwrap().to_string())
+            }
+            _ => {}
+        });
+        for prefix in [
+            "db.query(`SELECT",
+            "db.execute(",
+            "db.query(`value",
+            "db.query('UPDATE",
+        ] {
+            assert!(calls.contains(&text.find(prefix).unwrap()));
+        }
+        assert!(variables.contains(&"table".into()));
+        assert!(variables.contains(&"local".into()));
+        let cast_at = text.find("'SELECT * FROM owner.cast'").unwrap() as u64;
+        assert_eq!(
+            literals
+                .iter()
+                .filter(|(value, start)| value == "SELECT * FROM owner.cast" && *start == cast_at)
+                .count(),
+            1
+        );
+        assert_eq!(
+            sparse["body"][1]["declarations"][0]["init"]["value"],
+            "owner.records"
         );
     }
     #[test]
@@ -2541,6 +2668,93 @@ impl<'a> Visit<'a> for ReferencedNames<'_> {
             );
         }
         walk::walk_static_member_expression(self, node);
+    }
+}
+
+fn sql_query_call(node: &CallExpression<'_>) -> bool {
+    match node.callee.get_inner_expression() {
+        Expression::StaticMemberExpression(member) => {
+            matches!(member.property.name.as_str(), "query" | "execute")
+        }
+        Expression::ComputedMemberExpression(member) => {
+            matches!(member.expression.get_inner_expression(), Expression::StringLiteral(name) if matches!(name.value.as_str(), "query" | "execute"))
+        }
+        _ => false,
+    }
+}
+fn sql_hard_anchor(kind: AstKind<'_>) -> bool {
+    matches!(kind, AstKind::TemplateLiteral(_))
+        || matches!(kind, AstKind::CallExpression(call) if sql_query_call(call))
+}
+fn function_node(kind: AstKind<'_>) -> bool {
+    matches!(
+        kind,
+        AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
+    )
+}
+#[derive(Default)]
+struct SqlSyntaxSelection {
+    ancestors: Vec<oxc_span::Span>,
+    marked: BTreeSet<(u32, u32)>,
+    variable_depth: usize,
+    hard_depth: usize,
+    function_variables: Vec<usize>,
+}
+impl<'a> Visit<'a> for SqlSyntaxSelection {
+    fn visit_statement(&mut self, statement: &Statement<'a>) {
+        let span = statement.span();
+        self.ancestors.push(span);
+        if self.variable_depth > 0 || self.hard_depth > 0 {
+            self.marked.insert((span.start, span.end));
+        }
+        walk::walk_statement(self, statement);
+        self.ancestors.pop();
+    }
+    fn enter_node(&mut self, kind: AstKind<'a>) {
+        // Initializer expression shapes remain complete. Function bodies are
+        // independent statement scopes: string evaluation does not execute them.
+        if function_node(kind) {
+            self.function_variables.push(self.variable_depth);
+            self.variable_depth = 0;
+        }
+        let variable = matches!(kind, AstKind::VariableDeclaration(_));
+        let hard = sql_hard_anchor(kind);
+        if variable {
+            self.variable_depth += 1;
+        }
+        if hard {
+            self.hard_depth += 1;
+        }
+        if variable
+            || hard
+            || matches!(kind, AstKind::StringLiteral(literal) if sql_operation_literal(&literal.value))
+        {
+            self.marked
+                .extend(self.ancestors.iter().map(|span| (span.start, span.end)));
+        }
+    }
+    fn leave_node(&mut self, kind: AstKind<'a>) {
+        if matches!(kind, AstKind::VariableDeclaration(_)) {
+            self.variable_depth -= 1;
+        }
+        if sql_hard_anchor(kind) {
+            self.hard_depth -= 1;
+        }
+        if function_node(kind) {
+            self.variable_depth = self.function_variables.pop().unwrap();
+        }
+    }
+}
+struct SqlSyntaxProjection {
+    marked: BTreeSet<(u32, u32)>,
+}
+impl<'a> VisitMut<'a> for SqlSyntaxProjection {
+    fn visit_statements(&mut self, statements: &mut oxc_allocator::Vec<'a, Statement<'a>>) {
+        statements.retain(|statement| {
+            let span = statement.span();
+            self.marked.contains(&(span.start, span.end))
+        });
+        walk_mut::walk_statements(self, statements);
     }
 }
 
