@@ -20,7 +20,7 @@ import {
 import type { RealmView } from './realm-page.tsx';
 import { resolveRealm } from './read.ts';
 import { parseAddressSegment } from '../address/path.ts';
-import { parseCursor } from './route.ts';
+import { idOf, parseCursor } from './route.ts';
 import { realmMetadata } from './routes.tsx';
 
 // `/r/{realm}/discussions/{reply}`: one discussion, or one reply with its
@@ -45,7 +45,7 @@ export async function realmThreadMetadata({
   if (resolved.kind !== 'realm') return metadata;
   const read = await settle(() =>
     mainApiWithToken(undefined)
-      .v1.realms({ realm: resolved.realm })
+      .v1.realms({ realm: idOf(resolved.realm) ?? resolved.realm })
       .threads({ reply: parsed.id })
       .get(),
   );

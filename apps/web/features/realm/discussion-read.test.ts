@@ -34,6 +34,25 @@ test('board links preserve the selected Concept and content language without mix
     language: 'ja', cursor: 'thread/+==', boardsCursor: 'board/+==' });
 });
 
+test('production Realm IRIs become UUID route parameters for boards, selected lists and threads', async () => {
+  const realm = '8a9c681a-fb6c-4ce1-850d-73730b07894a';
+  const reply = '20ea15b3-d80a-4098-a0f6-ea53288953bf';
+  const requests: string[] = [];
+  const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async input => {
+    const path = new URL(input instanceof Request ? input.url : String(input)).pathname;
+    requests.push(path);
+    return Response.json(path.endsWith('/classification-context') ? { context: 'context' } : { items: [] });
+  }) as typeof fetch });
+  const reads = realmDiscussionReads(main, `https://rezics.com/id/${realm}`);
+  await reads.boards();
+  await reads.threads({ sort: 'best', window: 'week', concept: 'concept' });
+  await reads.thread(`https://rezics.com/id/${reply}`, 'new');
+  expect(requests).toEqual([
+    `/v1/realms/${realm}/classification-context`, '/v1/classification-vocabulary',
+    `/v1/realms/${realm}/threads`, `/v1/realms/${realm}/threads/${reply}`,
+  ]);
+});
+
 test('closed and absent discussions retain the same ordinary failure for every reader', async () => {
   for (const actor of [undefined, 'stranger', 'member', 'owner', 'moderator', 'operator']) {
     const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async (_input: RequestInfo | URL) =>

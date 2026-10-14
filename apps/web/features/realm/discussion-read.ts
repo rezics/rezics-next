@@ -1,6 +1,7 @@
 import type { MainClient } from '../discover/types.ts';
 import type { ThreadRead, ThreadSort, ThreadsPage, ThreadWindow } from '../feed/thread.ts';
 import { settleFrame, type RealmFrameRead } from './zone-presentation-read.ts';
+import { idOf } from './route.ts';
 
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 export type BoardPage = Ok<MainClient['v1']['classification-vocabulary']['get']>;
@@ -28,9 +29,10 @@ export function discussionListHref(path: string, query: DiscussionQuery): string
 /** Production routes and stories share the client and failure boundary. No roster read authorizes discussion. */
 export function realmDiscussionReads(main: MainClient, realm: string, actingSubject?: string) {
   const actor = actingSubject ? { actingSubject } : {};
+  const realmId = idOf(realm) ?? realm;
   return {
     async boards(cursor?: string): Promise<RealmFrameRead<BoardPage>> {
-      const context = await settleFrame(() => main.v1.realms({ realm })['classification-context'].get());
+      const context = await settleFrame(() => main.v1.realms({ realm: realmId })['classification-context'].get());
       if (!context.ok) return context;
       return settleFrame(() => main.v1['classification-vocabulary'].get({ query: {
         context: context.data.context, limit: 20, ...(cursor ? { cursor } : {}),
@@ -44,10 +46,10 @@ export function realmDiscussionReads(main: MainClient, realm: string, actingSubj
         ...(query.cursor ? { cursor: query.cursor } : {}),
         ...(query.concept ? { concept: query.concept } : {}),
         ...(query.language ? { language: query.language } : {}), ...actor };
-      return settleFrame(() => main.v1.realms({ realm }).threads.get({ query: selection }), query.cursor);
+      return settleFrame(() => main.v1.realms({ realm: realmId }).threads.get({ query: selection }), query.cursor);
     },
     thread(reply: string, sort: ThreadSort, language?: string, cursor?: string): Promise<RealmFrameRead<ThreadRead>> {
-      return settleFrame(() => main.v1.realms({ realm }).threads({ reply: reply.slice(-36) }).get({ query: {
+      return settleFrame(() => main.v1.realms({ realm: realmId }).threads({ reply: reply.slice(-36) }).get({ query: {
         sort, ...(language ? { language } : {}), ...(cursor ? { cursor } : {}), ...actor,
       } }), cursor);
     },
