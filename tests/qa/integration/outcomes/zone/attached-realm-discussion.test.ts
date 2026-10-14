@@ -22,7 +22,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { try { await privateSessions?.close(); } finally { await sessions?.close(); } }
 });
 
 import discussion from '../../../../../scripts/qa/cases/outcomes/zone/attached-realm-discussion.ts';
@@ -52,6 +52,7 @@ type Thread = {
     body: string;
     language: string | null;
     parent: string | null;
+    vote: { score: number; value: -1 | 0 | 1; revision: string | null; open: boolean };
   }[];
 };
 let privateSessions: PersonaSessions;
@@ -235,6 +236,7 @@ function post(person: PersonaSession, page: Page, body: string, key = randomUUID
       body,
     },
     key,
+    { settle: false },
   );
 }
 async function thread(person: PersonaSession, page: Page, reply: string) {
@@ -242,9 +244,18 @@ async function thread(person: PersonaSession, page: Page, reply: string) {
     sort: 'new',
     ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
   });
-  return answer<Thread>(
+  const read = await answer<Thread>(
     person.main('GET', `/v1/realms/${short(page.realm)}/threads/${short(reply)}?${query}`),
   );
+  for (const item of read.items) {
+    expect(Number.isInteger(item.vote.score)).toBe(true);
+    expect([-1, 0, 1]).toContain(item.vote.value);
+  }
+  return read;
+}
+function contributions(items: Thread['items']) {
+  // The viewer's ability to vote differs between signed-in and public reads.
+  return items.map(({ vote: _vote, ...contribution }) => contribution);
 }
 async function privateAccess(name: PersonaName, status: number,
   sample?: ReturnType<typeof recording.session>) {
@@ -258,26 +269,18 @@ async function privateAccess(name: PersonaName, status: number,
 }
 async function concurrent(page: Page, first: PersonaSession, second: PersonaSession,
   sample?: ReturnType<typeof recording.session>) {
+  // Establish the canonical opener before the concurrent contributions. Pending
+  // opener recovery belongs to the owner suite, never to outcome retry loops.
+  const opener = await answer<Posted>(post(first, page, 'Canonical original contribution'), 201);
   const firstKey = randomUUID(),
     secondKey = randomUUID();
   const requests = await Promise.all([
     post(first, page, 'First independent contribution', firstKey),
     post(second, page, 'Second independent contribution', secondKey),
   ]);
-  // A 202 is a durable pending write: explicitly replay the same intent, never sleep.
-  const settle = async (response: Response, person: PersonaSession, body: string, key: string) => {
-    for (let attempt = 0; response.status === 202 && attempt < 20; attempt++) {
-      expect(await response.json()).toMatchObject({ operationId: expect.any(String) });
-      response = await post(person, page, body, key);
-    }
-    expect([200, 201], `${response.status}: ${await response.clone().text()}`).toContain(
-      response.status,
-    );
-    return answer<Posted>(Promise.resolve(response), response.status);
-  };
   const [a, b] = await Promise.all([
-    settle(requests[0]!, first, 'First independent contribution', firstKey),
-    settle(requests[1]!, second, 'Second independent contribution', secondKey),
+    answer<Posted>(Promise.resolve(requests[0]!), 201),
+    answer<Posted>(Promise.resolve(requests[1]!), 201),
   ]);
   expect(a.author).toBe(first.actingSubject!);
   expect(b.author).toBe(second.actingSubject!);
@@ -286,11 +289,12 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
   expect(await answer(post(second, page, 'Second independent contribution', secondKey))).toEqual(b);
   const canonical = await answer<Lookup>(lookup(first, page, sample, 'canonical-about-thread'));
   expect(canonical.thread!.rootRevision).toBe(page.targetRevision);
-  expect([a.reply, b.reply]).toContain(canonical.thread!.reply);
+  expect(canonical.thread!.reply).toBe(opener.reply);
   const read = await thread(first, page, canonical.thread!.reply);
   expect(read.rootRevision).toBe(page.targetRevision);
-  expect(read.items.map((item) => item.reply).sort()).toEqual([a.reply, b.reply].sort());
+  expect(read.items.map((item) => item.reply).sort()).toEqual([opener.reply, a.reply, b.reply].sort());
   for (const [posted, body] of [
+    [opener, 'Canonical original contribution'],
     [a, 'First independent contribution'],
     [b, 'Second independent contribution'],
   ] as const) {
@@ -299,6 +303,7 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
       author: { id: posted.author },
       revisionId: posted.revisionId,
       language: 'en',
+      vote: { score: 0, value: 0, revision: null, open: expect.any(Boolean) },
     });
     expect(
       item.title === null ? item.body : [item.title, item.body].filter(Boolean).join('\n'),
@@ -307,6 +312,28 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
   expect(read.items.filter((item) => item.parent === null)).toHaveLength(1);
   return canonical;
 }
+
+async function discussionState(person: PersonaSession, page: Page) {
+  const canonical = await answer<Lookup>(lookup(person, page));
+  const items = canonical.thread ? (await thread(person, page, canonical.thread.reply)).items : [];
+  const credits = await answer<{ items: { id: string; role: string; agent: string }[]; nextCursor: string | null }>(
+    person.main('GET', `/v1/works/${short(page.about)}/agent-credits${person.actingSubject ? `?${acting(person)}` : ''}`),
+  );
+  expect(credits.nextCursor).toBeNull();
+  expect(credits.items).toHaveLength(1);
+  expect(credits.items[0]).toMatchObject({ role: 'author', agent: sessions.owner.actingSubject });
+  // Read native placement/Content author evidence independently of the thread
+  // projection, so a refused write cannot silently change its attribution.
+  const native = await Promise.all(items.map(async item => {
+    const placed = await answer<{ reply: string; revisionId: string; author: string; rootTarget: string }>(
+      person.main('GET', `/v1/realms/${encodeURIComponent(page.realm)}/replies/${encodeURIComponent(item.reply)}?${acting(person)}`),
+    );
+    expect(placed).toMatchObject({ reply: item.reply, revisionId: item.revisionId,
+      author: item.author.id, rootTarget: page.about });
+    return placed;
+  }));
+  return { canonical, items, credits: credits.items, native };
+}
 outcomeTest(discussion, 'visitor', async () => {
   const sample = recording.session('visitor', sessions.visitor);
   expect(await answer<Lookup>(lookup(sessions.visitor, publicPage, sample, 'empty-about-thread'))).toEqual({
@@ -314,9 +341,15 @@ outcomeTest(discussion, 'visitor', async () => {
     about: publicPage.about,
     thread: null,
   });
+  const before = await discussionState(sessions.visitor, publicPage);
   await answer(post(sessions.visitor, publicPage, 'Signed-out attempt', undefined, sample, 'signed-out-post-refused'), 401);
   expect((await answer<Lookup>(lookup(sessions.visitor, publicPage))).thread).toBeNull();
+  expect(await discussionState(sessions.visitor, publicPage)).toEqual(before);
   await privateAccess('visitor', 404, recording.session('visitor', privateSessions.visitor));
+  await visitorEntryReads(sample, publicPage, 'current-discussion-route',
+    'current-discussion-target', 'realm-policy', false);
+  await visitorEntryReads(recording.session('visitor', privateSessions.visitor), privatePage,
+    'private-discussion-route', 'private-discussion-target', 'private-realm-policy', true);
 }, recording);
 outcomeTest(discussion, 'stranger', async () => {
   const sample = recording.session('stranger', sessions.stranger);
@@ -345,33 +378,30 @@ outcomeTest(discussion, 'owner', async () => {
   const sample = recording.session('owner', sessions.owner);
   await privateAccess('owner', 200, recording.session('owner', privateSessions.owner));
   const canonical = await concurrent(ownerPage, sessions.owner, sessions.member, sample);
-  await answer(
-    sessions.owner.main('POST', `/v1/zones/${short(sessions.zone)}/realm-attachment-withdrawals`, {
-      realm: sessions.realm,
+  const before = await discussionState(sessions.owner, ownerPage);
+  try {
+    await answer(
+      sessions.owner.main('POST', `/v1/zones/${short(sessions.zone)}/realm-attachment-withdrawals`, {
+        realm: sessions.realm,
+        actingSubject: sessions.owner.actingSubject,
+      }),
+    );
+    expect(await answer(lookup(sessions.visitor, ownerPage))).toEqual(canonical);
+    expect(contributions((await thread(sessions.visitor, ownerPage, canonical.thread!.reply)).items))
+      .toEqual(contributions(before.items));
+    const refused = await answer<{ code: string }>(post(sessions.owner, ownerPage,
+      'After withdrawal', undefined, sample, 'withdrawn-attachment-post-refused'), 409);
+    expect(refused.code).toBe('read_basis_changed');
+    expect(await discussionState(sessions.owner, ownerPage)).toEqual(before);
+  } finally {
+    // Even a failed response/assertion must restore the next persona's basis.
+    const config = await answer<{ revision: string }>(sessions.owner.main('GET',
+      `/v1/zones/${short(sessions.zone)}/configuration?${acting(sessions.owner)}`));
+    await answer(sessions.owner.main('PUT', `/v1/zones/${short(sessions.zone)}/configuration`, {
+      expectedHead: config.revision, defaultRealm: sessions.realm,
       actingSubject: sessions.owner.actingSubject,
-    }),
-  );
-  expect(await answer(lookup(sessions.visitor, ownerPage))).toEqual(canonical);
-  expect((await thread(sessions.visitor, ownerPage, canonical.thread!.reply)).items).toHaveLength(
-    2,
-  );
-  const refused = await post(sessions.owner, ownerPage, 'After withdrawal', undefined, sample, 'withdrawn-attachment-post-refused');
-  expect([409, 503]).toContain(refused.status);
-  expect(await answer(lookup(sessions.owner, ownerPage))).toEqual(canonical);
-  // Subsequent cells need their original current attachment.
-  const config = await answer<{ revision: string }>(
-    sessions.owner.main(
-      'GET',
-      `/v1/zones/${short(sessions.zone)}/configuration?${acting(sessions.owner)}`,
-    ),
-  );
-  await answer(
-    sessions.owner.main('PUT', `/v1/zones/${short(sessions.zone)}/configuration`, {
-      expectedHead: config.revision,
-      defaultRealm: sessions.realm,
-      actingSubject: sessions.owner.actingSubject,
-    }),
-  );
+    }));
+  }
 }, recording);
 outcomeTest(discussion, 'moderator', async () => {
   const sample = recording.session('moderator', sessions.moderator);
@@ -390,23 +420,25 @@ outcomeTest(discussion, 'moderator', async () => {
     selfJoin: true,
     rules: [],
   };
-  await answer(
-    sessions.owner.main('PUT', root, {
-      expectedGeneration: current.generation,
-      expectedRulesRevision: current.ruleBasis.revision,
-      reason: 'Require review without moderator bypass',
-      settings,
-      actingSubject: sessions.owner.actingSubject,
-    }),
-    201,
-  );
+  const before = await discussionState(sessions.moderator, moderationPage);
   try {
+    await answer(
+      sessions.owner.main('PUT', root, {
+        expectedGeneration: current.generation,
+        expectedRulesRevision: current.ruleBasis.revision,
+        reason: 'Require review without moderator bypass',
+        settings,
+        actingSubject: sessions.owner.actingSubject,
+      }),
+      201,
+    );
     const refusal = await answer<{ code: string }>(
       post(sessions.moderator, moderationPage, 'Requires review', undefined, sample, 'review-required-post-refused'),
-      503,
+      403,
     );
-    expect(refusal.code).toBe('realm_reply_unavailable');
+    expect(refusal.code).toBe('realm_reply_denied');
     expect((await answer<Lookup>(lookup(sessions.moderator, moderationPage, sample, 'reviewed-empty-about-thread'))).thread).toBeNull();
+    expect(await discussionState(sessions.moderator, moderationPage)).toEqual(before);
   } finally {
     const updated = await answer<{ generation: string; ruleBasis: { revision: string | null } }>(
       sessions.owner.main('GET', `${root}?${acting(sessions.owner)}`),
@@ -431,7 +463,8 @@ outcomeTest(discussion, 'operator', async () => {
     201,
   );
   expect(own.author).toBe(sessions.operator.actingSubject!);
-  const forged = await sample('impersonation-refused',
+  const before = await discussionState(sessions.operator, operatorPage);
+  const forged = await answer<{ code: string }>(sample('impersonation-refused',
     'POST',
     `/v1/realms/${short(sessions.realm)}/about-posts`,
     {
@@ -446,8 +479,9 @@ outcomeTest(discussion, 'operator', async () => {
       direction: 'ltr',
       body: 'Impersonation attempt',
     },
-  );
-  expect([403, 503]).toContain(forged.status);
+  ), 403);
+  expect(forged.code).toBe('authority_denied');
+  expect(await discussionState(sessions.operator, operatorPage)).toEqual(before);
   const canonical = await answer<Lookup>(lookup(sessions.operator, operatorPage, sample, 'canonical-about-thread'));
   expect(
     (await thread(sessions.operator, operatorPage, canonical.thread!.reply)).items.map(
@@ -455,6 +489,17 @@ outcomeTest(discussion, 'operator', async () => {
     ),
   ).toEqual([sessions.operator.actingSubject!]);
 }, recording);
+
+async function visitorEntryReads(sample: ReturnType<typeof recording.session>, page: Page,
+  routeLabel: string, targetLabel: string, realmLabel: string, concealed: boolean) {
+  const route = await answer<{ realm: string | null }>(sample(routeLabel, 'GET',
+    `/v1/zones/${short(page.zone)}/routes?${new URLSearchParams({ path: page.path })}`));
+  expect(route.realm).toBe(concealed ? null : page.realm);
+  await answer(sample(targetLabel, 'GET', `/v1/resources/${short(page.about)}/page`));
+  const realm = await answer<{ code?: string }>(sample(realmLabel, 'GET',
+    `/v1/realms/${short(page.realm)}`), concealed ? 404 : 200);
+  if (concealed) expect(realm.code).toBe('work_unavailable');
+}
 
 async function supportingReads(sample: ReturnType<typeof recording.session>, person: PersonaSession,
   page: Page, canonical: Lookup) {
@@ -470,9 +515,9 @@ async function supportingReads(sample: ReturnType<typeof recording.session>, per
   await answer(sample('joining-context', 'GET', viewer(`/v1/realms/${short(page.realm)}/joining`)));
   await answer(sample('follow-context', 'GET', viewer(`/v1/follows/${short(page.realm)}?kind=realm`)));
   await answer(sample('platform-access', 'GET', '/v1/me/platform-access'));
-  const ban = await sample('member-ban-absent', 'GET', viewer(`/v1/realms/${short(page.realm)}/member-ban`));
-  expect([403, 404]).toContain(ban.status);
-  await ban.body?.cancel();
+  const ban = await answer<{ code: string }>(sample('member-ban-absent', 'GET',
+    viewer(`/v1/realms/${short(page.realm)}/member-ban`)), 404);
+  expect(ban.code).toBe('appeal_unavailable');
   await answer(sample('showcase-editor-refused', 'GET', viewer(`/v1/zones/${short(page.zone)}/showcase-editor`)), 404);
   // The component uses the default thread order; the concurrency proof above uses new explicitly.
   await answer(sample('canonical-discussion-thread', 'GET', viewer(`/v1/realms/${short(page.realm)}/threads/${
