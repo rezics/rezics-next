@@ -86,18 +86,16 @@ export function publishedFrameModel(answer: ZonePresentationRead, zoneId: string
     tokens?: ZoneTokens;
     navigation?: SitePresentationCut['navigation'];
   } = {}): PublishedFrameModel {
-  const address = siteAddress(answer.address);
-  const ref = options.ref ?? addressKey(address);
+  const ref = options.ref ?? addressKey(siteAddress(answer.address));
   const tokens = options.tokens ?? answer.presentation.tokens;
-  const name = zoneContentText(answer.name ?? address.suffixSource, answer.language ?? '');
   const cuts = savedSiteCuts(
     { tokens, navigation: options.navigation ?? answer.presentation.navigation },
     options.mounts ?? answer.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
     ref, locale, homeName);
-  const zone: ZoneContext = options.zone ? { ...options.zone, tokens } : {
+  const zone: ZoneContext = options.zone ? (options.tokens ? { ...options.zone, tokens } : options.zone) : {
     slug: answer.official,
     realm: null,
-    name,
+    name: zoneContentText(answer.name ?? siteAddress(answer.address).suffixSource, answer.language ?? ''),
     description: null,
     icon: null,
     hero: null,

@@ -189,6 +189,12 @@ test('the public frame mapping preserves the host locale, reader theme and saved
   expect(mapped.cuts.navigation[0]?.label).toMatchObject({ value: '首页', lang: 'zh-Hans' });
   expect(mapped.cuts.navigation[0]?.href).toContain('/zh-Hans/');
   expect(mapped.theme).toEqual(zoneTheme(read.data.presentation.tokens, { reader: 'dark', enabled: true }));
+  const hosted = publishedFrameModel(read.data, mapped.zoneId, 'zh-Hans', '首页', zoneMessages.moduleHeroCarousel, {
+    reader: 'dark', zone: mapped.zone, ref: mapped.ref,
+  });
+  expect(hosted.zone).toBe(mapped.zone);
+  expect(hosted.cuts).toEqual(mapped.cuts);
+  expect(hosted.theme).toEqual(mapped.theme);
   const tokens = { ...read.data.presentation.tokens, density: 'comfortable' as const, pageSurface: 'flat' as const };
   const preview = publishedFrameModel(read.data, mapped.zoneId, 'zh-Hans', '首页', zoneMessages.moduleHeroCarousel, {
     reader: 'system', zone: mapped.zone, ref: mapped.ref, tokens, mounts: [], navigation: [],
