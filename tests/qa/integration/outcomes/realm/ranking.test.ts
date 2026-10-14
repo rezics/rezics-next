@@ -137,8 +137,15 @@ afterAll(async () => {
 });
 
 async function storyRanking(sessions: PersonaSessions, name: PersonaName,
-  sort: 'best' | 'top', window: 'week' | 'month' | 'all', label: string, cursor?: string) {
-  return readRankingAnswer(recordedMainClient(recording, name, sessions[name], label), {
+  sort: 'best' | 'top', window: 'week' | 'month' | 'all', label: string, cursor?: string,
+  expectedStatus = 200) {
+  const person = sessions[name];
+  const checked = { ...person, main: async (...args: Parameters<PersonaSession['main']>) => {
+    const response = await person.main(...args);
+    expect(response.status, `${label}: ${await response.clone().text()}`).toBe(expectedStatus);
+    return response;
+  } };
+  return readRankingAnswer(recordedMainClient(recording, name, checked, label), {
     realm: sessions.realm, sort, window, actingSubject: sessions[name].actingSubject, ...(cursor ? { cursor } : {}),
   });
 }
@@ -153,10 +160,10 @@ async function storyStates(name: PersonaName) {
     if (!empty.ok) throw new Error('Empty ranking read failed');
     expect(empty.data.items).toEqual([]);
     expect(empty.data.nextCursor).toBeNull();
-    expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`))
+    expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`, undefined, 404))
       .toMatchObject({ ok: false, failure: 'missing' });
     const invalid = await storyRanking(publicRealm, name, sort, window,
-      `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2');
+      `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2', 400);
     expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
   }
   for (const interval of ['day', 'week', 'month'] as const) {
@@ -168,9 +175,14 @@ async function storyStates(name: PersonaName) {
     expect(populated.data.nextCursor).not.toBeNull();
     // The module itself never follows this cursor; retain that separate API answer as evidence.
     const continuation = recordedMainClient(recording, name, person, `ranking-module-${interval}-continuation`);
-    await continuation.v1.realms({ realm: short(publicRealm.realm) }).rankings.get({ query: {
+    const continued = await continuation.v1.realms({ realm: short(publicRealm.realm) }).rankings.get({ query: {
       interval, metric: 'reads', limit: 10, cursor: populated.data.nextCursor!,
     } });
+    expect(continued.response.status).toBe(200);
+    expect(continued.error).toBeNull();
+    if (!continued.data) throw new Error('Ranking module continuation returned no page');
+    expect(continued.data.items.length).toBeGreaterThan(0);
+    expect(continued.data.nextCursor).toBeNull();
     const empty = await readRankingModuleAnswer(
       recordedMainClient(recording, name, person, `ranking-module-${interval}-empty`), emptyRealm, interval, 'reads');
     expect(empty.ok).toBe(true);
@@ -187,11 +199,11 @@ async function storyStates(name: PersonaName) {
   const otherParams = acting(other); otherParams.set('sort', 'best'); otherParams.set('window', 'all');
   const otherPage = await answer<Page>(other.main('GET', `/v1/realms/${short(movedRealm)}/threads?${otherParams}`));
   expect(otherPage.nextCursor).not.toBeNull();
-  const stolen = await storyRanking(moving, name, 'best', 'all', 'viewer-bound-refusal', otherPage.nextCursor!);
+  const stolen = await storyRanking(moving, name, 'best', 'all', 'viewer-bound-refusal', otherPage.nextCursor!, 400);
   expect(stolen).toMatchObject({ ok: false, failure: 'invalid' });
   // A committed placement advances this Realm's rank revision, invalidating the old cut.
   await seed({ ...moving, owner: publicRealm.stranger }, 1, 'next-ranked-cut');
-  expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!))
+  expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!, 409))
     .toMatchObject({ ok: false, failure: 'moved' });
 }
 
@@ -249,7 +261,7 @@ async function prove(name: PersonaName) {
       const params = acting(person); params.set('sort', sort!); params.set('window', window!);
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
       expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
-        `private-${sort}-${window}`)).toMatchObject({ ok: false, failure: 'missing' });
+        `private-${sort}-${window}`, undefined, 404)).toMatchObject({ ok: false, failure: 'missing' });
     }
   }
   await storyStates(name);
