@@ -731,7 +731,7 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     .toEqual({ rows: 68, provedPairs: 51, missingRows: 17, missingProofs: 19 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 5, L26: 0, gap: 13, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 2, L26: 0, gap: 13, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
