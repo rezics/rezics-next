@@ -42,22 +42,25 @@ async function freePort(): Promise<number> {
   });
 }
 
+/** The fixture's one Account pool. Migration, Better Auth's drivers and the live server share it, so a
+ * driver's own cleanup must not close it while the listener still answers introspection: `pool.end`
+ * does nothing until `closePool` runs. */
+function sharedAccountPool(connectionString: string) {
+  const pool = new Pool({ connectionString });
+  let releasePool = false;
+  const endPool = pool.end.bind(pool);
+  pool.end = ((callback?: () => void) => {
+    if (!releasePool) { callback?.(); return Promise.resolve(); }
+    return callback ? endPool(callback) : endPool();
+  }) as typeof pool.end;
+  return { pool, closePool: async () => { releasePool = true; await endPool(); } };
+}
+
 /** Real Better Auth owner and OAuth clients on the fixture's isolated database. */
 export async function ratingAccount(apps: Record<string, string>,
   scopes = 'openid work:create work:edit work:read space:create rating:configure rating:submit rating:read',
   deletionFence?: (issuer: string, subject: string) => Promise<void>) {
-  const pool = new Pool({ connectionString: apps.ACCOUNT_DATABASE_URL });
-  // Migration and the live auth share this pool. A second driver must not
-  // close it while the fixture's server is still answering introspection.
-  let releasePool = false;
-  const endPool = pool.end.bind(pool);
-  pool.end = ((callback?: () => void) => {
-    if (!releasePool) {
-      callback?.();
-      return Promise.resolve();
-    }
-    return callback ? endPool(callback) : endPool();
-  }) as typeof pool.end;
+  const { pool, closePool } = sharedAccountPool(apps.ACCOUNT_DATABASE_URL!);
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -72,7 +75,6 @@ export async function ratingAccount(apps: Record<string, string>,
   let stopped = false;
   const stop = async () => { if (!stopped) { stopped = true;
     try { await account.stop(true); } finally { unregisterTelemetryPeers(); } } };
-  const closePool = async () => { releasePool = true; await endPool(); };
   try {
     unregisterTelemetryPeers = registerTelemetryPeers({ ...apps, ACCOUNT_ORIGIN: base,
       ACCOUNT_JWKS_URL: `${base}/api/auth/jwks`, ACCOUNT_INTROSPECT_URL: `${base}/api/auth/oauth2/introspect` });
@@ -140,16 +142,7 @@ export async function restoreRatingAccount(snapshot: RetainedRatingAuth, account
   if (snapshot.version !== RETAINED_RATING_AUTH_VERSION || snapshot.issuer !== `${snapshot.base}/api/auth`) {
     throw new Error('retained Account authentication snapshot is incompatible');
   }
-  const pool = new Pool({ connectionString: accountDatabaseUrl });
-  // Better Auth's drivers share this live pool; their cleanup must not close
-  // it before the isolated listener and introspection consumer stop.
-  let releasePool = false;
-  const endPool = pool.end.bind(pool);
-  pool.end = ((callback?: () => void) => {
-    if (!releasePool) { callback?.(); return Promise.resolve(); }
-    return callback ? endPool(callback) : endPool();
-  }) as typeof pool.end;
-  const closePool = async () => { releasePool = true; await endPool(); };
+  const { pool, closePool } = sharedAccountPool(accountDatabaseUrl);
   let stop = async () => {};
   try {
     const port = await freePort();
