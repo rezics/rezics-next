@@ -187,4 +187,56 @@ public class PersonProfileErasurePolicyTest {
         assertNotNull(ErasurePolicy.preflight(data, CommandPolicy.parse(template.formatted(PERSON), receipt), receipt));
         assertNull(ErasurePolicy.preflight(data, CommandPolicy.parse(template.formatted(WORK), receipt), receipt));
     }
+    @Test public void productionSha256ProfileOperationsRemainTypedErasureTargets() throws Exception {
+        var data = fixture();
+        replace(data, REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + "ab".repeat(32)));
+        assertNull(preflight(data, update()));
+        for (String suffix : List.of("ab".repeat(31), "AB".repeat(32), "ab".repeat(32) + "x")) {
+            replace(data, REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + suffix));
+            refused(data);
+        }
+    }
+
+    static final Node SOLO_PREFIX = uri("urn:rezics:search:directory:prefix:solo"),
+        SHARED_PREFIX = uri("urn:rezics:search:directory:prefix:shared");
+    static void authorPrefixes(DatasetGraph data) {
+        for (Node entry : List.of(SOLO_PREFIX, SHARED_PREFIX)) {
+            data.add(PUBLIC, entry, rv("prefixAuthor"), PERSON);
+            data.add(PUBLIC, entry, rv("prefixField"), text("credit"));
+            data.add(PUBLIC, entry, rv("prefixWork"), WORK);
+            data.add(PUBLIC, entry, rv("publicTitle"), text("rezicsprefixdirectory"));
+        }
+        data.add(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), OTHER);
+    }
+    private static String prefixUpdate(boolean removeSharedFacts) throws Exception {
+        String extraDelete = " . <" + SOLO_PREFIX + "> ?sp ?so . <" + SHARED_PREFIX + "> "
+            + (removeSharedFacts ? "?shp ?sho" : "rv:prefixAuthor <" + PERSON + ">");
+        String raw = update(); int split = raw.indexOf("} INSERT {");
+        return raw.substring(0, split).replace("<" + UNIT + "> ?up ?uo }", "<" + UNIT + "> ?up ?uo" + extraDelete + " }")
+            + raw.substring(split).replace("UNION { GRAPH <" + PUBLIC + "> { <" + UNIT + "> ?up ?uo } }",
+                "UNION { GRAPH <" + PUBLIC + "> { <" + UNIT + "> ?up ?uo } } "
+                + "UNION { GRAPH <" + PUBLIC + "> { <" + SOLO_PREFIX + "> ?sp ?so } } "
+                + (removeSharedFacts ? "UNION { GRAPH <" + PUBLIC + "> { <" + SHARED_PREFIX + "> ?shp ?sho } }" : ""));
+    }
+    @Test public void personErasureRemovesAuthorPrefixesAndPreservesSharedWorkData() throws Exception {
+        var data = fixture(); authorPrefixes(data);
+        String update = prefixUpdate(false);
+        var plan = CommandPolicy.parse(update, receipt());
+        assertNull(ErasurePolicy.preflight(data, plan, receipt()));
+        UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+        assertNull(ErasurePolicy.check(data, plan));
+        assertFalse(data.contains(PUBLIC, SOLO_PREFIX, Node.ANY, Node.ANY));
+        assertFalse(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), PERSON));
+        assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), OTHER));
+        assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixWork"), WORK));
+        assertTrue(data.contains(PUBLIC, FOREIGN_UNIT, rv("publicTitle"), text("Surviving Work")));
+        assertTrue(data.contains(CURRENT, CREDIT, rv("agent"), PERSON));
+    }
+    @Test public void omittedAuthorPrefixesAndDeletingACoauthorsSharedEntryAreRefused() throws Exception {
+        var data = fixture(); authorPrefixes(data);
+        assertNotNull(preflight(data, update()));
+        assertNotNull(preflight(data, prefixUpdate(true)));
+        assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), OTHER));
+    }
+
 }

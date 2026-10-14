@@ -186,7 +186,7 @@ final class ErasurePolicy {
             PersonMarker marker = personMarker(plan);
             if (marker == null || !personTombstone(data, marker.person(), marker.id(), marker.epoch()))
                 return "Person tombstone footprint differs";
-            if (personIndexedReference(data, marker.person())) return "erased Person still has an indexed unit";
+            if (personIndexedReference(data, marker.person()) || data.contains(uri(CommandPolicy.PUBLIC_SEARCH), Node.ANY, rv("prefixAuthor"), marker.person())) return "erased Person still has an indexed unit";
             for (String subject : plan.revisions()) {
                 if (profileFacts(data, REVISIONS, uri(subject))) return "erased Person revision still has profile facts";
                 if (personIndexedReference(data, uri(subject))) return "erased Person revision still has an indexed unit";
@@ -267,7 +267,10 @@ final class ErasurePolicy {
                     || !(quad.getPredicate().isVariable() || historicalProfilePredicate(quad.getPredicate())))
                     return "Person erasure cannot remove owner history";
             } else if (Set.of(uri(CommandPolicy.PUBLIC_SEARCH), uri(CommandPolicy.PRIVATE_SEARCH)).contains(quad.getGraph())) {
-                if (!quad.getSubject().isURI() || !quad.getPredicate().isVariable() || !quad.getObject().isVariable() || ++units > 64)
+                if (!(quad.getSubject().isURI() || quad.getSubject().isVariable())
+                    || !(quad.getPredicate().isVariable() && quad.getObject().isVariable()
+                        || quad.getPredicate().equals(rv("prefixAuthor")) && quad.getObject().equals(marker.person()))
+                    || ++units > 64)
                     return "Person erasure deletes only exact search units";
             } else if (!quad.getGraph().equals(uri(CommandPolicy.CONTROL))
                 || !quad.getSubject().equals(uri("urn:rezics:dataset:product")) || !quad.getPredicate().equals(rv("sequence")))
@@ -318,7 +321,7 @@ final class ErasurePolicy {
         } else if (!revision.getURI().matches(PERSON_TARGET)
             || !data.contains(REVISIONS, revision, RDF.type.asNode(), rv("AgentPublicProfileRevision"))
             || model == null || !Set.of(rvModel("agent-profile-address-v1"), rvModel("agent-profile-v1"), rvModel("agent-profile-v2")).contains(model)
-            || operation == null || !operation.isURI() || !operation.getURI().matches("urn:rezics:operation:agent-profile:" + UUID)) return false;
+            || operation == null || !operation.isURI() || !operation.getURI().matches("urn:rezics:operation:agent-profile:(?:" + UUID + "|[0-9a-f]{64})")) return false;
         Set<Node> allowedTypes = revision.getURI().matches(PROVISION_TARGET)
             ? Set.of(rv("RevisionAnchor"), ERASED)
             : Set.of(rv("RevisionAnchor"), rv("AgentPublicProfileRevision"), ERASED);
@@ -361,6 +364,38 @@ final class ErasurePolicy {
         return false;
     }
 
+    private static boolean directPersonDocument(DatasetGraph data, Node graph, Node subject, Set<Node> targets) {
+        boolean own = false;
+        for (Node predicate : INDEX_REFERENCES) {
+            var values = data.find(graph, subject, predicate, Node.ANY);
+            try { while (values.hasNext()) {
+                if (!targets.contains(values.next().getObject())) return false;
+                own = true;
+            } } finally { Iter.close(values); }
+        }
+        return own;
+    }
+
+    /** Shared prefixes retain every coauthor and Work fact; only an unshared
+     * credit prefix may disappear as a complete directory entry. */
+    static boolean authorPrefixRemoval(DatasetGraph data, Quad quad, Node person) {
+        return authorPrefixRemoval(data, quad, Set.of(person));
+    }
+    static boolean authorPrefixRemoval(DatasetGraph data, Quad quad, Set<Node> persons) {
+        if (!uri(CommandPolicy.PUBLIC_SEARCH).equals(quad.getGraph())
+            || persons.stream().noneMatch(person -> data.contains(quad.getGraph(), quad.getSubject(), rv("prefixAuthor"), person))) return false;
+        if (quad.getPredicate().equals(rv("prefixAuthor"))) return persons.contains(quad.getObject());
+        if (!quad.getSubject().isURI() || !quad.getSubject().getURI().startsWith(PublicNameProjection.PREFIX_DIRECTORY)) return false;
+        Node field = one(data, quad.getGraph(), quad.getSubject(), rv("prefixField"));
+        if (field != null && !NodeFactory.createLiteralString("credit").equals(field)) return false;
+        for (Node reference : INDEX_REFERENCES)
+            if (data.contains(quad.getGraph(), quad.getSubject(), reference, Node.ANY)) return false;
+        var authors = data.find(quad.getGraph(), quad.getSubject(), rv("prefixAuthor"), Node.ANY);
+        try { while (authors.hasNext()) if (!persons.contains(authors.next().getObject())) return false; }
+        finally { Iter.close(authors); }
+        return true;
+    }
+
     private static String personPreflight(DatasetGraph data, CommandPolicy.Plan plan, String receipt) {
         PersonMarker marker = personMarker(plan);
         Node person = marker.person();
@@ -383,6 +418,8 @@ final class ErasurePolicy {
         Set<Node> targets = new HashSet<>(); targets.add(person); owned.forEach(value -> targets.add(uri(value)));
         var modify = (UpdateModify) plan.request().getOperations().getFirst();
         for (Quad quad : modify.getDeleteQuads()) if (Set.of(uri(CommandPolicy.PUBLIC_SEARCH), uri(CommandPolicy.PRIVATE_SEARCH)).contains(quad.getGraph())) {
+            // Author-prefix removals are proved from their actual staged quads below.
+            if (quad.getSubject().isVariable() || data.contains(uri(CommandPolicy.PUBLIC_SEARCH), quad.getSubject(), rv("prefixAuthor"), person)) continue;
             boolean own = false;
             for (Node predicate : INDEX_REFERENCES) {
                 var values = data.find(quad.getGraph(), quad.getSubject(), predicate, Node.ANY);
@@ -403,6 +440,10 @@ final class ErasurePolicy {
                 return "Person erasure deleted a retained current fact";
             if (REVISIONS.equals(quad.getGraph()) && !historicalProfilePredicate(quad.getPredicate()))
                 return "Person erasure deleted retained revision metadata";
+            if (Set.of(uri(CommandPolicy.PUBLIC_SEARCH), uri(CommandPolicy.PRIVATE_SEARCH)).contains(quad.getGraph())
+                && !directPersonDocument(data, quad.getGraph(), quad.getSubject(), targets)
+                && !authorPrefixRemoval(data, quad, person))
+                return "Person erasure deleted retained search data";
         }
         if (!personTombstone(staged, person, marker.id(), marker.epoch())) return "Person erasure guard did not match its exact tombstone";
         String checked = check(staged, plan);

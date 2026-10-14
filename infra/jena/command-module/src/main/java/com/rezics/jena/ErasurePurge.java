@@ -285,6 +285,14 @@ public final class ErasurePurge {
                         genericRevisions.removeAll(personTargets);
                         Set<IndexUnit> textDocuments = textIndexDocuments(input, genericRevisions);
                         Set<IndexUnit> personDocuments = personIndexDocuments(input, personTargets);
+                        Set<Node> authorPrefixes = new HashSet<>();
+                        for (Node person : personHeads) {
+                            var prefixes = input.find(PUBLIC_SEARCH, Node.ANY, rv("prefixAuthor"), person);
+                            try { while (prefixes.hasNext()) {
+                                Node entry = prefixes.next().getSubject();
+                                if (entry.isURI() && entry.getURI().startsWith(PublicNameProjection.PREFIX_DIRECTORY)) authorPrefixes.add(entry);
+                            } } finally { org.apache.jena.atlas.iterator.Iter.close(prefixes); }
+                        }
                         long retained = 0;
                         long excluded = 0;
                         var quads = input.find();
@@ -297,10 +305,19 @@ public final class ErasurePurge {
                                     || ErasurePolicy.historicalProfilePredicate(quad.getPredicate()));
                             boolean dropPerson = CURRENT.equals(quad.getGraph()) && personHeads.contains(quad.getSubject())
                                 && ErasurePolicy.PROFILE_PREDICATES.contains(quad.getPredicate());
+                            boolean dropAuthorPrefix = PUBLIC_SEARCH.equals(quad.getGraph()) && authorPrefixes.contains(quad.getSubject()) && ErasurePolicy.authorPrefixRemoval(input, quad, personHeads);
                             boolean dropText = textDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()))
                                 || personDocuments.contains(new IndexUnit(quad.getGraph(), quad.getSubject()));
-                            if (dropContent || dropRevision || dropPerson || dropText) excluded++;
-                            else { output.add(quad); retained++; }
+                            if (dropContent || dropRevision || dropPerson || dropText || dropAuthorPrefix) excluded++;
+                            else {
+                                // Prefix text is an index sentinel, never an author's
+                                // literal name, including detached and shared entries.
+                                if (PUBLIC_SEARCH.equals(quad.getGraph()) && authorPrefixes.contains(quad.getSubject())
+                                    && rv("publicTitle").equals(quad.getPredicate()))
+                                    output.add(quad.getGraph(), quad.getSubject(), quad.getPredicate(), NodeFactory.createLiteralString("rezicsprefixdirectory"));
+                                else output.add(quad);
+                                retained++;
+                            }
                         }
                         org.apache.jena.tdb2.sys.CopyDSG.copyPrefixes(input, output);
                         // Non-sensitive, exact identity and frontier survive compaction.

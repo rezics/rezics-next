@@ -120,4 +120,57 @@ public class PersonProfileErasurePurgeTest {
             assertTrue(output.asDatasetGraph().contains(REVISIONS, PROFILE, rv("component"), PERSON));
         } finally { output.end(); output.close(); }
     }
+    @Test public void sha256ProfileOperationPurgeRemovesAuthorPrefixesWithoutErasingTheWork() throws Exception {
+        Path base = directory(), source = base.resolve("source"), destination = base.resolve("destination");
+        Set<Quad> before = source(source, data -> {
+            data.deleteAny(REVISIONS, PROFILE, rv("operation"), Node.ANY);
+            data.add(REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + "ab".repeat(32)));
+            authorPrefixes(data);
+            data.add(PUBLIC, uri("urn:rezics:search:directory:prefix:detached"), rv("prefixAuthor"), PERSON);
+            data.add(PUBLIC, uri("urn:rezics:search:directory:prefix:detached"), rv("publicTitle"), text("Exact identifying name"));
+            data.add(PUBLIC, SHARED_PREFIX, rv("publicTitle"), text("Exact identifying name"));
+        });
+        purge(source, destination, PERSON, "7");
+        Dataset output = TDB2Factory.connectDataset(destination.toString()); output.begin(ReadWrite.READ);
+        try {
+            var data = output.asDatasetGraph();
+            assertFalse(data.contains(REVISIONS, PROFILE, rv("profileBio"), Node.ANY));
+            assertTrue(data.contains(REVISIONS, PROFILE, rv("operation"), uri("urn:rezics:operation:agent-profile:" + "ab".repeat(32))));
+            assertFalse(data.contains(PUBLIC, SOLO_PREFIX, Node.ANY, Node.ANY));
+            assertFalse(data.contains(PUBLIC, uri("urn:rezics:search:directory:prefix:detached"), Node.ANY, Node.ANY));
+            assertFalse(data.contains(PUBLIC, SHARED_PREFIX, rv("publicTitle"), text("Exact identifying name")));
+            assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("publicTitle"), text("rezicsprefixdirectory")));
+            assertFalse(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), PERSON));
+            assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixAuthor"), OTHER));
+            assertTrue(data.contains(PUBLIC, SHARED_PREFIX, rv("prefixWork"), WORK));
+            assertTrue(data.contains(PUBLIC, FOREIGN_UNIT, rv("publicTitle"), text("Surviving Work")));
+            assertTrue(data.contains(CURRENT, WORK, RDF.type.asNode(), uri("https://schema.org/CreativeWork")));
+            assertTrue(data.contains(CURRENT, CREDIT, rv("agent"), PERSON));
+        } finally { output.end(); output.close(); }
+        Dataset original = TDB2Factory.connectDataset(source.toString()); original.begin(ReadWrite.READ);
+        try { assertEquals(before, snapshot(original.asDatasetGraph())); } finally { original.end(); original.close(); }
+    }
+
+    @Test public void campaignErasingEveryCreditedAuthorDropsTheirSharedPrefix() throws Exception {
+        Path base = directory(), source = base.resolve("source"), destination = base.resolve("destination");
+        source(source, data -> {
+            authorPrefixes(data);
+            data.deleteAny(CURRENT, OTHER, Node.ANY, Node.ANY);
+            data.add(CURRENT, OTHER, RDF.type.asNode(), rv("AgentTombstone"));
+            data.add(CURRENT, OTHER, rv("agentKind"), rv("PersonAgent"));
+            data.add(CURRENT, OTHER, rv("erasureId"), text(id(8)));
+            data.add(CURRENT, OTHER, rv("erasureEpoch"), integer("7"));
+        });
+        Path campaign = base.resolve("campaign.tsv");
+        Files.writeString(campaign, PERSON.getURI() + "\t7\n" + OTHER.getURI() + "\t7\n");
+        ErasurePurge.main(new String[]{source.toString(), destination.toString(), "--campaign", campaign.toString()});
+        Dataset output = TDB2Factory.connectDataset(destination.toString()); output.begin(ReadWrite.READ);
+        try {
+            var data = output.asDatasetGraph();
+            assertFalse(data.contains(PUBLIC, SHARED_PREFIX, Node.ANY, Node.ANY));
+            assertTrue(data.contains(PUBLIC, FOREIGN_UNIT, rv("publicTitle"), text("Surviving Work")));
+            assertTrue(data.contains(CURRENT, CREDIT, rv("agent"), PERSON));
+        } finally { output.end(); output.close(); }
+    }
+
 }

@@ -29,13 +29,10 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
   );
   cpSync(join(root, 'generated/model'), join(build, 'profiles'), { recursive: true });
   mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
-  cpSync(
-    join(
-      root,
-      'infra/jena/command-module/src/test/java/com/rezics/jena/ErasurePurgeCampaignTest.java',
-    ),
-    join(build, 'src/test/java/com/rezics/jena/ErasurePurgeCampaignTest.java'),
-  );
+  for (const name of ['ErasurePurgeCampaignTest', 'PersonProfileErasurePolicyTest', 'PersonProfileErasurePurgeTest']) {
+    cpSync(join(root, `infra/jena/command-module/src/test/java/com/rezics/jena/${name}.java`),
+      join(build, `src/test/java/com/rezics/jena/${name}.java`));
+  }
   cpSync(
     join(
       root,
@@ -66,7 +63,7 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
         '-ntp',
         '-Dmaven.repo.local=/maven-cache',
         '-Djava.io.tmpdir=/build/tmp',
-        '-Dtest=ErasurePurgeCampaignTest,ModelMutationPolicyTest',
+        '-Dtest=ErasurePurgeCampaignTest,ModelMutationPolicyTest,PersonProfileErasurePolicyTest,PersonProfileErasurePurgeTest',
         'test',
       ],
       {
@@ -79,8 +76,13 @@ test('offline erasure campaign native TDB2 and direct Lucene counterexamples', (
       throw new Error(
         `native campaign tests failed (${result.status}):\n${result.stdout}\n${result.stderr}`,
       );
-    // The class grows with each purge counterexample; what matters is that it ran and passed.
-    expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
+    // The classes grow with each purge counterexample; what matters is that it ran and passed.
+    for (const name of ['ErasurePurgeCampaignTest', 'ModelMutationPolicyTest', 'PersonProfileErasurePolicyTest', 'PersonProfileErasurePurgeTest']) {
+      const report = readFileSync(join(build, `target/surefire-reports/TEST-com.rezics.jena.${name}.xml`), 'utf8');
+      expect(report).toMatch(/<testsuite\b[^>]*tests="[1-9][0-9]*"/);
+      expect(report).toMatch(/<testsuite\b[^>]*errors="0"/);
+      expect(report).toMatch(/<testsuite\b[^>]*failures="0"/);
+    }
   } finally {
     rmSync(build, { recursive: true, force: true });
   }
