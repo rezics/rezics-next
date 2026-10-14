@@ -2,7 +2,7 @@ import { closureSetup, closureCell, closureHydrationFence, effectClosure, publis
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-search.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   personaNames,
@@ -33,6 +33,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 
 async function missing(person: PersonaSession, path: string, absent: string) {
   const unavailable = await person.main('GET', path);
+  expect(unavailable.status, path).toBeLessThan(500);
   const body = await unavailable.json() as { code?: string };
   if (unavailable.status === 409 && body.code === 'read_basis_changed') {
     const restarted = new URL(path, 'http://main.local');
@@ -192,7 +193,7 @@ async function delivered(name: PersonaName) {
   } else if (during.status === 409) expect(body.code, during.path).toBe('read_basis_changed');
   else {
     const ordinary = await person.main('GET', `/v1/search/catalogue?q=${phrase}&realm=${encodeURIComponent(`https://rezics.com/id/${randomUUID()}`)}`);
-    expect(ordinary.status, during.path).toBeLessThan(500);
+    expect(ordinary.status, during.path).toBe(404);
     expect(during.status, during.path).toBe(ordinary.status);
     expect(body, during.path).toEqual(await ordinary.json());
   }
@@ -205,10 +206,10 @@ async function delivered(name: PersonaName) {
     profile: 'public-realm-phrase-v1', context: { kind: 'realm-local', id: sessions.realm },
     phrase, language: 'en',
   };
-  const unavailable = await outcomeResponse(() => person.main('POST', '/v1/queries', query));
-  const ordinary = await outcomeResponse(() => person.main('POST', '/v1/queries', {
+  const unavailable = await person.main('POST', '/v1/queries', query);
+  const ordinary = await person.main('POST', '/v1/queries', {
     ...query, context: { kind: 'realm-local', id: `https://rezics.com/id/${randomUUID()}` },
-  }));
+  });
   expect(ordinary.status).toBe(404);
   expect(unavailable.status).toBe(404);
   expect(await unavailable.json()).toEqual(await ordinary.json());

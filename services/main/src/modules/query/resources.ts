@@ -124,10 +124,12 @@ interface Candidate {
   types?: string[];
   head?: string;
 }
-const resourceDisclosureTarget = (row: Candidate) => ({
+/** A Realm card consumes the record, just like the dedicated directory. Its
+ * name alone is not authority to disclose a closed community. */
+export const resourceDisclosureTarget = (row: Pick<Candidate, 'id' | 'kind' | 'head'>) => ({
   owner: 'graph' as const,
   resource: row.id,
-  component: 'name' as const,
+  component: row.kind === 'realm' ? 'record' as const : 'name' as const,
   ...(row.kind === 'work' && row.head
     ? { work: row.id, workRevision: row.head, revision: row.head }
     : {}),

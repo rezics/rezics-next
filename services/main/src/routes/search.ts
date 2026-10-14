@@ -37,6 +37,7 @@ import { MAX_SEARCH_RESPONSE_BYTES } from '../modules/work/search-readiness.ts';
 import { assertPublicTextReady } from '../modules/work/search-readiness.ts';
 import { normalizedSearchText, fenceSearchFields } from '../modules/search/fields.ts';
 import { readPublicTypeahead } from '../modules/search/typeahead.ts';
+import { withPublicRealmSearch } from '../modules/search/realm-disclosure.ts';
 import { WorkReadLimit } from '../modules/work/read-session.ts';
 import { readName, readAvatar } from '../modules/work/read-contract.ts';
 import { discoveryCredit } from '../modules/discovery/contract.ts';
@@ -180,12 +181,13 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
   const principals = new WeakMap<Request, VerifiedPrincipal>();
   const connections = new Map<string, PrivateSearchConnection>();
   async function readerSnapshot<T>(request: Request, read: () => Promise<T>,
-    deadlineMs?: number, diagnostics?: SearchAttemptDiagnostic[]): Promise<T> {
+    deadlineMs?: number, diagnostics?: SearchAttemptDiagnostic[], realm?: string): Promise<T> {
     await work.access.assertRecoveryOpen();
     const principal = request.headers.has('authorization')
       ? await work.account.verify(request, ['work:read']) : null;
     const result = await withDisclosureViewer(disclosureViewer(principal),
-      () => withStableSearchSnapshot(fuseki, read, deadlineMs, diagnostics));
+      () => withStableSearchSnapshot(fuseki,
+        () => withPublicRealmSearch(work.environment, realm, read), deadlineMs, diagnostics));
     await work.access.assertRecoveryOpen();
     return result;
   }
@@ -252,7 +254,7 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             throw new PublicQueryBudgetExceeded('Ranked catalogue page exceeds its byte bound');
           }
           return hydrated;
-        }));
+        }), undefined, undefined, query.realm);
         return Response.json(result, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         logSearchFailure('catalogue', error, undefined);
@@ -500,7 +502,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
             }
             return result;
           });
-        }, undefined, diagnostics);
+        }, undefined, diagnostics, 'context' in body && typeof body.context === 'object'
+          ? body.context.id : undefined);
         return Response.json(result, {
           headers: { 'cache-control': 'no-store' },
         });
@@ -592,7 +595,8 @@ export function searchRoutes(fuseki: FusekiClient, work: SearchRouteDependencies
           };
           return body.profile === 'public-content-phrase-page-v1' ? readPage()
             : withSearchGraphSnapshot(work.environment, readPage);
-        }, undefined, diagnostics);
+        }, undefined, diagnostics, 'context' in body && typeof body.context === 'object'
+          ? body.context.id : undefined);
         return Response.json(page,
           { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
