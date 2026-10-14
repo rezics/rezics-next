@@ -144,18 +144,18 @@ async function selectionHead(realm: string, mainVersion: string) {
     GRAPH ${iri(GRAPHS.current)} { ${iri(realmSelectionSlotIri(realm, mainVersion))} rv:selectionHead ?head }
   } LIMIT 2`)).results?.bindings?.[0]?.head?.value ?? null;
 }
-async function delegatePagePublication(owner: Member, member: Member, page: string) {
-  const scope = `content:publish:${page}`;
-  await member.grant(scope, 'content.publish');
+async function requireZoneEditGrant(owner: Member, zone: string) {
+  const scope = `zone:edit:${zone}`;
+  await owner.grant(scope, 'zone.edit');
   if ((await stack.accessPool.query('SELECT id FROM access.policy WHERE scope_id=$1', [scope])).rowCount) return;
   await owner.grant(scope, POLICY_MANAGE);
   const epoch = (await stack.accessPool.query<{ authority_epoch: string }>(
     'SELECT authority_epoch::text FROM access.scope_gate WHERE id=$1', [scope])).rows[0]!.authority_epoch;
   const change = { action: 'publish-revision' as const, policyId: randomUUID(), scopeId: scope,
-    expectedHeadRevision: '0', mandatory: [], ordered: [{ ruleId: randomUUID(), actions: ['content.publish'],
-      effect: 'allow' as const, condition: { op: 'has-grant', action: 'content.publish' } }] };
-  // Zone editing and publishing its exact home bytes are separate capabilities.
-  // Admit this delegate through the ordinary policy owner, retaining both proofs.
+    expectedHeadRevision: '0', mandatory: [], ordered: [{ ruleId: randomUUID(), actions: ['zone.edit'],
+      effect: 'allow' as const, condition: { op: 'has-grant', action: 'zone.edit' } }] };
+  // The installed policy makes Zone editing depend on the exact domain grant.
+  // The creator's separate live control still authorizes the Content page pin.
   await new AccessPolicyChanges(stack.accessPool).change({ principal: await principal(owner),
     issuerSubject: owner.actor, expectedAuthorityEpoch: epoch, idempotencyKey: randomUUID(),
     requestDigest: hash(JSON.stringify(change)) }, change);
@@ -291,13 +291,13 @@ const zoneEntries: ReplayEntry[] = (['configure', 'retire', 'recover', 'publish'
   requestBuilder: async subcase => {
     const baseline = subcase === 'creator-controller' || subcase === 'steward-controller';
     let site: Awaited<ReturnType<typeof zoneFixture>>;
-    if (baseline) {
+    if (baseline || operation === 'publish') {
       const owner = await personFixture();
       site = { ...await answer<{ zone: string; zoneRevision: string; navigationRevision: string }>(
         owner.send('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Controlled site',
           language: 'en', visibility: 'public', capabilities: ['zone'], actingSubject: owner.actor })), owner };
     } else site = await zoneFixture();
-    const member = baseline && operation !== 'withdraw' ? site.owner
+    const member = (baseline && operation !== 'withdraw') || operation === 'publish' ? site.owner
       : subcase === 'steward' || subcase === 'steward-controller' ? await personFixture() : await stack.member(randomUUID());
     const deps = stack.composition.dependencies, key = randomUUID();
     let expectedHead = (await readZoneConfiguration(stack.env, site.zone)).revision;
@@ -325,7 +325,7 @@ const zoneEntries: ReplayEntry[] = (['configure', 'retire', 'recover', 'publish'
       publication = { zone: site.zone, expectedHead, actingSubject: member.actor, idempotencyKey: key,
         routesRevision: site.navigationRevision, navigationRevision: site.navigationRevision,
         pages: [{ page, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }] };
-      if (!baseline) await delegatePagePublication(site.owner, member, page);
+      if (!baseline) await requireZoneEditGrant(site.owner, site.zone);
     }
     // Attachment authority consumes Realm stewardship in addition to its action.
     if (operation === 'withdraw' && (baseline || subcase === 'steward')) {
@@ -568,6 +568,18 @@ const controllerEntries: ReplayEntry[] = [
 // Each registration names an observed disclosure whose ordinary controls passed.
 // Keep registrations per witness so a repaired path cannot hide a sibling leak.
 const registeredDisclosures = new Set([
+  'Zone publish / represented-agent / expired',
+  'Zone publish / represented-agent / revoked',
+  'Realm submission submit by author / content-publication / revoked',
+  'Realm submission submit / correction / revoked',
+  'Realm submission decide / accept / expired',
+  'Realm submission decide / accept / revoked',
+  'Realm submission decide / accept-content-publication / expired',
+  'Realm submission decide / accept-content-publication / revoked',
+  'Realm reply review / reviewed-revision / expired',
+  'Realm reply review / reviewed-revision / revoked',
+  'Realm reply place / reviewed-revision / expired',
+  'Realm reply place / reviewed-revision / revoked',
   'Realm profile / represented-agent / expired',
   'Realm profile / represented-agent / revoked',
   'Realm public-choice / represented-agent / expired',
