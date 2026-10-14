@@ -1,11 +1,11 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterEach, expect, spyOn, test } from 'bun:test';
 import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { sha256, stable } from '../fixture/corpus.ts';
 import { retainedIntegrity } from '../fixture/manifest.ts';
 import { rebindRetainedRecoveryAttachment } from '../../tests/qa/fault-recovery/owner-restore-erasure-fixture.ts';
-import { RetainedSources, sourceKey, sourceFileDigests, ownerErasurePreparationOptions, SOURCES_PER_PRODUCER, SOURCE_PREPARATION_MS, SOURCE_RESTORE_MS, type RetainedSourceAdapter, type SourceInputs } from './retained-source.ts';
+import { RetainedSources, RetainedSourceRefusal, retainedSourceFailure, sourceKey, sourceFileDigests, ownerErasurePreparationOptions, SOURCES_PER_PRODUCER, SOURCE_PREPARATION_MS, SOURCE_RESTORE_MS, type RetainedSourceAdapter, type SourceInputs } from './retained-source.ts';
 
 const directories: string[] = [];
 afterEach(() => { for (const path of directories.splice(0)) rmSync(path, { recursive: true, force: true }); });
@@ -54,6 +54,8 @@ test('a failed build remains primary when removal fails and cannot become select
   expect(error).toBe(primary);
   expect(error.cause).toBe(cause);
   expect(error.stack).toBe(stack);
+  expect(retainedSourceFailure(error)?.boundary).toBe('build');
+  expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
   await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
 });
 
@@ -65,7 +67,151 @@ test('a failed custody verification retains its exception when removal also fail
   const error = await f.store.prepare(f.adapter).catch(error => error);
   expect(error.message).toContain('physical verification failed');
   expect(error.cause).toBe(primary);
+  expect(error).toBeInstanceOf(RetainedSourceRefusal);
+  expect(retainedSourceFailure(error)?.boundary).toBe('verify-staging');
+  expect(retainedSourceFailure(error)?.adapterPhases).toEqual({ api: 5 });
+  expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
   await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
+});
+
+// Fault the real holder only after it exits, so tests never leave a kernel lease behind.
+function failLeaseRelease(error: Error) {
+  const spawn = Bun.spawn;
+  return spyOn(Bun, 'spawn').mockImplementation((...args) => {
+    const holder = Reflect.apply(spawn, Bun, args) as ReturnType<typeof Bun.spawn>;
+    if (holder.stderr instanceof ReadableStream) {
+      const cancel = holder.stderr.cancel.bind(holder.stderr);
+      holder.stderr.cancel = async () => { await cancel(); throw error; };
+    }
+    return holder;
+  });
+}
+
+test('failed preparation records active/admission phases before cleanup and logs no exception payload', async () => {
+  const f = setup();
+  let clock = 0, removals = 0;
+  const store = new RetainedSources(join(f.directory, 'timings'), () => clock);
+  const primary = Object.freeze(new Error('compose.env PRIVATE_PASSWORD=private-primary'));
+  const cleanup = new Error('compose.env PRIVATE_PASSWORD=private-cleanup');
+  const messages: string[] = [];
+  const log = spyOn(console, 'error').mockImplementation(message => { messages.push(String(message)); });
+  try {
+    f.adapter.build = async context => {
+      clock += 750;
+      context.budget.excludeAdmissionWait(700);
+      throw primary;
+    };
+    f.adapter.remove = async () => { if (++removals > 1) { clock += 20; throw cleanup; } };
+    expect(await store.prepare(f.adapter).catch(error => error)).toBe(primary);
+    const evidence = retainedSourceFailure(primary)!;
+    expect(evidence.elapsedMs).toBe(50);
+    expect(evidence.admissionWaitMs).toBe(700);
+    expect(evidence.phases.build).toEqual({ elapsedMs: 50, admissionWaitMs: 700 });
+    expect(evidence.adapterPhases).toBeUndefined();
+    expect(evidence.cleanup).toEqual([{ boundary: 'remove', error: cleanup, elapsedMs: 20, admissionWaitMs: 0 }]);
+    expect(messages.length).toBeGreaterThan(0);
+    expect(messages.join('')).not.toContain('private-primary');
+    expect(messages.join('')).not.toContain('private-cleanup');
+    expect(messages.join('').length).toBeLessThan(8_000);
+  } finally { log.mockRestore(); }
+});
+
+test('successful failure cleanup preserves the primary; cleanup alone stops preparation before build', async () => {
+  const f = setup(), primary = new Error('producer interrupted');
+  f.adapter.build = async () => { throw primary; };
+  expect(await f.store.prepare(f.adapter).catch(error => error)).toBe(primary);
+  expect(retainedSourceFailure(primary)?.cleanup).toEqual([]);
+  expect(readdirSync(join(f.directory, 'sources')).filter(name => !name.endsWith('.lock'))).toEqual([]);
+  const cleanup = new Error('preparation removal refused');
+  f.adapter.remove = async () => { throw cleanup; };
+  expect(await f.store.prepare(f.adapter).catch(error => error)).toBe(cleanup);
+  expect(retainedSourceFailure(cleanup)?.boundary).toBe('remove');
+  expect(f.counts().builds).toBe(0);
+});
+
+test('failure after publication quarantines custody even when external removal fails', async () => {
+  const f = setup(), primary = new Error('published inventory failed'), cleanup = new Error('volume held');
+  let verifies = 0, removes = 0;
+  f.adapter.verify = async () => { if (++verifies === 2) throw primary; return []; };
+  f.adapter.remove = async () => { if (++removes > 1) throw cleanup; };
+  const error = await f.store.prepare(f.adapter).catch(error => error);
+  expect(error.cause).toBe(primary);
+  expect(retainedSourceFailure(error)?.boundary).toBe('verify-published');
+  expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+  expect(existsSync(join(f.directory, 'sources', sourceKey(f.inputs)))).toBe(false);
+  await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
+  expect(readdirSync(join(f.directory, 'sources')).some(name => name.includes('.pending-'))).toBe(true);
+});
+
+test('failed verification of existing custody remains primary when rebuild removal fails', async () => {
+  const f = setup();
+  const { manifest } = await f.store.prepare(f.adapter);
+  writeFileSync(join(manifest.provenance.backupPath, 'objects'), 'tampered');
+  const cleanup = new Error('volume held');
+  f.adapter.remove = async () => { throw cleanup; };
+  const error = await f.store.prepare(f.adapter).catch(error => error);
+  expect(error).toBeInstanceOf(RetainedSourceRefusal);
+  expect(retainedSourceFailure(error)?.boundary).toBe('verify-existing');
+  expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+  expect(f.counts().builds).toBe(1);
+});
+
+test('select refusal and restore exception survive failed lease release; release alone also fails', async () => {
+  const f = setup();
+  await f.store.prepare(f.adapter);
+  const primary = new Error('restore interrupted'), cleanup = new Error('lease stream failed');
+  const release = failLeaseRelease(cleanup);
+  try {
+    f.adapter.restore = async () => { throw primary; };
+    expect(await f.store.restore(f.adapter).catch(error => error)).toBe(primary);
+    expect(retainedSourceFailure(primary)?.boundary).toBe('restore');
+    expect(retainedSourceFailure(primary)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+    expect(await f.store.select(f.adapter).catch(error => error)).toBe(cleanup);
+    expect(retainedSourceFailure(cleanup)?.boundary).toBe('release');
+    f.adapter.verify = async () => ['physical state differs'];
+    const refusal = await f.store.select(f.adapter).catch(error => error);
+    expect(refusal).toBeInstanceOf(RetainedSourceRefusal);
+    expect(retainedSourceFailure(refusal)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+  } finally { release.mockRestore(); }
+});
+
+test('restore budget failure survives failed candidate disposal and lease release', async () => {
+  const f = setup();
+  let clock = 0;
+  const store = new RetainedSources(join(f.directory, 'restore-failure'), () => clock);
+  await store.prepare(f.adapter);
+  const restore = f.adapter.restore, disposal = new Error('candidate stop failed'), lease = new Error('lease stream failed');
+  f.adapter.restore = async (context, manifest) => { const candidate = await restore(context, manifest); clock += 600_001; return candidate; };
+  f.adapter.dispose = async () => { throw disposal; };
+  const release = failLeaseRelease(lease);
+  try {
+    const error = await store.restore(f.adapter).catch(error => error);
+    expect(error.message).toBe('Fixture preparation exceeded 600 seconds');
+    const evidence = retainedSourceFailure(error)!;
+    expect(evidence.boundary).toBe('verify-restored');
+    expect(evidence.elapsedMs).toBe(600_001);
+    expect(evidence.cleanup.map(entry => entry.error)).toEqual([disposal, lease]);
+  } finally { release.mockRestore(); }
+});
+
+test('post-disposal custody refusal survives lease failure and cannot be reported as successful disposal', async () => {
+  const f = setup();
+  await f.store.prepare(f.adapter);
+  const consumer = await f.store.restore(f.adapter), dispose = f.adapter.dispose, cleanup = new Error('lease stream failed');
+  f.adapter.dispose = async candidate => { await dispose(candidate); f.adapter.verify = async () => ['source changed during disposal']; };
+  // The holder already exists; inject at its release through the stream method instead of acquiring a new lease.
+  const cancel = ReadableStream.prototype.cancel;
+  const release = spyOn(ReadableStream.prototype, 'cancel').mockImplementation(async function(reason) {
+    await cancel.call(this, reason);
+    throw cleanup;
+  });
+  try {
+    const error = await consumer.dispose().catch(error => error);
+    expect(error).toBeInstanceOf(RetainedSourceRefusal);
+    expect(retainedSourceFailure(error)?.boundary).toBe('verify-disposed');
+    expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+    expect(existsSync(consumer.candidate.directory)).toBe(false);
+  } finally { release.mockRestore(); }
 });
 
 test('key binds every declared digest, producer identity/version/options and compatibility, never revision', () => {
