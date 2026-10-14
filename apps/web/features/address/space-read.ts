@@ -4,8 +4,7 @@ import { serviceOrigin } from '../api/origins.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serverRead, serverDeadline } from '../api/server-read.ts';
 import type { ResolvedAddress } from './client.ts';
-import { parseAddressSegment } from './path.ts';
-import { type ClassifiedSpacePage, classifyRealmSpacePage, privateDiscovery } from './space-page.ts';
+import { type ClassifiedSpacePage, readRealmSpacePage, privateDiscovery } from './space-page.ts';
 
 export { privateDiscovery };
 
@@ -45,32 +44,7 @@ export async function readSpacePage(
       },
       { deadlineAt: await serverDeadline(options.incoming) },
     ));
-  try {
-    let realm = options.address?.capabilities?.realm?.slice(-36);
-    if (options.address && !realm) return { kind: 'missing' };
-    if (!realm) {
-      const parsed = parseAddressSegment(key);
-      // The merged API has one alias resolver and no per-Realm handle lookup.
-      // A denied alias cannot be mapped to a Realm through a second resolver.
-      if (!parsed || parsed.kind === 'alias') return { kind: 'missing' };
-      realm = parsed.id;
-    }
-    const query =
-      options.token && options.actingSubject
-        ? `?${new URLSearchParams({ actingSubject: options.actingSubject })}`
-        : '';
-    const header = await read(`/v1/realms/${realm}${query}`, Boolean(query));
-    const headerBody = header.ok ? await header.json() : null;
-    const denied = !header.ok && [401, 403, 404].includes(header.status);
-    const landing = denied ? await read(`/v1/realms/${realm}/join-page`, false) : null;
-    const landingBody = landing?.ok ? await landing.json() : null;
-    return classifyRealmSpacePage(realm, { ok: header.ok, status: header.status, body: headerBody },
-      landing ? { ok: landing.ok, status: landing.status, body: landingBody } : null);
-  } catch (error) {
-    // A replay miss must stay visible. Production's own read still becomes unavailable.
-    if (options.read) throw error;
-    return { kind: 'unavailable' };
-  }
+  return readRealmSpacePage(key, { ...options, throwReadErrors: Boolean(options.read) }, read);
 }
 
 export function realmDiscovery(

@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RealmMessages } from '../messages.ts';
 
 export default {
+  loading: '正在加载…',
+  boards: '版块', allDiscussions: '全部讨论', moreBoards: '更多版块', boardsFailed: '无法加载版块。',
   sections: '社区版块',
   home: '首页', works: '作品', discussions: '讨论', decisions: '决定', about: '关于',
   members: plural({ other: insert('{{count}} 位成员') }, { count: asValue(number()) }),

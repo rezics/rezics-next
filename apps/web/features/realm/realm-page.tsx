@@ -50,9 +50,9 @@ import { idOf, type RealmTab, realmHref, siteHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
 import { addressKey, spaceHref } from '../address/path.ts';
-import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
+import { RealmJoinPage } from './entry-page.tsx';
 import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
-import { privateDiscovery, readSpacePage, realmDiscovery } from '../address/space-read.ts';
+import { readSpacePage, realmDiscovery } from '../address/space-read.ts';
 import type { PublishedHomeContext } from '../zone-editor/home-modules.ts';
 import type { JoinPage, SpaceAccessApi } from '../manage/settings-api.ts';
 import type { MainClient } from '../discover/types.ts';
@@ -125,16 +125,8 @@ export async function privateJoinPage(page: JoinPage, locale: UiLocale, here: st
   api?: SpaceAccessApi;
 }) {
   const actingSubject = transport ? transport.actingSubject ?? null : (await realmReader()).actingSubject ?? null;
-  return (
-    <PrivateSpaceJoinPage
-      page={{ ...page, discovery: privateDiscovery(page.discovery) }}
-      discoveryMetadata={false}
-      locale={locale}
-      actingSubject={actingSubject}
-      signInHref={signInPath(localizedPath(here, locale))}
-      {...transport ? { api: transport.api, persist: false } : {}}
-    />
-  );
+  return <RealmJoinPage page={page} locale={locale} here={here} actingSubject={actingSubject}
+    api={transport?.api} persist={!transport} />;
 }
 
 /**

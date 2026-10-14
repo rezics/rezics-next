@@ -16,11 +16,18 @@ import { type MembershipActions, RealmMembership } from './membership.tsx';
 import type { Membership } from './membership-state.ts';
 import { messages as english, type RealmMessages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
+import de from './messages/de.ts';
+import fr from './messages/fr.ts';
+import es from './messages/es.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { siteHref } from './route.ts';
 
 /** The Realm catalog a story renders in `locale`. */
-export const realmMessagesFor = (locale: UiLocale): RealmMessages => locale === 'zh-Hans' ? { ...english, ...zhHans } : english;
+const realmCatalogs = { en: {}, 'zh-Hans': zhHans, 'zh-Hant': zhHant, ja, ko, de, fr, es };
+export const realmMessagesFor = (locale: UiLocale): RealmMessages => ({ ...english, ...realmCatalogs[locale] });
 
 /**
  * A Realm page as `RealmFrame` composes it on the server, from story data:

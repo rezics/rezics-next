@@ -24,6 +24,7 @@ import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-c
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
 import { mainThreadApi, type ThreadApi } from '../feed/thread-api.ts';
 import { replyTree, THREAD_DEPTH, type ThreadRead, type ThreadReply, type ThreadSort } from '../feed/thread.ts';
+import { mergeThreadPage, threadContinuationHref } from './thread-pages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -50,19 +51,6 @@ export interface ThreadViewProps {
 
 type Continuation = NonNullable<ThreadRead['continuations']>[number];
 const continuationKey = (value: Continuation) => `${value.kind}:${value.reply}`;
-
-/** Keep loaded branches in Main's sibling order and replace only the consumed control. */
-function mergeThreadPage(current: ThreadRead, page: ThreadRead, consumed: Continuation): ThreadRead {
-  const items = new Map(current.items.map((item) => [item.reply, item]));
-  for (const item of page.items) items.set(item.reply, item);
-  const controls = new Map((current.continuations ?? []).map((value) => [continuationKey(value), value]));
-  controls.delete(continuationKey(consumed));
-  for (const value of page.continuations ?? []) {
-    if (value.kind !== 'ancestors') controls.set(continuationKey(value), value);
-  }
-  const continuations = [...controls.values()];
-  return { ...current, items: [...items.values()], continuations, complete: continuations.length === 0 };
-}
 
 function MoreReplies({ continuation, load, href }: {
   continuation: Continuation & { kind: 'siblings' };
@@ -310,7 +298,7 @@ export function ThreadView({
     return byReply;
   }, [read.continuations]);
   const query = sortHrefs[sort].split('?')[1]?.split('#')[0] ?? '';
-  const replyHref = (reply: string) => `${threadPath(realm.path, reply)}${query ? `?${query}` : ''}`;
+  const replyHref = (reply: string, cursor?: string) => threadContinuationHref(threadPath(realm.path, reply), query, cursor);
   const load = async (continuation: Continuation & { kind: 'siblings' }) => {
     let page: ThreadRead;
     if (readPage) page = await readPage(continuation.reply, continuation.cursor);
@@ -332,8 +320,8 @@ export function ThreadView({
   const continuation = (reply: string, depth = 0) => controls.get(reply)?.filter(value => value.kind !== 'ancestors')
     .map(value => value.kind === 'siblings' && depth < THREAD_DEPTH
       ? <MoreReplies key={`${continuationKey(value)}:${value.cursor}`} continuation={value} load={load}
-          href={replyHref(value.reply)} />
-      : <LocalizedLink key={continuationKey(value)} href={replyHref(value.reply)}
+          href={replyHref(value.reply, value.cursor)} />
+      : <LocalizedLink key={continuationKey(value)} href={replyHref(value.reply, value.kind === 'siblings' ? value.cursor : undefined)}
           className="inline-flex min-h-9 w-fit items-center gap-1.5 py-1 font-medium text-primary text-sm
             underline-offset-4 hover:underline">
           {t.continueThread}<ArrowRightIcon aria-hidden="true" className="size-4" />

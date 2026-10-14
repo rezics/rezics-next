@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RealmMessages } from '../messages.ts';
 
 export default {
+  loading: '載入中…',
+  boards: '版面', allDiscussions: '所有討論', moreBoards: '更多版面', boardsFailed: '無法載入版面。',
   sections: '社群版面',
   home: '首頁', works: '作品', discussions: '討論', decisions: '決策', about: '關於',
   members: plural({ one: insert('{{count}} 位成員'), other: insert('{{count}} 位成員') },

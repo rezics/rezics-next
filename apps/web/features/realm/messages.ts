@@ -1,6 +1,8 @@
 import { asValue, insert, number, plural } from 'native-i18n';
 
 export const messages = {
+  loading: 'Loading…',
+  boards: 'Boards', allDiscussions: 'All discussions', moreBoards: 'More boards', boardsFailed: 'Couldn’t load boards.',
   sections: 'Community sections',
   home: 'Home', works: 'Works', discussions: 'Discussions', decisions: 'Decisions', about: 'About',
   members: plural({ one: insert('{{count}} member'), other: insert('{{count}} members') },

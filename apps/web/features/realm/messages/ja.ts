@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RealmMessages } from '../messages.ts';
 
 export default {
+  loading: '読み込み中…',
+  boards: '掲示板', allDiscussions: 'すべてのディスカッション', moreBoards: 'ほかの掲示板', boardsFailed: '掲示板を読み込めませんでした。',
   sections: 'コミュニティのセクション',
   home: 'ホーム', works: '作品', discussions: 'ディスカッション', decisions: '決定', about: '概要',
   members: plural({ one: insert('{{count}}人のメンバー'), other: insert('{{count}}人のメンバー') },

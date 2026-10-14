@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RealmMessages } from '../messages.ts';
 
 export default {
+  loading: 'Cargando…',
+  boards: 'Secciones', allDiscussions: 'Todos los debates', moreBoards: 'Más secciones', boardsFailed: 'No se pudieron cargar las secciones.',
   sections: 'Secciones de la comunidad',
   home: 'Inicio', works: 'Obras', discussions: 'Debates', decisions: 'Decisiones', about: 'Acerca de',
   members: plural({ one: insert('{{count}} miembro'), other: insert('{{count}} miembros') },

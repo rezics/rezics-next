@@ -30,11 +30,11 @@ function realmCopy(messages: RealmMessages, title: string) {
 export function RealmUnavailable({ messages, failure = 'unavailable', reference }: {
   messages: RealmMessages; failure?: FeedFailure; reference?: string;
 }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const text = failureText(failure, realmCopy(messages, messages.unavailableTitle));
   if (text.kind === 'absent') return null;
   if (failure === 'missing') return <RealmNotFound messages={messages} />;
-  const router = useRouter();
-  const [pending, start] = useTransition();
   const quiet = text.action === 'none' || text.action === 'sign-in';
   return <PageContainer>
     <EmptyState icon={text.action === 'restart' ? RotateCwIcon : TriangleAlertIcon}

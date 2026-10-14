@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RealmMessages } from '../messages.ts';
 
 export default {
+  loading: '불러오는 중…',
+  boards: '게시판', allDiscussions: '모든 토론', moreBoards: '게시판 더 보기', boardsFailed: '게시판을 불러오지 못했습니다.',
   sections: '커뮤니티 메뉴',
   home: '홈', works: '작품', discussions: '토론', decisions: '결정', about: '소개',
   members: plural({ one: insert('회원 {{count}}명'), other: insert('회원 {{count}}명') },
