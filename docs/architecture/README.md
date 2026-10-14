@@ -6,6 +6,7 @@
 - [Services](services.md): business owners, deployable processes and dependencies.
 - [System invariants](../contracts/system-invariants.md): cross-domain correctness.
 - [Semantic model](../contracts/semantic-model.md): identities, values and model admission.
+- [Content adoption design](content-adoption.md): field meaning and admitted forms, derivation, references and the Recipe migration proposal.
 - [Storage ownership](../storage/ownership-and-placement.md): one writer, multiple stores and placement.
 - [Decision evidence](evidence.md): sources, selected lessons and remaining qualification.
 - [Target architecture](target-architecture.md): the design record of 2026-10-07 (Traditional Chinese) that the Goals build towards; its decisions move into their owner documents as they settle in code.
