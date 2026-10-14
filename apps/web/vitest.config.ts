@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
+import { storyBrowser } from '../../scripts/qa/story-browser.ts';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { STORY_SCREENSHOTS_ENV, storyScreenshotCommand } from '../../scripts/qa/story-screenshots.ts';
 
@@ -34,6 +34,6 @@ export default defineConfig({
       env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },
       browser: { enabled: true, headless: true,
       ...screenshotCommands,
-      provider: playwright({}), instances: [{ browser: 'chromium' }] } },
+      provider: storyBrowser(), instances: [{ browser: 'chromium' }] } },
   }] },
 });
