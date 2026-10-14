@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { inflateRawSync } from 'node:zlib';
 
@@ -228,8 +229,18 @@ function ensureBinary(): void {
   if (!built) {
     // Task owns the pinned native build and its target directory. Its sources
     // are inputs even when an older executable is already present.
+    // Manager services do not source the shell's Rustup PATH. Preserve any
+    // configured tool first, then expose Rustup before Task isolates CARGO_HOME.
+    const path = [
+      process.env.PATH,
+      process.env.CARGO_HOME ? join(process.env.CARGO_HOME, 'bin') : undefined,
+      join(homedir(), '.cargo/bin'),
+    ]
+      .filter(Boolean)
+      .join(delimiter);
     const result = Bun.spawnSync(['task', 'repo-index:build'], {
       cwd: repository,
+      env: { ...process.env, PATH: path },
       stdout: 'pipe',
       stderr: 'pipe',
     });

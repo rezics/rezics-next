@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { delimiter, join, resolve } from 'node:path';
 import { indexedFiles, indexedSource, indexedSql, repositoryIndex } from './repo-index.ts';
 import { cruiseDependencies } from '../static/mechanism-dependencies.ts';
 
@@ -14,6 +14,51 @@ function withTree(run: (root: string) => void) {
     rmSync(root, { recursive: true, force: true });
   }
 }
+
+test('guard preparation finds Rustup without a login-shell PATH', () => {
+  const path = (process.env.PATH ?? '')
+    .split(delimiter)
+    .filter((directory) => !existsSync(join(directory, 'cargo')))
+    .join(delimiter);
+  const result = Bun.spawnSync(
+    [
+      process.execPath,
+      '-e',
+      `if (Bun.which('cargo')) throw new Error('Fixture still exposes Cargo');
+       const { indexedSource } = await import(${JSON.stringify(resolve(import.meta.dir, 'repo-index.ts'))});
+       console.log(indexedSource({ file: 'fixture.ts', text: 'export const value = 1;' }).ast.type);`,
+    ],
+    { cwd: resolve(import.meta.dir, '../..'), env: { ...process.env, PATH: path } },
+  );
+  expect({
+    exitCode: result.exitCode,
+    output: Buffer.from(result.stdout).toString(),
+    error: result.exitCode === 0 ? '' : Buffer.from(result.stderr).toString(),
+  }).toEqual({ exitCode: 0, output: 'Program\n', error: '' });
+});
+
+test('guard preparation preserves configured Cargo precedence and rejects a mismatched pin', () => {
+  withTree((root) => {
+    const cargo = join(root, 'cargo');
+    writeFileSync(cargo, "#!/bin/sh\nprintf '%s\\n' 'cargo 1.98.0 (fixture)'\n");
+    chmodSync(cargo, 0o755);
+    const result = Bun.spawnSync(
+      [
+        process.execPath,
+        '-e',
+        `await import(${JSON.stringify(resolve(import.meta.dir, 'repo-index.ts'))});`,
+      ],
+      {
+        cwd: resolve(import.meta.dir, '../..'),
+        env: { ...process.env, PATH: [root, process.env.PATH].join(delimiter) },
+      },
+    );
+    expect(result.exitCode).not.toBe(0);
+    expect(Buffer.from(result.stderr).toString()).toContain(
+      'test "$(cargo --version)" = "cargo 1.98.1 (797e8a9bc 2026-08-05)"',
+    );
+  });
+});
 
 test('repository syntax facts reuse content and invalidate edits, additions and deletions', () => {
   withTree((root) => {
