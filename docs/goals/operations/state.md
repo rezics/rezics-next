@@ -1,14 +1,11 @@
 # State
 
-The checkpoint for [this Goal](GOAL.md), recording `task:G-2248:3`,
-`mail:92b643a6-3f0e-47e8-a248-f1c9460a43eb`,
-`mail:89fd3025-f03d-4f7c-b1e8-b81b7b60db78`, `task:G-2287:3`,
-`mail:eac2fe19-4122-4883-b505-a9b196f7275a`,
-`mail:5bf10cd0-5bf1-40e1-92e8-564e8c23a8e0`,
-`mail:d0fb5521-54d2-4e9d-be21-cd94797bcf8b` and
-`mail:6dd0658d-6144-43e2-bb0e-a9eb46488a2f` under
-`checkpoint:577f3e97-f595-435b-a17f-b3f1201a6234`, carrying forward the
-previous checkpoint's decisions. All six listed mail deliveries are acknowledged.
+The checkpoint for [this Goal](GOAL.md), recording
+`mail:6c9d8731-c3fa-45e1-ba59-95d91feebe19` and
+`mail:465530f5-c0b1-4549-95f8-0fac5c175a91` under
+`checkpoint:d935fcdd-bc1e-4679-b581-75da1507f8a8`, carrying forward
+`checkpoint:577f3e97-f595-435b-a17f-b3f1201a6234`'s decisions. Both listed
+mail deliveries are acknowledged.
 
 | Field | State |
 | --- | --- |
@@ -24,10 +21,10 @@ previous checkpoint's decisions. All six listed mail deliveries are acknowledged
 | G-2202, release payload and image (D026) | Running, first attempt. Capture the missing-import failure, then prove packaged Main and actual local release-image startup with image identity and a healthy answer. An API failure after startup is a partial handoff |
 | G-2203, disposable Fuseki support (D016, D075, D109) | Program reports the support step accepted on main at `2502fc2597a7` (three files), task closed verified and claims released. Selected image, killed-container restart and bounded redacted readiness logs are landed support; physical checks remain red. Program already mailed API the revision |
 | G-2205, campaign fixture evidence (D108) | Attempt 3 consumer fix `ff6c24d890d58d1cb29234d6b8b7425fc6adaaf3` accepted as partial support; `land --step` succeeded, on main as `ef88de57e`. It admits only the authenticated initial model-bootstrap sequence advance and accounts for `align-model`. Static gates and 18 supporting tests pass; both post-fix restores qualify. Physical campaign remains red at candidate startup: `Content source field missing or ambiguous: field`. Keep open pending API's accepted G-2249 qualification and exact verdict; no worker resume now. Evidence: `.temp/worktrees/g-2205/.temp/goal/d108-evidence-inventory.json` |
-| G-2248, copied PostgreSQL startup and shared lost-outcome helper | Startup support remains landed at `01c3c623b1a0efc53ef0e95a0c7cfc4b5a22fd6b`. Accepted helper support landed at `3a9662260de1ea1da8b5dc89e2203c0f661d782f`: lost outer outcome injects `08007`, deferred Access unavailable write uses `55P03`, with assertions and fences preserved. Source-stable completion QA `20261013t223605-88996b` stopped at the existing 15-second `pg_verifybackup` limit before any candidate or fault: 22 assertions, preparation failed at 198.100 s, disposal at 206.925 s, admission wait 411.225 s separately. Four fixture unit files pass (9 tests, 65 assertions); no fault behavior or physical outcome is proved. Keep open, with no resume or repeated landing; fixture editing is released to G-2366. Original rerun still needs G-2269's accepted setup and the accepted API prerequisite |
+| G-2248, copied PostgreSQL startup and shared lost-outcome helper | Startup support remains landed at `01c3c623b1a0efc53ef0e95a0c7cfc4b5a22fd6b`. Accepted helper support landed at `3a9662260de1ea1da8b5dc89e2203c0f661d782f`: lost outer outcome injects `08007`, deferred Access unavailable write uses `55P03`, with assertions and fences preserved. Program's admission-clock correction at `13436f6dc80b` voids completion QA `20261013t223605-88996b`'s preparation, disposal, admission-wait and budget-feasibility measurements from the saturated window. Retain source stability, 22 assertions and the observed 15-second `pg_verifybackup` timeout as diagnostic facts only. Four fixture unit files pass (9 tests, 65 assertions); no fault behavior, structural preparation-cost defect or physical outcome is proved. Keep held without resume, repeated landing or unchanged expensive run; fixture editing is released to G-2366. Separate qualification awaits accepted retention support; the original drill also needs G-2269's accepted setup and the accepted API prerequisite |
 | G-2269, original source-erasure newer-head setup | Already running at the epoch-prerequisite decision; sole editor of the original comment-source-erasure test. API's G-2266 qualification is accepted on main at `67988f2bf2c5896142a817efd3d2e1de66fc037f`: real PostgreSQL, 41 assertions, 58.252 seconds active preparation, full check passed; service unchanged. Matching epochs publish; transactional historical supersession rolls back; stale NULL-to-1 and 1-to-2 captures refuse unchanged. No setup acceptance or physical pass is recorded by these events |
-| G-2287, sibling newer-head setups | Handoff remains pending; no landing accepted. Correction `cfb0f308b553bbd68b7ac23431cfa95a668c221d` follows the historical fault contract. Attempt 3's source-stable production measurement exhausted the ceiling at 364.964 active seconds (Program's rounded reading 365.0); it does not requalify the file. Source construction took 178.8 s; operations 1 and 2 took about 45 and 109 s, and operation 3 was unfinished at 346 s. Host load reached 93 after seven stacks started, but preparation cost is structural. No further unchanged run, resume or landing; await accepted G-2366 retention support and G-2248 helper support for later committed-tree qualification |
-| G-2366, shared retained-source preparation | Sole retention mechanism for operations and API; Program's dated design reading and four conditions are committed and the amended brief was requeued. Key source-affecting input digests, never commits; one builder per key; coded bounded retention with failed-manifest removal and preparation rebuild; reuse `scripts/fixture/` copy/layout/manifest with per-file hashes, RDF digest and owner-state descriptor. Owner-erasure is the first adapter and proof; API's Content producer is the second adapter. Build once within 600 active seconds outside operation clocks; each consumer first verifies the manifest, then restores an isolated copy without producer or corpus-smoke reruns. G-2248's fixture claim is released; respect G-2281's landing-owned harness claim until Program releases it |
+| G-2287, sibling newer-head setups | Handoff remains pending; no landing accepted. Correction `cfb0f308b553bbd68b7ac23431cfa95a668c221d` follows the historical fault contract. Program's admission-clock correction at `13436f6dc80b` voids attempt 3's 364.964/365.0-second ceiling verdict, 178.8-second source-build reading and per-operation timings from the saturated window. They prove neither complete-file budget feasibility nor a structural preparation-cost defect; the incomplete handoff remains unqualified. No unchanged run, resume or landing; decide committed-tree qualification separately after accepted G-2366 retention support. G-2248 helper support is already on main at `3a9662260de1ea1da8b5dc89e2203c0f661d782f` |
+| G-2366, shared retained-source preparation | Sole retention mechanism for operations and API; Program's dated reading and four conditions stand. API's Content producer contract at `4bfe7ce57` now binds the shared interface and manifest acceptance; the amended brief was requeued. Key source-affecting input digests, never commits; one builder per key; coded bounded retention with failed-manifest removal and preparation rebuild; reuse `scripts/fixture/` copy/layout/manifest with per-file hashes, RDF digest and owner-state descriptor. Owner-erasure remains the first adapter and proof; API implements its second adapter only after merge and Program's accepted-commit/contract notification. Build once within 600 active seconds outside operation clocks; each consumer verifies the manifest, then restores an isolated copy without producer or corpus-smoke reruns. G-2248's fixture claim is released. Program reports G-2281 merged at `13436f6dc80b` and closed, freeing `scripts/qa/cli.ts`, with G-2366 running on it |
 | G-2367, history-reader cause preservation | API committed and invoked dispatch of the bounded repair for the guard failure at `services/main/src/modules/work/history.ts:134`. Preserve `RevisionReadBudgetExceeded`, message, budgets, abort precedence and refusal meaning; require exact-cause regression and unchanged restore-closure guard. Await API's accepted-main notification; no classifier change, gate waiver, expensive restore run or physical proof follows |
 | G-2249, retained Content and crash-fence qualification | API's isolated title-only crash qualification remains landed at `fe7e0002fd0a0cda0e15b029ae641036efa85d9e`: source-stable QA `20261013t215346-33fc0f`, 22 assertions, 121764 ms. It proves neither interrupted-body recovery nor physical erasure. API was directed to the sole G-2366 mechanism for stopped-source integrity metadata and isolated restore; its Content adapter step 1 starts only after G-2366 merges and Program mails API the accepted commit. No accepted retained reconstruction or missing/ambiguous-source verdict binds G-2205's candidate facts yet; D016 and campaign prerequisites remain unresolved |
 | Access recovery classification | API retains sole review and landing ownership in G-2214. G-2205's attempt-2 evidence records accepted Access revision `e2a24d6427c6237683a8c203f241c5467e0d51f3` present at capture `cd490077773a4c1bae92a34535f1bbfecef74e8f`; no independent physical restore is proved |
@@ -49,20 +46,40 @@ snapshots establish neither historical event counts nor rebuild frequency.
 
 G-2248's second partial landing is acknowledged; do not repeat it or close the
 still-unproved task. Its fixture claim is lent to G-2366, with no concurrent
-fixture edits. Program attributed the verification timeout to host saturation
-from 22:31 to 23:04 UTC and restored the load gate; this changes no timeout or
-qualification verdict. No extra expensive run is authorized. API owns G-2367's
+fixture edits. Program's accepted admission-clock correction at `13436f6dc80b`
+supersedes G-2248's and G-2287's time-based readings from the saturated
+2026-10-13 22:31–23:04 UTC window. No timing-based budget or structural-cost
+verdict survives; the observed verification timeout remains diagnostic only.
+Any later authorized rerun counts its limit from admission, excludes queueing
+and records source preparation separately from isolated consumer work under
+unchanged ceilings. No extra expensive run is authorized. API owns G-2367's
 cause-preservation finding and will supply the accepted revision after landing;
 borrowed-custody failures remain outside these claims and waive no gate.
 
-G-2287's final measurement was reported and decided; no further unchanged run,
-worker resume or landing is authorized. G-2366 is the single approved source
-preparation mechanism, shared with API. Preserve G-2281's harness claim until
-Program releases it. Its owner-erasure adapter must prove reuse, manifest
+G-2287's incomplete handoff remains unqualified after the timing correction;
+no unchanged run, worker resume or landing is authorized. G-2366 is the single
+approved source preparation mechanism, shared with API; G-2281's harness claim
+is released. Its owner-erasure adapter must prove reuse, manifest
 integrity and isolated restore before later production/completion qualification;
 the API adapter starts on Program's accepted-commit notification. No second
 retention brief is needed. Preserve both G-2205 backups outside the new
 mechanism's bounded retention policy. No per-test ceiling or assertion moves.
+
+G-2366's shared interface is bound to API's `retained-content-source-v1`
+contract at `4bfe7ce57`: one main-selected public companion and one published,
+publicly eligible Content variant, with approval relay/delivery drained and
+the projection cursor at the Content cut. Declared producer inputs and
+source-affecting digests determine the key; generated identities, epochs and
+timings are manifest provenance. Bind graph/index backup, object evidence and
+isolated-restorable Content/Access/Main relay owner state, including authority,
+outbox, cursor/delivery positions, retained facts, byte digest and baseline
+public answer. Valid, missing and ambiguous copies consume one valid source;
+API keeps their assertions in the existing split qualifications. The old
+Content backup `rezics-retained-d8dfd354-8cbc-41d3-a79c-63c687bf90bf` is partial
+evidence and cannot be resealed or supplemented from former live state.
+Preserve it and all existing Content/crash backups outside bounded retention.
+The existing Program reading covers this interface; no second mechanism,
+reading, G-2249 worker attempt or consumer qualification is granted.
 
 G-2266's accepted publication qualification remains a prerequisite, not physical
 erasure or a scope promotion; closure belongs to API. Decide G-2269's original
