@@ -50,8 +50,8 @@ function contractClient(state: State) {
     if (url.pathname.endsWith('/classification-vocabulary')) return Response.json(boards);
     if (!url.pathname.includes('/threads')) throw new Error(`Unexpected contract story request: ${url.pathname}`);
     if (state === 'loading' || state === 'thread-loading') return new Promise<Response>(() => {});
-    if (state === 'error' || state === 'thread-error') return Response.json({ code: 'realm_threads_unavailable' }, { status: 503 });
-    if (state === 'gone' || state === 'thread-gone') return Response.json({ code: 'not_found' }, { status: 404 });
+    if (state === 'error' || state === 'thread-error') return Response.json({ type: 'https://rezics.com/problems/work_read_unavailable', title: 'Work read is unavailable', status: 503, code: 'work_read_unavailable' }, { status: 503 });
+    if (state === 'gone' || state === 'thread-gone') return Response.json({ type: 'https://rezics.com/problems/work_unavailable', title: 'Work is unavailable', status: 404, code: 'work_unavailable' }, { status: 404 });
     if (url.pathname.endsWith('/threads')) return Response.json(page);
     const read: ThreadRead = state === 'siblings' ? { ...storyThread, complete: false,
       continuations: [{ kind: 'siblings', reply: storyThread.focus, cursor: 'siblings/+==' }],
