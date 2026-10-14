@@ -326,6 +326,8 @@ export async function readStructureMeasures(env: WorkActivationEnvironment, inpu
 export async function readCompositionPage(env: WorkActivationEnvironment, input: {
   structure: string; revision?: string; parent?: string; occurrence?: string; after?: string; limit: number;
   canReadTarget: (target: string) => Promise<boolean>; outline?: boolean;
+  /** An authorized exact owner cut may disclose a selected use independently of its moving target. */
+  canReadOccurrence?: (record: OccurrenceRecord) => Promise<boolean>;
   /** Descending sibling order; `after` remains an exclusive continuation anchor. */
   reverse?: boolean;
   /** One disclosure pass per immutable range, including visible lookahead.
@@ -366,6 +368,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
       throw error;
     }
     const withheld = record.target && !isCatalogTarget(profile, record.target)
+      && !await input.canReadOccurrence?.(record)
       && !(input.canReadTargets ? (await input.canReadTargets([record.target])).has(record.target)
         : await input.canReadTarget(record.target));
     if (withheld && profile.withholdUnreadableTargets) throw new CompositionUnavailable('occurrence is unavailable');
@@ -471,6 +474,7 @@ export async function readCompositionPage(env: WorkActivationEnvironment, input:
         targetDecisions.set(record.target, await input.canReadTarget(record.target));
       }
       const withheld = record.target && !isCatalogTarget(profile, record.target)
+        && !await input.canReadOccurrence?.(record)
         && !(readable ? readable.has(record.target) : targetDecisions.get(record.target));
       if (!withheld || !profile.withholdUnreadableTargets) {
         const visible = disclosedRecord(withheld ? { ...record, target: undefined, selection: undefined, labels: [] } : record);

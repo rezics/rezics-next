@@ -12,6 +12,7 @@ import { scaleIngredients } from './operations.ts';
 import { exactRational, type ExactRational } from './quantity.ts';
 import { compositionTargetReader } from '../composition/disclosure-read.ts';
 import { structureProfileFor } from '../structure/profiles.ts';
+import { isAdoptedInstruction, readRecipeInstructions } from './instructions.ts';
 
 /** Occurrences returned by one Recipe work-page call. */
 export const RECIPE_WORK_PAGE_OCCURRENCES = 100;
@@ -299,7 +300,8 @@ export async function readRecipePreviewStructure(session: WorkReadSession, mainV
 }
 
 /** One selected Recipe revision, at most {@link RECIPE_WORK_PAGE_OCCURRENCES} occurrences. */
-export async function readRecipeWorkPage(session: WorkReadSession, work: string, servings?: number, cursor?: string) {
+export async function readRecipeWorkPage(session: WorkReadSession, work: string, servings?: number, cursor?: string,
+  requestedRevision?: string) {
   if (servings !== undefined && (!Number.isInteger(servings) || servings < 1 || servings > 100)) {
     throw new WorkReadInvalid('Servings must be a whole number from 1 to 100');
   }
@@ -326,7 +328,7 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
     || selected && selected.structureProfile !== `${RV}RecipeComposition`) {
     throw new WorkReadUnavailable('Recipe Structure differs from selected Work');
   }
-  const revision = hasPrivatePreview ? header.head : selected!.structureRevision;
+  const revision = requestedRevision ?? (hasPrivatePreview ? header.head : selected!.structureRevision);
   if (!await structureRevisionDisclosureVisible(session, { work, workRevision: basis.card.revision,
     structure, revision })) {
     if (!hasPrivatePreview) {
@@ -342,7 +344,8 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
       ...(query.parent ? { parent: query.parent } : {}),
       ...(query.occurrence ? { occurrence: query.occurrence } : {}),
       ...(query.after ? { after: query.after } : {}),
-      limit: query.limit, canReadTarget });
+      limit: query.limit, canReadTarget,
+      canReadOccurrence: record => Promise.resolve(isAdoptedInstruction(record)) });
   const page = await readRecipeHierarchyPage({ structure, revision,
     ...(servings !== undefined ? { servings } : {}),
     ...(cursor ? { cursor } : {}),
@@ -372,9 +375,10 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
       structure, revision })) throw new WorkReadMoved('Recipe Structure disclosure changed');
   };
   if (page.profile === 'recipe-work-page-stale') { await fence(); return page; }
-  if (Buffer.byteLength(JSON.stringify(page)) > RECIPE_WORK_PAGE_BYTES) {
+  const result = { ...page, instructions: await readRecipeInstructions(session, page.occurrences) };
+  if (Buffer.byteLength(JSON.stringify(result)) > RECIPE_WORK_PAGE_BYTES) {
     throw new WorkReadLimit('Recipe page exceeds 1 MiB');
   }
   await fence();
-  return page;
+  return result;
 }

@@ -213,6 +213,7 @@ export const structureProfiles: readonly StructureProfileRegistration[] = [{
   optionalTargetRoles: ['ingredient', 'equipment', 'step'],
   selectionRequiredRoles: ['instruction'],
   selectionOptionalRoles: ['step'],
+  selectionSelectorRoles: ['instruction', 'step'],
   checkOccurrence(record) {
     if (record.role !== 'instruction' && record.role !== 'step') return;
     if (record.target) {

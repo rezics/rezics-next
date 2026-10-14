@@ -203,6 +203,7 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       if (operation.selection && (operation.selection.mode !== 'fixed-revision' || !operation.target)) {
         throw new InvalidCompositionChange('a selection update names its target and exact revision');
       }
+      if (operation.target && !operation.selection) throw new InvalidCompositionChange('a target update names its exact selection');
       if (operation.target && operation.selection?.mode === 'fixed-revision') {
         try { checkExactInstructionSelection(operation.target, operation.selection.revision, operation.selection.selector); }
         catch (error) { throw new InvalidCompositionChange((error as Error).message); }
@@ -243,6 +244,9 @@ export function checkedOperations(operations: readonly CompositionOperation[],
       const requested = operation.selection ?? { mode: 'follow-context' };
       if (requested.mode === 'fixed-revision') {
         if (requested.selector) {
+          if (!registration?.selectionSelectorRoles?.includes(operation.role)) {
+            throw new InvalidCompositionChange('this field does not admit an owner selector');
+          }
           try { checkExactInstructionSelection(target, requested.revision, requested.selector); }
           catch (error) { throw new InvalidCompositionChange((error as Error).message); }
         } else if (!/^urn:rezics:content:revision:[0-9a-f-]{36}$/.test(requested.revision)) {

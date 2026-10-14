@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia';
+import { ExactInstructionSelector } from '../modules/structure/selection.ts';
+import { isAdoptedInstruction, readRecipeInstructions } from '../modules/recipe/instructions.ts';
 import { createHash } from 'node:crypto';
 import type { Static, TSchema } from 'typebox';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -148,6 +150,7 @@ export const openApiOperations = {
   '/v1/recipes/{id}/imports': { post: { rateLimitFamily: 'write', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/file-imports': { post: { rateLimitFamily: 'upload', exposure: 'public', bearer: true, idempotencyKey: true } },
   '/v1/recipes/{id}/exports/schema-org': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
+  '/v1/recipes/{id}/export': { get: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
   '/v1/recipes/nutrition': { post: { rateLimitFamily: 'read', exposure: 'public', bearer: true } },
 } as const;
 
@@ -215,7 +218,8 @@ async function readPage(work: MainWorkDependencies, request: Request, input: {
     readCompositionPage(work.environment, { structure: input.structure, revision,
       ...(input.parent ? { parent: input.parent } : {}), ...(input.after ? { after: input.after } : {}),
       limit: input.limit, canReadTarget: target => NATIVE_ID.test(target)
-        ? work.access.canReadWork(principal, input.actingSubject, target) : Promise.resolve(false) }));
+        ? work.access.canReadWork(principal, input.actingSubject, target) : Promise.resolve(false),
+      canReadOccurrence: record => Promise.resolve(isAdoptedInstruction(record)) }));
 }
 
 async function allOccurrences(work: MainWorkDependencies, request: Request, structure: string,
@@ -377,6 +381,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
   return new Elysia()
     .get('/v1/recipes/works/:id', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref),
+        revision: t.Optional(ref),
         servings: t.Optional(t.Numeric({ minimum: 1, maximum: 100 })),
         cursor: t.Optional(t.String({ minLength: 1, maxLength: RECIPE_WORK_PAGE_CURSOR_MAX })) },
       { additionalProperties: false }),
@@ -384,6 +389,10 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       response: { 200: t.Nullable(t.Object({ profile: t.Literal('recipe-work-page-v1'), structure: ref,
         revision: ref, occurrences: t.Array(OccurrenceRecord),
         measures: t.Array(RecipeMeasure),
+        instructions: t.Array(t.Object({ occurrence: ref,
+          reference: t.Object({ target: t.String(), selector: ExactInstructionSelector }),
+          status: t.Union([t.Literal('available'), t.Literal('unavailable')]),
+          document: t.Optional(t.Any()), mediaUse: t.Optional(t.String()) })),
         ingredients: t.Array(t.Object({ occurrence: ref, originalText: t.String(),
           sourceLexical: t.Optional(t.String()), amount: t.Optional(rational),
           amountUpper: t.Optional(rational), unitText: t.Optional(t.String()), scaled: t.Boolean(),
@@ -403,7 +412,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     async ({ request, params, query }) => {
       try {
         const body = await workRead(work, request, { actingSubject: query.actingSubject },
-          session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings, query.cursor));
+          session => readRecipeWorkPage(session, `https://rezics.com/id/${params.id}`, query.servings, query.cursor, query.revision));
         const stale = body !== null && typeof body === 'object' && 'profile' in body
           && body.profile === 'recipe-work-page-stale';
         return Response.json(body, { status: stale ? 409 : 200, headers: { 'cache-control': 'private, no-store' } });
@@ -558,6 +567,31 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           sourcePosition: header.sourcePosition,
           cost: { pages: scanned.pages + 1, pagesRead: scanned.pagesRead + header.cost.pagesRead,
             occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
+      } catch (error) { return routeError(error); }
+    })
+    .get('/v1/recipes/:id/export', { params: t.Object({ id: groupUuid }),
+      query: t.Object({ actingSubject: ref, revision: t.Optional(ref),
+        format: t.Optional(t.Union([t.Literal('native'), t.Literal('schema-org')])) }, { additionalProperties: false }),
+      response: { 200: t.Any(), 413: problemResult(413), ...problems } },
+    async ({ request, params, query }: { request: Request; params: { id: string };
+      query: { actingSubject: string; revision?: string; format?: 'native' | 'schema-org' } }) => {
+      try {
+        const structure = `https://rezics.com/id/${params.id}`;
+        const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
+          ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
+        const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
+          RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
+        const instructions = await workRead(work, request, { actingSubject: query.actingSubject },
+          session => readRecipeInstructions(session, scanned.records));
+        const contents = [...new Map(instructions.flatMap(item => item.document
+          ? [[JSON.stringify(item.reference), { reference: item.reference, document: item.document }] as const] : [])).values()];
+        const body = query.format === 'native'
+          ? { format: 'native', structure, revision: header.revision, occurrences: scanned.records,
+            contents, derivations: [], losses: [] }
+          : { profile: 'recipe-schema-org-export-v1', structure, revision: header.revision,
+            ...exportRecipe(scanned.records, structure, instructions) };
+        if (Buffer.byteLength(JSON.stringify(body)) > 1_048_576) throw new RecipeExportLimit('Recipe export exceeds 1 MiB');
+        return Response.json(body, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return routeError(error); }
     })
     .post('/v1/recipes/:id/file-imports', { params: t.Object({ id: groupUuid }),

@@ -1,6 +1,6 @@
 import { Type, type Static, type TSchema } from 'typebox';
 import { Value } from 'typebox/value';
-import { ExactInstructionSelector } from './selection.ts';
+import { ExactInstructionSelector, checkExactInstructionSelection } from './selection.ts';
 
 // Immutable object formats for Structure revisions. The graph holds the current
 // projection and the revision anchor; these bytes hold the complete state that
@@ -68,6 +68,7 @@ export interface BoundStructureProfile {
   optionalTargetRoles?: readonly string[];
   selectionRequiredRoles?: readonly string[];
   selectionOptionalRoles?: readonly string[];
+  selectionSelectorRoles?: readonly string[];
   qualifiers?: Readonly<Record<string, StructureQualifierSpec>>;
   checkOccurrence?: (record: Pick<OccurrenceRecord, 'role' | 'target' | 'selection' | 'qualifier'>) => void;
 }
@@ -414,6 +415,13 @@ export function checkOccurrenceRecord(record: OccurrenceRecord, profile: Structu
     throw new InvalidStructureObject('a selection policy requires a target');
   }
   if (record.target !== undefined) {
+    if (record.selection?.mode === 'fixed-revision' && record.selection.selector) {
+      if (!registration?.selectionSelectorRoles?.includes(record.role)) {
+        throw new InvalidStructureObject('this field does not admit an owner selector');
+      }
+      try { checkExactInstructionSelection(record.target, record.selection.revision, record.selection.selector); }
+      catch (error) { throw new InvalidStructureObject((error as Error).message); }
+    }
     const catalog = catalogTargetTypes.includes(record.target);
     const needsSelection = !catalog && requiredSelection.includes(record.role);
     if (needsSelection && record.selection === undefined) {

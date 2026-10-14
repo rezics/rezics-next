@@ -82,6 +82,7 @@ export interface StructureProfileRegistration {
   topologyValidationProfile?: ProfileId;
   /** These roles may retain a Content pin, but resource membership needs no pin. */
   selectionOptionalRoles?: readonly OccurrenceRole[];
+  selectionSelectorRoles?: readonly OccurrenceRole[];
   /** Field-specific owner forms, also used for retained and staged objects. */
   checkOccurrence?: (record: Pick<OccurrenceRecord, 'role' | 'target' | 'selection' | 'qualifier'>) => void;
   /** An owner projects its qualifier node alongside the common placement. */
@@ -194,7 +195,8 @@ export async function discoverStructureProfiles(directory = join(import.meta.dir
         || profile.optionalTargetRoles?.some(role => !profile.roles?.includes(role)
           || profile.targetRoles?.includes(role))
         || profile.selectionRequiredRoles?.some(role => !profile.targetRoles?.includes(role))
-        || profile.selectionOptionalRoles?.some(role => !profile.targetRoles?.includes(role)
+        || profile.selectionOptionalRoles?.some(role => (!profile.targetRoles?.includes(role)
+          && !profile.optionalTargetRoles?.includes(role))
           || profile.selectionRequiredRoles?.includes(role))
         || (profile.projectQualifier === undefined) !== (profile.hydrateQualifier === undefined)
         || profile.projectQualifier !== undefined && typeof profile.projectQualifier !== 'function'

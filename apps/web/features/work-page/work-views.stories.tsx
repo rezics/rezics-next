@@ -114,6 +114,7 @@ const typedWork = (type: string, title: string): WorkHeader => ({
 
 const recipeStory: RecipeWorkPage = {
   profile: 'recipe-work-page-v1',
+  instructions: [],
   structure: fixture.work.id,
   revision: fixture.work.revision,
   occurrences: [
