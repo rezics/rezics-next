@@ -5,6 +5,9 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { mainTrackingApi } from '../tracking/api.ts';
 import type { EditionChoice } from '../tracking/types.ts';
+import { releaseChoiceName } from '../tracking/display.ts';
+import { copyOf } from '../tracking/messages.ts';
+import type { EditionPreference, Release } from '../tracking/types.ts';
 import { booksEditionReads, readBooksEditionPage, readBooksEditionStatus } from './books-edition-page.read.ts';
 
 const row = record as AnswerRecord;
@@ -190,7 +193,76 @@ for (const persona of ['stranger', 'owner', 'moderator', 'operator'] as const) {
   });
 }
 
+test('member: an empty preference on a Chinese page reads that locale’s progress', async () => {
+  const header = sample('member', 'primary-get-works-0');
+  const releases = sample('member', 'hub-releases');
+  const preference = sample('member', 'primary-get-me-edition-preferences-1');
+  const progress = sample('member', 'hub-progress-empty-zh-Hans');
+  expect(preference.answer).toBeNull();
+  const failures: string[] = [];
+  const main = transport('member', [
+    { label: header.label, state: 'populated' },
+    { label: releases.label, state: 'populated' },
+    { label: preference.label, state: 'empty' },
+    { label: progress.label, state: 'populated' },
+  ], failures);
+  const page = await readBooksEditionPage(booksEditionReads({
+    main, actingSubject: subjectOf('member', header.label),
+  }), workId('member'), 'zh-Hans');
+  expect<unknown>(page.status.preference).toEqual({ ok: true, data: null });
+  expect<unknown>(page.status.progress).toEqual({ ok: true, data: progress.answer });
+  expect(page.status.editionName).toBeNull();
+  expect(failures).toEqual([]);
+});
+
 for (const persona of choosers) {
+  test(`${persona}: the saved release is named from its recorded detail`, async () => {
+    const preference = sample(persona, 'primary-get-me-edition-preferences-2');
+    const progress = sample(persona, 'chooser-progress-release');
+    const detail = sample(persona, 'saved-release-detail');
+    const failures: string[] = [];
+    const actingSubject = subjectOf(persona, preference.label)!;
+    const main = transport(persona, [
+      { label: preference.label, state: 'populated' },
+      { label: progress.label, state: 'populated' },
+      { label: detail.label, state: 'populated' },
+    ], failures);
+    const reads = booksEditionReads({ main, actingSubject });
+    const locale = persona === 'member' ? 'zh-Hans' : 'en';
+    const status = await readBooksEditionStatus(reads, workId(persona), locale);
+    expect<unknown>(status.preference).toEqual({ ok: true, data: preference.answer });
+    expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
+    const release = detail.answer as Release;
+    expect(status.editionName).toBe(releaseChoiceName(release, locale, copyOf(locale)));
+    const saved = preference.answer as EditionPreference;
+    expect<unknown>(await mainTrackingApi(actingSubject, () => main).edition(saved.work, saved.edition!))
+      .toEqual({ ok: true, data: detail.answer });
+    expect(failures).toEqual([]);
+  });
+
+  test(`${persona}: the saved realization keeps its revision and recorded detail`, async () => {
+    const preference = sample(persona, 'primary-get-me-edition-preferences-3');
+    const progress = sample(persona, 'primary-get-me-progress-summaries-0');
+    const detail = sample(persona, 'saved-realization-detail');
+    const failures: string[] = [];
+    const actingSubject = subjectOf(persona, preference.label)!;
+    const main = transport(persona, [
+      { label: preference.label, state: 'populated' },
+      { label: progress.label, state: 'populated' },
+      { label: detail.label, state: 'populated' },
+    ], failures);
+    const reads = booksEditionReads({ main, actingSubject });
+    const status = await readBooksEditionStatus(reads, workId(persona), 'en');
+    expect<unknown>(status.preference).toEqual({ ok: true, data: preference.answer });
+    expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
+    expect(status.editionName).toBeNull();
+    const saved = preference.answer as EditionPreference;
+    expect(saved.edition?.kind).toBe('realization');
+    expect<unknown>(await mainTrackingApi(actingSubject, () => main).edition(saved.work, saved.edition!))
+      .toEqual({ ok: true, data: detail.answer });
+    expect(failures).toEqual([]);
+  });
+
   test(`${persona}: a recorded save, replay and compare-and-set keep the exact edition`, async () => {
     for (const label of ['primary-put-me-edition-preferences-1', 'primary-put-me-edition-preferences-2', 'primary-put-me-edition-preferences-3', 'primary-put-me-edition-preferences-4'] as const) {
       const { answer, actingSubject, expectedVersion, choice, work } = command(persona, label);
