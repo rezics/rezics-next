@@ -2,7 +2,7 @@ import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { profileHref } from '../profile/route.ts';
 import { onRezics, page, people, post, realms, storyId } from './fixtures.ts';
-import type { FeedHead, FeedPage, FeedQuery } from './types.ts';
+import type { FeedHead, FeedPage, FeedQuery, MainClient } from './types.ts';
 
 /** Contract specimens, not recorded answers. Capture these requests in the prove phase.
  * Original title and text are authored for this fixture by the owner Person;
@@ -49,9 +49,13 @@ export function closureHead(scope: string, after: string): FeedHead {
     projection: { sequence: '40', reviewSequence: '7', dataEpoch: 'story' } };
 }
 
-export const closureProblem = { code: 'forbidden', detail: 'The acting Agent cannot read this feed.' };
-export const closureUnavailableProblem = { code: 'work_read_unavailable', detail: 'Feed read unavailable.',
-  reference: 'feed-read-contract-503' };
+type FeedProblem = NonNullable<Awaited<ReturnType<MainClient['v1']['feed']['get']>>['error']>['value'];
+export const closureProblem = { type: 'https://rezics.com/problems/forbidden', title: 'Feed access refused',
+  status: 403, code: 'forbidden', detail: 'The acting Agent cannot read this feed.' } satisfies FeedProblem;
+export const closureUnavailableProblem = { type: 'https://rezics.com/problems/work_read_unavailable',
+  title: 'Feed read unavailable', status: 503, code: 'work_read_unavailable',
+  detail: 'Feed read unavailable.' } satisfies FeedProblem;
+export const closureUnavailableReference = 'feed-read-contract-503';
 
 /** Exact specimen requests, including independent-original continuation and all closure scopes.
  * There is no 202 in the feed read contract; catching-up 200 is not pending. */
@@ -95,7 +99,12 @@ export function closureTransport(persona: AnswerPersona, state: ClosureState) {
     const body = request.method === 'GET' ? null : await request.json() as { actingSubject?: string };
     if ((url.searchParams.get('actingSubject') ?? body?.actingSubject) !== closureActor(persona))
       throw new Error('Feed specimen identity mismatch');
-    const json = (body: unknown, status = 200) => Response.json(body, { status });
+    const json = (body: unknown, status = 200) => {
+      const headers: Record<string, string> = {};
+      if (status >= 400) headers['content-type'] = 'application/problem+json';
+      if (status === 503) headers['x-request-id'] = closureUnavailableReference;
+      return Response.json(body, { status, headers });
+    };
     if (path === '/v1/feed/head') return json(closureHead(url.searchParams.get('scope') ?? 'all',
       url.searchParams.get('after')!));
     if (path.startsWith('/v1/me/feed-watermarks/')) return json({ profile: 'home-watermark-v1',

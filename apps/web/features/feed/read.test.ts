@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
+import { Value } from 'typebox/value';
+import { problemResult } from '../../../../services/main/src/api-contract.ts';
+import { feedPage } from '../../../../services/main/src/modules/feed/contract.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { mainFeedApi } from './api.ts';
 import { closedRealm, closureActor, closurePersonas, closureProblem, closureQuery, closureSuccessor,
-  closureTransport, independentOriginals } from './closure-feed-fixtures.ts';
+  closureTransport, closureUnavailableProblem, independentOriginals } from './closure-feed-fixtures.ts';
 import { feedHeadScope, readFeedPage } from './read.ts';
 
 describe('closed Realm feed answer consumption', () => {
@@ -56,7 +59,7 @@ test('feed head uses a Realm scope and declines unsupported combined filters', (
 test('feed read failures retain status and exact problem; only 401 requests sign-in', async () => {
   for (const [status, failure] of [[400, 'invalid'], [401, 'sign-in'], [403, 'unavailable'],
     [404, 'missing'], [409, 'moved'], [422, 'budget'], [503, 'unavailable']] as const) {
-    const problem = { ...closureProblem, code: `feed_${status}` };
+    const problem = { ...closureProblem, status, code: `feed_${status}`, type: `https://rezics.com/problems/feed_${status}` };
     const calls: string[] = [];
     const main = browserMainApi('https://contract.invalid', { fetcher: Object.assign(async (input: Parameters<typeof fetch>[0]) => {
       calls.push(String(input));
@@ -73,11 +76,23 @@ test('feed read failures retain status and exact problem; only 401 requests sign
 });
 
 test('platform closure stays absent while retaining its HTTP answer', async () => {
-  const problem = { code: 'platform_closed' };
+  const problem = { ...closureProblem, code: 'platform_closed', type: 'https://rezics.com/problems/platform_closed' };
   const main = browserMainApi('https://contract.invalid', {
     fetcher: Object.assign(async () => Response.json(problem, { status: 403 }), { preconnect: globalThis.fetch.preconnect }),
   });
   expect(await readFeedPage(main, closureQuery('member'))).toEqual({ ok: false, failure: 'closed', status: 403, problem });
+});
+
+test('contract-built feed and refusal specimens conform to Main schemas', async () => {
+  expect(Value.Check(problemResult(403), closureProblem)).toBe(true);
+  expect(Value.Check(problemResult(503), closureUnavailableProblem)).toBe(true);
+  for (const state of ['populated', 'empty', 'sparse'] as const) {
+    const transport = closureTransport('member', state);
+    const read = await readFeedPage(transport.main, closureQuery('member', state === 'empty'));
+    if (!read.ok) throw new Error('First page failed');
+    expect(Value.Check(feedPage, read.data)).toBe(true);
+    transport.dispose();
+  }
 });
 
 test('a transport failure has no invented HTTP status or Main problem', async () => {
