@@ -46,8 +46,8 @@ import { addressKey, siteMemberTarget, spaceHref, zoneMemberHref } from '../addr
 import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
-import { zoneTheme } from './theme.ts';
-import { savedSiteCuts, type SiteMountCut } from './site-cuts.ts';
+import { publishedFrameModel } from '../realm/zone-presentation-read.ts';
+import type { SiteMountCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
@@ -561,12 +561,15 @@ export async function StandaloneZoneSiteFrame({ zone, zoneId, address, locale, m
   children: ReactNode;
 }) {
   const [jar, incoming] = await Promise.all([cookies(), headers()]);
-  const tokens = siteTokens ?? presentation.presentation.tokens;
-  const frameZone = siteTokens ? { ...zone, tokens: siteTokens } : zone;
-  const cuts = savedSiteCuts({ tokens, navigation: siteNavigation ?? presentation.presentation.navigation },
-    siteMounts ?? presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
-    address, locale, messages.home);
-  const theme = zoneTheme(cuts.tokens, { reader: parseTheme(jar.get(THEME_COOKIE)?.value), enabled: true });
+  const model = publishedFrameModel(presentation, zoneId, locale, messages.home, '', {
+    reader: parseTheme(jar.get(THEME_COOKIE)?.value),
+    ref: address,
+    zone,
+    mounts: siteMounts,
+    tokens: siteTokens,
+    navigation: siteNavigation,
+  });
+  const { zone: frameZone, cuts, theme } = model;
   const actions = <ZoneEditLink zoneId={zoneId} space={address} locale={locale} />;
   return <ZoneFrame zone={frameZone} dataZone={zoneId} theme={theme} pkg={null}
     nonce={incoming.get(ZONE_NONCE_HEADER) ?? undefined} members={null} actions={actions}

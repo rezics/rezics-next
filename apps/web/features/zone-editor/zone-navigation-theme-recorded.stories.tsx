@@ -16,6 +16,9 @@ import { zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts
 
 const record = navigationAndTheme as AnswerRecord;
 const locale = 'en';
+// Route parameters stay independent of the answer selected for this Zone.
+const publishedZoneId = '6fb6dc7e-79f0-8b61-8d2e-96f29bf19977';
+const emptyZoneId = '0343da38-4096-8bfb-8e4d-4f9644c76f72';
 const copy = editorMessages[locale];
 
 function sample(persona: AnswerPersona, label: string) {
@@ -56,7 +59,7 @@ const phone = { viewport: { value: 'phone' }, locale };
 const meta = {
   title: 'Zone editor/Navigation and theme recorded',
   component: RecordedNavigationTheme,
-  args: { record, locale },
+  args: { record, locale, zoneId: publishedZoneId },
   globals: { locale },
 } satisfies Meta<typeof RecordedNavigationTheme>;
 export default meta;
@@ -102,7 +105,7 @@ export const RepublishedOwner: Story = {
 export const RepublishedOwnerPhone: Story = { ...RepublishedOwner, globals: phone };
 
 export const EmptyHomeVisitor: Story = {
-  args: { persona: 'visitor', presentation: 'empty-home-presentation', presentationState: 'empty' },
+  args: { persona: 'visitor', zoneId: emptyZoneId, presentation: 'empty-home-presentation', presentationState: 'empty' },
   parameters: { route: { pathname: sitePath('visitor', 'empty-home-presentation') } },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
@@ -118,7 +121,7 @@ export const EmptyHomeVisitorPhone: Story = { ...EmptyHomeVisitor, globals: phon
 export const EmptyIndexVisitor: Story = {
   args: {
     persona: 'visitor', presentation: 'published-presentation', presentationState: 'populated',
-    route: 'published-index-empty', routeState: 'empty',
+    route: 'published-index-empty', routeState: 'empty', path: '/published-link',
   },
   parameters: { route: { pathname: mountedPath('visitor', 'published-presentation', 'published-index-empty') } },
   play: async ({ canvasElement }) => {
@@ -198,7 +201,7 @@ export const LoadingVisitorPhone: Story = { ...LoadingVisitor, globals: phone };
 export const RouteRefusedVisitor: Story = {
   args: {
     persona: 'visitor', presentation: 'published-presentation', presentationState: 'populated',
-    route: 'unpublished-route-refused', routeState: 'error',
+    route: 'unpublished-route-refused', routeState: 'error', path: '/draft-link',
   },
   parameters: { route: { pathname: sitePath('visitor', 'published-presentation') } },
   play: async ({ canvasElement }) => {

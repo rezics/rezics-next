@@ -3,6 +3,8 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import navigationAndTheme from '../../../../tests/qa/fixtures/outcomes/zone/navigation-and-theme.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
+import { loadPublishedFrame, publishedFrameModel, zonePresentationReads } from '../realm/zone-presentation-read.ts';
+import { zoneTheme } from '../zones/theme.ts';
 import type { ZonePresentationRead, ZoneRouteRead } from '../realm/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { messages as zoneMessages } from '../zones/messages.ts';
@@ -12,8 +14,6 @@ import { publicationWire, type PublicationChoice } from './model.ts';
 import { NAV_PAGE_SIZE, pageNameOf } from './navigation.ts';
 import {
   loadNavigationEditor,
-  loadPublishedFrame,
-  loadRecordedRoute,
   loadThemeEditor,
   loadZoneNavigationRead,
   recordedActingSubject,
@@ -135,7 +135,7 @@ test('a recorded empty home is a site with no mounts and no home document', asyn
 test('a recorded empty index has no members and no continuation', async () => {
   const item = sample('visitor', 'published-index-empty');
   const session = open('visitor', [{ label: item.label, state: 'empty' }]);
-  const read = await loadRecordedRoute(session.main, zoneIdFromRecordedPath(item.path), recordedRoutePath(item.path));
+  const read = await zonePresentationReads(session.main).readZoneRoute( zoneIdFromRecordedPath(item.path), recordedRoutePath(item.path));
   if (!read.ok) throw new Error(String(session.unmatched() ?? read.failure));
   expect(read.data.kind).toBe('index');
   if (read.data.kind !== 'index') throw new Error('The recorded route was not an index');
@@ -148,9 +148,55 @@ test('a recorded empty index has no members and no continuation', async () => {
 test('a recorded missing route stays missing and keeps its problem', async () => {
   const item = sample('visitor', 'unpublished-route-refused');
   const session = open('visitor', [{ label: item.label, state: 'error' }]);
-  const read = await loadRecordedRoute(session.main, zoneIdFromRecordedPath(item.path), recordedRoutePath(item.path));
+  const read = await zonePresentationReads(session.main).readZoneRoute(zoneIdFromRecordedPath(item.path), recordedRoutePath(item.path));
   expect(item.answer).toMatchObject({ code: 'route_missing', title: 'Zone route is unavailable' });
+  const { status, problem, ...shown } = read;
+  expect(shown).toEqual({ ok: false, failure: 'missing' });
+  expect(status).toBe(item.status);
+  expect(problem).toEqual(item.answer);
+});
+
+test('the host display contract uses the same refused route without dropping the replay evidence', async () => {
+  const item = sample('visitor', 'unpublished-route-refused');
+  const session = open('visitor', [{ label: item.label, state: 'error' }]);
+  const read = await zonePresentationReads(session.main, undefined, false)
+    .readZoneRoute(zoneIdFromRecordedPath(item.path), '/draft-link');
   expect(read).toEqual({ ok: false, failure: 'missing' });
+  expect(session.calls).toEqual([`GET ${BFF_PREFIX}${item.path} ${item.status}`]);
+  expect(session.unmatched()).toBeUndefined();
+});
+
+test('an unrecorded acting subject is an evidence gap instead of an unavailable public frame', async () => {
+  const item = sample('visitor', 'published-presentation');
+  const session = open('visitor', [{ label: item.label, state: 'populated' }]);
+  await expect(zonePresentationReads(session.main, 'unrecorded-agent')
+    .readCompletePresentation(zoneIdFromRecordedPath(item.path))).rejects.toThrow('Unmatched recorded request');
+  expect(String(session.unmatched())).toContain('actingSubject=unrecorded-agent');
+  expect(session.calls).toEqual([]);
+});
+
+test('the public frame mapping preserves the host locale, reader theme and saved preview cuts', async () => {
+  const item = sample('visitor', 'published-presentation');
+  const session = open('visitor', [{ label: item.label, state: 'populated' }]);
+  const read = await zonePresentationReads(session.main).readCompletePresentation(zoneIdFromRecordedPath(item.path));
+  if (!read.ok) throw new Error(read.failure);
+  const original = structuredClone(read.data);
+  const mapped = publishedFrameModel(read.data, zoneIdFromRecordedPath(item.path), 'zh-Hans',
+    '首页', zoneMessages.moduleHeroCarousel, { reader: 'dark' });
+  expect(mapped.zone.locale).toBe('zh-Hans');
+  expect(mapped.zone.name.lang).toBe(read.data.language);
+  expect(mapped.zone.realm).toBeNull();
+  expect(mapped.cuts.navigation[0]?.label).toMatchObject({ value: '首页', lang: 'zh-Hans' });
+  expect(mapped.cuts.navigation[0]?.href).toContain('/zh-Hans/');
+  expect(mapped.theme).toEqual(zoneTheme(read.data.presentation.tokens, { reader: 'dark', enabled: true }));
+  const tokens = { ...read.data.presentation.tokens, density: 'comfortable' as const, pageSurface: 'flat' as const };
+  const preview = publishedFrameModel(read.data, mapped.zoneId, 'zh-Hans', '首页', zoneMessages.moduleHeroCarousel, {
+    reader: 'system', zone: mapped.zone, ref: mapped.ref, tokens, mounts: [], navigation: [],
+  });
+  expect(preview.zone).toEqual({ ...mapped.zone, tokens });
+  expect(preview.cuts.navigation).toEqual([mapped.cuts.navigation[0]!]);
+  expect(preview.theme).toEqual(zoneTheme(tokens, { reader: 'system', enabled: true }));
+  expect(read.data).toEqual(original);
 });
 
 test('an owner configuration opens the recorded compact card theme', async () => {

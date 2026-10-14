@@ -14,6 +14,7 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection, type RecordedState } from '../stories/recorded-fetch.ts';
 import { defaultPresentation } from '../zones/presentation.ts';
+import { loadPublishedFrame, zonePresentationReads } from '../realm/zone-presentation-read.ts';
 import { zoneMessagesFor } from '../zones/fixtures.ts';
 import { messages as zoneMessagesCatalog } from '../zones/messages.ts';
 import { ZonePageMissing } from '../zones/page-missing.tsx';
@@ -31,14 +32,10 @@ import { ZoneThemeEditor } from './theme-editor.tsx';
 import type { ThemeEditorStart } from './theme.ts';
 import { zoneNavigationPath, zonePreviewPath, zoneThemePath } from './routes.ts';
 import {
-  loadCompletePresentation,
   loadNavigationEditor,
-  loadPublishedFrame,
-  loadRecordedRoute,
   loadThemeEditor,
   recordedActingSubject,
   recordedIndexMembers,
-  recordedRoutePath,
   recordedThemeSaveKey,
   recordedThemeWrite,
   saveRecordedTheme,
@@ -51,6 +48,9 @@ export interface RecordedNavigationThemeProps {
   record: AnswerRecord;
   persona: AnswerPersona;
   locale?: UiLocale;
+  /** Route inputs supplied by the story, independently of the selected answers. */
+  zoneId?: string;
+  path?: string;
   /** Published, republished or empty-home presentation sample. */
   presentation?: string;
   presentationState?: 'populated' | 'empty' | 'loading';
@@ -84,7 +84,7 @@ type Screen =
   | { kind: 'denied'; failure: ReadFailure };
 
 /** Stories and the mapping unit render a recorded navigation or theme answer through the production readers. */
-export function RecordedNavigationTheme({ record, persona, locale = 'en', presentation, presentationState = 'populated',
+export function RecordedNavigationTheme({ record, persona, locale = 'en', zoneId: publicZoneId, path = '/', presentation, presentationState = 'populated',
   route, routeState = 'empty', configuration, configurationState = 'populated', save, navigation,
   navigationState = 'populated', navigationDraft, navigationHeads, mountNames, mountWork }: RecordedNavigationThemeProps) {
   const [screen, setScreen] = useState<Screen | null>(null);
@@ -96,6 +96,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
     const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher });
     const zoneMessages = zoneMessagesFor(locale);
+    const reads = zonePresentationReads(main);
     async function load(): Promise<Screen> {
       if (save) {
         const sample = recordedSample(record, persona, save);
@@ -107,7 +108,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
         }
         const state = themeEditorAfterStaleSave(write);
         if (!state) throw new Error('Recorded stale presentation did not open in the theme editor');
-        const named = presentation ? await loadCompletePresentation(main, zoneIdFromRecordedPath(
+        const named = presentation ? await reads.readCompletePresentation(zoneIdFromRecordedPath(
           recordedSample(record, persona, presentation).path)) : null;
         if (named && !named.ok) throw new Error(`Recorded presentation read failed: ${named.failure}`);
         const name = named?.ok ? named.data.name ?? named.data.address.suffixSource : write.actingSubject;
@@ -141,13 +142,12 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
         return { kind: 'theme', zoneId, acting, name, start: loaded.start };
       }
       if (!presentation) throw new Error('Recorded page has no presentation sample');
-      const sample = recordedSample(record, persona, presentation);
-      const zoneId = zoneIdFromRecordedPath(sample.path);
+      if (!publicZoneId) throw new Error('Recorded public page has no Zone route input');
+      const zoneId = publicZoneId;
       if (route && routeState === 'error') {
-        const routeSample = recordedSample(record, persona, route);
         const [frame, read] = await Promise.all([
           loadPublishedFrame(main, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel),
-          loadRecordedRoute(main, zoneIdFromRecordedPath(routeSample.path), recordedRoutePath(routeSample.path)),
+          reads.readZoneRoute(zoneId, path),
         ]);
         if (!frame.ok) throw new Error(`Recorded presentation read failed: ${frame.failure}`);
         if (read.ok || read.failure !== 'missing') {
@@ -158,9 +158,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
       const frame = await loadPublishedFrame(main, zoneId, locale, realmMessages.home, zoneMessages.moduleHeroCarousel);
       if (!frame.ok) throw new Error(`Recorded presentation read failed: ${frame.failure}`);
       if (!route) return { kind: 'frame', frame: frame.data, index: null };
-      const routeSample = recordedSample(record, persona, route);
-      const read = await loadRecordedRoute(main, zoneIdFromRecordedPath(routeSample.path),
-        recordedRoutePath(routeSample.path));
+      const read = await reads.readZoneRoute(zoneId, path);
       if (!read.ok) throw new Error(`Recorded route read failed: ${read.failure}`);
       if (read.data.kind !== 'index') throw new Error(`Recorded route was ${read.data.kind}`);
       return { kind: 'frame', frame: frame.data, index: recordedIndexMembers(read.data, frame.data.ref) };
@@ -171,7 +169,7 @@ export function RecordedNavigationTheme({ record, persona, locale = 'en', presen
       setError(reason instanceof Error ? reason : new Error(String(reason)));
     });
     return () => { active = false; replay.dispose(); };
-  }, [record, persona, locale, presentation, presentationState, route, routeState, configuration,
+  }, [record, persona, locale, publicZoneId, path, presentation, presentationState, route, routeState, configuration,
     configurationState, save, navigation, navigationState, navigationDraft, navigationHeads, mountNames, mountWork]);
   if (error) throw error;
   if (!screen) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;

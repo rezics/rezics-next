@@ -1,5 +1,6 @@
 import { cache } from 'react';
-import { completePublicNavigation } from './public-navigation.ts';
+import { recordedReplayGap, settleFrame, zonePresentationReads, type RealmFrameRead } from './zone-presentation-read.ts';
+export type { RealmFrameRead } from './zone-presentation-read.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
@@ -66,42 +67,6 @@ export type RealmResolution =
   | { kind: 'join'; page: JoinPage }
   | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
 
-/** A frame keeps Main's complete HTTP problem beside its existing display category. */
-export type RealmFrameRead<T> = Loaded<T> & { status?: number; problem?: unknown };
-
-type FrameAnswer<T> = {
-  data: T | null;
-  error: { status: number; value?: unknown } | null;
-  headers?: unknown;
-  response?: { headers?: unknown };
-};
-
-// Replay omissions are evidence gaps, never a replacement unavailable frame.
-function recordedReplayGap(error: unknown): boolean {
-  return error instanceof Error
-    && /Unmatched recorded request|Recorded sample|Ambiguous recorded request|cannot supply/.test(error.message);
-}
-
-async function settleFrame<T>(call: () => Promise<FrameAnswer<T>>, cursor?: string, keepProblem = true): Promise<RealmFrameRead<T>> {
-  const recorded: { problem: FrameAnswer<T>['error']; gap?: unknown } = { problem: null };
-  const result = await settle(async () => {
-    try {
-      recorded.problem = null;
-      const answer = await call();
-      recorded.problem = answer.error;
-      if (recordedReplayGap(answer.error?.value)) recorded.gap = answer.error?.value;
-      return answer;
-    } catch (error) {
-      if (recordedReplayGap(error)) recorded.gap = error;
-      throw error;
-    }
-  }, cursor);
-  if (recorded.gap) throw recorded.gap;
-  const { problem } = recorded;
-  return !result.ok && problem && keepProblem ? { ...result, status: problem.status,
-    ...(problem.value !== undefined ? { problem: problem.value } : {}) } : result;
-}
-
 /** Public header adapter retained for rules readers and their recorded surfaces. */
 export function readPublishedRealmHeader(client: MainClient, realm: string, keepProblem = false): Promise<RealmFrameRead<RealmHeader>> {
   return realmFrameReads({ main: client, keepProblem }).readRealmHeader(realm);
@@ -131,8 +96,7 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
     readRealmHeader?: typeof readRealmHeader;
   };
 }) {
-  const readPresentation = (zone: string, after?: string): Promise<RealmFrameRead<ZonePresentationRead>> =>
-    settleFrame(() => personal.v1.zones({ id: zone }).presentation.get({ query: { actingSubject, after } }), after, keepProblem);
+  const presentation = zonePresentationReads(personal, actingSubject, keepProblem);
   const readRealmHeader = (realm: string): Promise<RealmFrameRead<RealmHeader>> =>
     settleFrame(() => main.v1.realms({ realm }).get({ query: {} }), undefined, keepProblem);
   const readHeader = resolution?.readRealmHeader ?? ((realm: string, _locale: UiLocale) => readRealmHeader(realm));
@@ -167,11 +131,7 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
     readRealmHeader,
     readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get(), undefined, keepProblem),
     readAddress: (ref: string, locale: UiLocale, fresh = false) => resolve('space', ref, locale, fresh),
-    readPresentation,
-    readCompletePresentation: (zone: string, readPage = readPresentation): Promise<RealmFrameRead<ZonePresentationRead>> =>
-      completePublicNavigation(after => readPage(zone, after)),
-    readZoneRoute: (zone: string, path: string, cursor?: string): Promise<RealmFrameRead<ZoneRouteRead>> =>
-      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor, keepProblem),
+    ...presentation,
     resolveRealm: async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
       const resolved = await resolve('space', ref, locale);
       if (resolved.kind !== 'resolved') {
