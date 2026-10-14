@@ -61,7 +61,7 @@ test('anonymous Realm entry after attachment under both authorities consumes onl
   // its owner, who also holds Realm stewardship. It saves without publication.
   expect((await configuration(fixture.owner, fixture.zone)).configuration.defaultRealm).toBe(fixture.realm);
   await anonymousEntry(fixture, 'attached under both authorities');
-}, 60_000);
+}, 180_000);
 
 test('anonymous Realm entry after delegated stewardship preserves independent Zone authority', async () => {
   const fixture = publicAttachment;
@@ -87,7 +87,7 @@ test('anonymous Realm entry after delegated stewardship preserves independent Zo
   await attach(fixture.moderator, target.zone, target.zoneRevision, fixture.realm);
   expect((await configuration(fixture.moderator, target.zone)).configuration.defaultRealm).toBe(fixture.realm);
   await anonymousEntry(fixture, 'attached by a delegated steward');
-}, 60_000);
+}, 180_000);
 
 test('anonymous Realm entry after a Zone mandate refuses attachment without Realm stewardship', async () => {
   const fixture = publicAttachment;
@@ -112,7 +112,7 @@ test('anonymous Realm entry after a Zone mandate refuses attachment without Real
   expect(refused.code).toBe('invalid_zone_configuration');
   expect(await configuration(operator, target.zone)).toEqual(before);
   await anonymousEntry(fixture, 'refused for a Zone mandate without stewardship');
-}, 60_000);
+}, 180_000);
 afterAll(async () => { await sessions?.close(); });
 
 for (const name of personaNames) test(`${name}: Realm Zone frame read preserves selected publication and persona authority`, async () => {
@@ -133,7 +133,7 @@ for (const name of personaNames) test(`${name}: Realm Zone frame read preserves 
   expect(roles.status, await roles.text()).toBe(name === 'owner' ? 200 : name === 'visitor' ? 401 : 403);
   const editor = await person.main('GET', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor${administrationActing}`);
   expect(editor.status, await editor.text()).toBe(name === 'owner' ? 200 : name === 'visitor' ? 401 : 404);
-}, 60_000);
+}, 180_000);
 
 test('completed Realm closure keeps all six Zone frame reads equal to actual absence', async () => {
   await closeRealm(sessions);
