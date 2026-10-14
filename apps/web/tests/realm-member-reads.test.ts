@@ -53,6 +53,19 @@ function mainDouble(initial: Reader) {
   return { calls, as: (value: Reader) => { reader = value; }, move: () => { moved = true; } };
 }
 
+/** Every adapter gives the same absence. The route read also keeps the HTTP problem, because the frame
+ * chooses the attached Realm's browse chain from it; a kept problem must be the owner's concealed 404. */
+function expectConcealed(results: readonly object[]) {
+  expect(results).toHaveLength(memberReads.length);
+  for (const result of results) {
+    const { status, problem, ...answer } = result as { status?: number; problem?: unknown };
+    expect(answer).toEqual({ ok: false, failure: 'missing' });
+    if (status !== undefined || problem !== undefined) {
+      expect({ status, problem }).toEqual({ status: 404, problem: { code: 'realm_unavailable' } });
+    }
+  }
+}
+
 const memberReads = [
   { path: `/v1/realms/${realm}`, read: () => readWorkRealm(realm, 'en') },
   { path: `/v1/realms/${realm}/works`, read: (cursor?: string) => readRealmWorks(realm, 'en', cursor) },
@@ -78,7 +91,7 @@ for (const reader of ['anonymous', 'nonmember', 'expired', 'revoked', 'unselecte
     const main = mainDouble(reader);
     const results = await pageRequest(() => Promise.all(memberReads.map(({ read }) => read())),
       { signedIn: reader !== 'anonymous' });
-    expect(results).toEqual(memberReads.map(() => ({ ok: false, failure: 'missing' })));
+    expectConcealed(results);
     for (const call of main.calls) {
       const subject = reader === 'nonmember' ? other : reader === 'revoked' ? member : null;
       expect(call.url.searchParams.get('actingSubject')).toBe(subject);
@@ -92,9 +105,9 @@ test('the same Realm and decision keys in a later request cannot reuse a previou
   const read = () => Promise.all(memberReads.map(({ read }) => read()));
   expect((await pageRequest(read, { signedIn: true })).every(result => result.ok)).toBe(true);
   main.as('nonmember');
-  expect(await pageRequest(read, { signedIn: true })).toEqual(memberReads.map(() => ({ ok: false, failure: 'missing' })));
+  expectConcealed(await pageRequest(read, { signedIn: true }));
   main.as('anonymous');
-  expect(await pageRequest(read)).toEqual(memberReads.map(() => ({ ok: false, failure: 'missing' })));
+  expectConcealed(await pageRequest(read));
 });
 
 test('first-page retry and continuation preserve the reader and exact continuation parameter', async () => {
