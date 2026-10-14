@@ -1725,6 +1725,7 @@ type NativeCallGraph = {
   outgoing: Map<string, Set<string>>;
 };
 let lastNativeGraph: NativeCallGraph | undefined;
+const referenceWhitespace = /\s/;
 function compactReference(
   text: string,
   start: number,
@@ -1733,7 +1734,7 @@ function compactReference(
 ): string | undefined {
   let result = '';
   for (let at = start; at < end; at++)
-    if (!/\s/.test(text[at])) {
+    if (!referenceWhitespace.test(text[at])) {
       if (result.length === maximum) return;
       result += text[at];
     }
@@ -1787,59 +1788,55 @@ function nativeFunctionSelection(
     string,
     Map<string, NonNullable<(typeof records)[number]['facts']['aliases']>>
   >();
+  const functionInitializers = new Map<string, Set<string>>();
+  const possibleKeys = new Map<string, Set<string>>();
+  const maximumKeys = new Map<string, number>();
   const recordsByFile = new Map(records.map((record) => [record.source.file, record]));
   for (const { source, facts, offset } of records) {
+    const initializers = new Set<string>();
+    const keys = new Set<string>();
+    let maximum = 0;
+    const remember = (key: string) => {
+      keys.add(key);
+      maximum = Math.max(maximum, key.length);
+    };
     definitions.set(`${source.file}:module`, { file: source.file, start: null, parameters: [] });
     for (const fn of facts.functionFacts!) {
       const id = `${source.file}:${offset(fn.start)}`;
       definitions.set(id, { file: source.file, start: fn.start, parameters: fn.parameters });
-      if (fn.name)
-        names.set(`${source.file}#${fn.className ? fn.className + '.' : ''}${fn.name}`, id);
+      initializers.add(`${fn.start}:${fn.end}`);
+      if (fn.name) {
+        const name = `${fn.className ? fn.className + '.' : ''}${fn.name}`;
+        names.set(`${source.file}#${name}`, id);
+        remember(name);
+      }
     }
     const imported = new Map<string, string>();
-    for (const binding of facts.namedImports!)
+    for (const binding of facts.namedImports!) {
+      remember(binding.local);
       if (binding.source.startsWith('.')) {
         const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
         imported.set(binding.local, `${module}#${binding.imported}`);
       }
+    }
     imports.set(source.file, imported);
     const declarations = new Map<string, NonNullable<typeof facts.aliases>>();
     for (const alias of facts.aliases!) {
+      remember(alias.name);
       const values = declarations.get(alias.name) ?? [];
       values.push(alias);
       declarations.set(alias.name, values);
     }
     aliases.set(source.file, declarations);
+    functionInitializers.set(source.file, initializers);
+    possibleKeys.set(source.file, keys);
+    maximumKeys.set(source.file, maximum);
   }
   const missingSeed = [...seeds].find((id) => !definitions.has(id));
   if (missingSeed) {
     profile?.(`native-graph-fallback:missing-seed:${missingSeed}`);
     return;
   }
-  const functionInitializers = new Map(
-    records.map(({ source, facts }) => [
-      source.file,
-      new Set(facts.functionFacts!.map((fn) => `${fn.start}:${fn.end}`)),
-    ]),
-  );
-  const possibleKeys = new Map(
-    records.map(({ source, facts }) => [
-      source.file,
-      new Set([
-        ...facts
-          .functionFacts!.filter((fn) => fn.name)
-          .map((fn) => `${fn.className ? fn.className + '.' : ''}${fn.name}`),
-        ...facts.namedImports!.map((binding) => binding.local),
-        ...facts.aliases!.map((alias) => alias.name),
-      ]),
-    ]),
-  );
-  const maximumKeys = new Map(
-    [...possibleKeys].map(([file, keys]) => [
-      file,
-      Math.max(0, ...[...keys].map((key) => key.length)),
-    ]),
-  );
   const aliasText = new WeakMap<object, string | undefined>();
   const resolvedNames = new Map<string, Set<string>>();
   const targets = (file: string, inputs: string[]): Set<string> => {
@@ -1900,8 +1897,9 @@ function nativeFunctionSelection(
   };
   for (const { source, facts, offset } of records) {
     for (const fn of facts.functionFacts!)
-      for (const target of targets(source.file, fn.defaultReferences))
-        edge(`${source.file}:${offset(fn.start)}`, target);
+      if (fn.defaultReferences.length)
+        for (const target of targets(source.file, fn.defaultReferences))
+          edge(`${source.file}:${offset(fn.start)}`, target);
     for (const call of facts.callFacts!) {
       if (!call.calleeName) continue;
       const ownerId =
