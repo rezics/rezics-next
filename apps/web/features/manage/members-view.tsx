@@ -15,6 +15,8 @@ import { type FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { signInPath } from '../auth/paths.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { type AdminApi, bffAdminApi, useRoleChange, useRoleRecovery } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import type { CommandFailure } from './commands.ts';
@@ -148,7 +150,8 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
 
   const target = (member: Member): Target => ({ iri: member.member, membershipGeneration: member.membershipGeneration,
     member });
-  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages} />;
+  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages}
+    signInHref={signInPath(localizedPath(membersHref(address, roleFilter?.id ?? null), locale))} />;
   return <div className="grid gap-5">
     {recovery.attempts.filter(entry => entry.attempt.input.command.change.kind === 'assignment').map(entry => {
       const change = entry.attempt.input.command.change;

@@ -19,6 +19,6 @@ export function ZoneAttachmentsPage({ principal, page, realm, actingSubject, loc
     signInHref={signInHref} retryHref={retryHref} />;
   const formatter = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' });
   return <ZoneAttachments principal={principal} realm={realm} actingSubject={actingSubject} locale={locale} messages={messages}
-    client={client} nextCursor={page.data.nextCursor} items={page.data.items.map(item => ({ ...item,
+    client={client} signInHref={signInHref} nextCursor={page.data.nextCursor} items={page.data.items.map(item => ({ ...item,
       when: item.attachedAt ? formatter.format(new Date(item.attachedAt)) : null }))} />;
 }

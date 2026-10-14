@@ -14,6 +14,8 @@ import { useMemo, useState, useEffect } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { signInPath } from '../auth/paths.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { type AdminApi, bffAdminApi, useRoleChange, useRoleRecovery } from './admin-api.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { agentLabel } from './format.ts';
@@ -22,7 +24,7 @@ import { failureText } from './members-view.tsx';
 import type { ManageMessages } from './messages.ts';
 import { permissionOrder, permissionText, sortPermissions } from './permissions.ts';
 import { mergeAgents, newestRoleList } from './read.ts';
-import { membersHref } from './routes.ts';
+import { membersHref, realmHref } from './routes.ts';
 import { REASON_LIMIT } from './reason-dialog.tsx';
 import { ManageFailure } from './parts.tsx';
 import type { AgentSummary, ReadFailure, RealmPermission, Role, RoleChange, RoleCommand, RoleList } from './types.ts';
@@ -54,7 +56,8 @@ export function RolesView({ principal, realm, address = realm, actingSubject, li
     else if (['missing', 'denied', 'sign-in'].includes(refreshed.failure)) setFailure(refreshed.failure);
     setEditing(null); setStatus(t.roleSaved); router.refresh();
   }
-  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages} />;
+  if (failure) return <ManageFailure failure={failure} locale={locale} messages={messages}
+    signInHref={signInPath(localizedPath(realmHref(address, 'roles'), locale))} />;
   return <div className="grid gap-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="space-y-1">

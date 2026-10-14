@@ -15,7 +15,8 @@ import { newKey } from './commands.ts';
 import { attemptStorage, performCommand, retainedCommands } from './safety-pending.ts';
 import { readZoneAttachments } from './read.ts';
 import { withdrawRealmAttachment } from './zone-attachments-api.ts';
-import type { MainClient } from './types.ts';
+import type { MainClient, ReadFailure } from './types.ts';
+import { ManageFailure } from './parts.tsx';
 
 export interface ZoneAttachmentItem {
   zone: string;
@@ -33,7 +34,7 @@ const attachedWhen = (iso: string, locale: UiLocale) =>
   new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'UTC' }).format(new Date(iso));
 
 /** The steward's page of Zones that show this Realm, with withdraw and the next page. */
-export function ZoneAttachments({ principal, realm, actingSubject, locale, messages, items, nextCursor, client = browserMainApi }: {
+export function ZoneAttachments({ principal, realm, actingSubject, locale, messages, items, nextCursor, signInHref, client = browserMainApi }: {
   principal: string;
   realm: string;
   actingSubject: string;
@@ -42,6 +43,7 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
   items: ZoneAttachmentItem[];
   nextCursor: string | null;
   client?: () => MainClient;
+  signInHref?: string;
 }) {
   const t = materializeData(messages, { locale });
   const [rows, setRows] = useState(items);
@@ -50,6 +52,7 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
   const [loading, setLoading] = useState(false);
   const [moved, setMoved] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [failure, setFailure] = useState<ReadFailure | null>(null);
   const [ready, setReady] = useState(false);
   const store = useMemo(() => attemptStorage(principal), [principal]);
   const [unconfirmed, setUnconfirmed] = useState(new Set<string>());
@@ -75,6 +78,7 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
           const current = await readZoneAttachments(client(), realm, actingSubject);
           if (!current.ok && ['missing', 'denied', 'sign-in'].includes(current.failure)) {
             setRows([]); setCursor(null); setMoved(false);
+            setFailure(current.failure);
           }
         }
         return;
@@ -99,6 +103,7 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
         setMoved(answer.failure === 'moved');
         if (answer.failure === 'missing' || answer.failure === 'denied' || answer.failure === 'sign-in') {
           setRows([]); setCursor(null);
+          setFailure(answer.failure);
         }
         setNotice(answer.problem?.title ?? t.unavailableHelp);
         return;
@@ -122,6 +127,10 @@ export function ZoneAttachments({ principal, realm, actingSubject, locale, messa
     }
   }
 
+  if (failure) return <div className="grid gap-3">
+    {notice ? <p role="status">{notice}</p> : null}
+    <ManageFailure failure={failure} locale={locale} messages={messages} signInHref={signInHref} />
+  </div>;
   return <section className="grid min-w-0 gap-4" aria-labelledby="attached-zones-title">
     <div className="min-w-0 space-y-2">
       <h2 id="attached-zones-title" className="font-semibold text-lg tracking-tight sm:text-xl">{t.zonesTitle}</h2>

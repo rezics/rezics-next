@@ -95,6 +95,8 @@ const revoked: Story = { args: { state: 'revoked', persona: 'moderator', delegat
   await canvas.findByText('Reading room 1', { exact: true });
   await userEvent.click(canvas.getByRole('button', { name: messages.loadMore }));
   await expect(canvas.findByText('Realm is unavailable')).resolves.toBeVisible();
+  await expect(canvas.getByRole('heading', { name: messages.missingTitle })).toBeVisible();
+  await expect(canvas.queryByRole('heading', { name: messages.zonesEmpty })).toBeNull();
   await expect(canvas.queryByText('Reading room 1', { exact: true })).toBeNull();
   await expect(canvas.queryByRole('button', { name: messages.loadMore })).toBeNull();
 } };
