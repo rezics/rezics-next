@@ -482,16 +482,15 @@ test('native container work hangs until its batch deadline', async () => {
     r.files.push({ file, tier: 'jena:check', outcome: 'pending' });
     r.write(file, "import { test } from 'bun:test';\ntest('admitted proof passes', () => {});\n");
     r.commit();
-    const savedProfile = process.env.REZICS_STACK_PROFILE;
-    const savedSlot = process.env.GOAL_IN_SLOT;
-    process.env.REZICS_STACK_PROFILE = 'dev';
-    // The check's outer lease does not own this temporary repository's fixture slot.
-    process.env.GOAL_IN_SLOT = '0';
+    // The outer regression's heavy lease does not own this fixture's ordinary slot.
+    const env: NodeJS.ProcessEnv = { ...process.env, REZICS_STACK_PROFILE: 'dev', GOAL_IN_SLOT: '0' };
+    delete env.GOAL_QA_HEAVY_RUN;
+    delete env.GOAL_QA_HEAVY_LOCK;
     let pending: Promise<Execution> | undefined;
     try {
       // Run in the fixture root so its actual slot wrapper sees the held fixture lease.
       pending = runBatch(r.dir, { id: 'native-queued', tier: 'jena:check', files: [file],
-        state: 'pending', attempts: [] }, directory, 1, 1, undefined, { deadlineCapMs: 1_000 });
+        state: 'pending', attempts: [] }, directory, 1, 1, undefined, { deadlineCapMs: 1_000, env });
       const waitDeadline = Date.now() + 15_000;
       while (!existsSync(join(directory, 'runner.log'))
         || !readFileSync(join(directory, 'runner.log'), 'utf8').includes('waiting for QA slot')) {
@@ -511,10 +510,6 @@ test('native container work hangs until its batch deadline', async () => {
     } finally {
       lease.release();
       await pending;
-      if (savedProfile === undefined) delete process.env.REZICS_STACK_PROFILE;
-      else process.env.REZICS_STACK_PROFILE = savedProfile;
-      if (savedSlot === undefined) delete process.env.GOAL_IN_SLOT;
-      else process.env.GOAL_IN_SLOT = savedSlot;
       r.cleanup();
     }
   }, 30_000);

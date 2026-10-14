@@ -239,7 +239,7 @@ test('comment source selectors clear once with the revision and cannot be restor
       VALUES ($1, $2, 7)`, [primary.revisionId, erasureId]);
     await pool.query('COMMIT');
     expect(await probeContentErasure(pool, erasureId, [primary.revisionId])).toEqual(new Map([
-      [primary.revisionId, 'erased']]));
+      [primary.revisionId, 'foreign']]));
     expect(await openCommentSourceRevisions(pool, [primary.revisionId])).toEqual([primary.revisionId]);
     const wrong = { preservationAccess: access, erasureId: randomUUID(), erasureEpoch: '7',
       resourceId: primary.work, revisionIds: [primary.revisionId] };
@@ -257,6 +257,8 @@ test('comment source selectors clear once with the revision and cannot be restor
     expect(cleared.author).toBe(before.author);
     expect(cleared.request_digest).toBe(before.request_digest);
     expect(cleared.revision_id).toBe(before.revision_id);
+    expect(await probeContentErasure(pool, erasureId, [primary.revisionId], '7')).toEqual(new Map([
+      [primary.revisionId, 'erased']]));
     expect((await pool.query(`SELECT request_digest, action, outcome, revision_id::text
       FROM content.receipt WHERE operation_id = $1`,
       [`content-comment:${primary.admissionId}`])).rows[0]).toEqual(receiptBefore);

@@ -1,11 +1,34 @@
-import { expect, test } from 'bun:test';
+import { expect, spyOn, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import * as filesystem from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { planIntegrationShards } from './integration-shards.ts';
 import { integrationStackAdmitsWorkScope } from './stack-environment.ts';
 import { rawSparqlIntegrationFiles, rawSparqlIntegrationScan, scanRawSparqlIntegrationFiles } from './isolated-integration-files.ts';
+
+test('shared helpers are read once per scan and retain provenance for every root', () => {
+  const directory = mkdtempSync(resolve('.temp/qa-shared-helper-scan-'));
+  const integrationDirectory = join(directory, 'tests/qa/integration');
+  mkdirSync(integrationDirectory, { recursive: true });
+  const helper = join(integrationDirectory, 'shared.ts');
+  writeFileSync(helper, "export const update = (fuseki: FusekiClient) => fuseki.update('INSERT DATA {}');\n");
+  for (const name of ['first', 'second']) {
+    writeFileSync(join(integrationDirectory, `${name}.test.ts`), "import './shared.ts';\n");
+  }
+  const read = spyOn(filesystem, 'readFileSync');
+  try {
+    const scan = scanRawSparqlIntegrationFiles(directory);
+    expect(read.mock.calls.filter(([file]) => file === helper)).toHaveLength(1);
+    for (const name of ['first', 'second']) {
+      expect(scan.sites.get(`tests/qa/integration/${name}.test.ts`))
+        .toContain('tests/qa/integration/shared.ts:1: fuseki.update()');
+    }
+    writeFileSync(helper, 'export const update = () => {};\n');
+    expect(scanRawSparqlIntegrationFiles(directory).files.size).toBe(0);
+  } finally { read.mockRestore(); rmSync(directory, { recursive: true, force: true }); }
+});
 
 test('raw SPARQL scan covers integration roots and follows imported support helpers', () => {
   expect(rawSparqlIntegrationScan().roots).toContain('services/main/tests/work-read.integration.test.ts');
