@@ -2,7 +2,7 @@ import type { ZoneLifecycleSnapshot, ZoneLifecycleStatus } from './api.ts';
 
 export type ZoneLifecycleAction = 'retire' | 'recover';
 export type ZoneLifecycleNotice = 'idle' | 'retired' | 'retired-replayed' | 'recovered' | 'recovered-replayed'
-  | 'stale' | 'reviewed' | 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'unavailable';
+  | 'stale' | 'reviewed' | 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'pending' | 'unavailable';
 
 export interface ZoneLifecycleEditorState {
   expectedHead: string;

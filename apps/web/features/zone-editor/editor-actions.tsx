@@ -9,9 +9,10 @@ import type { ZoneEditorMessages } from './messages.ts';
  * One row at every width: Publish, then Save draft, then the two lighter ways out.
  * A full-width stack of these four pushed the writing area below a phone's fold.
  */
-export function EditorActions({ copy, canEdit, busy, saveDisabled, publishDisabled, onSave, onPublish, previewHref, siteHref }: {
+export function EditorActions({ copy, canEdit, busy, saveDisabled, publishDisabled, onSave, onPublish, previewHref, siteHref, canPreview = true }: {
   copy: ZoneEditorMessages;
   canEdit: boolean;
+  canPreview?: boolean;
   busy: null | 'save' | 'publish' | 'load';
   saveDisabled: boolean;
   publishDisabled: boolean;
@@ -30,9 +31,9 @@ export function EditorActions({ copy, canEdit, busy, saveDisabled, publishDisabl
       </Button>
     </> : null}
     {/* Preview builds a fresh server selection; clean soft navigation could leave the editor segment mounted. */}
-    <LocalizedLink href={previewHref} documentNavigation className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'shrink-0')}>
+    {canPreview ? <LocalizedLink href={previewHref} documentNavigation className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'shrink-0')}>
       {copy.preview}
-    </LocalizedLink>
+    </LocalizedLink> : null}
     <LocalizedLink href={siteHref} documentNavigation className={cn(buttonVariants({ variant: 'ghost', size: 'sm' }), 'shrink-0')}>
       {copy.viewSite}
     </LocalizedLink>

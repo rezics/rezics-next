@@ -2,10 +2,12 @@
 
 import { Button } from '@rezics/ui/button';
 import type { FormEvent, SetStateAction } from 'react';
-import { commandLane } from '../api/command.ts';
+import { useMemo } from 'react';
+import { zoneCommandLane as commandLane } from './api.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneRealmAttachment, commitCommand, type ZoneRealmAttachmentClient,
   type ZoneRealmAttachmentSnapshot, type ZoneRealmAttachmentWrite, type ZoneRealmAttachmentWritten } from './api.ts';
+import { reopenAuthoringNotice } from './draft-state.ts';
 import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorResource, useZoneEditorSessionState } from './draft-provider.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 
@@ -21,7 +23,7 @@ interface AttachmentDraft {
   command: AttachmentChoice | null;
   needsReview: boolean;
   review: ZoneRealmAttachmentSnapshot | null;
-  notice: null | 'saved' | 'removed' | 'unavailable' | 'limit' | 'sign-in' | 'failed' | 'denied' | 'stale' | 'reviewed';
+  notice: null | 'pending' | 'saved' | 'removed' | 'unavailable' | 'limit' | 'sign-in' | 'failed' | 'denied' | 'stale' | 'reviewed';
 }
 
 const isDirty = (draft: AttachmentDraft) => Boolean(draft.handle.trim() || draft.command);
@@ -47,9 +49,10 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
   startingNotice?: null | 'limit';
   api?: ZoneRealmAttachmentClient;
 }) {
-  const [state, updateState, ready] = useZoneEditorDraft<AttachmentDraft>('attachment', {
+  const admitted = useMemo<AttachmentDraft>(() => ({
     head: zoneHead, attachedName, attachedRealm, handle: '', command: null, needsReview: false, review: null, notice: startingNotice,
-  }, isDirty, accepts);
+  }), [zoneHead, attachedName, attachedRealm, startingNotice]);
+  const [state, updateState, ready] = useZoneEditorDraft<AttachmentDraft>('attachment', admitted, isDirty, accepts, reopenAuthoringNotice);
   const [busy, updateBusy] = useZoneEditorSessionState<null | 'attach' | 'remove' | 'review'>('attachment-busy', null);
   const stateRef = useZoneEditorRef('attachment-state', state);
   stateRef.current = state;
@@ -70,7 +73,7 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
   const lane = useZoneEditorResource('attachment-command', () =>
     commandLane<AttachmentChoice, ZoneRealmAttachmentWritten>({ ok: false, failure: 'unavailable' }));
   const reviewing = state.needsReview;
-  const disabled = !ready || busy !== null;
+  const disabled = !ready || busy !== null || state.notice === 'denied' || state.notice === 'sign-in';
   useZoneEditorExitActions('attachment', async () => {
     if (!stateRef.current.command || stateRef.current.needsReview || busyRef.current) return false;
     return await write(stateRef.current.command) && !isDirty(stateRef.current);
@@ -88,8 +91,9 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
           handle: choice.body.defaultRealm && current.handle === choice.handle ? '' : current.handle,
           command: null, needsReview: false, review: null, notice: choice.body.defaultRealm ? 'saved' : 'removed' };
         if (answer.failure === 'stale') return { ...current, command: choice, needsReview: true, review: null, notice: 'stale' };
+        if (answer.failure === 'pending') return { ...current, command: choice, notice: 'pending' };
         if (answer.failure === 'unavailable') return { ...current, command: choice, notice: 'failed' };
-        return { ...current, command: null, needsReview: false, review: null,
+        return { ...current, command: lane.needsConfirmation(answer) ? choice : null, needsReview: false, review: null,
           notice: answer.failure === 'sign-in' ? 'sign-in' : answer.failure === 'denied' ? 'denied'
             : 'reason' in answer && answer.reason === 'attachment-limit' ? 'limit' : 'unavailable' };
       });
@@ -154,6 +158,7 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
       <h2 id="zone-realm-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.realmTitle}</h2>
       <p className="text-pretty text-muted-foreground text-sm">{copy.realmHelp}</p>
     </div>
+    {state.notice === 'pending' ? <p role="status" className="text-sm">{copy.commandPending}</p> : null}
     {state.notice === 'saved' ? <p className="text-sm" role="status">{copy.realmSaved}</p> : null}
     {state.notice === 'removed' ? <p className="text-sm" role="status">{copy.realmRemoved}</p> : null}
     {state.notice === 'unavailable' ? <p className="text-pretty text-destructive text-sm" role="alert">{copy.realmUnavailable}</p> : null}
@@ -170,7 +175,7 @@ export function RealmAttachmentEditor({ zoneId, actingSubject, copy, zoneHead, a
       <Button variant="outline" size="sm" className="justify-self-start" disabled={disabled}
         onClick={applyReviewed}>{copy.realmApplyReviewed}</Button>
     </div> : null}
-    {state.command && !state.needsReview && state.notice === 'failed' ? <Button variant="outline" size="sm" className="justify-self-start"
+    {state.command && !state.needsReview && (state.notice === 'failed' || state.notice === 'pending') ? <Button variant="outline" size="sm" className="justify-self-start"
       disabled={disabled} onClick={() => void write(state.command!)}>{copy.realmRetry}</Button> : null}
     {attached ? <div className="grid min-w-0 gap-2 rounded-xl border border-border/60 p-3">
       <p className="truncate font-medium">{attached}</p>

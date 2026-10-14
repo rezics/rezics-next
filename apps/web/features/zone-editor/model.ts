@@ -1,5 +1,6 @@
 import { checkDocument, fromPlainText, serializeDocument, type DocumentSnapshot } from '@rezics/document';
 import { editorDocument, hasBodyContent } from '../document-editor/body.ts';
+import { reopenAuthoringNotice } from './draft-state.ts';
 
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const digest = /^[0-9a-f]{64}$/;
@@ -19,7 +20,7 @@ export interface ContentLanguage {
   originalTag: string;
 }
 
-export type AuthoringFailure = 'unavailable' | 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'missing';
+export type AuthoringFailure = 'pending' | 'unavailable' | 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'missing';
 
 export interface AuthoringProblem { title: string; code: string }
 /** The owner's acknowledged cuts, retained even when the draft or current heads move later. */
@@ -59,6 +60,8 @@ export interface EditorState {
   navigationRevision: string;
   publishedRevisionId: string | null;
   publishedReceipt?: PublicationReceipt;
+  /** A replay confirms its original cut; only a fresh read establishes today’s publication. */
+  publicationCurrentKnown?: boolean;
   variantId: string;
   language: ContentLanguage;
   direction: 'ltr' | 'rtl' | 'none';
@@ -123,6 +126,7 @@ export type EditorEvent =
       variantId: string; language: ContentLanguage; direction: 'ltr' | 'rtl' | 'none';
       zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
   | { type: 'published'; zoneHead: string; revisionId?: string; replayed: boolean; receipt?: PublicationReceipt }
+  | { type: 'publication-current'; zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
   | { type: 'publish-stale'; problem?: AuthoringProblem }
   | { type: 'heads'; zoneHead: string; navigationRevision: string }
   | { type: 'failed'; failure: AuthoringFailure; problem?: AuthoringProblem };
@@ -138,10 +142,17 @@ export function canPublish(state: EditorState): boolean {
   return Boolean(preparedHomeDocument(state) && state.basis && state.savedValue !== null && !isDirty(state) && hasBodyContent(state.value));
 }
 
-export function publicationStatus(state: EditorState): 'private' | 'live' | 'behind' {
+export function publicationStatus(state: EditorState): 'private' | 'live' | 'behind' | 'unknown' {
+  if (state.publicationCurrentKnown === false) return 'unknown';
   if (!state.publishedRevisionId) return 'private';
   if (state.basis && state.basis.revisionId === state.publishedRevisionId && !isDirty(state)) return 'live';
   return 'behind';
+}
+
+/** Only an authorized page read can restore editing; remembered bytes cannot grant it. */
+export function reopenEditorDraft(retained: EditorState, admitted: EditorState): EditorState {
+  if (retained.homeDocument !== admitted.homeDocument || retained.variantId !== admitted.variantId) return retained;
+  return reopenAuthoringNotice(retained, admitted);
 }
 
 export function reduceEditor(state: EditorState, event: EditorEvent): EditorState {
@@ -180,16 +191,21 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
         zoneHead: event.zoneHead,
         navigationRevision: event.navigationRevision,
         publishedRevisionId: event.publishedRevisionId,
+        publicationCurrentKnown: true,
         notice: { kind: 'loaded' },
       };
     case 'published':
       return {
         ...state,
         publishedReceipt: event.receipt,
+        publicationCurrentKnown: !event.replayed,
         publishedRevisionId: event.revisionId ?? state.basis?.revisionId ?? state.publishedRevisionId,
         zoneHead: event.zoneHead,
         notice: { kind: 'published', replayed: event.replayed },
       };
+    case 'publication-current':
+      return { ...state, zoneHead: event.zoneHead, navigationRevision: event.navigationRevision,
+        publishedRevisionId: event.publishedRevisionId, publicationCurrentKnown: true };
     case 'publish-stale':
       return { ...state, notice: { kind: 'publish-stale', ...(event.problem ? { problem: event.problem } : {}) } };
     case 'heads':

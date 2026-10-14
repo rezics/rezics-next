@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "更改已受理，仍待确认。请再次查询以确认同一更改。",
+  checkConfirmation: "查询确认结果",
+  statusUnknown: "尚未核对当前发布内容。",
+  receiptTitle: "发布回执",
+  receiptBody: "此回执保留本次发布的准确页面与布局。在线站点可能已经变化。",
+  receiptPages: "页面修订",
   realmFailedBody: 'REZICS 未响应。您的连接选择仍保留在此处；请重试。',
   exitTitle: '离开前保存未保存的修改？',
   exitBody: '未保存的修改仍在编辑器中。离开前可以保存、放弃修改，或继续编辑。',
@@ -49,7 +55,7 @@ const messages: ZoneEditorMessages = {
   publish: '发布',
   publishing: '正在发布…',
   published: '已发布。读者看到的是这一页。',
-  publishedReplayed: '已发布。先前的发布已经完成。',
+  publishedReplayed: "已确认此前的发布。请打开站点查看当前版本。",
   saveFirst: '发布前请先保存草稿。读者得到的是已保存的页面，不是尚未保存的修改。',
   staleTitle: '这一页已在别处保存',
   staleBody: '你的文字还在这里。可以把它保存到另一版之上，也可以载入那一版。',

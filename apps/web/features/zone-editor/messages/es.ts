@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "Cambio aceptado. La confirmación sigue pendiente; consulta de nuevo el mismo cambio.",
+  checkConfirmation: "Comprobar confirmación",
+  statusUnknown: "La publicación actual aún no se ha comprobado.",
+  receiptTitle: "Comprobante de publicación",
+  receiptBody: "Este comprobante conserva las páginas y el diseño exactos de esta publicación. El sitio puede haber cambiado.",
+  receiptPages: "Revisiones de páginas",
   realmFailedBody: 'REZICS no respondió. Tu elección de conexión sigue aquí; inténtalo de nuevo.',
   exitTitle: '¿Guardar los cambios antes de salir?',
   exitBody: 'Los cambios sin guardar siguen en el editor. Guárdalos, descártalos o sigue editando.',
@@ -51,7 +57,7 @@ const messages: ZoneEditorMessages = {
   publish: 'Publicar',
   publishing: 'Publicando…',
   published: 'Publicada. Los lectores ven esta página.',
-  publishedReplayed: 'Publicada. La publicación anterior ya se había completado.',
+  publishedReplayed: "Publicación anterior confirmada. Abre el sitio para ver la versión actual.",
   saveFirst:
     'Guarda el borrador antes de publicar. Los lectores reciben la página guardada, no los cambios sin guardar.',
   staleTitle: 'Esta página se guardó en otro lugar',

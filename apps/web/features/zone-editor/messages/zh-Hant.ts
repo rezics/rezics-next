@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "變更已受理，仍待確認。請再次查詢以確認同一變更。",
+  checkConfirmation: "查詢確認結果",
+  statusUnknown: "尚未核對目前的發布內容。",
+  receiptTitle: "發布回執",
+  receiptBody: "此回執保留本次發布的確切頁面與版面。線上站點可能已經變更。",
+  receiptPages: "頁面修訂",
   realmFailedBody: 'REZICS 未回應。您的連結選擇仍保留在此處；請重試。',
   exitTitle: '離開前儲存尚未儲存的修改？',
   exitBody: '尚未儲存的修改仍在編輯器中。離開前可以儲存、捨棄修改，或繼續編輯。',
@@ -49,7 +55,7 @@ const messages: ZoneEditorMessages = {
   publish: '發佈',
   publishing: '正在發佈…',
   published: '已發佈。讀者看到的是這一頁。',
-  publishedReplayed: '已發佈。先前的發佈已經完成。',
+  publishedReplayed: "已確認先前的發布。請開啟站點查看目前版本。",
   saveFirst: '發佈前請先儲存草稿。讀者得到的是已儲存的頁面，不是尚未儲存的修改。',
   staleTitle: '這一頁已在別處儲存',
   staleBody: '你的文字還在這裡。可以把它儲存到另一版之上，也可以載入那一版。',

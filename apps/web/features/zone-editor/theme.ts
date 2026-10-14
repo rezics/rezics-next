@@ -26,7 +26,7 @@ export type ThemeNotice =
   | 'sign-in'
   | 'invalid-save'
   | 'conflict'
-  | 'unavailable';
+  | 'pending' | 'unavailable';
 
 export interface ThemeEditorState {
   expectedHead: string;

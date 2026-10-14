@@ -1,30 +1,17 @@
 import { cache } from 'react';
-import type { ZoneText } from '@rezics/zone-sdk';
-import { addressKey, parseAddressSegment, spaceHref } from '../address/path.ts';
+import { headers } from 'next/headers';
+import { ADDRESS_HEADER, resolvedAddress } from '../address/client.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import { settle } from '../manage/read.ts';
-import { type MainClient, type ReadFailure } from '../manage/types.ts';
+import type { MainClient } from '../manage/types.ts';
+import { idOf } from '../realm/route.ts';
+import { SPACE_MISSING_HEADER } from '../realm/missing.ts';
 import { resolveSite, type SiteResolution } from '../realm/read.ts';
-import { authoringModel, type ZoneAuthoringModel } from './model.ts';
-import { resolveZoneManagementAddress, zoneManagementBinding, zoneManagementReturnAddress,
-  type ZoneManagementBinding } from './management-address.ts';
-import { zoneEditorPath, zonePreviewPath } from './routes.ts';
+import { readManagementAddress, readZoneRecoveryReturnAddress, suppliedManagementSite, zoneAuthoringFromAddress,
+  zoneLifecycleFromAddress, zoneManagementFrameFromReads, type ZoneAuthoringLoad, type ZoneLifecycleLoad,
+  type ZoneManagementFrame } from './authoring-reads.ts';
+import type { ZoneManagementBinding } from './management-address.ts';
 
-type EditorRead = NonNullable<Awaited<ReturnType<ReturnType<MainClient['v1']['zones']>['showcase-editor']['get']>>['data']>;
-export type ZoneAuthoringPreview = EditorRead['preview'];
-
-export type ZoneAuthoringLoad =
-  | { kind: 'missing' }
-  | { kind: 'failure'; failure: ReadFailure }
-  | { kind: 'ready'; model: ZoneAuthoringModel; preview: ZoneAuthoringPreview; realm: string | null;
-    frameMetadata: { ref: string; name: ZoneText };
-    editorPath: string; previewPath: string; sitePath: string };
-
-export type ZoneLifecycleLoad =
-  | { kind: 'missing' }
-  | { kind: 'failure'; failure: ReadFailure }
-  | { kind: 'ready'; zoneId: string; spaceId: string; revision: string; status: 'active' | 'retired'; name: string;
-    returnAddress: string };
+export type { ZoneAuthoringLoad, ZoneAuthoringPreview, ZoneLifecycleLoad, ZoneManagementFrame } from './authoring-reads.ts';
 
 /** Recovery can outlive a cached retired address. Revalidate with the same admission owner. */
 export async function readZoneAuthoringSite(space: string, locale: UiLocale,
@@ -36,12 +23,27 @@ export async function readZoneAuthoringSite(space: string, locale: UiLocale,
 
 export const resolveZoneAuthoringSite = cache(readZoneAuthoringSite);
 
+/** A proxy admission stands. Otherwise the acting person reads the Space, and a miss uses the host landing. */
+async function hostManagementSite(main: MainClient, actingSubject: string, ref: string, locale: UiLocale,
+): Promise<SiteResolution> {
+  const incoming = await headers();
+  if (incoming.get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
+  const carried = incoming.get(ADDRESS_HEADER);
+  if (carried) {
+    try {
+      const data = resolvedAddress(JSON.parse(decodeURIComponent(carried)));
+      if (data?.scope === 'space' && (data.key === ref || data.holder.slice(-36) === ref)) {
+        const zone = idOf(data.capabilities?.zone ?? '');
+        if (zone) return { kind: 'site', address: data, zone, realm: idOf(data.capabilities?.realm ?? '') };
+      }
+    } catch { /* A malformed internal header is never admission. */ }
+  }
+  const site = await suppliedManagementSite(main, actingSubject)(ref, locale);
+  return site.kind === 'missing' ? resolveZoneAuthoringSite(ref, locale) : site;
+}
+
 const resolveManagementAddress = cache((main: MainClient, space: string, locale: UiLocale, actingSubject: string) =>
-  resolveZoneManagementAddress(space, locale, {
-    configuration: zoneId => settle(() => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }),
-      { management: true }),
-    site: resolveZoneAuthoringSite,
-  }));
+  readManagementAddress(main, space, locale, actingSubject, (ref, loc) => hostManagementSite(main, actingSubject, ref, loc)));
 
 /**
  * The home draft and the two heads a publish names. Shared by the editor and its preview
@@ -49,30 +51,8 @@ const resolveManagementAddress = cache((main: MainClient, space: string, locale:
  */
 export const loadZoneAuthoring = cache(async (
   main: MainClient, space: string, locale: UiLocale, actingSubject: string,
-): Promise<ZoneAuthoringLoad> => {
-  const address = await resolveManagementAddress(main, space, locale, actingSubject);
-  if (address.kind === 'missing' || address.kind === 'lifecycle') return { kind: 'missing' };
-  if (address.kind === 'failure') return address;
-  const { site } = address;
-  const [editor, zone] = await Promise.all([
-    settle(() => main.v1.zones({ id: site.zone })['showcase-editor'].get({ query: { actingSubject } }), { management: true }),
-    settle(() => main.v1.zones({ id: site.zone }).get({ query: { actingSubject } }), { management: true }),
-  ]);
-  if (!editor.ok) return { kind: 'failure', failure: editor.failure };
-  if (!zone.ok) return { kind: 'failure', failure: zone.failure };
-  const suffix = site.address.canonical.suffixSource?.trim();
-  const model = authoringModel(editor.data, zone.data, site.zone, suffix || addressKey(site.address.canonical) || space);
-  if (!model) return { kind: 'failure', failure: 'unavailable' };
-  return {
-    kind: 'ready', model, preview: editor.data.preview,
-    realm: typeof editor.data.configuration.defaultRealm === 'string' ? editor.data.configuration.defaultRealm : null,
-    frameMetadata: { ref: addressKey(site.address.canonical),
-      name: { value: model.name, lang: editor.data.language, dir: editor.data.direction } },
-    editorPath: zoneEditorPath(space),
-    previewPath: zonePreviewPath(space),
-    sitePath: spaceHref(site.address.canonical, 'site'),
-  };
-});
+): Promise<ZoneAuthoringLoad> => zoneAuthoringFromAddress(main, space, actingSubject,
+  await resolveManagementAddress(main, space, locale, actingSubject)));
 
 /**
  * Authorized lifecycle entry. A retired site's public Space resolver no longer
@@ -80,34 +60,26 @@ export const loadZoneAuthoring = cache(async (
  */
 export const loadZoneLifecycle = cache(async (
   main: MainClient, space: string, locale: UiLocale, actingSubject: string,
-): Promise<ZoneLifecycleLoad> => {
-  const address = await resolveManagementAddress(main, space, locale, actingSubject);
-  if (address.kind === 'missing' || address.kind === 'failure') return address;
-  let binding = address.binding;
-  if (!binding && address.kind === 'site') {
-    const loaded = await settle(() => main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject } }),
-      { management: true });
-    if (!loaded.ok) return { kind: 'failure', failure: loaded.failure };
-    binding = zoneManagementBinding(address.site.zone, loaded.data);
-  }
-  if (!binding) return { kind: 'failure', failure: 'unavailable' };
-  return { kind: 'ready', zoneId: binding.zoneId, spaceId: binding.spaceId, revision: binding.revision,
-    status: binding.status, name: binding.name ?? space,
-    returnAddress: zoneManagementReturnAddress(space, binding, address.kind === 'site'
-      ? { address: space, space: address.site.address.holder } : undefined) };
-});
+): Promise<ZoneLifecycleLoad> => zoneLifecycleFromAddress(main, space, actingSubject,
+  await resolveManagementAddress(main, space, locale, actingSubject)));
 
 /** Validate aliases with the address owner; a retired or unavailable alias falls back to the bound Space. */
-export async function loadZoneRecoveryReturnAddress(main: MainClient, candidate: unknown,
+export function loadZoneRecoveryReturnAddress(main: MainClient, candidate: unknown,
   binding: Pick<ZoneManagementBinding, 'zoneId' | 'spaceId'>, actingSubject: string,
 ): Promise<string> {
-  const fallback = zoneManagementReturnAddress(candidate, binding);
-  if (typeof candidate !== 'string' || candidate === fallback) return fallback;
-  const parsed = parseAddressSegment(candidate);
-  if (parsed?.kind !== 'alias') return fallback;
-  const admitted = await settle(() => main.v1.addresses.resolve.get({ query: {
-    scope: 'space', key: candidate, actingSubject,
-  } }));
-  return zoneManagementReturnAddress(candidate, binding, admitted.ok && admitted.data.status === 'resolved'
-    ? { address: candidate, space: admitted.data.holder } : undefined);
+  return readZoneRecoveryReturnAddress(main, candidate, binding, actingSubject);
 }
+
+/** The layout's frame. The two cached reads share one address admission, including a carried proxy header. */
+export const loadZoneManagementFrame = cache(async (
+  main: MainClient, space: string, locale: UiLocale, actingSubject: string,
+): Promise<ZoneManagementFrame> => {
+  const [authoring, lifecycle] = await Promise.all([
+    loadZoneAuthoring(main, space, locale, actingSubject),
+    loadZoneLifecycle(main, space, locale, actingSubject),
+  ]);
+  const pageUrl = (await headers()).get('x-rezics-page-url');
+  let requestedReturn: string | null = null;
+  try { requestedReturn = pageUrl ? new URL(pageUrl).searchParams.get('address') : null; } catch { /* No return override. */ }
+  return zoneManagementFrameFromReads(main, space, actingSubject, authoring, lifecycle, requestedReturn);
+});

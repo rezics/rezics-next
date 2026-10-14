@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "Änderung angenommen. Die Bestätigung steht noch aus; prüfe dieselbe Änderung erneut.",
+  checkConfirmation: "Bestätigung prüfen",
+  statusUnknown: "Die aktuelle Veröffentlichung wurde noch nicht geprüft.",
+  receiptTitle: "Veröffentlichungsbeleg",
+  receiptBody: "Dieser Beleg hält die genauen Seiten und das Layout dieser Veröffentlichung fest. Die Live-Website kann sich geändert haben.",
+  receiptPages: "Seitenrevisionen",
   realmFailedBody: 'REZICS hat nicht geantwortet. Ihre Auswahl zur Verknüpfung bleibt erhalten. Versuchen Sie es erneut.',
   exitTitle: 'Änderungen vor dem Verlassen speichern?',
   exitBody: 'Nicht gespeicherte Änderungen sind noch im Editor. Speichere sie, verwirf sie oder bearbeite sie weiter.',
@@ -52,7 +58,7 @@ const messages: ZoneEditorMessages = {
   publish: 'Veröffentlichen',
   publishing: 'Wird veröffentlicht…',
   published: 'Veröffentlicht. Leser sehen diese Seite.',
-  publishedReplayed: 'Veröffentlicht. Das frühere Veröffentlichen war bereits durch.',
+  publishedReplayed: "Frühere Veröffentlichung bestätigt. Öffne die Website für den aktuellen Stand.",
   saveFirst:
     'Speichern Sie den Entwurf, bevor Sie veröffentlichen. Leser erhalten die gespeicherte Seite, nicht ungespeicherte Änderungen.',
   staleTitle: 'Diese Seite wurde an anderer Stelle gespeichert',

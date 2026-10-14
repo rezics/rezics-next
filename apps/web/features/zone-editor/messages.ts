@@ -10,6 +10,12 @@ import zhHant from './messages/zh-Hant.ts';
 
 // Interface copy for writing a Zone's home page. The page the author writes is theirs, never this catalog.
 const en = {
+  commandPending: "Change accepted. Confirmation is still pending; check again to confirm the same change.",
+  checkConfirmation: "Check confirmation",
+  statusUnknown: "The current publication has not been checked yet.",
+  receiptTitle: "Publication receipt",
+  receiptBody: "This receipt keeps the exact pages and layout from this publication. The live site may have changed.",
+  receiptPages: "Page revisions",
   realmFailedBody: 'REZICS did not answer. Your attachment choice is still here; try again.',
   exitTitle: 'Save your unsaved work before leaving?',
   exitBody: 'Unsaved changes are still in this editor. Save them before leaving, discard them, or keep editing.',
@@ -58,7 +64,7 @@ const en = {
   publish: 'Publish',
   publishing: 'Publishing…',
   published: 'Published. Readers see this page.',
-  publishedReplayed: 'Published. The earlier publish had already gone through.',
+  publishedReplayed: "Earlier publication confirmed. Read the site to see its current version.",
   saveFirst: 'Save the draft before publishing. Readers get the saved page, not unsaved edits.',
   staleTitle: 'This page was saved somewhere else',
   staleBody:

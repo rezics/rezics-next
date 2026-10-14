@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "변경을 접수했습니다. 확인 대기 중입니다. 같은 변경을 다시 확인하세요.",
+  checkConfirmation: "확인 상태 확인",
+  statusUnknown: "현재 게시 상태를 아직 확인하지 않았습니다.",
+  receiptTitle: "게시 확인서",
+  receiptBody: "이 확인서는 게시 당시의 정확한 페이지와 레이아웃을 보존합니다. 현재 사이트는 변경되었을 수 있습니다.",
+  receiptPages: "페이지 리비전",
   realmFailedBody: 'REZICS가 응답하지 않았습니다. 연결 선택은 그대로 남아 있습니다. 다시 시도하세요.',
   exitTitle: '이동하기 전에 변경 사항을 저장할까요?',
   exitBody: '저장하지 않은 변경 사항이 편집기에 남아 있습니다. 저장하고 이동하거나 변경 사항을 버리거나 계속 편집하세요.',
@@ -50,7 +56,7 @@ const messages: ZoneEditorMessages = {
   publish: '공개',
   publishing: '공개하는 중…',
   published: '공개했습니다. 독자에게 이 페이지가 보입니다.',
-  publishedReplayed: '공개했습니다. 앞서 보낸 공개는 이미 반영되어 있었습니다.',
+  publishedReplayed: "이전 게시를 확인했습니다. 현재 버전은 사이트에서 확인하세요.",
   saveFirst:
     '공개하기 전에 초고를 저장하세요. 독자에게는 저장한 페이지가 전달되며, 저장하지 않은 수정은 전달되지 않습니다.',
   staleTitle: '이 페이지가 다른 곳에서 저장되었습니다',

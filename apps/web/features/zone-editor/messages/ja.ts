@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "変更を受け付けました。確認は保留中です。同じ変更をもう一度確認してください。",
+  checkConfirmation: "確認状況を確認",
+  statusUnknown: "現在の公開内容はまだ確認されていません。",
+  receiptTitle: "公開の受領記録",
+  receiptBody: "この記録には公開時のページとレイアウトが保持されています。現在のサイトは変更されている場合があります。",
+  receiptPages: "ページのリビジョン",
   realmFailedBody: 'REZICSから応答がありませんでした。接続の選択はここに残っています。もう一度お試しください。',
   exitTitle: '移動する前に変更を保存しますか？',
   exitBody: '未保存の変更はエディターに残っています。保存して移動するか、変更を破棄するか、編集を続けてください。',
@@ -50,7 +56,7 @@ const messages: ZoneEditorMessages = {
   publish: '公開する',
   publishing: '公開しています…',
   published: '公開しました。読者にはこのページが表示されます。',
-  publishedReplayed: '公開しました。先の公開はすでに完了していました。',
+  publishedReplayed: "以前の公開を確認しました。現在の版はサイトで確認してください。",
   saveFirst:
     '公開する前に下書きを保存してください。読者に渡るのは保存したページであり、未保存の変更ではありません。',
   staleTitle: 'このページは別の場所で保存されました',

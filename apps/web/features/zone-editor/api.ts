@@ -1,4 +1,4 @@
-import type { WriteRound } from '../api/command.ts';
+import { commandLane, unresolved, type WriteRound } from '../api/command.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { settle } from '../manage/read.ts';
 import { problemCode, type Loaded, type MainClient, type ReadFailure } from '../manage/types.ts';
@@ -22,6 +22,25 @@ export type WriteResult<T> =
 
 export interface SavedDraft extends DraftBasis { replayed: boolean }
 export interface PublishedSite { zoneHead: string; replayed: boolean; receipt?: PublicationReceipt }
+
+/** An accepted change retains its original envelope through a later authority refusal until control is restored. */
+export function zoneCommandLane<T, R extends { ok: boolean; failure?: string }>(failed: R) {
+  const lane = commandLane<T, R>(failed);
+  let accepted = false;
+  let intent: T | undefined;
+  return {
+    submit(choice: T, apply: (choice: T, round: WriteRound) => Promise<R>): Promise<R> {
+      if (choice !== intent) { accepted = false; intent = choice; }
+      return lane.submit(choice, async (chosen, round) => {
+        const result = await apply(chosen, round);
+        if (!result.ok && result.failure === 'pending') accepted = true;
+        if (result.ok) accepted = false;
+        return result;
+      });
+    },
+    needsConfirmation(result: R): boolean { return accepted || unresolved(result); },
+  };
+}
 export interface ZoneHeads { zoneHead: string; navigationRevision: string }
 export interface ZoneThemeSnapshot {
   revision: string;
@@ -128,7 +147,7 @@ export interface ZoneAuthoringClient {
   readHeads(zoneId: string, actingSubject: string): Promise<WriteResult<ZoneHeads>>;
 }
 
-type HttpAnswer = { data: unknown; error: { status: number; value: unknown } | null };
+type HttpAnswer = { data: unknown; error: { status: number; value: unknown } | null; response?: { status: number } };
 
 /** Browser writes for the home page. Stories pass their own client. */
 export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = browserMainApi()): ZoneAuthoringClient {
@@ -250,6 +269,7 @@ async function post(call: () => Promise<HttpAnswer>): Promise<WriteResult<unknow
   try {
     const answer = await call();
     if (answer.error || answer.data == null) return failureOf(answer.error, !answer.error);
+    if (answer.response?.status === 202) return { ok: false, failure: 'pending' };
     if (typeof answer.data === 'object' && answer.data !== null && 'operationId' in answer.data) {
       return { ok: false, failure: 'unavailable' };
     }

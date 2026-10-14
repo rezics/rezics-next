@@ -5,7 +5,8 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
 import { Children, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { commandLane, type WriteRound } from '../api/command.ts';
+import type { WriteRound } from '../api/command.ts';
+import { zoneCommandLane as commandLane } from './api.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import {
   browserZoneAuthoring,
@@ -22,13 +23,15 @@ import {
 import { EditorActions } from './editor-actions.tsx';
 import { CollectionPageLookup } from './collection-page-lookup.tsx';
 import { PageSearchPicker } from './page-search-picker.tsx';
+import { reopenAuthoringNotice } from './draft-state.ts';
 import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import { confirmPublicationReview, readSavedPublicationSelection, reviewedPublicationChoice, stagePublicationReview,
   type PublicationReview } from './publication-review.ts';
+import { PublicationReceiptPanel } from './publication-receipt-panel.tsx';
 import { PublicationReviewPanel } from './publication-review-panel.tsx';
 import type { ZoneEditorMessages } from './messages.ts';
 import {
-  preparedHomeDocument, canPublish,
+  reopenEditorDraft, preparedHomeDocument, canPublish,
   isDirty,
   publicationChoice,
   reduceEditor,
@@ -87,8 +90,8 @@ export function ZoneNavigationEditor({
   authoring?: ZoneAuthoringClient;
   themeApi?: ZoneThemeClient;
 }) {
-  const [state, dispatch, draftReady] = useZoneEditorDraft('navigation', initial, isNavigationDirty, isNavigationState);
-  const [page, setPage, pageReady] = useZoneEditorDraft('home', home, isDirty, isEditorState);
+  const [state, dispatch, draftReady] = useZoneEditorDraft('navigation', initial, isNavigationDirty, isNavigationState, reopenAuthoringNotice);
+  const [page, setPage, pageReady] = useZoneEditorDraft('home', home, isDirty, isEditorState, reopenEditorDraft);
   const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue'>('navigation-busy', null);
   const [intent, setIntent] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'continue' | 'review'>('navigation-intent', null);
   const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('navigation-review', null);
@@ -138,11 +141,12 @@ export function ZoneNavigationEditor({
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
   if (!publishLane.current)
     publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
+  const authorityRefused = [state.notice.kind, page.notice.kind].some(kind => ['denied', 'sign-in', 'missing'].includes(kind));
   const dirty = isNavigationDirty(state);
 
   useZoneEditorExitActions('navigation', async () => {
     const current = stateRef.current;
-    if (inflight.current || !current.complete || hasInvalidNavigationPaths(current) || current.notice.kind === 'stale') return false;
+    if (authorityRefused || inflight.current || !current.complete || hasInvalidNavigationPaths(current) || current.notice.kind === 'stale') return false;
     if (publishChoice.current) {
       const published = await publishLane.current!.submit(publishChoice.current, applyPublish);
       if (!published.ok) return false;
@@ -225,7 +229,7 @@ export function ZoneNavigationEditor({
       );
       put({ type: 'progress', progress: result.progress });
       setSaveCompleted(result.ok ? 0 : result.progress.completed);
-      if (result.ok || result.failure !== 'unavailable') saveSession.current = null;
+      if (result.ok || !saveLane.current!.needsConfirmation(result)) saveSession.current = null;
       if (result.ok)
         return {
           ok: true,
@@ -239,7 +243,7 @@ export function ZoneNavigationEditor({
 
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
     return commitCommand(round, (key) => pages.current!.publish(chosen, actingSubject, key, zoneId)).then(
-      (result) => {
+      async (result) => {
         if (result.ok)
           putPage({
             type: 'published',
@@ -248,14 +252,18 @@ export function ZoneNavigationEditor({
           });
         else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale', problem: result.problem }); }
         else putPage({ type: 'failed', failure: result.failure, problem: result.problem });
-        if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
+        if (result.ok || !publishLane.current!.needsConfirmation(result)) publishChoice.current = null;
+        if (result.ok && result.data.replayed) {
+          const current = await pages.current!.readDraft(zoneId, actingSubject);
+          if (current.ok) putPage({ type: 'publication-current', ...current.data });
+        }
         return result;
       },
     );
   }
 
   function save(next: NavigationState = stateRef.current) {
-    if (busy || !draftReady || !pageReady || !next.complete || !isNavigationDirty(next) || hasInvalidNavigationPaths(next)) return;
+    if (authorityRefused || busy || !draftReady || !pageReady || !next.complete || !isNavigationDirty(next) || hasInvalidNavigationPaths(next)) return;
     track(
       'save',
       saveLane
@@ -290,7 +298,7 @@ export function ZoneNavigationEditor({
 
   function publish() {
     const choice = publishChoice.current ?? siteChoice(stateRef.current.head);
-    if (!choice || busy || !draftReady || !pageReady) return;
+    if (authorityRefused || !choice || busy || !draftReady || !pageReady) return;
     publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
@@ -450,7 +458,7 @@ export function ZoneNavigationEditor({
       : null;
   const publishable = Boolean(siteChoice(state.head));
   const resumable = !!saveSession.current && !busy;
-  const editingDisabled = !draftReady || !!busy || resumable || !state.complete || state.notice.kind === 'stale';
+  const editingDisabled = authorityRefused || !draftReady || !!busy || resumable || !state.complete || state.notice.kind === 'stale';
 
   return (
     <section className="grid min-w-0 gap-3" aria-labelledby="zone-navigation-title">
@@ -464,7 +472,7 @@ export function ZoneNavigationEditor({
           </h2>
           <EditorActions
             copy={resumable ? { ...copy, save: copy.navResume } : copy}
-            canEdit
+            canEdit={!authorityRefused} canPreview={!authorityRefused}
             busy={busy === 'continue' ? null : busy}
             saveDisabled={!draftReady || !!busy || !dirty || !state.complete || hasInvalidNavigationPaths(state) || state.notice.kind === 'stale'}
             publishDisabled={
@@ -534,6 +542,7 @@ export function ZoneNavigationEditor({
       {!dirty && !canPublish(page) ? (
         <p className="text-pretty text-muted-foreground text-sm">{copy.saveFirst}</p>
       ) : null}
+      {page.publishedReceipt ? <PublicationReceiptPanel receipt={page.publishedReceipt} copy={copy} /> : null}
       <NavNotice
         copy={copy}
         state={state}
@@ -676,6 +685,10 @@ function NavigationWriteNotice({
   onReview,
   onRetry,
 }: NavNoticeProps) {
+  if (state.notice.kind === 'pending') return <div role="status" className="grid gap-2">
+    <p className="text-sm">{copy.commandPending}</p>
+    <Button variant="outline" size="sm" className="justify-self-start" disabled={!!busy} onClick={onRetry}>{copy.checkConfirmation}</Button>
+  </div>;
   if (state.notice.kind === 'stale') {
     return (
       <NoticeAlert variant="warning" title={copy.navStaleTitle} body={copy.navStaleBody}>
@@ -721,6 +734,10 @@ function NavigationWriteNotice({
 
 function NavigationPublicationNotice({ copy, state, page, busy, signInHref, ready, review, reviewPublishDisabled,
   onRefresh, onPublishReviewed, onRetry }: NavNoticeProps) {
+  if (page.notice.kind === 'pending') return <div role="status" className="grid gap-2">
+    <p className="text-sm">{copy.commandPending}</p>
+    <Button variant="outline" size="sm" className="justify-self-start" disabled={!!busy} onClick={onRetry}>{copy.checkConfirmation}</Button>
+  </div>;
   if (page.notice.kind === 'publish-stale') {
     return (
       <>

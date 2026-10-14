@@ -3,10 +3,11 @@
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { commandLane, type WriteRound } from '../api/command.ts';
+import type { WriteRound } from '../api/command.ts';
+import { zoneCommandLane as commandLane } from './api.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
 import { browserZoneLifecycle, commitCommand, type SavedZoneLifecycle, type WriteResult, type ZoneLifecycleClient,
   type ZoneLifecycleSnapshot } from './api.ts';
@@ -14,6 +15,7 @@ import type { ZoneEditorMessages } from './messages.ts';
 import { initialZoneLifecycleState, reduceZoneLifecycle, zoneLifecycleTarget, type ZoneLifecycleAction,
   type ZoneLifecycleEditorState, type ZoneLifecycleNotice } from './lifecycle.ts';
 import { zoneEditorPath, zoneLifecyclePath } from './routes.ts';
+import { reopenAuthoringNotice } from './draft-state.ts';
 import { useZoneEditorDraft, useZoneEditorExit, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 
 const actionClass = 'h-auto min-h-9 whitespace-normal px-3';
@@ -33,7 +35,8 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   /** Stories keep the confirmation on screen instead of navigating away. */
   onRetired?: () => void;
 }) {
-  const [state, setState] = useZoneEditorDraft('lifecycle', initialZoneLifecycleState(initial), () => false, isLifecycleEditorState);
+  const admitted = useMemo(() => initialZoneLifecycleState(initial), [initial]);
+  const [state, setState] = useZoneEditorDraft('lifecycle', admitted, () => false, isLifecycleEditorState, reopenAuthoringNotice);
   const [busy, updateBusy] = useZoneEditorSessionState<null | 'write' | 'review'>('lifecycle-busy', null);
   const busyRef = useZoneEditorRef('lifecycle-busy-ref', busy);
   busyRef.current = busy;
@@ -120,7 +123,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
   async function submitLifecycle(intent: LifecycleIntent): Promise<WriteResult<SavedZoneLifecycle>> {
     captured.current = intent;
     const result = await lane.current!.submit(intent, (chosen, round) => apply(chosen, round));
-    if (result.ok || result.failure !== 'unavailable') captured.current = null;
+    if (result.ok || !lane.current!.needsConfirmation(result)) captured.current = null;
     if (result.ok) {
       const snapshot = { revision: result.data.revision, status: zoneLifecycleTarget(intent.action) } as const;
       put({ type: 'saved', action: intent.action, snapshot, replayed: result.data.replayed });
@@ -136,6 +139,7 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
       : client.current!.recover(zoneId, body, key));
   }
 
+  const authorityRefused = state.notice === 'denied' || state.notice === 'sign-in';
   const selected = state.selection;
   const alreadyApplied = selected !== null && state.status === zoneLifecycleTarget(selected);
   return <section className="grid min-w-0 max-w-3xl gap-4" aria-labelledby="zone-lifecycle-title">
@@ -165,18 +169,18 @@ export function ZoneLifecycleEditor({ zoneId, actingSubject, locale, copy, initi
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         <Button variant={selected === 'retire' ? 'destructive' : 'secondary'} size="sm" className={actionClass}
-          disabled={busy !== null || state.needsReview} isLoading={busy === 'write'}
+          disabled={authorityRefused || busy !== null || state.needsReview} isLoading={busy === 'write'}
           onClick={() => void save(selected)}>
-          {busy === 'write' ? selected === 'retire' ? copy.lifecycleRetiring : copy.lifecycleRecovering : copy.lifecycleConfirmAction}
+          {busy === 'write' ? selected === 'retire' ? copy.lifecycleRetiring : copy.lifecycleRecovering : state.notice === 'pending' ? copy.checkConfirmation : copy.lifecycleConfirmAction}
         </Button>
-        <Button variant="outline" size="sm" className={actionClass} disabled={busy !== null}
+        <Button variant="outline" size="sm" className={actionClass} disabled={busy !== null || state.notice === 'pending'}
           onClick={() => put({ type: 'cancel' })}>{copy.lifecycleCancel}</Button>
       </div>
     </Alert> : null}
 
     {!selected ? <div className="flex flex-wrap items-center gap-2">
       <Button variant={state.status === 'active' ? 'destructive' : 'secondary'} size="sm" className={actionClass}
-        disabled={busy !== null} onClick={() => put({ type: 'select', action: state.status === 'active' ? 'retire' : 'recover' })}>
+        disabled={authorityRefused || busy !== null} onClick={() => put({ type: 'select', action: state.status === 'active' ? 'retire' : 'recover' })}>
         {state.status === 'active' ? copy.lifecycleRetire : copy.lifecycleRecover}
       </Button>
       {state.status === 'retired' ? <p className="text-pretty text-muted-foreground text-sm">{copy.lifecycleRecoveredBody}</p> : null}
@@ -199,6 +203,7 @@ function LifecycleNotice({ state, copy, signInHref, busy, onReview }: {
   onReview: () => void;
 }) {
   if (state.notice === 'idle') return null;
+  if (state.notice === 'pending') return <p role="status" className="text-sm">{copy.commandPending}</p>;
   if (state.notice === 'retired') return <p role="status" className="text-sm">{copy.lifecycleRetiredSaved}</p>;
   if (state.notice === 'retired-replayed') return <p role="status" className="text-sm">{copy.lifecycleRetiredReplay}</p>;
   if (state.notice === 'recovered') return <p role="status" className="text-sm">{copy.lifecycleRecoveredSaved}</p>;
@@ -234,8 +239,9 @@ function failureCopy(copy: ZoneEditorMessages, notice: ZoneLifecycleNotice): { t
   }
 }
 
-function noticeFailure(failure: string): 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'unavailable' {
+function noticeFailure(failure: string): 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'pending' | 'unavailable' {
   switch (failure) {
+    case 'pending': return 'pending';
     case 'denied': return 'denied';
     case 'sign-in': return 'sign-in';
     case 'invalid': return 'invalid';

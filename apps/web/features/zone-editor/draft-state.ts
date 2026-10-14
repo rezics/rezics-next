@@ -6,6 +6,13 @@ export interface DraftStorage {
   removeItem(key: string): void;
 }
 
+/** A fresh authorized section read restores controls while preserving all unsaved choices and their original heads. */
+export function reopenAuthoringNotice<T extends { notice: string | { kind: string } | null }>(retained: T, admitted: T): T {
+  const kind = typeof retained.notice === 'string' ? retained.notice : retained.notice?.kind;
+  if (!kind || !['denied', 'sign-in', 'missing'].includes(kind)) return retained;
+  return { ...retained, notice: admitted.notice };
+}
+
 /** The mounted route owns author choices; browser storage is only a full-page fallback. */
 export function createZoneEditorDraftStore() {
   const values = new Map<string, unknown>();

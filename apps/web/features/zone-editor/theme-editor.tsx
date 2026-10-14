@@ -5,8 +5,10 @@ import { Button, buttonVariants } from '@rezics/ui/button';
 import { RadioGroup, RadioGroupItem, RadioGroupLabel } from '@rezics/ui/radio-group';
 import { cn } from '@rezics/ui/utils';
 import { useRef } from 'react';
-import { commandLane, type WriteRound } from '../api/command.ts';
+import type { WriteRound } from '../api/command.ts';
+import { zoneCommandLane as commandLane } from './api.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
+import { reopenAuthoringNotice } from './draft-state.ts';
 import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorResource, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
 import {
   browserZoneTheme,
@@ -65,7 +67,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
   shellPresentation?: ZonePresentationBaseline;
   api?: ZoneThemeClient;
 }) {
-  const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState);
+  const [state, setState, draftReady] = useZoneEditorDraft('theme', initial, isThemeDirty, isThemeEditorState, reopenAuthoringNotice);
   const [busy, updateBusy] = useZoneEditorSessionState<null | 'save' | 'review'>('theme-busy', null);
   const busyRef = useZoneEditorRef('theme-busy-ref', busy);
   busyRef.current = busy;
@@ -128,7 +130,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
         revision: result.data.revision, replayed: result.data.replayed });
       else if (result.failure === 'stale') put({ type: 'stale' });
       else put({ type: 'failed', failure: noticeFailure(result.failure) });
-      if (result.ok || result.failure !== 'unavailable') captured.current = null;
+      if (result.ok || !saveLane.needsConfirmation(result)) captured.current = null;
       return result;
     });
   }
@@ -162,6 +164,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     }
   }
 
+  const authorityRefused = state.notice === 'denied' || state.notice === 'sign-in';
   const dirty = isThemeDirty(state) || captured.current !== null;
   if (state.initialization === 'offered') return <section className="grid min-w-0 max-w-3xl gap-3" aria-labelledby="zone-theme-title">
     <h2 id="zone-theme-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.themeTitle}</h2>
@@ -169,7 +172,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
       <AlertTitle>{copy.themeAbsentTitle}</AlertTitle>
       <AlertDescription>{copy.themeDefaultsBody}</AlertDescription>
     </Alert>
-    <Button variant="secondary" size="sm" className="justify-self-start" disabled={!draftReady}
+    <Button variant="secondary" size="sm" className="justify-self-start" disabled={authorityRefused || !draftReady}
       onClick={() => put({ type: 'create' })}>{copy.themeCreate}</Button>
   </section>;
   return <section className="grid min-w-0 max-w-3xl gap-5" aria-labelledby="zone-theme-title">
@@ -180,7 +183,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
     <ThemeNotice state={state} copy={copy} signInHref={signInHref} busy={busy}
       onReview={() => { void reviewLatest(); }} />
     <div className="grid min-w-0 gap-5 sm:grid-cols-2">
-      <RadioGroup name="zone-density" value={state.choice.density} disabled={!draftReady || busy !== null}
+      <RadioGroup name="zone-density" value={state.choice.density} disabled={authorityRefused || !draftReady || busy !== null}
         onValueChange={({ value }) => {
           if (value === 'compact' || value === 'comfortable') put({ type: 'edit', choice: { ...state.choice, density: value } });
         }}>
@@ -192,7 +195,7 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
           <span>{copy.themeCompact}</span>
         </RadioGroupItem>
       </RadioGroup>
-      <RadioGroup name="zone-page-surface" value={state.choice.pageSurface} disabled={!draftReady || busy !== null}
+      <RadioGroup name="zone-page-surface" value={state.choice.pageSurface} disabled={authorityRefused || !draftReady || busy !== null}
         onValueChange={({ value }) => {
           if (value === 'flat' || value === 'cards') put({ type: 'edit', choice: { ...state.choice, pageSurface: value } });
         }}>
@@ -206,11 +209,11 @@ function EditableThemeEditor({ zoneId, actingSubject, copy, initial, signInHref,
       </RadioGroup>
     </div>
     <div className="flex flex-wrap items-center gap-2">
-      <Button variant="secondary" size="sm" disabled={!draftReady || !dirty || state.needsReview || busy !== null}
+      <Button variant="secondary" size="sm" disabled={authorityRefused || !draftReady || !dirty || state.needsReview || busy !== null}
         isLoading={busy === 'save'} onClick={() => void save()}>
-        {busy === 'save' ? copy.themeSaving : copy.themeSave}
+        {busy === 'save' ? copy.themeSaving : state.notice === 'pending' ? copy.checkConfirmation : copy.themeSave}
       </Button>
-      {previewHref ? <LocalizedLink href={previewHref} documentNavigation
+      {previewHref && !authorityRefused ? <LocalizedLink href={previewHref} documentNavigation
         className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionClass)}>{copy.preview}</LocalizedLink> : null}
       {siteHref ? <LocalizedLink href={siteHref} documentNavigation
         className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), actionClass)}>{copy.viewSite}</LocalizedLink> : null}
@@ -232,6 +235,7 @@ function ThemeNotice({ state, copy, signInHref, busy, onReview }: {
   busy: 'save' | 'review' | null;
   onReview: () => void;
 }) {
+  if (state.notice === 'pending') return <p role="status" className="text-sm">{copy.commandPending}</p>;
   if (state.notice === 'saved') return <p role="status" className="text-sm">{copy.themeSaved}</p>;
   if (state.notice === 'replayed') return <p role="status" className="text-sm">{copy.themeSavedReplayed}</p>;
   if (state.notice === 'reviewed') return <p role="status" className="text-sm">{copy.themeReviewed}</p>;
@@ -262,8 +266,9 @@ function failureCopy(copy: ZoneEditorMessages, notice: ThemeNotice): { title: st
   }
 }
 
-function noticeFailure(failure: string): 'denied' | 'sign-in' | 'invalid-save' | 'conflict' | 'unavailable' {
+function noticeFailure(failure: string): 'denied' | 'sign-in' | 'invalid-save' | 'conflict' | 'pending' | 'unavailable' {
   switch (failure) {
+    case 'pending': return 'pending';
     case 'denied': return 'denied';
     case 'sign-in': return 'sign-in';
     case 'invalid': return 'invalid-save';

@@ -2,6 +2,12 @@
 import type { ZoneEditorMessages } from '../messages.ts';
 
 const messages: ZoneEditorMessages = {
+  commandPending: "Modification acceptée. La confirmation est en attente ; vérifiez à nouveau cette même modification.",
+  checkConfirmation: "Vérifier la confirmation",
+  statusUnknown: "La publication actuelle n’a pas encore été vérifiée.",
+  receiptTitle: "Reçu de publication",
+  receiptBody: "Ce reçu conserve les pages et la mise en page exactes de cette publication. Le site peut avoir changé.",
+  receiptPages: "Révisions des pages",
   realmFailedBody: 'REZICS n’a pas répondu. Votre choix de rattachement est conservé ; réessayez.',
   exitTitle: 'Enregistrer les modifications avant de quitter ?',
   exitBody: 'Les modifications non enregistrées sont encore dans l’éditeur. Enregistrez-les, abandonnez-les ou continuez à modifier.',
@@ -51,7 +57,7 @@ const messages: ZoneEditorMessages = {
   publish: 'Publier',
   publishing: 'Publication…',
   published: 'Publié. Les lecteurs voient cette page.',
-  publishedReplayed: 'Publié. La publication précédente était déjà passée.',
+  publishedReplayed: "Publication précédente confirmée. Ouvrez le site pour voir sa version actuelle.",
   saveFirst:
     'Enregistrez le brouillon avant de publier. Les lecteurs reçoivent la page enregistrée, pas les modifications non enregistrées.',
   staleTitle: 'Cette page a été enregistrée ailleurs',

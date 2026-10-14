@@ -167,7 +167,7 @@ export function useZoneEditorExit(): (action: () => void) => void {
 
 /** Restore a section's local choices after navigation, and advertise any work that still needs saving. */
 export function useZoneEditorDraft<T>(section: ZoneEditorSection, initial: T, isDirty: (value: T) => boolean,
-  accepts: (value: unknown) => value is T): [T, (next: SetStateAction<T>) => void, boolean] {
+  accepts: (value: unknown) => value is T, reopen?: (retained: T, admitted: T) => T): [T, (next: SetStateAction<T>) => void, boolean] {
   const scope = useContext(DraftContext);
   const key = scope ? zoneEditorDraftKey(scope.zoneId, scope.actingSubject, section) : null;
   const [local, setLocal] = useState(initial);
@@ -191,11 +191,15 @@ export function useZoneEditorDraft<T>(section: ZoneEditorSection, initial: T, is
   }, [key, scope?.drafts, scope?.mark, initial, isDirty, section]);
 
   useEffect(() => {
-    if (!scope || !key || scope.drafts.current(key) !== undefined) return;
-    const value = scope.drafts.read(sessionStorageIfAvailable(), key, accepts) ?? initial;
+    if (!scope || !key) return;
+    const current = scope.drafts.current<T>(key);
+    if (current !== undefined && !reopen) return;
+    const retained = current ?? scope.drafts.read(sessionStorageIfAvailable(), key, accepts) ?? initial;
+    const value = reopen ? reopen(retained, initial) : retained;
     scope.drafts.retain(key, value);
+    if (value !== retained) scope.drafts.write(sessionStorageIfAvailable(), key, value, isDirty(value));
     scope.mark(section, isDirty(value));
-  }, [key, scope?.drafts, scope?.mark, accepts, initial, isDirty, section]);
+  }, [key, scope?.drafts, scope?.mark, accepts, initial, isDirty, section, reopen]);
 
   return [state, setState, ready];
 }

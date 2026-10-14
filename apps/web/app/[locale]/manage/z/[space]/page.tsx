@@ -17,6 +17,10 @@ export default async function ZoneHomePage({ params }: { params: Promise<{ space
   const { space } = await params;
   const locale = await requestLocale();
   const { actingSubject, main, signInHref } = await manager(locale, zoneEditorPath(space));
+  const lifecycle = await loadZoneLifecycle(main, space, locale, actingSubject);
+  if (lifecycle.kind === 'ready' && lifecycle.status === 'retired') {
+    redirect(localizedPath(zoneLifecyclePath(space, lifecycle.returnAddress), locale));
+  }
   const loaded = await loadZoneAuthoring(main, space, locale, actingSubject);
   if (loaded.kind === 'missing') {
     const lifecycle = await loadZoneLifecycle(main, space, locale, actingSubject);
