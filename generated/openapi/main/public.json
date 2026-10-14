@@ -546488,6 +546488,15 @@
           },
           {
             "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "cursor",
             "required": false,
             "schema": {
@@ -548402,6 +548411,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -549177,6 +549195,15 @@
             "schema": {
               "maxLength": 35,
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
           }
@@ -550115,6 +550142,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -550913,6 +550949,15 @@
             "schema": {
               "maxLength": 35,
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
           }
@@ -552330,6 +552375,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -553731,6 +553785,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -554528,6 +554591,15 @@
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+              "type": "string"
+            }
           }
         ],
         "responses": {
@@ -555322,6 +555394,15 @@
             "schema": {
               "maxLength": 35,
               "pattern": "^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "actingSubject",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
           }
