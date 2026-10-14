@@ -174,3 +174,4 @@ the change that makes its tests pass or removes them.
 - D126, 1 file: Wiki candidate matching performs two name-record queries instead of its one-batch contract. Source: `services/main/src/modules/wiki/`.
 - D127, 1 file: Work progress summary executes eight statements instead of the six-statement owner budget. Source: `services/main/src/modules/progress-summary/`.
 - D128, 1 file: Zone facet reconciliation cannot complete within its preparation page budget. Source: `services/main/src/modules/zone-browse/store.ts`.
+- Program mail `35c8d278-735a-4e88-944f-785d2d6d281e`, 2026-10-14 00:59 UTC: Work releases arrive in identity order, varying between fixtures. Fold this nonblocking observation into the next Work release-read owner task: if the API defines date-then-title order, apply it and state it in the contract; otherwise state that the client orders. No current read-owner brief or claim was found; this observation holds no task or acceptance today.
