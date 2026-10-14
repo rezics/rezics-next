@@ -478,6 +478,7 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task web:build` | Build the vinext Workers application. |
 | `task web:preview` | Build the web Worker for a running QA stack and serve it with wrangler on port 3003. |
 | `task web:e2e` | Run Playwright journeys against the running web preview. |
+| `task goal:type-files` | Type-check selected files and their imports without whole-workspace memory admission. |
 | `task web:typecheck` | Type-check the web workspace. |
 | `task storybook` | Run Storybook on port 6006 with its MCP endpoint at /mcp. |
 | `task storybook:build` | Build static Storybook into .temp/storybook/static. |
