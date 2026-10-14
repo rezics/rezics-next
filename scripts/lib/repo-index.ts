@@ -55,6 +55,7 @@ export interface IndexedFile {
     start: number;
     end: number;
     functionStart?: number;
+    calleeSpan?: { start: number; end: number };
     calleeName?: string;
     calleeKind?: 'identifier' | 'this-member';
     className?: string;
