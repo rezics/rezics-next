@@ -115,7 +115,7 @@ export default {
   removeFilter: insert('移除篩選條件：{{filter}}', { filter: String }),
   pickedHere: '已選入',
   becauseYouFollow: insert('因為你追蹤了 {{name}}', { name: String }),
-  someone: '一位成員',
+  someone: '某位使用者',
   aboutWork: insert('關於《{{title}}》', { title: String }),
   spoilerTag: '劇透', spoilerAnnounced: '作者已將此內容標示為劇透。', showSpoiler: '顯示劇透',
   markSpoiler: '標記為劇透', markSpoilerHelp: '讀者在查看這則回覆前會看到提示。',

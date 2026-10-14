@@ -115,7 +115,7 @@ export default {
   removeFilter: insert('フィルターを解除：{{filter}}', { filter: String }),
   pickedHere: '選出済み',
   becauseYouFollow: insert('{{name}}をフォローしているため', { name: String }),
-  someone: 'メンバー', aboutWork: insert('「{{title}}」について', { title: String }),
+  someone: 'あるユーザー', aboutWork: insert('「{{title}}」について', { title: String }),
   spoilerTag: 'ネタバレ', spoilerAnnounced: '作者がネタバレとして指定しました。', showSpoiler: 'ネタバレを表示',
   markSpoiler: 'ネタバレとしてマーク', markSpoilerHelp: '返信を表示する前に、読者へ注意を示します。',
   replyIn: 'ディスカッションの返信', replyAction: '返信', viewThread: 'スレッドで見る', replied: '返信しました',

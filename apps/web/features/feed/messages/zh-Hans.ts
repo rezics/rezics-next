@@ -47,7 +47,7 @@ export default {
   words: plural({ other: insert('{{count}} 字') }, { count: asValue(number()) }),
   version: insert('版本 {{version}}', { version: String }),
   promptPreview: '提示词预览',
-  someone: '一位成员', blockedUser: '已屏蔽的用户', aboutWork: insert('关于作品：{{title}}', { title: String }),
+  someone: '某位用户', blockedUser: '已屏蔽的用户', aboutWork: insert('关于作品：{{title}}', { title: String }),
   spoilerTag: '剧透', spoilerAnnounced: '作者标注了剧透。', showSpoiler: '显示剧透内容',
   markSpoiler: '标记剧透', markSpoilerHelp: '读者在查看这条回复前会看到提示。',
   replyIn: '讨论中的一条回复', replyAction: '回复', viewThread: '在讨论中查看', replied: '回复了',

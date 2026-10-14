@@ -53,7 +53,7 @@ export const messages = {
   version: insert('Version {{version}}', { version: String }),
   promptPreview: 'Prompt preview',
   // A discussion or reply
-  someone: 'A member', blockedUser: 'Blocked user', aboutWork: insert('On {{title}}', { title: String }),
+  someone: 'Someone', blockedUser: 'Blocked user', aboutWork: insert('On {{title}}', { title: String }),
   spoilerTag: 'Spoiler', spoilerAnnounced: 'The author marked this as a spoiler.', showSpoiler: 'Show spoiler',
   markSpoiler: 'Mark as spoiler',
   markSpoilerHelp: 'Readers see a warning before the reply.',

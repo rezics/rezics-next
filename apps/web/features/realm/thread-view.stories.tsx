@@ -87,7 +87,7 @@ export const Thread: Story = {
     // Priya opened the discussion, so her reply is marked OP.
     await expect(within(reply(canvas, /Priya Raman/)).getByTitle('Started this discussion')).toHaveTextContent('OP');
     // A reply whose author keeps a private profile shows without a name.
-    await expect(canvas.getAllByText('A member').length).toBeGreaterThan(0);
+    await expect(canvas.getAllByText('Someone').length).toBeGreaterThan(0);
     // Six levels down, a branch continues on the reply's own page.
     await expect(canvas.getByRole('link', { name: 'Continue this thread' })).toHaveAttribute('href',
       localizedPath(threadHref(storyRealm.path, storyReply(7)), 'en'));

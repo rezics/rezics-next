@@ -123,7 +123,7 @@ export default {
   removeFilter: insert("Filter {{filter}} entfernen", { filter: String }),
   pickedHere: "Ausgewählt",
   becauseYouFollow: insert("Weil du {{name}} folgst", { name: String }),
-  someone: "Ein Mitglied",
+  someone: 'Jemand',
   aboutWork: insert("Zu „{{title}}“", { title: String }),
   spoilerTag: "Spoiler",
   spoilerAnnounced: "Der Autor hat diesen Beitrag als Spoiler markiert.",
