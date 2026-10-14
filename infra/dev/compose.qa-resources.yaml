@@ -4,7 +4,7 @@ services:
     # Ordinary integration: 426 MiB; large tmpfs: 628 MiB (2026-10-07 docker stats).
     mem_limit: ${REZICS_POSTGRES_MEMORY_LIMIT:-2g}
   fuseki:
-    mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}
+    mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}
   rustfs:
     # Ordinary integration: 379 MiB; large tmpfs: 371 MiB (2026-10-07 docker stats).
     mem_limit: ${REZICS_RUSTFS_MEMORY_LIMIT:-1g}

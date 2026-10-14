@@ -149,7 +149,7 @@ test('disposable QA caps every service beside Fuseki and still accepts an overri
   const overlay = join(import.meta.dir, '../../infra/dev/compose.qa.yaml');
   const resources = join(import.meta.dir, '../../infra/dev/compose.qa-resources.yaml');
   const overlayText = readFileSync(resources, 'utf8');
-  expect(overlayText).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-2g}');
+  expect(overlayText).toContain('mem_limit: ${REZICS_FUSEKI_MEMORY_LIMIT:-7g}');
   const resolve = (extra: Record<string, string>) => {
     const env = composeProcessEnvironment(process.env, saved);
     for (const name of ['REZICS_POSTGRES_MEMORY_LIMIT', 'REZICS_RUSTFS_MEMORY_LIMIT',
