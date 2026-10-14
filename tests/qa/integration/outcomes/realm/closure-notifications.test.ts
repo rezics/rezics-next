@@ -65,9 +65,20 @@ async function inbox(person: PersonaSession) {
     cursor = page.next;
   }
 }
-async function watch(person: PersonaSession, work: string) {
+async function watch(person: PersonaSession, work: string, participated = false) {
+  const query = new URLSearchParams({ target: work, kind: 'thread', actingSubject: person.actingSubject! });
+  const deadline = performance.now() + 45_000;
+  let current: { watch: { revision: string; level: string } | null };
+  for (;;) {
+    current = await closureCommand(person, 'GET', `/v1/me/watches?${query}`);
+    if (!participated || current.watch) break;
+    expect(performance.now(), 'The initial reply must establish its author’s automatic watch').toBeLessThan(deadline);
+    await Bun.sleep(100);
+  }
+  if (participated) expect(current.watch!.level).toBe('participating');
   await closureCommand(person, 'POST', '/v1/me/watches', {
-    target: work, kind: 'thread', level: 'all', actingSubject: person.actingSubject, expectedRevision: null,
+    target: work, kind: 'thread', level: 'all', actingSubject: person.actingSubject,
+    expectedRevision: current.watch?.revision ?? null,
   });
 }
 beforeAll(async () => {
@@ -92,7 +103,9 @@ beforeAll(async () => {
         profile: 'notification-endpoint-v1', deviceId: 'closure-fixture',
         address: `https://push.example.test/${name}`, lockScreenDisclosure: false,
       });
-      await watch(sessions[name], original.work);
+      // The initial reply asynchronously creates the member author's watch.
+      // Observe that state before changing it, regardless of relay scheduling.
+      await watch(sessions[name], original.work, name === 'member');
       await watch(sessions[name], control.work);
     }
     closedReplies.add((await closureReply(sessions, original, 'Original reply by the credited member Person.')).reply);
