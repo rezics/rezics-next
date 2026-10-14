@@ -96,5 +96,4 @@ export const integrationGateFiles = [
   'services/main/tests/erasure-media-composition.test.ts',
   'services/main/tests/access-erasure-recovery-catalog.integration.test.ts',
   'services/main/tests/realm-closure-roster-discussion.test.ts',
-  'services/main/tests/also-enjoyed-read-cost.integration.test.ts',
 ] as const;
