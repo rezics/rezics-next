@@ -170,9 +170,9 @@ async function expectSanction(canvasElement: HTMLElement, persona: AnswerPersona
   if (!chosen) throw new Error('Recorded appeal row is not shown');
   await userEvent.click(chosen);
   await expect(chosen).toHaveAttribute('aria-current', 'true');
-  await waitFor(() => {
-    expect(canvas.queryByText(manage.impactChecking)).toBeNull();
-    expect(canvas.getByRole('heading', { name: review.title })).toBeVisible();
+  await waitFor(async () => {
+    await expect(canvas.queryByText(manage.impactChecking)).toBeNull();
+    await expect(canvas.getByRole('heading', { name: review.title })).toBeVisible();
   });
   await expect(canvas.getAllByText(receipt.reason).length).toBeGreaterThan(0);
   await expect(canvas.getAllByText(receipt.appeal.statement).length).toBeGreaterThan(0);
