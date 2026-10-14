@@ -82,6 +82,8 @@ struct Token {
 #[serde(rename_all = "camelCase")]
 struct SqlFacts {
     tokens: Vec<Token>,
+    #[cfg(test)]
+    #[serde(skip)]
     serialization_tokens: Vec<Token>,
     references: Vec<Value>,
     bodies: Vec<SqlCandidate>,
@@ -432,6 +434,7 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
     let tree_deflate = tree.as_ref().map(|tree| compressed_json(tree).unwrap());
     elapsed(&SQL, timing);
     SqlFacts {
+        #[cfg(test)]
         serialization_tokens: tokens.clone(),
         tokens,
         references,
@@ -1107,6 +1110,11 @@ mod tests {
         let facts = sql_facts("SELECT * FROM owner.records;");
         let wire = serde_json::to_value(&facts).unwrap();
         assert!(wire.get("tree").is_none());
+        assert!(wire.get("serializationTokens").is_none());
+        assert_eq!(
+            serde_json::to_value(&facts.tokens).unwrap(),
+            serde_json::to_value(&facts.serialization_tokens).unwrap()
+        );
         let bytes = STANDARD
             .decode(wire["treeDeflate"].as_str().unwrap())
             .unwrap();
