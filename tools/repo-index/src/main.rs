@@ -85,8 +85,11 @@ struct SqlFacts {
     serialization_tokens: Vec<Token>,
     references: Vec<Value>,
     bodies: Vec<SqlCandidate>,
-    #[serde(skip_serializing_if = "Option::is_none")]
+    #[cfg(test)]
+    #[serde(skip)]
     tree: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tree_deflate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     parse_error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -424,13 +427,18 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
                 .collect()
         })
         .unwrap_or_default();
+    // Most rules consume lexical facts; keep PostgreSQL's real tree available
+    // without allocating it in every JavaScript token-only index read.
+    let tree_deflate = tree.as_ref().map(|tree| compressed_json(tree).unwrap());
     elapsed(&SQL, timing);
     SqlFacts {
         serialization_tokens: tokens.clone(),
         tokens,
         references,
         bodies,
+        #[cfg(test)]
         tree,
+        tree_deflate,
         parse_error,
         scan_error,
     }
@@ -1095,6 +1103,38 @@ mod tests {
         );
     }
     #[test]
+    fn postgres_trees_are_lazy_wire_facts_and_remain_lossless_for_dollar_bodies() {
+        let facts = sql_facts("SELECT * FROM owner.records;");
+        let wire = serde_json::to_value(&facts).unwrap();
+        assert!(wire.get("tree").is_none());
+        let bytes = STANDARD
+            .decode(wire["treeDeflate"].as_str().unwrap())
+            .unwrap();
+        let tree: Value =
+            serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
+        assert_eq!(Some(&tree), facts.tree.as_ref());
+        assert!(
+            wire["tokens"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|token| token["text"] == "records")
+        );
+        assert_eq!(wire["references"][0]["relation"], "owner.records");
+        let procedural = sql_facts("DO $$SELECT * FROM owner.records;$$;");
+        let body = procedural.bodies.first().unwrap();
+        let bytes = STANDARD.decode(body.sql_deflate.as_ref().unwrap()).unwrap();
+        let body_facts: Value =
+            serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
+        assert!(body_facts.get("tree").is_none());
+        assert!(body_facts.get("treeDeflate").is_some());
+        assert!(
+            sql_facts_with_parse("owner.records", false)
+                .tree_deflate
+                .is_none()
+        );
+    }
+    #[test]
     fn dotted_literal_facts_are_scanned_and_compressed_without_parsing_prose() {
         let root = env::current_dir().unwrap();
         let facts = indexed(
@@ -1154,7 +1194,7 @@ mod tests {
             let sql: Value =
                 serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice()))
                     .unwrap();
-            assert!(sql.get("tree").is_some(), "{text}: {sql}");
+            assert!(sql.get("treeDeflate").is_some(), "{text}: {sql}");
             assert!(sql.get("parseError").is_none(), "{text}: {sql}");
             if text.contains("SELECT\n") || text.starts_with("COPY") {
                 assert!(
