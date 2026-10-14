@@ -2027,6 +2027,11 @@ function gateUpgrades(
       constants.set(key, value);
       return value;
     }
+    const aliases = provider && indexedSource(provider).aliases;
+    if (aliases && !aliases.some((alias) => alias.name === name)) {
+      constants.set(key, undefined);
+      return;
+    }
     const ast = provider && indexedSourceFile(provider);
     if (!ast) return;
     let declarations = moduleDeclarations.get(file);
@@ -2051,9 +2056,31 @@ function gateUpgrades(
     constants.set(key, value);
     return value;
   };
+  const neededConstants = new Map<string, Set<string>>();
+  for (const trace of traces.values()) {
+    const needed = neededConstants.get(trace.file) ?? new Set<string>();
+    const remember = (value: string) => {
+      for (const match of value.matchAll(
+        /"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|(?<![.\w])[a-z_$][a-z_0-9$]*/gi,
+      ))
+        if (imports.get(trace.file)?.has(match[0])) needed.add(match[0]);
+    };
+    for (const value of trace.defaults.values()) remember(value);
+    for (const event of trace.events) {
+      if ('effect' in event) {
+        remember(event.effect.key);
+        for (const condition of event.effect.conditions ?? []) remember(condition.expression);
+      } else {
+        for (const value of event.args) remember(value);
+        for (const condition of event.conditions) remember(condition.expression);
+      }
+    }
+    neededConstants.set(trace.file, needed);
+  }
   for (const [file, names] of imports) {
     const values = new Map<string, string>();
     for (const name of names.keys()) {
+      if (!neededConstants.get(file)?.has(name)) continue;
       const value = constant(file, name);
       if (value !== undefined) values.set(name, value);
     }

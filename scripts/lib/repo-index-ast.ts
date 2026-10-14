@@ -409,6 +409,25 @@ const isIndexedMethod = (raw: AstNode) =>
 const isIndexedFunction = (raw: AstNode) => functionTypes.has(raw.type) || isIndexedMethod(raw);
 const sqlOperation =
   /\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i;
+const runtimeTypeSyntax = new Set([
+  'TSAsExpression',
+  'TSSatisfiesExpression',
+  'TSNonNullExpression',
+  'TSInstantiationExpression',
+  'TSTypeAssertion',
+  'TSModuleDeclaration',
+  'TSModuleBlock',
+  'TSParameterProperty',
+  'TSEnumDeclaration',
+  'TSEnumBody',
+  'TSEnumMember',
+  'TSExportAssignment',
+  'TSAbstractMethodDefinition',
+  'TSAbstractPropertyDefinition',
+  'TSDeclareFunction',
+]);
+const pureTypeSyntax = (raw: AstNode) =>
+  raw.type.startsWith('TS') && !runtimeTypeSyntax.has(raw.type);
 
 /** Traverse indexed facts directly; adapting unrelated type syntax costs more
  * than these guards' rules. Parent chains are adapted only for selected nodes. */
@@ -450,6 +469,7 @@ function selectIndexedNodes(
     }
     if (!value || typeof value !== 'object' || !('type' in value) || !('start' in value)) return;
     const raw = value as AstNode;
+    if (mode === 'declarations' && pureTypeSyntax(raw)) return;
     const parent = path.at(-1);
     const methodBody =
       raw.type === 'FunctionExpression' &&
@@ -536,6 +556,7 @@ export function indexedSourceNodes(source: { file: string; text: string }): ts.N
 
 const scopedDeclarationPresence = new WeakMap<AstNode, boolean>();
 function containsScopedDeclaration(raw: AstNode): boolean {
+  if (pureTypeSyntax(raw)) return false;
   const previous = scopedDeclarationPresence.get(raw);
   if (previous !== undefined) return previous;
   let found = raw.type === 'VariableDeclarator';

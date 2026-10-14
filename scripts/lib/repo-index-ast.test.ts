@@ -311,3 +311,18 @@ test('serialization keeps interpolated templates as one SQL value', () => {
     ),
   ).toEqual([]);
 });
+
+test('runtime namespace declarations remain available to SQL parameter rules', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'probe.ts',
+          text: "namespace Probe { const KEY=12; db.query('SELECT pg_advisory_lock($1)', [KEY]); }",
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['constant-advisory-key', '12']]);
+});
