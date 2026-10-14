@@ -4,8 +4,15 @@ import { closureActor, closureAnswers, closureCredit, closurePersonas, closureRe
 import { readLatest, readNotificationCount, readNotificationDelivery, readWindow } from './window.ts';
 
 describe('closed Realm notification reader', () => {
+  test('publishing credit keeps the member and moderator Persons distinct from acting and recipient authority', () => {
+    expect(closureCredit.closedAuthor).toBe(closureAnswers('member').recipient);
+    expect(closureCredit.closedReplyAuthors).toEqual([
+      closureAnswers('member').recipient, closureAnswers('moderator').recipient]);
+    expect(closureCredit.liveAuthor).not.toBe(closureActor.id);
+  });
   test('visitor inbox, count and delivery retain the authentication refusal', async () => {
     const fixture = closureTransport('visitor');
+    expect(fixture.recipient).toBeNull();
     expect(await readLatest(fixture.main)).toEqual({ ok: false, failure: 'sign-in' });
     expect(await readNotificationCount(fixture.main)).toEqual({ ok: false, failure: 'sign-in' });
     expect(await readNotificationDelivery(fixture.main, fixture.deliveries[0]!.id))

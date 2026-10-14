@@ -12,7 +12,8 @@ export type ClosureState = 'populated' | 'empty' | 'loading' | 'error' | 'count-
  * The receiver's Person is distinct from both authors; owning/moderating/operating grants no process authority.
  */
 export const closureCredit = {
-  basis: 'original-contribution', closedAuthor: `https://rezics.com/id/${streamId(800)}`,
+  basis: 'original-contribution', closedAuthor: `https://rezics.com/id/${streamId(1100)}`,
+  closedReplyAuthors: [`https://rezics.com/id/${streamId(1100)}`, `https://rezics.com/id/${streamId(1300)}`],
   liveAuthor: `https://rezics.com/id/${streamId(801)}`,
 } as const;
 // Main resolves the acting Agent; original-contribution credit names the author Person separately.
@@ -32,7 +33,7 @@ function notice(id: number, sequence: string): StreamItem {
 
 export function closureAnswers(persona: ClosurePersona, state: ClosureState = 'populated') {
   const offset = closurePersonas.indexOf(persona) * 100;
-  const recipient = `https://rezics.com/id/${streamId(900 + offset)}`;
+  const recipient = persona === 'visitor' ? null : `https://rezics.com/id/${streamId(900 + offset)}`;
   const closed = notice(1 + offset, '500');
   closed.deliveries = [{ id: streamId(20 + offset), channel: 'push' }];
   const live = notice(2 + offset, '400');
