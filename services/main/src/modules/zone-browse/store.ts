@@ -267,6 +267,10 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         if (rows.length < ZONE_BROWSE_PROJECTION_COST.batch) {
           state.phase = 'prune';
           state.after = undefined;
+          // A fresh empty store has nothing to prune. Finish under this cut
+          // instead of spanning another poll while new admissions begin.
+          if (!rows.length) complete = await this.poolPage(this.access, deadline,
+            async client => !(await client.query('SELECT realm, work FROM access.zone_browse_entry ORDER BY realm, work LIMIT 1')).rows.length);
         } else state.after = rows.at(-1)!;
       } else {
         const after = state.after;

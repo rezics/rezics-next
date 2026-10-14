@@ -195,6 +195,33 @@ test('explicit backfill waits for all pages and remains idempotent for preparati
   expect(await f.current()).toBe(true);
 });
 
+test('an empty fresh stack finishes its authoritative scan in one poll before admissions begin', async () => {
+  const f = fixture(0);
+  f.state.usableCut = false;
+  f.state.checkpoint.sequence = '0';
+  f.graph.relaySequence = f.acknowledged.sequence = f.delivered.sequence = '0';
+  await f.instance.tick();
+  expect(await f.current()).toBe(true);
+  expect(f.instance.recoveryStatus().state).toBe('ready');
+  // The startup shortcut is fenced too; a new committed adoption declares lag.
+  f.graph.rows.push(...adoptions(1));
+  f.graph.sequence = '101';
+  f.graph.relaySequence = '1';
+  expect(await f.current()).toBe(false);
+});
+
+test('an empty adoption graph still prunes retained stale candidates before becoming ready', async () => {
+  const f = fixture(0);
+  f.seed({ realm, work: id(600), adopted_order: '1' });
+  f.state.usableCut = false;
+  await f.instance.tick();
+  expect(await f.current()).toBe(false);
+  expect(f.candidates().size).toBe(1);
+  await f.instance.tick();
+  expect(await f.current()).toBe(true);
+  expect(f.candidates().size).toBe(0);
+});
+
 test('a repaired gap conflict recovers all authoritative candidates in bounded pages', async () => {
   const f = fixture(130);
   await f.gap();
