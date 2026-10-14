@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
   authorize,
@@ -106,13 +106,7 @@ beforeAll(async () => {
   const started = performance.now();
   sessions = await personaSessions();
   await recording.prepare();
-  sessions.owner = await readingSession(sessions.owner, 'owner');
-  const operatorMain = sessions.operator.main.bind(sessions.operator);
-  sessions.operator = {
-    ...sessions.operator,
-    main: (method, path, body, key) => timedMain('operator', method, path, body,
-      () => operatorMain(method, path, body, key)),
-  };
+  sessions.owner = await readingSession(sessions.owner);
   const owner = sessions.owner;
   const operator = sessions.operator;
   const authority = await answer<{ authorityEpoch: string }>(
@@ -240,7 +234,6 @@ beforeAll(async () => {
 }, 600_000);
 afterAll(async () => {
   try {
-    writeRequestTimes();
     await recording.publish();
   }
   finally { await sessions?.close(); }
@@ -269,72 +262,12 @@ async function credit(person: PersonaSession, work: Work, sample?: ReturnType<Ou
 const isContentsRead = (method: string, path: string) =>
   method === 'GET' && /^\/v1\/works\/[^/?]+\/contents(?:\?|$)/.test(path);
 
-type RequestTime = {
-  persona: string;
-  method: string;
-  path: string;
-  status: number;
-  ms: number;
-  body?: unknown;
-  response?: string;
-};
-const requestTimes: RequestTime[] = [];
-
-/** Wall time of one Main call. A call at or over five seconds keeps its body and response for the handoff. */
-async function timedMain(persona: string, method: string, path: string, body: unknown,
-  call: () => Promise<Response>): Promise<Response> {
-  const started = performance.now();
-  try {
-    const response = await call();
-    const ms = performance.now() - started;
-    const slow = ms >= 5000;
-    let responseText: string | undefined;
-    if (slow) {
-      try { responseText = (await response.clone().text()).slice(0, 800); }
-      catch { responseText = '<unreadable>'; }
-    }
-    requestTimes.push({
-      persona, method, path, status: response.status, ms,
-      ...(slow && body !== undefined ? { body } : {}),
-      ...(responseText !== undefined ? { response: responseText } : {}),
-    });
-    return response;
-  } catch (error) {
-    requestTimes.push({
-      persona, method, path, status: 0, ms: performance.now() - started,
-      ...(body !== undefined ? { body } : {}),
-      response: error instanceof Error ? error.message : String(error),
-    });
-    throw error;
-  }
-}
-
-function writeRequestTimes(): void {
-  const sorted = [...requestTimes].sort((left, right) => right.ms - left.ms);
-  const at = (fraction: number) => sorted[Math.min(sorted.length - 1, Math.floor((sorted.length - 1) * fraction))]?.ms ?? 0;
-  const summary = {
-    count: requestTimes.length,
-    totalMs: Math.round(requestTimes.reduce((sum, item) => sum + item.ms, 0)),
-    maxMs: sorted[0]?.ms ?? 0,
-    p50Ms: at(0.5),
-    p95Ms: at(0.05),
-    over1s: sorted.filter(item => item.ms >= 1000).length,
-    over5s: sorted.filter(item => item.ms >= 5000).length,
-    slowest: sorted.slice(0, 15).map(item => ({ ...item, ms: Math.round(item.ms) })),
-  };
-  mkdirSync('.temp/g-2224-request-times', { recursive: true });
-  writeFileSync('.temp/g-2224-request-times/summary.json', `${JSON.stringify(summary, null, 2)}\n`);
-  writeFileSync('.temp/g-2224-request-times/requests.jsonl', requestTimes
-    .map(item => JSON.stringify({ ...item, ms: Math.round(item.ms) })).join('\n') + '\n');
-  console.info(`request-timing count=${summary.count} total=${summary.totalMs}ms max=${Math.round(summary.maxMs)}ms p95=${Math.round(summary.p95Ms)}ms over1s=${summary.over1s} over5s=${summary.over5s}`);
-}
-
-async function readingSession(person: PersonaSession, persona: string): Promise<PersonaSession> {
+async function readingSession(person: PersonaSession): Promise<PersonaSession> {
   if (!person.accountId) return {
     ...person,
-    main: (method, path, body) => timedMain(persona, method, path, body, () => fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+    main: (method, path) => fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
         method, redirect: 'manual', signal: AbortSignal.timeout(isContentsRead(method, path) ? 5000 : 30_000),
-      })),
+      }),
   };
   const stack = resolve('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const directory = readdirSync(stack).find((name) => name.startsWith('g-1005-auth-'));
@@ -381,13 +314,13 @@ async function readingSession(person: PersonaSession, persona: string): Promise<
       if (key !== undefined || !['GET', 'HEAD'].includes(method))
         headers.set('idempotency-key', key ?? randomUUID());
       const request = (signal: AbortSignal) =>
-        timedMain(persona, method, path, body, () => fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+        fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
           method,
           headers,
           redirect: 'manual',
           signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        }));
+        });
       if (isContentsRead(method, path)) return request(AbortSignal.timeout(5000));
       return request(AbortSignal.timeout(30_000));
     },
@@ -406,7 +339,7 @@ async function navigate(name: PersonaName) {
     elapsed(); partName = label; partRequests = requests; partStarted = performance.now();
   };
   try {
-    const person = await readingSession(sessions[name], name);
+    const person = await readingSession(sessions[name]);
     const sample = recording.session(name, person);
     const production = productionClient(name, person);
     const path = `/v1/reading-positions/${short(published.work)}`;
@@ -505,8 +438,7 @@ async function navigate(name: PersonaName) {
       ),
       400,
     );
-    const otherName = name === 'stranger' ? 'member' : 'stranger';
-    const other = await readingSession(sessions[otherName], otherName);
+    const other = await readingSession(sessions[name === 'stranger' ? 'member' : 'stranger']);
     await answer(
       other.main('GET', `${path}?${query(other, { limit: '2', cursor: first.nextCursor! })}`),
       400,

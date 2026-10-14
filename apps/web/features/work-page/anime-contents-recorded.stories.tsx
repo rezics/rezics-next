@@ -233,7 +233,9 @@ function RecordedReachedEpisode({ persona, header = false }: { persona: AnswerPe
   </PageContainer>;
 }
 
-function reachedPlay(persona: AnswerPersona, phoneWidth: boolean, titled: boolean): NonNullable<Story['play']> {
+function reachedPlay(
+  persona: AnswerPersona, phoneWidth: boolean, titled: boolean,
+): NonNullable<StoryObj<typeof RecordedReachedEpisode>['play']> {
   return async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     const chosen = reachedSearch(persona);
