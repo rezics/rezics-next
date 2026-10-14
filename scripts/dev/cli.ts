@@ -24,6 +24,7 @@ import { assertOwnerMigrationsComplete, migrateFixtureOwners, migrateOwnerData }
 import { withQaStackStartup, type StartupMemoryOptions } from '../qa/memory-admission.ts';
 import { runHostAdmission } from '../qa/host-admission.ts';
 import { dockerUnavailableMessage } from '../load/docker-env.ts';
+import { prepareComposeFileMounts } from './compose-mounts.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
@@ -32,6 +33,7 @@ const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml'
 
 function run(command: string, args: string[], env: NodeJS.ProcessEnv = process.env,
   timeout?: number): string {
+  if (command === 'docker') prepareComposeFileMounts(root, args, env);
   const result = spawnSync(command, args, { cwd: root, env, encoding: 'utf8',
     stdio: ['inherit', 'pipe', 'pipe'], timeout });
   if (result.error || result.status !== 0) {
