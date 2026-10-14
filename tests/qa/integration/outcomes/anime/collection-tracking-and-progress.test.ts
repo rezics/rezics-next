@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -252,160 +253,184 @@ async function journey(name: PersonaName) {
 async function libraryVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
   // LibraryRoute redirects an anonymous visitor before it reads the library.
   if (name === 'visitor') return;
-  await answer(sample('library-session-acting-contexts', 'GET', '/v1/me/acting-contexts?task=work.create'));
-  await answer(sample('library-session-agents', 'GET', '/v1/me/agents?languages=en'));
-  await answer(sample('library-session-agent', 'GET', '/v1/me/session-agent'));
+  await Promise.all([
+    answer(sample('library-session-acting-contexts', 'GET', '/v1/me/acting-contexts?task=work.create')),
+    answer(sample('library-session-agents', 'GET', '/v1/me/agents?languages=en')),
+    answer(sample('library-session-agent', 'GET', '/v1/me/session-agent')),
+  ]);
   const query = (fields: Record<string, string> = {}) => new URLSearchParams({
     actingSubject: person.actingSubject!, ...fields,
   });
   await answer(sample('library-session-agent-profile', 'GET',
     `/v1/agents/${short(person.actingSubject!)}?${query()}`));
-  let cursor: string | null = null;
-  for (let page = 0; page < 5; page++) {
-    const shelves = await answer<{ nextCursor: string | null }>(sample(
-      page ? `library-custom-shelves-page-${page + 1}` : 'library-custom-shelves', 'GET',
-      `/v1/me/shelves?${query({ limit: '20', ...(cursor ? { cursor } : {}) })}`));
-    cursor = shelves.nextCursor;
-    if (!cursor) break;
-  }
-  await answer(sample('library-visibility', 'GET',
-    `/v1/agents/${short(person.actingSubject!)}/library-visibility`));
-  // readOverview deliberately reads the global question without the session bearer.
-  await answer(recording.session(name, sessions.visitor)('library-rating-context', 'GET',
-    '/v1/rating-contexts?scope=global&limit=1'));
   const year = String(new Date().getUTCFullYear());
-  await answer(sample('library-yearly-goal', 'GET', `/v1/me/reading-goal?${query({ year })}`));
-  await answer(sample('library-reading-year', 'GET', `/v1/me/reading-stats?${query({ year })}`));
-  let nextCursor: string | null = null;
-  for (let page = 0; ; page++) {
-    const shelf = await answer<{ items: { work: string; card: unknown }[]; nextCursor: string | null }>(sample(
-      page ? `library-watching-shelf-page-${page + 1}` : 'library-watching-shelf', 'GET',
-      `/v1/me/shelves/status/reading/works?${query({ sort: 'added', order: 'desc', limit: '20',
-        ...(nextCursor ? { cursor: nextCursor } : {}) })}`));
-    const works = shelf.items.filter(item => item.card).map(item => item.work);
-    if (works.length) {
-      await answer(sample(page ? `library-work-states-page-${page + 1}` : 'library-work-states', 'GET',
-        `/v1/me/work-states?${new URLSearchParams({ works: works.join(','), actingSubject: person.actingSubject! })}`));
-    }
-    for (const [index, work] of works.entries()) {
-      const label = `${page ? `library-page-${page + 1}` : 'library'}-work-${index + 1}`;
-      const resume = await answer<{ unreadCount?: { kind: string } }>(sample(`${label}-continue`, 'GET',
-        `/v1/me/continue/${short(work)}?${query()}`));
-      if (resume.unreadCount?.kind === 'exact') {
-        await answer(sample(`${label}-header`, 'GET', `/v1/works/${short(work)}?${query()}`));
+  await Promise.all([
+    (async () => {
+      let cursor: string | null = null;
+      for (let page = 0; page < 5; page++) {
+        const shelves = await answer<{ nextCursor: string | null }>(sample(
+          page ? `library-custom-shelves-page-${page + 1}` : 'library-custom-shelves', 'GET',
+          `/v1/me/shelves?${query({ limit: '20', ...(cursor ? { cursor } : {}) })}`));
+        cursor = shelves.nextCursor;
+        if (!cursor) break;
       }
-    }
-    nextCursor = shelf.nextCursor;
-    if (!nextCursor) break;
-  }
+    })(),
+    answer(sample('library-visibility', 'GET',
+      `/v1/agents/${short(person.actingSubject!)}/library-visibility`)),
+    // readOverview deliberately reads the global question without the session bearer.
+    answer(recording.session(name, sessions.visitor)('library-rating-context', 'GET',
+      '/v1/rating-contexts?scope=global&limit=1')),
+    answer(sample('library-yearly-goal', 'GET', `/v1/me/reading-goal?${query({ year })}`)),
+    answer(sample('library-reading-year', 'GET', `/v1/me/reading-stats?${query({ year })}`)),
+    (async () => {
+      let nextCursor: string | null = null;
+      for (let page = 0; ; page++) {
+        const shelf = await answer<{ items: { work: string; card: unknown }[]; nextCursor: string | null }>(sample(
+          page ? `library-watching-shelf-page-${page + 1}` : 'library-watching-shelf', 'GET',
+          `/v1/me/shelves/status/reading/works?${query({ sort: 'added', order: 'desc', limit: '20',
+            ...(nextCursor ? { cursor: nextCursor } : {}) })}`));
+        const works = shelf.items.filter(item => item.card).map(item => item.work);
+        await Promise.all([
+          (async () => {
+            if (works.length) {
+              await answer(sample(page ? `library-work-states-page-${page + 1}` : 'library-work-states', 'GET',
+                `/v1/me/work-states?${new URLSearchParams({ works: works.join(','), actingSubject: person.actingSubject! })}`));
+            }
+          })(),
+          ...works.map(async (work, index) => {
+            const label = `${page ? `library-page-${page + 1}` : 'library'}-work-${index + 1}`;
+            const resume = await answer<{ unreadCount?: { kind: string } }>(sample(`${label}-continue`, 'GET',
+              `/v1/me/continue/${short(work)}?${query()}`));
+            if (resume.unreadCount?.kind === 'exact') {
+              await answer(sample(`${label}-header`, 'GET', `/v1/works/${short(work)}?${query()}`));
+            }
+          }),
+        ]);
+        nextCursor = shelf.nextCursor;
+        if (!nextCursor) break;
+      }
+    })(),
+  ]);
 }
 
 /** Transport only: production owns paths, serialization, versions and command keys. */
 async function productionVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
-  let stage = 'frame', count = 0, stopped = false;
-  const at = (part: string) => { stage = part; count = 0; };
+  const labels = new AsyncLocalStorage<(method: string, url: URL) => string>();
+  const named = <T>(label: string, run: () => Promise<T>) => labels.run(() => label, run);
+  const routed = <T>(names: Record<string, string>, run: () => Promise<T>) => labels.run((method, url) => {
+    const route = Object.keys(names).find(route => route.startsWith(`${method} `) && url.pathname.endsWith(route.slice(method.length + 1)));
+    if (!route) throw new Error(`Production request has no fixed label: ${method} ${url.pathname}`);
+    return names[route]!;
+  }, run);
   const client = (anonymous = false) => browserMainApi('http://record.invalid', { fetcher: (async (input, init) => {
-    if (stopped) throw new Error('Production recording stopped after a 5xx');
-    const url = new URL(String(input));
-    const method = init?.method ?? 'GET';
+    const url = new URL(String(input)), method = init?.method ?? 'GET';
+    const label = labels.getStore()?.(method, url);
+    if (!label) throw new Error(`Production request has no label: ${method} ${url.pathname}`);
     const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
     const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
-    const response = await (anonymous ? recording.session(name, sessions.visitor) : sample)(
-      `${stage}-${++count}`, method, url.pathname.replace(/^\/api\/main/, '') + url.search, body, key);
-    stopped = response.status >= 500;
-    return response;
+    return (anonymous ? recording.session(name, sessions.visitor) : sample)(
+      label, method, url.pathname.replace(/^\/api\/main/, '') + url.search, body, key);
   }) as typeof fetch });
   const main = client(), publicMain = client(true), agent = person.actingSubject!;
-  await main.v1.me['platform-access'].get();
-  await publicMain.v1.types.get();
-  const zones = await publicMain.v1.zones.get({ query: { official: 'true', limit: 6 } });
-  for (const zone of zones.data?.items.slice(0, 6) ?? []) await publicMain.v1.realms({ realm: short(zone.realm) }).get();
+  const official = named('frame-official-zones', () => publicMain.v1.zones.get({ query: { official: 'true', limit: 6 } }))
+    .then(zones => Promise.all((zones.data?.items.slice(0, 6) ?? []).map(zone =>
+      named(`frame-official-realm-${short(zone.realm)}`, () => publicMain.v1.realms({ realm: short(zone.realm) }).get()))));
+  await Promise.all([
+    libraryVisit(name, person, sample),
+    named('frame-platform-access', () => main.v1.me['platform-access'].get()),
+    named('frame-type-registry', () => publicMain.v1.types.get()),
+    official,
+    ...name === 'visitor' ? [] : [
+      named('frame-person-preferences', () => main.v1.me['person-preferences'].get({ query: { actingSubject: agent } })),
+      named('frame-pinned-follows', () => main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, order: 'pinned', include: 'newSince' } })),
+      named('frame-space-follows', () => main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, kind: 'space', order: 'recent', include: 'newSince' } })),
+      named('frame-follow-inventory', () => main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } })),
+      named('frame-managed-realms', () => main.v1.me['managed-realms'].get({ query: { actingSubject: agent } })),
+      named('frame-notification-unread-count', () => main.v1.me.notifications['unread-count'].get()),
+    ],
+  ]);
   // The visitor is redirected by LibraryRoute; no private Library or Work control is reached.
   if (name === 'visitor') return;
-  await main.v1.me['person-preferences'].get({ query: { actingSubject: agent } });
-  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, order: 'pinned', include: 'newSince' } });
-  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, kind: 'space', order: 'recent', include: 'newSince' } });
-  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } });
-  await main.v1.me['managed-realms'].get({ query: { actingSubject: agent } });
-  await main.v1.me.notifications['unread-count'].get();
-  at('library-production-shelves');
-  await readCustomShelves(main, agent);
-  at('work-page');
+  await named('library-production-custom-shelves', () => readCustomShelves(main, agent));
   const id = short(show.work), query = { actingSubject: agent };
-  await main.v1.works({ id }).get({ query });
-  await main.v1.works({ id })['reader-state'].get({ query });
-  await readAnimeAgentCredits(main, agent, id);
-  await readAnimeWorkCredits(main, agent, id);
-  const projection = await readResourcePage(main, agent, id);
-  await publicMain.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [show.work] });
-  const contexts = await main.v1.resources({ resource: id })['rating-contexts'].get({ query: { ...query, scope: 'global' } });
+  const contextsRead = named('work-rating-contexts', () => main.v1.resources({ resource: id })['rating-contexts'].get({ query: { ...query, scope: 'global' } }));
+  const projectionRead = named('work-resource-page', () => readResourcePage(main, agent, id));
+  const [projection, contexts] = await Promise.all([
+    projectionRead, contextsRead,
+    named('work-header', () => main.v1.works({ id }).get({ query })),
+    named('work-reader-state', () => main.v1.works({ id })['reader-state'].get({ query })),
+    named('work-agent-credits', () => readAnimeAgentCredits(main, agent, id)),
+    named('work-credits-query', () => readAnimeWorkCredits(main, agent, id)),
+    named('work-showcase', () => publicMain.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [show.work] })),
+    named('work-rating-populations', () => main.v1['rating-populations'].get({ query: { limit: 20, target: show.work, ...query } })),
+  ]);
   const context = contexts.data?.items[0]?.context;
-  await main.v1.resources({ resource: id }).ratings.get({ query: { ...query, scope: 'global', context } });
-  await main.v1['rating-populations'].get({ query: { limit: 20, target: show.work, ...query } });
-  await main.v1.works({ id })['reader-stats'].get({ query: { ...query, context } });
   const plan = hubPlan(projection.ok ? projection.data : null);
-  if (plan.includes('availability')) {
-    await main.v1.works({ id }).realizations.get({ query: { ...query, limit: 20 } });
-    await main.v1.works({ id }).releases.get({ query: { limit: 20, ...query } });
-    await main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: 1 } });
-  }
-  if (plan.includes('parts')) {
-    await main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: PREVIEW_COUNTS.parts + 1 } });
-    await main.v1.resources({ resource: id }).wholes.get({ query: { ...query, limit: PREVIEW_COUNTS.wholes } });
-    await main.v1.resources({ resource: id }).relations.get({ query: { ...query, limit: 20 } });
-  }
-  if (projection.ok) {
-    const statements = projection.data.sections.find(section => section.id === 'statements');
-    if (statements) await followHref(main, statements.href, query)();
-    const discussion = projection.data.sections.find(section => section.id === 'discussion');
-    if (discussion) await followHref(main, discussion.href, query)();
-  }
-  if (plan.includes('about')) await main.v1.works({ id }).classifications.get({ query: { ...query, scope: 'global' } });
-  if (plan.includes('ratings') && context) await main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, ...query } });
-  if (plan.includes('lists')) await main.v1.works({ id })['also-enjoyed'].get({ query: { ...query, limit: 12 } });
-  if (plan.includes('lists') || plan.includes('discussion')) await main.v1.query.post({
-    profile: 'template-query-v1', query: 'https://rezics.com/query/work-adoptions', revision: 1,
-    parameters: { roots: [show.work] }, presentation: { actingSubject: agent },
-  });
-  const tracking = mainTrackingApi(agent, () => main);
-  const panel = async (part: string) => {
-    at(part);
-    await tracking.media!.types(show.work);
-    await tracking.episodes!.structure(show.work);
-    await tracking.preference(show.work);
-    await tracking.editions(show.work);
-    await tracking.relations(show.work);
-    await tracking.definition('correspondence-equivalent');
-    await tracking.series(show.work, 'en');
-  };
+  const tracking = mainTrackingApi(agent, () => main), episodes = mainEpisodeApi(agent, () => main);
+  const standing = (phase: 'work' | 'watched' | 'cleared') => routed({
+    'GET /parts': `${phase}-episode-structure`,
+    [`GET /compositions/${short(structure)}`]: `${phase}-episode-page`,
+    [`GET /reading-positions/${id}`]: `${phase}-episode-resume`,
+  }, () => standingOf(episodes, show.work));
+  const episodeStanding = plan.includes('parts') ? standing('work') : Promise.resolve(null);
+  await Promise.all([
+    named('work-rating-summary', () => main.v1.resources({ resource: id }).ratings.get({ query: { ...query, scope: 'global', context } })),
+    named('work-reader-statistics', () => main.v1.works({ id })['reader-stats'].get({ query: { ...query, context } })),
+    ...plan.includes('availability') ? [
+      named('work-availability-realizations', () => main.v1.works({ id }).realizations.get({ query: { ...query, limit: 20 } })),
+      named('work-availability-releases', () => main.v1.works({ id }).releases.get({ query: { limit: 20, ...query } })),
+      named('work-availability-parts', () => main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: 1 } })),
+    ] : [],
+    ...plan.includes('parts') ? [
+      named('work-preview-parts', () => main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: PREVIEW_COUNTS.parts + 1 } })),
+      named('work-preview-wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { ...query, limit: PREVIEW_COUNTS.wholes } })),
+      named('work-preview-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { ...query, limit: 20 } })),
+      named('panel-work-types', () => tracking.media!.types(show.work)).then(() =>
+        named('panel-progress-structure', () => tracking.episodes!.structure(show.work))),
+      Promise.all([
+        named('panel-edition-preference', () => tracking.preference(show.work)),
+        routed({ 'GET /realizations': 'panel-realizations', 'GET /releases': 'panel-releases' }, () => tracking.editions(show.work)),
+        named('panel-relations', () => tracking.relations(show.work)),
+        named('panel-equivalence-definition', () => tracking.definition('correspondence-equivalent')),
+      ]).then(() => named('panel-series-progress', () => tracking.series(show.work, 'en'))),
+      episodeStanding,
+    ] : [],
+    ...projection.ok ? projection.data.sections.flatMap(section => {
+      if (section.id === 'statements') return [named('work-linked-statements', () => followHref(main, section.href, query)())];
+      if (section.id === 'discussion') return [named('work-linked-discussion', () => followHref(main, section.href, query)())];
+      return [];
+    }) : [],
+    ...plan.includes('about') ? [named('work-classifications', () => main.v1.works({ id }).classifications.get({ query: { ...query, scope: 'global' } }))] : [],
+    ...plan.includes('ratings') && context ? [named('work-reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, ...query } }))] : [],
+    ...plan.includes('lists') ? [named('work-also-enjoyed', () => main.v1.works({ id })['also-enjoyed'].get({ query: { ...query, limit: 12 } }))] : [],
+    ...plan.includes('lists') || plan.includes('discussion') ? [named('work-adoptions-query', () => main.v1.query.post({
+      profile: 'template-query-v1', query: 'https://rezics.com/query/work-adoptions', revision: 1,
+      parameters: { roots: [show.work] }, presentation: { actingSubject: agent },
+    }))] : [],
+  ]);
   if (!plan.includes('parts')) return;
-  await panel('work-series-panel');
-  const episodes = mainEpisodeApi(agent, () => main);
-  at('work-episode-standing');
-  const standing = await standingOf(episodes, show.work);
   // Episode 2 is untouched by the proof, and all proof assertions have finished.
-  const episode = standing.ok ? standing.data?.mains.items[1] : undefined;
-  at('status-control');
+  const loaded = await episodeStanding;
+  const episode = loaded?.ok ? loaded.data?.mains.items[1] : undefined;
   const store = createReaderStore({ actingSubject: agent, main: () => main });
-  await store.setStatus(show.work, 'read');
-  at('status-series-refresh');
-  await tracking.series(show.work, 'en');
-  at('status-navigation-refresh');
-  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } });
-  if (!episode) return;
-  at('episode-select');
-  await episodes.progress(episode);
-  at('episode-mark-watched');
-  const watched = await episodes.mark(episode, { completed: true, position: markPosition(episode) });
-  if (!watched.ok) return;
-  at('episode-watched-refresh');
-  await standingOf(episodes, show.work);
-  at('episode-clear');
+  // Read would project completion onto episode 3, which later proof personas inspect.
+  await routed({ 'GET /reader-state': 'status-control-reader-state', 'PUT /reader-status': 'status-control-write' },
+    () => store.setStatus(show.work, 'want-to-read'));
+  await Promise.all([
+    named('status-series-refresh', () => tracking.series(show.work, 'en')),
+    named('status-navigation-refresh', () => main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } })),
+  ]);
+  if (!episode) throw new Error('Production episode chooser did not reach episode 2');
+  await named('episode-select-progress', () => episodes.progress(episode));
+  const watched = await routed({ 'GET /progress': 'episode-watched-before-write', 'PUT /progress': 'episode-watched-write' },
+    () => episodes.mark(episode, { completed: true, position: markPosition(episode) }));
+  if (!watched.ok) throw new Error(`Production episode mark failed: ${watched.failure}`);
+  await standing('watched');
   // The control omits position; episode-api carries Main's current position into the PUT.
-  const cleared = await episodes.mark(episode, { completed: false });
-  if (!cleared.ok) return;
-  at('episode-cleared-refresh');
-  await standingOf(episodes, show.work);
+  const cleared = await routed({ 'GET /progress': 'episode-cleared-before-write', 'PUT /progress': 'episode-cleared-write' },
+    () => episodes.mark(episode, { completed: false }));
+  if (!cleared.ok) throw new Error(`Production episode clear failed: ${cleared.failure}`);
+  await standing('cleared');
 }
 
 const qualification: { persona: string; passed: boolean; error?: string }[] = [];
@@ -418,12 +443,15 @@ async function within<T>(milliseconds: number, part: string, run: () => Promise<
   } finally { clearTimeout(timer); }
 }
 async function qualify(name: PersonaName) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
   try {
     // The API proof owns its original 90 s; production recording has a separate 120 s afterwards.
     await within(90_000, 'API proof', () => journey(name));
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
     await within(120_000, 'production recording', async () => {
       const person = sessions[name], sample = recording.session(name, person);
-      await libraryVisit(name, person, sample);
       await productionVisit(name, person, sample);
     });
     qualification.push({ persona: name, passed: true });
@@ -431,6 +459,7 @@ async function qualify(name: PersonaName) {
     qualification.push({ persona: name, passed: false, error: String(error) });
     throw error;
   } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
     await Bun.write(`.temp/anime-collection-tracking-and-progress-qualification-${Bun.env.REZICS_QA_RUN_ID}.json`,
       JSON.stringify({ preparation, qualification, failures }, null, 2));
   }
