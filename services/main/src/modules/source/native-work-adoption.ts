@@ -196,7 +196,7 @@ export class SourceNativeWorkAdoptionStore {
     private readonly env: WorkActivationEnvironment,
     private readonly account: Pick<AccountAssertionVerifier, 'verify'>,
     private readonly access: Pick<AccessAdmissionRegistry,
-      'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>) {}
+      'assertAuthority' | 'register' | 'claim' | 'recordGraphOutcome' | 'issueTitleAdmission'>) {}
 
   /** The adoption records only a title. These retained author references are
    * source reported until the separate author-credit command confirms them. */
@@ -302,6 +302,12 @@ export class SourceNativeWorkAdoptionStore {
     }
     const proposal = await this.proposals.read(principalId, proposalId);
     if (!proposal) return null;
+    // Saved bindings retain the original Work effect; disclosure uses the same
+    // live creation policy as fresh adoption, without registering another command.
+    const principal = await this.account.verify(request, ['source:adopt', 'work:create']);
+    await this.access.assertAuthority({ principal, actingSubject: input.actingSubject,
+      authorityPath: input.authorityPath, scope: 'work:create:root', action: 'work.create',
+      workSemanticTypes: proposal.semanticTypes });
     if (input.confirmedTitle !== proposal.candidateTitle) {
       throw new SourceAdoptionConflict('confirmed title differs from the source proposal');
     }
@@ -569,6 +575,11 @@ export class SourceNativeWorkAdoptionStore {
       if (!language || language.length > 35) throw new SourceAdoptionInvalid('invalid source title language');
       input = { ...input, language };
     }
+    // Recheck the ordinary title authority before reading saved support or
+    // application results. Historical heads and control bases remain intact.
+    const principal = await this.account.verify(request, ['source:adopt', 'work:edit']);
+    await this.access.assertAuthority({ principal, actingSubject: input.actingSubject,
+      scope: `work:title:apply:${work}`, action: 'work.title.apply' });
     const support = await this.readSupport(principalId, work);
     if (!support) return null;
     if (support.state === 'withdrawn') throw new SourceSupportConflict('source_support_withdrawn');
