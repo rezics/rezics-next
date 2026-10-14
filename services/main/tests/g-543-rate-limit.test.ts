@@ -74,19 +74,20 @@ test('every installed Main plugin group has the declared rate-limit hook', () =>
   const work = { rateLimit: limit, mcp: { issuer: 'https://account.test/api/auth', resource: 'http://localhost' },
     account: { async verify() { return { issuer: 'account', subject: 'same' }; } } } as unknown as MainWorkDependencies;
   const app = createMainApp(new FusekiClient('http://127.0.0.1:1/rezics'), work);
+  const routes = app.routes.map(route => ({ route, family: rateLimitFamily(route.method, route.path) }));
   // The guard must be present in every plugin group, including those composed
   // before domainRoutes. Merely testing a standalone plugin misses hook order.
-  expect(app.routes.filter(route => rateLimitFamily(route.method, route.path) === undefined)
-    .map(route => `${route.method} ${route.path}`)).toEqual([]);
+  expect(routes.filter(({ family }) => family === undefined)
+    .map(({ route }) => `${route.method} ${route.path}`)).toEqual([]);
   expect(app.routes.map(route => `${route.method} ${route.path}`)).toEqual(expect.arrayContaining([
     '* /mcp', 'GET /.well-known/oauth-protected-resource', 'GET /.well-known/oauth-protected-resource/mcp',
   ]));
   expect(rateLimitFamily('POST', '/mcp')).toBeNull();
   expect(rateLimitFamily('GET', '/mcp')).toBeNull();
   let guarded = 0;
-  for (const route of app.routes) {
-    expect(rateLimitFamily(route.method, route.path)).not.toBeUndefined();
-    if (rateLimitFamily(route.method, route.path) === null) continue;
+  for (const { route, family } of routes) {
+    expect(family).not.toBeUndefined();
+    if (family === null) continue;
     const hooks = (route.hooks.beforeHandle ?? []) as Function[];
     expect(hooks.some(hook => hook.name === 'enforceRateLimit')).toBe(true);
     guarded++;

@@ -413,4 +413,3 @@ test('P24: effective provider endpoint methods define the credential purpose mat
     if (prepared.kind === 'prepared') expect((await resolveAuthenticationSubject(auth, projection().pool, prepared.input)).purpose).toBe('provider-owned');
   }
 });
-
