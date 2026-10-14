@@ -1,8 +1,10 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
 import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { mainRelationships, RelationshipError } from '../../../../../apps/web/features/relationships/api.ts';
 import pagination from '../../../../../scripts/qa/cases/outcomes/recipes/catalogue-pagination-in-its-zone.ts';
 import { recipeCatalogue, short } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -109,6 +111,7 @@ async function pageReads(name: PersonaName) {
   const person = sessions[name];
   await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
     'space', short(sessions.space), 'browse');
+  await recordFollowStateRefresh(name);
   if (name !== 'visitor') {
     const personal = recording.session(name, person);
     await (await personal('frame-personal-realm-header', 'GET', `/v1/realms/${short(sessions.realm)}`)).body?.cancel();
@@ -189,6 +192,58 @@ async function recordProductionSiteContinuation(name: PersonaName, cursor: strin
   if (routed.failure !== 'missing' || routed.status !== 404)
     throw new Error(`Recipe browse continuation route answered ${routed.status ?? 'no-status'} ${routed.failure}`);
 }
+/**
+ * The header calls `state(realm)` when the follow it already read has no following or no level.
+ * A visitor has no acting person. A joined follow with a level does not refresh.
+ * The request carries the frame's acting person and the realm header's id, and no kind or body.
+ */
+async function recordFollowStateRefresh(name: PersonaName) {
+  const person = sessions[name];
+  const subject = person.actingSubject;
+  if (!subject) {
+    if (name !== 'visitor') throw new Error(`${name} has no acting person for the follow refresh`);
+    return;
+  }
+  const header = await answer<{ id: string }>(sessions.visitor.main('GET', `/v1/realms/${short(sessions.realm)}`));
+  expect(header.id).toBe(sessions.realm);
+  const follow = await answer<{ following: boolean | null; level: string | null }>(person.main('GET',
+    `/v1/follows/${short(sessions.realm)}?kind=realm&actingSubject=${encodeURIComponent(subject)}`));
+  if (follow.following !== null && follow.level !== null) return;
+  const sample = recording.session(name, person);
+  let recordedPath = '';
+  let failure: unknown;
+  const send = async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://record.invalid');
+    const path = url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) + url.search : url.pathname + url.search;
+    recordedPath = path;
+    if ((init?.method ?? 'GET') !== 'GET' || init?.body != null) throw new Error('Follow-state refresh is a GET with no body');
+    try {
+      return await sample('frame-follow-state', 'GET', path, undefined, undefined, {
+        headers: Object.fromEntries(new Headers(init?.headers)),
+      });
+    } catch (error) {
+      failure = error;
+      throw error;
+    }
+  };
+  const api = mainRelationships(subject, {
+    origin: 'http://record.invalid',
+    fetch: Object.assign(send, { preconnect: globalThis.fetch.preconnect }),
+  });
+  try {
+    await api.state(header.id);
+  } catch (error) {
+    if (failure) throw failure;
+    if (!(error instanceof RelationshipError)) throw error;
+  }
+  const params = new URLSearchParams(recordedPath.slice(recordedPath.indexOf('?') + 1));
+  expect(recordedPath.startsWith('/v1/me/follow-state?')).toBe(true);
+  expect(params.get('actingSubject')).toBe(subject);
+  expect(params.get('target')).toBe(header.id);
+  expect(params.has('kind')).toBe(false);
+  expect([...params.keys()]).toEqual(['actingSubject', 'target']);
+}
+
 // The browse route reads its frame, facet labels and the state of its cards separately.
 async function supportingReads(sample: ReturnType<typeof recording.session>) {
   const acting = `actingSubject=${encodeURIComponent(sessions.owner.actingSubject!)}`;

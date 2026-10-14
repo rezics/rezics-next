@@ -69,6 +69,8 @@ function selections(record: AnswerRecord, persona: Persona, label: string, route
   const signedIn = persona === 'visitor' ? [] : [
     'frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban', 'frame-follow', 'frame-platform-access',
   ];
+  // The header reads follow-state only when that persona's recorded follow has no level or following.
+  if (record.personas[persona].some(answer => answer.label === 'frame-follow-state')) signedIn.push('frame-follow-state');
   return [...new Set([...frame, ...signedIn])].map(item => ({ label: item,
     state: item === label ? state : sampleOf(record, persona, item).status >= 400 ? 'error' : 'populated' }));
 }

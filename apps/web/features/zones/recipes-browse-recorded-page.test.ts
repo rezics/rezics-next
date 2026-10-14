@@ -303,10 +303,14 @@ function findBrowse(node: ReactNode): BrowseModel {
   return found.props.model;
 }
 
+function followStateLabel(record: AnswerRecord) {
+  return record.personas[persona].some(sample => sample.label === 'frame-follow-state') ? ['frame-follow-state'] : [];
+}
+
 function frameLabels(page: string) {
   return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', page,
     ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban',
-      'frame-follow', 'frame-platform-access'])];
+      'frame-follow', 'frame-platform-access', ...followStateLabel(browse)])];
 }
 
 /** Labels the browse route reaches. The site route's `routes` read is absent here. */
@@ -458,7 +462,7 @@ for (const who of personas) {
       const answer = pageAnswer(sampleOf(pagination, who, page));
       const labels = ['site-address', 'frame-presentation', route, 'frame-realm-header', 'frame-facets', page,
         ...(who === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
-          'frame-member-ban', 'frame-follow', 'frame-platform-access'])];
+          'frame-member-ban', 'frame-follow', 'frame-platform-access', ...followStateLabel(pagination)])];
       const { requests, gaps, model } = await visitRoute(pagination, labels, page, 'site-address');
       expect(gaps).toEqual([]);
       expectRecordedPage(model, answer);
@@ -516,7 +520,7 @@ for (const who of personas) {
     const answer = pageAnswer(sampleOf(pagination, who, page));
     const labels = ['site-address', 'frame-presentation', 'site-search-newest-route', 'frame-realm-header', 'frame-facets', page,
       ...(who === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
-        'frame-member-ban', 'frame-follow', 'frame-platform-access'])];
+        'frame-member-ban', 'frame-follow', 'frame-platform-access', ...followStateLabel(pagination)])];
     const { requests, gaps, model } = await visitInjectedSite(pagination, labels, page, 'site-address');
     expect(gaps).toEqual([]);
     expectRecordedPage(model, answer);
