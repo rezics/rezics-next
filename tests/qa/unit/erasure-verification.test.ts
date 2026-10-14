@@ -115,6 +115,7 @@ function fixture() {
               availability,
               erasure_id: availability === 'erased' ? erasureId : null,
               erasure_epoch: availability === 'erased' ? tombstoneEpoch : null,
+              payload_absent: !commentSource && !evidenceSource,
             },
           ],
         };

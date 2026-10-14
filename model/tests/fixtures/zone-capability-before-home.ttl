@@ -1,0 +1,50 @@
+# A Zone is a Space capability for routes, navigation and presentation, retired independently of a Realm.
+# Mounts are occurrences of the Zone navigation Structure; a mount copies no content and grants no control.
+# Configuration revisions retain unknown advanced settings by digest so an API edit cannot drop them.
+@prefix sh: <http://www.w3.org/ns/shacl#> .
+@prefix rdf: <http://www.w3.org/1999/02/22-rdf-syntax-ns#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+@prefix rv: <https://rezics.com/vocab/> .
+
+<https://rezics.com/definition/zone-capability-v1/navigation-link-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Zone ] ;
+    sh:property [ sh:path rv:navigation ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Structure ] .
+
+<https://rezics.com/definition/zone-capability-v1/zone-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:Zone ] ;
+    sh:property [ sh:path rv:space ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Space ] ;
+    sh:property [ sh:path rv:zoneState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Active rv:Retired ) ] ;
+    sh:property [ sh:path rv:zoneHead ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:ZoneRevision ] ;
+    sh:property [ sh:path rv:navigation ; sh:maxCount 1 ; sh:class rv:Structure ] ;
+    sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
+    sh:property [ sh:path rv:defaultRealm ; sh:maxCount 1 ; sh:class rv:Realm ] ;
+    sh:property [ sh:path rv:defaultContext ; sh:maxCount 1 ; sh:class rv:SemanticContext ] ;
+    sh:property [ sh:path rv:defaultContextRevision ; sh:maxCount 1 ; sh:class rv:ContextSemanticRevision ] ;
+    sh:property [ sh:path rv:presentation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/zone-capability-v1/mount-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:maxCount 1 ; sh:hasValue rv:ZoneMount ] ;
+    sh:property [ sh:path rv:zone ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Zone ] ;
+    sh:property [ sh:path rv:routeSegment ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[a-z0-9]+(-[a-z0-9]+)*$" ; sh:maxLength 64 ] ;
+    sh:property [ sh:path rv:disclosure ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:Public rv:Private ) ] ;
+    sh:property [ sh:path rv:presentation ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
+
+<https://rezics.com/definition/zone-capability-v1/revision-shape>
+    a sh:NodeShape ;
+    sh:property [ sh:path rdf:type ; sh:minCount 2 ; sh:maxCount 2 ; sh:in ( rv:ZoneRevision rv:RevisionAnchor ) ] ;
+    sh:property [ sh:path rv:component ; sh:minCount 1 ; sh:maxCount 1 ; sh:class rv:Zone ] ;
+    sh:property [ sh:path rv:predecessor ; sh:maxCount 1 ; sh:class rv:ZoneRevision ] ;
+    sh:property [ sh:path rv:operation ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:zoneOperation ; sh:minCount 1 ; sh:maxCount 1 ; sh:in ( rv:ZoneCreate rv:ZoneConfigure rv:ZoneRetire rv:ZoneRecover ) ] ;
+    sh:property [ sh:path rv:manifest ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:advancedConfig ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:modelRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/zone-capability-v1> ] ;
+    sh:property [ sh:path rv:shapeRevision ; sh:maxCount 1 ; sh:hasValue <https://rezics.com/definition/zone-capability-v1> ] ;
+    sh:property [ sh:path rv:datasetId ; sh:maxCount 1 ; sh:hasValue <urn:rezics:dataset:product> ] ;
+    sh:property [ sh:path rv:dataEpoch ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
+    sh:property [ sh:path rv:sequence ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:integer ; sh:minInclusive 1 ] .
+
+# Authored SHACL constraints for Space, Realm and Zone capabilities.

@@ -47,6 +47,9 @@ test('the merge Task command executes mixed unit and owner files and retains gua
   const fixture = mkdtempSync(join(root, '.temp/merge-unit-files-'));
   try {
     copyFileSync(join(root, 'Taskfile.yml'), join(fixture, 'Taskfile.yml'));
+    mkdirSync(join(fixture, 'scripts/qa'), { recursive: true });
+    for (const file of ['repository-guards.ts', 'integration-gate-files.ts'])
+      copyFileSync(join(root, 'scripts/qa', file), join(fixture, 'scripts/qa', file));
     const unit = 'tests/qa/unit/operation.test.ts';
     const guard = 'scripts/inventory.test.ts';
     for (const file of [unit, guard]) {
@@ -57,7 +60,7 @@ test('the merge Task command executes mixed unit and owner files and retains gua
       );
     }
     const run = () =>
-      spawnSync('task', ['goal:unit-files', '--', `./${unit}`, `./${guard}`], {
+      spawnSync('task', ['goal:unit-files', '--', `./${unit}`, `./${guard}`, '--reporter-outfile=report.xml'], {
         cwd: fixture,
         encoding: 'utf8',
         env: { ...process.env, AGENT: '1' },
@@ -65,7 +68,9 @@ test('the merge Task command executes mixed unit and owner files and retains gua
       });
     const passing = run();
     expect(passing.status, `${passing.stdout}\n${passing.stderr}`).toBe(0);
-    expect(`${passing.stdout}\n${passing.stderr}`).toContain('2 pass');
+    // Parallel guards aggregate JUnit; agent-mode Bun output omits passing names.
+    const report = () => readFileSync(join(fixture, 'report.xml'), 'utf8');
+    expect(report()).toContain('<testsuites tests="2" failures="0"');
     writeFileSync(
       join(fixture, guard),
       "import { expect, test } from 'bun:test';\ntest('invalid inventory', () => expect(false).toBe(true));\n",
@@ -73,8 +78,8 @@ test('the merge Task command executes mixed unit and owner files and retains gua
     const failing = run();
     expect(failing.status).not.toBe(0);
     expect(`${failing.stdout}\n${failing.stderr}`).toContain(`${guard}:`);
-    expect(`${failing.stdout}\n${failing.stderr}`).toContain('1 pass');
-    expect(`${failing.stdout}\n${failing.stderr}`).toContain('1 fail');
+    expect(report()).toContain('<testsuites tests="2" failures="1"');
+    expect(report()).toContain('name="invalid inventory"');
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
