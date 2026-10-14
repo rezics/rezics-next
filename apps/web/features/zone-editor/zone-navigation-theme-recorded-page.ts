@@ -118,6 +118,7 @@ export function loadZoneNavigationRead(main: WebClient, zoneId: string, actingSu
 /** The authorized home draft, before the navigation read replaces its two heads. */
 function homeFromAuthorizedDraft(draft: LoadedDraft): EditorState {
   return {
+    homeDocument: draft.homeDocument,
     value: draft.value,
     savedValue: draft.basis ? draft.value : null,
     expectedHead: draft.expectedHead,

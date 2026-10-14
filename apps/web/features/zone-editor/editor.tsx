@@ -9,7 +9,7 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { commandLane, type WriteRound } from '../api/command.ts';
 import { BodyEditor } from '../document-editor/body-editor.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, choiceWire, commitCommand, type SavedDraft, type WriteResult, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient } from './api.ts';
+import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, choiceWire, commitCommand, type PublishedSite, type SavedDraft, type WriteResult, type ZoneAuthoringClient, type ZoneNavigationClient, type ZoneThemeClient } from './api.ts';
 import { EditorActions } from './editor-actions.tsx';
 import { ZoneHomeDocument } from './home-document.tsx';
 import { useZoneEditorDraft, useZoneEditorExitActions, useZoneEditorRef, useZoneEditorSessionState } from './draft-provider.tsx';
@@ -68,7 +68,7 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
   if (!navigation.current) navigation.current = navigationApi ?? browserZoneNavigation();
   if (!theme.current) theme.current = themeApi ?? browserZoneTheme();
   const saveLane = useZoneEditorRef<ReturnType<typeof commandLane<DraftChoice, WriteResult<SavedDraft>>> | null>('home-save-lane', null);
-  const publishLane = useZoneEditorRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>> | null>('home-publish-lane', null);
+  const publishLane = useZoneEditorRef<ReturnType<typeof commandLane<PublicationChoice, WriteResult<PublishedSite>>> | null>('home-publish-lane', null);
   const saveChoice = useZoneEditorRef<DraftChoice | null>('home-save-choice', null);
   const publishChoice = useZoneEditorRef<PublicationChoice | null>('home-publish-choice', null);
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
@@ -118,9 +118,9 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
 
   function applyPublish(chosen: PublicationChoice, round: WriteRound) {
     return commitCommand(round, key => client.current!.publish(chosen, actingSubject, key, zoneId)).then(result => {
-      if (result.ok) put({ type: 'published', zoneHead: result.data.zoneHead, revisionId: chosen.revisionId, replayed: result.data.replayed });
-      else if (result.failure === 'stale') { setReview(null); put({ type: 'publish-stale' }); }
-      else put({ type: 'failed', failure: result.failure });
+      if (result.ok) put({ type: 'published', ...result.data, revisionId: chosen.revisionId });
+      else if (result.failure === 'stale') { setReview(null); put({ type: 'publish-stale', problem: result.problem }); }
+      else put({ type: 'failed', failure: result.failure, problem: result.problem });
       if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
       return result;
     });
@@ -259,7 +259,7 @@ function EditorNotice({ copy, state, busy, signInHref, review, onSaveOver, onLoa
   }
   if (notice.kind === 'publish-stale') {
     return <>
-      <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
+      <NoticeAlert variant="warning" title={notice.problem?.title ?? copy.publishStaleTitle} body={notice.problem ? `${copy.publishStaleBody} (${notice.problem.code})` : copy.publishStaleBody}>
         {!review ? <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy}
           isLoading={busy === 'load'} onClick={onRefresh}>{copy.refreshAndPublish}</Button> : null}
       </NoticeAlert>
@@ -269,7 +269,8 @@ function EditorNotice({ copy, state, busy, signInHref, review, onSaveOver, onLoa
   }
   const failure = failureCopy(copy, notice.kind);
   if (!failure) return null;
-  return <NoticeAlert variant={notice.kind === 'sign-in' ? 'info' : 'destructive'} title={failure.title} body={failure.body}>
+  const problem = 'problem' in notice ? notice.problem : undefined;
+  return <NoticeAlert variant={notice.kind === 'sign-in' ? 'info' : 'destructive'} title={problem?.title ?? failure.title} body={problem ? `${failure.body} (${problem.code})` : failure.body}>
     {notice.kind === 'sign-in' ? <LocalizedLink href={signInHref} className={cn(buttonVariants({ variant: 'outline', size: 'sm' }), choiceClass)}>{copy.signInTitle}</LocalizedLink> : null}
     {failure.retry ? <Button variant="outline" size="sm" className={choiceClass} disabled={!!busy} onClick={onRetry}>{copy.tryAgain}</Button> : null}
   </NoticeAlert>;

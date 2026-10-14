@@ -6,7 +6,7 @@ import { isWideText } from '../search/suggest.ts';
 import { normalizePhrase, PHRASE } from '../search/state.ts';
 import {
   draftWire, loadedDraft, publicationWire,
-  type AuthoringFailure, type DraftBasis, type DraftChoice, type DraftWire, type LoadedDraft, type PublicationChoice,
+  type AuthoringFailure, type AuthoringProblem, type DraftBasis, type DraftChoice, type DraftWire, type LoadedDraft, type PublicationChoice, type PublicationReceipt,
 } from './model.ts';
 import {
   foldMountPages, NAV_LOAD_BATCH, NAV_PAGE_SIZE, navigationReadTarget, pageNameOf, zoneMountPage,
@@ -17,11 +17,11 @@ import { readZoneLifecycleSnapshot } from './lifecycle.ts';
 
 export type WriteResult<T> =
   | { ok: true; data: T }
-  | { ok: false; failure: AuthoringFailure }
-  | { ok: false; failure: 'stale'; currentHead: string | null };
+  | { ok: false; failure: AuthoringFailure; problem?: AuthoringProblem }
+  | { ok: false; failure: 'stale'; currentHead: string | null; problem?: AuthoringProblem };
 
 export interface SavedDraft extends DraftBasis { replayed: boolean }
-export interface PublishedSite { zoneHead: string; replayed: boolean }
+export interface PublishedSite { zoneHead: string; replayed: boolean; receipt?: PublicationReceipt }
 export interface ZoneHeads { zoneHead: string; navigationRevision: string }
 export interface ZoneThemeSnapshot {
   revision: string;
@@ -137,8 +137,17 @@ export function browserZoneAuthoring(main: ReturnType<typeof browserMainApi> = b
       return savedOf(await post(() => main.v1['content-drafts'].post(body, { headers: { 'idempotency-key': key } })));
     },
     async publish(choice, actingSubject, key, zoneId) {
-      return publishedOf(await post(() => main.v1.zones({ id: zoneId })['site-publications'].post(
-        publicationWire(choice, actingSubject), { headers: { 'idempotency-key': key } })));
+      let problem: AuthoringProblem | undefined;
+      const result = publishedOf(await post(async () => {
+        const answer = await main.v1.zones({ id: zoneId })['site-publications'].post(
+          publicationWire(choice, actingSubject), { headers: { 'idempotency-key': key } });
+        const refusal = record(answer.error?.value);
+        if (typeof refusal?.title === 'string' && typeof refusal.code === 'string') {
+          problem = { title: refusal.title, code: refusal.code };
+        }
+        return answer;
+      }));
+      return !result.ok && problem ? { ...result, problem } : result;
     },
     async readDraft(zoneId, actingSubject) {
       const answer = await post(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }));
@@ -265,9 +274,19 @@ function savedOf(result: WriteResult<unknown>): WriteResult<SavedDraft> {
 
 function publishedOf(result: WriteResult<unknown>): WriteResult<PublishedSite> {
   if (!result.ok) return result;
-  const revision = record(result.data)?.revision;
-  if (typeof revision !== 'string' || !iriPattern.test(revision)) return { ok: false, failure: 'unavailable' };
-  return { ok: true, data: { zoneHead: revision, replayed: record(result.data)?.replayed === true } };
+  const row = record(result.data);
+  const revision = row?.revision;
+  if (!row || typeof revision !== 'string' || !iriPattern.test(revision)
+    || !['themeRevision', 'routesRevision', 'navigationRevision', 'homeDocument', 'homeRevision']
+      .every(key => typeof row[key] === 'string' && iriPattern.test(row[key] as string))
+    || !Array.isArray(row.pages) || !row.pages.length || !row.pages.every(value => {
+      const page = record(value);
+      return typeof page?.page === 'string' && iriPattern.test(page.page)
+        && typeof page.variantId === 'string' && typeof page.language === 'string'
+        && typeof page.revisionId === 'string' && uuid.test(page.revisionId)
+        && typeof page.byteDigest === 'string' && digest.test(page.byteDigest);
+    })) return { ok: false, failure: 'unavailable' };
+  return { ok: true, data: { zoneHead: revision, replayed: row.replayed === true, receipt: row as unknown as PublicationReceipt } };
 }
 
 function lifecycleWrittenOf(result: WriteResult<unknown>): WriteResult<SavedZoneLifecycle> {

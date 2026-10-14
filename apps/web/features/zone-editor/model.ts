@@ -21,14 +21,27 @@ export interface ContentLanguage {
 
 export type AuthoringFailure = 'unavailable' | 'denied' | 'sign-in' | 'invalid' | 'conflict' | 'missing';
 
+export interface AuthoringProblem { title: string; code: string }
+/** The owner's acknowledged cuts, retained even when the draft or current heads move later. */
+export interface PublicationReceipt {
+  revision: string;
+  themeRevision: string;
+  routesRevision: string;
+  navigationRevision: string;
+  homeDocument: string;
+  homeRevision: string;
+  pages: { page: string; variantId: string; revisionId: string; byteDigest: string; language: string }[];
+  [key: string]: unknown;
+}
+
 export type Notice =
   | { kind: 'idle' }
   | { kind: 'saved'; replayed: boolean }
   | { kind: 'published'; replayed: boolean }
   | { kind: 'stale'; currentHead: string | null }
-  | { kind: 'publish-stale' }
+  | { kind: 'publish-stale'; problem?: AuthoringProblem }
   | { kind: 'loaded' }
-  | { kind: AuthoringFailure };
+  | { kind: AuthoringFailure; problem?: AuthoringProblem };
 
 export interface EditorState {
   /** Content identity from the authorized prepared configuration; the Zone owns the commands. */
@@ -45,6 +58,7 @@ export interface EditorState {
   /** Current navigation Structure revision. Routes and navigation must name this same revision. */
   navigationRevision: string;
   publishedRevisionId: string | null;
+  publishedReceipt?: PublicationReceipt;
   variantId: string;
   language: ContentLanguage;
   direction: 'ltr' | 'rtl' | 'none';
@@ -108,10 +122,10 @@ export type EditorEvent =
       homeDocument: string;
       variantId: string; language: ContentLanguage; direction: 'ltr' | 'rtl' | 'none';
       zoneHead: string; navigationRevision: string; publishedRevisionId: string | null }
-  | { type: 'published'; zoneHead: string; revisionId?: string; replayed: boolean }
-  | { type: 'publish-stale' }
+  | { type: 'published'; zoneHead: string; revisionId?: string; replayed: boolean; receipt?: PublicationReceipt }
+  | { type: 'publish-stale'; problem?: AuthoringProblem }
   | { type: 'heads'; zoneHead: string; navigationRevision: string }
-  | { type: 'failed'; failure: AuthoringFailure };
+  | { type: 'failed'; failure: AuthoringFailure; problem?: AuthoringProblem };
 
 /** An unsaved first draft counts once it has text. After a save, only a difference from that snapshot is unsaved. */
 export function isDirty(state: EditorState): boolean {
@@ -171,12 +185,13 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
     case 'published':
       return {
         ...state,
+        publishedReceipt: event.receipt,
         publishedRevisionId: event.revisionId ?? state.basis?.revisionId ?? state.publishedRevisionId,
         zoneHead: event.zoneHead,
         notice: { kind: 'published', replayed: event.replayed },
       };
     case 'publish-stale':
-      return { ...state, notice: { kind: 'publish-stale' } };
+      return { ...state, notice: { kind: 'publish-stale', ...(event.problem ? { problem: event.problem } : {}) } };
     case 'heads':
       return {
         ...state,
@@ -185,7 +200,7 @@ export function reduceEditor(state: EditorState, event: EditorEvent): EditorStat
         notice: state.notice.kind === 'publish-stale' ? { kind: 'idle' } : state.notice,
       };
     case 'failed':
-      return { ...state, notice: { kind: event.failure } };
+      return { ...state, notice: { kind: event.failure, ...(event.problem ? { problem: event.problem } : {}) } };
   }
 }
 

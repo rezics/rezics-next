@@ -1,4 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { serializeDocument } from '@rezics/document';
+import { Button } from '@rezics/ui/button';
 import { useEffect, useState } from 'react';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
@@ -8,11 +10,11 @@ import { messages as manageMessages } from '../manage/messages.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, type NavigationSnapshot } from './api.ts';
 import { zoneEditorDraftKey } from './draft-state.ts';
-import { ZoneEditorDraftProvider } from './draft-provider.tsx';
+import { ZoneEditorDraftProvider, useZoneEditorExit } from './draft-provider.tsx';
 import { ZoneHomeEditor } from './editor.tsx';
 import { ZoneEditorFrame } from './frame.tsx';
 import { messages } from './messages.ts';
-import { authoringModel, reduceEditor, type ZoneAuthoringModel } from './model.ts';
+import { authoringModel, reduceEditor, type DraftWire, type EditorState, type ZoneAuthoringModel } from './model.ts';
 import { ZoneNavigationEditor } from './navigation-editor.tsx';
 import { recordedActingSubject, zoneIdFromRecordedPath } from './zone-navigation-theme-recorded-page.ts';
 
@@ -28,7 +30,27 @@ const actingSubject = recordedActingSubject(editor.path);
 const copy = messages.en;
 const editorPath = `/manage/z/${zoneId}`;
 
-function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' | 'navigation-review' }) {
+/** Captured owner choices use the command records; the later editor read has another variant. */
+function capturedState(state: EditorState, label: string, saved: boolean): EditorState {
+  const body = sample(label).body as DraftWire;
+  if (body.resourceId !== state.homeDocument) throw new Error('Recorded draft differs from the prepared home');
+  const next = { ...state, variantId: body.variantId, language: body.language, direction: body.direction,
+    expectedHead: body.expectedHead, value: serializeDocument(body.document), embeds: body.embeds };
+  if (!saved) return next;
+  const answer = sample(label).answer as { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string }; replayed: boolean };
+  return reduceEditor(next, { type: 'saved', captured: next.value, savedValue: next.value,
+    basis: { revisionId: answer.revisionId, byteDigest: answer.byteDigest, contentEpoch: answer.sourcePosition.dataEpoch }, replayed: answer.replayed });
+}
+
+function ExitControl() {
+  const requestExit = useZoneEditorExit();
+  const [left, setLeft] = useState(false);
+  return <div data-exit-completed={left}>
+    <Button onClick={() => requestExit(() => setLeft(true))}>{copy.preview}</Button>
+  </div>;
+}
+
+function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' | 'navigation-review' | 'save' | 'exit-save' }) {
   const [loaded, setLoaded] = useState<{
     model: ZoneAuthoringModel;
     navigation: NavigationSnapshot;
@@ -43,7 +65,7 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
     }
     const replay = recordedFetch(record, 'owner', [{ label: 'mount-target-work', state: 'error' }, ...[
       'showcase-editor', 'draft-navigation', 'draft-navigation-editor', 'draft-configuration',
-      'mount-target-collection-name', 'publish-site-bundle',
+      'mount-target-collection-name', 'save-home-draft', 'save-home-draft-over-head', 'publish-site-bundle',
     ].map(label => ({ label, state: 'populated' as const }))], { pathPrefix: BFF_PREFIX });
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try {
@@ -65,11 +87,13 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
       if (showcase.error || zone.error || !navigation.ok) throw new Error('Authorized recorded editor refused');
       const model = authoringModel(showcase.data, zone.data, zoneId, 'Recorded site');
       if (!model) throw new Error('Authorized recorded model unavailable');
-      if (active) setLoaded({ model, navigation: navigation.data, main });
+      const firstSaved = capturedState(model.state, 'save-home-draft', true);
+      const state = capturedState(firstSaved, 'save-home-draft-over-head', place !== 'save' && place !== 'exit-save');
+      if (active) setLoaded({ model: { ...model, state, document: (sample('save-home-draft-over-head').body as DraftWire).document }, navigation: navigation.data, main });
     }
     void load().catch(failure => { if (active) setError(failure as Error); });
     return () => { active = false; replay.dispose(); };
-  }, []);
+  }, [place]);
   if (error) throw error;
   if (!loaded) return null;
   const { model, main, navigation } = loaded;
@@ -96,6 +120,7 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
             previewHref={`${editorPath}/preview`} siteHref={`/s/${zoneId}/site`} signInHref="/sign-in"
             api={authoring} navigationApi={navigationApi} themeApi={themeApi} />}
       </ZoneEditorFrame>
+      {place === 'exit-save' ? <ExitControl /> : null}
     </ZoneEditorDraftProvider>
   </div>;
 }
@@ -141,6 +166,33 @@ const review: NonNullable<Story['play']> = async context => {
     .toContain('201');
 };
 
+const save: NonNullable<Story['play']> = async context => {
+  const { canvasElement } = context;
+  const canvas = within(canvasElement);
+  const button = await canvas.findByRole('button', { name: copy.save });
+  await waitFor(() => expect(button).toBeEnabled());
+  await userEvent.click(button);
+  await expect(await canvas.findByText(copy.saved)).toBeVisible();
+  await expect(button).toBeDisabled();
+  await expect(canvasElement.querySelector('[data-accepted-statuses]')?.getAttribute('data-accepted-statuses')?.split(','))
+    .toContain('201');
+};
+
+const exitSave: NonNullable<Story['play']> = async context => {
+  const canvas = within(context.canvasElement);
+  await expect(await canvas.findByRole('button', { name: copy.save })).toBeEnabled();
+  await userEvent.click(canvas.getByRole('button', { name: copy.preview }));
+  const body = within(context.canvasElement.ownerDocument.body);
+  const dialog = within(await body.findByRole('dialog', { name: copy.exitTitle }));
+  await userEvent.click(dialog.getByRole('button', { name: copy.exitSave }));
+  await waitFor(() => expect(context.canvasElement.querySelector('[data-exit-completed]'))
+    .toHaveAttribute('data-exit-completed', 'true'));
+  await expect(body.queryByRole('dialog')).not.toBeInTheDocument();
+  await expect(canvas.getByText(copy.saved)).toBeVisible();
+  await expect(context.canvasElement.querySelector('[data-accepted-statuses]')?.getAttribute('data-accepted-statuses')?.split(','))
+    .toContain('201');
+};
+
 export const HomePublication: Story = { args: { place: 'home' }, play: publish };
 export const HomePublicationPhone: Story = { ...HomePublication, globals: { viewport: { value: 'phone' }, locale: 'en' } };
 export const NavigationPublication: Story = { args: { place: 'navigation' }, play: publish };
@@ -149,3 +201,11 @@ export const ConfirmedHomeReview: Story = { args: { place: 'review' }, play: rev
 export const ConfirmedHomeReviewPhone: Story = { ...ConfirmedHomeReview, globals: { viewport: { value: 'phone' }, locale: 'en' } };
 export const ConfirmedNavigationReview: Story = { args: { place: 'navigation-review' }, play: review };
 export const ConfirmedNavigationReviewPhone: Story = { ...ConfirmedNavigationReview, globals: { viewport: { value: 'phone' }, locale: 'en' } };
+export const DraftSaved: Story = { args: { place: 'save' }, play: save };
+export const DraftSavedPhone: Story = { ...DraftSaved, globals: { viewport: { value: 'phone' }, locale: 'en' } };
+export const SaveThenPublish: Story = { args: { place: 'save' }, async play(context) { await save(context); await publish(context); } };
+export const SaveThenPublishPhone: Story = { ...SaveThenPublish, globals: { viewport: { value: 'phone' }, locale: 'en' } };
+export const ExitDraftSaved: Story = { args: { place: 'exit-save' }, play: exitSave };
+export const ExitDraftSavedPhone: Story = { ...ExitDraftSaved, globals: { viewport: { value: 'phone' }, locale: 'en' } };
+export const ExitSaveThenPublish: Story = { args: { place: 'exit-save' }, async play(context) { await exitSave(context); await publish(context); } };
+export const ExitSaveThenPublishPhone: Story = { ...ExitSaveThenPublish, globals: { viewport: { value: 'phone' }, locale: 'en' } };

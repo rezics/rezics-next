@@ -13,6 +13,7 @@ import {
   browserZoneTheme,
   commitCommand,
   type PageChoice,
+  type PublishedSite,
   type WriteResult,
   type ZoneAuthoringClient,
   type ZoneNavigationClient,
@@ -131,7 +132,7 @@ export function ZoneNavigationEditor({
     >
   > | null>('navigation-save-lane', null);
   const publishLane = useZoneEditorRef<ReturnType<
-    typeof commandLane<PublicationChoice, WriteResult<{ zoneHead: string; replayed: boolean }>>
+    typeof commandLane<PublicationChoice, WriteResult<PublishedSite>>
   > | null>('navigation-publish-lane', null);
   const publishChoice = useZoneEditorRef<PublicationChoice | null>('navigation-publish-choice', null);
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
@@ -242,12 +243,11 @@ export function ZoneNavigationEditor({
         if (result.ok)
           putPage({
             type: 'published',
-            zoneHead: result.data.zoneHead,
+            ...result.data,
             revisionId: chosen.revisionId,
-            replayed: result.data.replayed,
           });
-        else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale' }); }
-        else putPage({ type: 'failed', failure: result.failure });
+        else if (result.failure === 'stale') { setReview(null); putPage({ type: 'publish-stale', problem: result.problem }); }
+        else putPage({ type: 'failed', failure: result.failure, problem: result.problem });
         if (result.ok || result.failure !== 'unavailable') publishChoice.current = null;
         return result;
       },
@@ -724,7 +724,8 @@ function NavigationPublicationNotice({ copy, state, page, busy, signInHref, read
   if (page.notice.kind === 'publish-stale') {
     return (
       <>
-        <NoticeAlert variant="warning" title={copy.publishStaleTitle} body={copy.publishStaleBody}>
+        <NoticeAlert variant="warning" title={page.notice.problem?.title ?? copy.publishStaleTitle}
+          body={page.notice.problem ? `${copy.publishStaleBody} (${page.notice.problem.code})` : copy.publishStaleBody}>
           {!review ? <Button
             variant="outline"
             size="sm"
@@ -743,7 +744,10 @@ function NavigationPublicationNotice({ copy, state, page, busy, signInHref, read
   }
   const failure = failureCopy(copy, page.notice.kind);
   if (!failure) return null;
-  return <FailureNotice copy={copy} kind={page.notice.kind} failure={failure} busy={busy} signInHref={signInHref} onRetry={onRetry} />;
+  const problem = 'problem' in page.notice ? page.notice.problem : undefined;
+  return <FailureNotice copy={copy} kind={page.notice.kind}
+    failure={problem ? { ...failure, title: problem.title, body: `${failure.body} (${problem.code})` } : failure}
+    busy={busy} signInHref={signInHref} onRetry={onRetry} />;
 }
 
 function FailureNotice({ copy, kind, failure, busy, signInHref, onRetry }: {
