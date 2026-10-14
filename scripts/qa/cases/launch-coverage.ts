@@ -565,7 +565,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-704-contribution-loop.test.ts',
       'CLP01/CLP04: a correction in a non-UI language is proposed, reviewed, revised, decided, notified, withdrawn and reverted',
       'Reads the Book Work’s corrected Swedish synopsis from Main’s metadata API, retaining sv outside the UI locale set.'),
-    browser: missing('L21'),
+    browser: journeyBrowser('apps/web/tests/books-non-ui-languages.e2e.ts',
+      'apps/web/tests/journeys/books-non-ui-languages.ts',
+      'books / Read non-UI languages (${locale}): a reader reopens the Swedish synopsis',
+      'A reader expands a Swedish Book synopsis by keyboard, reloads and rereads its complete text and sv language tags in English on desktop and Japanese on a phone.'),
   },
   {
     kind: 'books',
@@ -597,7 +600,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/books/library-import.test.ts',
       'books/resume-an-interrupted-export-interrupted-exports / owner: a dropped Book page resumes without loss or duplicates and a changed basis requires restart',
       'Resumes an interrupted Book export on the unchanged private basis without lost or duplicate rows, rejects changed-basis continuation and prevents copied tokens from authorizing other readers.'),
-    browser: missing('L21'),
+    browser: journeyBrowser('apps/web/tests/books-interrupted-export.e2e.ts',
+      'apps/web/tests/journeys/books-interrupted-export.ts',
+      'books / Resume an interrupted export (${locale}): a reader reloads and saves every Book copy once',
+      'A Book owner loses an export continuation, reloads, resumes by keyboard with the same cursor and snapshot, and saves every identified Book copy and its exact edition once in English and Japanese.'),
   },
   {
     kind: 'books',
