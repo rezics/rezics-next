@@ -1,13 +1,44 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/work-hub-and-edition-choice.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(185_000);
+const proofDeadlineMs = 60_000; // The original outcome proof owns these 60 seconds.
+const visitDeadlineMs = 120_000;
+const fileWall = setTimeout(() => { throw new Error('Work hub file exceeded 480 s'); }, 480_000);
+async function within(part: string, milliseconds: number, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 type Work = { work: string; mainVersion: string };
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(declaration);
+// Reuse proof answers when the visit sends exactly the same request. The last
+// preference read is the saved answer; no old sample is relabelled or replaced.
+const proofAnswers = new Map<string, Response>();
+function requestKey(name: PersonaName, method: string, path: string, body?: unknown) {
+  const url = new URL(path, 'http://record.invalid');
+  url.searchParams.sort();
+  return JSON.stringify([name, method, url.pathname, url.searchParams.toString(), body]);
+}
+function proofSamples(name: PersonaName, person: PersonaSession) {
+  const sample = recording.session(name, person);
+  return async (label: string, ...args: Parameters<PersonaSession['main']>) => {
+    const response = await sample(label, ...args);
+    proofAnswers.set(requestKey(name, args[0], args[1], args[2]), response.clone());
+    return response;
+  };
+}
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => person.actingSubject
   ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
@@ -65,7 +96,7 @@ async function credit(person: PersonaSession, game: Work, sample: ReturnType<typ
 }
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 let game: Work;
@@ -103,7 +134,7 @@ beforeAll(async () => {
 
 async function hub(name: PersonaName) {
   const person = sessions[name];
-  const sample = recording.session(name, person);
+  const sample = proofSamples(name, person);
   const root = `/v1/works/${short(game.work)}`;
   const header = await answer<{ id: string; disclosure: string; description: { value: string } | null }>(
     sample('work-header', 'GET', `${root}?${acting(person)}`));
@@ -229,15 +260,139 @@ async function supportingReads(person: PersonaSession, sample: ReturnType<typeof
   }
 }
 
-outcomeTest(declaration, 'visitor', () => hub('visitor'), recording);
+// WorkFrameView, WorkOverview, hub-sections and YourEdition's initial render.
+// Labels belong to calls, including the two inventory calls inside tracking.editions.
+async function visit(name: PersonaName) {
+  const person = sessions[name];
+  const labels = new AsyncLocalStorage<string | ((path: string) => string)>();
+  const recorded = recording.session(name, person);
+  const publicSample = recording.session(name, sessions.visitor);
+  const seen = new Map<string, Promise<Response>>();
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const method = init?.method ?? 'GET';
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    const label = labels.getStore();
+    if (!label) throw new Error(`Unlabelled hub request: ${method} ${path}`);
+    const anonymous = ['/v1/types', '/v1/facets', '/v1/resources/showcase'].includes(url.pathname.slice(BFF_PREFIX.length));
+    const key = requestKey(name, method, path, body) + (anonymous ? ':anonymous' : '');
+    const old = anonymous && person.actingSubject ? undefined : proofAnswers.get(requestKey(name, method, path, body));
+    if (old) return old.clone();
+    let pending = seen.get(key);
+    if (!pending) {
+      const stableLabel = typeof label === 'function' ? label(path) : label;
+      pending = (anonymous ? publicSample : recorded)(stableLabel, method, path, body);
+      seen.set(key, pending);
+    }
+    try { return (await pending).clone(); }
+    catch (error) { throw new Error(`Hub visit ${name}: ${method} ${path}: ${String(error)}`, { cause: error }); }
+  };
+  const main = browserMainApi('http://record.invalid', { fetcher });
+  const call = <T,>(label: string | ((path: string) => string), read: () => Promise<T>) => labels.run(label, read);
+  const actingSubject = person.actingSubject ?? undefined;
+  const id = short(game.work);
+  const work = main.v1.works({ id });
+  const resource = main.v1.resources({ resource: id });
+  const query = { actingSubject };
+  const template = (kind: 'work-credits' | 'work-adoptions') => call(`hub-${kind}`, () => main.v1.query.post({
+    profile: 'template-query-v1', query: `https://rezics.com/query/${kind}`, revision: 1,
+    parameters: { roots: [game.work] }, presentation: { actingSubject },
+  }));
+  // The signed-in shell's Main reads have no acting query until selection is known.
+  await Promise.all([
+    call('hub-types', () => main.v1.types.get()),
+    person.actingSubject ? (async () => {
+      const [state] = await Promise.all([
+        call('hub-session-agent', () => main.v1.me['session-agent'].get()),
+        call('hub-acting-contexts', () => main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } })),
+        call('hub-session-agents', () => main.v1.me.agents.get({ query: { languages: 'en' } })),
+      ]);
+      if (state.data?.sessionAgent.eligible) await Promise.all([
+        call('hub-person-preferences', () => main.v1.me['person-preferences'].get({ query })),
+        call('hub-session-profile', () => main.v1.agents({ id: short(person.actingSubject!) }).get({ query })),
+      ]);
+    })() : null,
+  ]);
+  const header = await call('hub-header', () => work.get({ query }));
+  if (header.error || !header.data) return; // The route cannot render a Work frame without its header.
+  const [projection, contexts, credits] = await Promise.all([
+    call('hub-projection', () => resource.page.get({ query })),
+    call('hub-rating-contexts', () => resource['rating-contexts'].get({ query: { ...query, scope: 'global' } })),
+    call('hub-agent-credits', () => work['agent-credits'].get({ query })),
+    template('work-credits'), template('work-adoptions'),
+    call('hub-showcase', () => main.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [game.work] })),
+    call('hub-facets', () => main.v1.facets.get()),
+    call('hub-classifications', () => work.classifications.get({ query: { ...query, scope: 'global' } })),
+    call('hub-rating-populations', () => main.v1['rating-populations'].get({ query: { ...query, target: game.work, limit: 20 } })),
+    call('hub-also-enjoyed', () => work['also-enjoyed'].get({ query: { ...query, limit: 12 } })),
+    person.actingSubject ? call('hub-reader-state', () => work['reader-state'].get({ query })) : null,
+    person.actingSubject ? call('hub-platform-access', () => main.v1.me['platform-access'].get()) : null,
+  ]);
+  const context = contexts.data?.items[0]?.context;
+  const sections = projection.data?.sections ?? [];
+  // Game availability is non-book; the releases make YourEdition reachable.
+  await Promise.all([
+    contexts.error ? null : call('hub-ratings-global', () => resource.ratings.get({ query: { ...query, scope: 'global', context } })),
+    call('hub-reader-stats', () => work['reader-stats'].get({ query: { ...query, context } })),
+    context ? call('hub-reviews', () => resource.reviews.get({ query: { ...query, context, sort: 'helpful', limit: 10 } })).then(async () => {
+      await call('hub-review-relations', () => resource.relations.get({ query: { ...query, limit: 32 } }));
+    }) : null,
+    (async () => {
+      const [realizations, releases] = await Promise.all([
+        call('hub-realizations', () => work.realizations.get({ query: { ...query, limit: 20 } })),
+        call('hub-releases', () => work.releases.get({ query: { ...query, limit: 20 } })),
+        call('hub-partless-parts', () => resource.parts.get({ query: { ...query, limit: 1 } })),
+      ]);
+      if (person.actingSubject && (releases.data?.items.length || realizations.data?.items.length)) {
+        const tracking = mainTrackingApi(person.actingSubject, () => main);
+        await Promise.all([
+          call('hub-edition-preference', () => tracking.preference(game.work)),
+          call(path => path.includes('/realizations') ? 'hub-realizations' : 'hub-releases', () => tracking.editions(game.work)),
+        ]);
+      }
+    })(),
+    call('hub-parts-preview', () => resource.parts.get({ query: { ...query, limit: 7 } })),
+    call('hub-wholes', () => resource.wholes.get({ query: { ...query, limit: 3 } })),
+    call('hub-relations', () => resource.relations.get({ query: { ...query, limit: 20 } })),
+    person.actingSubject ? (async () => {
+      const tracking = mainTrackingApi(person.actingSubject!, () => main);
+      const [preference] = await Promise.all([
+        call('hub-edition-preference', () => tracking.preference(game.work)),
+        call(path => path.includes('/realizations') ? 'hub-realizations' : 'hub-releases', () => tracking.editions(game.work)),
+        call('hub-relations', () => tracking.relations(game.work)),
+        call('hub-correspondence-definition', () => tracking.definition('correspondence-equivalent')),
+      ]);
+      await call('hub-series-progress', () => tracking.series(game.work, preference.ok ? preference.data?.language ?? 'en' : 'en'));
+    })() : null,
+    ...sections.filter(section => ['statements', 'discussion'].includes(section.id)).map(section =>
+      call(`hub-${section.id}`, followHref(main, section.href, query))),
+    ...(credits.data?.items.filter(credit => credit.role === 'author').slice(0, 1).map(credit =>
+      call('hub-author-works', () => main.v1.agents({ id: short(credit.agent) }).works.get({ query: { ...query, limit: 12 } }))) ?? []),
+  ]);
+}
 
-outcomeTest(declaration, 'stranger', () => hub('stranger'), recording);
+async function proveAndVisit(name: PersonaName) {
+  const started = performance.now();
+  let proved = started;
+  try {
+    await within('proof', proofDeadlineMs, () => hub(name));
+    proved = performance.now();
+    await within('visit', visitDeadlineMs, () => visit(name));
+  } finally {
+    console.info(`[work-hub] ${name} proof=${Math.round(proved - started)}ms visit=${Math.round(performance.now() - proved)}ms`);
+  }
+}
 
-outcomeTest(declaration, 'member', () => hub('member'), recording);
+outcomeTest(declaration, 'visitor', () => proveAndVisit('visitor'), recording);
 
-outcomeTest(declaration, 'owner', () => hub('owner'), recording);
+outcomeTest(declaration, 'stranger', () => proveAndVisit('stranger'), recording);
 
-outcomeTest(declaration, 'moderator', () => hub('moderator'), recording);
+outcomeTest(declaration, 'member', () => proveAndVisit('member'), recording);
 
-outcomeTest(declaration, 'operator', () => hub('operator'), recording);
+outcomeTest(declaration, 'owner', () => proveAndVisit('owner'), recording);
+
+outcomeTest(declaration, 'moderator', () => proveAndVisit('moderator'), recording);
+
+outcomeTest(declaration, 'operator', () => proveAndVisit('operator'), recording);
 
