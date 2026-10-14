@@ -12,7 +12,7 @@ import { JobStore, jobDirectory, wakeJobs, type JobPassOptions } from './job.ts'
 import { readLedger } from './ledger.ts';
 import type { Ledger } from './types.ts';
 
-/** A coordinator pass owns worker wakes as well as manager events; commands retain their detached
+/** A coordinator pass retries worker wakes missed by their executor; commands retain their detached
  * executor while queued or running, so taking over never restarts a command or acquires a second slot. */
 export async function coordinateWorkerJobs(ledger: Ledger = readLedger(), options: JobPassOptions = {}): Promise<void> {
   for (const cwd of new Set(Object.values(ledger.tasks).map(task => task.worktree))) {
