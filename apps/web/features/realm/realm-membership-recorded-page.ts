@@ -53,7 +53,9 @@ export function recordedIdentity(record: AnswerRecord, persona: AnswerPersona, s
 }
 
 export function recordedRead(fetcher: typeof fetch): RealmReplay['read'] {
-  return (path: string) => fetcher(new URL(`${BFF_PREFIX}${path}`, recordedOrigin));
+  return (path: string, personal = false) => fetcher(new URL(`${BFF_PREFIX}${path}`, recordedOrigin), {
+    credentials: personal ? 'same-origin' : 'omit',
+  });
 }
 
 export function recordedReplay(fetcher: typeof fetch, signedIn: boolean): RealmReplay {

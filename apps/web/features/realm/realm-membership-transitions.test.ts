@@ -72,6 +72,8 @@ test('withdrawal uses the production join reader and refreshes the same request 
       expect(after.data.entry.requestGeneration).not.toBe(before.data.entry.requestGeneration);
       expect(playback.phase()).toBe(1);
       expect(playback.calls.find(call => call.method === 'POST')).toMatchObject({ body, key });
+      expect(playback.calls.find(call => call.path.endsWith('/join-page'))?.credentials).toBe('omit');
+      expect(playback.calls.filter(call => call.path.includes('/mine?')).every(call => call.credentials === 'same-origin')).toBe(true);
       const reads = playback.calls.filter(call => call.path.includes('/mine?'));
       expect(reads[0]!.path).toBe(reads[1]!.path);
       const repeated = await readCurrentRequest(api);
