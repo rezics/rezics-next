@@ -8,7 +8,7 @@ import { readQueueNames } from '../../../../../apps/web/features/manage/queue-ap
 import { readDecisionBasis, readManagedRealms, readQueue, readRealmHeader, settle } from '../../../../../apps/web/features/manage/read.ts';
 import { realmEditSite } from '../../../../../apps/web/features/manage/realm-site.ts';
 import moderation from '../../../../../scripts/qa/cases/outcomes/realm/moderation-and-appeal.ts';
-import { OutcomeRecorder, outcomeTest as recordedOutcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaNames, personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -111,11 +111,11 @@ async function pageReads(name: PersonaName) {
   }
 }
 
-function outcomeTest(declaration: typeof moderation, name: PersonaName, proof: () => Promise<void>, recorder: OutcomeRecorder) {
-  recordedOutcomeTest(declaration, name, async () => {
+function recordedProof(name: PersonaName, proof: () => Promise<void>) {
+  return async () => {
     await withinDeadline(`${name} proof`, proofDeadlineMs, proof);
     await withinDeadline(`${name} page reads`, readDeadlineMs, () => pageReads(name));
-  }, recorder);
+  };
 }
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request, raw = await response.text();
@@ -211,7 +211,7 @@ async function restored(fixture: Fixture, caseId: string, sample?: ReturnType<Ou
   expect(members.items.find(item => item.member === fixture.sessions.member.actingSubject)?.banned).toBe(false);
 }
 
-outcomeTest(moderation, 'visitor', async () => {
+outcomeTest(moderation, 'visitor', recordedProof('visitor', async () => {
   const fixture = fixtures.visitor, person = fixture.sessions.visitor;
   const sample = recording.session('visitor', person);
   for (const path of [fixture.path, `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`])
@@ -219,8 +219,8 @@ outcomeTest(moderation, 'visitor', async () => {
   await cannotImpersonate(fixture, person, 401);
   await answer(person.main('GET', fixture.root), 404);
   expect((await read(fixture)).appeal).toEqual({ state: 'none' });
-}, recording);
-outcomeTest(moderation, 'stranger', async () => {
+}), recording);
+outcomeTest(moderation, 'stranger', recordedProof('stranger', async () => {
   const fixture = fixtures.stranger, person = fixture.sessions.stranger;
   const sample = recording.session('stranger', person);
   await answer(sample('another-members-appeal-hidden', 'GET', fixture.path), 404);
@@ -236,8 +236,8 @@ outcomeTest(moderation, 'stranger', async () => {
   await answer(person.main('POST', path, { statement: 'My own unjoined-subject sanction is appealed.' }), 201);
   const reading = await answer<Reading>(sample('unjoined-appellant-open', 'GET', path));
   expect(reading.appeal.state).toBe('open'); protectedIdentity(reading, fixture.sessions);
-}, recording);
-outcomeTest(moderation, 'member', async () => {
+}), recording);
+outcomeTest(moderation, 'member', recordedProof('member', async () => {
   const fixture = fixtures.member, person = fixture.sessions.member;
   const sample = recording.session('member', person);
   await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
@@ -254,8 +254,8 @@ outcomeTest(moderation, 'member', async () => {
   expect(await read(fixture)).toEqual(before);
   await decide(fixture.sessions.owner, decision(fixture.sessions.owner, opened.caseId, 'restore'), 200);
   await restored(fixture, opened.caseId, sample);
-}, recording);
-outcomeTest(moderation, 'owner', async () => {
+}), recording);
+outcomeTest(moderation, 'owner', recordedProof('owner', async () => {
   const fixture = fixtures.owner, person = fixture.sessions.owner;
   const sample = recording.session('owner', person);
   for (const [label, path] of [
@@ -282,8 +282,8 @@ outcomeTest(moderation, 'owner', async () => {
   expect(await decide(person, command, 200)).toMatchObject({ replayed: true });
   await decide(person, { ...command, rationale: 'Changed intent under the same key.' }, 409);
   await restored(fixture, caseId);
-}, recording);
-outcomeTest(moderation, 'moderator', async () => {
+}), recording);
+outcomeTest(moderation, 'moderator', recordedProof('moderator', async () => {
   const fixture = fixtures.moderator, person = fixture.sessions.moderator;
   const sample = recording.session('moderator', person);
   await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}&language=en`));
@@ -299,8 +299,8 @@ outcomeTest(moderation, 'moderator', async () => {
   const banReading = await answer<Reading>(fixture.sessions.member.main('GET', `${fixture.root}/member-ban?${acting(fixture.sessions.member)}`));
   expect(banReading.appeal).toMatchObject({ state: 'decided', outcome: 'dismiss', rationale: null });
   protectedIdentity(banReading, fixture.sessions);
-}, recording);
-outcomeTest(moderation, 'operator', async () => {
+}), recording);
+outcomeTest(moderation, 'operator', recordedProof('operator', async () => {
   const fixture = fixtures.operator, person = fixture.sessions.operator;
   const sample = recording.session('operator', person);
   expect(await answer<{ groups: string[] }>(sample('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({ groups: expect.arrayContaining(['platform-admin']) });
@@ -312,4 +312,4 @@ outcomeTest(moderation, 'operator', async () => {
   await decide(person, decision(person, caseId, 'restore'), 403);
   await decide(person, decision(person, caseId, 'dismiss'), 403);
   expect(await read(fixture)).toEqual(before);
-}, recording);
+}), recording);
