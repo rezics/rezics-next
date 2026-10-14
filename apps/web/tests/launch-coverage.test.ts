@@ -789,7 +789,34 @@ test('every Realm closure surface records passing directory evidence or its miss
     file: 'services/main/tests/realm-platform-closure-reads.test.ts',
     test: 'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
   });
-  for (const row of closureRows) expect(row.browser, row.capability).toMatchObject({ missing: 'gap' });
+  for (const row of closureRows.filter(row => row.capability !== 'Closure: notifications'))
+    expect(row.browser, row.capability).toMatchObject({ missing: 'gap' });
+  expect(closureRows.find(row => row.capability === 'Closure: notifications')!.browser)
+    .toMatchObject({ file: 'apps/web/tests/realm-closure.e2e.ts', journey: 'apps/web/tests/journeys/realm-closure.ts' });
+});
+
+test('Realm closure browser coverage registers the proved notification journey and preserves exact media and roster blockers', () => {
+  const rows = launchCoverage.filter(row => row.kind === 'realm');
+  const notification = rows.find(row => row.capability === 'Closure: notifications')!.browser;
+  expect(proofMissing(notification)).toBe(false);
+  if (proofMissing(notification) || !journeyProof(notification)) throw new Error('Expected a registered notification journey');
+  const wrapper = readFileSync(resolve(repositoryRoot, notification.file), 'utf8');
+  const journey = readFileSync(resolve(repositoryRoot, notification.journey), 'utf8');
+  const specifier = relative(dirname(notification.file), notification.journey).split(sep).join('/');
+  const registrations = journeyRegistrations(wrapper, `./${specifier}`);
+  expect(namedTestExists(journey, notification.test, registrations)).toBe(true);
+  expect(namedTestExists(journey, notification.test.replace('(en)', '(ja)'), registrations)).toBe(true);
+  for (const [capability, request] of [
+    ['Closure: media', 'POST /v1/media/metadata'],
+    ['Closure: roster', 'GET /v1/realms/{closedRealm}/members?actingSubject={founder}'],
+  ]) {
+    const browser = rows.find(row => row.capability === capability)!.browser;
+    expect(browser).toMatchObject({ missing: 'gap' });
+    if (!proofMissing(browser)) throw new Error('An API-blocked journey must remain missing');
+    expect(browser.reason).toContain(request!);
+    expect(browser.reason).toContain('HTTP 200');
+    expect(browser.reason).toContain('Exact request and answer: QA ');
+  }
 });
 
 test('every launch kind and hard case has a coverage row', () => {
