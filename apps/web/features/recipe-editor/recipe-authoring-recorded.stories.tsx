@@ -300,7 +300,8 @@ const staleImportStory = {
     await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(refusal.title);
     await expect(canvas.getByRole('button', { name: copy.importStaleAction })).toBeEnabled();
     await expectRecipe(canvas, destinationTitle, importedRecipe, destinationHeader.id);
-    await expect(canvas.queryByText(copy.importedRevision({ revision: '' }))).toBeNull();
+    const revision = (recorded(exchange, 'owner', 'file-import').answer as { revision: string }).revision.slice(-36);
+    await expect(canvas.queryByText(copy.importedRevision({ revision }))).toBeNull();
   },
 } satisfies Story;
 
