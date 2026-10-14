@@ -316,8 +316,8 @@ async function libraryVisit(name: PersonaName, person: PersonaSession, sample: S
 /** Transport only: production owns paths, serialization, versions and command keys. */
 async function productionVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
   const labels = new AsyncLocalStorage<(method: string, url: URL) => string>();
-  const named = <T>(label: string, run: () => Promise<T>) => labels.run(() => label, run);
-  const routed = <T>(names: Record<string, string>, run: () => Promise<T>) => labels.run((method, url) => {
+  const named = <T,>(label: string, run: () => Promise<T>) => labels.run(() => label, run);
+  const routed = <T,>(names: Record<string, string>, run: () => Promise<T>) => labels.run((method, url) => {
     const route = Object.keys(names).find(route => route.startsWith(`${method} `) && url.pathname.endsWith(route.slice(method.length + 1)));
     if (!route) throw new Error(`Production request has no fixed label: ${method} ${url.pathname}`);
     return names[route]!;
