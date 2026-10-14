@@ -366,7 +366,9 @@ async function workVisit(name: PersonaName) {
     const label = labels.getStore();
     if (!label) throw new Error('Unlabelled Work page request');
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
-    return sample(`visit-work-completed-${label}`, init?.method ?? 'GET',
+    const requestLabel = label === 'series-editions'
+      ? `${label}-${url.pathname.endsWith('/releases') ? 'releases' : 'realizations'}` : label;
+    return sample(`visit-work-completed-${requestLabel}`, init?.method ?? 'GET',
       (url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) : url.pathname) + url.search, body);
   };
   const main = browserMainApi('http://record.invalid', { fetcher });
@@ -436,18 +438,30 @@ async function workVisit(name: PersonaName) {
   if (!plan.includes('parts') || !seed) return;
   const tracking = mainTrackingApi(actingSubject, () => main);
   const media = tracking.media!;
-  const [types, preference] = await Promise.all([
-    call('medium-types', () => media.types(work)),
-    call('series-preference', () => tracking.preference(work)),
-    call('series-realizations', () => readWorkRealizations(main, actingSubject, id)),
-    call('series-releases', () => reads.readReleases(id)),
-    call('series-relations', () => tracking.relations(work)),
-    call('correspondence-definition', () => tracking.definition('correspondence-equivalent')),
-  ]);
-  const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
-  const control = await call('medium-parts', () => progressControl(media, tracking.episodes!, work, presentation));
   await Promise.all([
-    call('series-progress', () => tracking.series(work, preference.ok && preference.data ? preference.data.language : 'en')),
-    control.kind === 'work' ? call('winning-mark', () => media.workStanding(work)) : Promise.resolve(),
+    (async () => {
+      const types = await call('medium-types', () => media.types(work));
+      if (!types.ok && types.failure === 'missing') return;
+      const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
+      const control = await call('medium-parts', () => progressControl(media, tracking.episodes!, work, presentation));
+      if (control.kind === 'work') await call('winning-mark', () => media.workStanding(work));
+      else if (control.kind === 'game') {
+        // A failed parts choice still mounts GameProgress; its opening read
+        // owns the displayed refusal. It must not invent a whole-Work mark.
+        const routes = await call('game-routes', () => media.routes(work));
+        if (routes.ok) await Promise.all(routes.data.items.map(route =>
+          call(`game-part-${short(route.occurrence)}`, () => media.progress(route))));
+      }
+    })(),
+    (async () => {
+      const [preference] = await Promise.all([
+        call('series-preference', () => tracking.preference(work)),
+        call('series-editions', () => tracking.editions(work)),
+        call('series-relations', () => tracking.relations(work)),
+        call('correspondence-definition', () => tracking.definition('correspondence-equivalent')),
+      ]);
+      await call('series-progress', () => tracking.series(work,
+        preference.ok && preference.data ? preference.data.language : 'en'));
+    })(),
   ]);
 }
