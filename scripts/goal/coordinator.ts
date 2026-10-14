@@ -8,6 +8,20 @@ import { processIdentity, processParent, sameProcess, type ProcessIdentity } fro
 import { GoalMailStore } from './mail.ts';
 import { retryEventDatabase } from './event-store.ts';
 import { ensureTermspacesSession, termspacesSession, missingTermspacesReason, termspacesTarget, goalWindows, newGoalWindow, turnWindowName, windowTurns, windowTmux, followTurn } from './windows.ts';
+import { JobStore, jobDirectory, wakeJobs, type JobPassOptions } from './job.ts';
+import { readLedger } from './ledger.ts';
+import type { Ledger } from './types.ts';
+
+/** A coordinator pass owns worker wakes as well as manager events; commands retain their detached
+ * executor while queued or running, so taking over never restarts a command or acquires a second slot. */
+export async function coordinateWorkerJobs(ledger: Ledger = readLedger(), options: JobPassOptions = {}): Promise<void> {
+  for (const cwd of new Set(Object.values(ledger.tasks).map(task => task.worktree))) {
+    const directory = jobDirectory(cwd);
+    if (!existsSync(join(directory, 'jobs.sqlite'))) continue;
+    const store = new JobStore(directory);
+    try { await wakeJobs(store, options); } finally { store.close(); }
+  }
+}
 
 export { processIdentity, sameProcess, type ProcessIdentity };
 

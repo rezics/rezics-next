@@ -11,7 +11,12 @@ import { qaResourceClasses, type QaResourceClass } from './resource-classes.ts';
 
 export const GiB = 1024 ** 3;
 export type QaMemoryService = 'postgres' | 'fuseki' | 'rustfs' | 'toxiproxy' | 'mailpit';
-export interface MemoryReading { vmTotal: number; vmUsed: number; hostAvailable: number }
+export interface MemoryReading {
+  vmTotal: number; vmUsed: number; hostAvailable: number;
+  /** Older injected readings describe the separate Docker Desktop pool. */
+  engine?: 'native' | 'desktop';
+  containers?: Record<string, number>;
+}
 export interface MemoryNeed { vm: number; host: number; hostReserve: number; vmReserve: number }
 
 /** Stats uses SI or IEC units; Docker container caps interpret every suffix as binary. */
@@ -63,17 +68,23 @@ export function qaMemoryNeed(root: string, kind: 'other' | 'browser', resourceCl
   };
 }
 
-export function parseMemoryReading(total: string, stats: string, meminfo: string): MemoryReading {
+export function parseMemoryReading(total: string, stats: string, meminfo: string,
+  operatingSystem = 'Docker Desktop'): MemoryReading {
   const vmTotal = Number(total.trim());
   const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(meminfo);
   if (!Number.isSafeInteger(vmTotal) || vmTotal <= 0 || !available)
-    throw new Error('Cannot read Docker VM total or host MemAvailable');
+    throw new Error('Cannot read Docker memory total or host MemAvailable');
+  if (!operatingSystem.trim()) throw new Error('Cannot read Docker OperatingSystem');
+  const containers: Record<string, number> = {};
   const vmUsed = stats.trim() ? stats.trim().split('\n').reduce((sum, line) => {
-    const row = JSON.parse(line) as { MemUsage?: string };
+    const row = JSON.parse(line) as { MemUsage?: string; Name?: string };
     if (!row.MemUsage) throw new Error('Docker stats did not report container memory');
-    return sum + memoryBytes(row.MemUsage.split('/')[0]!);
+    const used = memoryBytes(row.MemUsage.split('/')[0]!);
+    if (row.Name) containers[row.Name] = used;
+    return sum + used;
   }, 0) : 0;
-  return { vmTotal, vmUsed, hostAvailable: Number(available[1]) * 1024 };
+  return { vmTotal, vmUsed, hostAvailable: Number(available[1]) * 1024,
+    ...(!operatingSystem.includes('Docker Desktop') ? { engine: 'native' as const, containers } : {}) };
 }
 
 function readHostMemory(): MemoryReading {
@@ -88,11 +99,13 @@ export async function readMemory(remainingMs: number, env: NodeJS.ProcessEnv = p
   // Twenty host readings peaked at 6.731 s; allow twice that, rounded up.
   const timeout = Math.max(1, Math.min(memoryMeasurementTimeoutMs, remainingMs));
   const [info, stats] = await Promise.all([
-    execute('docker', ['info', '--format', '{{.MemTotal}}'], { timeout, env: preserveReapEnvironment(env) }),
+    execute('docker', ['info', '--format', '{{.MemTotal}}\n{{.OperatingSystem}}'], { timeout, env: preserveReapEnvironment(env) }),
     execute('docker', ['stats', '--no-stream', '--format', '{{json .}}'],
       { timeout, env: preserveReapEnvironment(env), maxBuffer: 4 * 1024 ** 2 }),
   ]);
-  return parseMemoryReading(info.stdout, stats.stdout, readFileSync('/proc/meminfo', 'utf8'));
+  const [total, operatingSystem] = info.stdout.trim().split('\n');
+  if (!total || !operatingSystem) throw new Error('Cannot read Docker memory total or OperatingSystem');
+  return parseMemoryReading(total, stats.stdout, readFileSync('/proc/meminfo', 'utf8'), operatingSystem);
 }
 
 export interface MemoryWaitOptions {
@@ -118,6 +131,8 @@ export interface MemoryWaitOptions {
   startTime?: (pid: number) => string | undefined;
   readLoad?: () => number;
   processors?: number;
+  /** Compose project whose resident containers already consume MemAvailable. */
+  project?: string;
 }
 
 let admissionSequence = 0;
@@ -286,6 +301,33 @@ interface StartupWaiter extends StartupPromise {
 interface StartupPromise {
   id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number;
   completed: number; processor_until: number;
+  project?: string;
+}
+
+/** MemAvailable already charges resident native containers. Only the remaining
+ * cap of the promised project's containers belongs to admission's free pool. */
+function pendingContainerMemory(promise: StartupPromise, reading: MemoryReading): number {
+  const project = promise.project;
+  if (!project) return promise.vm;
+  const resident = Object.entries(reading.containers ?? {}).reduce((sum, [name, used]) =>
+    name.startsWith(`${project}-`) && /^(postgres|fuseki|rustfs|toxiproxy|mailpit)-\d+$/.test(name.slice(project.length + 1))
+      ? sum + used : sum, 0);
+  return Math.max(0, promise.vm - resident);
+}
+
+function memoryPool(reading: MemoryReading, promises: readonly StartupPromise[] = []) {
+  return {
+    vmFree: reading.vmTotal - reading.vmUsed - promises.reduce((sum, p) => sum + p.vm, 0),
+    hostFree: reading.hostAvailable - promises.reduce((sum, p) => sum + p.host
+      + (reading.engine === 'native' ? pendingContainerMemory(p, reading) : 0), 0),
+  };
+}
+
+function memoryFits(need: MemoryNeed, reading: MemoryReading, promises: readonly StartupPromise[] = []): boolean {
+  const { vmFree, hostFree } = memoryPool(reading, promises);
+  return reading.engine === 'native'
+    ? hostFree >= need.vm + need.host + Math.max(need.hostReserve, need.vmReserve)
+    : vmFree >= need.vm + need.vmReserve && hostFree >= need.host + need.hostReserve;
 }
 function sqliteBusy(error: unknown): boolean {
   return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
@@ -333,7 +375,10 @@ async function sharedMemoryReading(db: Database, needsVm: boolean, options: Memo
   const startTime = options.startTime ?? processStartTime;
   const identity = startTime(process.pid);
   if (!identity) throw new Error('Cannot read QA measurement process start time');
-  const scope = needsVm ? 'docker' : 'host';
+  const env = options.env ?? process.env;
+  // During an engine migration both contexts may answer. A reading from the
+  // Desktop VM cannot authorize work against the native host pool.
+  const scope = needsVm ? `docker:${JSON.stringify([env.DOCKER_CONTEXT, env.DOCKER_HOST, env.DOCKER_CONFIG])}` : 'host';
   const owner = randomUUID();
   for (;;) {
     if (now() >= options.deadline) throw new Error('Memory measurement deadline reached');
@@ -445,6 +490,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           mutex.exec('ALTER TABLE startup_promises ADD COLUMN completed INTEGER NOT NULL DEFAULT 0');
         if (!promiseColumns.some(column => column.name === 'processor_until'))
           mutex.exec('ALTER TABLE startup_promises ADD COLUMN processor_until REAL NOT NULL DEFAULT 0');
+        if (!promiseColumns.some(column => column.name === 'project'))
+          mutex.exec("ALTER TABLE startup_promises ADD COLUMN project TEXT NOT NULL DEFAULT ''");
         mutex.exec(`CREATE TABLE IF NOT EXISTS startup_waiters (
           seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, arrival_seq TEXT NOT NULL,
           pid INTEGER NOT NULL, start_time TEXT NOT NULL, vm REAL NOT NULL, host REAL NOT NULL,
@@ -525,13 +572,12 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
             mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(waiter.id);
           else waiters.push(waiter);
         }
-        const vmFree = reading ? reading.vmTotal - reading.vmUsed - live.reduce((sum, p) => sum + p.vm, 0) : -1;
-        const hostFree = reading ? reading.hostAvailable - live.reduce((sum, p) => sum + p.host, 0) : -1;
-        const fits = (waiter: StartupWaiter) => vmFree >= waiter.vm + waiter.vm_reserve
-          && hostFree >= waiter.host + waiter.host_reserve;
+        if (reading) measured = measuredAdmissionMessage(need, reading, live);
+        const fits = (waiter: StartupWaiter) => reading !== undefined && memoryFits({
+          vm: waiter.vm, host: waiter.host, vmReserve: waiter.vm_reserve, hostReserve: waiter.host_reserve,
+        }, reading, live);
         const ownTurn = waiters.find(waiter => waiter.id === promiseId || waiter.slot_ready === 1 && fits(waiter))?.id === promiseId;
-        readingFits = activeStartups < concurrency && vmFree >= need.vm + need.vmReserve
-          && hostFree >= need.host + need.hostReserve && ownTurn;
+        readingFits = activeStartups < concurrency && reading !== undefined && memoryFits(need, reading, live) && ownTurn;
         // A lifetime lease is owned by the existing runner. An ungranted request
         // must not block holders of all those leases behind it in either queue.
         // Ask only after fresh memory fits and older ready contenders have had
@@ -575,8 +621,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           } else {
             const processorUntil = !loadEnabled ? 0 : pressure !== undefined ? now() + 30_000
               : loadWaitStarted !== undefined ? now() + 20_000 : 0;
-            mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at, processor_until) VALUES (?, ?, ?, ?, ?, ?, ?)')
-              .run(promiseId, process.pid, identity, need.vm, need.host, now(), processorUntil);
+            mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at, processor_until, project) VALUES (?, ?, ?, ?, ?, ?, ?, ?)')
+              .run(promiseId, process.pid, identity, need.vm, need.host, now(), processorUntil, options.project ?? '');
             mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
             mutex.exec('COMMIT');
             held = false;
@@ -655,8 +701,12 @@ export async function withQaStackStartup<T>(root: string, env: NodeJS.ProcessEnv
   }, start);
 }
 
-function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
+function admissionMessage(need: MemoryNeed, reading?: MemoryReading, promises: readonly StartupPromise[] = []): string {
   const gib = (bytes: number) => `${(bytes / GiB).toFixed(2)} GiB`;
+  if (reading?.engine === 'native') {
+    return `QA memory: native Docker Engine on host needs ${gib(need.vm)} containers + ${gib(need.host)} host `
+      + `+ ${gib(Math.max(need.hostReserve, need.vmReserve))} reserve, available ${gib(Math.max(0, memoryPool(reading, promises).hostFree))}`;
+  }
   return `QA memory: Docker VM needs ${gib(need.vm)} + ${gib(need.vmReserve)} reserve, `
     + `free ${reading ? reading.vmTotal === 0 ? 'not needed' : gib(Math.max(0, reading.vmTotal - reading.vmUsed)) : 'unknown'}; `
     + `host needs ${gib(need.host)} + ${gib(need.hostReserve)} reserve, `
@@ -664,12 +714,14 @@ function admissionMessage(need: MemoryNeed, reading?: MemoryReading): string {
 }
 
 /** The wait line may say "unknown" before a reading exists. Admission cannot. */
-export function measuredAdmissionMessage(need: MemoryNeed, reading: MemoryReading): string {
-  if (Object.values(reading).some(value => !Number.isFinite(value) || value < 0)
+export function measuredAdmissionMessage(need: MemoryNeed, reading: MemoryReading, promises: readonly StartupPromise[] = []): string {
+  if ([reading.vmTotal, reading.vmUsed, reading.hostAvailable, ...Object.values(reading.containers ?? {})]
+    .some(value => !Number.isFinite(value) || value < 0)
+    || (reading.engine !== undefined && reading.engine !== 'native' && reading.engine !== 'desktop')
     || (need.vm + need.vmReserve > 0 && reading.vmTotal === 0)) {
     throw new Error('Invalid memory reading');
   }
-  const message = admissionMessage(need, reading);
+  const message = admissionMessage(need, reading, promises);
   if (message.includes('unknown')) throw new Error('Memory admission requires a reading');
   return message;
 }
@@ -697,9 +749,13 @@ export async function waitForMemory(need: MemoryNeed, options: MemoryWaitOptions
       const shared = await sharedMemoryReading(db, needsVm, readingOptions, read);
       if (!shared.reading) throw new Error(shared.error ?? 'No memory reading');
       reading = shared.reading;
-      message = measuredAdmissionMessage(need, reading);
-      if (shared.generation === memoryGeneration(db) && now() < options.deadline && reading.vmTotal - reading.vmUsed >= need.vm + need.vmReserve
-        && reading.hostAvailable >= need.host + need.hostReserve) {
+      const startTime = options.startTime ?? processStartTime;
+      const promises = reading.engine === 'native'
+        && db.query("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'startup_promises'").get()
+        ? db.query<StartupPromise, []>('SELECT * FROM startup_promises WHERE completed = 0').all()
+          .filter(p => now() - p.admitted_at <= 15 * 60_000 && startTime(p.pid) === p.start_time) : [];
+      message = measuredAdmissionMessage(need, reading, promises);
+      if (shared.generation === memoryGeneration(db) && now() < options.deadline && memoryFits(need, reading, promises)) {
         publishWait();
         announce(`Admitted; ${message}`);
         return;

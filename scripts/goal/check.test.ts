@@ -83,7 +83,7 @@ test('worker guards use changed inputs and report empty changes without acquirin
     expect(result.code).toBe(0);
     expect(f.commands.some(command => command.includes('goal:unit-files'))).toBe(runs);
     expect(f.lines.filter(line => line.startsWith('Repository guards:'))).toHaveLength(1);
-    if (!changed.length) expect(f.lines.join('\n')).toContain('0/37 selected for changed paths: (none)');
+    if (!changed.length) expect(f.lines.join('\n')).toMatch(/Repository guards: 0\/\d+ selected for changed paths: \(none\)/);
   }
 });
 
@@ -449,6 +449,40 @@ function currencyFixture() {
   };
   return { ...f, cwd, main, git, commit, changed: undefined, tests: [], only: ['types'] as const };
 }
+
+test('wave checks select only the worker commits and staged, unstaged and untracked edits', () => {
+  const f = currencyFixture();
+  f.git(f.main, 'checkout', '-qb', 'wave/1');
+  const wave = f.commit(f.main, 'scripts/wave.ts', 'export {};\n');
+  f.git(f.cwd, 'merge', '--ff-only', wave);
+  f.git(f.main, 'checkout', 'main');
+  f.commit(f.main, 'scripts/main.ts', 'export {};\n');
+  f.commit(f.cwd, 'scripts/own.ts', 'export {};\n');
+  writeFileSync(join(f.cwd, 'scripts/staged.ts'), 'export {};\n');
+  f.git(f.cwd, 'add', 'scripts/staged.ts');
+  writeFileSync(join(f.cwd, 'scripts/example.ts'), 'export const edited = true;\n');
+  writeFileSync(join(f.cwd, 'scripts/untracked.ts'), 'export {};\n');
+  expect(checkChangedFiles(f.cwd)).toEqual([
+    'scripts/example.ts', 'scripts/own.ts', 'scripts/staged.ts', 'scripts/untracked.ts',
+  ]);
+});
+
+test('a clean wave check updates to the wave and selects only worker changes', async () => {
+  const f = currencyFixture();
+  f.git(f.main, 'checkout', '-qb', 'wave/1');
+  const wave = f.commit(f.main, 'apps/web/wave.ts', 'export {};\n');
+  f.git(f.cwd, 'merge', '--ff-only', wave);
+  f.commit(f.cwd, 'scripts/own.ts', 'export {};\n');
+  const latest = f.commit(f.main, 'apps/web/latest.ts', 'export {};\n');
+  f.git(f.main, 'checkout', 'main');
+  f.commit(f.main, 'scripts/main.ts', 'export {};\n');
+  const result = await workerCheck(f);
+  expect(result.code).toBe(0);
+  expect(f.lines[0]).toContain('1 commits behind wave/1; rebased');
+  expect(f.git(f.cwd, 'rev-parse', 'HEAD^')).toBe(latest);
+  expect(checkChangedFiles(f.cwd)).toEqual(['scripts/own.ts']);
+  expect(f.commands).toEqual([['task', 'scripts:typecheck']]);
+});
 
 test.each([false, true])('a clean check updates to main before selecting and running checks (worker commit=%s)', async ownCommit => {
   const f = currencyFixture();

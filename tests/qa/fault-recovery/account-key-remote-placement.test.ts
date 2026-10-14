@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
+import { connect, createServer, type Socket } from 'node:net';
 import { expect, test } from 'bun:test';
 import { Client, Pool } from 'pg';
 import { hostLoopbackAccess, loadDockerEnvironment } from '../../../scripts/load/docker-env.ts';
@@ -15,10 +16,8 @@ const TIMEOUT_MS = 1_500;
 test('OPS08: remote Account placement isolates network partition, Account database loss and refused Main credentials, with no private database shortcut', async () => {
   const env = qaEnvironment();
   const docker = loadDockerEnvironment();
-  const loopback = hostLoopbackAccess(docker);
-  if (loopback.host !== 'host.docker.internal') {
-    throw new Error('The OPS08 partition fixture needs Docker Desktop host-gateway networking');
-  }
+  const native = hostLoopbackAccess(docker).host === '127.0.0.1';
+  const loopback = { args: ['--add-host=host.docker.internal:host-gateway'], host: 'host.docker.internal' };
   const run = (...args: string[]) => {
     const result = spawnSync('docker', args, { env: docker, encoding: 'utf8', timeout: 60_000 });
     if (result.status !== 0) throw new Error(`docker ${args[0]} failed: ${result.stderr}`);
@@ -29,6 +28,31 @@ test('OPS08: remote Account placement isolates network partition, Account databa
   const databases = await cloneQaOwnerDatabases(env.runId, ['account', 'access'], 'owner');
   const accessPool = new Pool({ connectionString: databases.urls.access, max: 4 });
   const started: string[] = [];
+  const relays: Array<() => Promise<void>> = [];
+  const upstreamPort = async (port: number) => {
+    if (!native) return port;
+    // Native host-gateway reaches the bridge address, not host loopback. Keep
+    // these two temporary relays behind the fixture's independent fault hops.
+    const sockets = new Set<Socket>();
+    const relay = createServer(incoming => {
+      const outgoing = connect(port, '127.0.0.1');
+      for (const socket of [incoming, outgoing]) {
+        sockets.add(socket);
+        socket.once('close', () => sockets.delete(socket));
+        socket.on('error', () => { incoming.destroy(); outgoing.destroy(); });
+      }
+      incoming.pipe(outgoing).pipe(incoming);
+    });
+    const gateway = run('network', 'inspect', 'bridge', '--format', '{{(index .IPAM.Config 0).Gateway}}');
+    await new Promise<void>((resolve, reject) => { relay.once('error', reject); relay.listen(0, gateway, resolve); });
+    relays.push(() => new Promise<void>((resolve, reject) => {
+      for (const socket of sockets) socket.destroy();
+      relay.close(error => error ? reject(error) : resolve());
+    }));
+    const address = relay.address();
+    if (!address || typeof address === 'string') throw new Error('Native fixture relay has no TCP port');
+    return address.port;
+  };
   let account: Awaited<ReturnType<typeof startAccount>> | undefined;
   try {
     // Two network hops, each a proxy container on its own Docker network: the
@@ -36,8 +60,11 @@ test('OPS08: remote Account placement isolates network partition, Account databa
     for (const hop of Object.values(hops)) {
       run('network', 'create', hop);
       started.push(hop);
+      // Disconnecting the sole native network releases automatic host ports;
+      // reconnect must restore the same issuer origin and database endpoint.
+      const apiPort = await freePort(), linkPort = await freePort();
       run('run', '-d', '--rm', '--name', hop, '--network', hop, ...loopback.args,
-        '-p', '127.0.0.1::8474', '-p', '127.0.0.1::20000', TOXIPROXY, '-host', '0.0.0.0');
+        '-p', `127.0.0.1:${apiPort}:8474`, '-p', `127.0.0.1:${linkPort}:20000`, TOXIPROXY, '-host', '0.0.0.0');
     }
     const published = (hop: string, port: number) =>
       Number(run('port', hop, `${port}/tcp`).split('\n')[0]!.split(':').pop());
@@ -51,7 +78,7 @@ test('OPS08: remote Account placement isolates network partition, Account databa
         await Bun.sleep(100);
       }
       const created = await fetch(`${api(hop)}/proxies`, { method: 'POST', body: JSON.stringify({
-        name: 'link', listen: '0.0.0.0:20000', upstream: `${loopback.host}:${upstream}` }) });
+        name: 'link', listen: '0.0.0.0:20000', upstream: `${loopback.host}:${await upstreamPort(upstream)}` }) });
       expect(created.status).toBe(201);
     }
     const edgeOrigin = `http://127.0.0.1:${published(hops.edge, 20000)}`;
@@ -175,6 +202,7 @@ test('OPS08: remote Account placement isolates network partition, Account databa
   } finally {
     await account?.stop();
     await accessPool.end();
+    for (const close of relays) await close();
     await databases.close();
     for (const name of started.reverse()) {
       spawnSync('docker', ['rm', '-f', name], { env: docker, timeout: 30_000 });

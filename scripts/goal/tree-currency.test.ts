@@ -2,7 +2,7 @@ import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { prepareCheckTree, warnHarnessCurrency } from './tree-currency.ts';
+import { prepareCheckTree, updateWorktree, warnHarnessCurrency } from './tree-currency.ts';
 
 const scratch = join(import.meta.dir, '../../.temp/tree-currency-tests');
 const fixtures: string[] = [];
@@ -40,6 +40,68 @@ function repository() {
 
 afterEach(() => {
   for (const dir of fixtures.splice(0)) rmSync(dir, { recursive: true, force: true });
+});
+
+function waveRepository() {
+  const r = repository();
+  r.git(r.main, 'checkout', '-qb', 'wave/1');
+  const wave = r.commit('wave.ts', 'export {};\n');
+  r.git(r.cwd, 'merge', '--ff-only', wave);
+  r.git(r.main, 'checkout', 'main');
+  return { ...r, wave };
+}
+
+test('a worker carrying wave work stays on its wave when main moves', () => {
+  const r = waveRepository();
+  r.commit('scripts/qa/main-fix.ts', 'export {};\n');
+  const before = r.git(r.cwd, 'rev-parse', 'HEAD');
+  const result = prepareCheckTree(r.cwd, () => {});
+  expect(result).toMatchObject({ before, after: before, failed: false });
+  expect(result?.line).toContain('0 commits behind wave/1; already current');
+  expect(warnHarnessCurrency(r.cwd, () => { throw new Error('main must not trigger a warning'); })).toBe(0);
+});
+
+test.each([false, true])('a worker follows new wave commits (worker commit=%s)', ownCommit => {
+  const r = waveRepository();
+  if (ownCommit) {
+    r.write(r.cwd, 'own.ts', 'export {};\n');
+    r.git(r.cwd, 'add', 'own.ts');
+    r.git(r.cwd, 'commit', '-qm', 'Worker change');
+  }
+  r.git(r.main, 'checkout', 'wave/1');
+  const wave = r.commit('scripts/qa/wave-fix.ts', 'export {};\n');
+  r.git(r.main, 'checkout', 'main');
+  r.commit('scripts/qa/main-fix.ts', 'export {};\n');
+  const lines: string[] = [];
+  expect(warnHarnessCurrency(r.cwd, line => lines.push(line))).toBe(1);
+  expect(lines[0]).toContain('1 commits behind wave/1');
+  expect(lines[0]).toContain('rebase onto wave/1');
+  // Resume calls updateWorktree directly; check calls it through prepareCheckTree.
+  const result = ownCommit ? updateWorktree(r.cwd, 'worker') : prepareCheckTree(r.cwd, () => {});
+  expect(result?.failed).toBe(false);
+  expect(result?.line).toContain(`1 commits behind wave/1; ${ownCommit ? 'rebased' : 'fast-forwarded'}`);
+  expect(r.git(r.cwd, 'rev-parse', ownCommit ? 'HEAD^' : 'HEAD')).toBe(wave);
+  expect(warnHarnessCurrency(r.cwd, () => {})).toBe(0);
+});
+
+test.each([false, true])('a worker without unmerged wave ancestry still follows main (wave merged=%s)', merged => {
+  const r = waveRepository();
+  if (merged) r.git(r.main, 'merge', '--ff-only', 'wave/1');
+  else r.git(r.cwd, 'reset', '--hard', 'main');
+  const main = r.commit('scripts/qa/main-fix.ts', 'export {};\n');
+  const result = prepareCheckTree(r.cwd, () => {});
+  expect(result?.line).toContain('commits behind main; fast-forwarded');
+  expect(r.git(r.cwd, 'rev-parse', 'HEAD')).toBe(main);
+});
+
+test('an unrelated local wave does not hide the wave carrying the worker work', () => {
+  const r = waveRepository();
+  r.git(r.main, 'checkout', '--orphan', 'wave/0');
+  r.git(r.main, 'rm', '-rf', '.');
+  r.commit('unrelated.ts', 'export {};\n');
+  r.git(r.main, 'checkout', 'main');
+  r.commit('scripts/qa/main-fix.ts', 'export {};\n');
+  expect(prepareCheckTree(r.cwd, () => {})?.line).toContain('0 commits behind wave/1; already current');
 });
 
 test.each(['scripts/goal/fix.ts', 'scripts/qa/fix.ts', 'tests/qa/support/fix.ts'])('warns for missing ancestry under %s without moving the tree', path => {

@@ -18,6 +18,7 @@ import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFi
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 import type { GateLaneOptions } from './qa-slots.ts';
 import { gateRefusal } from './queue.ts';
+import { parkedResult } from './job.ts';
 import { processIdentity } from '../qa/process/identity.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
@@ -174,7 +175,7 @@ export async function dispatch(briefPath: string, flags: Set<string>): Promise<v
 }
 
 /** A preparation has no worker pid yet, but has already consumed admission capacity. */
-function admitWorkers(tasks: Task[], engine: Engine, forceUsage: boolean) {
+export function admitWorkers(tasks: Task[], engine: Engine, forceUsage: boolean) {
   const live = tasks.filter(task => task.state === 'starting' || running(task)).length;
   const limit = Number(process.env.GOAL_MAX_WORKERS ?? 25);
   if (live >= limit) throw new Error(`Concurrency limit reached: ${live}/${limit} live workers`);
@@ -197,6 +198,10 @@ export async function finishAttempt(id: string, attemptNumber: number) {
     if (current.waitingResume) return { kind: 'replaced' as const, task: current };
     last.endedAt ??= new Date().toISOString();
     if (result.session && !last.session) last.session = result.session;
+    if (parkedResult(result.text)) {
+      if (current.state === 'running') current.state = 'exited';
+      return { kind: 'ended' as const, task: current, repeated: false, refused: undefined };
+    }
     // Status may already have marked a dead pid exited. A stop or a close still stands.
     const open = current.state === 'running' || current.state === 'exited';
     const drop = transportDrop(last);

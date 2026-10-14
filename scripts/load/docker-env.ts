@@ -8,7 +8,17 @@ export interface DockerProbeClock {
   sleep?: (milliseconds: number) => void;
 }
 
-const unavailableMessage = 'Docker is unavailable; start it with `systemctl --user start docker-desktop`';
+/** A stopped daemon cannot answer info; its selected context still identifies
+ * Desktop. Respect DOCKER_HOST's precedence over a saved context. */
+export function dockerUnavailableMessage(env: NodeJS.ProcessEnv, operatingSystem?: string): string {
+  const context = env.DOCKER_CONTEXT ?? (env.DOCKER_HOST ? '' : spawnSync('docker', ['context', 'show'],
+    { env, encoding: 'utf8', timeout: 5_000 }).stdout?.trim());
+  const desktop = operatingSystem !== undefined ? operatingSystem.includes('Docker Desktop')
+    : context === 'desktop-linux' || (env.DOCKER_HOST ?? '').includes('/desktop/docker.sock');
+  return desktop
+    ? 'Docker is unavailable; start Docker Desktop with `systemctl --user start docker-desktop`'
+    : 'Docker is unavailable; start Docker Engine with `sudo systemctl start docker`';
+}
 
 function dockerInfo(field: string): DockerInfoProbe {
   return (candidate, timeoutMs) => {
@@ -29,14 +39,14 @@ function waitForDockerInfo(env: NodeJS.ProcessEnv, probe: DockerInfoProbe, clock
   let backoffMs = 250;
   while (true) {
     const remainingMs = Math.floor(deadline - now());
-    if (remainingMs <= 0) throw new Error(unavailableMessage);
+    if (remainingMs <= 0) throw new Error(dockerUnavailableMessage(env));
     const value = probe(env, Math.min(10_000, remainingMs));
     if (value !== undefined) {
-      if (value.trim() === '') throw new Error(unavailableMessage);
+      if (value.trim() === '') throw new Error(dockerUnavailableMessage(env));
       return value;
     }
     const waitMs = Math.min(backoffMs, deadline - now());
-    if (waitMs <= 0) throw new Error(unavailableMessage);
+    if (waitMs <= 0) throw new Error(dockerUnavailableMessage(env));
     sleep(waitMs);
     backoffMs = Math.min(backoffMs * 2, 2_000);
   }

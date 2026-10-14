@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, relative, resolve } from 'node:path';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { availableParallelism, freemem } from 'node:os';
 import { integrationGateFiles } from './integration-gate-files.ts';
 
 /** Outcome proofs may depend on public clients and fixture support, never product internals. */
@@ -307,20 +308,180 @@ export function repositoryGuardSelectionLine(changed: readonly string[], root = 
   return `Repository guards: ${present.length}/${repositoryGuards.length} selected for changed paths: ${changed.join(', ') || '(none)'}`;
 }
 
-// `task guards`: a worker runs the same rules before it hands off. Prints the failures or one summary line.
+/** A dependency scan and its Bun parent need up to 2 GiB. Keep the same 8 GiB
+ * host reserve as QA admission; a constrained host can still run one file. */
+export function guardParallelism(files: number, processors: number, availableBytes: number, reserveBytes = 8 * 1024 ** 3): number {
+  return files === 0 ? 0 : Math.max(1, Math.min(files, processors,
+    Math.floor((availableBytes - reserveBytes) / (2 * 1024 ** 3))));
+}
+
+function availableHostMemory(): number {
+  if (process.platform === 'linux') {
+    const available = /^MemAvailable:\s+(\d+)\s+kB$/m.exec(readFileSync('/proc/meminfo', 'utf8'));
+    if (available) return Number(available[1]) * 1024;
+  }
+  return freemem();
+}
+
+export function parseGuardRunArgs(args: readonly string[]): { files: string[]; bunArgs: string[]; report?: string } {
+  const files: string[] = [];
+  const bunArgs: string[] = [];
+  let report: string | undefined;
+  const valueOptions = new Set(['--timeout', '--preload', '--test-name-pattern', '-t', '--rerun-each', '--seed']);
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--reporter' || arg.startsWith('--reporter=')) {
+      const value = arg === '--reporter' ? args[++i] : arg.slice('--reporter='.length);
+      if (value !== 'junit') throw new Error('Repository guards support one junit reporter');
+    } else if (arg === '--reporter-outfile' || arg.startsWith('--reporter-outfile=')) {
+      report = arg === '--reporter-outfile' ? args[++i] : arg.slice('--reporter-outfile='.length);
+      if (!report || report.startsWith('--')) throw new Error('--reporter-outfile needs a path');
+    } else if (valueOptions.has(arg)) {
+      const value = args[++i];
+      if (!value || value.startsWith('--')) throw new Error(`${arg} needs a value`);
+      bunArgs.push(arg, value);
+    } else if (arg.startsWith('-')) bunArgs.push(arg);
+    else if (/\.(?:test|spec)\.[cm]?[jt]sx?$/.test(arg)) files.push(arg);
+    else throw new Error(`Expected an explicit test file, got ${arg}`);
+  }
+  return { files: [...new Set(files)], bunArgs, ...(report ? { report } : {}) };
+}
+
+function xmlEscape(value: string): string {
+  return value.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;').replaceAll("'", '&apos;');
+}
+
+function failedGuardReport(file: string, detail: string): string {
+  return `<testsuite name="${xmlEscape(file)}" file="${xmlEscape(file)}" tests="1" failures="1" skipped="0" time="0">`
+    + `<testcase name="Guard process did not complete" file="${xmlEscape(file)}" time="0">`
+    + `<error message="${xmlEscape(detail)}" /></testcase></testsuite>`;
+}
+
+interface GuardFileResult { file: string; code: number; output: string; suites: string }
+export interface GuardRunOptions {
+  cwd?: string;
+  bunArgs?: readonly string[];
+  report?: string;
+  env?: NodeJS.ProcessEnv;
+  parallelism?: number;
+}
+
+/** These six files consumed 81% of the measured serial run. Starting them first
+ * keeps short inventories from delaying the critical path on a bounded pool. */
+const slowGuardFiles = [
+  'services/account/tests/authentication-subject.test.ts',
+  'scripts/static/mechanism-dependencies.test.ts',
+  'tests/qa/unit/serialization-points.test.ts',
+  'scripts/static/web-acting-identity.test.ts',
+  'services/main/tests/g-543-rate-limit.test.ts',
+  'tests/qa/unit/g-1046-sql-relations.test.ts',
+];
+
+/** Each file has its own Bun module cache and fixtures. Reading the registered
+ * guards and helpers found only mkdtemp/UUID fixture writes, ephemeral ports,
+ * and one writer of .temp/web-acting-identity-inventory.json; no guards share
+ * mutable state. Contract builds return documents without writing generated files.
+ * Inherit admission/reaper ownership: a child must not acquire a second QA slot. */
+export async function runRepositoryGuardFiles(input: readonly string[], options: GuardRunOptions = {}): Promise<{
+  code: number; summary: string; report: string; parallelism: number;
+}> {
+  const cwd = options.cwd ?? process.cwd();
+  const env = options.env ?? process.env;
+  const reserveGiB = Number(env.REZICS_QA_HOST_RESERVE_GIB ?? 8);
+  if (!Number.isFinite(reserveGiB) || reserveGiB < 0 || env.REZICS_QA_HOST_RESERVE_GIB?.trim() === '')
+    throw new Error('REZICS_QA_HOST_RESERVE_GIB must be a nonnegative number');
+  const files = [...new Set(input)];
+  const parallelism = options.parallelism ?? guardParallelism(files.length, availableParallelism(), availableHostMemory(), reserveGiB * 1024 ** 3);
+  if (!Number.isSafeInteger(parallelism) || parallelism < (files.length ? 1 : 0)) throw new Error('Guard parallelism must be a positive integer');
+  const temporaryRoot = join(cwd, '.temp/repository-guards');
+  mkdirSync(temporaryRoot, { recursive: true });
+  const directory = mkdtempSync(join(temporaryRoot, 'run-'));
+  const report = resolve(cwd, options.report ?? join(directory, 'unit.xml'));
+  const started = performance.now();
+  const queue = [...files].sort((left, right) => {
+    const rank = (file: string) => {
+      const index = slowGuardFiles.indexOf(relative(cwd, resolve(cwd, file)).replaceAll('\\', '/'));
+      return index < 0 ? slowGuardFiles.length : index;
+    };
+    return rank(left) - rank(right);
+  });
+  const results = new Map<string, GuardFileResult>();
+  const children = new Set<ReturnType<typeof Bun.spawn>>();
+  let interrupted = false;
+  const stop = () => {
+    interrupted = true;
+    for (const child of children) child.kill('SIGTERM');
+  };
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+  async function worker(): Promise<void> {
+    while (queue.length && !interrupted) {
+      const file = queue.shift()!;
+      const index = files.indexOf(file);
+      const childReport = join(directory, `${index}.xml`);
+      let output = '';
+      let suites = '';
+      let code = 1;
+      try {
+        // Stay in the caller's process group so gate cancellation also reaches
+        // depcruise and other grandchildren. Options (including preloads) survive.
+        const child = Bun.spawn([process.execPath, 'test', ...(options.bunArgs ?? []),
+          resolve(cwd, file), '--reporter=junit', `--reporter-outfile=${childReport}`],
+        { cwd, env: { ...env, FORCE_COLOR: '0' }, stdout: 'pipe', stderr: 'pipe' });
+        children.add(child);
+        try {
+          const [stdout, stderr, exitCode] = await Promise.all([
+            new Response(child.stdout).text(), new Response(child.stderr).text(), child.exited,
+          ]);
+          output = `${stdout}${stderr}`;
+          code = exitCode;
+        } finally { children.delete(child); }
+        const xml = existsSync(childReport) ? readFileSync(childReport, 'utf8') : '';
+        suites = [...xml.matchAll(/<testsuite\b[^>]*>[\s\S]*?<\/testsuite>/g)].map(match => match[0]).join('\n');
+        if (!suites || (code !== 0 && !/<(?:failure|error)\b/.test(suites))) {
+          output += `\nerror: Guard process exited (${code}) without ${suites ? 'a reported failure' : 'a complete JUnit report'}`;
+          code = 1;
+          suites += failedGuardReport(file, output.trim());
+        }
+        // A failure in the report cannot be masked by an incorrect exit code.
+        if (/<(?:failure|error)\b/.test(suites)) code = 1;
+      } catch (error) {
+        output += `\nerror: ${String(error)}`;
+        suites = failedGuardReport(file, output.trim());
+      } finally { rmSync(childReport, { force: true }); }
+      writeFileSync(join(directory, `${index}.log`), output);
+      results.set(file, { file, code, output, suites });
+    }
+  }
+  try { await Promise.all(Array.from({ length: Math.min(parallelism, files.length) }, worker)); }
+  finally { process.off('SIGINT', stop); process.off('SIGTERM', stop); }
+  for (const file of queue) results.set(file, { file, code: 1, output: 'Guard run interrupted',
+    suites: failedGuardReport(file, 'Guard run interrupted before this file started') });
+  const ordered = files.map(file => results.get(file)!);
+  const suites = ordered.map(result => result.suites).join('\n');
+  const sum = (name: string) => [...suites.matchAll(new RegExp(`<testsuite\\b[^>]*\\b${name}="(\\d+)"`, 'g'))]
+    .reduce((total, match) => total + Number(match[1]), 0);
+  mkdirSync(dirname(report), { recursive: true });
+  writeFileSync(report, `<?xml version="1.0" encoding="UTF-8"?>\n<testsuites tests="${sum('tests')}" failures="${sum('failures')}" skipped="${sum('skipped')}" time="${(performance.now() - started) / 1000}">\n${suites}\n</testsuites>\n`);
+  const failed = ordered.filter(result => result.code !== 0);
+  const failures = failed.map(result => `${result.file}:\n${result.output.trim()}`).join('\n\n');
+  const summary = `${failures ? `${failures}\n\n` : ''}Repository guards ${failed.length ? 'failed' : 'passed'}: ${files.length} files, ${sum('tests')} tests, ${failed.length} failing files; ${parallelism} parallel processes; JUnit: ${report}`;
+  return { code: interrupted || failed.length ? 1 : 0, summary, report, parallelism };
+}
+
 if (import.meta.main) {
-  const files = repositoryGuards.map((guard) => guard.file).filter((file) => existsSync(file));
-  const run = Bun.spawnSync(['bun', 'test', ...files], { stdout: 'pipe', stderr: 'pipe' });
-  const lines = `${run.stdout.toString()}${run.stderr.toString()}`.split('\n');
-  const summary = lines.filter((line) => /^\s*\d+ (pass|fail)\b|^Ran \d+ tests/.test(line));
-  if (run.exitCode === 0)
-    console.log(`Repository guards passed: ${summary.join(',').replace(/\s+/g, ' ').trim()}`);
-  else
-    console.log(
-      [
-        ...lines.filter((line) => /^\(fail\)|^error:|^\s+error:/.test(line)).slice(0, 60),
-        ...lines.slice(-25),
-      ].join('\n'),
-    );
-  process.exit(run.exitCode ?? 1);
+  try {
+    const args = process.argv.slice(2);
+    const selected = parseGuardRunArgs(args);
+    // Omitted arguments mean the complete registry; explicit runs never widen.
+    const files = args.length ? selected.files : repositoryGuards.map(guard => guard.file).filter(file => existsSync(file));
+    if (args.length && !files.length) throw new Error('Provide explicit guard test files');
+    const result = await runRepositoryGuardFiles(files, { bunArgs: selected.bunArgs, report: selected.report });
+    console.log(result.summary);
+    process.exit(result.code);
+  } catch (error) {
+    console.error(`error: ${String(error)}`);
+    process.exit(1);
+  }
 }
