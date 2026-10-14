@@ -1,28 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, type Locator, type Page, test } from '@playwright/test';
+import { expect, test } from '@playwright/test';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
 import type { VisualNovelHubFixture } from './visual-novel-hub-seed.ts';
+import { chooseByKeyboard } from './journeys/keyboard-choice.ts';
 
 test.use({ actionTimeout: 15_000 });
-
-// Ark's choice list uses arrow keys, rather than Tab, within the open listbox.
-async function choose(page: Page, control: Locator, option: Locator, found: Findings) {
-  await pressByKeyboard(page, control, found, await control.getAttribute('aria-label') ?? 'Choice');
-  await expect(option).toBeVisible();
-  await page.keyboard.press('Home');
-  for (let index = 0; index < 30; index++) {
-    if (await option.getAttribute('data-highlighted') !== null) {
-      await page.keyboard.press('Enter');
-      return;
-    }
-    await page.keyboard.press('ArrowDown');
-  }
-  throw new Error('The choice is not reachable with the arrow keys');
-}
 
 for (const locale of ['en', 'ja'] as const) {
   test(`visual-novel-hub / ${locale}: a player chooses a release by keyboard and returns to the saved edition`, async ({ page }, info) => {
@@ -44,11 +30,11 @@ for (const locale of ['en', 'ja'] as const) {
       await expect(availability).toContainText('Windows');
       await expect(availability).toContainText('Linux');
       const language = availability.getByRole('combobox', { name: t.language, exact: true });
-      await choose(page, language, page.getByRole('option', { name: t.english, exact: true }), found);
+      await chooseByKeyboard(page, language, page.getByRole('option', { name: t.english, exact: true }), found);
       // Choose both alternatives so a pre-existing preference cannot make this a no-op.
       for (const release of fixture.releases) {
         const edition = availability.getByRole('combobox', { name: t.edition, exact: true });
-        await choose(page, edition, page.getByRole('option', { name: new RegExp(`^${release.title} ·`) }), found);
+        await chooseByKeyboard(page, edition, page.getByRole('option', { name: new RegExp(`^${release.title} ·`) }), found);
         await expect(edition).toContainText(release.title);
         await pressByKeyboard(page, availability.getByRole('button', { name: t.save, exact: true }), found, t.save);
         await expect(availability.getByRole('status')).toHaveText(t.saved);

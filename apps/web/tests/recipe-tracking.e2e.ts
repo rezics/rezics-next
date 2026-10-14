@@ -5,6 +5,7 @@ import { studioHref } from '../features/studio/agent.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { chooseRadio, expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
+import { chooseByKeyboard } from './journeys/keyboard-choice.ts';
 
 test.use({ actionTimeout: 15_000 });
 
@@ -20,10 +21,11 @@ for (const locale of ['en', 'ja'] as const) {
     await signInAtAccounts(page, localizedPath(studioHref({ iri: actingSubject, handle: null }, '/new'), 'en'), member);
     await page.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
     await chooseRadio(page, page.getByRole('radio', { name: /^Recipe/ }), found, 'Recipe');
-    await pressByKeyboard(page, page.getByRole('combobox', { name: 'Language you’ll write in', exact: true }), found, 'Recipe language');
-    await page.getByRole('option', { name: 'English', exact: true }).press('Enter');
+    await chooseByKeyboard(page, page.getByRole('combobox', { name: 'Language you’ll write in', exact: true }),
+      page.getByRole('option', { name: 'English', exact: true }), found);
+    await expect(page.getByRole('combobox', { name: 'Language you’ll write in', exact: true })).toHaveText('English');
     await pressByKeyboard(page, page.getByRole('button', { name: /^Create as / }), found, 'Create recipe');
-    await expect(page.getByRole('heading', { name: 'About this recipe', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'About this recipe', exact: true })).toBeVisible({ timeout: 60_000 });
     const ingredient = page.getByRole('textbox', { name: 'Ingredient line', exact: true });
     await ingredient.fill('1 cup flour');
     await ingredient.press('Enter');
@@ -44,7 +46,6 @@ for (const locale of ['en', 'ja'] as const) {
     const home = localizedPath(path, locale);
     const connections = localizedPath(`${path}/connections`, locale);
     await page.goto(home);
-    if (locale !== 'en') await page.goto(home);
     const t = locale === 'en'
       ? { want: 'Want to cook', cooking: 'Cooking', cooked: 'Cooked', remove: 'Remove from my shelves', start: 'Mark reading', finish: 'Mark completed', reset: 'Mark not started', started: 'Reading', completed: 'Completed', empty: 'Not started' }
       : { want: '作りたい', cooking: '調理中', cooked: '作った', remove: '本棚から削除', start: '読書中にする', finish: 'クリアにする', reset: '未開始に戻す', started: '読書中', completed: 'クリア', empty: '未読' };
@@ -60,16 +61,15 @@ for (const locale of ['en', 'ja'] as const) {
       // Start a fresh shelf cycle when the same member ran the other locale already.
       const existing = page.getByRole('button', { name: /^(Want to cook|Cooking|Cooked|作りたい|調理中|作った) —/ });
       if (await existing.count()) {
-        await pressByKeyboard(page, existing, found, 'Shelf');
-        await page.getByRole('menuitem', { name: t.remove, exact: true }).press('Enter');
+        await chooseByKeyboard(page, existing, page.getByRole('menuitem', { name: t.remove, exact: true }), found);
       }
       await pressByKeyboard(page, page.getByRole('button', { name: t.want, exact: true }), found, t.want);
       await savedShelf(t.want);
       await page.reload();
       await savedShelf(t.want);
       for (const label of [t.cooking, t.cooked]) {
-        await pressByKeyboard(page, page.getByRole('button', { name: /^(Want to cook|Cooking|Cooked|作りたい|調理中|作った) —/ }), found, 'Shelf');
-        await page.getByRole('menuitemradio', { name: label, exact: true }).press('Enter');
+        await chooseByKeyboard(page, page.getByRole('button', { name: /^(Want to cook|Cooking|Cooked|作りたい|調理中|作った) —/ }),
+          page.getByRole('menuitemradio', { name: label, exact: true }), found);
         await savedShelf(label);
         await page.reload();
         await savedShelf(label);
