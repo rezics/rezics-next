@@ -87,6 +87,24 @@ workspace `.env.example` files show variables. Personal overrides belong in
 the ignored root `.env.dev`, not `.env` or `.env.local`, which Bun can load into
 unrelated processes.
 
+## Shared repository parser
+
+The repository guards share the native `tools/repo-index` package, built with
+Rust/Cargo 1.98.1 by `task repo-index:build`. Oxc parses TypeScript and TSX and
+resolves imports ([parser](https://docs.rs/oxc_parser/0.152.0/oxc_parser/),
+[resolver](https://docs.rs/oxc_resolver/11.24.3/oxc_resolver/));
+[`pg_query`](https://docs.rs/pg_query/6.2.0/pg_query/) embeds
+[`libpg_query`](https://github.com/pganalyze/libpg_query)'s PostgreSQL parser and scanner for SQL
+facts. Guard policy, messages and debt lists remain in TypeScript. The reader
+builds a missing or changed binary before use; its content digest reuses an
+unchanged JSON index under `.temp/`. `Cargo.lock` pins transitive crates.
+ASTs use compressed JSON strings so the import guard reads graph facts without
+materializing every syntax tree; source guards inflate the trees they inspect.
+Task keeps Cargo's registry and build output in this worktree's `.temp/`.
+Building needs a C compiler and libclang development headers for `pg_query`'s
+bindings. The Task command supplies the C compiler's system include directory
+when `BINDGEN_EXTRA_CLANG_ARGS` is unset.
+
 ## Turtle model compilation
 
 The model compiler uses [N3.js](https://github.com/rdfjs/N3.js) (MIT) to parse
@@ -276,6 +294,7 @@ by `goalctl` ([program](../goals/program/GOAL.md#how-managers-run-from-now-on));
 | Aspire SDK | 13.5.4 | aspire.config.json |
 | Go package oracle | 1.27.1 | scripts/package/go-oracle.ts |
 | Cargo package oracle | 1.98.1 | scripts/package/cargo-oracle.ts |
+| Repository index Rust/Cargo | 1.98.1 | tools/repo-index/Cargo.toml; Taskfile.yml |
 | npm package oracle | 11.19.1 | scripts/package/npm-oracle.ts |
 
 ### Direct workspace packages
@@ -423,6 +442,25 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | webpack | 5.110.3 | apps/accounts, apps/web |
 | wrangler | 4.137.0 | apps/about, apps/accounts, apps/web |
 
+### Repository index crates
+
+Exact direct pins from `tools/repo-index/Cargo.toml`; its Cargo.lock records the native parser dependencies.
+
+| Crate | Pin |
+| --- | --- |
+| base64 | 0.22.1 |
+| blake3 | 1.8.3 |
+| flate2 | 1.1.5 |
+| oxc_allocator | 0.152.0 |
+| oxc_ast | 0.152.0 |
+| oxc_ast_visit | 0.152.0 |
+| oxc_parser | 0.152.0 |
+| oxc_resolver | 11.24.3 |
+| oxc_span | 0.152.0 |
+| pg_query | 6.2.0 |
+| serde | 1.0.228 |
+| serde_json | 1.0.149 |
+
 ### Service and Fuseki build images
 
 | Source | Image and digest |
@@ -542,6 +580,11 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task api:fuzz` | Run Schemathesis against Main's generated OpenAPI contract on an isolated stack. |
 | `task gen` | Regenerate model, OpenAPI and pinned-image artifacts and the toolchain inventory. |
 | `task gen:check` | Fail if generated artifacts are stale. |
+| `task repo-index:build` | Build the shared Rust repository parser with pinned Cargo 1.98.1. |
+| `task repo-index:lock` | Resolve and lock the exact direct Rust repository-index dependency pins. |
+| `task repo-index:format` | Format the shared Rust repository-index package. |
+| `task repo-index:test` | Test Rust source parsing, SQL facts and content-index invalidation. |
+| `task repo-index:run` | Parse repository sources once or reuse their content-digest index. |
 | `task operation` | Find Main API operation declarations, handlers and calling tests. |
 | `task jena:check` | Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI. |
 | `task jena:image` | Obtain the input-pinned Fuseki image, building once per tag under a host-wide lock. |
