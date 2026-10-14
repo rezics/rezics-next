@@ -168,4 +168,36 @@ public class CatalogueRankIteratorWorkTest {
     private static void bounded(List<String> failures, String label, long actual, long ceiling) {
         if (actual > ceiling) failures.add(label + ": " + actual + " > " + ceiling);
     }
+
+    @Test public void matchingTitleTiesStopAtTheNativePageBound() throws Exception {
+        var failures = new ArrayList<String>();
+        for (boolean realm : List.of(false, true)) try (var fixture = new RealmSearchSeekTest.Fixture()) {
+            RealmSearchSeekTest.Owner first = null;
+            long baselineNext = 0, baselineAdvance = 0;
+            int population = 0;
+            for (int size : new int[] {10, 26, 74, 200}) {
+                while (population < size) {
+                    if (!fixture.data.isInTransaction()) fixture.data.begin(ReadWrite.WRITE);
+                    var owner = add(fixture, 30000 + population * 10, realm, PHRASE, "Unrelated article");
+                    if (first == null) first = owner;
+                    fixture.committed(); population++;
+                }
+                fixture.data.begin(ReadWrite.READ);
+                try (var work = new CommandWork()) {
+                    var page = fixture.index.ranked(p("searchBody"), WORD, 1, null, fixture.data,
+                        new FilteredGraphTextIndex.RankScope(realm ? id(1).getURI() : null, null, null, true));
+                    assertEquals(1, page.hits().size()); assertTrue(page.more());
+                    assertEquals(first.main().getURI(), page.hits().getFirst().key());
+                    assertEquals(2_000_000f, page.hits().getFirst().score(), 0f);
+                    long next = CommandWork.currentCount("rank_lucene_iterator_next_calls");
+                    long advance = CommandWork.currentCount("rank_lucene_iterator_advance_calls");
+                    System.out.printf("catalogue matching titles size=%d realm=%s next=%d advance=%d%n", size, realm, next, advance);
+                    if (size == 10) { baselineNext = next; baselineAdvance = advance; }
+                    bounded(failures, "matching-title next calls size=" + size + " realm=" + realm, next, baselineNext + 8);
+                    bounded(failures, "matching-title advance calls size=" + size + " realm=" + realm, advance, baselineAdvance + 16);
+                } finally { fixture.data.end(); }
+            }
+        }
+        assertTrue(String.join("\n", failures), failures.isEmpty());
+    }
 }
