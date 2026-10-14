@@ -102,6 +102,7 @@ import {
   type RecoveryCoverage,
 } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { readEnv } from '../../../scripts/dev/config.ts';
+import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import {
   accessOutboxCoverage,
   accessStateCoverage,
@@ -1960,7 +1961,7 @@ done' sh {} +`], docker, 60_000);
 }
 
 /** Relative import closure binds the actual producer/helper/service bytes rather than Git HEAD. */
-function producerModules(root: string, initial: readonly string[]): string[] {
+export function producerModules(root: string, initial: readonly string[]): string[] {
   const paths = new Set<string>();
   const visit = (path: string) => {
     if (paths.has(path)) return;
@@ -1975,7 +1976,7 @@ function producerModules(root: string, initial: readonly string[]): string[] {
     }
   };
   for (const path of initial) visit(path);
-  // Runtime model/native definitions are read as data rather than imported TS modules.
+  // Runtime model definitions are read as data rather than imported TS modules.
   const walk = (directory: string) => {
     for (const entry of readdirSync(join(root, directory), { withFileTypes: true })) {
       const path = `${directory}/${entry.name}`;
@@ -1983,7 +1984,8 @@ function producerModules(root: string, initial: readonly string[]): string[] {
       else if (entry.isFile()) paths.add(path);
     }
   };
-  for (const directory of ['packages/model/src', 'infra/fuseki']) walk(directory);
+  walk('packages/model/src');
+  for (const path of fusekiBuildInputs(root)) paths.add(path);
   return [...paths].sort();
 }
 
