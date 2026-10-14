@@ -6,6 +6,11 @@ working in your own worktree on a `goal/<id>` branch. Your brief
 task. Priority when guidance differs: the brief, then this page, then `AGENTS.md`
 and other documents. Documents record practice; the code is the truth.
 
+A wave build task (a brief with a `## Wave` section, or a resume that says so)
+follows [Waves](wave.md) instead of the Scope, Checks and landing parts of this
+page. It is not bounded by claims, its own or another task's, and it starts no
+QA stack.
+
 ## Finish the work
 
 Begin with the brief's failing outcome tests and the files most likely to

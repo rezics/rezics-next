@@ -16,11 +16,18 @@ one branch replaces hundreds of per-task stack runs.
 
 The brief names the work and an area. It has no `tests:` and no `land: auto`.
 
-1. Before editing: `git merge --ff-only wave/<n>`. If your branch already has
-   commits, run `git rebase wave/<n>` instead.
+1. Before editing, if your branch has no commits of its own: `git reset --hard
+   wave/<n>` (your brief lives outside git and stays). If it has commits:
+   `git rebase wave/<n>`. Program merges `main` into `wave/<n>` from time to
+   time, so the pages and briefs you read there are current.
 2. Implement. Write the tests that prove it: outcome tests for API rows, unit
    tests, and stories for surfaces. Read the row's existing outcome test as its
-   specification.
+   specification. A brief's `paths:` do not limit a build task. Change any file
+   the outcome needs, native modules included. Repair from reading the code:
+   the run that shows the failure before and the pass after happens in the
+   prove phase. When reading leaves two possible causes, repair the more likely
+   one, add a test for each, and say which in the handoff. A handoff that only
+   adds tests is a build task left unfinished.
 3. Run only the checks that need no stack: `task goal -- check --only
    types,lint,guards`, plus `bun test` on unit test files that start no stack.
    Do not run `task goal -- test`, an integration or outcome test, a
