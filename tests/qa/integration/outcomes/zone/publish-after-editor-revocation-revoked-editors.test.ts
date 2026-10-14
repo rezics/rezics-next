@@ -2,13 +2,15 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
-import { commandInstance } from '../../../../../apps/web/features/api/command.ts';
-import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
-import { settle } from '../../../../../apps/web/features/manage/read.ts';
-import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
-import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
-import { authoringModel, draftChoice, draftWire, publicationChoice, reduceEditor } from '../../../../../apps/web/features/zone-editor/model.ts';
+import { readManagementAddress, suppliedManagementSite, zoneAuthoringFromAddress, zoneLifecycleFromAddress, zoneManagementFrameFromReads } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
+import { loadSavedPreviewFrame } from '../../../../../apps/web/features/zone-editor/saved-preview-frame.ts';
+import { readShowcaseEditor, showcaseEditorAuthority } from '../../../../../apps/web/features/zone-editor/edit-site-link.tsx';
+import { independentZoneHomeBoundary, readIndependentZoneHome } from '../../../../../apps/web/features/zones/independent-zone-recorded-page.ts';
+import { installedDigest, loadPackage } from '../../../../../apps/web/zones/official/index.ts';
+import { declaredData } from '../../../../../apps/web/zones/official/declared.ts';
+import { browserZoneAuthoring, commitCommand, loadCompleteZoneNavigation, zoneCommandLane } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { draftChoice, draftWire, publicationChoice, reduceEditor } from '../../../../../apps/web/features/zone-editor/model.ts';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import revoked from '../../../../../scripts/qa/cases/outcomes/zone/publish-after-editor-revocation-revoked-editors.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -354,94 +356,70 @@ async function productionVisit(name: PersonaName) {
   const main = browserMainApi('https://record.invalid', { fetcher: transport(false) });
   const publicMain = browserMainApi('https://record.invalid', { anonymous: true, fetcher: transport(true) });
   const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
-  // /z/[space]/[[...path]] resolves the public site first. Its home metadata
-  // reads the route while standaloneSite reads the complete presentation.
   const publicFrame = realmFrameReads({ main: publicMain, keepProblem: false });
-  const resolved = await requestLabels.run(path => path.startsWith('/v1/addresses/')
-    ? 'public-site-address' : 'public-site-presentation', () => publicFrame.resolveSite(site.space.slice(-36), 'en'));
+  let publicPresentation: ReturnType<typeof publicFrame.readCompletePresentation> | undefined;
+  const publicPages = realmFrameReads({ main: publicMain, keepProblem: false, resolution: {
+    readCompletePresentation: zone => publicPresentation ??= named('public-site-presentation',
+      () => publicFrame.readCompletePresentation(zone)),
+  } });
+  const resolved = await named('public-site-address', () => publicPages.resolveSite(site.space.slice(-36), 'en'));
   if (resolved.kind !== 'site') return;
   const personalFrame = realmFrameReads({ main: publicMain, personal: main,
     actingSubject: subject ?? undefined, keepProblem: false });
+  // The public home and its metadata share resolution. The metadata route and
+  // the home's presentation can start together; the edit link follows the home.
   await Promise.all([
     named('public-home-route', () => personalFrame.readZoneRoute(resolved.zone, '/')),
-    // Anonymous resolveSite and standaloneSite share the cached presentation.
-    ...(subject ? [named('public-home-presentation', () => personalFrame.readCompletePresentation(resolved.zone))] : []),
+    readIndependentZoneHome(independentZoneHomeBoundary({ production: {
+      resolveSite: async () => resolved,
+      readCompletePresentation: zone => subject
+        ? named('public-home-presentation', () => personalFrame.readCompletePresentation(zone))
+        : publicPresentation!,
+    }, editorOpen: subject ? async (zone, actor) => named('public-home-editor', async () =>
+      showcaseEditorAuthority(await readShowcaseEditor(main, zone, actor))) : null }), {
+      space: site.space.slice(-36), locale: 'en', actingSubject: subject ?? undefined,
+    }),
   ]);
   // manager() sends an anonymous visitor to sign-in before any management reads.
   if (!subject) return;
-  const nativeFetch = globalThis.fetch;
-  // readSpacePage uses the server transport, not Eden. Route only its recording origin.
-  globalThis.fetch = (async (input, init) => {
-    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
-    if (url.origin !== 'https://record.invalid') return nativeFetch(input, init);
-    return transport(!new Headers(init?.headers).has('authorization'))(input, init);
-  }) as typeof fetch;
-  try {
-    async function render(prefix: 'management' | 'saved-preview') {
-      let freshResolution = false;
-      const frame = realmFrameReads({ main: publicMain, keepProblem: false, resolution: {
-        readPrivateRealm: (ref, _locale, address) => requestLabels.run(path => path.includes('/join-page')
-          ? `${prefix}-fallback-join${freshResolution ? '-fresh' : ''}`
-          : `${prefix}-fallback-realm${freshResolution ? '-fresh' : ''}`, () => readSpacePage(ref, 'en', {
-          address, actingSubject: subject!, token: 'recording-persona', origin: 'https://record.invalid', incoming: new Headers(),
-        })),
-      } });
-      const address = await resolveZoneManagementAddress(site.zone.slice(-36), 'en', {
-        configuration: id => named(`${prefix}-configuration`, () => settle(() =>
-          main.v1.zones({ id }).configuration.get({ query: { actingSubject: subject } }), { management: true })),
-        site: async (ref, locale) => {
-          const resolveSite = (fresh: boolean) => {
-            freshResolution = fresh;
-            return requestLabels.run(path => path.startsWith('/v1/addresses/')
-              ? `${prefix}-address${fresh ? '-fresh' : ''}` : `${prefix}-site-presentation${fresh ? '-fresh' : ''}`,
-            () => frame.resolveSite(ref, locale, fresh));
-          };
-          const resolved = await resolveSite(false);
-          return resolved.kind === 'missing' ? resolveSite(true) : resolved;
-        },
-      });
-      if (address.kind !== 'site') return null;
-      // Layout and home share the address and authoring cache. Independent render reads start together.
-      const [editor, zone] = await Promise.all([
-        named(`${prefix}-editor`, () => settle(() => main.v1.zones({ id: address.site.zone })['showcase-editor']
-          .get({ query: { actingSubject: subject } }), { management: true })),
-        named(`${prefix}-zone`, () => settle(() => main.v1.zones({ id: address.site.zone })
-          .get({ query: { actingSubject: subject } }), { management: true })),
-        ...(address.binding ? [] : [named(`${prefix}-lifecycle-configuration`, () => settle(() =>
-          main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject: subject } }), { management: true }))]),
-      ]);
-      if (!editor.ok || !zone.ok) return null;
-      const model = authoringModel(editor.data, zone.data, address.site.zone, site.zone.slice(-36));
-      if (!model) throw new Error('Production authoring reads did not form an editor');
-      return { model, preview: editor.data.preview };
-    }
-    const opened = await render('management');
-    if (!opened) return;
-    const preview = await render('saved-preview');
-    if (!preview) return;
-    const navigation = await named('saved-preview-navigation', () => loadCompleteZoneNavigation(main,
-      site.zone.slice(-36), subject, preview.model.state));
-    if (!navigation.ok) throw new Error(`Production saved preview failed: ${navigation.failure}`);
-    if (preview.preview.presentation.official?.theme) {
-      await named('saved-preview-theme-report', () => realmFrameReads({ main: publicMain, personal: main,
-        actingSubject: subject, keepProblem: false }).readCompletePresentation(site.zone.slice(-36)));
-    }
-    const client = browserZoneAuthoring(main);
-    let state = reduceEditor(opened.model.state, { type: 'edit',
-      value: JSON.stringify(fromPlainText('Restored editor production garden', 'blocks')) });
-    const choice = draftChoice(state, subject);
-    const save = commandInstance();
-    const saved = await named('editor-save', () => client.saveDraft(draftWire(choice), save.id()));
-    save.finish(saved);
-    if (!saved.ok) throw new Error(`Production save failed: ${saved.failure}`);
-    state = reduceEditor(state, { type: 'saved', captured: choice.captured, savedValue: choice.savedValue,
-      basis: saved.data, replayed: saved.data.replayed });
-    const publication = publicationChoice(state);
-    if (!publication) throw new Error('Production editor has no saved publication choice');
-    const publish = commandInstance();
-    const published = await named('editor-publication', () => client.publish(publication, subject,
-      publish.id(), site.zone.slice(-36)));
-    publish.finish(published);
-    if (!published.ok) throw new Error(`Production publication failed: ${published.failure}`);
-  } finally { globalThis.fetch = nativeFetch; }
+  const space = site.zone.slice(-36);
+  async function render(prefix: 'management' | 'saved-preview') {
+    const address = await named(`${prefix}-configuration`, () => readManagementAddress(main, space, 'en', subject!,
+      (ref, locale) => named(`${prefix}-address`, () => suppliedManagementSite(main, subject!)(ref, locale))));
+    // Layout and home share one address. The imported readers start the editor,
+    // Zone and any lifecycle configuration together, as loadZoneManagementFrame does.
+    const [authoring, lifecycle] = await Promise.all([
+      requestLabels.run(path => path.includes('/showcase-editor') ? `${prefix}-editor` : `${prefix}-zone`,
+        () => zoneAuthoringFromAddress(main, space, subject!, address)),
+      named(`${prefix}-lifecycle-configuration`, () => zoneLifecycleFromAddress(main, space, subject!, address)),
+    ]);
+    return zoneManagementFrameFromReads(main, space, subject!, authoring, lifecycle, null);
+  }
+  const opened = await render('management');
+  if (opened.authoring.kind !== 'ready') return;
+  const preview = await loadSavedPreviewFrame({
+    authoring: async () => (await render('saved-preview')).authoring,
+    navigation: saved => named('saved-preview-navigation', () => loadCompleteZoneNavigation(main,
+      saved.model.zoneId, subject, saved.model.state)),
+    presentation: zone => named('saved-preview-theme-report', () => personalFrame.readPresentation(zone)),
+    realmHeader: realm => named('saved-preview-realm-header', () => publicFrame.readRealmHeader(realm)),
+    installedDigest, packages: { load: loadPackage, declarations: declaredData },
+  }, { locale: 'en', homeName: 'Home', lookEnabled: false });
+  if (preview.kind !== 'ready') return;
+  const client = browserZoneAuthoring(main);
+  let state = reduceEditor(opened.authoring.model.state, { type: 'edit',
+    value: JSON.stringify(fromPlainText('Restored editor production garden', 'blocks')) });
+  const choice = draftChoice(state, subject);
+  const save = zoneCommandLane<typeof choice, Awaited<ReturnType<typeof client.saveDraft>>>({ ok: false, failure: 'unavailable' });
+  const saved = await named('editor-save', () => save.submit(choice,
+    (chosen, round) => commitCommand(round, key => client.saveDraft(draftWire(chosen), key))));
+  if (!saved.ok) throw new Error(`Production save failed: ${saved.failure}`);
+  state = reduceEditor(state, { type: 'saved', captured: choice.captured, savedValue: choice.savedValue,
+    basis: saved.data, replayed: saved.data.replayed });
+  const publication = publicationChoice(state);
+  if (!publication) throw new Error('Production editor has no saved publication choice');
+  const publish = zoneCommandLane<typeof publication, Awaited<ReturnType<typeof client.publish>>>({ ok: false, failure: 'unavailable' });
+  const published = await named('editor-publication', () => publish.submit(publication,
+    (chosen, round) => commitCommand(round, key => client.publish(chosen, subject, key, space))));
+  if (!published.ok) throw new Error(`Production publication failed: ${published.failure}`);
 }
