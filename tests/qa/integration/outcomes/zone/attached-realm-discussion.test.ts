@@ -27,6 +27,8 @@ afterAll(async () => {
 
 import discussion from '../../../../../scripts/qa/cases/outcomes/zone/attached-realm-discussion.ts';
 const recording = new OutcomeRecorder(discussion);
+let bodyPage: Page, privateBodyPage: Page;
+let bodyOpener: Posted, privateBodyOpener: Posted;
 type Page = {
   realm: string;
   zone: string;
@@ -194,6 +196,8 @@ beforeAll(async () => {
   await recording.prepare();
   sessions = await personaSessions('public');
   privateSessions = await personaSessions('private');
+  bodyPage = await answerPage(sessions, 'read-discussion');
+  privateBodyPage = await answerPage(privateSessions, 'read-private-discussion');
   publicPage = await answerPage(sessions, 'public');
   privatePage = await answerPage(privateSessions, 'private');
   ownerPage = await answerPage(sessions, 'owner');
@@ -210,6 +214,12 @@ beforeAll(async () => {
       )
     ).revision;
   }
+  for (const [fixture, page] of [[sessions, bodyPage], [privateSessions, privateBodyPage]] as const) {
+    page.routeRevision = (await answer<{ revision: string }>(fixture.owner.main('GET',
+      `/v1/zones/${short(page.zone)}/routes?${new URLSearchParams({ path: page.path })}`))).revision;
+  }
+  bodyOpener = await answer<Posted>(post(sessions.owner, bodyPage, 'Original public discussion body and author credit.'), 201);
+  privateBodyOpener = await answer<Posted>(post(privateSessions.owner, privateBodyPage, 'Original private discussion body and author credit.'), 201);
 }, 240_000);
 function lookup(person: PersonaSession, page: Page,
   sample?: ReturnType<typeof recording.session>, label = 'about-thread') {
@@ -291,6 +301,7 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
   expect(canonical.thread!.rootRevision).toBe(page.targetRevision);
   expect(canonical.thread!.reply).toBe(opener.reply);
   const read = await thread(first, page, canonical.thread!.reply);
+  if (sample) await canonicalBody(sample, first, page, canonical.thread!.reply, 'canonical-about-thread-body');
   expect(read.rootRevision).toBe(page.targetRevision);
   expect(read.items.map((item) => item.reply).sort()).toEqual([opener.reply, a.reply, b.reply].sort());
   for (const [posted, body] of [
@@ -350,6 +361,9 @@ outcomeTest(discussion, 'visitor', async () => {
     'current-discussion-target', 'realm-policy', false);
   await visitorEntryReads(recording.session('visitor', privateSessions.visitor), privatePage,
     'private-discussion-route', 'private-discussion-target', 'private-realm-policy', true);
+  await canonicalBody(sample, sessions.visitor, bodyPage, bodyOpener.reply, 'canonical-discussion-thread');
+  await canonicalBody(recording.session('visitor', privateSessions.visitor), privateSessions.visitor,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread', 404);
 }, recording);
 outcomeTest(discussion, 'stranger', async () => {
   const sample = recording.session('stranger', sessions.stranger);
@@ -358,6 +372,8 @@ outcomeTest(discussion, 'stranger', async () => {
   expect(await answer(lookup(sessions.stranger, publicPage))).toEqual(canonical);
   expect(await answer(lookup(sessions.visitor, publicPage))).toEqual(canonical);
   await supportingReads(sample, sessions.stranger, publicPage, canonical);
+  await canonicalBody(recording.session('stranger', privateSessions.stranger), privateSessions.stranger,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread', 404);
   // The contribution does not join the stranger to the attached Realm.
   const joining = await answer<{ state: string }>(
     sessions.stranger.main(
@@ -373,11 +389,15 @@ outcomeTest(discussion, 'member', async () => {
   expect(await answer(lookup(privateSessions.member, privatePage))).toEqual(canonical);
   await privateAccess('stranger', 404);
   await privateAccess('operator', 404);
+  await canonicalBody(recording.session('member', privateSessions.member), privateSessions.member,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread');
 }, recording);
 outcomeTest(discussion, 'owner', async () => {
   const sample = recording.session('owner', sessions.owner);
   await privateAccess('owner', 200, recording.session('owner', privateSessions.owner));
   const canonical = await concurrent(ownerPage, sessions.owner, sessions.member, sample);
+  await canonicalBody(recording.session('owner', privateSessions.owner), privateSessions.owner,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread');
   const before = await discussionState(sessions.owner, ownerPage);
   try {
     await answer(
@@ -406,6 +426,9 @@ outcomeTest(discussion, 'owner', async () => {
 outcomeTest(discussion, 'moderator', async () => {
   const sample = recording.session('moderator', sessions.moderator);
   await privateAccess('moderator', 200, recording.session('moderator', privateSessions.moderator));
+  await canonicalBody(sample, sessions.moderator, bodyPage, bodyOpener.reply, 'canonical-discussion-thread');
+  await canonicalBody(recording.session('moderator', privateSessions.moderator), privateSessions.moderator,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread');
   const root = `/v1/realms/${short(sessions.realm)}/settings`;
   const current = await answer<{
     generation: string;
@@ -458,6 +481,8 @@ outcomeTest(discussion, 'moderator', async () => {
 outcomeTest(discussion, 'operator', async () => {
   const sample = recording.session('operator', sessions.operator);
   await privateAccess('operator', 404, recording.session('operator', privateSessions.operator));
+  await canonicalBody(recording.session('operator', privateSessions.operator), privateSessions.operator,
+    privateBodyPage, privateBodyOpener.reply, 'private-canonical-discussion-thread', 404);
   const own = await answer<Posted>(
     post(sessions.operator, operatorPage, 'Operator as its own Person', undefined, sample, 'operator-own-post'),
     201,
@@ -483,6 +508,7 @@ outcomeTest(discussion, 'operator', async () => {
   expect(forged.code).toBe('authority_denied');
   expect(await discussionState(sessions.operator, operatorPage)).toEqual(before);
   const canonical = await answer<Lookup>(lookup(sessions.operator, operatorPage, sample, 'canonical-about-thread'));
+  await canonicalBody(sample, sessions.operator, operatorPage, canonical.thread!.reply, 'canonical-discussion-thread');
   expect(
     (await thread(sessions.operator, operatorPage, canonical.thread!.reply)).items.map(
       (item) => item.author.id,
@@ -499,6 +525,19 @@ async function visitorEntryReads(sample: ReturnType<typeof recording.session>, p
   const realm = await answer<{ code?: string }>(sample(realmLabel, 'GET',
     `/v1/realms/${short(page.realm)}`), concealed ? 404 : 200);
   if (concealed) expect(realm.code).toBe('work_unavailable');
+}
+
+async function canonicalBody(sample: ReturnType<typeof recording.session>, person: PersonaSession,
+  page: Page, reply: string, label: string, status = 200) {
+  const query = person.actingSubject ? `?${acting(person)}` : '';
+  const body = await answer<Thread>(sample(label, 'GET',
+    `/v1/realms/${short(page.realm)}/threads/${short(reply)}${query}`), status);
+  if (status === 200) {
+    expect(body.thread).toBe(reply);
+    expect(body.rootRevision).toBe(page.targetRevision);
+    expect(body.items.length).toBeGreaterThan(0);
+    expect(body.items.every(item => item.author.id && item.revisionId)).toBe(true);
+  }
 }
 
 async function supportingReads(sample: ReturnType<typeof recording.session>, person: PersonaSession,

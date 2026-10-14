@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import boards from '../../../../../scripts/qa/cases/outcomes/realm/boards.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 
@@ -13,6 +14,9 @@ type Page = { items: { reply: string }[]; nextCursor: string | null;
 type Observation = { request: string; status: number; answer: unknown; expected: string };
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(boards);
+let recordedVocabulary: Vocabulary, emptyVocabulary: Vocabulary;
+let recordedTarget: Target;
 let context: string, news: Vocabulary, empty: Vocabulary, retiring: Vocabulary, retirement: Observation;
 let memberReply: Reply, ownerReply: Reply;
 const short = (iri: string) => iri.slice(-36);
@@ -34,7 +38,7 @@ function placementHead(value: unknown, reply: Reply): string {
   return placement;
 }
 
-async function publish(person: PersonaSession, target: Target, text: string): Promise<Reply> {
+async function publish(person: PersonaSession, target: Target, text: string, concept?: string): Promise<Reply> {
   async function command(path: string, input: unknown) {
     const key = randomUUID();
     for (let attempt = 0; ; attempt++) {
@@ -58,6 +62,7 @@ async function publish(person: PersonaSession, target: Target, text: string): Pr
     profile: 'realm-reply-placement-v1', realm: sessions.realm, reply: draft.reply,
     revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
     reviewDecisionId: null, expectedHead: null, actingSubject: person.actingSubject,
+    ...(concept ? { concepts: [concept], primaryConcept: concept } : {}),
   }), 201);
   return { ...draft, placement: placementHead(placed, draft) };
 }
@@ -103,6 +108,7 @@ beforeAll(async () => {
     profile: 'metadata-only-v1', title: 'Original board discussions', language: 'en', authoring: 'own-work',
     actingSubject: sessions.owner.actingSubject,
   }), 201);
+  recordedTarget = target;
   const draft = await answer<{ contribution: string; draftRevision: string }>(sessions.owner.main('POST', '/v1/contributions', {
     profile: 'text-contribution-v1', work: target.work, language: 'en',
     body: 'An original story about a gardener planting a seed.', actingSubject: sessions.owner.actingSubject,
@@ -121,11 +127,92 @@ beforeAll(async () => {
   await answer(sessions.visitor.main('GET', `/v1/works/${short(target.work)}`));
   memberReply = await publish(sessions.member, target, 'Member discussion\nAn original contribution.');
   ownerReply = await publish(sessions.owner, target, 'Owner discussion\nAnother original contribution.');
-}, 180_000);
-afterAll(async () => { await sessions?.close(); });
+  await prepareRecordedVocabulary();
+  for (let index = 0; index < 21; index++)
+    await publish(sessions.owner, recordedTarget, `Original classified discussion ${index}.`, recordedVocabulary.concept);
+}, 390_000);
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
+
+async function prepareRecordedVocabulary() {
+  const define = (prior: Vocabulary | null, value: string) => answer<Vocabulary>(sessions.owner.main('POST',
+    '/v1/classification-vocabulary', {
+      profile: 'classification-proposition-v2',
+      scheme: prior ? { id: prior.scheme, expectedHead: prior.schemeHead } : null,
+      labels: [{ language: 'en', value }], alternativeLabels: [], broader: [], narrower: [],
+      actingSubject: sessions.owner.actingSubject,
+    }), 201);
+  let prior: Vocabulary | null = null;
+  for (let index = 0; index < 21; index++)
+    prior = await define(prior, `Recorded discussion board ${index} ${randomUUID()}`);
+  recordedVocabulary = prior!;
+  emptyVocabulary = await define(null, `Empty vocabulary ${randomUUID()}`);
+  await answer(sessions.owner.main('POST', '/v1/classification-vocabulary', {
+    profile: 'classification-proposition-v2',
+    concept: { id: emptyVocabulary.concept, expectedHead: emptyVocabulary.conceptHead }, state: 'retired',
+    actingSubject: sessions.owner.actingSubject,
+  }), 201);
+}
+async function productionBoards(name: PersonaName) {
+  const path = `/v1/realms/${short(sessions.realm)}/classification-context`;
+  const basis = await answer<{ contextRevision: string; scheme: string | null }>(sessions.owner.main('GET', path));
+  // Select a bounded, fixture-owned scheme. Restore the original selection so
+  // supporting reads cannot change the existing board proof's jurisdiction.
+  const select = async (scheme: { id: string; expectedHead: string } | null) => {
+    const current = await answer<{ contextRevision: string }>(sessions.owner.main('GET', path));
+    await answer(sessions.owner.main('POST', '/v1/classification-contexts', {
+      profile: 'classification-context-v2', realm: sessions.realm, expectedHead: current.contextRevision,
+      scheme, actingSubject: sessions.owner.actingSubject,
+    }));
+  };
+  // The original fixture context has no selected scheme.
+  expect(basis.scheme).toBeNull();
+  const reads = recordRealmDiscussion(recording, name, sessions[name], sessions.realm);
+  try {
+    await select({ id: recordedVocabulary.scheme, expectedHead: recordedVocabulary.schemeHead });
+    const first = await reads('boards-populated').boards();
+    if (first.ok && first.data.nextCursor) {
+      await reads('boards-continuation').boards(first.data.nextCursor);
+      await reads('board-threads-mismatched-vocabulary-cursor').threads({ sort: 'best', window: 'week',
+        concept: recordedVocabulary.concept, cursor: first.data.nextCursor });
+    }
+    for (const sort of ['best', 'new', 'top'] as const) {
+      for (const window of sort === 'top' ? ['week', 'month', 'all'] as const : ['week'] as const) {
+        const label = `board-threads-${sort}${sort === 'top' ? `-${window}` : ''}`;
+        const query = { sort, window, concept: recordedVocabulary.concept };
+        const page = await reads(label).threads(query);
+        if (page.ok && page.data.nextCursor) {
+          await reads(`${label}-continuation`).threads({ ...query, cursor: page.data.nextCursor });
+          await reads(`${label}-mismatched-board-cursor`).threads({ ...query, concept: empty.concept,
+            cursor: page.data.nextCursor });
+        }
+        await reads(`${label}-language`).threads({ ...query, language: 'en' });
+      }
+    }
+    await reads('board-threads-empty').threads({ sort: 'best', window: 'week', concept: empty.concept });
+    await reads('board-threads-retired').threads({ sort: 'best', window: 'week', concept: retiring.concept });
+    await reads('board-threads-absent').threads({ sort: 'best', window: 'week', concept: id() });
+    await reads('board-threads-unsupported-selection').threads({ sort: 'best', window: 'week', concept: 'unsupported-board-selection' });
+    const beforeMove = await reads('board-threads-before-move').threads({ sort: 'new', window: 'week',
+      concept: recordedVocabulary.concept });
+    if (beforeMove.ok && beforeMove.data.nextCursor) {
+      await publish(sessions.owner, recordedTarget, 'Original classified insertion moves the board.', recordedVocabulary.concept);
+      await reads('board-threads-moved-cursor').threads({ sort: 'new', window: 'week',
+        concept: recordedVocabulary.concept, cursor: beforeMove.data.nextCursor });
+    }
+    await select({ id: emptyVocabulary.scheme, expectedHead: emptyVocabulary.schemeHead });
+    await reads('boards-empty').boards();
+  } finally { await select(null); }
+}
 
 async function boardContract(name: PersonaName) {
-  const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}`;
+  const source = sessions[name], sample = recording.session(name, source);
+  let ordinal = 0;
+  const person: PersonaSession = { ...source,
+    main: (...args) => sample(`board-proof-${++ordinal}`, ...args) };
+  const root = `/v1/realms/${short(sessions.realm)}`;
   const gaps: Observation[] = [];
   async function observe(method: string, path: string, body: unknown, expected: string,
     accepts: (status: number, value: unknown) => boolean) {
@@ -214,14 +301,15 @@ async function boardContract(name: PersonaName) {
   }
 
   console.log(`Board HTTP evidence / ${name}: ${JSON.stringify(gaps)}`);
+  await productionBoards(name);
   // Attempt every request before asserting, so a collection gap cannot
   // conceal placement, continuation or empty/retirement contract gaps.
   expect(gaps, JSON.stringify(gaps)).toEqual([]);
 }
 
-outcomeTest(boards, 'visitor', () => boardContract('visitor'));
-outcomeTest(boards, 'stranger', () => boardContract('stranger'));
-outcomeTest(boards, 'member', () => boardContract('member'));
-outcomeTest(boards, 'owner', () => boardContract('owner'));
-outcomeTest(boards, 'moderator', () => boardContract('moderator'));
-outcomeTest(boards, 'operator', () => boardContract('operator'));
+outcomeTest(boards, 'visitor', () => boardContract('visitor'), recording);
+outcomeTest(boards, 'stranger', () => boardContract('stranger'), recording);
+outcomeTest(boards, 'member', () => boardContract('member'), recording);
+outcomeTest(boards, 'owner', () => boardContract('owner'), recording);
+outcomeTest(boards, 'moderator', () => boardContract('moderator'), recording);
+outcomeTest(boards, 'operator', () => boardContract('operator'), recording);

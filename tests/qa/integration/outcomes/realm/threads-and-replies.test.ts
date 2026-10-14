@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import threads from '../../../../../scripts/qa/cases/outcomes/realm/threads-and-replies.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Work = { work: string; workRevision: string };
@@ -16,6 +17,8 @@ type Branch = {
 };
 setDefaultTimeout(420_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
+const recording = new OutcomeRecorder(threads);
+let emptyRealm: string;
 let work: Work, privateWork: Work, opener: Reply, privateOpener: Reply;
 const roots: Reply[] = [], descendants: Reply[] = [];
 let preparation: Promise<void> | undefined;
@@ -70,6 +73,13 @@ async function publish(person: PersonaSession, target: Work, realm: string, body
 beforeAll(async () => {
   publicRealm = await personaSessions('public');
   privateRealm = await personaSessions('private');
+  emptyRealm = (await answer<{ realm: string }>(publicRealm.owner.main('POST', '/v1/spaces', {
+    profile: 'space-realm-v2', name: 'An empty original discussion Realm',
+    handle: `empty-discussion-${randomUUID().slice(0, 12)}`, language: 'en', capabilities: ['realm'],
+    actingSubject: publicRealm.owner.actingSubject,
+    initialSettings: { visibility: 'public', reviewRequired: false, reviewMode: 'open',
+      whoMaySubmit: 'members', selfJoin: true, rules: [] },
+  }), 201)).realm;
   work = await answer<Work>(publicRealm.owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title: 'Original discussion garden', language: 'en',
     authoring: 'own-work', actingSubject: publicRealm.owner.actingSubject }), 201);
@@ -102,12 +112,64 @@ async function prepare() {
   privateOpener = (await publish(privateRealm.owner, privateWork, privateRealm.realm,
     'Private garden\nAn original contribution in a private Realm.')).reply;
 }
-afterAll(async () => { await publicRealm?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await publicRealm?.close(); }
+});
+
+async function productionDiscussion(name: PersonaName) {
+  const person = publicRealm[name];
+  const reads = recordRealmDiscussion(recording, name, person, publicRealm.realm);
+  for (const sort of ['best', 'new', 'top'] as const) {
+    for (const window of sort === 'top' ? ['week', 'month', 'all'] as const : ['week'] as const) {
+      const label = `threads-${sort}${sort === 'top' ? `-${window}` : ''}`;
+      const query = { sort, window };
+      const first = await reads(label).threads(query);
+      if (first.ok && first.data.nextCursor)
+        await reads(`${label}-continuation`).threads({ ...query, cursor: first.data.nextCursor });
+      await reads(`${label}-language`).threads({ ...query, language: 'en' });
+    }
+    const first = await reads(`thread-${sort}`).thread(opener.reply, sort);
+    await reads(`thread-${sort}-language`).thread(opener.reply, sort, 'en');
+    await reads(`thread-${sort}-empty`).thread(roots.at(-1)!.reply, sort);
+    if (first.ok) {
+      const pending = [...first.data.continuations];
+      let page = 0;
+      while (pending.length && page < 20) {
+        const next = pending.shift()!;
+        const branch = await reads(`thread-${sort}-${next.kind}-${++page}`)
+          .thread(next.reply, sort, undefined, next.kind === 'siblings' ? next.cursor : undefined);
+        if (branch.ok) pending.push(...branch.data.continuations.filter(item => item.kind !== 'ancestors'));
+      }
+    }
+  }
+  const deepest = await reads('thread-ancestors').thread(descendants.at(-1)!.reply, 'best');
+  if (deepest.ok) {
+    let next = deepest.data.continuations.find(item => item.kind === 'ancestors');
+    let page = 0;
+    while (next && page < 20) {
+      const branch = await reads(`thread-ancestors-${++page}`).thread(next.reply, 'best');
+      next = branch.ok ? branch.data.continuations.find(item => item.kind === 'ancestors') : undefined;
+    }
+  }
+  await recordRealmDiscussion(recording, name, person, emptyRealm)('threads-empty')
+    .threads({ sort: 'best', window: 'week' });
+  await recordRealmDiscussion(recording, name, person, id())('threads-absent')
+    .threads({ sort: 'best', window: 'week' });
+  await recordRealmDiscussion(recording, name, privateRealm[name], privateRealm.realm)('private-thread')
+    .thread(privateOpener.reply, 'best');
+  const before = await reads('threads-before-move').threads({ sort: 'new', window: 'week' });
+  if (before.ok && before.data.nextCursor) {
+    await publish(publicRealm.owner, work, publicRealm.realm, 'Original insertion moves the discussion population.');
+    await reads('threads-moved-cursor').threads({ sort: 'new', window: 'week', cursor: before.data.nextCursor });
+  }
+}
 
 async function traverse(name: PersonaName) {
   const person = publicRealm[name], params = acting(person);
   await answer(person.main('GET', `/v1/realms/${short(publicRealm.realm)}?${params}`));
   await (preparation ??= prepare());
+  await productionDiscussion(name);
   params.set('sort', 'new'); params.set('limit', '10');
   const seen: string[] = [];
   let page: Page;
@@ -201,14 +263,14 @@ async function denyOtherAuthor(person: PersonaSession, status = 403) {
   await answer(publicRealm.owner.main('GET', `/v1/member-replies/${short(input.reply)}?${acting(publicRealm.owner)}`), 404);
 }
 
-outcomeTest(threads, 'visitor', async () => { const person = await traverse('visitor'); await denyOtherAuthor(person, 401); });
+outcomeTest(threads, 'visitor', async () => { const person = await traverse('visitor'); await denyOtherAuthor(person, 401); }, recording);
 outcomeTest(threads, 'stranger', async () => {
   const person = await traverse('stranger'); await ownReply('stranger'); await denyReview(person);
   const input = draftInput(privateRealm.stranger, privateWork, privateRealm.realm, 'Private publication refused.');
   await answer(privateRealm.stranger.main('POST', '/v1/member-reply-drafts', input), 403);
   await answer(privateRealm.owner.main('GET', `/v1/member-replies/${short(input.reply)}?${acting(privateRealm.owner)}`), 404);
-});
-outcomeTest(threads, 'member', async () => { await traverse('member'); await ownReply('member', true); await denyReview(publicRealm.member); });
-outcomeTest(threads, 'owner', async () => { await traverse('owner'); await ownReply('owner', true); });
-outcomeTest(threads, 'moderator', async () => { const person = await traverse('moderator'); await ownReply('moderator', true); await denyReview(person); await denyOtherAuthor(person); });
-outcomeTest(threads, 'operator', async () => { const person = await traverse('operator'); await ownReply('operator'); await denyReview(person); await denyOtherAuthor(person); });
+}, recording);
+outcomeTest(threads, 'member', async () => { await traverse('member'); await ownReply('member', true); await denyReview(publicRealm.member); }, recording);
+outcomeTest(threads, 'owner', async () => { await traverse('owner'); await ownReply('owner', true); }, recording);
+outcomeTest(threads, 'moderator', async () => { const person = await traverse('moderator'); await ownReply('moderator', true); await denyReview(person); await denyOtherAuthor(person); }, recording);
+outcomeTest(threads, 'operator', async () => { const person = await traverse('operator'); await ownReply('operator'); await denyReview(person); await denyOtherAuthor(person); }, recording);

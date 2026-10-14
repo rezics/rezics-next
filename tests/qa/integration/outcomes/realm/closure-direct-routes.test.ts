@@ -263,6 +263,11 @@ async function reads(name: PersonaName) {
   expect(privateClosureFailure, privateClosureFailure ?? '').toBeNull();
   expect(setupFailure, setupFailure ?? '').toBeNull();
   const person = closed[name];
+  const sample = recording.session(name, person);
+  const recorded = async (label: string, path: string): Promise<Answer> => {
+    const response = await sample(label, 'GET', path);
+    return { status: response.status, body: await response.text() };
+  };
   const failures: string[] = [];
   const closedPaths = paths(closed, adopted.decision!, person);
   const livePaths = paths(live, liveAdoption.decision!, person);
@@ -273,8 +278,16 @@ async function reads(name: PersonaName) {
     const liveAnswer = await observe(person, livePaths[index]!);
     if (control.status !== 200 || liveAnswer.status !== 200)
       failures.push(`Live control GET ${path}: before ${control.status} ${control.body}; independent ${liveAnswer.status} ${liveAnswer.body}`);
-    concealed(failures, path, await observe(person, path), await observe(person, absentPaths[index]!));
+    const label = ['realm-header', 'realm-works', 'realm-decisions', 'realm-decision', 'realm-zone'][index]!;
+    concealed(failures, path, await recorded(`closed-${label}`, path), await recorded(`absent-${label}`, absentPaths[index]!));
   }
+  const joinPath = `${root(closed)}/join-page${person.actingSubject ? `?${acting(person)}` : ''}`;
+  const absentJoin = `/v1/realms/${short(absentRealm)}/join-page${person.actingSubject ? `?${acting(person)}` : ''}`;
+  const closedJoin = await recorded('closed-join-page', joinPath);
+  const ordinaryJoin = await recorded('absent-join-page', absentJoin);
+  expect(closedJoin.status).toBe(404);
+  expect(ordinaryJoin.status).toBe(404);
+  concealed(failures, joinPath, closedJoin, ordinaryJoin);
   const teaser = `${root(privateRealm)}/join-page?${acting(privateRealm[name])}`;
   const teaserBefore = before.get(`${name}:${teaser}`)!;
   // Joined readers get the home, so join-page intentionally refuses a teaser.

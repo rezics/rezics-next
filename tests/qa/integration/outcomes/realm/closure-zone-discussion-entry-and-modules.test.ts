@@ -1,4 +1,6 @@
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
+import { readAboutDiscussion } from '../../../../../apps/web/features/zones/about-discussion-api.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-zone-discussion-entry-and-modules.ts';
 import { publishClosureOriginals } from './closure-original-credit-setup.ts';
@@ -16,6 +18,7 @@ setDefaultTimeout(60_000);
 type Work = { work: string; mainVersion: string; workRevision: string };
 type Publication = Work & { contribution: string; publicationDecision: string; selection: string };
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(closure);
 const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
@@ -71,7 +74,10 @@ beforeAll(async () => {
   });
 }, 180_000);
 
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { await sessions?.close(); }
+});
 
 let homeRevision: string;
 async function prepareSurface() {
@@ -87,7 +93,17 @@ async function prepareSurface() {
 }
 
 async function delivered(name: PersonaName) {
-  const person = sessions[name];
+  const source = sessions[name], sample = recording.session(name, source);
+  let ordinal = 0;
+  const person: PersonaSession = { ...source, main: (...args) => {
+    const path = new URL(args[1], 'https://record.invalid');
+    const label = path.pathname.endsWith('/routes') ? path.searchParams.get('path') === '/'
+      ? 'closed-zone-home-route' : 'closed-zone-original-route'
+      : path.pathname.endsWith('/presentation') ? 'closed-zone-presentation'
+      : path.pathname.includes('/modules/') ? `${path.pathname.includes(short(sessions.realm)) ? 'closed' : 'absent'}-module-${path.pathname.split('/').at(-1)}`
+      : `closed-zone-proof-${++ordinal}`;
+    return sample(label, ...args);
+  } };
   await requireClosure(person);
   const root = `/v1/realms/${short(sessions.realm)}`;
   const absent = `/v1/realms/${randomUUID()}`;
@@ -110,12 +126,26 @@ async function delivered(name: PersonaName) {
   const home = await answer<unknown>(person.main('GET', closureZoneReadPath(`/v1/content-revisions/${homeRevision}`, person)));
   expect(JSON.stringify(home)).toContain('Independent original Zone home document');
   await independent(person);
+  for (const path of ['/', '/original']) {
+    const requested: string[] = [];
+    const fetcher = (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      requested.push(url.pathname);
+      return sample(`closed-discussion-${path === '/' ? 'home' : 'original'}-route`,
+        init?.method ?? 'GET', `${url.pathname}${url.search}`);
+    }) as typeof fetch;
+    const entry = await readAboutDiscussion(mainApiWithToken(source.actingSubject ? 'recorded-session' : undefined,
+      { fetcher }), { zone: sessions.zone, path, signedIn: Boolean(source.actingSubject),
+      actingSubject: source.actingSubject ?? undefined, personal: Boolean(source.actingSubject) });
+    expect(entry).toEqual({ kind: 'none' });
+    expect(requested).toEqual([`${zone}/routes`]);
+  }
 }
 
-outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')));
-outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')));
-outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')));
-outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')));
-outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')));
-outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')));
+outcomeTest(closure, 'visitor', () => closureCell(closure, 'visitor', () => sessions, () => delivered('visitor')), recording);
+outcomeTest(closure, 'stranger', () => closureCell(closure, 'stranger', () => sessions, () => delivered('stranger')), recording);
+outcomeTest(closure, 'member', () => closureCell(closure, 'member', () => sessions, () => delivered('member')), recording);
+outcomeTest(closure, 'owner', () => closureCell(closure, 'owner', () => sessions, () => delivered('owner')), recording);
+outcomeTest(closure, 'moderator', () => closureCell(closure, 'moderator', () => sessions, () => delivered('moderator')), recording);
+outcomeTest(closure, 'operator', () => closureCell(closure, 'operator', () => sessions, () => delivered('operator')), recording);
 

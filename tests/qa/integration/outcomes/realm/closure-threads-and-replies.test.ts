@@ -1,4 +1,5 @@
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readAddress } from '../../../../../apps/web/features/address/client.ts';
 import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
@@ -220,6 +221,11 @@ async function reads(name: PersonaName) {
   expect(closureFailure, closureFailure ?? '').toBeNull();
   expect(setupFailure, setupFailure ?? '').toBeNull();
   const person = closed[name];
+  const sample = recording.session(name, person);
+  const recorded = async (label: string, path: string): Promise<Answer> => {
+    const response = await sample(label, 'GET', path);
+    return { status: response.status, body: await response.text() };
+  };
   const failures: string[] = [];
   const closedPaths = paths(closed.realm, work, opener, descendant, person);
   const absentPaths = paths(absentRealm, work, opener, descendant, person);
@@ -247,7 +253,18 @@ async function reads(name: PersonaName) {
       if (index === 7 && body.count !== 2)
         failures.push(`Populated count control GET ${path}: ${control.body}`);
     }
-    concealed(failures, path, await observe(person, path), await observe(person, absentPaths[index]!));
+    concealed(failures, path, await recorded(`closed-discussion-proof-${index}`, path),
+      await recorded(`absent-discussion-proof-${index}`, absentPaths[index]!));
+  }
+  const reads = recordRealmDiscussion(recording, name, person, closed.realm);
+  const absentReads = recordRealmDiscussion(recording, name, person, absentRealm);
+  for (const sort of ['best', 'new', 'top'] as const) {
+    await reads(`closed-threads-${sort}`).threads({ sort, window: 'week' });
+    await absentReads(`absent-threads-${sort}`).threads({ sort, window: 'week' });
+    await reads(`closed-thread-${sort}`).thread(opener.reply, sort);
+    await absentReads(`absent-thread-${sort}`).thread(opener.reply, sort);
+    await reads(`closed-descendant-${sort}`).thread(descendant.reply, sort);
+    await absentReads(`absent-descendant-${sort}`).thread(descendant.reply, sort);
   }
   const independent = await observe(person, `/v1/works/${short(work.work)}?${acting(person)}`);
   if (independent.status !== 200)

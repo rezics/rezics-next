@@ -2,6 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import admission from '../../../../../scripts/qa/cases/outcomes/realm/membership-and-admission.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -25,6 +26,8 @@ async function phase<T>(name: string, milliseconds: number, run: () => Promise<T
 }
 function personaProof(name: PersonaName, proof: () => Promise<() => Promise<void>>) {
   return async () => {
+    await recordRealmDiscussion(recording, name, sessions[name], sessions.realm)('private-discussion-empty')
+      .threads({ sort: 'best', window: 'week' });
     // The first 60 seconds belong to the outcome proof; supporting records have their own budget.
     const reads = await phase(`${name} proof`, 60_000, proof);
     await phase(`${name} supporting records`, 120_000, reads);
