@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { ownerErasurePreparationOptions } from './retained-source.ts';
+import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-source.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { redactCommandOutput } from '../fixture/command-output.ts';
@@ -741,6 +742,21 @@ async function runShardWork(
           xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
       }
       environment.REZICS_FIXTURE_ROOT ??= join(root, '.temp', 'fixture');
+    }
+  }
+  if (tier === 'integration' && files.includes('tests/qa/integration/realm-discussion-source.test.ts')) {
+    // This producer owns the declared build clock, followed by the unchanged
+    // physical-cut clock. The consumer file only selects/restores custody.
+    const prepared = await commandAsync(root, 'bun', [
+      'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare',
+    ], realmSourceBuildDeadlineMs + 600_000, { ...environment, ...apps,
+      REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory,
+      REZICS_REALM_SOURCE_PREPARATION: '1' }, noteMemory, { runDeadline });
+    writeFileSync(join(logs, `${label}-realm-discussion-source.log`), prepared.output);
+    if (!prepared.ok) {
+      errors.push(`Realm source preparation failed before operation clock (${label})`);
+      return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
+        xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
     }
   }
   record.stage = 'test';

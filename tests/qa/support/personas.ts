@@ -26,8 +26,10 @@ import { RequestWatch } from './request-watch.ts';
 const personaRequests = new RequestWatch();
 // Bun runs teardown hooks on assertion failures and timeouts, too. A successful
 // test with no outstanding request emits nothing; setup failures reach afterAll.
-afterEach(() => personaRequests.reportPending());
-afterAll(() => personaRequests.reportPending());
+if (Bun.env.REZICS_REALM_SOURCE_PREPARATION !== '1') {
+  afterEach(() => personaRequests.reportPending());
+  afterAll(() => personaRequests.reportPending());
+}
 
 export const personaNames = [
   'visitor',
@@ -50,6 +52,23 @@ export interface PersonaSession {
   account: Call;
   /** A captured bearer never renews, so expiry and revocation remain observable. */
   snapshot(): { expiresAt: number | null; main: Call };
+}
+
+/** Private fixture credentials, retained only in a mode-0600 source manifest.
+ * Restoring signs in normally; it never restores or extends a bearer. */
+export type RetainedPersonaIdentity = {
+  email: string; password: string; accountId: string; actingSubject: string;
+};
+const retainedIdentities = new WeakMap<PersonaSession, RetainedPersonaIdentity>();
+type RetainedPersonaAuth = {
+  accountOrigin: string; clientId: string; redirectUris: string[]; scope: string;
+  mainClientId: string; mainClientSecret: string;
+};
+const retainedAuths = new WeakMap<PersonaSession, RetainedPersonaAuth>();
+export function retainedPersonaIdentity(person: PersonaSession): RetainedPersonaIdentity {
+  const identity = retainedIdentities.get(person);
+  if (!identity) throw new Error('Persona has no restorable Account identity');
+  return { ...identity };
 }
 export interface PersonaSessions extends Record<PersonaName, PersonaSession> {
   realm: string;
@@ -79,6 +98,8 @@ export function personaSession(
   observeMain?: PersonaOptions['observeMain'],
   persona = accountId ?? 'visitor',
   watch = personaRequests,
+  observeAccount?: PersonaOptions['observeMain'],
+  accountOrigin = account,
 ): PersonaSession {
   const sessionKey = randomUUID();
   const expiry = (token: string) => {
@@ -121,16 +142,25 @@ export function personaSession(
             });
           } catch (error) {
             finish();
-            throw error;
+            const observe = base === main ? observeMain : observeAccount;
+            try {
+              if (observe) await observe({ caller: person,
+                request: { method, url: url.href, path: url.pathname + url.search,
+                  body: base === main ? body ?? null : null, key: commandKey ?? null },
+                // Zero denotes no HTTP answer, never a terminal product refusal.
+                response: { status: 0, body: JSON.stringify({ transportFailure: error instanceof Error ? error.name : 'unknown' }) },
+                requestStartedAt, answeredAt: Date.now() });
+            } finally { throw error; }
           }
           finish(response);
-          if (base === main && observeMain) {
+          const observe = base === main ? observeMain : observeAccount;
+          if (observe) {
             const raw = await response.clone().text(), answeredAt = Date.now();
             // Setup diagnostics never retain credentials, cookies or headers.
-            await observeMain({ caller: person,
+            await observe({ caller: person,
               request: { method, url: url.href, path: url.pathname + url.search,
-                body: body ?? null, key: commandKey ?? null },
-              response: { status: response.status, body: raw }, requestStartedAt, answeredAt });
+                body: base === main ? body ?? null : null, key: commandKey ?? null },
+              response: { status: response.status, body: base === main ? raw : '' }, requestStartedAt, answeredAt });
           }
           const token = headers.get('authorization')?.slice('Bearer '.length);
           if (!renewExpired || renewed || !token || expiry(token) > Date.now()
@@ -169,7 +199,8 @@ export function personaSession(
         ),
       true,
     ),
-    account: call(account, async () => new Headers(cookie ? { cookie, origin: account } : {})),
+    account: call(account, async () => new Headers(cookie ? { cookie, origin: accountOrigin }
+      : accountOrigin !== account ? { origin: accountOrigin } : {})),
     snapshot() {
       const token = oauth?.accessToken;
       return { expiresAt: token ? expiry(token) : null,
@@ -213,20 +244,29 @@ interface PersonaOptions {
   notificationProvider?: { url: string; token: string; callbackSecret: string };
   /** A transparent HTTP proxy may delay real storage responses for race proofs. */
   graphEndpoint?: string;
+  observeAccount?: PersonaOptions['observeMain'];
+  retainedOperator?: RetainedPersonaIdentity;
+  retainedAuth?: RetainedPersonaAuth;
 }
 async function applications(options: PersonaOptions) {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId) throw new Error('Persona sessions require the QA integration tier');
-  const auth = await joiningAuthFixture(runId);
-  const authDirectory = dirname(auth.publicConfigPath);
-  const runtime = readEnv(auth.runtimeEnvPath);
-  const publicAuth = JSON.parse(readFileSync(auth.publicConfigPath, 'utf8')) as {
+  const auth = options.retainedAuth ? undefined : await joiningAuthFixture(runId);
+  const authDirectory = auth ? dirname(auth.publicConfigPath) : undefined;
+  const runtime = auth ? readEnv(auth.runtimeEnvPath) : {
+    ACCOUNT_ISSUER: `${options.retainedAuth!.accountOrigin}/api/auth`,
+    ACCOUNT_MAIN_CLIENT_ID: options.retainedAuth!.mainClientId,
+    ACCOUNT_MAIN_CLIENT_SECRET: options.retainedAuth!.mainClientSecret,
+  };
+  const publicAuth = options.retainedAuth ?? JSON.parse(readFileSync(auth!.publicConfigPath, 'utf8')) as {
     clientId: string;
     redirectUris: string[];
     scope: string;
   };
-  const accountBase = Bun.env.ACCOUNT_BASE_URL!;
+  const accountBase = options.retainedAuth?.accountOrigin ?? Bun.env.ACCOUNT_BASE_URL!;
+  const accountService = options.retainedAuth ? Bun.env.ACCOUNT_SERVICE_ORIGIN ?? accountBase : accountBase;
   const mainBase = `http://127.0.0.1:${Bun.env.MAIN_PORT}`;
+  const resource = Bun.env.ACCOUNT_MAIN_RESOURCE;
   const compose = readEnv(resolve('.temp/stack', `rezics-qa-${runId}`, 'compose.env'));
   const config = mainConfig({ ...process.env, ...runtime, PLATFORM_FIRST_ADMIN_ACCOUNT: undefined,
     ...(options.notificationProvider ? {
@@ -287,7 +327,7 @@ async function applications(options: PersonaOptions) {
       }
     } finally {
       await Promise.all(pools.map((pool) => pool?.end()));
-      rmSync(authDirectory, { recursive: true, force: true });
+      if (authDirectory) rmSync(authDirectory, { recursive: true, force: true });
     }
   };
   try {
@@ -337,12 +377,25 @@ async function applications(options: PersonaOptions) {
       'services/main/src/relay.ts'], {
       env: relayEnvironment, stdout: 'inherit', stderr: 'inherit',
     });
-    const signup = async (name: string): Promise<PersonaSession> => {
+    const signup = async (name: string, retained?: RetainedPersonaIdentity): Promise<PersonaSession> => {
       const previous =
-        name === 'operator' && firstOperator?.runId === runId ? firstOperator : undefined;
+        retained ?? (name === 'operator' ? options.retainedOperator ??
+          (firstOperator?.runId === runId ? firstOperator : undefined) : undefined);
       const emailAddress = previous?.email ?? `persona-${name}-${randomUUID()}@example.test`;
       const password = previous?.password ?? randomBytes(24).toString('base64url');
-      const anonymous = personaSession(mainBase, accountBase, null, undefined, undefined, undefined, name);
+      const anonymous = personaSession(mainBase, accountService, null, undefined, undefined,
+        options.observeMain, name, personaRequests, options.observeAccount, accountBase);
+      const observeAccountFetch = async (input: string | URL, init?: RequestInit) => {
+        const started = Date.now(), response = await fetch(input, init);
+        if (options.observeAccount) {
+          await response.clone().arrayBuffer();
+          const url = new URL(input);
+          await options.observeAccount({ caller: anonymous,
+            request: { method: init?.method ?? 'GET', url: url.href, path: url.pathname + url.search, body: null, key: null },
+            response: { status: response.status, body: '' }, requestStartedAt: started, answeredAt: Date.now() });
+        }
+        return response;
+      };
       if (!previous) {
         await json(
           anonymous.account('POST', '/api/auth/sign-up/email', {
@@ -356,11 +409,11 @@ async function applications(options: PersonaOptions) {
         await email.drain();
         const mailbox = `http://127.0.0.1:${compose.MAILPIT_HTTP_PORT}`;
         const inbox = await json<{ messages: { ID: string }[] }>(
-          fetch(`${mailbox}/api/v1/search?query=${encodeURIComponent(`to:${emailAddress}`)}`),
+          observeAccountFetch(`${mailbox}/api/v1/search?query=${encodeURIComponent(`to:${emailAddress}`)}`),
         );
         if (!inbox.messages[0]) throw new Error(`No verification mail for ${name}`);
         const message = await json<{ Text: string }>(
-          fetch(`${mailbox}/api/v1/message/${inbox.messages[0].ID}`),
+          observeAccountFetch(`${mailbox}/api/v1/message/${inbox.messages[0].ID}`),
         );
         const link = message.Text.match(/https?:\/\/[^\s]+/)?.[0];
         if (!link) throw new Error(`No verification link for ${name}`);
@@ -373,6 +426,8 @@ async function applications(options: PersonaOptions) {
         password,
       });
       const user = await json<{ user: { id: string } }>(Promise.resolve(login));
+      anonymous.accountId = user.user.id;
+      anonymous.actingSubject = previous?.actingSubject ?? null;
       const cookie = login.headers
         .getSetCookie()
         .map((value) => value.split(';')[0])
@@ -381,14 +436,20 @@ async function applications(options: PersonaOptions) {
       const oauth = await signIn(
         {
           account: accountBase,
+          service: accountService,
+          ...(options.observeAccount ? { fetch: observeAccountFetch } : {}),
           clientId: publicAuth.clientId,
           redirectUri: publicAuth.redirectUris[0]!,
           scope: publicAuth.scope,
-          resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
+          resource,
         },
         cookie,
       );
-      const person = personaSession(mainBase, accountBase, user.user.id, cookie, oauth, options.observeMain, name);
+      const expectedIdentity = retained ?? (name === 'operator' ? options.retainedOperator : undefined);
+      if (expectedIdentity && user.user.id !== expectedIdentity.accountId)
+        throw new Error('Restored sign-in selected a different Account');
+      const person = personaSession(mainBase, accountService, user.user.id, cookie, oauth,
+        options.observeMain, name, personaRequests, options.observeAccount, accountBase);
       person.actingSubject =
         previous?.actingSubject ?? (await provisionedAgent(person.main, `Outcome ${name}`));
       await json(
@@ -397,6 +458,10 @@ async function applications(options: PersonaOptions) {
           expectedRevision: null,
         }),
       );
+      retainedIdentities.set(person, { email: emailAddress, password,
+        accountId: user.user.id, actingSubject: person.actingSubject });
+      retainedAuths.set(person, { accountOrigin: accountBase, ...publicAuth,
+        mainClientId: runtime.ACCOUNT_MAIN_CLIENT_ID!, mainClientSecret: runtime.ACCOUNT_MAIN_CLIENT_SECRET! });
       if (name === 'operator')
         firstOperator = {
           runId,
@@ -408,14 +473,12 @@ async function applications(options: PersonaOptions) {
     };
     const operator = await signup('operator');
     // The first platform mandate is the existing deployment bootstrap, not an end-user command.
-    const designation = await new AccessPlatformAdministrators(accessPool).designateFirst(
-      `${accountBase}/api/auth`,
-      operator.accountId!,
-    );
+    const designation = options.retainedOperator ? undefined :
+      await new AccessPlatformAdministrators(accessPool).designateFirst(`${accountBase}/api/auth`, operator.accountId!);
     const authority = await json<{ groups: string[] }>(
       operator.main('GET', '/v1/me/platform-access'),
     );
-    if (designation.status === 'unconfigured' || !authority.groups.includes('platform-admin'))
+    if (designation?.status === 'unconfigured' || !authority.groups.includes('platform-admin'))
       throw new Error(
         'Persona stack must be fresh or retain this harness’s first platform administrator',
       );
@@ -427,6 +490,48 @@ async function applications(options: PersonaOptions) {
 }
 
 let active: Promise<Awaited<ReturnType<typeof applications>>> | undefined;
+
+export type RetainedPersonaRealm = {
+  realm: string; space: string; zone: string; visibility: 'public' | 'private';
+  identities: Record<Exclude<PersonaName, 'visitor'>, RetainedPersonaIdentity>;
+  auth: RetainedPersonaAuth;
+};
+
+export function retainPersonaRealm(sessions: PersonaSessions): RetainedPersonaRealm {
+  const auth = retainedAuths.get(sessions.owner);
+  if (!auth) throw new Error('Persona Realm has no retained OAuth client');
+  return { realm: sessions.realm, space: sessions.space, zone: sessions.zone, visibility: sessions.visibility, auth,
+    identities: Object.fromEntries(personaNames.filter(name => name !== 'visitor')
+      .map(name => [name, retainedPersonaIdentity(sessions[name])])) as RetainedPersonaRealm['identities'] };
+}
+
+/** Starts an independent application lifetime against the caller's isolated restored
+ * environment. No Realm, membership, role or author is created during restoration. */
+export async function restorePersonaRealms(records: readonly RetainedPersonaRealm[]): Promise<PersonaSessions[]> {
+  if (!records.length) throw new Error('Restored persona Realms are missing');
+  const operator = records[0]!.identities.operator;
+  if (records.some(record => record.identities.operator.accountId !== operator.accountId))
+    throw new Error('Restored Realms must share their retained platform identity');
+  if (records.some(record => JSON.stringify(record.auth) !== JSON.stringify(records[0]!.auth)))
+    throw new Error('Restored Realms must share their retained Account issuer and OAuth clients');
+  const started = performance.now(), stack = await applications({ retainedOperator: operator, retainedAuth: records[0]!.auth });
+  try {
+    const sessions: PersonaSessions[] = [];
+    for (const record of records) {
+      const people = new Map<string, PersonaSession>();
+      await Promise.all(personaNames.filter(name => name !== 'visitor').map(async name => {
+        const identity = record.identities[name];
+        const person = name === 'operator' ? stack.operator : await stack.signup(name, identity);
+        people.set(name, person);
+      }));
+      sessions.push({ ...record, visitor: stack.visitor,
+        stranger: people.get('stranger')!, member: people.get('member')!, owner: people.get('owner')!,
+        moderator: people.get('moderator')!, operator: stack.operator,
+        elapsedSeconds: (performance.now() - started) / 1000, close: stack.close });
+    }
+    return sessions;
+  } catch (error) { await stack.close(); throw error; }
+}
 
 /** One call builds six HTTP sessions and a Realm with an attached Zone.
  * The first call includes OAuth/application setup; subsequent calls share those listeners.

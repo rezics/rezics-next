@@ -2029,7 +2029,7 @@ function retainedSourceVolumes(key: string) {
 }
 
 /** Inventory mounted custody read-only; copyVolume remains the sole volume copier. */
-function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<string, RetainedFileIntegrity> {
+export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<string, RetainedFileIntegrity> {
   if (!volumeExists(volume, docker)) throw new Error(`retained graph volume is missing: ${volume}`);
   const output = run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
     '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
