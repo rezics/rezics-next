@@ -1,17 +1,19 @@
 # State
 
-Checkpoint 25386beb-41e8-4c15-96c2-b393c646cad0 consolidates handled event
-mail:ff1fc3c0-ef92-461d-9981-6a0f507c0593.
-Carry forward unaffected decisions from checkpoint 0d3305f1. Program confirms
-G-2236's authoring-frame and destination-editor requests and seven prove
-files on the record and prove lists. Decision `9ea62b6c7` settles the
-stale-import criterion: an authorized editor saves an import, the source
-changes, and the same editor submits again. A reached HTTP 409 must be
-recorded and shown in the production-boundary story. If no production path
-reaches it, retain the unit test's 409 coverage without a page-state story.
-Program decides reachability from the record run. Both rows and G-2236
-remain open for wave proof and landing; this ruling accepts no run result
-and authorizes no worker restart, individual landing or closure.
+Checkpoint 6e1dd100-15a9-48c7-a24a-c3830910669f consolidates handled event
+mail:f5d42752-fff3-4177-ac74-1034504852d0.
+Carry forward unaffected decisions from checkpoint 25386beb. Program's
+[content-adoption decision](../../architecture/content-adoption.md#decision-supermanager-2026-10-14)
+at `ab29e5c26` separates a field's semantic role from its value's form;
+content form, derivation and in-content references are separate dimensions.
+Recipe is the first case. Recipes remain in the first public scope and open
+only after a vertical slice proves this boundary through the API. Program
+briefs the slice after wave/1 merges; G-2545 owns the data inventory.
+Until then, start no new Recipe model or editor work that deepens
+IngredientLine, RecipeStep or RecipeMeasure qualifiers. Existing wave/1
+fixes continue. Read the note before briefing content-form work in any domain.
+The deciding turn found no current brief change necessary and started no
+worker or landing; no run result, row proof or closure is accepted here.
 
 All open work uses wave build/prove. Stopped pre-wave record, coverage and
 verification tasks stay stopped. The fourteen replacement briefs were
@@ -47,9 +49,9 @@ It supplies no current tokens-per-proved-row reading.
 | Web tool measures | 70% first share, daily 56% (27 of 48); 66 first, 36 step, 28 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 7 (G-2232) |
 | Web tokens | 1542M input, 10M output, 2 unavailable sessions; tokens per proved row unavailable |
 | Web recorded refusals | 0 outcome, 8 gate, 0 failing-test finding, 16 other in retained reports; Program owns the classified tool/main/host faults below |
-| Program measures | 61% first attempts, today 55% (64 of 117); landed-task median 1, maximum 9 (G-1427); 1589.7M input, 6.9M output, 75 unavailable sessions; tokens per proved row unavailable |
-| Program refusals | 0 outcome, 9 gate, 0 failing-test finding, 5 other in retained reports |
-| Accounts | Concurrent status: codex 55%, codex-1 70% of weekly windows |
+| Program measures | 55% first attempts, today 41% (79 of 194); landed-task median 1, maximum 9 (G-1427); 1496.4M input, 6.7M output, 80 unavailable sessions; tokens per proved row unavailable |
+| Program refusals | 0 outcome, 11 gate, 0 failing-test finding, 5 other in retained reports |
+| Accounts | Concurrent status: codex 60%, codex-1 70% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
 The concurrent API reading is 50 of 67; this handled event closes no task
@@ -59,7 +61,9 @@ it does not measure tokens per proved row. Its deciding turn accounted for prior
 commands and found all eight queued surfaces missing prerequisites on main.
 The retained raw first share is 52%; the earlier tool daily share
 was below half at 38%, prompting the classifications below. The retained tool
-daily share is 56%; tokens per proved row remain unavailable. Repeated work
+daily share remains 56%; Program's daily share is 41%, below half. Program
+owns the shared tooling causes classified below; this notice adds no fix
+round or missing-input restart. Tokens per proved row remain unavailable. Repeated work
 comes from incomplete production-path records, omitted layout decisions,
 shared routing and test-order or host-pressure gate failures. The recorded
 dispositions remove those causes: landed whole-visit inputs admit bounded
@@ -419,8 +423,8 @@ G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
 
-The deciding turn acknowledged mail:ff1fc3c0-ef92-461d-9981-6a0f507c0593
-at 11:27:26 UTC; this checkpoint confirmed that durable acknowledgement.
+The deciding turn acknowledged mail:f5d42752-fff3-4177-ac74-1034504852d0
+at 14:53:46 UTC; this checkpoint confirmed that durable acknowledgement.
 Earlier acknowledgements remain in mail history; this checkpoint supplies
 no new mail delivery or duplicate ack.
 This checkpoint edits no brief, starts no worker or landing, waits for no

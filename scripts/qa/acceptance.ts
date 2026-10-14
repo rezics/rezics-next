@@ -246,6 +246,7 @@ export const nativeIntegerPreservationTest = 'infra/jena/tests/native-integer-pr
 export const nativeUnionTest = 'infra/jena/tests/semantic-source-readiness-union.test.ts';
 export const workNameScopeBasisTest = 'infra/jena/tests/work-name-scope-basis.test.ts';
 export const heldReplayNativeTest = 'services/main/tests/erasure-held-replay-native.test.ts';
+export const nativeModuleSuiteTest = 'infra/jena/tests/native-module-suite.test.ts';
 export interface NativeProofDeclaration {
   file: string;
   /** Whole-file execution budget, including every serial case and optional probe. */
@@ -255,6 +256,7 @@ export interface NativeProofDeclaration {
 }
 /** A moved proof carries its selection, preparation and execution contract. */
 export const nativeProofDeclarations: readonly NativeProofDeclaration[] = [
+  { file: nativeModuleSuiteTest, deadlineMs: 2_710_000, imageInputs: 'module', preparedImage: null },
   { file: nativeUnionTest, deadlineMs: 910_000, imageInputs: 'module', preparedImage: null },
   { file: erasureCampaignNativeTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
   { file: nativeIntegerPreservationTest, deadlineMs: 420_000, imageInputs: 'fuseki', preparedImage: 'fuseki' },

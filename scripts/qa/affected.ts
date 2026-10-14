@@ -13,6 +13,7 @@ import {
   heldReplayNativeTest,
   inputSelectedNativeTests,
   nativeProofDeclarations,
+  nativeModuleSuiteTest,
   legacyHostJenaGateFiles,
   nativeIntegerPreservationTest,
   nativeUnionTest,
@@ -135,6 +136,7 @@ function copySourceCovers(path: string, copies: readonly NativeModuleCopy[]): bo
 function nativeFilesTouchedBy(path: string, copies: readonly NativeModuleCopy[], runtimeSources: readonly string[]): readonly string[] {
   if (inputSelectedNative.has(path)) return [path];
   return nativeProofDeclarations.filter(proof => path === nativeModuleDockerfile
+    || (proof.file === nativeModuleSuiteTest && path.startsWith('infra/jena/'))
     || copySourceCovers(path, copies)
     || (proof.imageInputs === 'fuseki' && copySourceCovers(path,
       runtimeSources.map(source => ({ source, destination: '' }))))).map(proof => proof.file);

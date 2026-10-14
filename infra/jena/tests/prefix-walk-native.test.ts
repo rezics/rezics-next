@@ -2,9 +2,11 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { nativeModuleTestInvocation } from '../../../scripts/dev/fuseki-image.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const focused = Bun.env.REZICS_NATIVE_TEST_CLASSES;
+const focused = Bun.env.REZICS_NATIVE_TEST_CLASSES
+  ?? (Bun.env.REZICS_NATIVE_FULL_SUITE === '1' ? undefined : 'PrefixWalkTest');
 
 test(focused ? `the image Maven invocation verifies ${focused}`
   : 'the native prefix projection and complete image Maven suite share one source pin', () => {
@@ -17,9 +19,7 @@ test(focused ? `the image Maven invocation verifies ${focused}`
   const image = /^FROM (\S+) AS module$/m.exec(dockerfile)?.[1];
   if (!image) throw new Error('missing pinned native builder');
   const stage = dockerfile.split(/\nFROM /, 1)[0]!;
-  const invocation = /^RUN --mount=\S+ mvn (.+) package$/m.exec(stage)?.[1];
-  if (!invocation || !invocation.split(' ').every(argument => /^-[^\s"'`]+$/u.test(argument)))
-    throw new Error('unsupported native image Maven invocation');
+  const invocation = nativeModuleTestInvocation(dockerfile);
   const environment = ['MAVEN_OPTS', 'JAVA_TOOL_OPTIONS'].map(name => {
     const value = new RegExp(`^ENV ${name}="([^"\\n]*)"$`, 'm').exec(stage)?.[1];
     if (!value) throw new Error(`missing native builder ${name}`);

@@ -8,18 +8,24 @@ COPY generated/model/ /build/profiles/
 COPY infra/jena/fuseki-text.ttl /build/fuseki-text.ttl
 ENV MAVEN_OPTS="-Xmx128m"
 ENV JAVA_TOOL_OPTIONS="-XX:+UseSerialGC -XX:ActiveProcessorCount=4 -Djava.io.tmpdir=/build/tmp"
+RUN mvn -B -ntp -DskipTests package
+
+FROM module AS module-test
 # Fixture databases need a writable disk mount: syncing the image layer can exceed
 # their unchanged transaction deadlines. Each fixture still creates a fresh directory.
-# ExternalFixture tests need a live SQL fixture. This package build excludes that
+# ExternalFixture tests need a live SQL fixture. This native suite excludes that
 # category; the focused wrapper qualifies those original cases separately at this pin.
 RUN --mount=type=cache,id=rezics-native-test-files,target=/build/tmp,sharing=locked mvn -B -ntp -DexcludedGroups=com.rezics.jena.ExternalFixture -DargLine=-Xmx384m -DforkCount=1 -DreuseForks=false package
 
 FROM maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 AS distribution
 ARG FUSEKI_VERSION=6.2.0
 ARG FUSEKI_SHA512=ba65f5867d2d4741b2ed9e2af5a0d4fbb447909894ab2a0c6bc4dac8997f4fe339c87b13c48d45d054977769f0f8bf763ea346b1f7792d5cdc458041bd43a132
-RUN curl --fail --location --retry 3 \
-      "https://archive.apache.org/dist/jena/binaries/apache-jena-fuseki-${FUSEKI_VERSION}.tar.gz" \
+RUN (curl --fail --location --retry 3 --connect-timeout 15 --max-time 120 \
+      "https://dlcdn.apache.org/jena/binaries/apache-jena-fuseki-${FUSEKI_VERSION}.tar.gz" \
       --output /tmp/fuseki.tar.gz \
+    || curl --fail --location --retry 3 --connect-timeout 15 \
+      "https://archive.apache.org/dist/jena/binaries/apache-jena-fuseki-${FUSEKI_VERSION}.tar.gz" \
+      --output /tmp/fuseki.tar.gz) \
     && echo "${FUSEKI_SHA512}  /tmp/fuseki.tar.gz" | sha512sum --check - \
     && mkdir -p /opt \
     && tar -xzf /tmp/fuseki.tar.gz -C /opt

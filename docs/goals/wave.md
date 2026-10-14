@@ -55,9 +55,11 @@ committed work except to resolve a conflict with your own.
 cell against that revision without touching main's confirmation record
 (`task goal -- confirm --status --run <id>` shows a run's cells). Before the
 first run, run `task gen` on the branch, commit what it changes, and pin the
-run to that commit. When the Fuseki image tag changed, build that image once
-(`docker build -f infra/jena/Dockerfile -t <pinned tag> .`), because stacks
-that build it at startup fail. A regress run holds the heavy QA turn for its
+run to that commit. `task gen` obtains the pinned Fuseki image through
+`task jena:image`'s shared implementation; concurrent callers wait for one build
+per tag. Never build that image by hand. The Jena regression stage runs the
+complete native suite's `module-test` target once at the pinned wave tip, in
+addition to the focused native proofs. A regress run holds the heavy QA turn for its
 whole length, and build workers' type checks queue behind it. Start one only
 when the build tasks have handed off. (2026-10-14: a unit run started at 07:15
 held builders' final checks for 50 minutes, and eight confirmation lanes failed

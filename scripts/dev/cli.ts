@@ -13,6 +13,7 @@ import { assertWebInstallationReady, bootstrapWebAuth, upgradeWebClient } from '
 import { compatibleLoadStorage, loadCompatibility,
   type LoadCompatibility } from '../load/compatibility.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
+import { ensureFusekiImage } from './fuseki-image-build.ts';
 import { devResetPlan, devResetTarget } from './reset.ts';
 import { ensureBackend, activeBackend, storageBackend, readPendingRefresh } from './refresh.ts';
 import { expectedRefreshEnvironment, prepareRefreshStorage, refreshSharedStack } from './refresh-stack.ts';
@@ -282,7 +283,8 @@ function printEndpoints(options: StackOptions, env: Record<string, string>, dir:
 /** Admission uses the run deadline; Compose readiness gets its own full budget. */
 export async function startDevCompose<T>(root: string, env: NodeJS.ProcessEnv,
   profile: StackOptions['profile'], start: (timeout: number) => T | Promise<T>,
-  admission: Partial<StartupMemoryOptions> = {}): Promise<T> {
+  admission: Partial<StartupMemoryOptions> & { imageRoot?: string; prepareImage?: () => Promise<unknown> } = {}): Promise<T> {
+  await (admission.prepareImage ?? (() => ensureFusekiImage(admission.imageRoot ?? root, { env })))();
   const ready = () => start(180_000);
   if (profile === 'qa') return await withQaStackStartup(root, env, undefined, ready, admission);
   // A saved dev profile controls storage recovery, but it cannot exempt an
@@ -318,7 +320,7 @@ async function stackUp(options: StackOptions): Promise<{ apps: Record<string, st
     try {
       await startDevCompose(root, composeProcessEnvironment(env, config.composeEnv), options.profile,
         timeout => compose(options,
-          ['up', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, timeout),
+          ['up', '--no-build', '-d', '--wait', ...qaStartupServices(options, env[QA_STACK_TIER])], env, timeout),
         { project: projectName(options) });
       printEndpoints(options, config.composeEnv, config.dir);
       return config;
@@ -353,7 +355,7 @@ async function install(): Promise<void> {
   const options: StackOptions = { profile: 'dev' };
   await stackConfig(options);
   compose(options, ['pull', '--ignore-buildable'], env);
-  compose(options, ['build', 'fuseki'], env);
+  await ensureFusekiImage(root, { env });
   run('node_modules/.bin/playwright', ['install', 'chromium']);
   console.log('Toolchain installed');
 }
@@ -550,8 +552,8 @@ async function devStart(args: string[]): Promise<void> {
         const composeEnvironment = composeProcessEnvironment(process.env, readEnv(join(stackDirectory(root, options!), 'compose.env')));
         await startDevCompose(root, composeEnvironment, 'dev', timeout =>
           run('docker', ['compose', '--env-file', join(stackDirectory(root, options!), 'compose.env'),
-            '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '-d', '--wait'],
-            composeEnvironment, timeout));
+            '-f', join(storage, 'infra/dev/compose.yaml'), '--project-name', 'rezics-dev', 'up', '--no-build', '-d', '--wait'],
+            composeEnvironment, timeout), { imageRoot: storage });
         if (!readPendingRefresh(stackDirectory(root, options!))?.mutatingStep)
           replacePrivate(envFile, expectedRefreshEnvironment(root));
       } else prepareRefreshStorage(backend);

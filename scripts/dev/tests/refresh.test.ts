@@ -303,7 +303,7 @@ if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(proces
         expect(env.REZICS_STACK_PROFILE).toBe('dev');
         builds++;
         return 'image rebuilt; storage ready';
-      }, { now: () => now, deadline: 100, pollMs: 10, announce: () => {},
+      }, { prepareImage: async () => {}, now: () => now, deadline: 100, pollMs: 10, announce: () => {},
         sleep: async ms => { expect(builds).toBe(0); now += ms; },
         read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: (now === 0 ? 11 : 12) * GiB }) });
       expect(result).toBe('image rebuilt; storage ready');
@@ -319,7 +319,7 @@ if (readFileSync(${JSON.stringify(join(lock, 'pid'))}, 'utf8') !== String(proces
   test('shared recovery startup leaves Compose unstarted when host memory never admits its image build', async () => {
     let now = 0, starts = 0;
     await expect(startDevCompose(root, { REZICS_STACK_PROFILE: 'dev', GOAL_TASK_ID: 'recovery-startup-probe' },
-      'dev', () => { starts++; }, { now: () => now, deadline: 20, pollMs: 10,
+      'dev', () => { starts++; }, { prepareImage: async () => {}, now: () => now, deadline: 20, pollMs: 10,
         announce: () => {}, sleep: async ms => { now += ms; },
         read: async () => ({ vmTotal: 0, vmUsed: 0, hostAvailable: 11 * GiB }) }))
       .rejects.toThrow('Memory admission deadline');
@@ -1448,20 +1448,18 @@ describe('refresh image build', () => {
     const dir = mkdtempSync(join(root, '.temp/image-build-'));
     const state = join(dir, '.temp/stack/rezics-dev');
     mkdirSync(state, { recursive: true });
+    mkdirSync(join(dir, 'infra/jena/command-module'), { recursive: true });
+    writeFileSync(join(dir, 'infra/jena/Dockerfile'), 'ARG FUSEKI_VERSION=6.2.0\nCOPY infra/jena/command-module/pom.xml /build/pom.xml\n');
+    writeFileSync(join(dir, 'infra/jena/command-module/pom.xml'), '<artifactId>fuseki-command</artifactId><version>0.1.0</version>');
     writeFileSync(join(state, 'compose.env'), 'SECRET_VALUE=do-not-log\n');
     const docker = join(dir, 'docker');
-    writeFileSync(docker, `#!/bin/sh\n${script}\n`, { mode: 0o755 });
+    writeFileSync(docker, `#!/bin/sh\nif [ "$1" = image ]; then exit 1; fi\n${script}\n`, { mode: 0o755 });
     return { dir, docker, log: join(state, 'image-build.log') };
   }
 
-  test('budget covers the measured native build', () => {
-    expect(imageBuildBudgetMs).toBe(45 * 60_000);
+  test('image packaging has a bounded budget separate from the native suite', () => {
+    expect(imageBuildBudgetMs).toBe(10 * 60_000);
   });
-
-  function imageCommand(dir: string, docker: string): string {
-    const state = join(dir, '.temp/stack/rezics-dev');
-    return `${docker} compose --env-file ${join(state, 'compose.env')} -f ${join(dir, 'infra/dev/compose.yaml')} --project-name rezics-dev build fuseki`;
-  }
 
   test('a build that outlives the budget reports a timeout', async () => {
     const { dir, docker, log } = stack('echo started; exec sleep 30');
@@ -1471,9 +1469,8 @@ describe('refresh image build', () => {
         .catch((failure: unknown) => failure);
       expect(Date.now() - started).toBeLessThan(10_000);
       expect(error).toBeInstanceOf(Error);
-      expect((error as Error).message).toBe(
-        `image build ${imageCommand(dir, docker)} exceeded 0.3 s; output in ${log}`,
-      );
+      expect((error as Error).message).toContain(`image build task jena:image failed; output in ${log}`);
+      expect((error as Error).message).toContain('exceeded 0.3 s');
       expect(readFileSync(log, 'utf8')).toContain('started');
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
@@ -1484,9 +1481,8 @@ describe('refresh image build', () => {
       const error = await buildRefreshImage(dir, dir, { executable: docker }).catch((failure: unknown) => failure);
       expect(error).toBeInstanceOf(Error);
       if (!(error instanceof Error)) return;
-      expect(error.message).toBe(
-        `image build ${imageCommand(dir, docker)} failed (exit 255); output in ${log}`,
-      );
+      expect(error.message).toContain(`image build task jena:image failed; output in ${log}`);
+      expect(error.message).toContain('exit 255');
       expect(readFileSync(log, 'utf8')).toContain('step 3/9 mvn package');
       expect(readFileSync(log, 'utf8')).toContain('BUILD FAILURE');
       expect(statSync(log).mode & 0o777).toBe(0o600);
