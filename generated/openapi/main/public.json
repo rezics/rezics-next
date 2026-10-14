@@ -578838,6 +578838,7 @@
     },
     "/v1/realms/{realm}/zone": {
       "get": {
+        "description": "Returns the visible active Zone whose published configuration names this Realm. Selects an eligible official Zone first; otherwise selects the first eligible Zone in the attachment inventory’s ascending Zone IRI order. Returns 404 when no attached Zone is eligible for this reader.",
         "operationId": "getV1RealmsByRealmZone",
         "parameters": [
           {
