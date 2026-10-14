@@ -899,7 +899,7 @@ function pressureScenario(pressure = 12) {
   const setPressure = (value: number) => writeFileSync(pressureFile,
     `some avg10=${value.toFixed(2)} avg60=99.00 avg300=99.00 total=123456\n`);
   setPressure(pressure);
-  return { ...scenario, pressureFile, setPressure, options: { ...scenario.options,
+  return { ...scenario, pressureFile, setPressure, options: { ...scenario.options, pollMs: 5000,
     env: { ...scenario.options.env, REZICS_QA_CPU_PRESSURE_FILE: pressureFile } } };
 }
 
@@ -913,7 +913,7 @@ test('a stack holds at the CPU pressure limit and releases below it regardless o
       .toContain('CPU pressure some avg10 12.00%, limit 12%, recent starts 0');
     scenario.advance(ms);
     scenario.setPressure(11.99);
-  } }, () => { expect(scenario.now()).toBe(1000); });
+  } }, () => { expect(scenario.now()).toBe(5000); });
   expect(scenario.lines.at(-1)).toContain('CPU pressure some avg10 11.99%, limit 12%');
   expect(readdirSync(scenario.waiters)).toEqual([]);
 });
@@ -982,7 +982,7 @@ test('the CPU pressure limit file is reread on the next poll', async () => {
     expect(scenario.lines.at(-1)).toContain('limit 15%');
     scenario.advance(ms);
     writeFileSync(limitFile, '16');
-  } }, () => { expect(scenario.now()).toBe(1000); });
+  } }, () => { expect(scenario.now()).toBe(5000); });
   expect(scenario.lines.at(-1)).toContain('limit 16%');
 });
 
