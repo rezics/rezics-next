@@ -2,6 +2,10 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { seedTypes, typeEntry } from '../../../../../apps/web/features/catalogue/types.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
 import { authorize, exchangeCode, LocalOAuthSession, type LocalOAuthClient } from '../../../../../scripts/lib/oauth-client.ts';
 import reading, { acting, originalRecipe, short, type RecipeWork } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
@@ -112,6 +116,9 @@ function proofSession(person: PersonaSession): Pick<PersonaSession, 'main'> {
 // including the recipe continuation opened by RecipeExperience.
 async function recipePageReads(name: PersonaName, person: PersonaSession, sample: ReturnType<OutcomeRecorder['session']>) {
   const id = short(recipe.work);
+  const publicSample = recording.session(name, proofSession(sessions.visitor));
+  const registry = await publicSample('type-registry', 'GET', '/v1/types');
+  seedTypes(await registry.json());
   const viewer = (path: string) => person.actingSubject
     ? `${path}${path.includes('?') ? '&' : '?'}${acting(person)}` : path;
   const get = async <T,>(label: string, path: string): Promise<T> => {
@@ -155,6 +162,7 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
     await response.body?.cancel();
   }));
   if (person.actingSubject) await get('reader-state-empty', `/v1/works/${id}/reader-state`);
+  if (person.actingSubject) await recipeProgressReads(person, sample);
   // WorkFrame's follow control calls state(work.id) without a kind or body.
   if (person.actingSubject) await (await sample('recipe-follow-state', 'GET',
     `/v1/me/follow-state?${new URLSearchParams({ actingSubject: person.actingSubject, target: recipe.work })}`)).body?.cancel();
@@ -185,7 +193,6 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
     profile: 'template-query-v1', query: `https://rezics.com/query/${query}`, revision: 1,
     parameters: { roots: [recipe.work] }, presentation: person.actingSubject ? { actingSubject: person.actingSubject } : {},
   })).body?.cancel();
-  const publicSample = recording.session(name, proofSession(sessions.visitor));
   await (await publicSample('work-showcase', 'POST', '/v1/resources/showcase', {
     profile: 'work-showcase-batch-v1', targets: [recipe.work],
   })).body?.cancel();
@@ -193,6 +200,44 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
   await (await publicSample('metadata-work-header', 'GET', `/v1/works/${id}`)).body?.cancel();
   await (await publicSample('classification-facets', 'GET', '/v1/facets')).body?.cancel();
   await (await sample('platform-access', 'GET', '/v1/me/platform-access')).body?.cancel();
+  if (person.actingSubject) {
+    await (await sample('session-agent', 'GET', '/v1/me/session-agent')).body?.cancel();
+    await (await sample('reader-content-preferences', 'GET',
+      `/v1/me/person-preferences?${acting(person)}`, undefined, undefined,
+      { headers: { 'x-session-key': '' } })).body?.cancel();
+  }
+}
+
+// Use the production tracking client so its paths, query order and headers are recorded unchanged.
+// The frame's successful reader-state seed supplies tracking, including media and episodes.
+async function recipeProgressReads(person: PersonaSession, sample: ReturnType<OutcomeRecorder['session']>) {
+  const client = (label: string) => browserMainApi('http://recipe-page.local', { fetcher: async (input, init) => {
+    const url = new URL(String(input));
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const suffix = url.pathname.endsWith('/realizations') ? '-realizations'
+      : url.pathname.endsWith('/releases') ? '-releases' : '';
+    return sample(label + suffix, init?.method ?? 'GET', path, undefined, undefined,
+      { headers: Object.fromEntries(new Headers(init?.headers).entries()) });
+  } });
+  const api = (label: string) => mainTrackingApi(person.actingSubject!, () => client(label));
+  await Promise.all([
+    api('progress-edition-preference').preference(recipe.work),
+    api('progress-editions').editions(recipe.work),
+    api('progress-relations').relations(recipe.work),
+    api('progress-equivalent-definition').definition('correspondence-equivalent'),
+  ]);
+  // SeriesPartsPanel initially uses the interface language, even before a saved preference is applied.
+  await api('progress-series-summary').series(recipe.work, 'en');
+  const media = api('progress-medium-types').media!;
+  const types = await media.types(recipe.work);
+  if (!types.ok && types.failure === 'missing') return;
+  const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
+  const choice = await progressControl(api('progress-medium-parts').media!, api('progress-episode-structure').episodes!,
+    recipe.work, presentation);
+  if (choice.kind === 'chapters') {
+    const standing = await api('progress-chapter-standing').media!.standing(recipe.work);
+    if (standing.ok && !standing.data.opened) await api('progress-chapter-positions').media!.positions(recipe.work);
+  } else if (choice.kind === 'work') await api('progress-work-standing').media!.workStanding(recipe.work);
 }
 
 async function readingSession(person: PersonaSession): Promise<PersonaSession> {
@@ -233,11 +278,15 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
   const sessionKey = randomUUID();
   return {
     ...person,
-    main: async (method, path, body, key) => {
+    main: async (method, path, body, key, options) => {
       const headers = new Headers({
         authorization: `Bearer ${await oauth.current(Date.now(), 60_000)}`,
         'x-session-key': sessionKey,
       });
+      for (const [name, value] of Object.entries(options?.headers ?? {})) {
+        if (value) headers.set(name, value);
+        else headers.delete(name);
+      }
       if (body !== undefined) headers.set('content-type', 'application/json');
       if (key !== undefined || !['GET', 'HEAD'].includes(method))
         headers.set('idempotency-key', key ?? randomUUID());
