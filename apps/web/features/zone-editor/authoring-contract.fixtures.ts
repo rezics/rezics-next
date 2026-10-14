@@ -4,7 +4,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { collectionPreview } from './home-modules.fixtures.ts';
 
 /** Contract-built states awaiting prove-phase recording. No recorded answer is edited here. */
-export type AuthoringContractState = 'saved' | 'empty' | 'loading' | 'unavailable' | 'retired' | 'recovered'
+export type AuthoringContractState = 'saved' | 'retained-details' | 'empty' | 'loading' | 'unavailable' | 'retired' | 'recovered'
   | 'revoked-member' | 'revoked-moderator' | 'restored' | 'operator-without-agent' | 'operator-mandate'
   | 'pending-save' | 'pending-publication' | 'replayed-after-competition';
 const id = (tail: number) => `00000000-0000-4000-8000-${String(tail).padStart(12, '0')}`;
@@ -14,7 +14,7 @@ export const contractSpaceId = id(1102);
 export const contractSavingAgent = iri(1103);
 export const contractDocument = fromPlainText('Saved by the original Agent. 雨夜の庭。', 'blocks');
 export const contractUnsavedDocument = fromPlainText('The next saved Agent garden.', 'blocks');
-export const contractSavedAfterEdit = { revisionId: id(1122), byteDigest: 'ef'.repeat(32), contentEpoch: id(1123) };
+export const contractSavedAfterEdit = { revisionId: id(1122), byteDigest: 'ef'.repeat(32), contentEpoch: id(1106) };
 export const contractBasis = { revisionId: id(1105), byteDigest: 'ab'.repeat(32), contentEpoch: id(1106) };
 export const contractHome = iri(1104);
 export const contractVariant = `urn:rezics:variant:${id(1107)}`;
@@ -24,7 +24,7 @@ export const contractNavigation = iri(1110);
 export const contractCompetingRevision = id(1111);
 export const contractCompetingHead = iri(1128);
 export const contractCompetingDocument = fromPlainText('The competing published garden.', 'blocks');
-export const contractCompetingBasis = { revisionId: contractCompetingRevision, byteDigest: '12'.repeat(32), contentEpoch: id(1129) };
+export const contractCompetingBasis = { revisionId: contractCompetingRevision, byteDigest: '12'.repeat(32), contentEpoch: id(1106) };
 export function contractStateHead(state: AuthoringContractState): string {
   return state === 'retired' ? iri(1126) : state === 'recovered' ? iri(1127) : contractHead;
 }
@@ -54,7 +54,8 @@ export function authoringContractRequests(state: AuthoringContractState) {
     authority: state === 'operator-mandate' ? { resource: `zone:edit:${iri(1101)}`, agent: actingSubject, live: true }
       : state === 'operator-without-agent' ? { resource: `zone:edit:${iri(1101)}`, agent: null, live: false }
       : { resource: iri(1101), agent: actingSubject, live: !state.startsWith('revoked-') },
-    saved: { page: selectedPage, document: contractDocument, provenance: contractProvenance },
+    saved: { page: selectedPage, document: contractDocument, provenance: contractProvenance,
+      ...(state === 'retained-details' ? { notes: { preserved: ['Original saved detail'] } } : {}) },
     ...(state === 'replayed-after-competition' ? { afterCompetingPublication: { configurationHead: contractCompetingHead,
       page: { page: contractHome, variantId: contractVariant, ...contractCompetingBasis }, document: contractCompetingDocument },
       acknowledgement: 'Original command commits; HTTP acknowledgement is dropped; a competing cut commits; the identical key and body replay the original receipt.' } : {}),
@@ -137,7 +138,8 @@ export function authoringContractClient(state: AuthoringContractState) {
         draft: { variantId: contractVariant, revisionId: state === 'empty' ? null : savedBasis.revisionId,
           document: state === 'empty' ? null : savedDocument, byteDigest: state === 'empty' ? null : savedBasis.byteDigest,
           language: { kind: 'tag', tag: 'ja', originalTag: 'ja' }, direction: direction('ja', documentText(savedDocument)), editable: true,
-          sourcePosition: { owner: 'content', dataEpoch: savedBasis.contentEpoch, sequence: '4' } },
+          sourcePosition: { owner: 'content', dataEpoch: savedBasis.contentEpoch, sequence: '4' },
+          ...(state === 'retained-details' ? { notes: manifest.saved.notes, editable: false } : {}) },
         publishedPage: state === 'empty' ? null : { page: contractHome, variantId: contractVariant,
           revisionId: currentPublishedRevision } });
       if (path === `/v1/zones/${contractZoneId}`) return Response.json({ ...preview.navigation, ownerRevision: currentHead });

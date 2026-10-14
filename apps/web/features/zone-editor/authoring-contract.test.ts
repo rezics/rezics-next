@@ -179,3 +179,18 @@ test('attachment uses the addressed Realm capability across Spaces and never inv
     expect(queries).toEqual([{ query: { scope: 'space', key: 'community-space', actingSubject: actor } }]);
   }
 });
+
+test('a protected body remains publishable as its exact admitted revision without rewriting retained details', async () => {
+  const fixture = authoringContractClient('retained-details');
+  const loaded = await readZoneAuthoring(fixture.main, contractZoneId, 'en', contractActor('retained-details'));
+  if (loaded.kind !== 'ready') throw new Error('Retained cut unavailable');
+  expect(loaded.model.editable).toBe(false);
+  const selected = publicationChoice(loaded.model.state);
+  if (!selected) throw new Error('Exact publication choice unavailable');
+  const answer = await browserZoneAuthoring(fixture.main).publish(selected, fixture.manifest.actingSubject, 'retained-details-key', contractZoneId);
+  expect(answer.ok).toBe(true);
+  const writes = fixture.calls.filter(call => call.method === 'POST');
+  expect(writes).toHaveLength(1);
+  expect(writes[0]!.body).toEqual(fixture.manifest.writes[1].body);
+  expect(fixture.manifest.saved.notes).toEqual({ preserved: ['Original saved detail'] });
+});

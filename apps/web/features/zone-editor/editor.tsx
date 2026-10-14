@@ -1,10 +1,10 @@
 'use client';
 
-import type { DocumentSnapshot } from '@rezics/document';
+import { checkDocument, type DocumentSnapshot } from '@rezics/document';
 import { Alert, AlertDescription, AlertTitle } from '@rezics/ui/alert';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { cn } from '@rezics/ui/utils';
-import { Children, useRef, useState, type ReactNode } from 'react';
+import { Children, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { WriteRound } from '../api/command.ts';
 import { zoneCommandLane as commandLane } from './api.ts';
@@ -50,6 +50,10 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
   const [canEdit, setCanEdit] = useState(editable);
   const [reading, setReading] = useState(document);
   const [generation, setGeneration] = useState(0);
+  const retainedReading = useMemo(() => {
+    try { const value: unknown = JSON.parse(state.value); return checkDocument(value) ? value : reading; }
+    catch { return reading; }
+  }, [state.value, reading]);
   const [busy, setBusy] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load'>('home-busy', null);
   const [intent, setIntent] = useZoneEditorSessionState<null | 'save' | 'publish' | 'load' | 'review'>('home-intent', null);
   const [review, setReview] = useZoneEditorSessionState<PublicationReview | null>('home-review', null);
@@ -76,15 +80,18 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
   if (!saveLane.current) saveLane.current = commandLane({ ok: false, failure: 'unavailable' });
   if (!publishLane.current) publishLane.current = commandLane({ ok: false, failure: 'unavailable' });
   const authorityRefused = ['denied', 'sign-in', 'missing'].includes(state.notice.kind);
+  // Unsupported Content details restrict this body editor, while the admitted exact revision can still be published.
+  const publicationAvailable = !authorityRefused;
   const controlsAvailable = canEdit && !authorityRefused;
   const dirty = isDirty(state) || saveChoice.current !== null;
   useZoneEditorExitActions('home', async () => {
-    if (!controlsAvailable || !preparedHomeDocument(stateRef.current) || inflight.current || stateRef.current.notice.kind === 'stale') return false;
+    if (!publicationAvailable || !preparedHomeDocument(stateRef.current) || inflight.current || stateRef.current.notice.kind === 'stale') return false;
     if (publishChoice.current) {
       const published = await publishLane.current!.submit(publishChoice.current, applyPublish);
       if (!published.ok) return false;
     }
     if (!saveChoice.current && !isDirty(stateRef.current)) return true;
+    if (!controlsAvailable) return false;
     saveChoice.current ??= draftChoice(stateRef.current, actingSubject);
     const result = await saveLane.current!.submit(saveChoice.current, applySave);
     return result.ok && !isDirty(stateRef.current);
@@ -142,7 +149,7 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
 
   function publish(next: EditorState = stateRef.current) {
     const choice = publishChoice.current ?? publicationChoice(next);
-    if (!controlsAvailable || !choice || busy || !draftReady) return;
+    if (!publicationAvailable || !choice || busy || !draftReady) return;
     publishChoice.current = choice;
     track('publish', publishLane.current!.submit(choice, applyPublish));
   }
@@ -185,7 +192,7 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
   }
 
   function publishReviewed() {
-    if (!controlsAvailable || !review || busy) return;
+    if (!publicationAvailable || !review || busy) return;
     const confirmed = confirmPublicationReview(review);
     const choice = reviewedPublicationChoice(stateRef.current, confirmed);
     if (!choice) return;
@@ -214,7 +221,7 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
     <div className="min-w-0 space-y-2">
       <div className="flex min-w-0 flex-wrap items-center justify-between gap-x-3 gap-y-2">
         <h2 id="zone-home-title" className="font-semibold text-lg tracking-tight sm:text-xl">{copy.homeTitle}</h2>
-        <EditorActions copy={copy} canEdit={controlsAvailable} canPreview={!authorityRefused} busy={busy}
+        <EditorActions copy={copy} canEdit={controlsAvailable} canPublish={publicationAvailable} canPreview={!authorityRefused} busy={busy}
           saveDisabled={!draftReady || !preparedHomeDocument(state) || !!busy || !dirty || state.notice.kind === 'stale'}
           publishDisabled={!draftReady || !!busy || saveChoice.current !== null || !canPublish(state) || state.notice.kind === 'publish-stale'}
           onSave={() => save()} onPublish={() => publish()} previewHref={previewHref} siteHref={siteHref} />
@@ -235,7 +242,7 @@ export function ZoneHomeEditor({ zoneId, actingSubject, locale, copy, initial, e
       lang={state.language.tag === 'und' ? undefined : state.language.tag}
       dir={state.direction === 'none' ? undefined : state.direction}
       onChange={value => put({ type: 'edit', value })} />
-      : reading ? <ZoneHomeDocument document={reading} className="max-w-3xl text-pretty leading-7" /> : null}
+      : retainedReading ? <ZoneHomeDocument document={retainedReading} className="max-w-3xl text-pretty leading-7" /> : null}
   </section>;
 }
 

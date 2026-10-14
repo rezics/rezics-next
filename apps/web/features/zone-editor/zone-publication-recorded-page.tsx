@@ -6,11 +6,8 @@ import { localizedPath } from '../../i18n/locale.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
-import { messages as manageMessages } from '../manage/messages.ts';
-import manageDe from '../manage/messages/de.ts';
 import { RouteLoading } from '../shell/route-states.tsx';
 import { ShellProvider } from '../shell/shell-provider.tsx';
-import { messages as shellMessages } from '../shell/messages.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { ZoneSiteRecordedPage } from '../zones/zone-site-recorded-page.tsx';
 import { readZoneManagementFrame, type ZoneManagementFrame } from './authoring-reads.ts';
@@ -19,6 +16,7 @@ import { ZoneHomeEditor } from './editor.tsx';
 import { ZoneEditorFrame } from './frame.tsx';
 import { messages as zoneMessages } from './messages.ts';
 import { zoneEditorPath } from './routes.ts';
+import { zoneManagementMessages } from './authoring-messages.ts';
 import { ZoneAuthoringFailure } from './states.tsx';
 import { managementVisit, recordedActingPerson } from './zone-publication-recorded-page.ts';
 
@@ -64,7 +62,7 @@ export function ZonePublicationManagementPage({ record, persona, selections, loc
     return () => { mounted = false; replay.dispose(); };
   }, [record, persona, selections, locale, visit.space, visit.actingSubject]);
   const copy = zoneMessages[locale];
-  const manage = locale === 'de' ? { ...manageMessages, ...manageDe } : manageMessages;
+  const catalogs = zoneManagementMessages(locale);
   // The configuration query names this Person. The management reads do not return an Agent profile.
   const agent = { iri: visit.actingSubject, label: null, handle: null, kind: null, path: null };
   const settled = view.kind === 'frame' ? view.frame : null;
@@ -77,7 +75,7 @@ export function ZonePublicationManagementPage({ record, persona, selections, loc
   const frame = view.kind === 'loading' ? null : <ZoneEditorFrame
     name={settled?.name ?? visit.space} editorPath={zoneEditorPath(visit.space)}
     lifecycleOnly={settled?.lifecycleOnly ?? false} lifecycleAddress={settled?.lifecycleAddress}
-    agent={agent} locale={locale} manageMessages={manage} sectionsLabel={copy.sectionsLabel}
+    agent={agent} locale={locale} manageMessages={catalogs.manage} sectionsLabel={copy.sectionsLabel}
     sectionHome={copy.sectionHome} sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm}
     sectionTheme={copy.sectionTheme} sectionLifecycle={copy.sectionLifecycle} unsavedWork={copy.unsavedWork}>
     {ready ? <ZoneHomeEditor zoneId={ready.model.zoneId} zoneIri={ready.model.zoneIri}
@@ -89,7 +87,7 @@ export function ZonePublicationManagementPage({ record, persona, selections, loc
   const opened = settled?.draftZoneId
     ? <ZoneEditorDraftProvider zoneId={settled.draftZoneId} actingSubject={visit.actingSubject}>{frame}</ZoneEditorDraftProvider>
     : frame;
-  return <ShellProvider locale={locale} messages={shellMessages} initialTheme="light" initialCollapsed={false}>
+  return <ShellProvider locale={locale} messages={catalogs.shell} initialTheme="light" initialCollapsed={false}>
     <section aria-label={persona} className="grid min-w-0 gap-2">
       <p className="px-4 pt-3 text-sm text-muted-foreground sm:px-6 lg:px-10">{persona}</p>
       <p className="break-all px-4 text-sm text-muted-foreground sm:px-6 lg:px-10">{visit.actingSubject}</p>

@@ -43,6 +43,12 @@ function scenario(state: AuthoringContractState, viewport: 'phone' | 'desktop', 
       } else if (state === 'retired') {
         await expect(await canvas.findByRole('button', { name: copy.lifecycleRecover })).toBeVisible();
         await expect(canvas.queryByRole('link', { name: copy.sectionHome })).toBeNull();
+      } else if (state === 'retained-details') {
+        await expect(await canvas.findByText(copy.protectedBody)).toBeVisible();
+        await expect(canvas.queryByRole('textbox', { name: copy.editorLabel })).toBeNull();
+        await expect(canvas.queryByRole('button', { name: copy.save })).toBeNull();
+        await userEvent.click(canvas.getByRole('button', { name: copy.publish }));
+        await expect(await canvas.findByText(copy.published)).toBeVisible();
       } else {
         await expect(await canvas.findByRole('textbox', { name: copy.editorLabel })).toBeVisible();
         if (state === 'pending-save' || state === 'pending-publication') {
@@ -66,6 +72,8 @@ function scenario(state: AuthoringContractState, viewport: 'phone' | 'desktop', 
 
 export const SavedPhone: Story = scenario('saved', 'phone');
 export const SavedDesktop: Story = scenario('saved', 'desktop');
+export const RetainedDetailsPhone: Story = scenario('retained-details', 'phone');
+export const RetainedDetailsDesktop: Story = scenario('retained-details', 'desktop');
 export const LoadingPhone: Story = scenario('loading', 'phone');
 export const LoadingDesktop: Story = scenario('loading', 'desktop');
 export const EmptyPhone: Story = scenario('empty', 'phone');

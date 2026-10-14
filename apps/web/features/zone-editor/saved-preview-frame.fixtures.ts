@@ -3,7 +3,7 @@ import { direction } from '@rezics/main/language';
 import type { ZonePackage } from '@rezics/zone-sdk';
 import { spaceHref } from '../address/path.ts';
 import type { RealmHeader, ZonePresentationRead } from '../realm/types.ts';
-import { collectionPreview, previewCollection, previewSummary } from './home-modules.fixtures.ts';
+import { collectionPreview, previewCollection } from './home-modules.fixtures.ts';
 import { authoringModel } from './model.ts';
 import type { ZoneAuthoringLoad } from './read.ts';
 import type { SavedPreviewReaders } from './saved-preview-frame.ts';
@@ -68,7 +68,8 @@ export const savedPreviewPackage: ZonePackage = { slug: 'fiction', css: '', slot
 /** Contract-built GET /v1/realms/{defaultRealm UUID}: the Realm belongs to a different Space from the saved Zone. */
 export function savedPreviewRealmHeader(): RealmHeader {
   return { profile: 'realm-read-v1', id: previewCollection, space: savedPreviewRealmSpace, revision: zoneHead,
-    name: { ...previewSummary.title, value: 'Tides community' },
+    name: { value: 'Tides community', language: 'en', direction: direction('en', 'Tides community'),
+      basis: { requested: ['en'], selected: 'en', matchedRange: 'en', original: false, untagged: false } },
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: previewCollection, resourceType: 'realm' },
     visibility: 'public', reviewMode: 'mandatory', policyRevision: null, profileRevision: null,
     description: null, banner: null, rules: null, membership: { count: { kind: 'unknown', value: null }, publicMembers: null },

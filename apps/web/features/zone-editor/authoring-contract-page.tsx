@@ -3,11 +3,9 @@
 import { serializeDocument } from '@rezics/document';
 import { useEffect, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
-import { messages as manageMessages } from '../manage/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { RouteLoading } from '../shell/route-states.tsx';
 import { ShellProvider } from '../shell/shell-provider.tsx';
-import { messages as shellMessages } from '../shell/messages.ts';
 import { browserZoneAuthoring, browserZoneLifecycle, loadCompleteZoneNavigation } from './api.ts';
 import { readZoneManagementFrame, type ZoneManagementFrame } from './authoring-reads.ts';
 import { authoringContractClient, contractActor, contractManagementKey, contractUnsavedDocument, contractZoneId, type AuthoringContractState } from './authoring-contract.fixtures.ts';
@@ -20,6 +18,7 @@ import { ZoneDraftPreview } from './preview.tsx';
 import { zoneEditorPath } from './routes.ts';
 import { loadSavedPreviewFrame, type SavedPreviewFrameLoad } from './saved-preview-frame.ts';
 import { ZoneSavedPreviewFrame } from './saved-preview-frame.tsx';
+import { zoneManagementMessages } from './authoring-messages.ts';
 import { ZoneAuthoringFailure } from './states.tsx';
 
 /** The same management and saved-preview readers as the production routes; inputs are explicitly contract-built. */
@@ -32,6 +31,7 @@ export function ZoneAuthoringContractPage({ state, view, locale }: {
   const [failure, setFailure] = useState<string | null>(null);
   const actor = contractActor(state);
   const copy = messages[locale];
+  const catalogs = zoneManagementMessages(locale);
   useEffect(() => {
     let active = true;
     async function load() {
@@ -76,7 +76,7 @@ export function ZoneAuthoringContractPage({ state, view, locale }: {
       : <ZoneAuthoringFailure copy={copy} failure={loaded.authoring.kind === 'failure' ? loaded.authoring.failure : 'missing'} />;
     const frame = <ZoneEditorFrame name={loaded.name} editorPath={zoneEditorPath(contractZoneId)} lifecycleOnly={loaded.lifecycleOnly}
       lifecycleAddress={loaded.lifecycleAddress} agent={{ iri: actor, label: null, handle: null, kind: null, path: null }}
-      locale={locale} manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
+      locale={locale} manageMessages={catalogs.manage} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
       sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm} sectionTheme={copy.sectionTheme}
       sectionLifecycle={copy.sectionLifecycle} unsavedWork={copy.unsavedWork}>
       {loaded.lifecycleOnly && lifecycle ? <ZoneLifecycleEditor zoneId={contractZoneId} actingSubject={actor} locale={locale}
@@ -85,5 +85,5 @@ export function ZoneAuthoringContractPage({ state, view, locale }: {
     </ZoneEditorFrame>;
     content = loaded.draftZoneId ? <ZoneEditorDraftProvider zoneId={loaded.draftZoneId} actingSubject={actor}>{frame}</ZoneEditorDraftProvider> : frame;
   }
-  return <ShellProvider locale={locale} messages={shellMessages} initialTheme="light" initialCollapsed={false}>{content}</ShellProvider>;
+  return <ShellProvider locale={locale} messages={catalogs.shell} initialTheme="light" initialCollapsed={false}>{content}</ShellProvider>;
 }
