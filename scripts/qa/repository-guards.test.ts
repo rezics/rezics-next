@@ -167,6 +167,7 @@ test('service changes select service inventories without generated-contract web 
 test('registry and main-wide runs retain all guards, empty changes run none, and each guard selects itself', () => {
   const all = repositoryGuards.map(guard => guard.file);
   expect(guardFiles(['scripts/qa/repository-guards.ts'])).toEqual(all);
+  expect(guardFiles(['scripts/lib/repository-files.ts'])).toEqual(all);
   expect(guardFiles()).toEqual(all);
   expect(guardFiles([])).toEqual([]);
   for (const guard of repositoryGuards) expect(guardFiles([guard.file])).toContain(guard.file);
