@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
 export default {
+  catalogueIncomplete: '일치하는 작품이 더 있을 수 있습니다. 이 수는 최솟값입니다.',
+  catalogueFreshness: insert('변경 {{sequence}} 기준 카탈로그', { sequence: String }),
   more: '더 보기', shuffle: '무작위로 섞기',
   whyHere: insert('{{title}}이(가) 여기에 있는 이유', { title: String }),
   untitled: '제목 없는 작품',

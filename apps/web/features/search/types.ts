@@ -1,4 +1,4 @@
-import type { MainClient, WorkCover, WorkName } from '../discover/types.ts';
+import type { MainClient, ReadProblem, WorkCover, WorkName } from '../discover/types.ts';
 import type { CatalogueAuthor } from '../catalogue/work.ts';
 import { chapterHref, idOf } from '../work-page/route.ts';
 
@@ -73,7 +73,7 @@ export type SearchFailure =
   | 'missing'
   | 'invalid' | 'unsupported' | 'unavailable';
 
-export type SearchLoaded = { ok: true; page: SearchResultPage } | { ok: false; failure: SearchFailure };
+export type SearchLoaded = { ok: true; page: SearchResultPage } | ({ ok: false; failure: SearchFailure } & ReadProblem);
 
 export function searchFailureOf(status: number, code: string | undefined): SearchFailure {
   if (status === 409 || code === 'invalid_search_continuation') return 'restart';

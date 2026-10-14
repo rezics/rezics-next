@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
 export default {
+  catalogueIncomplete: 'Weitere Treffer können folgen. Diese Anzahl ist ein Mindestwert.',
+  catalogueFreshness: insert('Katalogstand bei Änderung {{sequence}}', { sequence: String }),
   more: 'Mehr', shuffle: 'Zufällig mischen',
   whyHere: insert('Warum {{title}} hier ist', { title: String }),
   untitled: 'Unbenanntes Werk',

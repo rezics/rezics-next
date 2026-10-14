@@ -13,6 +13,12 @@ import type {
 import type { UiLocale } from '../../i18n/define.ts';
 import { messages, type ZoneMessages } from './messages.ts';
 import zhHans from './messages/zh-Hans.ts';
+import zhHant from './messages/zh-Hant.ts';
+import ja from './messages/ja.ts';
+import ko from './messages/ko.ts';
+import de from './messages/de.ts';
+import fr from './messages/fr.ts';
+import es from './messages/es.ts';
 import { presetTokens } from './presentation.ts';
 import type { ModuleState, PlacedModule } from './zone-home.tsx';
 
@@ -66,7 +72,9 @@ function slideArt(seed: string, headline: string, sub: string): ZoneShowcaseImag
 
 /** The Zone catalog a story renders in `locale`: English with its translation over it. */
 export const zoneMessagesFor = (locale: UiLocale): ZoneMessages =>
-  locale === 'zh-Hans' ? { ...messages, ...zhHans } : messages;
+  ({ en: messages, 'zh-Hans': { ...messages, ...zhHans }, 'zh-Hant': { ...messages, ...zhHant },
+    ja: { ...messages, ...ja }, ko: { ...messages, ...ko }, de: { ...messages, ...de },
+    fr: { ...messages, ...fr }, es: { ...messages, ...es } })[locale];
 
 const text = (value: string, lang = 'zh-Hans') => ({ value, lang, dir: 'ltr' as const });
 const realmId = '01a0e3d0-dca8-7736-a626-f53097e68dce';

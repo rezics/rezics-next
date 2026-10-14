@@ -2,8 +2,9 @@ import type { FilterCondition } from '../../../../model/definitions/filter-docum
 import type { ResourceQuery } from '../../../../model/definitions/filter-document-v2.ts';
 import { iriOf } from './scope.ts';
 import type { DiscoverState } from './state.ts';
-import { failureOf, type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient, problemCode }
+import { type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient }
   from './types.ts';
+import { settle } from './read.ts';
 
 /** Filtered shelves use the Concept Works Query, including top-rated, Mine and exclude-only. */
 export async function readQueryDiscovery(main: MainClient, state: DiscoverState,
@@ -29,18 +30,16 @@ export async function readQueryDiscovery(main: MainClient, state: DiscoverState,
     ...(mine && shelf.actingSubject ? { actingSubject: shelf.actingSubject } : {}),
     page: { size: shelf.limit ?? 12, ...(shelf.cursor ? { continuation: shelf.cursor } : {}) } };
   const read = async (): Promise<Loaded<DiscoveryPage>> => {
-    try {
-      const { data, error } = await main.v1.query.post(query,
-        { headers: { 'accept-language': shelf.language ?? 'en' } });
-      if (error) return { ok: false, failure: failureOf(error.status, problemCode(error.value)) };
-      if (data?.result.profile !== 'concept-works-v1') return { ok: false, failure: 'unavailable' };
-      const result = data.result;
+      const answer = await settle(() => main.v1.query.post(query,
+        { headers: { 'accept-language': shelf.language ?? 'en' } }));
+      if (!answer.ok) return answer;
+      if (answer.data.result.profile !== 'concept-works-v1') return { ok: false, failure: 'unavailable' };
+      const result = answer.data.result;
       return { ok: true, data: { profile: 'discovery-works-v1', order: top ? 'top-rated' : 'recent',
         context: shelf.context ?? null, matchedTerm: null,
         generation: result.generation, stale: result.stale, projectionPosition: result.projectionPosition,
         scope: result.scope, items: result.items, sourcePosition: result.sourcePosition,
         nextCursor: result.nextCursor, count: result.count, matches: result.matches } as DiscoveryPage };
-    } catch { return { ok: false, failure: 'unavailable' }; }
   };
   const first = await read();
   return !first.ok && first.failure === 'moved' && !shelf.cursor ? read() : first;

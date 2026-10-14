@@ -301,15 +301,18 @@ describe('discover shelves', () => {
     expect(await readDiscovery(answering(503, 'discovery_unavailable'), {})).toEqual({
       ok: false,
       failure: 'unbuilt',
+      status: 503, problem: { code: 'discovery_unavailable' },
     });
     // A first page has no cursor to move under: its 409 means the built list predates a write.
     expect(await readDiscovery(answering(409, 'read_basis_changed'), {})).toEqual({
       ok: false,
       failure: 'stale',
+      status: 409, problem: { code: 'read_basis_changed' },
     });
     expect(await readDiscovery(answering(409, 'read_basis_changed'), { cursor: 'c' })).toEqual({
       ok: false,
       failure: 'moved',
+      status: 409, problem: { code: 'read_basis_changed' },
     });
     const throwing = {
       v1: {

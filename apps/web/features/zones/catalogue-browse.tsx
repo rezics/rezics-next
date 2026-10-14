@@ -7,13 +7,13 @@ import type { readZoneBrowse } from '../realm/read.ts';
 import { browseHref, mainBrowseQuery, parseBrowseState } from './browse-state.ts';
 import type { BrowseModel } from './browse-view.ts';
 import type { readPublicationYears } from './catalogue-facts.ts';
-import { catalogueYearParam } from './catalogue-year.ts';
+import { catalogueYearCondition, catalogueYearParam } from './catalogue-year.ts';
 
 // A selected year is a Condition on the Realm's browse read. The all-years
 // directory retains its existing publication-year template and ordering source.
 export function catalogueBrowseQuery(search: Record<string, string | string[] | undefined>):
   ReturnType<typeof mainBrowseQuery> & { publicationYear?: string } {
-  const year = catalogueYearParam(search.year);
+  const year = catalogueYearCondition(search.year);
   return { ...mainBrowseQuery(parseBrowseState(search)),
     ...year !== null ? { publicationYear: String(year) } : {} };
 }
@@ -24,7 +24,7 @@ export const YEAR_PAGES = 8;
 /** Matches kept from the pages this request read. A further year-read page waits for the next cursor. */
 const SCREEN = 20;
 
-function withFlags(href: string, year: number | null, directory: boolean): string {
+function withFlags(href: string, year: string | null, directory: boolean): string {
   const url = new URL(href, 'https://rezics.local');
   if (year === null) url.searchParams.delete('year');
   else url.searchParams.set('year', String(year));
@@ -86,7 +86,7 @@ export async function applyCatalogueYear({ view, search, model }: {
 }, reads: { publicationYears?: typeof readPublicationYears; zoneBrowse?: typeof readZoneBrowse } = {}): Promise<{
   header: ReactNode; publicationYears: Map<string, number[]>; year: number | null;
   failure: 'unavailable' | null }> {
-  const year = catalogueYearParam(search.year);
+  const year = catalogueYearCondition(search.year);
   const directory = year === null && directoryParam(search.years);
   const base = view.zone.links.browse;
   const state = parseBrowseState(search);
@@ -118,22 +118,24 @@ export async function applyCatalogueYear({ view, search, model }: {
   const header = Header && Link ? <Header zone={view.zone} filter={null} filtered={false} fallback={null} Link={Link}
     year={yearControl} /> : null;
   const publicationYears = new Map<string, number[]>();
-  if (year !== null) for (const work of model.items) publicationYears.set(work.id, [year]);
+  // A range is a Condition, not evidence of each card's publication year.
+  const exactYear = year === null ? null : catalogueYearParam(year);
+  if (exactYear !== null) for (const work of model.items) publicationYears.set(work.id, [exactYear]);
   if (directory) {
     // Directory reads belong to the server. Selected-year presentation can also
     // render in Storybook without importing their request context.
     const years = reads.publicationYears ?? (await import('./catalogue-facts.ts')).readPublicationYears;
     const browse = reads.zoneBrowse ?? (await import('../realm/read.ts')).readZoneBrowse;
     const roster = await members(view, { ...state, cursor: null }, browse);
-    if (roster.failure) return { header, publicationYears, year, failure: 'unavailable' };
+    if (roster.failure) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
     const found: ZoneWork[] = [];
     let cursor = yearCursorOf(search.yearCursor) ?? undefined;
     let nextCursor: string | null = null;
     // YEAR_PAGES bounds one request. Works outside this Zone are filtered after the read;
     // the year template does not take a format or type yet.
     for (let step = 0; step < YEAR_PAGES; step++) {
-      const listed = await years(year === null ? {} : { fromYear: year, toYear: year }, cursor);
-      if (!listed.ok) return { header, publicationYears, year, failure: 'unavailable' };
+      const listed = await years({}, cursor);
+      if (!listed.ok) return { header, publicationYears, year: exactYear, failure: 'unavailable' };
       for (const row of listed.data.items) {
         const work = roster.works.get(row.id);
         if (!work) continue;
@@ -163,5 +165,5 @@ export async function applyCatalogueYear({ view, search, model }: {
     model.results = open
       ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
   }
-  return { header, publicationYears, year, failure: null };
+  return { header, publicationYears, year: exactYear, failure: null };
 }

@@ -6,6 +6,7 @@ import { zoneContentText } from '../language/untagged.ts';
 import { type BrowseFacet, browseFacets, browseHref, type BrowseSort, type BrowseState, chipHref, cleared,
   facetParams, lengthBands, toggled, toggledExcludedConcept, urlValue } from './browse-state.ts';
 import type { ZoneMessages } from './messages.ts';
+import type { ZoneBrowsePage } from '../realm/types.ts';
 
 // Main's browse page as the page shows it: every Facet and value named in the
 // reader's language, and every change a link. Pure, so tests and stories
@@ -38,6 +39,7 @@ export interface BrowseModel {
   items: ZoneWork[];
   next: string | null;
   first: string | null;
+  basis?: Pick<ZoneBrowsePage, 'sourcePosition' | 'window' | 'tags' | 'matches'>;
 }
 
 /** `language` is the interface locale for the page's own words; a raw value (loader, version) has none. */
@@ -98,7 +100,7 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
   base: string; zoneName: string; state: BrowseState;
   page: { items: ZoneWork[]; facets: FacetCounts; matches: { value: number; kind: 'exact' | 'lower-bound' };
     window: { scanned: number; complete: boolean }; tags: 'current' | 'stale' | 'unavailable';
-    nextCursor: string | null; sort: BrowseSort };
+    nextCursor: string | null; sort: BrowseSort; sourcePosition?: ZoneBrowsePage['sourcePosition'] };
   admitted: ReadonlyMap<string, string>; locale: UiLocale; messages: ZoneMessages;
 }): BrowseModel {
   const t = materializeData(messages, { locale });
@@ -123,6 +125,8 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     label: view === 'list' ? messages.viewList : messages.viewGrid,
     href: browseHref(base, { ...state, view, cursor: state.cursor }) }));
   const notes = [
+    !page.window.complete ? messages.catalogueIncomplete : null,
+    page.sourcePosition ? t.catalogueFreshness({ sequence: page.sourcePosition.sequence }) : null,
     page.tags === 'stale' && (state.filter.concept || state.excludedConcepts?.length) ? messages.tagsStale : null,
     page.tags === 'unavailable' && (state.filter.concept || state.excludedConcepts?.length)
       ? messages.tagsUnavailable : null,
@@ -139,6 +143,8 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     results: page.matches.kind === 'exact' ? t.results(page.matches.value)
       : t.resultsAtLeast({ count: String(page.matches.value) }),
     notes, items: page.items,
+    ...(page.sourcePosition ? { basis: { sourcePosition: page.sourcePosition, window: page.window,
+      tags: page.tags, matches: page.matches } } : {}),
     next: page.nextCursor ? browseHref(base, { ...state, cursor: page.nextCursor }) : null,
     first: state.cursor ? browseHref(base, { ...state, cursor: null }) : null };
 }

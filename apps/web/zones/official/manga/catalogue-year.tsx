@@ -20,9 +20,9 @@ export function CatalogueYearForm({ year, label, submit, clear, directory, bound
     className="flex min-h-11 flex-wrap items-center gap-2 rounded-xl border border-border/80 bg-card px-4 py-1.5 text-sm">
     {year.kept.map(item => <input key={`${item.name}=${item.value}`} type="hidden" name={item.name} value={item.value} />)}
     <label className="flex items-center gap-2 font-medium">{label}
-      <input name="year" defaultValue={year.value} inputMode="numeric" autoComplete="off"
-        pattern="[1-9][0-9]{0,3}"
-        className="h-8 w-24 rounded-xl border border-border/80 bg-card px-3 font-normal text-foreground text-sm outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20" />
+      <input name="year" defaultValue={year.value} autoComplete="off"
+        pattern="[1-9][0-9]{0,3}(-[1-9][0-9]{0,3})?" placeholder="2000-2009"
+        className="h-8 w-32 rounded-xl border border-border/80 bg-card px-3 font-normal text-foreground text-sm outline-none hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20" />
     </label>
     <button type="submit" className={buttonVariants({ size: 'sm' })}>{submit}</button>
     {year.clearHref ? <Link href={year.clearHref}

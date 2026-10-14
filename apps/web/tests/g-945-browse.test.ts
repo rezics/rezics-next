@@ -17,6 +17,10 @@ import {
 import { EntityPickerSource } from '../../../packages/ui/src/components/entity-picker-state.ts';
 import { browseCategories } from '../features/catalogue/registry.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+import { browserMainApi } from '../features/api/browser.ts';
+
+const response = (data: unknown, status = 200) => new Response(JSON.stringify(data),
+  { status, headers: { 'content-type': 'application/json' } });
 
 const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const iri = (n: number) => `https://rezics.com/id/${id(n)}`;
@@ -149,18 +153,12 @@ describe('G-945 one browse', () => {
 describe('G-945 served browse contract', () => {
   test('the client forwards language, actor, cursor and page bounds without multilingual fan-out', async () => {
     const calls: unknown[] = [];
-    const main = {
-      v1: {
-        discovery: {
-          concepts: {
-            get: async (options: unknown) => {
-              calls.push(options);
-              return { data: { ...page([]), profile: 'concept-search-v1' }, error: null };
-            },
-          },
-        },
-      },
-    };
+    const main = browserMainApi('https://fixture.invalid', { fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      calls.push({ query: Object.fromEntries(new URL(request.url).searchParams),
+        headers: { 'accept-language': request.headers.get('accept-language') } });
+      return response({ ...page([]), profile: 'concept-search-v1' });
+    }) as typeof fetch });
     await discoveryApi(main, 'ja', iri(8)).concepts({ q: '宇宙', cursor: 'next', realm: iri(9) });
     expect(calls).toEqual([
       {
@@ -169,7 +167,7 @@ describe('G-945 served browse contract', () => {
           cursor: 'next',
           scope: 'realm',
           realm: iri(9),
-          limit: 20,
+          limit: '20',
           actingSubject: iri(8),
         },
         headers: { 'accept-language': 'ja' },
@@ -177,29 +175,13 @@ describe('G-945 served browse contract', () => {
     ]);
   });
   test('Query results require the new profile; stale cursors remain refusals', async () => {
-    const wrong = {
-      v1: {
-        query: {
-          post: async () => ({
-            data: { result: { ...page<ResourceCard>([]), profile: 'concept-works-v1' } },
-            error: null,
-          }),
-        },
-      },
-    };
+    const wrong = browserMainApi('https://fixture.invalid', { fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      response({ result: { ...page<ResourceCard>([]), profile: 'concept-works-v1' } })) as typeof fetch });
     await expect(
       discoveryApi(wrong, 'en').resources(browseQuery(emptyBrowse)),
     ).rejects.toBeInstanceOf(BrowseReadError);
-    const stale = {
-      v1: {
-        query: {
-          post: async () => ({
-            data: null,
-            error: { status: 409, value: { code: 'read_basis_changed' } },
-          }),
-        },
-      },
-    };
+    const stale = browserMainApi('https://fixture.invalid', { fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      response({ code: 'read_basis_changed' }, 409)) as typeof fetch });
     try {
       await discoveryApi(stale, 'en').resources(browseQuery(emptyBrowse));
       throw new Error('Expected refusal');
@@ -209,19 +191,10 @@ describe('G-945 served browse contract', () => {
   });
   test('rating populations forward the real target and reader identity on every page', async () => {
     let input: unknown;
-    const main = {
-      v1: {
-        'rating-populations': {
-          get: async (options: unknown) => {
-            input = options;
-            return {
-              data: { ...page([]), profile: 'rating-populations-v1', target: iri(99) },
-              error: null,
-            };
-          },
-        },
-      },
-    };
+    const main = browserMainApi('https://fixture.invalid', { fetcher: (async (url: RequestInfo | URL, init?: RequestInit) => {
+      input = { query: Object.fromEntries(new URL(new Request(url, init).url).searchParams) };
+      return response({ ...page([]), profile: 'rating-populations-v1', target: iri(99) });
+    }) as typeof fetch });
     await discoveryApi(main, 'fr', iri(8)).populations(iri(99), {
       q: 'lecteurs',
       cursor: 'past-20',
@@ -232,7 +205,7 @@ describe('G-945 served browse contract', () => {
         actingSubject: iri(8),
         q: 'lecteurs',
         cursor: 'past-20',
-        limit: 20,
+        limit: '20',
       },
     });
   });
@@ -246,18 +219,8 @@ describe('G-945 served browse contract', () => {
   });
   test('section continuation is taken from the nested page, never the section-list cursor', async () => {
     const item = { id: 'sites', reason: { kind: 'new-sites' }, page: page([], 'next-site') };
-    const main = {
-      v1: {
-        discovery: {
-          sections: {
-            get: async () => ({
-              data: { ...page([item]), profile: 'discovery-sections-v1', personalized: false },
-              error: null,
-            }),
-          },
-        },
-      },
-    };
+    const main = browserMainApi('https://fixture.invalid', { fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+      response({ ...page([item]), profile: 'discovery-sections-v1', personalized: false })) as typeof fetch });
     const read = await discoveryApi(main, 'en').sections({
       section: 'sites',
       cursor: 'first-site',

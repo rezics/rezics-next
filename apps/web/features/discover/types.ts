@@ -24,12 +24,19 @@ export type RealmHeader = Ok<ReturnType<MainClient['v1']['realms']>['get']>;
  * `stale` is its 409 on a first page, when the active generation predates a
  * write and no operator has rebuilt it; `moved` is a 409 on a later page.
  */
-export type ReadFailure = 'unbuilt' | 'stale' | 'moved' | 'invalid' | 'unsupported' | 'sign-in' | 'missing' | 'budget'
+export type ReadFailure = 'pending' | 'unbuilt' | 'stale' | 'moved' | 'invalid' | 'unsupported' | 'sign-in' | 'missing' | 'budget'
   | 'unavailable';
 
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+/** Presentation categories supplement the original response; they never replace its problem. */
+export interface ReadProblem { status?: number; problem?: unknown }
+export type Loaded<T> = { ok: true; data: T } | ({ ok: false; failure: ReadFailure } & ReadProblem);
+
+export function failedDiscoveryRead(status: number, problem?: unknown): Extract<Loaded<never>, { ok: false }> {
+  return { ok: false, failure: failureOf(status, problemCode(problem)), status, problem };
+}
 
 export function failureOf(status: number, code?: string): ReadFailure {
+  if (status === 202) return 'pending';
   if (status === 404) return 'missing';
   if (status === 401 || status === 403) return 'sign-in';
   if (status === 409) return 'moved';

@@ -11,6 +11,7 @@ import { UnlistedSpaceNotice } from '../features/space-access/unlisted-notice.ts
 import { parseBrowseState, browseHref, browseQuery } from '../features/discover/browse-state.ts';
 import { discoveryApi } from '../features/discover/api.ts';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
+import { browserMainApi } from '../features/api/browser.ts';
 
 beforeAll(seedServedTypes);
 const originalFetch = globalThis.fetch;
@@ -101,33 +102,16 @@ test.each(['en', 'zh-Hant'] as const)(
 
 test('G982: Communities continuation preserves its type and selection and renders a distinct second page', async () => {
   const calls: unknown[] = [];
-  const api = discoveryApi(
-    {
-      v1: {
-        query: {
-          post: async (query: ReturnType<typeof browseQuery>) => {
-            calls.push(query);
-            const continued = query.cursor === 'communities-next';
-            return {
-              error: null,
-              data: {
-                result: {
-                  profile: 'resource-list-v1',
-                  items: Array.from({ length: continued ? 5 : 20 }, (_, index) => ({
-                    id: `community-${index + (continued ? 20 : 0)}`,
-                  })),
-                  nextCursor: continued ? null : 'communities-next',
-                  complete: continued,
-                  count: { kind: 'exact', value: 25 },
-                },
-              },
-            };
-          },
-        },
-      },
-    },
-    'en',
-  );
+  const main = browserMainApi('https://fixture.invalid', { fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const query = await new Request(input, init).json() as ReturnType<typeof browseQuery>;
+    calls.push(query);
+    const continued = query.cursor === 'communities-next';
+    return new Response(JSON.stringify({ result: { profile: 'resource-list-v1',
+      items: Array.from({ length: continued ? 5 : 20 }, (_, index) => ({ id: `community-${index + (continued ? 20 : 0)}` })),
+      nextCursor: continued ? null : 'communities-next', complete: continued, count: { kind: 'exact', value: 25 },
+    } }), { headers: { 'content-type': 'application/json' } });
+  }) as typeof fetch });
+  const api = discoveryApi(main, 'en');
   const first = parseBrowseState({ tab: 'communities', personalization: 'off' })!;
   const firstPage = await api.resources(browseQuery(first));
   const href = browseHref({ ...first, cursor: firstPage.nextCursor });

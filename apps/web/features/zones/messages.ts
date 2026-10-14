@@ -54,6 +54,8 @@ export const messages = {
   windowNote: insert('Filters look through this community’s {{count}} newest picks.', { count: String }),
   tagsStale: 'Tags are catching up with the latest changes. Try again in a moment.',
   tagsUnavailable: 'Tags can’t be used as filters right now.',
+  catalogueIncomplete: 'More matches may follow. This count is a minimum.',
+  catalogueFreshness: insert('Catalogue as of change {{sequence}}', { sequence: String }),
   browseEmptyTitle: 'Nothing matches these filters',
   browseEmptyBody: 'Remove a filter, or search for something else.',
   facetStatus: 'Status', facetLength: 'Length', facetConcept: 'Tags', facetType: 'Type',

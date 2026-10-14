@@ -2,10 +2,11 @@ import { infiniteQueryOptions } from '@tanstack/react-query';
 import { browserMainApi } from '../api/browser.ts';
 import { readSearchPage } from './read.ts';
 import type { SearchState } from './state.ts';
+import type { ReadProblem } from '../discover/types.ts';
 import type { SearchContinuation, SearchFailure, SearchLoaded, SearchResultPage } from './types.ts';
 
 export class SearchError extends Error {
-  constructor(readonly failure: SearchFailure) { super(`Search read failed: ${failure}`); }
+  constructor(readonly failure: SearchFailure, readonly response: ReadProblem = {}) { super(`Search read failed: ${failure}`); }
 }
 
 export type SearchLoader = (continuation: SearchContinuation | undefined) => Promise<SearchLoaded>;
@@ -29,7 +30,7 @@ export function searchPagesOptions(state: SearchState, language: string, actingS
     queryKey: ['public-search', state, language, actingSubject ?? null, signedIn, first.indexGeneration, first.sequence],
     queryFn: async ({ pageParam }) => {
       const read = await load(pageParam ?? undefined);
-      if (!read.ok) throw new SearchError(read.failure);
+      if (!read.ok) throw new SearchError(read.failure, read);
       return read.page;
     },
     initialPageParam: null as SearchContinuation | null,

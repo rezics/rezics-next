@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { ZoneMessages } from '../messages.ts';
 
 export default {
+  catalogueIncomplete: '可能還有更多符合條件的作品。此數量為下限。',
+  catalogueFreshness: insert('目錄更新至變更 {{sequence}}', { sequence: String }),
   more: '查看更多', shuffle: '換一批',
   whyHere: insert('《{{title}}》為何在此', { title: String }),
   untitled: '未命名作品',

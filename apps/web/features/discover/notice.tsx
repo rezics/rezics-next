@@ -33,7 +33,7 @@ export function Notice({ icon: Icon, title, description, children, tone = 'defau
 export function failureNotice(failure: ReadFailure, shelf: string, t: ContractOf<DiscoverMessages>):
   { icon: LucideIcon; title: string; description?: string; tone: 'default' | 'destructive' } {
   switch (failure) {
-    case 'unbuilt': case 'stale':
+    case 'pending': case 'unbuilt': case 'stale':
       return { icon: HourglassIcon, title: t.preparing, description: t.preparingHelp, tone: 'default' };
     case 'moved': return { icon: RefreshCwIcon, title: t.moved, description: t.movedHelp, tone: 'default' };
     case 'missing': return { icon: CircleSlashIcon, title: t.missingShelf, description: t.missingHelp, tone: 'default' };

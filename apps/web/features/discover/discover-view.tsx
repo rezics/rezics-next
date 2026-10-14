@@ -44,6 +44,7 @@ function Failure({
   locale: UiLocale;
 }) {
   const t = browseMessages[locale];
+  if (read.pending) return <p role="status" aria-busy="true">{messages[locale].preparing}</p>;
   return (
     <div
       role="alert"

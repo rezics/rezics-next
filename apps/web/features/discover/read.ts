@@ -1,17 +1,18 @@
 import { type BrowseScope, idOf, iriOf } from './scope.ts';
-import { failureOf, type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient,
-  problemCode, type RealmHeader } from './types.ts';
+import { failedDiscoveryRead, type DiscoveryPage, type DiscoveryQuery, type Loaded, type MainClient,
+  type RealmHeader } from './types.ts';
 
 // Reads shared by the server render and the browser's "Show more": each takes
 // the Eden client for its side and returns `Loaded` instead of throwing, so
 // one shelf's failure never takes down the page.
 
-type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null };
+type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; response?: { status: number } };
 
 export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
   try {
-    const { data, error } = await call();
-    if (error) return { ok: false, failure: failureOf(error.status, problemCode(error.value)) };
+    const { data, error, response } = await call();
+    if (error) return failedDiscoveryRead(error.status, error.value);
+    if (response?.status === 202) return failedDiscoveryRead(202, data);
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
   } catch {
     return { ok: false, failure: 'unavailable' };
@@ -21,7 +22,7 @@ export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<
 /** One page of a discovery shelf. A first page cannot have moved under a cursor, so its 409 is staleness. */
 export async function readDiscovery(main: MainClient, query: DiscoveryQuery): Promise<Loaded<DiscoveryPage>> {
   const read = await settle(() => main.v1.works.get({ query }));
-  return !read.ok && read.failure === 'moved' && !query.cursor ? { ok: false, failure: 'stale' } : read;
+  return !read.ok && read.failure === 'moved' && !query.cursor ? { ...read, failure: 'stale' } : read;
 }
 
 /** A public Realm's header, for its name in the scope bar and shelf titles. */

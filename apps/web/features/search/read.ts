@@ -66,7 +66,8 @@ export async function readSearchPage(clients: { search: MainClient; names: MainC
   let page: SearchPage;
   try {
     const { data, error } = await clients.search.v1.query.post(searchRequest(state, options.continuation));
-    if (error) return { ok: false, failure: searchFailureOf(error.status, problemCode(error.value)) };
+    if (error) return { ok: false, failure: searchFailureOf(error.status, problemCode(error.value)),
+      status: error.status, problem: error.value };
     if (!data || !('results' in data.result)
       || data.result.profile === 'public-content-phrase-page-v1') return { ok: false, failure: 'unavailable' };
     page = data.result as SearchPage;

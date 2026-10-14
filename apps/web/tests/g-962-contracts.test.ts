@@ -6,6 +6,7 @@ import { browseQuery, emptyBrowse } from '../features/discover/browse-state.ts';
 import { fixtureFollow, target } from '../features/relationships/fixtures.ts';
 import { followedCommunity, withZoneAddress } from '../features/shell/communities-relationships.ts';
 import { realmSegment, segmentsOf, type Community } from '../features/shell/communities.ts';
+import { browserMainApi } from '../features/api/browser.ts';
 
 const sourcePosition = { dataEpoch: 'merged-main', sequence: '42' };
 const list = { items: [], nextCursor: null, complete: true, count: { value: 0, kind: 'exact' as const } };
@@ -16,12 +17,13 @@ describe('G-962 merged browse and relationship contracts', () => {
     const concepts = { ...list, profile: 'concept-search-v1' as const, sourcePosition, stale: true };
     const populations = { ...list, profile: 'rating-populations-v1' as const, target: target(10), sourcePosition, stale: true };
     const sections = { ...list, profile: 'discovery-sections-v1' as const, personalized: false, sourcePosition, stale: true };
-    const answer = (data: unknown) => ({ get: async () => ({ data, error: null }) });
-    const api = discoveryApi({ v1: {
-      query: { post: async () => ({ data: { result: resources }, error: null }) },
-      discovery: { concepts: answer(concepts), sections: answer(sections) },
-      'rating-populations': answer(populations),
-    } }, 'zh-Hant');
+    const main = browserMainApi('https://fixture.invalid', { fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const path = new URL(new Request(input, init).url).pathname;
+      const data = path.endsWith('/query') ? { result: resources } : path.endsWith('/concepts') ? concepts
+        : path.endsWith('/sections') ? sections : populations;
+      return new Response(JSON.stringify(data), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch });
+    const api = discoveryApi(main, 'zh-Hant');
     expect(await api.resources(browseQuery(emptyBrowse))).toEqual(resources);
     expect(await api.concepts()).toEqual(concepts);
     expect(await api.populations(target(10))).toEqual(populations);
@@ -30,11 +32,9 @@ describe('G-962 merged browse and relationship contracts', () => {
 
   test('branch-era and missing profiles cannot become successful picker or section reads', async () => {
     for (const profile of [undefined, 'discovery-works-v1', 'follows-v1']) {
-      const get = async () => ({ data: { ...list, profile }, error: null });
-      const api = discoveryApi({ v1: {
-        discovery: { concepts: { get }, sections: { get } },
-        'rating-populations': { get },
-      } }, 'en');
+      const main = browserMainApi('https://fixture.invalid', { fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ ...list, profile }), { headers: { 'content-type': 'application/json' } })) as typeof fetch });
+      const api = discoveryApi(main, 'en');
       await expect(api.concepts()).rejects.toBeInstanceOf(BrowseReadError);
       await expect(api.sections()).rejects.toBeInstanceOf(BrowseReadError);
       await expect(api.populations(target(10))).rejects.toBeInstanceOf(BrowseReadError);

@@ -11,6 +11,8 @@ export interface ListPage<T> {
   nextCursor: string | null;
   complete: boolean;
   count: { value: number; kind: 'exact' | 'at-least' };
+  sourcePosition?: DiscoveryPage['sourcePosition'];
+  stale?: boolean;
 }
 type QueryResult = NonNullable<Awaited<ReturnType<MainClient['v1']['query']['post']>>['data']>['result'];
 /** The shared card is the served Query contract, also used by Discovery sections. */
@@ -61,44 +63,12 @@ export interface ResourceQuery extends ListInput {
   sort: 'newest' | 'updated' | 'relevance';
   filter?: FilterDocument;
 }
-type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null };
-type Get<T, Q> = {
-  get: (options: { query: Q; headers?: Record<string, string> }) => Promise<Answer<T>>;
-};
-// The manager must merge Main's route types before this seam can use Eden directly.
-interface BrowseContract {
-  v1: {
-    query: {
-      post: (
-        query: ResourceQuery,
-        options: { headers: Record<string, string> },
-      ) => Promise<Answer<{ result: ServedPage<ResourceCard, 'resource-list-v1'> }>>;
-    };
-    discovery: {
-      concepts: Get<
-        ServedPage<ConceptChoice, 'concept-search-v1'>,
-        ListInput & {
-          scope?: 'realm';
-          realm?: string;
-          actingSubject?: string;
-          personalization?: boolean;
-        }
-      >;
-      sections: Get<
-        SectionsPage,
-        ListInput & { section?: SectionId; actingSubject?: string; personalization?: boolean }
-      >;
-    };
-    'rating-populations': Get<
-      ServedPage<RatingPopulation, 'rating-populations-v1'> & { target: string },
-      ListInput & { target: string; actingSubject?: string }
-    >;
-  };
-}
+type Answer<T> = { data: T | null; error: { status: number; value: unknown } | null; response?: { status: number } };
 export class BrowseReadError extends Error {
   constructor(
     readonly status: number,
     readonly code: string | null = null,
+    readonly problem?: unknown,
   ) {
     super('Browse read failed');
   }
@@ -111,13 +81,14 @@ export function browseTypeCondition(category: string): FilterCondition {
   return { facet: 'type', any: entry.types };
 }
 async function value<T>(read: Promise<Answer<T>>): Promise<T> {
-  const { data, error } = await read;
+  const { data, error, response } = await read;
+  if (response?.status === 202) throw new BrowseReadError(202, null, data ?? error?.value);
   if (error || data === null) {
     const code =
       error?.value && typeof error.value === 'object' && 'code' in error.value
         ? String(error.value.code)
         : null;
-    throw new BrowseReadError(error?.status ?? 503, code);
+    throw new BrowseReadError(error?.status ?? 503, code, error?.value);
   }
   return data;
 }
@@ -144,12 +115,13 @@ function servedPage<T, Profile extends string>(
   return page;
 }
 
-export function discoveryApi(main: unknown, locale: string, actingSubject?: string) {
-  const contract = main as BrowseContract;
+export function discoveryApi(main: MainClient, locale: string, actingSubject?: string) {
+  const contract = main;
   const headers = { 'accept-language': locale };
   return {
     async resources(query: ResourceQuery) {
       const result = await value(contract.v1.query.post(query, { headers }));
+      if (result.result.profile !== 'resource-list-v1') throw new BrowseReadError(503);
       return servedPage(result.result, 'resource-list-v1', query.cursor);
     },
     async concepts(query: ListInput & { realm?: string; personalization?: boolean } = {}) {

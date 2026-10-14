@@ -10,6 +10,7 @@ import { browseHref, type BrowseState } from './browse-state.ts';
 import { browseCounts } from './count-messages.ts';
 import { DiscoverResourceCard, resourceWork } from './resource-card.tsx';
 import type { BrowseScope } from './scope.ts';
+import { pageMessages } from './page-messages.ts';
 
 export { browseResourceHref } from './resource-card.tsx';
 /** The same resource cards serve every tab and every section. Names retain their written language. */
@@ -55,6 +56,7 @@ export function BrowseContinuation({
 }) {
   const t = browseMessages[locale];
   const counts = materializeData(browseCounts[locale], { locale });
+  const freshness = materializeData(pageMessages[locale], { locale });
   return (
     <div className="flex flex-wrap items-center justify-between gap-3">
       <p role="status" className="text-muted-foreground text-sm">
@@ -79,6 +81,9 @@ export function BrowseContinuation({
           </Link>
         ) : null}
       </nav>
+      {page.sourcePosition ? <p className="basis-full text-muted-foreground text-xs">
+        {freshness.freshness({ sequence: page.sourcePosition.sequence })}</p> : null}
+      {page.stale ? <p className="basis-full text-muted-foreground text-sm">{freshness.stale}</p> : null}
     </div>
   );
 }

@@ -1,7 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import {
   discoveryApi,
-  BrowseReadError,
   type ConceptChoice,
   type DiscoverySection,
   type ListPage,
@@ -11,15 +10,9 @@ import { browseQuery, type BrowseState } from './browse-state.ts';
 import { browseReader } from './server.ts';
 import { readChapterText } from './chapter-text-read.ts';
 import type { SearchLoaded } from '../search/types.ts';
+import { readBrowse, type BrowseResult } from './browse-read.ts';
+export { readBrowse, type BrowseResult } from './browse-read.ts';
 
-export type BrowseResult<T> = { ok: true; data: T } | { ok: false; moved: boolean };
-export async function readBrowse<T>(call: () => Promise<T>): Promise<BrowseResult<T>> {
-  try {
-    return { ok: true, data: await call() };
-  } catch (error) {
-    return { ok: false, moved: error instanceof BrowseReadError && error.status === 409 };
-  }
-}
 export interface LoadedBrowse {
   state: BrowseState | null;
   topics: ConceptChoice[];
