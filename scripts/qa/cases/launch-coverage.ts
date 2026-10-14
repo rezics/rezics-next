@@ -43,7 +43,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-828-zone-browse.test.ts',
       'HTTP traverses 1,000 adopted Works in every sort and Condition; public counts, relay, backfill and serial recovery',
       'Traverses the Realm-scoped Book browse API in every sort and title, completion and Concept filter, checking public result sets.'),
-    browser: missing('L21'),
+    browser: journeyBrowser('apps/web/tests/books-catalogue-export.e2e.ts', 'books-catalogue',
+      'books-catalogue: a visitor browses and searches the Books Zone by keyboard and returns after reload (en)',
+      'Browses two typed Books in their Zone, searches by keyboard, excludes an unadopted matching Book, reloads the results and opens and reloads the identified Book; repeated in Japanese.'),
   },
   {
     kind: 'books',
@@ -71,7 +73,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-854-library-bundle.test.ts',
       'API review, own-person denial, private retention, interrupted apply and resumable complete bundle re-import',
       'Exports imported Goodreads book statements through Main under one snapshot, re-imports into another reader and compares restored library state.'),
-    browser: missing('L21', 'the identified Book export journey skips when the Library is closed; the separate export journey uses untyped retained records'),
+    browser: journeyBrowser('apps/web/tests/books-catalogue-export.e2e.ts', 'books-library-export',
+      'books-library-export: a reader downloads an identified Book after reloading its saved Library shelf (en)',
+      'Shelves a typed Book by keyboard, reloads its Library shelf, downloads the bundle and checks its exact Work identity and saved status; repeated in Japanese without skipping a closed Library.'),
   },
   {
     kind: 'books',
