@@ -1,24 +1,24 @@
-import { proved, rowOutcomes } from '../../outcome-cells.ts';
+import { pending, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'anime/navigate-a-thousand-episode-inventory-thousand-chapters',
   {
-    visitor: proved(
+    visitor: pending(
       'finds distant numbered and CJK episodes through label search and traverses all 1000 disclosed entries with credit',
     ),
-    stranger: proved(
+    stranger: pending(
       'finds distant numbered and CJK episodes and traverses all 1000 entries with identity-bound continuation',
     ),
-    member: proved(
+    member: pending(
       'finds distant numbered and CJK episodes and traverses all 1000 entries with identity-bound continuation',
     ),
-    owner: proved(
+    owner: pending(
       'traverses the complete credited episode inventory and its explicitly authorized private Work',
     ),
-    moderator: proved(
+    moderator: pending(
       'traverses the complete credited episode inventory without a private Work bypass',
     ),
-    operator: proved(
+    operator: pending(
       'traverses the complete credited episode inventory without a private Work bypass',
     ),
   },
