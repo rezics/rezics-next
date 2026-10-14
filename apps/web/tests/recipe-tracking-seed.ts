@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { authorCreditFixture } from '../../../tests/qa/fixtures/author-credit.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -18,10 +19,18 @@ await objects.initialize();
 Object.assign(f.env, { structureObjects: objects });
 try {
   const answer = async <T>(method: string, path: string, body?: unknown, status = 200): Promise<T> => {
-    const response = await f.call(method, path, body);
-    const text = await response.text();
-    if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${text}`);
-    return JSON.parse(text) as T;
+    const key = randomUUID();
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const response = await f.call(method, path, body, key);
+      const text = await response.text();
+      if (response.status === 202) {
+        await new Promise(done => setTimeout(done, 1_000));
+        continue;
+      }
+      if (response.status !== status) throw new Error(`${method} ${path}: ${response.status} ${text}`);
+      return JSON.parse(text) as T;
+    }
+    throw new Error(`${method} ${path}: still pending after 60 attempts`);
   };
   const title = 'Measured pancakes';
   const work = await answer<{ work: string; mainVersion: string }>('POST', '/v1/works', await f.authoredBody({

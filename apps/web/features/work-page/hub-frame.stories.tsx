@@ -26,16 +26,20 @@ interface FrameArgs { locale: UiLocale; action: NextAction | null; types?: strin
 /** Identity and the next action around a short overview, with the phone's "On this page" menu. */
 function Frame({ locale, action, types = fixture.work.types, editionName = 'Sword Art Online 1: Aincrad' }: FrameArgs) {
   const t = messages[locale];
-  const progress = { ok: true as const, data: tracking.indexSummary };
   const experience = workExperience(null, types);
-  return <WorkFrame workRef={fixture.workRef} work={{ ...fixture.work, types }} experience={experience} locale={locale} messages={t}
+  const game = experience.presentation === 'game';
+  const work = game ? { ...fixture.work, types, title: { ...fixture.work.title, value: 'Paper Cranes' },
+    originalTitle: null, tagline: null, description: null, completionStatus: null, chapterCount: null, wordCount: null }
+    : { ...fixture.work, types };
+  const progress = game ? null : { ok: true as const, data: tracking.indexSummary };
+  return <WorkFrame workRef={fixture.workRef} work={work} experience={experience} locale={locale} messages={t}
     sections={hubLabels(t, hubSections)}
-    credits={<WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits} locale={locale} messages={t} />}
-    readAction={action ? <NextActionView action={action} workRef={fixture.workRef} locale={locale} messages={t} /> : undefined}
+    credits={game ? null : <WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits} locale={locale} messages={t} />}
+    readAction={action ? <NextActionView action={action} workRef={fixture.workRef} locale={locale} messages={t} /> : game ? null : undefined}
     status={showsEditionStatus(experience) ? <IdentityStatus progress={progress} preference={{ ok: true, data: tracking.indexSummary.preference }}
       editionName={editionName} locale={locale} messages={t} /> : undefined}>
     <OverviewLayout messages={t} plan={hubSections} scopeBar={null} ratings={null}
-      about={<WorkAbout work={fixture.work} messages={t} />} record={null}
+      about={<WorkAbout work={work} messages={t} />} record={null}
       availability={<p>Availability</p>} parts={<p>Parts</p>} wiki={<p>Wiki</p>} discussion={<p>Discussion</p>}
       alsoEnjoyed={<p>Lists</p>} />
   </WorkFrame>;
@@ -187,7 +191,7 @@ export const EditionChoice: StoryObj<Meta<EditionArgs>> = {
   async play({ canvasElement }) {
     const canvas = within(canvasElement);
     await userEvent.click(await canvas.findByRole('combobox', { name: 'Edition' }));
-    await chooseOption(within(document.body), 'Sword Art Online 1 (audiobook)');
+    await chooseOption(within(document.body), /^Sword Art Online 1 \(audiobook\) ·/);
     await userEvent.click(canvas.getByRole('button', { name: 'Save choice' }));
     await expect(await canvas.findByText('Saved.')).toBeVisible();
   },

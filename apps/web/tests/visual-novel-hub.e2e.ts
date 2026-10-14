@@ -52,6 +52,7 @@ for (const locale of ['en', 'ja'] as const) {
         await expect(edition).toContainText(release.title);
         await pressByKeyboard(page, availability.getByRole('button', { name: t.save, exact: true }), found, t.save);
         await expect(availability.getByRole('status')).toHaveText(t.saved);
+        await page.waitForLoadState('networkidle');
         await page.reload();
         await expect(page.locator('html')).toHaveAttribute('lang', locale);
         await expect(availability.getByRole('combobox', { name: t.language, exact: true })).toHaveText(t.english);
