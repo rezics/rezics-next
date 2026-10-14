@@ -78,6 +78,29 @@ function ruleInput(person: PersonaSession, scopeId = scope) {
     document: { rule: 'Review the exact Realm record while preserving independent originals.' },
     idempotencyKey: randomUUID() };
 }
+
+/** Date headers have second resolution. A client clock cannot establish that
+ * the server has passed a fractional grant deadline. Stay within the fixture's
+ * existing HTTP exchange bound while obtaining a full-second expiry witness. */
+export async function waitForPublisherExpiry(validUntil: string, read: () => Promise<Response>,
+  pause: (milliseconds: number) => Promise<unknown> = Bun.sleep) {
+  const expiresAt = Date.parse(validUntil);
+  expect(Number.isFinite(expiresAt), 'Publisher grant must have a stored deadline').toBe(true);
+  const deadline = performance.now() + 30_000;
+  while (performance.now() < deadline) {
+    const response = await read();
+    const raw = await response.text();
+    expect(response.status, `Publisher expiry clock read: ${response.status} ${raw}`).toBe(200);
+    const serverDate = response.headers.get('date');
+    const serverTime = Date.parse(serverDate ?? '');
+    expect(Number.isFinite(serverTime), 'Publisher expiry requires the server Date header').toBe(true);
+    const offsetMs = serverTime - expiresAt;
+    if (offsetMs >= 1_000) return { validUntil, serverDate: serverDate!, offsetMs };
+    await pause(1_000);
+  }
+  throw new Error('Publisher expiry server Date did not qualify within the HTTP exchange bound');
+}
+
 async function denied(person: PersonaSession, input: ReturnType<typeof ruleInput>) {
   const problem = await closureCommand<{ code: string }>(person, 'POST', '/v1/governance/rules',
     input, 403, input.idempotencyKey);
@@ -146,9 +169,23 @@ export async function publishClosureRule(sessions: PersonaSessions): Promise<Rul
   const temporary = await issue(new Date(Date.now() + 3_000).toISOString());
   const expiring = await publish();
   await denied(operator, ruleInput(operator, `governance:realm:${sessions.realm}`));
-  await Bun.sleep(Math.max(0, Date.parse(temporary.grant.validUntil!) - Date.now() + 20));
+  const expiry = await waitForPublisherExpiry(temporary.grant.validUntil!,
+    () => operator.main('GET', path));
   // Even replay consumes live authority; an old publication receipt grants none.
-  await denied(operator, expiring.input);
+  const expiredReplay = await operator.main('POST', '/v1/governance/rules', expiring.input,
+    expiring.input.idempotencyKey);
+  const expiredRaw = await expiredReplay.text();
+  const replayDate = expiredReplay.headers.get('date');
+  const offsetMs = Date.parse(replayDate ?? '') - Date.parse(expiry.validUntil);
+  const expiredRequest = { method: 'POST', path: '/v1/governance/rules', body: expiring.input,
+    expiry, answer: { status: expiredReplay.status, body: expiredRaw,
+      etag: expiredReplay.headers.get('etag'), serverDate: replayDate, offsetMs } };
+  console.log('Realm rule publisher expired replay', JSON.stringify(expiredRequest));
+  if (expiredReplay.status !== 403 || !Number.isFinite(offsetMs) || offsetMs < 1_000)
+    proof.prerequisite = expiredRequest;
+  expect(offsetMs, JSON.stringify(expiredRequest)).toBeGreaterThanOrEqual(1_000);
+  expect(expiredReplay.status, JSON.stringify(expiredRequest)).toBe(403);
+  expect((JSON.parse(expiredRaw) as { code: string }).code).toBe('governance_denied');
   await denied(operator, ruleInput(operator));
   await revoke(temporary);
   const revocable = await issue(new Date(Date.now() + 3_600_000).toISOString());
