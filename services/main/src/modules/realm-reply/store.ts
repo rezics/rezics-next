@@ -459,7 +459,12 @@ export class RealmReplyStore {
       outcome: 'active', revisionId: input.revisionId, receipt: terminal.receipt,
       dataEpoch: terminal.dataEpoch, sequence: terminal.sequence,
     });
-    await settleRealmThreadPlacement(this.rankingAccess, terminal.dataEpoch, prepared, terminal.placement, client);
+    // Replay returns the immutable receipt, but must not re-index a superseded placement.
+    const live = existing ? await readPlacementHead(this.env, input.realm, input.reply) : null;
+    if (!existing || live?.placement === terminal.placement) await settleRealmThreadPlacement(this.rankingAccess, terminal.dataEpoch, prepared, terminal.placement, client, {
+      concepts: boards?.concepts ?? (input.expectedHead ? (await readReplyBoards(this.env, terminal.placement)).concepts : []),
+      newEpoch: 0, newSequence: terminal.sequence,
+    });
     return { terminal, body: { placement: terminal.placement, reply: input.reply, realm: input.realm,
       ...(boards ?? {}),
       revisionId: input.revisionId, reviewDecisionId: prepared.reviewDecisionId, reviewGeneration: prepared.reviewGeneration,

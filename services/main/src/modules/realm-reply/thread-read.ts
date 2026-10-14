@@ -310,7 +310,8 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   const threads = store(session);
   const sort = query.sort ?? 'best', window = query.window ?? 'week';
   let population: string | undefined;
-  if (sort !== 'new' && basis.visibility === 'private') {
+  const maintained = sort !== 'new' || !!query.concept;
+  if (maintained && basis.visibility === 'private') {
     const policy = await session.realm(realm);
     if (policy.history === 'from-admission') {
       if (
@@ -330,7 +331,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     }
   }
   const history =
-    sort === 'new' && basis.visibility === 'private' && basis.history === 'from-admission'
+    !maintained && basis.visibility === 'private' && basis.history === 'from-admission'
       ? await realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
   const binding = ['realm-threads-v1', realm, sort, sort === 'top' ? window : null,
@@ -341,19 +342,19 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   ];
   const retained = retainedMembershipBasis('realm-threads-v1', query.cursor, binding, session.position);
   const { cursor } = retained;
-  const order = sort === 'new' ? cursor?.order.split(':') : undefined;
+  const order = !maintained ? cursor?.order.split(':') : undefined;
   if (order && (order.length !== 4 || !order.slice(0, 3).every((value) => /^\d+$/.test(value))
     || !/^[0-9a-f]{64}$/.test(order[3]!))) {
     throw new WorkReadInvalid('Thread cursor is invalid');
   }
   // New adds two exact-key Access revision probes, independent of Realm size.
   // Its private admission filter is also membership, never a retained grant.
-  const newRevision = sort === 'new' ? await threads.rankingRevision(session.position.dataEpoch, realm) : null;
+  const newRevision = !maintained ? await threads.rankingRevision(session.position.dataEpoch, realm) : null;
   if (newRevision === 'unavailable') throw new WorkReadUnavailable('Thread population is unavailable');
   if (order && order[2] !== newRevision) throw new WorkReadMoved('Thread population changed');
   if (order && order[3] !== hash(history)) throw new WorkReadMoved('Thread history admission changed');
   let after: (RealmRankKey & { revision: string }) | undefined;
-  if (sort !== 'new' && cursor) {
+  if (maintained && cursor) {
     try {
       const key = JSON.parse(cursor.order) as { rank: number; time: string; revision: string };
       if (!Number.isFinite(key.rank) || !/^-?\d+$/.test(key.time) || !/^\d+$/.test(key.revision))
@@ -364,9 +365,9 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     }
   }
   let rankedPage: RealmRankPage | null = null;
-  if (sort !== 'new') {
-    try { rankedPage = await selectedOwnerRead(session, ['ranked-page', realm, sort, window, limit, after, population],
-      () => threads.rankedPage(session, realm, sort, window, limit, after, population)); }
+  if (maintained) {
+    try { rankedPage = await selectedOwnerRead(session, ['ranked-page', realm, sort, window, limit, after, population, query.concept],
+      () => threads.rankedPage(session, realm, sort, window, limit, after, population, query.concept)); }
     catch (error) {
       // A Realm with no placed reply is empty under every order, so a ranking
       // that has not caught up with a just-created Realm has nothing to hold back.
@@ -376,17 +377,16 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     }
   }
   const selected = rankedPage?.rows.slice(0, limit);
-  const epochs = sort === 'new' ? await readEpochOrder(session) : '';
+  const epochs = !maintained ? await readEpochOrder(session) : '';
   const size = limit + 1;
   const rows = (await session.query(`SELECT DISTINCT ?id ?reply ?work ?author ?revision ?review ?preparation
     ?rootRevision ?revisionEpoch ?sequence ?epochOrder WHERE {
     ${selected ? `VALUES (?slot ?id) { ${selected.map((row) => `(${iri(replySlotIri(realm, row.reply))} ${iri(row.placement)})`).join(' ')} }` : ''}
     ${epochs} ${headPattern(realm)} ${history}
-    ${query.concept ? `GRAPH ${iri(GRAPHS.revisions)} { ?id rv:concept ${iri(query.concept)} }` : ''}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id rv:parentReply ?parent } }
-    ${sort === 'new' && cursor && order ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
+    ${!maintained && cursor && order ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
       && (?sequence < ${order[1]} || (?sequence = ${order[1]} && STR(?id) > ${lit(cursor.after)}))))` : ''}
-  } ${sort === 'new' ? 'ORDER BY ?epochOrder DESC(?sequence) STR(?id)' : ''} LIMIT ${size}`, size)).map(head);
+  } ${!maintained ? 'ORDER BY ?epochOrder DESC(?sequence) STR(?id)' : ''} LIMIT ${size}`, size)).map(head);
   if (new Set(rows.map((row) => row.placement)).size !== rows.length) {
     throw new WorkReadUnavailable('Realm thread candidates are ambiguous');
   }
@@ -399,7 +399,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     () => threads.admitted(realm, candidates));
   const visible = candidates.filter((row) => admitted.has(row.reply));
   let page: Head[], next: string | null = null, votes: Map<string, ThreadVote>;
-  if (sort === 'new') {
+  if (!maintained) {
     page = visible;
     votes = await selectedOwnerRead(session, ['votes', page.map(row => row.placement)],
       () => threads.votes(session.position.dataEpoch, page.map((row) => row.placement), reader(session)));

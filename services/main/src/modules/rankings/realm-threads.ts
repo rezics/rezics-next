@@ -1,5 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
-import { controlTransaction } from '../access/topology-control.ts';
+import { controlRead, controlTransaction } from '../access/topology-control.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { replySlotIri } from '../realm-reply/graph.ts';
@@ -13,7 +13,11 @@ import {
 import { hash } from '../work/activate.ts';
 import { realmHistoryOriginCutFilter, type RealmHistoryFloor } from '../realm-admin/history.ts';
 import { retireRealmPopulation } from './retirement.ts';
+import { readEpochOrder } from '../discovery/lineage.ts';
+import { readReplyBoards } from '../realm-reply/boards.ts';
 import type { PlacementPreparation } from '../realm-reply/content-store.ts';
+
+export const REALM_RANK_SEEK_SETTINGS = 'SET LOCAL enable_bitmapscan=off; SET LOCAL enable_seqscan=off';
 
 export const REALM_RANK_COST = {
   projectBatch: 20,
@@ -47,6 +51,7 @@ interface Reference {
   work: string;
   occurred_at: Date;
   active: boolean;
+  concepts: string[]; newEpoch: number; newSequence: string;
 }
 const BATCH = REALM_RANK_COST.projectBatch;
 const native = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
@@ -57,11 +62,12 @@ export async function settleRealmThreadPlacement(
   access: Pool, epoch: string,
   preparation: Pick<PlacementPreparation, 'realm' | 'reply' | 'rootTarget' | 'parentReply' | 'ownerDataEpoch' | 'ownerSequence'>,
   placement: string, client?: PoolClient,
+  order = { concepts: [] as string[], newEpoch: 0, newSequence: '0' },
 ) {
   const { realm, reply, rootTarget: work, parentReply: parent } = preparation;
   await applyRealmThreadReferences(access, epoch, [{ realm, reply }], [{
     realm, reply, placement, parent, thread: parent ?? reply, work,
-    occurred_at: activityTime(placement, new Date(0)).time, active: true,
+    occurred_at: activityTime(placement, new Date(0)).time, active: true, ...order,
   }], [{ id: placement, occurred_at: new Date(0) }], client,
   { dataEpoch: preparation.ownerDataEpoch, sequence: preparation.ownerSequence });
 }
@@ -109,17 +115,37 @@ async function mainStreamCoverage(session: WorkReadSession): Promise<RelayHandof
 
 /** Keyset order is identical to the B-tree, including tied scores/times. */
 export function realmRankSeek(
-  sort: 'best' | 'top',
+  sort: 'best' | 'top' | 'new',
   after: boolean,
   privatePopulation = false,
+  concept = false,
 ): string {
   const table = privatePopulation ? 'realm_thread_private_order' : 'realm_thread_order';
-  return `WITH parameters AS (SELECT $4::double precision AS rank,$5::bigint AS time,$6::text AS placement)
-    SELECT reply,placement,rank_key,time_key::text FROM access.${table}
+  return `WITH parameters AS (SELECT $4::double precision AS rank,$5::bigint AS time,$6::text AS placement
+      ${concept ? ',$8::uuid AS content_epoch,$9::bigint AS content_sequence,$10::numeric AS main_sequence,$11::text AS population' : ''})
+    SELECT reply,placement,rank_key,time_key::text${concept ? ',expires_at' : ''} FROM access.${table}
     WHERE data_epoch=$1 AND realm=$2 AND sort='${sort}' AND period=$3
       ${privatePopulation ? 'AND population=$11' : ''}
+      AND concept=${concept ? '$12' : "''"}
       ${after ? 'AND (rank_key,time_key,placement)>($4::double precision,$5::bigint,$6::text COLLATE "C")' : ''}
     ORDER BY ${table}.rank_key,${table}.time_key,${table}.placement LIMIT $7`;
+}
+
+/** One bounded page and its existing selected-dependency fence share a snapshot. */
+export function realmConceptRankCut(sort: 'new' | 'best' | 'top', after: boolean, privatePopulation = false) {
+  return `WITH page AS MATERIALIZED (${realmRankSeek(sort, after, privatePopulation, true)}),
+    fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE),
+    state AS (SELECT COALESCE(s.revision,0)::text AS revision FROM (SELECT 1) root
+      LEFT JOIN access.realm_thread_state s ON s.data_epoch=$1 AND s.realm=$2),
+    readiness AS (SELECT ready AND NOT EXISTS(SELECT 1 FROM access.realm_thread_reference
+        WHERE data_epoch=$1 AND realm=$2 AND concepts IS NULL LIMIT 1)
+      AND NOT EXISTS(SELECT 1 FROM page WHERE expires_at<=clock_timestamp()) AS complete
+      FROM access.read_realm_thread_scope_cut($1,$2,
+        (SELECT COALESCE(array_agg(reply),'{}') FROM page),$8::uuid,$9::bigint,$10::numeric,$11::text))
+    SELECT fence.open,readiness.complete,state.revision,
+      CASE WHEN fence.open AND readiness.complete THEN
+        (SELECT COALESCE(jsonb_agg(to_jsonb(page)-'expires_at' ORDER BY rank_key,time_key::bigint,placement),'[]'::jsonb) FROM page)
+      ELSE '[]'::jsonb END AS rows FROM fence CROSS JOIN state CROSS JOIN readiness`;
 }
 
 export const realmHistoryPopulation = (floor: RealmHistoryFloor) =>
@@ -157,14 +183,15 @@ export async function realmRankPage(
   access: Pool,
   session: WorkReadSession,
   realm: string,
-  sort: 'best' | 'top',
+  sort: 'best' | 'top' | 'new',
   period: 'week' | 'month' | 'all',
   limit: number,
   after?: RealmRankKey & { revision: string },
   population?: string,
+  concept?: string,
 ): Promise<RealmRankPage> {
   if (
-    !native.test(realm) ||
+    !native.test(realm) || concept !== undefined && !native.test(concept) ||
     limit < 1 ||
     limit > REALM_RANK_COST.pageSize ||
     !Number.isInteger(limit) ||
@@ -177,30 +204,20 @@ export async function realmRankPage(
     throw new WorkReadUnavailable('Invalid Realm rank seek');
   const main = await mainStreamCoverage(session);
   const content = await contentPosition(session);
-  const row = (
-    await access.query<{
-      open: boolean;
-      complete: boolean;
-      revision: string;
-      rows: RealmRankPage['rows'];
-    }>(
-      `SELECT * FROM access.read_realm_thread_rank_cut($1,$2,'${sort}',$3,
-        $4::double precision,$5::bigint,$6::text,$7::integer,$8::uuid,$9::bigint,$10::numeric,$11::text)`,
-      [
-        session.position.dataEpoch,
-        realm,
-        sort === 'best' ? 'all' : period,
-        after?.rank ?? null,
-        after?.time ?? null,
-        after?.placement ?? '',
-        limit + 1,
-        content.dataEpoch,
-        content.sequence,
-        main.sequence,
-        population ?? null,
-      ],
-    )
-  ).rows[0];
+  type Cut = { open: boolean; complete: boolean; revision: string; rows: RealmRankPage['rows'] };
+  const sql = concept ? realmConceptRankCut(sort, !!after, !!population)
+    : `SELECT * FROM access.read_realm_thread_rank_cut($1,$2,'${sort}',$3,
+      $4::double precision,$5::bigint,$6::text,$7::integer,$8::uuid,$9::bigint,$10::numeric,$11::text)`;
+  const values = [session.position.dataEpoch, realm, sort === 'top' ? period : 'all',
+    after?.rank ?? null, after?.time ?? null, after?.placement ?? '', limit + 1,
+    content.dataEpoch, content.sequence, main.sequence, population ?? null, ...(concept ? [concept] : [])];
+  const result = concept ? await controlRead(access, async client => {
+    // Match the existing seek function's local planner contract, including
+    // empty/sparse keys when small-tail statistics would otherwise choose a scan.
+    await client.query(REALM_RANK_SEEK_SETTINGS);
+    return client.query<Cut>(sql, values);
+  }) : await access.query<Cut>(sql, values);
+  const row = result.rows[0];
   if (!row?.open) throw new WorkReadUnavailable('Realm rankings are projecting');
   if (after && after.revision !== row.revision) throw new WorkReadMoved('Thread ranking changed');
   if (!row.complete) throw new RealmRankingsIncomplete();
@@ -267,6 +284,12 @@ export class RealmThreadRankingProjection {
       });
       return true;
     }
+    // NULL marks only pre-migration references. The existing owner consumes
+    // their exact keys in its normal bounded turn, with no migration scan.
+    const backfill = (await this.access.query<{ realm: string; reply: string }>(
+      `SELECT realm,reply FROM access.realm_thread_reference WHERE data_epoch=$1 AND concepts IS NULL
+        ORDER BY realm,reply LIMIT $2`, [epoch, BATCH])).rows;
+    if (backfill.length) { await this.project(session, backfill); return true; }
     const pending = (
       await this.access.query<{ id: string; occurred_at: Date }>(
         `SELECT id,occurred_at FROM access.feed_item
@@ -547,7 +570,7 @@ export class RealmThreadRankingProjection {
           if (allowed.has(ref.reply))
             await client.query(
               `INSERT INTO access.realm_thread_private_order
-            SELECT data_epoch,realm,$3,sort,period,reply,placement,rank_key,time_key,expires_at FROM access.realm_thread_order
+            SELECT data_epoch,realm,$3,sort,period,reply,placement,rank_key,time_key,expires_at,concept FROM access.realm_thread_order
             WHERE data_epoch=$1 AND realm=$2 AND reply=$4`,
               [epoch, realm, population.population, ref.reply],
             );
@@ -625,16 +648,19 @@ export class RealmThreadRankingProjection {
     keys: { realm: string; reply: string }[],
     pending: { id: string; occurred_at: Date }[] = [],
   ) {
+    const epochs = await readEpochOrder(session);
     const rows = keys.length
       ? await session.query(
-          `SELECT ?realm ?reply ?id ?work ?author ?rootRevision ?parent ?revision ?review ?preparation WHERE {
+          `SELECT ?realm ?reply ?id ?work ?author ?rootRevision ?parent ?revision ?review ?preparation ?epochOrder ?sequence WHERE {
+      ${epochs}
       VALUES (?realm ?reply ?slot) { ${keys.map((key) => `(${iri(key.realm)} ${iri(key.reply)} ${iri(replySlotIri(key.realm, key.reply))})`).join(' ')} }
         GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm ; rv:realmState rv:Active ; rv:space ?space .
           ?space a rv:Space ; rv:realmCapability ?realm .
           ?slot a rv:RealmReplySlot ; rv:replyPlacementHead ?id . }
       GRAPH ${iri(GRAPHS.revisions)} { ?id a rv:RealmReplyPlacement ; rv:placementOutcome rv:Accepted ;
         rv:realm ?realm ; rv:reply ?reply ; rv:rootTarget ?work ; rv:rootRevision ?rootRevision ; rv:author ?author ;
-        rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation .
+        rv:contentRevision ?revision ; rv:reviewDecision ?review ; rv:contentPreparation ?preparation ;
+        rv:dataEpoch ?revisionEpoch ; rv:sequence ?sequence .
         OPTIONAL { ?id rv:parentReply ?parent }
         BIND(IRI(?rootRevision) AS ?anchor)
         FILTER NOT EXISTS { ?anchor a rv:ErasedRevision } }
@@ -686,6 +712,8 @@ export class RealmThreadRankingProjection {
         work: row.work!.value,
         occurred_at: activityTime(row.id!.value, fallback).time,
         active: admitted.has(`${row.realm!.value}|${reply}`),
+        concepts: (await readReplyBoards(session.deps.environment, row.id!.value)).concepts,
+        newEpoch: Number(row.epochOrder!.value), newSequence: row.sequence!.value,
       });
     }
     await applyRealmThreadReferences(this.access, session.position.dataEpoch, keys, references, pending);
@@ -765,11 +793,12 @@ async function applyRealmThreadReferences(
         const time = ref.occurred_at.getTime() === 0 && prior ? prior.occurred_at : ref.occurred_at;
         await client.query(
           `INSERT INTO access.realm_thread_reference
-          (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active,score)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10)
+          (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active,score,concepts,new_epoch,new_sequence)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$8,$9,$10,$11,$12,$13::bigint)
           ON CONFLICT(data_epoch,realm,reply) DO UPDATE SET placement=EXCLUDED.placement,parent=EXCLUDED.parent,
             thread=EXCLUDED.thread,work=EXCLUDED.work,occurred_at=EXCLUDED.occurred_at,
-            active=EXCLUDED.active,score=EXCLUDED.score`,
+            active=EXCLUDED.active,score=EXCLUDED.score,concepts=EXCLUDED.concepts,
+            new_epoch=EXCLUDED.new_epoch,new_sequence=EXCLUDED.new_sequence`,
           [
             epoch,
             ref.realm,
@@ -780,7 +809,7 @@ async function applyRealmThreadReferences(
             ref.work,
             time,
             ref.active,
-            vote?.score ?? 0,
+            vote?.score ?? 0, ref.concepts, ref.newEpoch, ref.newSequence,
           ],
         );
         changed(ref.realm, ref.thread, ref.parent && ref.active ? 1 : 0);

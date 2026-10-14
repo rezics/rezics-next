@@ -188,13 +188,14 @@ export class RealmReplyThreadStore {
   rankedPage(
     session: WorkReadSession,
     realm: string,
-    sort: 'best' | 'top',
+    sort: 'best' | 'top' | 'new',
     period: 'week' | 'month' | 'all',
     limit: number,
     after?: RealmRankKey & { revision: string },
     population?: string,
+    concept?: string,
   ) {
-    return realmRankPage(this.access, session, realm, sort, period, limit, after, population);
+    return realmRankPage(this.access, session, realm, sort, period, limit, after, population, concept);
   }
   historyPopulation(epoch: string, realm: string, floor: RealmHistoryFloor) {
     return ensureRealmHistoryPopulation(this.access, epoch, realm, floor);

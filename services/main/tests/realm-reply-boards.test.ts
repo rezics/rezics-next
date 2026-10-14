@@ -127,6 +127,16 @@ function boardWorld(options: { retired?: boolean; hidden?: boolean } = {}) {
     }
     return rows;
   };
+  const ranked = session.deps.realmReplyThreads!.rankedPage.bind(session.deps.realmReplyThreads);
+  session.deps.realmReplyThreads!.rankedPage = async (read, realm, sort, period, limit, after, population, concept) => {
+    if (!concept) return ranked(read, realm, sort, period, limit, after, population);
+    const ids = concept === news ? [2, 1] : [];
+    const rows = (await session.query('SELECT DISTINCT ?id ?reply ?work', 20)).filter(row =>
+      ids.some(id => reply(id) === row.reply!.value)).map(row => ({ reply: row.reply!.value,
+      placement: row.id!.value, rank_key: 0, time_key: String(-Number(row.sequence!.value)) }));
+    rows.sort((a, b) => Number(a.time_key) - Number(b.time_key));
+    return { revision: '1', rows: rows.filter(row => !after || Number(row.time_key) > Number(after.time)).slice(0, limit + 1) };
+  };
   return { ...fixture, get boardDisclosures() { return boardDisclosures; } };
 }
 
@@ -158,9 +168,9 @@ test('a thread continuation cannot enter another board or leave its board', asyn
 });
 
 test('retired and withheld boards answer gone before reading thread content', async () => {
-  for (const options of [{ retired: true }, { hidden: true }]) {
+  for (const options of [{ retired: true }, { hidden: true }]) for (const sort of ['new', 'best', 'top'] as const) {
     const fixture = boardWorld(options), { session, calls } = fixture;
-    await expect(readRealmThreads(session, realm, { concept: news, sort: 'new' })).rejects.toBeInstanceOf(WorkReadMissing);
+    await expect(readRealmThreads(session, realm, { concept: news, sort })).rejects.toBeInstanceOf(WorkReadMissing);
     expect(calls.bodies).toBe(0);
     expect(calls.admitted).toBe(0);
     expect(fixture.boardDisclosures).toBe(1);
