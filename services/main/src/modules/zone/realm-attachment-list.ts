@@ -1,6 +1,6 @@
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
-import type { AccessAdmissionRegistry } from '../access/admission.ts';
+import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { identityCanonical } from '../address/canonical.ts';
 import { AccountAssertionDenied, AccountAssertionUnavailable,
   type AccountAssertionVerifier } from '../account/verify-assertion.ts';
@@ -9,8 +9,8 @@ import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { InvalidZoneConfiguration, REALM_ATTACHMENT_CAP } from './config-format.ts';
-import { duringAttachmentPage } from './realm-attachment-authority.ts';
-import { realmAttachHeld, realmAttachRequest } from './realm-attachment.ts';
+import { duringAttachmentPage, readAttachmentPage } from './realm-attachment-authority.ts';
+import { realmAttachRequest } from './realm-attachment.ts';
 
 /** The same answer as a Realm that is not there. Callers cannot tell a missing
  * Realm, a stranger, or a signed-out reader apart. */
@@ -39,7 +39,7 @@ export interface ZoneAttachmentRow {
 
 export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
   account: Pick<AccountAssertionVerifier, 'verify'>,
-  access: Partial<Pick<AccessAdmissionRegistry, 'assertAuthority'>>,
+  access: Partial<Pick<AccessAdmissionRegistry, 'withOwnerAuthority'>>,
   request: Request, input: { realm: string; actingSubject?: string; cursor?: string; limit: number }) {
   if (input.cursor && !CURSOR.test(input.cursor)) {
     throw new InvalidZoneConfiguration('Unsupported Zone attachment cursor; restart the listing');
@@ -59,9 +59,18 @@ export async function listRealmZoneAttachments(env: WorkActivationEnvironment,
   if (!input.actingSubject) throw new RealmAttachmentListMissing('Realm is unavailable');
   const read: { query: string; budget: number; result?: SparqlResult } = {
     query: attachmentPageQuery(input.realm, input.cursor, input.limit), budget: 64 * 1024 };
-  const held = await duringAttachmentPage(read, () => realmAttachHeld(access,
-    realmAttachRequest(principal, input.actingSubject!, input.realm)));
-  if (!held) throw new RealmAttachmentListMissing('Realm is unavailable');
+  if (!access.withOwnerAuthority) throw new RealmAttachmentListMissing('Realm is unavailable');
+  try {
+    await duringAttachmentPage(read, () => access.withOwnerAuthority!(
+      realmAttachRequest(principal, input.actingSubject!, input.realm), async () => {
+        if (!await readAttachmentPage(env.fuseki)) throw new RealmAttachmentListMissing('Realm is unavailable');
+      }));
+  } catch (error) {
+    if (error instanceof AdmissionDenied || error instanceof AdmissionExpired) {
+      throw new RealmAttachmentListMissing('Realm is unavailable');
+    }
+    throw error;
+  }
   if (!read.result) throw new Error('Realm attachment page was not read with the grant');
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const rows = read.result.results?.bindings?.filter(row => row.zone?.value) ?? [];

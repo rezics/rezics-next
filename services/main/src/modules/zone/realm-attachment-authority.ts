@@ -24,6 +24,16 @@ export function duringAttachmentPage<T>(page: AttachmentPageRead, run: () => Pro
   return attachmentPages.run(page, run);
 }
 
+/** Both authority branches consume the same bound snapshot. Stewardship may
+ * already have read it during admission; exact platform authority reads it in
+ * the owner's callback, before the selected grant locks are released. */
+export async function readAttachmentPage(graph: Pick<FusekiClient, 'query'>): Promise<boolean> {
+  const page = attachmentPages.getStore();
+  if (!page) throw new Error('Realm attachment page is not bound');
+  page.result ??= await graph.query(page.query, page.budget);
+  return page.result.results?.bindings?.some(row => row.open?.value === 'open') === true;
+}
+
 /** A Realm steward holds an administrative grant on the Realm's own governance
  * scope, as for every other Realm permission. Attaching a Zone grants nothing
  * beyond what the Realm's own read and post rules already allow.
@@ -41,11 +51,7 @@ export async function realmAttachAllowed(client: Pick<PoolClient, 'query'>,
         WHERE m.id = g.membership_id AND m.state = 'joined' AND m.generation = g.membership_generation))
     ORDER BY g.id LIMIT 1 FOR SHARE OF g`, [actingSubject, `governance:realm:${realm}`]);
   if (!steward.rowCount) return false;
-  const page = attachmentPages.getStore();
-  if (page) {
-    page.result = await graph.query(page.query, page.budget);
-    return page.result.results?.bindings?.some(row => row.open?.value === 'open') === true;
-  }
+  if (attachmentPagePending()) return readAttachmentPage(graph);
   return (await graph.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active ;
       rv:space ?space . FILTER NOT EXISTS { ${iri(realm)} rv:protectionHead ?protection } }

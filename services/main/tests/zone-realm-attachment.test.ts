@@ -52,6 +52,10 @@ function world(directory: string, fixture: Fixture = {}) {
     attachmentLive: true,
     attachments: [] as Record<string, ReturnType<typeof lit>>[],
     attachmentCount: 0,
+    attachmentAuthorityBranch: 'steward' as 'steward' | 'platform',
+    attachmentRealmState: 'active' as 'active' | 'missing' | 'inactive' | 'protected',
+    platformAttachmentScope: `realm:attach:${foreignRealm}`,
+    platformAttachmentAction: 'realm.attach',
     /** begin, the page read, end: the page is inside the grant admission. */
     grantWindow: [] as string[],
     /** Runs once, as a command reaches the graph: the race window after the editor read the head. */
@@ -84,6 +88,7 @@ function world(directory: string, fixture: Fixture = {}) {
       }
       if (query.includes('rv:realmAttachment ?receipt')) {
         state.grantWindow.push('page');
+        if (state.attachmentRealmState !== 'active') return rows([]);
         const after = /STR\(\?zone\) > "([^"]*)"/.exec(query)?.[1];
         const limit = Number(/LIMIT (\d+)/.exec(query)?.[1] ?? '0');
         const selected = [...state.attachments]
@@ -147,14 +152,6 @@ function world(directory: string, fixture: Fixture = {}) {
       state.attachChecks.push(`${request.action}@${request.scope}`);
       if (state.attachAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
       if (state.attachAuthority === 'expired') throw new AdmissionExpired('grant expired');
-      if (!attachmentPagePending()) return;
-      state.grantWindow.push('begin');
-      try {
-        const allowed = await realmAttachAllowed({
-          async query() { return { rowCount: 1, rows: [] }; },
-        } as never, fuseki, request.actingSubject ?? actor, request.scope.slice('realm:attach:'.length));
-        if (!allowed) throw new AdmissionDenied('permission is not granted');
-      } finally { state.grantWindow.push('end'); }
     },
     async activePrincipalId() { return 'principal'; },
     async canMarkOfficialZone() { return true; },
@@ -165,6 +162,25 @@ function world(directory: string, fixture: Fixture = {}) {
         reference: { language: { kind: 'tag', tag: 'en' } } } as T;
       state.ownerChecks.push(`${request.action}@${request.scope}`);
       if (state.ownerAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
+      if (request.action === 'realm.attach' && attachmentPagePending()) {
+        state.attachChecks.push(`${request.action}@${request.scope}`);
+        if (state.attachAuthority === 'denied') throw new AdmissionDenied('permission is not granted');
+        if (state.attachAuthority === 'expired') throw new AdmissionExpired('grant expired');
+        if (state.attachmentAuthorityBranch === 'platform'
+          && (request.scope !== state.platformAttachmentScope || request.action !== state.platformAttachmentAction)) {
+          throw new AdmissionDenied('exact resource mandate is not granted');
+        }
+        state.grantWindow.push('begin');
+        try {
+          if (state.attachmentAuthorityBranch === 'steward'
+            && !await realmAttachAllowed({
+              async query() { return { rowCount: 1, rows: [] }; },
+            } as never, fuseki, actor, request.scope.slice('realm:attach:'.length))) {
+            throw new AdmissionDenied('permission is not granted');
+          }
+          return await operation(undefined as never);
+        } finally { state.grantWindow.push('end'); }
+      }
       return operation(undefined as never);
     },
   };
@@ -466,8 +482,11 @@ test('realm.attach is a baseline target only on its own scope and judged on the 
   expect(baselineTarget('realm.attach', `zone:edit:${zone}`)).toBeNull();
   expect(baselineTarget('realm.attach', 'realm:attach:not-a-realm')).toBeNull();
   const graph = (active: boolean) => ({ async query() { return { boolean: active }; } });
-  const client = (granted: boolean) => ({ async query(_sql: string, values?: unknown[]) {
+  const client = (granted: boolean) => ({ async query(sql: string, values?: unknown[]) {
     expect(values).toEqual([actor, `governance:realm:${foreignRealm}`]);
+    expect(sql).toContain('g.active AND g.valid_until > clock_timestamp()');
+    expect(sql).toContain("m.state = 'joined' AND m.generation = g.membership_generation");
+    expect(sql).toContain('FOR SHARE OF g');
     return { rowCount: granted ? 1 : 0, rows: [] }; } }) as never;
   expect(await realmAttachAllowed(client(true), graph(true), actor, foreignRealm)).toBe(true);
   expect(await realmAttachAllowed(client(false), graph(true), actor, foreignRealm)).toBe(false);
@@ -483,6 +502,100 @@ const attachedZone = (n: number, when: string | null = '2026-10-08T03:04:05.000Z
 const list = (w: ReturnType<typeof world>, input: { actingSubject?: string; cursor?: string; limit: number } = { actingSubject: actor, limit: 24 }) =>
   listRealmZoneAttachments(w.env, w.account, w.access, new Request('http://main.test/v1/realms'),
     { realm: foreignRealm, ...input });
+
+for (const branch of ['steward', 'platform'] as const) {
+  test(`${branch} authority reads one active Realm snapshot inside its grant fence, including empty and terminal pages`, async () => {
+    await inDirectory(async directory => {
+      const w = world(directory);
+      w.state.attachmentAuthorityBranch = branch;
+      const empty = await list(w);
+      expect(empty).toMatchObject({ items: [], nextCursor: null, complete: true });
+      expect(w.state.grantWindow).toEqual(['begin', 'page', 'end']);
+      w.state.attachments = Array.from({ length: 51 }, (_, index) => attachedZone(100 + index));
+      for (const limit of [24, 50]) {
+        const seen: string[] = [];
+        let cursor: string | undefined;
+        do {
+          w.state.grantWindow = [];
+          const page = await list(w, { actingSubject: actor, limit, cursor });
+          expect(w.state.grantWindow).toEqual(['begin', 'page', 'end']);
+          expect(page.items.length).toBeLessThanOrEqual(limit);
+          expect(page.complete).toBe(page.nextCursor === null);
+          expect(page.cost.graphReads).toBe(1);
+          seen.push(...page.items.map(item => item.zone));
+          cursor = page.nextCursor ?? undefined;
+        } while (cursor);
+        expect(seen).toEqual(w.state.attachments.map(row => row.zone!.value));
+        expect(new Set(seen).size).toBe(51);
+      }
+      expect(w.state.ownerChecks.every(check => check === `realm.attach@realm:attach:${foreignRealm}`)).toBe(true);
+      expect(w.state.queries.filter(query => query.includes('rv:realmState') && query.includes('ASK'))).toEqual([]);
+    });
+  });
+
+  test(`${branch} authority conceals missing, inactive and protected Realms rather than returning empty pages`, async () => {
+    await inDirectory(async directory => {
+      for (const state of ['missing', 'inactive', 'protected'] as const) {
+        const w = world(directory);
+        w.state.attachmentAuthorityBranch = branch;
+        w.state.attachmentRealmState = state;
+        w.state.attachments = [attachedZone(30)];
+        await expect(list(w)).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+        expect(w.state.grantWindow).toEqual(['begin', 'page', 'end']);
+        const pageQuery = w.state.queries.find(query => query.includes('rv:realmAttachment ?receipt'))!;
+        expect(pageQuery).toContain(`<${foreignRealm}> a rv:Realm ; rv:realmState rv:Active`);
+        expect(pageQuery).toContain(`FILTER NOT EXISTS { <${foreignRealm}> rv:protectionHead ?protection }`);
+      }
+    });
+  });
+
+  test(`${branch} expired or revoked authority conceals attachments before reading the page`, async () => {
+    await inDirectory(async directory => {
+      for (const authority of ['expired', 'denied'] as const) {
+        const w = world(directory);
+        w.state.attachmentAuthorityBranch = branch;
+        w.state.attachAuthority = authority;
+        w.state.attachments = [attachedZone(30)];
+        await expect(list(w)).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+        expect(w.state.grantWindow).toEqual([]);
+        expect(w.state.queries).toEqual([]);
+      }
+    });
+  });
+}
+
+test('foreign Realm, Zone-only and unrelated platform mandates cannot disclose attachment pages', async () => {
+  await inDirectory(async directory => {
+    for (const [scope, action] of [
+      [`realm:attach:${otherRealm}`, 'realm.attach'],
+      [`zone:edit:${zone}`, 'zone.edit'],
+      ['platform', 'platform.grant'],
+    ]) {
+      const w = world(directory);
+      w.state.attachmentAuthorityBranch = 'platform';
+      w.state.platformAttachmentScope = scope!;
+      w.state.platformAttachmentAction = action!;
+      w.state.attachments = [attachedZone(30)];
+      await expect(list(w)).rejects.toBeInstanceOf(RealmAttachmentListMissing);
+      expect(w.state.queries).toEqual([]);
+    }
+  });
+});
+
+test('an unavailable authority or page read remains an error, and an unread page cannot become empty success', async () => {
+  await inDirectory(async directory => {
+    const w = world(directory);
+    w.state.attachmentAuthorityBranch = 'platform';
+    const unavailable = new Error('dependency unavailable');
+    w.env.fuseki.query = async () => { throw unavailable; };
+    await expect(list(w)).rejects.toBe(unavailable);
+    expect(w.state.grantWindow).toEqual(['begin', 'end']);
+    w.access.withOwnerAuthority = async () => { throw unavailable; };
+    await expect(list(w)).rejects.toBe(unavailable);
+    w.access.withOwnerAuthority = async () => undefined as never;
+    await expect(list(w)).rejects.toThrow('Realm attachment page was not read with the grant');
+  });
+});
 
 test('a steward lists attached Zones; a stranger and an anonymous reader get the missing Realm', async () => {
   await inDirectory(async directory => {
