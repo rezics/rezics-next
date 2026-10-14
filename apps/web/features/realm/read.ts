@@ -26,7 +26,6 @@ import {
   type RealmDecisionsPage,
   type RealmDecisionRead,
   type RealmDirectoryPage,
-  type ReadFailure,
   type RealmHeader,
   type RealmRoster,
   type RealmWorksPage,
