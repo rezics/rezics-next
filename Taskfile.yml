@@ -410,6 +410,39 @@ tasks:
     cmds:
       - bun scripts/generate.ts --check
 
+  repo-index:build:
+    desc: Build the shared Rust repository parser with pinned Cargo 1.98.1.
+    env:
+      CARGO_HOME: '{{.ROOT_DIR}}/.temp/repo-index-cargo'
+    cmds:
+      - test "$(cargo --version)" = "cargo 1.98.1 (797e8a9bc 2026-08-05)"
+      - BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS:--isystem $(cc -print-file-name=include)}" cargo build --release --locked --manifest-path tools/repo-index/Cargo.toml --target-dir .temp/repo-index-build {{.CLI_ARGS}}
+
+  repo-index:lock:
+    desc: Resolve and lock the exact direct Rust repository-index dependency pins.
+    env:
+      CARGO_HOME: '{{.ROOT_DIR}}/.temp/repo-index-cargo'
+    cmds:
+      - cargo generate-lockfile --manifest-path tools/repo-index/Cargo.toml {{.CLI_ARGS}}
+
+  repo-index:format:
+    desc: Format the shared Rust repository-index package.
+    cmds:
+      - cargo fmt --manifest-path tools/repo-index/Cargo.toml {{.CLI_ARGS}}
+
+  repo-index:test:
+    desc: Test Rust source parsing, SQL facts and content-index invalidation.
+    env:
+      CARGO_HOME: '{{.ROOT_DIR}}/.temp/repo-index-cargo'
+    cmds:
+      - BINDGEN_EXTRA_CLANG_ARGS="${BINDGEN_EXTRA_CLANG_ARGS:--isystem $(cc -print-file-name=include)}" cargo test --release --locked --manifest-path tools/repo-index/Cargo.toml --target-dir .temp/repo-index-build {{.CLI_ARGS}}
+
+  repo-index:run:
+    desc: Parse repository sources once or reuse their content-digest index.
+    cmds:
+      - task repo-index:build
+      - .temp/repo-index-build/release/repo-index {{.CLI_ARGS}}
+
   operation:
     desc: Find Main API operation declarations, handlers and calling tests.
     cmds:

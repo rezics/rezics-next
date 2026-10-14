@@ -1,0 +1,901 @@
+use base64::{Engine, engine::general_purpose::STANDARD};
+use flate2::{Compression, write::DeflateEncoder};
+use oxc_allocator::Allocator;
+use oxc_ast::ast::*;
+use oxc_ast_visit::{Visit, walk};
+use oxc_parser::Parser;
+use oxc_resolver::{ResolveOptions, Resolver, TsconfigDiscovery};
+use oxc_span::SourceType;
+use serde::{Deserialize, Serialize};
+#[cfg(test)]
+use serde_json::value::RawValue;
+use serde_json::{Value, json};
+use std::{
+    collections::{BTreeMap, BTreeSet, VecDeque},
+    env,
+    error::Error,
+    fs::{self, File},
+    io::{self, BufWriter, Read, Write},
+    path::{Path, PathBuf},
+    sync::{
+        Mutex,
+        atomic::{AtomicU64, Ordering},
+        mpsc,
+    },
+    time::Instant,
+};
+type Result<T> = std::result::Result<T, Box<dyn Error + Send + Sync>>;
+static PARSING: AtomicU64 = AtomicU64::new(0);
+static ENCODING: AtomicU64 = AtomicU64::new(0);
+static DECODING: AtomicU64 = AtomicU64::new(0);
+static RESOLVING: AtomicU64 = AtomicU64::new(0);
+static SQL: AtomicU64 = AtomicU64::new(0);
+fn elapsed(counter: &AtomicU64, start: Instant) {
+    counter.fetch_add(start.elapsed().as_micros() as u64, Ordering::Relaxed);
+}
+const ROOTS: &[&str] = &[
+    "apps",
+    "packages",
+    "model",
+    "services",
+    "scripts",
+    "tests",
+    "apphost",
+    "infra",
+    "generated",
+];
+const SKIP: &[&str] = &[
+    "node_modules",
+    ".temp",
+    ".git",
+    "dist",
+    "target",
+    ".next",
+    ".cache",
+    ".yarn",
+];
+#[derive(Deserialize)]
+struct Source {
+    file: String,
+    text: String,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct Import {
+    source: String,
+    resolved: Option<String>,
+    type_only: bool,
+}
+#[derive(Clone, Serialize)]
+struct Token {
+    text: String,
+    offset: usize,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    quoted: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    string: bool,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    literal: bool,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SqlFacts {
+    tokens: Vec<Token>,
+    serialization_tokens: Vec<Token>,
+    references: Vec<Value>,
+    bodies: Vec<SqlCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tree: Option<Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    parse_error: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    scan_error: Option<String>,
+}
+#[derive(Serialize)]
+struct SqlCandidate {
+    text: String,
+    start: usize,
+    end: usize,
+    sql: SqlFacts,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IndexedFile {
+    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ast_deflate: Option<String>,
+    imports: Vec<Import>,
+    sql_candidates: Vec<SqlCandidate>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sql: Option<SqlFacts>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parse_errors: Vec<String>,
+    comments: Vec<Value>,
+}
+fn walk(
+    path: &Path,
+    sources: &mut BTreeMap<String, Source>,
+    configs: &mut BTreeMap<String, Vec<u8>>,
+    root: &Path,
+) -> Result<()> {
+    if !path.exists() {
+        return Ok(());
+    }
+    if path.is_dir() {
+        let mut entries = fs::read_dir(path)?.collect::<std::result::Result<Vec<_>, _>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            if !SKIP.contains(&entry.file_name().to_string_lossy().as_ref()) {
+                walk(&entry.path(), sources, configs, root)?;
+            }
+        }
+    } else {
+        let file = path
+            .strip_prefix(root)?
+            .to_string_lossy()
+            .replace('\\', "/");
+        let name = path.file_name().unwrap().to_string_lossy();
+        if name == "package.json"
+            || name.starts_with("tsconfig") && (name.ends_with(".json") || name.ends_with(".jsonc"))
+        {
+            configs.insert(file.clone(), fs::read(path)?);
+        }
+        if ["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "sql"].contains(
+            &path
+                .extension()
+                .unwrap_or_default()
+                .to_string_lossy()
+                .as_ref(),
+        ) {
+            sources.insert(
+                file.clone(),
+                Source {
+                    file,
+                    text: fs::read_to_string(path)?,
+                },
+            );
+        }
+    }
+    Ok(())
+}
+fn visit(value: &Value, callback: &mut impl FnMut(&Value)) {
+    match value {
+        Value::Object(map) => {
+            callback(value);
+            for child in map.values() {
+                visit(child, callback);
+            }
+        }
+        Value::Array(items) => {
+            for item in items {
+                visit(item, callback);
+            }
+        }
+        _ => {}
+    }
+}
+fn scan_tokens(sql: &str, base: usize, tokens: &mut Vec<Token>) -> Result<()> {
+    for token in pg_query::scan(sql)?.tokens {
+        let start = token.start as usize;
+        let end = token.end as usize;
+        let raw = sql.get(start..end).ok_or("Invalid SQL token span")?;
+        if raw.starts_with("--") || raw.starts_with("/*") {
+            continue;
+        }
+        // PostgreSQL returns a dollar body as one token; inspect procedural SQL too.
+        if raw.starts_with('$') && raw[1..].contains('$') {
+            let delimiter_end = raw[1..].find('$').unwrap() + 2;
+            if raw.len() >= delimiter_end * 2 && raw.ends_with(&raw[..delimiter_end]) {
+                scan_tokens(
+                    &raw[delimiter_end..raw.len() - delimiter_end],
+                    base + start + delimiter_end,
+                    tokens,
+                )?;
+                continue;
+            }
+        }
+        let quoted = raw.starts_with('"');
+        let string = raw.starts_with('\'')
+            || ["e'", "E'", "b'", "B'", "x'", "X'"]
+                .iter()
+                .any(|prefix| raw.starts_with(prefix));
+        let text = if quoted {
+            raw[1..raw.len() - 1].replace("\"\"", "\"")
+        } else if string {
+            let at = raw.find('\'').unwrap();
+            raw[at + 1..raw.len() - 1].replace("''", "'")
+        } else {
+            raw.to_lowercase()
+        };
+        tokens.push(Token {
+            text,
+            offset: base + start,
+            quoted,
+            string,
+            literal: string,
+        });
+    }
+    Ok(())
+}
+fn sql_facts(sql: &str) -> SqlFacts {
+    let timing = Instant::now();
+    let mut tokens = Vec::new();
+    let scan_error = scan_tokens(sql, 0, &mut tokens)
+        .err()
+        .map(|error| error.to_string());
+    if scan_error.is_some() {
+        tokens = fallback_tokens(sql);
+    }
+    let (tree, parse_error) = match pg_query::parse(sql) {
+        Ok(result) => (Some(serde_json::to_value(result.protobuf).unwrap()), None),
+        Err(error) => (None, Some(error.to_string())),
+    };
+    let mut references = Vec::new();
+    if let Some(tree) = &tree {
+        visit(tree, &mut |node| {
+            if let Some(relation) = node.get("RangeVar") {
+                let schema = relation["schemaname"].as_str().unwrap_or_default();
+                let name = relation["relname"].as_str().unwrap_or_default();
+                let name = if schema.is_empty() {
+                    name.to_string()
+                } else {
+                    format!("{schema}.{name}")
+                };
+                references.push(json!({"relation":name,"offset":relation["location"].as_i64().unwrap_or(0).max(0)}));
+            }
+        });
+    }
+    let bodies = pg_query::scan(sql)
+        .map(|scan| {
+            scan.tokens
+                .into_iter()
+                .filter_map(|token| {
+                    let raw = &sql[token.start as usize..token.end as usize];
+                    if !raw.starts_with('$') {
+                        return None;
+                    }
+                    let delimiter_end = raw[1..].find('$')? + 2;
+                    if raw.len() < delimiter_end * 2 || !raw.ends_with(&raw[..delimiter_end]) {
+                        return None;
+                    }
+                    let start = token.start as usize + delimiter_end;
+                    let end = token.end as usize - delimiter_end;
+                    let text = sql[start..end].to_string();
+                    Some(SqlCandidate {
+                        sql: sql_facts(&text),
+                        text,
+                        start,
+                        end,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    elapsed(&SQL, timing);
+    SqlFacts {
+        serialization_tokens: tokens.clone(),
+        tokens,
+        references,
+        bodies,
+        tree,
+        parse_error,
+        scan_error,
+    }
+}
+fn is_sql(text: &str) -> bool {
+    let lower = text.trim_start().to_ascii_lowercase();
+    [
+        "select ",
+        "insert ",
+        "update ",
+        "delete ",
+        "create ",
+        "alter ",
+        "drop ",
+        "truncate ",
+        "with ",
+        "lock ",
+        "do ",
+        "begin",
+        "--",
+        "/*",
+    ]
+    .iter()
+    .any(|prefix| lower.starts_with(prefix))
+        || lower.contains("pg_advisory_")
+}
+fn indexed(
+    source: Source,
+    root: &Path,
+    resolver: &Resolver,
+    sql_only: bool,
+) -> Result<IndexedFile> {
+    if sql_only || source.file.ends_with(".sql") {
+        let sql = sql_facts(&source.text);
+        return Ok(IndexedFile {
+            text: source.text,
+            ast_deflate: None,
+            imports: vec![],
+            sql_candidates: vec![],
+            sql: Some(sql),
+            parse_errors: vec![],
+            comments: vec![],
+        });
+    }
+    let allocator = Allocator::default();
+    let timing = Instant::now();
+    let parsed = Parser::new(
+        &allocator,
+        &source.text,
+        SourceType::from_path(&source.file)?,
+    )
+    .parse();
+    elapsed(&PARSING, timing);
+    let timing = Instant::now();
+    let ast_json = parsed.program.to_estree_json(true, false);
+    elapsed(&ENCODING, timing);
+    let comments = parsed
+        .program
+        .comments
+        .iter()
+        .map(|comment| json!({"start":comment.span.start,"end":comment.span.end}))
+        .collect();
+    let mut facts = Facts {
+        root,
+        file: &source.file,
+        text: &source.text,
+        resolver,
+        imports: Vec::new(),
+        candidates: Vec::new(),
+    };
+    facts.visit_program(&parsed.program);
+    let imports = facts.imports;
+    let candidates = facts.candidates;
+    let parse_errors = parsed
+        .diagnostics
+        .into_iter()
+        .map(|error| error.to_string())
+        .collect();
+    Ok(IndexedFile {
+        text: source.text,
+        ast_deflate: Some(compressed_ast(&ast_json)?),
+        imports,
+        sql_candidates: candidates,
+        sql: None,
+        parse_errors,
+        comments,
+    })
+}
+fn main() {
+    if let Err(error) = run() {
+        eprintln!("repo-index: {error}");
+        std::process::exit(1);
+    }
+}
+fn run() -> Result<()> {
+    let started = Instant::now();
+    let mut root = env::current_dir()?;
+    let mut output = None;
+    let mut paths = Vec::new();
+    let mut stdin = false;
+    let mut sql_only = false;
+    let args: Vec<String> = env::args().skip(1).collect();
+    let mut at = 0;
+    while at < args.len() {
+        match args[at].as_str() {
+            "--root" => {
+                at += 1;
+                root = PathBuf::from(args.get(at).ok_or("--root needs a path")?);
+            }
+            "--output" => {
+                at += 1;
+                output = Some(PathBuf::from(args.get(at).ok_or("--output needs a path")?));
+            }
+            "--files" => {
+                at += 1;
+                while at < args.len() && !args[at].starts_with("--") {
+                    paths.push(args[at].clone());
+                    at += 1;
+                }
+                continue;
+            }
+            "--stdin" => stdin = true,
+            "--sql" => sql_only = true,
+            unknown => return Err(format!("Unknown argument: {unknown}").into()),
+        };
+        at += 1;
+    }
+    root = fs::canonicalize(root)?;
+    let resolver = resolver(&root);
+    let output = output.ok_or("--output is required")?;
+    let mut sources = BTreeMap::new();
+    let mut configs = BTreeMap::new();
+    let explicit_files = !paths.is_empty();
+    if stdin {
+        let input: Vec<Source> = serde_json::from_reader(io::stdin().lock())?;
+        for source in input {
+            sources.insert(source.file.clone(), source);
+        }
+    } else if paths.is_empty() {
+        for directory in ROOTS {
+            walk(&root.join(directory), &mut sources, &mut configs, &root)?;
+        }
+    } else {
+        for path in paths {
+            walk(&root.join(path), &mut sources, &mut configs, &root)?;
+        }
+    }
+    if explicit_files && !stdin && !sql_only {
+        let mut visited = BTreeSet::new();
+        while let Some(file) = sources
+            .keys()
+            .find(|file| !visited.contains(*file))
+            .cloned()
+        {
+            visited.insert(file.clone());
+            if file.ends_with(".sql") {
+                continue;
+            }
+            let source = &sources[&file];
+            let facts = indexed(
+                Source {
+                    file: file.clone(),
+                    text: source.text.clone(),
+                },
+                &root,
+                &resolver,
+                false,
+            )?;
+            for import in facts.imports {
+                if let Some(path) = import.resolved.filter(|path| {
+                    !path.starts_with("node_modules/") && !Path::new(path).is_absolute()
+                }) {
+                    if !sources.contains_key(&path) {
+                        walk(&root.join(path), &mut sources, &mut configs, &root)?;
+                    }
+                }
+            }
+        }
+    }
+    // Resolver configs are content inputs, including root manifests and lockfiles.
+    for name in [
+        "package.json",
+        "yarn.lock",
+        ".dependency-cruiser.json",
+        "tsconfig.json",
+        "tsconfig.base.json",
+    ] {
+        if let Ok(bytes) = fs::read(root.join(name)) {
+            configs.insert(name.to_string(), bytes);
+        }
+    }
+    let mut hasher = blake3::Hasher::new();
+    for part in [
+        include_bytes!("main.rs").as_slice(),
+        include_bytes!("../Cargo.toml"),
+        include_bytes!("../Cargo.lock"),
+    ] {
+        hasher.update(part);
+    }
+    hasher.update(root.to_string_lossy().as_bytes());
+    hasher.update(&[sql_only as u8]);
+    for (file, source) in &sources {
+        hasher.update(&(file.len() as u64).to_le_bytes());
+        hasher.update(file.as_bytes());
+        hasher.update(&(source.text.len() as u64).to_le_bytes());
+        hasher.update(source.text.as_bytes());
+    }
+    for (file, bytes) in &configs {
+        hasher.update(file.as_bytes());
+        hasher.update(bytes);
+    }
+    let digest = hasher.finalize().to_hex().to_string();
+    if let Ok(mut previous) = File::open(&output) {
+        let mut prefix = [0u8; 120];
+        let read = previous.read(&mut prefix)?;
+        if String::from_utf8_lossy(&prefix[..read]).contains(&format!("\"digest\":\"{digest}\"")) {
+            println!(
+                "{}",
+                json!({"digest":digest,"output":output,"reused":true,"totalMs":started.elapsed().as_secs_f64()*1000.0})
+            );
+            return Ok(());
+        }
+    }
+    if let Some(parent) = output.parent() {
+        fs::create_dir_all(parent)?;
+    }
+    let temporary = output.with_extension(format!("{}.tmp", std::process::id()));
+    let mut writer = BufWriter::new(File::create(&temporary)?);
+    write!(
+        writer,
+        "{{\"version\":1,\"digest\":\"{digest}\",\"files\":{{"
+    )?;
+    let queue = Mutex::new(sources.into_iter().enumerate().collect::<VecDeque<_>>());
+    let threads = std::thread::available_parallelism().map_or(1, |count| count.get().min(8));
+    let (sender, receiver) = mpsc::sync_channel(threads * 2);
+    std::thread::scope(|scope| -> Result<()> {
+        for _ in 0..threads {
+            let sender = sender.clone();
+            let queue = &queue;
+            let resolver = &resolver;
+            let root = &root;
+            scope.spawn(move || {
+                loop {
+                    let Some((number, (file, source))) = queue.lock().unwrap().pop_front() else {
+                        break;
+                    };
+                    if sender
+                        .send((number, file, indexed(source, root, resolver, sql_only)))
+                        .is_err()
+                    {
+                        break;
+                    }
+                }
+            });
+        }
+        drop(sender);
+        let mut pending = BTreeMap::new();
+        let mut next = 0;
+        for (number, file, facts) in receiver {
+            pending.insert(number, (file, facts));
+            while let Some((file, facts)) = pending.remove(&next) {
+                if next > 0 {
+                    writer.write_all(b",")?;
+                }
+                serde_json::to_writer(&mut writer, &file)?;
+                writer.write_all(b":")?;
+                serde_json::to_writer(&mut writer, &facts?)?;
+                next += 1;
+            }
+        }
+        Ok(())
+    })?;
+    writer.write_all(b"}}\n")?;
+    writer.flush()?;
+    writer.get_ref().sync_all()?;
+    fs::rename(&temporary, &output)?;
+    println!(
+        "{}",
+        json!({"digest":digest,"output":output,"reused":false,"totalMs":started.elapsed().as_secs_f64()*1000.0,"timingsMs":{"typescriptParse":PARSING.load(Ordering::Relaxed) as f64 / 1000.0,"estreeSerialize":ENCODING.load(Ordering::Relaxed) as f64 / 1000.0,"estreeDecode":DECODING.load(Ordering::Relaxed) as f64 / 1000.0,"importResolve":RESOLVING.load(Ordering::Relaxed) as f64 / 1000.0,"sql":SQL.load(Ordering::Relaxed) as f64 / 1000.0}})
+    );
+    Ok(())
+}
+
+fn resolver(root: &Path) -> Resolver {
+    Resolver::new(ResolveOptions {
+        cwd: Some(root.to_path_buf()),
+        tsconfig: Some(TsconfigDiscovery::Auto),
+        extensions: [
+            ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json",
+        ]
+        .iter()
+        .map(|s| s.to_string())
+        .collect(),
+        extension_alias: vec![(
+            ".js".to_string(),
+            vec![".ts".to_string(), ".tsx".to_string(), ".js".to_string()],
+        )],
+        condition_names: vec![
+            "import".to_string(),
+            "node".to_string(),
+            "default".to_string(),
+        ],
+        ..ResolveOptions::default()
+    })
+}
+
+// Sources include query fragments and prose that PostgreSQL cannot scan. A
+// lossless lexical fallback prevents malformed fragments from hiding violations;
+// complete SQL still uses PostgreSQL's scanner and parser above.
+fn fallback_tokens(sql: &str) -> Vec<Token> {
+    let bytes = sql.as_bytes();
+    let mut result = Vec::new();
+    let mut at = 0;
+    while at < bytes.len() {
+        if bytes[at].is_ascii_whitespace() {
+            at += 1;
+            continue;
+        }
+        if sql[at..].starts_with("--") {
+            at = sql[at..].find('\n').map_or(bytes.len(), |end| at + end);
+            continue;
+        }
+        if sql[at..].starts_with("/*") {
+            if let Some(end) = sql[at + 2..].find("*/") {
+                at += end + 4;
+                continue;
+            }
+        }
+        let start = at;
+        let mut quoted = false;
+        let mut string = false;
+        if bytes[at] == b'\'' || bytes[at] == b'"' {
+            let quote = bytes[at];
+            let mut end = at + 1;
+            let mut found = false;
+            while end < bytes.len() {
+                if bytes[end] == quote {
+                    if bytes.get(end + 1) == Some(&quote) {
+                        end += 2;
+                    } else {
+                        end += 1;
+                        found = true;
+                        break;
+                    }
+                } else {
+                    end += 1;
+                }
+            }
+            if found {
+                at = end;
+                quoted = quote == b'"';
+                string = quote == b'\'';
+            } else {
+                at += 1;
+            }
+        } else if bytes[at] == b'$' {
+            let mut end = at + 1;
+            while end < bytes.len() && (bytes[end].is_ascii_alphanumeric() || bytes[end] == b'_') {
+                end += 1;
+            }
+            if bytes.get(end) == Some(&b'$') {
+                at = end + 1;
+                continue;
+            }
+            if bytes.get(at + 1).is_some_and(u8::is_ascii_digit) {
+                at += 1;
+                while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+                    at += 1;
+                }
+            } else {
+                at += 1;
+            }
+        } else if bytes[at].is_ascii_digit() {
+            at += 1;
+            while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+                at += 1;
+            }
+            if bytes.get(at) == Some(&b'.') && bytes.get(at + 1).is_some_and(u8::is_ascii_digit) {
+                at += 1;
+                while bytes.get(at).is_some_and(u8::is_ascii_digit) {
+                    at += 1;
+                }
+            }
+        } else if bytes[at].is_ascii_alphabetic() || bytes[at] == b'_' {
+            at += 1;
+            while bytes
+                .get(at)
+                .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'$')
+            {
+                at += 1;
+            }
+        } else {
+            at += sql[at..].chars().next().unwrap().len_utf8();
+        }
+        let raw = &sql[start..at];
+        let text = if string {
+            raw[1..raw.len() - 1].replace("''", "'")
+        } else if quoted {
+            raw[1..raw.len() - 1].replace("\"\"", "\"")
+        } else {
+            raw.to_lowercase()
+        };
+        result.push(Token {
+            text,
+            offset: start,
+            quoted,
+            string,
+            literal: string,
+        });
+    }
+    result
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn postgres_relations_and_dollar_body_positions() {
+        let facts = sql_facts("SELECT * FROM \"owner\".\"records\";");
+        assert!(facts.parse_error.is_none());
+        assert_eq!(
+            facts.references,
+            vec![json!({"relation":"owner.records","offset":14})]
+        );
+        let sql = "DO $$ BEGIN UPDATE owner.records SET id = 1; END $$;";
+        let facts = sql_facts(sql);
+        assert_eq!(facts.bodies.len(), 1);
+        assert!(
+            facts
+                .tokens
+                .iter()
+                .any(|token| token.text == "update" && token.offset == sql.find("UPDATE").unwrap())
+        );
+    }
+    #[test]
+    fn malformed_fragments_preserve_tokens() {
+        let facts = sql_facts("don't SELECT * FROM owner.records");
+        assert!(facts.scan_error.is_some());
+        assert!(facts.tokens.iter().any(|token| token.text == "owner"));
+    }
+    #[test]
+    fn type_queries_are_import_edges_and_compressed_ast_preserves_unicode() {
+        let root = env::current_dir().unwrap();
+        let source = Source {
+            file: "query.ts".to_string(),
+            text: r#"const 名 = '\ud800'; type X = import('./owner.ts').X;"#.to_string(),
+        };
+        let facts = indexed(source, &root, &resolver(&root), false).unwrap();
+        assert_eq!(facts.imports.len(), 1);
+        assert_eq!(facts.imports[0].source, "./owner.ts");
+        assert!(facts.imports[0].type_only);
+        let compressed = STANDARD.decode(facts.ast_deflate.unwrap()).unwrap();
+        let mut decoder = flate2::read::DeflateDecoder::new(compressed.as_slice());
+        let mut ast = String::new();
+        decoder.read_to_string(&mut ast).unwrap();
+        assert!(ast.contains("名"));
+        assert!(ast.contains(r"\ud800"));
+        assert!(RawValue::from_string(ast).is_ok());
+    }
+    #[test]
+    fn template_holes_use_delimiter_spans_including_comment_braces() {
+        let root = env::current_dir().unwrap();
+        let text = "const sql = `SELECT * FROM owner.records WHERE id = ${ value /* } -- */ } AND EXISTS (SELECT 1 FROM owner.other)`;";
+        let facts = indexed(
+            Source {
+                file: "query.ts".to_string(),
+                text: text.to_string(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let expected = "SELECT * FROM owner.records WHERE id = ????????????????????? AND EXISTS (SELECT 1 FROM owner.other)";
+        assert!(
+            facts
+                .sql_candidates
+                .iter()
+                .any(|candidate| candidate.text == expected),
+            "{:?}",
+            facts
+                .sql_candidates
+                .iter()
+                .map(|candidate| &candidate.text)
+                .collect::<Vec<_>>()
+        );
+    }
+}
+
+struct Facts<'r> {
+    root: &'r Path,
+    file: &'r str,
+    text: &'r str,
+    resolver: &'r Resolver,
+    imports: Vec<Import>,
+    candidates: Vec<SqlCandidate>,
+}
+impl Facts<'_> {
+    fn import(&mut self, source: &str, type_only: bool) {
+        let timing = Instant::now();
+        let resolved = self
+            .resolver
+            .resolve_file(self.root.join(self.file), source)
+            .ok()
+            .map(|result| {
+                result
+                    .path()
+                    .strip_prefix(self.root)
+                    .map(|path| path.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_else(|_| result.path().to_string_lossy().to_string())
+            })
+            .or_else(|| source.starts_with("node:").then(|| source.to_string()));
+        self.imports.push(Import {
+            source: source.to_string(),
+            resolved,
+            type_only,
+        });
+        elapsed(&RESOLVING, timing);
+    }
+    fn candidate(&mut self, text: String, start: u32, end: u32) {
+        if is_sql(&text) {
+            self.candidates.push(SqlCandidate {
+                sql: sql_facts(&text),
+                text,
+                start: start as usize,
+                end: end as usize,
+            });
+        }
+    }
+}
+impl<'a> Visit<'a> for Facts<'_> {
+    fn visit_import_declaration(&mut self, node: &ImportDeclaration<'a>) {
+        let type_only = node.import_kind == ImportOrExportKind::Type || node.specifiers.as_ref().is_some_and(|items| !items.is_empty() && items.iter().all(|item| matches!(item,ImportDeclarationSpecifier::ImportSpecifier(specifier) if specifier.import_kind == ImportOrExportKind::Type)));
+        self.import(&node.source.value, type_only);
+        walk::walk_import_declaration(self, node);
+    }
+    fn visit_export_from_declaration(&mut self, node: &ExportFromDeclaration<'a>) {
+        let type_only = node.export_kind == ImportOrExportKind::Type
+            || !node.specifiers.is_empty()
+                && node
+                    .specifiers
+                    .iter()
+                    .all(|item| item.export_kind == ImportOrExportKind::Type);
+        self.import(&node.source.value, type_only);
+        walk::walk_export_from_declaration(self, node);
+    }
+    fn visit_export_all_declaration(&mut self, node: &ExportAllDeclaration<'a>) {
+        self.import(
+            &node.source.value,
+            node.export_kind == ImportOrExportKind::Type,
+        );
+        walk::walk_export_all_declaration(self, node);
+    }
+    fn visit_import_expression(&mut self, node: &ImportExpression<'a>) {
+        if let Expression::StringLiteral(source) = &node.source {
+            self.import(&source.value, false);
+        }
+        walk::walk_import_expression(self, node);
+    }
+    fn visit_ts_import_type(&mut self, node: &TSImportType<'a>) {
+        self.import(&node.source.value, true);
+        walk::walk_ts_import_type(self, node);
+    }
+    fn visit_ts_import_equals_declaration(&mut self, node: &TSImportEqualsDeclaration<'a>) {
+        if let TSModuleReference::ExternalModuleReference(source) = &node.module_reference {
+            self.import(
+                &source.expression.value,
+                node.import_kind == ImportOrExportKind::Type,
+            );
+        }
+        walk::walk_ts_import_equals_declaration(self, node);
+    }
+    fn visit_call_expression(&mut self, node: &CallExpression<'a>) {
+        if matches!(&node.callee,Expression::Identifier(name) if name.name == "require") {
+            if let Some(Argument::StringLiteral(source)) = node.arguments.first() {
+                self.import(&source.value, false);
+            }
+        }
+        walk::walk_call_expression(self, node);
+    }
+    fn visit_string_literal(&mut self, node: &StringLiteral<'a>) {
+        self.candidate(node.value.to_string(), node.span.start, node.span.end);
+    }
+    fn visit_template_literal(&mut self, node: &TemplateLiteral<'a>) {
+        let text = node
+            .quasis
+            .iter()
+            .map(|part| part.value.raw.as_str())
+            .collect::<Vec<_>>()
+            .join("?");
+        self.candidate(text, node.span.start, node.span.end);
+        if !node.expressions.is_empty() {
+            let start = node.span.start as usize + 1;
+            let end = node.span.end as usize - 1;
+            let mut text = self.text[start..end].to_string();
+            for index in (0..node.expressions.len()).rev() {
+                let hole_start = node.quasis[index].span.end as usize - start;
+                let hole_end = node.quasis[index + 1].span.start as usize - start;
+                let masked = text[hole_start..hole_end]
+                    .chars()
+                    .map(|ch| {
+                        if ch == '\n' {
+                            "\n".to_string()
+                        } else {
+                            "?".repeat(ch.len_utf16())
+                        }
+                    })
+                    .collect::<String>();
+                text.replace_range(hole_start..hole_end, &masked);
+            }
+            self.candidate(text, node.span.start, node.span.end);
+        }
+        walk::walk_template_literal(self, node);
+    }
+}
+
+fn compressed_ast(ast: &str) -> Result<String> {
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(ast.as_bytes())?;
+    Ok(STANDARD.encode(encoder.finish()?))
+}
