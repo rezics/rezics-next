@@ -80,7 +80,7 @@ const operation = t.Union([
   t.Object({ op: t.Literal('remove'), occurrence: ref }, { additionalProperties: false }),
   t.Object({ op: t.Literal('update'), occurrence: ref, label: t.Optional(label),
     target: t.Optional(t.String({ format: 'uri' })), selection: t.Optional(selection),
-    qualifier: t.Optional(t.Union([ingredientLine, recipeStep, declaredQualifier, noteQualifier])),
+    qualifier: t.Optional(t.Nullable(t.Union([ingredientLine, recipeStep, declaredQualifier, noteQualifier]))),
     division: t.Optional(division), displayLabel: t.Optional(t.String({ minLength: 1, maxLength: 500 })),
     inclusion: t.Optional(inclusion) }, { additionalProperties: false }),
 ]);
@@ -90,12 +90,16 @@ type BodyOperation = Static<typeof operation>;
 function commandOperation(item: BodyOperation, profileId: string): CompositionOperation {
   if (item.op !== 'insert' && item.op !== 'update') return item;
   if (
-    item.qualifier &&
+    item.qualifier !== undefined &&
     (item.division !== undefined || item.displayLabel !== undefined || item.inclusion !== undefined)
   ) {
     throw new InvalidCompositionChange('an occurrence carries one qualifier');
   }
   const { division: groupDivision, displayLabel, inclusion: partInclusion, qualifier, ...rest } = item;
+  if (qualifier === null) {
+    if (item.op !== 'update') throw new InvalidCompositionChange('only an update can clear its qualifier');
+    return { ...rest, op: 'update', occurrence: item.occurrence, qualifier: null };
+  }
   if (displayLabel !== undefined || partInclusion !== undefined || item.op === 'insert' && item.role === 'part') {
     if (!displayLabel || !partInclusion || groupDivision || item.op === 'insert' && item.role !== 'part') {
       throw new InvalidCompositionChange('a Work part requires its display label and inclusion');
@@ -114,7 +118,7 @@ function commandOperation(item: BodyOperation, profileId: string): CompositionOp
     }
     return { ...rest, qualifier: { type: 'fields' as const, id: spec.fieldId, values: { note: qualifier.note } } };
   }
-  return { ...rest, ...(qualifier ? { qualifier } : {}),
+  return { ...rest, ...(qualifier !== undefined ? { qualifier } : {}),
     ...(groupDivision ? { qualifier: { type: 'book-group' as const, division: groupDivision } } : {}) };
 }
 const sourcePosition = t.Object({ datasetId: t.Literal('product'), dataEpoch: t.String(),

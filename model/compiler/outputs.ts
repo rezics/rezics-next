@@ -15,12 +15,13 @@ export function expand(term: Term | string, prefixes: ReadonlyMap<string, string
   return `${namespace}${term.slice(colon + 1)}`;
 }
 
-function valueKind(property: PropertyDefinition, prefixes: ReadonlyMap<string, string>): 'boolean' | 'integer' | 'dateTime' | 'langString' | 'string' | 'iri' | 'mixed' | 'absent' {
+function valueKind(property: PropertyDefinition, prefixes: ReadonlyMap<string, string>): 'boolean' | 'integer' | 'rational' | 'dateTime' | 'langString' | 'string' | 'iri' | 'mixed' | 'absent' {
   if (property.maxCount === 0) return 'absent';
   if (property.hasValue && /^-?\d+$/.test(property.hasValue)) return 'integer';
   const datatype = property.datatype && expand(property.datatype, new Map([...Object.entries(reservedNamespaces), ...prefixes]));
   if (datatype === `${reservedNamespaces.xsd}boolean`) return 'boolean';
   if (datatype === `${reservedNamespaces.xsd}integer`) return 'integer';
+  if (datatype === `${reservedNamespaces.owl}rational`) return 'rational';
   if (datatype === `${reservedNamespaces.xsd}dateTime`) return 'dateTime';
   if (datatype === `${reservedNamespaces.rdf}langString`) return 'langString';
   if (datatype === `${reservedNamespaces.xsd}string`) return 'string';
@@ -50,6 +51,7 @@ function valueExpression(property: PropertyDefinition, prefixes: ReadonlyMap<str
     return `Type.Integer(${quote(options)})`;
   }
   if (kind === 'boolean') return 'Type.Boolean()';
+  if (kind === 'rational') return `Type.Object({ "@value": Type.String(${quote(options)}), "@type": Type.Literal(${quote(`${reservedNamespaces.owl}rational`)}) }, { additionalProperties: false })`;
   if (kind === 'dateTime') return `Type.String({ pattern: ${quote('^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})$')} })`;
   if (kind === 'mixed') return 'Type.Unknown()';
   if (kind === 'langString') {

@@ -223,6 +223,7 @@ export function parseTurtleProfile(
           `${xsd}boolean`,
           `${xsd}dateTime`,
           `${rdf}langString`,
+          `${reservedNamespaces.owl}rational`,
         ].includes(datatype)
       ) {
         throw new Error(`Unsupported sh:datatype ${result.datatype}`);
@@ -254,7 +255,7 @@ export function parseTurtleProfile(
     if (
       result.pattern !== undefined &&
       datatype &&
-      ![`${xsd}string`, `${rdf}langString`].includes(datatype)
+      ![`${xsd}string`, `${rdf}langString`, `${reservedNamespaces.owl}rational`].includes(datatype)
     )
       throw new Error('sh:pattern requires a string JSON mapping');
     // The current lowerer emits fixed values instead of their other facets.

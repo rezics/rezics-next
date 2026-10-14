@@ -146,7 +146,7 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
         const receipt = await changeAdmittedWorkStructurePublication(work.environment, work.account,
           work.access, request, { ...body, idempotencyKey }, dispatch =>
           withStructuredPublicationFence(work, body.work, dispatch), body.operation === 'publish'
-            ? admissionId => prepareInstructionAdoptions(work, body, admissionId) : undefined);
+            ? (admissionId, principal) => prepareInstructionAdoptions(work, body, admissionId, principal) : undefined);
         return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
           work: receipt.work, publicationDecision: receipt.publicationDecision!,
           ...(receipt.mainVersion ? { mainVersion: receipt.mainVersion } : {}),

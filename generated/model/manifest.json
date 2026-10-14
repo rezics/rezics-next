@@ -944,6 +944,11 @@
       }
     },
     {
+      "id": "recipe-facts-v1",
+      "sha256": "89506c7a5adae8ae0298f50ebd38751895189e53ab6717699ed8874d0786d747",
+      "file": "shapes/recipe-facts-v1.ttl"
+    },
+    {
       "id": "recipe-structure-v1",
       "sha256": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
       "file": "shapes/recipe-structure-v1.ttl"
@@ -1966,6 +1971,36 @@
           "profile": "value-exact-v1",
           "shape": "https://rezics.com/definition/value-exact-v1/temporal-shape",
           "when": []
+        }
+      ]
+    },
+    {
+      "type": "http://www.w3.org/ns/prov#Activity",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/activity-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "http://www.w3.org/ns/prov#Entity",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/extraction-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
         }
       ]
     },
@@ -3714,6 +3749,36 @@
       ]
     },
     {
+      "type": "https://schema.org/HowToStep",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/step-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "https://schema.org/HowToSupply",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/ingredient-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "https://schema.org/ItemList",
       "routes": [
         {
@@ -3734,12 +3799,66 @@
       ]
     },
     {
+      "type": "https://schema.org/NutritionInformation",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/nutrition-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "type": "https://schema.org/QuantitativeValue",
       "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/servings-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            },
+            {
+              "path": "https://schema.org/propertyID",
+              "value": "https://schema.org/numberOfItems"
+            }
+          ]
+        },
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/quantity-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
+        },
         {
           "profile": "value-exact-v1",
           "shape": "https://rezics.com/definition/value-exact-v1/quantity-shape",
           "when": []
+        }
+      ]
+    },
+    {
+      "type": "https://schema.org/Recipe",
+      "routes": [
+        {
+          "profile": "recipe-facts-v1",
+          "shape": "https://rezics.com/definition/recipe-facts-v1/recipe-shape",
+          "when": [
+            {
+              "path": "https://rezics.com/vocab/definitionProfile",
+              "value": "https://rezics.com/definition/recipe-facts-v1"
+            }
+          ]
         }
       ]
     }
@@ -4046,6 +4165,7 @@
     "contexts/realm-target-rating-observation-v2.jsonld": "076015b8f072c1d38c12cb48affa89c3166ac01a6a7e2ff635fc91a880a27ff7",
     "contexts/realm-target-rating-observation-v3.jsonld": "96a7a85f52ae996071e73464c5e93dd376228217583c96ffd37a5d27213ac60b",
     "contexts/realm-target-rating-observation-v4.jsonld": "743af4b61f7a22a1450a6d68428641d30838ed7a1e4598f306ded60031f2970d",
+    "contexts/recipe-facts-v1.jsonld": "0513ee3f56b29fcbbc5cc1e326e68d68232e9dee1b5182b3cd6ea3368248d311",
     "contexts/recipe-structure-v1.jsonld": "008e021120755538e16f0301ba2bd145dd167854435f66b0d1adc278c58c2d64",
     "contexts/relation-occurrence-v1.jsonld": "11765223ec6529f75fde356cb678562299f257127321825a0a6d06bc91b0b84f",
     "contexts/release-v1.jsonld": "4e08a0411d5e3180f70f1f90939d7df0c9d797daceeda586ebf4f823f7120461",
@@ -4183,6 +4303,7 @@
     "shapes/realm-target-rating-observation-v2.ttl": "dbfdb6259c310991d57b339854f8ac138f3b42c8acfba780d9d932bab411a341",
     "shapes/realm-target-rating-observation-v3.ttl": "4dc4a035b1dae7714d354e730617f1f649561e99a8a76eeb0afaed4a7b742c0e",
     "shapes/realm-target-rating-observation-v4.ttl": "670763404c8cd86a0629e4e55f35fb5b560e95ca00c1f7aaac52749dd4ee7386",
+    "shapes/recipe-facts-v1.ttl": "89506c7a5adae8ae0298f50ebd38751895189e53ab6717699ed8874d0786d747",
     "shapes/recipe-structure-v1.ttl": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
     "shapes/relation-occurrence-v1.ttl": "27269b50a2a7c632a6fa4a96bcc94d4e623f3b00e19b36926727c229bca099c6",
     "shapes/release-v1.ttl": "e0018a2144113c2c3cc6bfcdc3951f1ce282c919859950c0811aa018c4a1c92c",
@@ -4241,8 +4362,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "2effe7a09e8d28f4ca9fa0f0dd02b0022d4be87c2217feb701fb23de2f8df2ce",
-    "packages/model/src/generated/schemas.ts": "5ed6fbc3d0542d430821fb75ad1dea8f5e7abf2f03981376b1c235262047ef90",
-    "packages/model/src/generated/vocabulary.ts": "6d48547035823316b60de2da384a7ef2149ab5d679b30d24ce3d91962bfec43d"
+    "packages/model/src/generated/profiles.ts": "4bbf5b815ff66ff04c07f02c4d59ed97dc73db726b89c2b15e57c5c6110ae3d2",
+    "packages/model/src/generated/schemas.ts": "509dec005b498424e58431c5680c7051d27f98de7950d1a005c5817369042e78",
+    "packages/model/src/generated/vocabulary.ts": "bc155aa13c398472e537ad1efeb0b5cb3fc90a85dfff83fe8c57e5d59fcfaec8"
   }
 }

@@ -1952,6 +1952,15 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/recipes/{id}/export",
+    "ids": [
+      "path:id",
+      "query:actingSubject",
+      "query:revision"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/recipes/{id}/exports/schema-org",
     "ids": [
       "path:id",
@@ -1973,7 +1982,8 @@
     "operation": "GET /v1/recipes/works/{id}",
     "ids": [
       "path:id",
-      "query:actingSubject"
+      "query:actingSubject",
+      "query:revision"
     ],
     "status": "unregistered"
   },

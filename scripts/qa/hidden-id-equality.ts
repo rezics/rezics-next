@@ -56,8 +56,13 @@ export const registeredHiddenParentOutputReads = [
 export const registeredHiddenContentRevisionReads = [
   'GET /v1/content-revisions/{revision}/derivations',
 ] as const;
+/** Recipe export's owner API proof compares hidden/missing Structures and exact
+ * draft/missing revisions, including anonymous refusal. It claims response
+ * equality, not equal graph/SQL read counts (recipe-export-disclosure.test.ts). */
+export const registeredHiddenRecipeExportReads = ['GET /v1/recipes/{id}/export'] as const;
 export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenParentOutputReads,
   ...registeredHiddenContentRevisionReads,
+  ...registeredHiddenRecipeExportReads,
   ...registeredHiddenIdWrites].sort();
 
 // The posting contract declares disclosure inputs, separately from its observed

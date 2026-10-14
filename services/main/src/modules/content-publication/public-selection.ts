@@ -3,7 +3,7 @@ import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts
 /** Only the currently selected exact public Content decision grants these bytes. */
 export async function isPublicContentRevision(env: WorkActivationEnvironment, resource: string,
   revision: string, variant?: string): Promise<boolean> {
-  return (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
+  if ((await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/> ASK {
     GRAPH ${iri(GRAPHS.current)} { ${variant ? iri(variant) : '?variant'} rv:resource ${iri(resource)} ;
       rv:contentPublicationHead ?publication ; rv:publicSearchEligibilityHead ?eligibility }
     GRAPH ${iri(GRAPHS.revisions)} {
@@ -12,5 +12,8 @@ export async function isPublicContentRevision(env: WorkActivationEnvironment, re
       ?eligibility a rv:ContentSearchEligibilityDecision ; rv:publicationDecision ?publication ; rv:disclosure rv:Public .
       FILTER NOT EXISTS { ${iri(`urn:rezics:content:revision:${revision}`)} a rv:ErasedRevision }
     }
-  }`, 4096)).boolean === true;
+  }`, 4096)).boolean === true) return true;
+  const { readPublicInstructionAdoptions } = await import('../work/instruction-adoption.ts');
+  return (await readPublicInstructionAdoptions(env, { target: resource, contentRevision: revision }))
+    .some(item => item.selector.grain === 'content' && (!variant || item.selector.variantId === variant));
 }

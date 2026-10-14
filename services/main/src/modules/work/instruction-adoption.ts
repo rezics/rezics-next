@@ -1,8 +1,10 @@
+import { checkExactInstructionSelection } from '../structure/selection.ts';
+import type { VerifiedPrincipal } from '../access/admission.ts';
+import { canReadContentTarget, resolveContentTarget } from '../content-publication/draft.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { ExactInstructionSelector } from '../structure/selection.ts';
-import { readCompositionPage } from '../structure/read.ts';
-import { readCompositionHeader } from '../structure/graph.ts';
-import { isContainerRole, structureProfileFor } from '../structure/profiles.ts';
+import { readCompositionHeader, roleIri } from '../structure/graph.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 import { PublicationUnavailable } from '../contribution/publish.ts';
 import { GRAPHS, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { admittedPublicWorks } from './public-patterns.ts';
@@ -19,10 +21,12 @@ export function instructionAdoptionTriples(source: string, adoptions: readonly I
     return `${iri(source)} <https://schema.org/recipeInstructions> ${iri(node)} .
       ${iri(node)} a <http://www.w3.org/ns/oa#SpecificResource> ;
         <http://www.w3.org/ns/oa#hasSource> ${iri(adoption.target)} ;
-        <http://www.w3.org/ns/oa#hasState> ${iri(`urn:rezics:${adoption.selector.grain === 'content' ? 'content' : 'media'}:revision:${adoption.selector.revision}`)} ;
+        <http://www.w3.org/ns/oa#hasState> ${iri(`${node}:state`)} ;
         <https://schema.org/identifier> ${iri(adoption.occurrence)} ;
         <http://www.w3.org/1999/02/22-rdf-syntax-ns#value> ${lit(JSON.stringify(adoption.selector))}
-        ${adoption.mediaUse ? `; <https://schema.org/associatedMedia> ${iri(`https://rezics.com/id/${adoption.mediaUse}`)}` : ''} .`;
+        ${adoption.mediaUse ? `; <https://schema.org/associatedMedia> ${iri(`https://rezics.com/id/${adoption.mediaUse}`)}` : ''} .
+      ${iri(`${node}:state`)} a <http://www.w3.org/ns/oa#TimeState> ;
+        <http://www.w3.org/ns/oa#cachedSource> ${iri(`urn:rezics:content:revision:${adoption.selector.revision}`)} .`;
   }).join('\n');
 }
 
@@ -45,9 +49,10 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
         OPTIONAL { ?adoption <https://schema.org/associatedMedia> ?use }
         ${selection.mediaUse ? `FILTER(?use = ${iri(`https://rezics.com/id/${selection.mediaUse}`)})` : ''}
         ${selection.target ? `FILTER(?target = ${iri(selection.target)})` : ''}
-        ${selection.mediaRevision ? `?adoption <http://www.w3.org/ns/oa#hasState> ${iri(`urn:rezics:media:revision:${selection.mediaRevision}`)} .` : ''}
+        ${selection.mediaRevision ? `?adoption (<http://www.w3.org/ns/oa#hasState>|<http://www.w3.org/ns/oa#hasState>/<http://www.w3.org/ns/oa#cachedSource>) ?selectedRevision .
+          VALUES ?selectedRevision { ${iri(`urn:rezics:media:revision:${selection.mediaRevision}`)} ${iri(`urn:rezics:content:revision:${selection.mediaRevision}`)} }` : ''}
         ${selection.mediaUses ? `FILTER(?use IN (${selection.mediaUses.map(use => iri(`https://rezics.com/id/${use}`)).join(',')}))` : ''}
-        ${selection.contentRevision ? `?adoption <http://www.w3.org/ns/oa#hasState> ${iri(`urn:rezics:content:revision:${selection.contentRevision}`)} .` : ''}
+        ${selection.contentRevision ? `?adoption (<http://www.w3.org/ns/oa#hasState>|<http://www.w3.org/ns/oa#hasState>/<http://www.w3.org/ns/oa#cachedSource>) ${iri(`urn:rezics:content:revision:${selection.contentRevision}`)} .` : ''}
       }
     } LIMIT 4097`, 2 * 1024 * 1024)).results?.bindings ?? [];
   if (rows.length > 4096) throw new PublicationUnavailable('Instruction adoption inventory exceeds its bound');
@@ -65,36 +70,35 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
 /** Runs after Work publish admission. Custody and original authorship are separate proofs. */
 export async function prepareInstructionAdoptions(work: MainWorkDependencies,
   input: { work: string; structure: string; expectedStructureHead: string; actingSubject: string },
-  admissionId: string): Promise<InstructionAdoption[]> {
+  admissionId: string, principal: VerifiedPrincipal): Promise<InstructionAdoption[]> {
   const header = await readCompositionHeader(work.environment, input.structure);
   if (!header) throw new PublicationUnavailable('Instruction Structure is unavailable');
   const profile = structureProfileFor(header.profile);
   if (!profile.selectionSelectorRoles?.length) return [];
-  const adoptions: InstructionAdoption[] = [];
-  const parents = [input.structure];
-  let visited = 0;
-  for (const parent of parents) {
-    let after: string | undefined;
-    do {
-      const page = await readCompositionPage(work.environment, { structure: input.structure,
-        revision: input.expectedStructureHead, parent, limit: 100, ...(after ? { after } : {}),
-        canReadTarget: async () => true });
-      visited += page.occurrences.length;
-      if (visited > 4096) throw new PublicationUnavailable('Instruction publication exceeds 4096 occurrences');
-      for (const record of page.occurrences) {
-        if (isContainerRole(profile, record.role)) parents.push(record.occurrence);
-        if (!profile.selectionSelectorRoles.includes(record.role) || !record.target || record.selection?.mode !== 'fixed-revision'
-          || !record.selection.selector) continue;
-        adoptions.push({ occurrence: record.occurrence, target: record.target, selector: record.selection.selector });
-      }
-      after = page.next ?? undefined;
-    } while (after);
-  }
+  if (header.head !== input.expectedStructureHead) throw new PublicationUnavailable('Instruction Structure head changed');
+  // Only adopted dependencies count against this bounded inventory. An unrelated
+  // ingredient inventory does not acquire the export operation's 4,096-use limit.
+  const rows = (await work.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+    SELECT ?occurrence ?target ?selector WHERE { GRAPH ${iri(GRAPHS.current)} {
+      VALUES ?role { ${profile.selectionSelectorRoles.map(role => iri(roleIri(role))).join(' ')} }
+      ?placement rv:generation ${iri(header.generation)} ; rv:occurrenceRole ?role ;
+        rv:occurrence ?occurrence ; <https://schema.org/item> ?target ; rv:selectionSelector ?selector .
+      FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
+    } } LIMIT 4097`, 2 * 1024 * 1024)).results?.bindings ?? [];
+  if (rows.length > 4096) throw new PublicationUnavailable('Instruction publication exceeds 4096 adopted dependencies');
+  const adoptions: InstructionAdoption[] = rows.map(row => {
+    if (!row.occurrence || !row.target || !row.selector) throw new PublicationUnavailable('Instruction selection is incomplete');
+    const selector = JSON.parse(row.selector.value) as ExactInstructionSelector;
+    checkExactInstructionSelection(row.target.value, selector.revision, selector);
+    return { occurrence: row.occurrence.value, target: row.target.value, selector };
+  });
   for (const adoption of adoptions) {
     const selector = adoption.selector;
     const exact = (await work.content?.readExactBatch([selector.revision], async ids => new Set(ids)))?.[0];
     if (exact?.status !== 'available') throw new PublicationUnavailable('Instruction dependency is unavailable');
     if (selector.grain === 'content') {
+      if (!await canReadContentTarget(work.environment, work.access, principal, input.actingSubject, adoption.target,
+        await resolveContentTarget(work.environment, adoption.target))) throw new PublicationUnavailable('Instruction custody is unavailable');
       if (exact.reference.resourceId !== adoption.target || exact.reference.variantId !== selector.variantId
         || exact.reference.provenance.kind !== 'admitted-original-contribution-v1'
         || exact.reference.provenance.author !== input.actingSubject) {

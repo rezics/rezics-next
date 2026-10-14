@@ -1,3 +1,4 @@
+import { CompositionUnavailable } from './unavailable.ts';
 import { createHash } from 'node:crypto';
 import type { SparqlResult } from '../../infrastructure/fuseki.ts';
 import { GRAPHS, ID, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
@@ -52,7 +53,7 @@ export function roleFromIri(uri: string): string | undefined {
 }
 export type BookRole = 'group' | 'chapter';
 
-export class CompositionUnavailable extends Error {}
+export { CompositionUnavailable } from './unavailable.ts';
 export class CompositionCorrupt extends Error {}
 
 /** Deterministic native identity for one admitted command's allocations. */
@@ -87,6 +88,8 @@ export interface PlacementState {
   target?: string;
   selection?: Selection;
   qualifier?: OccurrenceRecord['qualifier'];
+  /** Internal codec marker retained only while diffing an older graph projection. */
+  qualifierProjection?: string;
   sourceKey?: string;
   introducedBy: string;
   removedBy?: string;

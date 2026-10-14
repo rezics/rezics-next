@@ -1,0 +1,144 @@
+{
+  "@context": {
+    "sh": {
+      "@id": "http://www.w3.org/ns/shacl#",
+      "@prefix": true
+    },
+    "rdf": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#",
+      "@prefix": true
+    },
+    "xsd": {
+      "@id": "http://www.w3.org/2001/XMLSchema#",
+      "@prefix": true
+    },
+    "owl": {
+      "@id": "http://www.w3.org/2002/07/owl#",
+      "@prefix": true
+    },
+    "schema": {
+      "@id": "https://schema.org/",
+      "@prefix": true
+    },
+    "prov": {
+      "@id": "http://www.w3.org/ns/prov#",
+      "@prefix": true
+    },
+    "rv": {
+      "@id": "https://rezics.com/vocab/",
+      "@prefix": true
+    },
+    "prov:specializationOf": {
+      "@id": "http://www.w3.org/ns/prov#specializationOf",
+      "@type": "@id"
+    },
+    "prov:wasDerivedFrom": {
+      "@id": "http://www.w3.org/ns/prov#wasDerivedFrom",
+      "@type": "@id"
+    },
+    "prov:wasGeneratedBy": {
+      "@id": "http://www.w3.org/ns/prov#wasGeneratedBy",
+      "@type": "@id"
+    },
+    "rdf:type": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#type",
+      "@type": "@id"
+    },
+    "rdf:value": {
+      "@id": "http://www.w3.org/1999/02/22-rdf-syntax-ns#value"
+    },
+    "rv:basis": {
+      "@id": "https://rezics.com/vocab/basis",
+      "@type": "@id"
+    },
+    "rv:coverage": {
+      "@id": "https://rezics.com/vocab/coverage",
+      "@type": "@id"
+    },
+    "rv:definitionProfile": {
+      "@id": "https://rezics.com/vocab/definitionProfile",
+      "@type": "@id"
+    },
+    "rv:generation": {
+      "@id": "https://rezics.com/vocab/generation",
+      "@type": "@id"
+    },
+    "rv:scaling": {
+      "@id": "https://rezics.com/vocab/scaling",
+      "@type": "@id"
+    },
+    "rv:substituteFor": {
+      "@id": "https://rezics.com/vocab/substituteFor",
+      "@type": "@id"
+    },
+    "schema:additionalProperty": {
+      "@id": "https://schema.org/additionalProperty",
+      "@type": "@id"
+    },
+    "schema:associatedMedia": {
+      "@id": "https://schema.org/associatedMedia",
+      "@type": "@id"
+    },
+    "schema:cookTime": {
+      "@id": "https://schema.org/cookTime",
+      "@type": "@id"
+    },
+    "schema:description": {
+      "@id": "https://schema.org/description"
+    },
+    "schema:maxValue": {
+      "@id": "https://schema.org/maxValue"
+    },
+    "schema:mentions": {
+      "@id": "https://schema.org/mentions",
+      "@type": "@id"
+    },
+    "schema:minValue": {
+      "@id": "https://schema.org/minValue"
+    },
+    "schema:name": {
+      "@id": "https://schema.org/name"
+    },
+    "schema:nutrition": {
+      "@id": "https://schema.org/nutrition",
+      "@type": "@id"
+    },
+    "schema:prepTime": {
+      "@id": "https://schema.org/prepTime",
+      "@type": "@id"
+    },
+    "schema:propertyID": {
+      "@id": "https://schema.org/propertyID",
+      "@type": "@id"
+    },
+    "schema:recipeYield": {
+      "@id": "https://schema.org/recipeYield",
+      "@type": "@id"
+    },
+    "schema:requiredQuantity": {
+      "@id": "https://schema.org/requiredQuantity",
+      "@type": "@id"
+    },
+    "schema:text": {
+      "@id": "https://schema.org/text"
+    },
+    "schema:totalTime": {
+      "@id": "https://schema.org/totalTime",
+      "@type": "@id"
+    },
+    "schema:unitCode": {
+      "@id": "https://schema.org/unitCode",
+      "@type": "@id"
+    },
+    "schema:unitText": {
+      "@id": "https://schema.org/unitText"
+    },
+    "schema:value": {
+      "@id": "https://schema.org/value"
+    },
+    "schema:valueRequired": {
+      "@id": "https://schema.org/valueRequired",
+      "@type": "http://www.w3.org/2001/XMLSchema#boolean"
+    }
+  }
+}

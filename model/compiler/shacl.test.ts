@@ -40,6 +40,15 @@ async function schema(source: string): Promise<TSchema> {
 }
 const node = (values: Record<string, unknown>) => ({ '@id': 'urn:probe:node', ...values });
 
+test('exact rational constraints retain the datatype in JSON-LD instead of accepting an untyped string', async () => {
+  const source = turtle('sh:path schema:value ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype <http://www.w3.org/2002/07/owl#rational> ; sh:pattern "^[0-9]+/[1-9][0-9]*$"');
+  const shape = await schema(source);
+  const value = { '@value': '1/3', '@type': 'http://www.w3.org/2002/07/owl#rational' };
+  expect(Value.Check(shape, node({ 'schema:value': [value] }))).toBe(true);
+  expect(Value.Check(shape, node({ 'schema:value': ['1/3'] }))).toBe(false);
+  expect(Value.Check(shape, node({ 'schema:value': [{ ...value, '@type': 'http://www.w3.org/2001/XMLSchema#string' }] }))).toBe(false);
+});
+
 test('Turtle discovery preserves authored bytes and refuses duplicate IDs across source languages', () => {
   const source = turtle('sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
   const path = directory();

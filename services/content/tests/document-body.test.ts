@@ -9,7 +9,7 @@ test('Content custody retains the authored snapshot without adding editor defaul
   const saved = authoredDocumentBody({ document });
   expect(saved.document).toEqual(document);
   expect(saved.document).not.toBe(document);
-  expect(retainedDocumentBody(saved)).toEqual(saved);
+  expect(retainedDocumentBody({ ...saved })).toEqual(saved);
 });
 import { resolveParagraphSelector } from '../src/comments.ts';
 

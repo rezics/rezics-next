@@ -1,13 +1,23 @@
 # Recipe profile and adoption
 
 The [content-adoption decision](../architecture/content-adoption.md#decision-supermanager-2026-10-14)
-is the target boundary. The current [Recipe structure profile](../../model/definitions/recipe-structure-v1.ts)
-still stores ingredient and step qualifiers; it is not evidence that the new
-forms are implemented. Recipes open publicly only after
+is implemented by the [Recipe facts profile](../../model/definitions/recipe-facts-v1.ts)
+and exact Structure selections. Recipes open publicly only after
 [`recipes/instructions-in-any-form`](../../scripts/qa/cases/outcomes/recipes/instructions-in-any-form.ts)
 passes for all six personas. Owned drafts, publications, supports and revision
 pins must be inventoried before choosing conversion or reimport. Exact history
 is never rewritten or silently retargeted.
+
+New graph projections use HowToSupply/requiredQuantity for ingredient occurrences
+and the shared exact scalar codec for integer/rational values and paired ranges.
+Parser wording, spans and extraction status remain a separate evidence snapshot;
+they do not carry the accepted name or quantity. Each Structure revision projects
+its retained yield, timing and nutrition measures in the revisions graph.
+The [legacy projection](../../services/main/src/modules/recipe/legacy-projection.ts)
+reads existing drafts without rewriting immutable history. An explicit qualifier
+edit adopts the new projection; a move or label edit preserves the old one.
+Legacy inline text steps remain readable. An update can clear their qualifier
+with `null` while selecting an exact authored instruction in the same command.
 
 ## Facts, content and placement
 

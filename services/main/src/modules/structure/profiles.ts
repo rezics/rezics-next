@@ -2,6 +2,7 @@ import { join, resolve } from 'node:path';
 import { bindStructureProfiles, STRUCTURE_LIMITS, type OccurrenceRole, type StructureProfile,
   type StructureQualifierSpec } from './format.ts';
 import type { OccurrenceRecord } from './format.ts';
+import type { RecipeMeasure } from './format.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import type { PlacementState } from './graph.ts';
 import type { CommandValidation } from '../../infrastructure/fuseki.ts';
@@ -10,6 +11,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { AccessAdmissionRegistry } from '../access/admission.ts';
 import type { TargetReadSession } from '../target/resolve.ts';
 import type { Selection } from './graph.ts';
+import type { StructureReferencePolicy } from './local-references.ts';
 
 export type StructureTargetReader = <T>(operation: (session: TargetReadSession) => Promise<T>) => Promise<T>;
 
@@ -65,12 +67,19 @@ export interface StructureProfileRegistration {
   /** Declared external catalog terms accepted as non-content occurrence targets. */
   catalogTargetTypes?: readonly string[];
   roles: readonly OccurrenceRole[];
+  localReferences?: StructureReferencePolicy;
+  /** Owner transitions may atomically clear references while retiring a use. */
+  mixedOperationKinds?: readonly (readonly string[])[];
   /** Roles that may parent other occurrences. Defaults to `group`. */
   containerRoles?: readonly OccurrenceRole[];
   /** Qualifier required or optional on a role. Absent means the role carries none. */
   qualifiers?: Readonly<Record<string, StructureQualifierSpec>>;
   /** The manifest retains recipe measures only when the profile declares them. */
   measures?: boolean;
+  /** The owning profile projects its retained facts at each exact revision. */
+  projectRevisionFacts?: (measures: readonly RecipeMeasure[], revision: string, owner: string) => string;
+  /** Owners with several fact subjects per occurrence use smaller projection batches. */
+  projectionBatchRecords?: number;
   /** Completion is present only when the profile declares it. */
   completion?: boolean;
   /** These roles may omit a target; all other non-target roles forbid it. */
@@ -88,6 +97,8 @@ export interface StructureProfileRegistration {
   /** An owner projects its qualifier node alongside the common placement. */
   projectQualifier?: (state: PlacementState, generation: string) => {
     iri: string; triples: readonly string[] } | null;
+  /** Owner facts may have RDF set or canonical value semantics. */
+  canonicalQualifier?: (qualifier: NonNullable<OccurrenceRecord['qualifier']>) => NonNullable<OccurrenceRecord['qualifier']>;
   /** Recover the qualifier on bounded edits of an existing placement. */
   hydrateQualifier?: (env: WorkActivationEnvironment, state: PlacementState) =>
     Promise<OccurrenceRecord['qualifier'] | undefined>;

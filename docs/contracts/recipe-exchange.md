@@ -4,14 +4,15 @@
 
 The [Recipe profile](recipes.md) and [Content contract](content-adoption.md)
 extend instructions to Post, exact recording representation, procedure, or an
-ordered combination. This is the unimplemented target; the sections below
-describe today's Schema.org adapter and its preservation bounds.
+ordered combination. The sections below describe the Schema.org adapter and
+its preservation bounds.
 
 Native export of one exact authorized Structure revision retains occurrence
 IDs/order/parents, exact Resource selectors, Content documents and selected
 procedure blocks, Media representation identities, derivation records and
 independent source support. It returns `{ format: "native", structure, revision,
-occurrences, contents, derivations, losses: [] }`. It does not expand referenced
+occurrences, measures, contents, derivations, instructions, losses: [] }`. Plain-text
+Post Content retains its `body` instead of acquiring a synthetic document. It does not expand referenced
 Recipes recursively or replace exact bytes with a delivery URL. Missing or
 concealed dependencies have explicit unavailable entries; concealed payloads
 and identifiers cannot leak through an export sidecar. This result describes
@@ -25,9 +26,19 @@ silently. In addition to today's result, the API returns
 `instruction-form-unsupported`, `reference-not-representable`,
 `derivation-not-representable` or `measurement-not-representable`.
 An unsupported target form may instead produce 422 with its typed reason.
+Loss pointers address the corresponding native export: an instruction's selector
+or document node, an occurrence qualifier, the retained derivation, or the retained measure. They do not
+pretend that an omitted reference still exists in the flattened Schema.org text.
+Procedure hierarchy maps to HowTo terms; projecting its step documents to text
+reports the lost document structure and local identities. Legacy occurrence links,
+preparation notes and held scaling policy also have explicit loss entries.
 Unknown nutrition/media/reference fields stay retained Source evidence or are
 explicitly refused; they never become accepted facts. Importability remains
 separate from fidelity: an importable file may have reported losses.
+The Schema.org adapter currently reports every measure as
+`measurement-not-representable`: its plain Recipe output cannot preserve the
+native measurement basis, coverage and provenance. Native export retains those
+measures exactly. Both export routes report that loss.
 
 `GET /v1/recipes/{structure}/export?revision=<exact>&format=native|schema-org`
 returns the selected response above, subject to current read authority, the

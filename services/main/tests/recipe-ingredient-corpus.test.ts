@@ -113,7 +113,7 @@ test('ingredient corpus preserves source names and quantity spans through displa
   assertCorpus();
 });
 
-test('native projection and hydration retain text spans and empty structured names', async () => {
+test('standard projection and legacy hydration retain text spans and empty structured names', async () => {
   const profile = structureProfiles[0]!;
   for (const input of ['200 克 牛奶', { name: '', value: 1, unitText: 'cup' }]) {
     const qualifier = importRecipe({ recipeIngredient: [input] }, root).ingredients[0]!.qualifier;
@@ -121,9 +121,9 @@ test('native projection and hydration retain text spans and empty structured nam
       role: 'ingredient', introducedBy: root, qualifier };
     const projection = profile.projectQualifier!(state, root)!;
     if (qualifier.textParts) expect(projection.triples.some(triple =>
-      triple.includes(`rv:ingredientTextParts ${lit(JSON.stringify(qualifier.textParts))}`))).toBe(true);
+      triple.includes(JSON.stringify(qualifier.textParts).replaceAll('"', '\\"')))).toBe(true);
     if (qualifier.name !== undefined) expect(projection.triples.some(triple =>
-      triple.includes(`rv:ingredientName ${lit(qualifier.name!)}`))).toBe(true);
+      triple.includes(`<https://schema.org/name> ${lit(qualifier.name!)}`))).toBe(true);
     const facts: Record<string, string> = { type: `${RV}IngredientLine`, originalText: qualifier.originalText.value,
       amountNumerator: String(qualifier.amount!.numerator), amountDenominator: String(qualifier.amount!.denominator),
       unitText: qualifier.unitText!, optionality: `${RV}Required`, scaling: `${RV}LinearScaling`,

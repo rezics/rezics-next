@@ -1,5 +1,5 @@
 // Exact recipe quantities. The graph stores reduced non-negative rationals
-// (recipe-structure-v1 rv:amountNumerator/rv:amountDenominator) beside the
+// (recipe-facts-v1 uses the shared exact scalar RDF codec) beside the
 // source lexical form; nothing is converted through floating point.
 
 export const QUANTITY_BOUND = 1_000_000_000_000n;

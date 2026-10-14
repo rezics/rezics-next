@@ -1,7 +1,8 @@
+import { checkIngredientReferences } from '../src/modules/recipe/references.ts';
 import { expect, test } from 'bun:test';
 import { InvalidCompositionChange, checkedOperations, compositionChangeDigest,
   type CompositionOperation } from '../src/modules/structure/change.ts';
-import { InvalidStructureObject, PROFILE_ROLES, checkOccurrenceRecord, checkIngredientReferences,
+import { InvalidStructureObject, PROFILE_ROLES, checkOccurrenceRecord,
   type OccurrenceRecord, type OccurrenceRole, type StructureProfile } from '../src/modules/structure/format.ts';
 import { structureProfileFor } from '../src/modules/structure/profiles.ts';
 import { derivedId } from '../src/modules/structure/graph.ts';

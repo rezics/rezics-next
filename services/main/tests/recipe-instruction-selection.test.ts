@@ -35,3 +35,16 @@ test('selection replacement participates in retry identity', () => {
     compositionChangeDigest(structure, structure, [{ ...operation,
       selection: { ...selection, selector: { ...selector, block: 'procedure' } } }], 'recipe-composition'));
 });
+
+test('a step target replaces its legacy text only through an explicit qualifier clear', () => {
+  const profile = structureProfileFor('recipe-composition');
+  expect(() => profile.checkOccurrence!({ role: 'step', target: structure, selection })).not.toThrow();
+  expect(() => profile.checkOccurrence!({ role: 'step', target: structure, selection,
+    qualifier: { type: 'recipe-step', instructionText: { value: 'Old wording', language: 'en' },
+      usesIngredient: [], media: [], scaling: 'linear' } })).toThrow();
+  const operation = { op: 'update' as const, occurrence: structure, target: structure, selection };
+  expect(compositionChangeDigest(structure, structure, [{ ...operation, qualifier: null }], 'recipe-composition'))
+    .not.toBe(compositionChangeDigest(structure, structure, [operation], 'recipe-composition'));
+  expect(() => checkExactInstructionSelection(`urn:rezics:media:asset:${revision}`, revision,
+    { grain: 'representation', revision, representation: revision, fragment: 'arbitrary bytes' })).toThrow();
+});

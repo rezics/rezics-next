@@ -1,7 +1,7 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
-  type AccessAdmissionRegistry } from '../access/admission.ts';
+  type AccessAdmissionRegistry, type VerifiedPrincipal } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
 import { IdempotencyConflict, type WorkActivationEnvironment } from './activate.ts';
 import { PendingAdmittedWork } from './create-admitted.ts';
@@ -22,7 +22,7 @@ export async function changeAdmittedWorkStructurePublication(
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
   publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
-  prepareDependencies?: (admissionId: string) => Promise<readonly InstructionAdoption[]>,
+  prepareDependencies?: (admissionId: string, principal: VerifiedPrincipal) => Promise<readonly InstructionAdoption[]>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -52,7 +52,7 @@ export async function changeAdmittedWorkStructurePublication(
             id => access.admittedActingSubject
               ? access.admittedActingSubject(id)
               : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable')),
-            input.operation === 'publish' ? await prepareDependencies?.(admission.id) : []));
+            input.operation === 'publish' ? await prepareDependencies?.(admission.id, principal) : []));
       }
     }
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-publication');

@@ -9,6 +9,7 @@ export interface InstructionReference { target: string; selector: ExactInstructi
 export interface RecipeInstruction {
   occurrence: string; reference: InstructionReference; status: 'available' | 'unavailable';
   document?: DocumentSnapshot; mediaUse?: string;
+  text?: string;
 }
 
 export const isAdoptedInstruction = (record: OccurrenceRecord) =>
@@ -45,9 +46,10 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
     if (selector.grain === 'content') {
       const value = exact.get(selector.revision);
       if (value?.status === 'available' && value.reference.resourceId === reference.target
-        && value.reference.variantId === selector.variantId && value.body.document) {
+        && value.reference.variantId === selector.variantId && (value.body.document || typeof value.body.body === 'string')) {
         instruction.status = 'available';
-        instruction.document = value.body.document as DocumentSnapshot;
+        if (value.body.document) instruction.document = value.body.document as DocumentSnapshot;
+        else instruction.text = value.body.body as string;
       }
     } else {
       const adoption = adoptions.find(item => item.occurrence === record.occurrence && item.target === record.target

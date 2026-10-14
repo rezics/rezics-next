@@ -1034,6 +1034,30 @@ export const profileRegistry = {
       "revision"
     ]
   },
+  "recipe-facts-v1": {
+    "sha256": "89506c7a5adae8ae0298f50ebd38751895189e53ab6717699ed8874d0786d747",
+    "file": "shapes/recipe-facts-v1.ttl",
+    "shapes": [
+      "https://rezics.com/definition/recipe-facts-v1/ingredient-shape",
+      "https://rezics.com/definition/recipe-facts-v1/step-shape",
+      "https://rezics.com/definition/recipe-facts-v1/extraction-shape",
+      "https://rezics.com/definition/recipe-facts-v1/quantity-shape",
+      "https://rezics.com/definition/recipe-facts-v1/servings-shape",
+      "https://rezics.com/definition/recipe-facts-v1/recipe-shape",
+      "https://rezics.com/definition/recipe-facts-v1/nutrition-shape",
+      "https://rezics.com/definition/recipe-facts-v1/activity-shape"
+    ],
+    "focusRoles": [
+      "ingredient",
+      "step",
+      "extraction",
+      "quantity",
+      "servings",
+      "recipe",
+      "nutrition",
+      "activity"
+    ]
+  },
   "recipe-structure-v1": {
     "sha256": "994a085c6ee2f10824cb29225d59076402db2cf4479d97e16a223d07323e2f16",
     "file": "shapes/recipe-structure-v1.ttl",

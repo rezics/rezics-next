@@ -491,21 +491,3 @@ export function checkOccurrenceQualifierRole(record: Pick<OccurrenceRecord, 'rol
     }
   }
 }
-
-
-/** Validate references against this Composition's indexed membership plus the entire candidate overlay. */
-export function checkIngredientReferences(candidate: readonly OccurrenceRecord[],
-  retained: ReadonlyMap<string, OccurrenceRecord>): void {
-  const pending = new Map(candidate.map(record => [record.occurrence, record]));
-  for (const record of candidate) {
-    if (record.state !== 'active') continue;
-    const references = record.qualifier?.type === 'recipe-step' ? record.qualifier.usesIngredient
-      : record.qualifier?.type === 'ingredient-line' ? record.qualifier.substituteFor : [];
-    for (const reference of references) {
-      const ingredient = pending.get(reference) ?? retained.get(reference);
-      if (!ingredient || ingredient.state !== 'active' || ingredient.role !== 'ingredient') {
-        throw new InvalidStructureObject('ingredient reference is not an active ingredient occurrence of this composition');
-      }
-    }
-  }
-}
