@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { expect } from 'bun:test';
 import { deactivateFixtureController, ensureFixtureScopeGate, expireFixtureAuthority, grantFixtureAuthority } from '../../src/modules/access/fixture-authority.ts';
 import { GovernanceConflict, GovernanceDenied, GLOBAL_CONTEXT } from '../../src/modules/governance/store.ts';
-import { type ReplayEntry, stack, principal, proposal } from './fixtures.ts';
+import { createAdmittedMetadataWork } from '../../src/modules/work/create-admitted.ts';
+import { setAdmittedWorkScalar } from '../../src/modules/work/edit-admitted.ts';
+import { type ReplayEntry, stack, principal, proposal, request, head } from './fixtures.ts';
 
 export const entries: ReplayEntry[] = [
   { operation: "POST /v1/reports", authorityClass: 'controller',
     scope: "governance:platform", action: "agent.control", family: 'report and rights complaint submission', owners: ['modules/governance/store.ts#GovernanceStore.submitReport'],
     subcases: ['content_report'], denied: GovernanceDenied, conflict: GovernanceConflict,
-    registration: 'registered-failing',
+    registration: 'turned',
     requestBuilder: async (subcase, loss) => {
       const member = await stack.member(randomUUID());
       let revokedController: string | undefined;
@@ -22,12 +25,19 @@ export const entries: ReplayEntry[] = [
       }
       // submitReport's existing represented() accepts any current mandate.
       const reported = await proposal(member, `OL${Math.floor(Math.random() * 900000000) + 100000000}W`, 'Reported source', 1);
+      const editor = await stack.member(randomUUID());
+      await editor.grant('work:create:root', 'work.create');
+      const work = await createAdmittedMetadataWork(stack.env, stack.composition.dependencies.account,
+        stack.access, request(editor), { actingSubject: editor.actor, title: 'Retained Work title',
+          language: 'en', idempotencyKey: randomUUID() });
+      await editor.grant(`work:edit:${work.work}`, 'work.edit');
       await ensureFixtureScopeGate(stack.accessPool, 'governance:platform', { open: true });
-      const target = { owner: 'source' as const, resource: reported.record, component: 'record' as const };
+      const target = { owner: 'graph' as const, resource: work.work, component: 'title' as const };
       const input = { kind: subcase as 'content_report' | 'rights_complaint', actingSubject: member.actor,
         authority: { kind: 'platform' as const, scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
         target, disclosure: 'private' as const, reasonCode: 'spam', statement: 'Retain this exact title.',
-        evidence: [{ ...target, revision: reported.observation, locator: null }], idempotencyKey: randomUUID(),
+        evidence: [{ owner: 'source' as const, resource: reported.record, component: 'record' as const,
+          revision: reported.observation, locator: null }], idempotencyKey: randomUUID(),
         ...(subcase === 'rights_complaint' ? { complaint: { process: 'ordinary_dispute' as const,
           claimantKind: 'rights_holder' as const, claimantName: 'Claimant', claimantContact: null,
           claimedWork: 'Original title', claimedRight: 'copyright' as const,
@@ -35,6 +45,12 @@ export const entries: ReplayEntry[] = [
       const owner = stack.composition.dependencies.governance!.store;
       return { command: async (fresh, changed) => owner.submitReport(await principal(member), { ...input,
         ...(fresh ? { idempotencyKey: randomUUID() } : {}), ...(changed ? { statement: 'Changed notice.' } : {}) }),
+      advance: async () => {
+        await setAdmittedWorkScalar(stack.env, stack.composition.dependencies.account, stack.access,
+          request(editor), { work: work.work, expectedHead: work.workRevision, actingSubject: editor.actor,
+            scalarValue: { kind: 'unknown' }, idempotencyKey: randomUUID() });
+        expect(await head(work.work)).not.toBe(work.workRevision);
+      },
       lose: async () => {
         if (revokedController) await deactivateFixtureController(stack.accessPool, revokedController);
         else await expireFixtureAuthority(stack.accessPool, member.actor);
@@ -49,7 +65,7 @@ export const entries: ReplayEntry[] = [
   { operation: "POST /v1/rights/complaints", authorityClass: 'controller',
     scope: "governance:platform", action: "agent.control", family: 'report and rights complaint submission', owners: ['modules/governance/store.ts#GovernanceStore.submitReport'],
     subcases: ['rights_complaint'], denied: GovernanceDenied, conflict: GovernanceConflict,
-    registration: 'registered-failing',
+    registration: 'turned',
     requestBuilder: async (subcase, loss) => {
       const member = await stack.member(randomUUID());
       let revokedController: string | undefined;
@@ -64,12 +80,19 @@ export const entries: ReplayEntry[] = [
       }
       // submitReport's existing represented() accepts any current mandate.
       const reported = await proposal(member, `OL${Math.floor(Math.random() * 900000000) + 100000000}W`, 'Reported source', 1);
+      const editor = await stack.member(randomUUID());
+      await editor.grant('work:create:root', 'work.create');
+      const work = await createAdmittedMetadataWork(stack.env, stack.composition.dependencies.account,
+        stack.access, request(editor), { actingSubject: editor.actor, title: 'Retained Work title',
+          language: 'en', idempotencyKey: randomUUID() });
+      await editor.grant(`work:edit:${work.work}`, 'work.edit');
       await ensureFixtureScopeGate(stack.accessPool, 'governance:platform', { open: true });
-      const target = { owner: 'source' as const, resource: reported.record, component: 'record' as const };
+      const target = { owner: 'graph' as const, resource: work.work, component: 'title' as const };
       const input = { kind: subcase as 'content_report' | 'rights_complaint', actingSubject: member.actor,
         authority: { kind: 'platform' as const, scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
         target, disclosure: 'private' as const, reasonCode: 'spam', statement: 'Retain this exact title.',
-        evidence: [{ ...target, revision: reported.observation, locator: null }], idempotencyKey: randomUUID(),
+        evidence: [{ owner: 'source' as const, resource: reported.record, component: 'record' as const,
+          revision: reported.observation, locator: null }], idempotencyKey: randomUUID(),
         ...(subcase === 'rights_complaint' ? { complaint: { process: 'ordinary_dispute' as const,
           claimantKind: 'rights_holder' as const, claimantName: 'Claimant', claimantContact: null,
           claimedWork: 'Original title', claimedRight: 'copyright' as const,
@@ -77,6 +100,12 @@ export const entries: ReplayEntry[] = [
       const owner = stack.composition.dependencies.governance!.store;
       return { command: async (fresh, changed) => owner.submitReport(await principal(member), { ...input,
         ...(fresh ? { idempotencyKey: randomUUID() } : {}), ...(changed ? { statement: 'Changed notice.' } : {}) }),
+      advance: async () => {
+        await setAdmittedWorkScalar(stack.env, stack.composition.dependencies.account, stack.access,
+          request(editor), { work: work.work, expectedHead: work.workRevision, actingSubject: editor.actor,
+            scalarValue: { kind: 'unknown' }, idempotencyKey: randomUUID() });
+        expect(await head(work.work)).not.toBe(work.workRevision);
+      },
       lose: async () => {
         if (revokedController) await deactivateFixtureController(stack.accessPool, revokedController);
         else await expireFixtureAuthority(stack.accessPool, member.actor);

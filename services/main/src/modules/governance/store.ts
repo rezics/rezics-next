@@ -385,7 +385,7 @@ export class GovernanceStore {
       throw new GovernanceInvalid('report does not match its profile');
     }
     const request = sha256(canonical({ ...input, idempotencyKey: undefined }));
-    const replay = await this.replayReport(principal, input.idempotencyKey, request);
+    const replay = await this.replayReport(principal, input.actingSubject, input.idempotencyKey, request);
     if (replay) return replay;
     if (input.authority.kind === 'realm'
       && (!agentPattern.test(input.context)
@@ -470,12 +470,12 @@ export class GovernanceStore {
       FROM access.governance_report WHERE principal_id = $1 AND idempotency_key = $2`, [principalId, key])).rows[0];
   }
 
-  private async replayReport(principal: VerifiedPrincipal, key: string, request: string): Promise<ReportResult | null> {
+  private async replayReport(principal: VerifiedPrincipal, actingSubject: string, key: string,
+    request: string): Promise<ReportResult | null> {
     return this.transaction(async client => {
-      const row = (await client.query<{ id: string; request_digest: string }>(`SELECT r.id, r.request_digest
-        FROM access.governance_report r JOIN access.principal p ON p.id = r.principal_id
-        WHERE p.account_issuer = $1 AND p.account_subject = $2 AND p.active AND r.idempotency_key = $3`,
-      [principal.issuer, principal.subject, key])).rows[0];
+      // Current representation governs disclosure even when no receipt exists.
+      const actor = await this.represented(client, principal, actingSubject);
+      const row = await this.receipt(client, actor.principalId, key);
       if (!row) return null;
       if (row.request_digest !== request) throw new GovernanceConflict('idempotency key reused');
       return this.reportResult(client, row.id, true);
