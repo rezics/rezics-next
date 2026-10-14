@@ -1,7 +1,15 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { appealClient } from '../../../../../apps/web/features/realm-appeal/api.ts';
+import { gateFor } from '../../../../../apps/web/features/api/platform-access.ts';
+import type { PlatformAccessSummary } from '../../../../../generated/openapi/main/exposure.ts';
+import { readQueueNames } from '../../../../../apps/web/features/manage/queue-api.ts';
+import { readDecisionBasis, readManagedRealms, readQueue, readRealmHeader, settle } from '../../../../../apps/web/features/manage/read.ts';
+import { realmEditSite } from '../../../../../apps/web/features/manage/realm-site.ts';
 import moderation from '../../../../../scripts/qa/cases/outcomes/realm/moderation-and-appeal.ts';
-import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest as recordedOutcomeTest } from '../../../support/outcome-test.ts';
+import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaNames, personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 type Members = { generation: string; items: { member: string; membershipGeneration: string; banned: boolean }[] };
@@ -10,11 +18,105 @@ type Reading = { realm: string; receiptId: string; appeal: {
   liftedAt?: string; liftReceiptId?: string | null;
 } };
 type Fixture = { sessions: PersonaSessions; receiptId: string; path: string; root: string };
-setDefaultTimeout(60_000);
+setDefaultTimeout(185_000);
+const proofDeadlineMs = 60_000; // The original persona proof owns these 60 seconds.
+const readDeadlineMs = 120_000;
+async function withinDeadline(part: string, milliseconds: number, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 const fixtures = {} as Record<PersonaName, Fixture>;
 const recording = new OutcomeRecorder(moderation);
 const short = (value: string) => value.slice(-36);
 const acting = (person: PersonaSession) => new URLSearchParams(person.actingSubject ? { actingSubject: person.actingSubject } : {});
+
+function productionMain(name: PersonaName, person: PersonaSession, prefix: string) {
+  const sample = recording.session(name, person);
+  let index = 0;
+  const fetcher: typeof fetch = async (input, init) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    const path = `${url.pathname.slice(BFF_PREFIX.length)}${url.search}`;
+    const raw = await request.text();
+    return sample(`${prefix}-${++index}`, request.method, path, raw ? JSON.parse(raw) as unknown : undefined,
+      request.headers.get('idempotency-key') ?? undefined, { headers: Object.fromEntries(request.headers) });
+  };
+  return { main: browserMainApi('http://localhost', { fetcher, cache: 'no-store' }), fetcher };
+}
+
+async function managementReads(name: PersonaName, fixture: Fixture, person: PersonaSession,
+  prefix: string, state: 'open' | 'closed', caseId?: string) {
+  const { main } = productionMain(name, person, prefix), realm = short(fixture.sessions.realm);
+  const actingSubject = person.actingSubject!;
+  await readRealmHeader(main, realm, 'en', actingSubject);
+  let after: string | null = null;
+  for (let page = 0; page < 5; page++) {
+    const permissions = await readManagedRealms(main, actingSubject, after);
+    if (!permissions.ok || permissions.data.items.some(item => short(item.realm) === realm)
+      || !permissions.data.nextCursor) break;
+    after = permissions.data.nextCursor;
+  }
+  await realmEditSite({
+    zone: () => settle(() => main.v1.realms({ realm }).zone.get({ query: { actingSubject } })),
+    editor: zone => settle(() => main.v1.zones({ zone })['showcase-editor'].get({ query: { actingSubject } })),
+  });
+  const page = await readQueue(main, realm, { actingSubject, state, type: null });
+  if (page.ok) {
+    await readQueueNames(main, realm, page.data.items, { language: 'en', actingSubject }, undefined,
+      productionMain(name, fixture.sessions.visitor, `${prefix}-public-name`).main);
+  }
+  if (caseId) await readDecisionBasis(main, realm, caseId, actingSubject);
+}
+
+async function pageReads(name: PersonaName) {
+  const fixture = fixtures[name], { sessions } = fixture, person = sessions[name];
+  await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
+    'space', short(sessions.zone), '/');
+  const sample = recording.session(name, person);
+  if (person.actingSubject) {
+    for (const [label, path] of [
+      ['page-agent-choices', '/v1/me/agents?languages=en'],
+      ['page-acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+      ['page-acting-agent-profile', `/v1/agents/${short(person.actingSubject)}?${acting(person)}`],
+    ] as const) await (await sample(label, 'GET', path)).body?.cancel();
+  }
+  if (name === 'member') {
+    const platform = await answer<PlatformAccessSummary>(sample('form-platform-access', 'GET', '/v1/me/platform-access'));
+    const own = await ban(sessions, person);
+    await (await sample('form-own-ban', 'GET', `${fixture.root}/member-ban?${acting(person)}`)).body?.cancel();
+    await (await sample('form-appeal-none', 'GET', `${fixture.root}/member-receipts/${own.receiptId}/appeal`)).body?.cancel();
+    await appealClient(sessions.realm, own.receiptId, productionMain(name, person, 'appeal-form').fetcher,
+      gateFor(platform)).submit('My original statement contests this sanction.', randomUUID());
+  }
+  if (name === 'moderator') {
+    await managementReads(name, fixture, person, 'moderator-management', 'closed');
+    const own = await ban(sessions, sessions.member);
+    const openedFixture = { ...fixture, receiptId: own.receiptId,
+      path: `${fixture.root}/member-receipts/${own.receiptId}/appeal` };
+    const { caseId } = await open(openedFixture);
+    await managementReads(name, fixture, person, 'moderator-open', 'open', caseId);
+    await managementReads(name, fixtures.owner, person, 'moderator-other-realm', 'open');
+  }
+  if (name === 'owner') {
+    const own = await ban(sessions, sessions.member);
+    const decidedFixture = { ...fixture, receiptId: own.receiptId,
+      path: `${fixture.root}/member-receipts/${own.receiptId}/appeal` };
+    const { caseId } = await open(decidedFixture);
+    await managementReads(name, fixture, person, 'owner-before-decision', 'open', caseId);
+    await decide(sessions.moderator, decision(sessions.moderator, caseId, 'dismiss', randomUUID(), 'private'), 200);
+    await managementReads(name, fixture, person, 'owner-decided', 'closed', caseId);
+  }
+}
+
+function outcomeTest(declaration: typeof moderation, name: PersonaName, proof: () => Promise<void>, recorder: OutcomeRecorder) {
+  recordedOutcomeTest(declaration, name, async () => {
+    await withinDeadline(`${name} proof`, proofDeadlineMs, proof);
+    await withinDeadline(`${name} page reads`, readDeadlineMs, () => pageReads(name));
+  }, recorder);
+}
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request, raw = await response.text();
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
@@ -184,7 +286,7 @@ outcomeTest(moderation, 'owner', async () => {
 outcomeTest(moderation, 'moderator', async () => {
   const fixture = fixtures.moderator, person = fixture.sessions.moderator;
   const sample = recording.session('moderator', person);
-  await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}`));
+  await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}&language=en`));
   await cannotImpersonate(fixture, person);
   const { caseId } = await open(fixture), before = await read(fixture);
   expect((await read(fixture, person, sample, 'moderator-appeal-open')).appeal.caseId).toBe(caseId);
