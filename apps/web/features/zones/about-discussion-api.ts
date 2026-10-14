@@ -31,6 +31,7 @@ export type AboutPostOutcome =
   | { kind: 'stale' };
 export interface AboutDiscussionApi {
   post(intent: AboutPostIntent): Promise<AboutPostOutcome>;
+  read?(input: AboutDiscussionReadInput): Promise<AboutDiscussionRead>;
 }
 const uuid = (iri: string) => iri.slice(-36);
 
@@ -38,7 +39,7 @@ const uuid = (iri: string) => iri.slice(-36);
  * Production supplies its current viewer gate; isolated tests and stories can omit it. */
 export function mainAboutDiscussionApi(main: () => MainClient = browserMainApi,
   operationOpen: OperationGate = () => true): AboutDiscussionApi {
-  return { async post(intent) {
+  return { read: input => readAboutDiscussion(main(), input), async post(intent) {
     if (operationOpen('postV1RealmsByRealmAbout-posts')) {
       try {
         const { realm, ...basis } = intent.basis;
@@ -77,11 +78,13 @@ export type AboutDiscussionRead =
 export type AboutDiscussionTargetReader =
   (resource: string) => Promise<{ resource: string; revision: string } | null>;
 export type AboutDiscussionRouteReader = () => Promise<{ data: ZoneRouteRead | null; error: unknown | null }>;
+export interface AboutDiscussionReadInput {
+  zone: string; path: string; signedIn: boolean; actingSubject?: string; personal: boolean; postingOpen?: boolean;
+}
 
 /** Reads the current route, never the Zone's cached frame attachment or reading-position route. */
-export async function readAboutDiscussion(main: MainClient, input: {
-  zone: string; path: string; signedIn: boolean; actingSubject?: string; personal: boolean; postingOpen?: boolean;
-}, readCurrentTarget?: AboutDiscussionTargetReader, readCurrentRoute?: AboutDiscussionRouteReader): Promise<AboutDiscussionRead> {
+export async function readAboutDiscussion(main: MainClient, input: AboutDiscussionReadInput,
+  readCurrentTarget?: AboutDiscussionTargetReader, readCurrentRoute?: AboutDiscussionRouteReader): Promise<AboutDiscussionRead> {
   try {
     // Eden keeps object key order. Recorded requests name the page or about first, then the actor.
     const actor = input.actingSubject === undefined ? {} : { actingSubject: input.actingSubject };

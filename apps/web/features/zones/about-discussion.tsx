@@ -39,7 +39,7 @@ export function AboutDiscussion(props: AboutDiscussionProps) {
   return <AboutDiscussionEntry key={identity} {...props} />;
 }
 
-function AboutDiscussionEntry({ read, locale, href, api, retain = true, recoveryScope }: AboutDiscussionProps) {
+function AboutDiscussionEntry({ read: initialRead, locale, href, api, retain = true, recoveryScope }: AboutDiscussionProps) {
   const operationOpen = useOperationGate();
   const operationGate = useRef(operationOpen);
   operationGate.current = operationOpen;
@@ -51,6 +51,9 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
   const [spoiler, setSpoiler] = useState(false);
   const [opened, setOpened] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [read, setRead] = useState(initialRead);
+  const [reading, setReading] = useState(false);
+  useEffect(() => setRead(initialRead), [initialRead]);
   const [hydrated, setHydrated] = useState(!retain);
   const [outcome, setOutcome] = useState<AboutPostOutcome | null>(null);
   const intent = useRef<AboutPostIntent | null>(null);
@@ -59,6 +62,19 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
   const zone = recoveryScope?.zone ?? (read.kind === 'ready' ? read.basis.zone : null);
   const path = recoveryScope?.path ?? (read.kind === 'ready' ? read.basis.path : null);
   const storageKey = actor && zone && path && retain ? `rezics:about-post:${actor}:${zone}:${path}` : null;
+  const retryRead = async () => {
+    const readAgain = (api ?? mainAboutDiscussionApi()).read;
+    if (!recoveryScope || !readAgain) { router.refresh(); return; }
+    setReading(true);
+    try {
+      // Retry this region through its existing API reader. A full Work refresh
+      // spends the same page deadline on unrelated regions before returning here.
+      setRead(await readAgain({ zone: recoveryScope.zone, path: recoveryScope.path,
+        signedIn: recoveryScope.signedIn, actingSubject: recoveryScope.actingSubject ?? undefined,
+        personal: recoveryScope.personal, postingOpen: operationGate.current('postV1RealmsByRealmAbout-posts') }));
+    } catch { setRead({ kind: 'unavailable' }); }
+    finally { setReading(false); }
+  };
 
   useEffect(() => {
     if (storageKey && actor && zone && path) {
@@ -87,7 +103,7 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
   if (read.kind === 'none' && !intent.current) return outcome?.kind === 'posted' ? <p role="status">{t.posted}</p> : null;
   if (read.kind === 'unavailable' && !intent.current) return <section aria-label={t.title} className="grid gap-3 border-t border-border py-6">
     <h2 className="font-semibold text-lg">{t.title}</h2><p role="status">{t.unavailable}</p>
-    <Button variant="outline" onClick={() => router.refresh()}>{t.retry}</Button>
+    <Button variant="outline" disabled={reading} aria-busy={reading} onClick={() => void retryRead()}>{t.retry}</Button>
   </section>;
   const ready = read.kind === 'ready' ? read : {
     basis: intent.current!.basis, actingSubject: actor, thread: null,

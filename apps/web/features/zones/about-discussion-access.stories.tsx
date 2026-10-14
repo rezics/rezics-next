@@ -18,6 +18,7 @@ const ready: Extract<AboutDiscussionRead, { kind: 'ready' }> = {
     targetRevision: storyQuietThread.rootRevision, zone: reference(1), path: '/chapter', routeRevision: reference(2) },
 };
 const post = fn<AboutDiscussionApi['post']>(async () => ({ kind: 'recovery' }));
+const readAgain = fn<NonNullable<AboutDiscussionApi['read']>>(async () => ready);
 const t = aboutDiscussionMessages.en;
 
 const meta = {
@@ -29,7 +30,7 @@ const meta = {
     platformAccess={context.parameters.platformAccess ?? granted}>
     <div className="mx-auto w-full max-w-[640px] px-5 py-6"><Story /></div>
   </ShellProvider>],
-  beforeEach: () => { post.mockClear(); },
+  beforeEach: () => { post.mockClear(); readAgain.mockClear(); },
 } satisfies Meta<typeof AboutDiscussion>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -66,6 +67,23 @@ export const GroupGranted: Story = {
 export const OperationGranted: Story = {
   ...GroupGranted,
   parameters: { platformAccess: { groups: [], operations: ['postV1RealmsByRealmAbout-posts'], generation: 'operation' } },
+};
+
+export const RetryOnlyTheDiscussion: Story = {
+  args: { read: { kind: 'unavailable' },
+    recoveryScope: { zone: ready.basis.zone, path: ready.basis.path, actingSubject: ready.actingSubject,
+      signedIn: true, personal: true, postingOpen: true } },
+  render: args => <AboutDiscussion {...args} api={{ post, read: readAgain }} />,
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('status')).toHaveTextContent(t.unavailable);
+    await userEvent.click(canvas.getByRole('button', { name: t.retry, exact: true }));
+    await expect(await canvas.findByRole('link', { name: t.continueThread })).toBeVisible();
+    await expect(canvas.getAllByRole('article')).toHaveLength(1);
+    await expect(readAgain).toHaveBeenCalledWith({ zone: ready.basis.zone, path: ready.basis.path,
+      actingSubject: ready.actingSubject, signedIn: true, personal: true, postingOpen: true });
+    await expect(post).not.toHaveBeenCalled();
+  },
 };
 
 function LiveAccess(props: ComponentProps<typeof AboutDiscussion>) {
