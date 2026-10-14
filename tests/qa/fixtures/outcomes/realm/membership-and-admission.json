@@ -4,15 +4,32 @@
   "personas": {
     "visitor": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "request-landing",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-page",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-page",
         "status": 200,
         "answer": {
           "profile": "realm-join-page-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "name": {
             "value": "Outcome private Realm",
             "language": "en",
@@ -23,9 +40,9 @@
           "rules": [],
           "action": {
             "kind": "request",
-            "href": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+            "href": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
             "method": "POST",
-            "basis": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis"
+            "basis": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis"
           },
           "listing": "listed",
           "discovery": {
@@ -34,7 +51,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           }
         },
@@ -47,7 +64,7 @@
         "label": "private-realm-hidden",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -64,7 +81,7 @@
         "label": "join-basis-sign-in-required",
         "operationId": "getV1RealmsByRealmJoin-requestsBasis",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -81,42 +98,59 @@
         "label": "join-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13876-0a86-7200-9460-02734c9c0680",
-          "holder": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "key": "01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "holder": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "status": "resolved",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-77880ce6-e33",
+            "key": "outcome-685ae236-508",
             "suffixSource": ""
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d"
           }
         },
         "headers": {
           "cache-control": "public, max-age=30, must-revalidate",
           "content-type": "application/json",
-          "etag": "\"address-identity-116212c824064dacb6f6fe3c2f4d1b1da3468f5441f546899de627fc045571d8\""
+          "etag": "\"address-identity-bc1c1090c20ae58658069a8d66c6b2546c45ec04848f079ee03a627214a006be\""
         }
       }
     ],
     "stranger": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "request-landing",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-page",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-page",
         "status": 200,
         "answer": {
           "profile": "realm-join-page-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "name": {
             "value": "Outcome private Realm",
             "language": "en",
@@ -127,9 +161,9 @@
           "rules": [],
           "action": {
             "kind": "request",
-            "href": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+            "href": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
             "method": "POST",
-            "basis": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis"
+            "basis": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis"
           },
           "listing": "listed",
           "discovery": {
@@ -138,7 +172,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           }
         },
@@ -151,7 +185,7 @@
         "label": "own-requests-before-request",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -173,8 +207,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-            "revision": "5b639e2c-86e2-49aa-806f-6ecc74b1f31e",
+            "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+            "revision": "85bbb23a-3256-4b3a-bc90-57daf06b12fb",
             "eligible": true
           },
           "mainAgent": {
@@ -193,7 +227,7 @@
         "label": "join-person-preferences",
         "operationId": "getV1MePerson-preferences",
         "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 200,
         "answer": {
           "profile": "person-preferences-v1",
@@ -221,7 +255,7 @@
           "complete": true,
           "items": [
             {
-              "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "kind": "person",
               "handle": null,
               "displayName": {
@@ -250,7 +284,7 @@
           "authorityEpoch": "0",
           "contexts": [
             {
-              "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "displayName": "Outcome stranger",
               "handle": null,
               "kind": "person"
@@ -271,14 +305,14 @@
         "label": "join-acting-agent-profile",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+          "id": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
           "displayName": "Outcome stranger",
           "kind": "person",
-          "revision": "https://rezics.com/id/7a2c42b8-b71c-44ae-ae45-7861498d07ee-agent-revision",
+          "revision": "https://rezics.com/id/398a5983-37df-4026-9e18-8bad3551b43d-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome stranger",
@@ -288,7 +322,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "HqrTUBTJWH2TCBHDcBoNHD",
+            "key": "YNRAjHhmLjEM4xcnoR9qEn",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -299,7 +333,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "library": {
@@ -307,10 +341,10 @@
             "statusShelvesVisible": true
           },
           "links": {
-            "profile": "/a/HqrTUBTJWH2TCBHDcBoNHD",
-            "works": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/works",
-            "collections": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/collections",
-            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50"
+            "profile": "/a/YNRAjHhmLjEM4xcnoR9qEn",
+            "works": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/works",
+            "collections": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f"
           }
         },
         "headers": {
@@ -322,35 +356,35 @@
         "label": "join-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13876-0a86-7200-9460-02734c9c0680",
-          "holder": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "key": "01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "holder": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "status": "resolved",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-77880ce6-e33",
+            "key": "outcome-685ae236-508",
             "suffixSource": ""
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d"
           }
         },
         "headers": {
           "cache-control": "public, max-age=30, must-revalidate",
           "content-type": "application/json",
-          "etag": "\"address-identity-116212c824064dacb6f6fe3c2f4d1b1da3468f5441f546899de627fc045571d8\""
+          "etag": "\"address-identity-bc1c1090c20ae58658069a8d66c6b2546c45ec04848f079ee03a627214a006be\""
         }
       },
       {
         "label": "join-public-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -367,7 +401,7 @@
         "label": "join-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -384,12 +418,12 @@
         "label": "join-landing",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-page",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-page",
         "status": 200,
         "answer": {
           "profile": "realm-join-page-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "name": {
             "value": "Outcome private Realm",
             "language": "en",
@@ -400,9 +434,9 @@
           "rules": [],
           "action": {
             "kind": "request",
-            "href": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+            "href": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
             "method": "POST",
-            "basis": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis"
+            "basis": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis"
           },
           "listing": "listed",
           "discovery": {
@@ -411,7 +445,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           }
         },
@@ -424,7 +458,7 @@
         "label": "join-own-requests-before-request",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -441,7 +475,7 @@
         "label": "join-request-basis",
         "operationId": "getV1RealmsByRealmJoin-requestsBasis",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 200,
         "answer": {
           "policyRevision": "1",
@@ -458,9 +492,9 @@
         "label": "join-request-submitted",
         "operationId": "postV1RealmsByRealmJoin-requests",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
         "body": {
-          "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+          "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
           "expectedMembershipGeneration": "0",
           "expectedPolicyRevision": "1",
           "termsRevision": "realm-membership-v1",
@@ -468,7 +502,7 @@
         },
         "status": 201,
         "answer": {
-          "requestId": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
+          "requestId": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
           "requestGeneration": "0",
           "state": "pending",
           "replayed": false
@@ -482,7 +516,7 @@
         "label": "request-inbox-denied",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -499,7 +533,7 @@
         "label": "requests-refused",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50&q=",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50&q=",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -516,19 +550,19 @@
         "label": "join-own-request-pending",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "pending",
               "decidedAt": null
             }
@@ -545,19 +579,19 @@
         "label": "own-request-pending",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "pending",
               "decidedAt": null
             }
@@ -574,16 +608,16 @@
         "label": "request-withdrawn",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/d888cdd6-1da8-4c49-8e93-fb8befee2d67/withdraw",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/7391d0c9-f24b-428d-a87a-e411bcd9c390/withdraw",
         "body": {
-          "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+          "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
           "expectedRequestGeneration": "0",
           "reason": "Withdraw my request"
         },
         "status": 201,
         "answer": {
-          "receiptId": "cbf4ee12-335b-45a3-967f-6252212e0222",
-          "requestId": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
+          "receiptId": "03126393-95e9-46a5-a3d7-21f5a0d93424",
+          "requestId": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
           "requestGeneration": "1",
           "generation": "6",
           "state": "withdrawn",
@@ -600,21 +634,21 @@
         "label": "own-request-withdrawn",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:30:42.138Z"
+              "decidedAt": "2026-10-14T15:13:32.771Z"
             }
           ],
           "nextCursor": null,
@@ -629,21 +663,21 @@
         "label": "join-own-request-withdrawn",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:30:42.138Z"
+              "decidedAt": "2026-10-14T15:13:32.771Z"
             }
           ],
           "nextCursor": null,
@@ -658,7 +692,7 @@
         "label": "requests-address-space-missing",
         "operationId": "getV1SpacesBySpace",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/space_unavailable",
@@ -675,7 +709,7 @@
         "label": "requests-address-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -692,7 +726,7 @@
         "label": "management-refused-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&language=en",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&language=en",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -709,7 +743,7 @@
         "label": "management-refused-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -726,7 +760,7 @@
         "label": "requests-access-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -743,33 +777,33 @@
         "label": "withdraw-confirm-own-request",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "74715119-0911-482c-8a4f-9baa5c8d1b16",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-              "requestGeneration": "0",
-              "membershipGeneration": "0",
-              "policyRevision": "1",
-              "termsRevision": "realm-membership-v1",
-              "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:43.445Z",
-              "state": "pending",
-              "decidedAt": null
-            },
-            {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:30:42.138Z"
+              "decidedAt": "2026-10-14T15:13:32.771Z"
+            },
+            {
+              "id": "77da02e5-ffc1-4b25-979a-8d37a9ed1450",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T15:13:33.361Z",
+              "state": "pending",
+              "decidedAt": null
             }
           ],
           "nextCursor": null,
@@ -784,16 +818,16 @@
         "label": "withdraw-confirm",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/74715119-0911-482c-8a4f-9baa5c8d1b16/withdraw",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/77da02e5-ffc1-4b25-979a-8d37a9ed1450/withdraw",
         "body": {
-          "actingSubject": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+          "actingSubject": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
           "expectedRequestGeneration": "0",
           "reason": "I cannot join this month."
         },
         "status": 201,
         "answer": {
-          "receiptId": "840d05e3-dfc4-40bd-9399-df993f03601f",
-          "requestId": "74715119-0911-482c-8a4f-9baa5c8d1b16",
+          "receiptId": "9d11cd35-98c6-4227-bf00-8c3b44761c24",
+          "requestId": "77da02e5-ffc1-4b25-979a-8d37a9ed1450",
           "requestGeneration": "1",
           "generation": "6",
           "state": "withdrawn",
@@ -810,33 +844,33 @@
         "label": "withdraw-confirm-own-request-after",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F886465e8-b1ad-4b69-8c4a-fee6a95e4d50&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffe08cfc0-77b4-4d0c-9b2b-c08246088d1f&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "74715119-0911-482c-8a4f-9baa5c8d1b16",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "7391d0c9-f24b-428d-a87a-e411bcd9c390",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:43.445Z",
+              "createdAt": "2026-10-14T15:13:32.349Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:30:43.595Z"
+              "decidedAt": "2026-10-14T15:13:32.771Z"
             },
             {
-              "id": "d888cdd6-1da8-4c49-8e93-fb8befee2d67",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "77da02e5-ffc1-4b25-979a-8d37a9ed1450",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:30:40.823Z",
+              "createdAt": "2026-10-14T15:13:33.361Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:30:42.138Z"
+              "decidedAt": "2026-10-14T15:13:33.407Z"
             }
           ],
           "nextCursor": null,
@@ -850,19 +884,47 @@
     ],
     "member": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
+        "status": 200,
+        "answer": {
+          "profile": "realm-threads-v1",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "sort": "best",
+          "window": "week",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "11"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "joined-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -874,7 +936,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -906,12 +968,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -923,7 +985,7 @@
         "label": "joined-request-basis",
         "operationId": "getV1RealmsByRealmJoin-requestsBasis",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "policyRevision": "1",
@@ -940,7 +1002,7 @@
         "label": "request-inbox-denied",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -957,7 +1019,7 @@
         "label": "requests-refused",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308&limit=50&q=",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3&limit=50&q=",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -974,10 +1036,10 @@
         "label": "joining-policy",
         "operationId": "getV1RealmsByRealmJoining",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
           "policyRevision": "1",
           "termsRevision": "realm-membership-v1",
           "open": true,
@@ -994,12 +1056,12 @@
         "label": "realm-follow",
         "operationId": "getV1FollowsById",
         "method": "GET",
-        "path": "/v1/follows/01a13876-0a86-7200-9460-02734c9c0680?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/follows/01a13af9-bac6-7364-9cd1-52d690906b8d?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "follow-state-v1",
           "target": {
-            "id": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+            "id": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
             "kind": "space",
             "name": {
               "value": "Outcome private Realm",
@@ -1011,13 +1073,13 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "realm",
-              "key": "7266659ebcb22d8dee6167c842d19a85"
+              "key": "1c6a87c8e09980c919eece918ffbda23"
             },
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-            "href": "/r/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+            "href": "/r/01a13af9-bac6-7364-9cd1-52d690906b8d"
           },
           "following": true,
-          "revision": "44a8a5ae-21aa-40ee-806e-3dd04b24c15b",
+          "revision": "33513a7d-c736-4395-ab76-2b0f5abf34f9",
           "level": "highlights",
           "source": "join",
           "pinPosition": null,
@@ -1038,9 +1100,26 @@
         "path": "/v1/me/platform-access",
         "status": 200,
         "answer": {
-          "groups": [],
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
           "operations": [],
-          "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
+          "generation": "636151e5e0a89a9d873ceb3b75f553c00a7da4160a651d3a5b16142042c0160a"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -1051,7 +1130,7 @@
         "label": "own-ban-absent",
         "operationId": "getV1RealmsByRealmMember-ban",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/appeal_unavailable",
@@ -1068,7 +1147,7 @@
         "label": "requests-address-space-missing",
         "operationId": "getV1SpacesBySpace",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/space_unavailable",
@@ -1085,7 +1164,7 @@
         "label": "requests-address-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -1102,16 +1181,16 @@
         "label": "management-refused-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308&language=en",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3&language=en",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -1123,7 +1202,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -1155,12 +1234,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -1172,7 +1251,7 @@
         "label": "management-refused-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -1189,16 +1268,16 @@
         "label": "requests-access-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -1210,7 +1289,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -1242,12 +1321,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -1259,7 +1338,7 @@
         "label": "requests-access-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-07bb-7727-b514-4af5c7c58966/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/spaces/01a13af9-ba10-74f4-b09f-dd7be2b26f67/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -1281,8 +1360,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
-            "revision": "92ceb661-1283-41e6-a77c-2ba5c252fc78",
+            "actingSubject": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
+            "revision": "cee48119-27d7-4f14-bbd3-27939d39a1d1",
             "eligible": true
           },
           "mainAgent": {
@@ -1301,7 +1380,7 @@
         "label": "frame-person-preferences",
         "operationId": "getV1MePerson-preferences",
         "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "person-preferences-v1",
@@ -1329,7 +1408,7 @@
           "complete": true,
           "items": [
             {
-              "actingSubject": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
+              "actingSubject": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
               "kind": "person",
               "handle": null,
               "displayName": {
@@ -1358,7 +1437,7 @@
           "authorityEpoch": "0",
           "contexts": [
             {
-              "actingSubject": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
+              "actingSubject": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
               "displayName": "Outcome member",
               "handle": null,
               "kind": "person"
@@ -1379,14 +1458,14 @@
         "label": "frame-acting-agent-profile",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
+          "id": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
           "displayName": "Outcome member",
           "kind": "person",
-          "revision": "https://rezics.com/id/c03d4bff-0bf0-4ab7-a3d9-5e4c3ab850e7-agent-revision",
+          "revision": "https://rezics.com/id/1c8e5969-e338-445c-a084-e3b4d44faf07-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome member",
@@ -1396,7 +1475,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "FCNi7d4LoBH8gPvbS9vQwh",
+            "key": "1nZpAEEZ7sfPi8qm2oz9vz",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -1407,7 +1486,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "library": {
@@ -1415,10 +1494,10 @@
             "statusShelvesVisible": true
           },
           "links": {
-            "profile": "/a/FCNi7d4LoBH8gPvbS9vQwh",
-            "works": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308/works",
-            "collections": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308/collections",
-            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308"
+            "profile": "/a/1nZpAEEZ7sfPi8qm2oz9vz",
+            "works": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3/works",
+            "collections": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3"
           }
         },
         "headers": {
@@ -1430,35 +1509,35 @@
         "label": "frame-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13876-0a86-7200-9460-02734c9c0680",
-          "holder": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "key": "01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "holder": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "status": "resolved",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-77880ce6-e33",
+            "key": "outcome-685ae236-508",
             "suffixSource": ""
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d"
           }
         },
         "headers": {
           "cache-control": "public, max-age=30, must-revalidate",
           "content-type": "application/json",
-          "etag": "\"address-identity-116212c824064dacb6f6fe3c2f4d1b1da3468f5441f546899de627fc045571d8\""
+          "etag": "\"address-identity-bc1c1090c20ae58658069a8d66c6b2546c45ec04848f079ee03a627214a006be\""
         }
       },
       {
         "label": "frame-public-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -1475,16 +1554,16 @@
         "label": "frame-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -1496,7 +1575,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -1528,12 +1607,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -1545,7 +1624,7 @@
         "label": "frame-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -1562,11 +1641,11 @@
         "label": "frame-presentation",
         "operationId": "getV1ZonesByIdPresentation",
         "method": "GET",
-        "path": "/v1/zones/4129d5b4-4c19-8990-8d93-497e7197cbf4/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/zones/890575f3-5fc9-819b-a8d1-998bc2ce0128/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "zone-presentation-response-v2",
-          "zone": "https://rezics.com/id/4129d5b4-4c19-8990-8d93-497e7197cbf4",
+          "zone": "https://rezics.com/id/890575f3-5fc9-819b-a8d1-998bc2ce0128",
           "realm": null,
           "listing": "listed",
           "discovery": {
@@ -1576,14 +1655,14 @@
           },
           "address": {
             "prefix": "/z/",
-            "key": "1Cg1RSk8ewn1KN4P1diWM5",
+            "key": "1Cg2M4B6j2CF8TDNpcyiPJ",
             "suffixSource": "Outcome Realm site"
           },
           "name": "Outcome Realm site",
           "language": "en",
           "direction": "ltr",
           "official": null,
-          "revision": "https://rezics.com/id/c9f8819e-2304-8e8a-877e-b663b4bba848",
+          "revision": "https://rezics.com/id/7da57b68-fe79-8f5f-91c8-dd19bfff9ce5",
           "presentation": {
             "profile": "zone-presentation-v2",
             "preset": "clean",
@@ -1645,17 +1724,17 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "\"76aba5f3fd5355886773cd1f951caf7b5c4d9777251fc1c1448b5da7a630e64d\""
+          "etag": "\"7adf523f359612d7cf3ffcceb2b104ebde9c681e51233e381c00c8b9f58f2385\""
         }
       },
       {
         "label": "frame-joining",
         "operationId": "getV1RealmsByRealmJoining",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
           "policyRevision": "1",
           "termsRevision": "realm-membership-v1",
           "open": true,
@@ -1672,12 +1751,12 @@
         "label": "frame-follow",
         "operationId": "getV1FollowsById",
         "method": "GET",
-        "path": "/v1/follows/01a13876-0a86-7200-9460-02734c9c0680?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/follows/01a13af9-bac6-7364-9cd1-52d690906b8d?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "follow-state-v1",
           "target": {
-            "id": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+            "id": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
             "kind": "space",
             "name": {
               "value": "Outcome private Realm",
@@ -1689,13 +1768,13 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "realm",
-              "key": "7266659ebcb22d8dee6167c842d19a85"
+              "key": "1c6a87c8e09980c919eece918ffbda23"
             },
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-            "href": "/r/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+            "href": "/r/01a13af9-bac6-7364-9cd1-52d690906b8d"
           },
           "following": true,
-          "revision": "44a8a5ae-21aa-40ee-806e-3dd04b24c15b",
+          "revision": "33513a7d-c736-4395-ab76-2b0f5abf34f9",
           "level": "highlights",
           "source": "join",
           "pinPosition": null,
@@ -1716,9 +1795,26 @@
         "path": "/v1/me/platform-access",
         "status": 200,
         "answer": {
-          "groups": [],
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
           "operations": [],
-          "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
+          "generation": "636151e5e0a89a9d873ceb3b75f553c00a7da4160a651d3a5b16142042c0160a"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -1729,7 +1825,7 @@
         "label": "frame-own-ban",
         "operationId": "getV1RealmsByRealmMember-ban",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/appeal_unavailable",
@@ -1745,6 +1841,34 @@
     ],
     "owner": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
+        "status": 200,
+        "answer": {
+          "profile": "realm-threads-v1",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "sort": "best",
+          "window": "week",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "11"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "session-agent",
         "operationId": "getV1MeSession-agent",
         "method": "GET",
@@ -1753,8 +1877,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
-            "revision": "12e17366-6ba7-4476-9088-65a97a10aa77",
+            "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
+            "revision": "327fcd54-047e-425d-871b-73c431ca36f4",
             "eligible": true
           },
           "mainAgent": {
@@ -1780,7 +1904,7 @@
           "complete": true,
           "items": [
             {
-              "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+              "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
               "kind": "person",
               "handle": null,
               "displayName": {
@@ -1809,7 +1933,7 @@
           "authorityEpoch": "0",
           "contexts": [
             {
-              "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+              "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
               "displayName": "Outcome owner",
               "handle": null,
               "kind": "person"
@@ -1830,14 +1954,14 @@
         "label": "acting-agent-profile",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/140c12dd-5a92-45ab-bcec-a67b966a5894?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/agents/829f8f00-6258-43c8-996b-22941c441dad?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "id": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "displayName": "Outcome owner",
           "kind": "person",
-          "revision": "https://rezics.com/id/5e44d163-4c54-4df9-9149-d7342b35dc06-agent-revision",
+          "revision": "https://rezics.com/id/0a5f4d0b-8338-497b-be2d-39ffedbfccb0-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome owner",
@@ -1847,7 +1971,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "3UacYDjrzAWjT188wBTyP9",
+            "key": "H8Y3kWP7nJ6WFRzVFSFtVi",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -1858,7 +1982,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "11"
           },
           "library": {
@@ -1866,10 +1990,10 @@
             "statusShelvesVisible": true
           },
           "links": {
-            "profile": "/a/3UacYDjrzAWjT188wBTyP9",
-            "works": "/v1/agents/140c12dd-5a92-45ab-bcec-a67b966a5894/works",
-            "collections": "/v1/agents/140c12dd-5a92-45ab-bcec-a67b966a5894/collections",
-            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894"
+            "profile": "/a/H8Y3kWP7nJ6WFRzVFSFtVi",
+            "works": "/v1/agents/829f8f00-6258-43c8-996b-22941c441dad/works",
+            "collections": "/v1/agents/829f8f00-6258-43c8-996b-22941c441dad/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad"
           }
         },
         "headers": {
@@ -1881,16 +2005,16 @@
         "label": "management-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&language=en",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&language=en",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
-          "space": "https://rezics.com/id/01a13876-b82d-7149-82e4-b263ad6191f3",
-          "revision": "https://rezics.com/id/01a13876-b8da-7660-acc7-ed1093823dcc",
+          "id": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
+          "space": "https://rezics.com/id/01a13af9-eff3-71b1-8b08-e162cd477045",
+          "revision": "https://rezics.com/id/01a13af9-f022-7521-9bb9-d6fc58ed75f6",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:44cc33c1386266b1451f8d61b8895676260780897576a8b64ec1e380f75b10a7",
+          "policyRevision": "urn:rezics:receipt:f7ea437a37eda2cf59c65271b66e7376449adc559a1d2de70eb4d031e4573d56",
           "history": "from-admission",
           "name": {
             "value": "Original request review circle",
@@ -1902,7 +2026,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "c94188642bc56028b8dd6599d84c7d87"
+            "key": "b4619a26063747a0b8c02f0c62a7c208"
           },
           "originalName": {
             "value": "Original request review circle",
@@ -1934,12 +2058,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/works",
-            "decisions": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/decisions"
+            "works": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/works",
+            "decisions": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/decisions"
           }
         },
         "headers": {
@@ -1951,7 +2075,7 @@
         "label": "request-address-space-missing",
         "operationId": "getV1SpacesBySpace",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-b8da-765e-a049-b10728d52245",
+        "path": "/v1/spaces/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/space_unavailable",
@@ -1968,7 +2092,7 @@
         "label": "management-site-absent",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -1985,7 +2109,7 @@
         "label": "request-inbox-empty",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "2",
@@ -2002,30 +2126,30 @@
         "label": "request-inbox",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "2",
           "items": [
             {
-              "id": "af1a232f-e501-4235-aa34-073e59b56028",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "b19cca34-c8ee-4796-bbff-0fdee2ef6304",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.431Z"
+              "createdAt": "2026-10-14T15:13:42.467Z"
             },
             {
-              "id": "d64248b4-fbc4-4368-beb3-03e974c6bccd",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "f9ee4301-dbfa-4dd7-b7ee-94b523c5e601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.055Z"
+              "createdAt": "2026-10-14T15:13:42.725Z"
             }
           ],
           "nextCursor": null,
@@ -2040,30 +2164,30 @@
         "label": "requests-first-page",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "2",
           "items": [
             {
-              "id": "af1a232f-e501-4235-aa34-073e59b56028",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "b19cca34-c8ee-4796-bbff-0fdee2ef6304",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.431Z"
+              "createdAt": "2026-10-14T15:13:42.467Z"
             },
             {
-              "id": "d64248b4-fbc4-4368-beb3-03e974c6bccd",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "f9ee4301-dbfa-4dd7-b7ee-94b523c5e601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.055Z"
+              "createdAt": "2026-10-14T15:13:42.725Z"
             }
           ],
           "nextCursor": null,
@@ -2078,7 +2202,7 @@
         "label": "request-inbox-search-empty",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=nomatch443868cdce8d4f96a5447da1aeb5d37c",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=nomatch8fed69b2279049779d3d333274e3518c",
         "status": 200,
         "answer": {
           "generation": "2",
@@ -2095,14 +2219,14 @@
         "label": "requester-name-stranger",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+          "id": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
           "displayName": "Outcome stranger",
           "kind": "person",
-          "revision": "https://rezics.com/id/7a2c42b8-b71c-44ae-ae45-7861498d07ee-agent-revision",
+          "revision": "https://rezics.com/id/398a5983-37df-4026-9e18-8bad3551b43d-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome stranger",
@@ -2112,7 +2236,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "HqrTUBTJWH2TCBHDcBoNHD",
+            "key": "YNRAjHhmLjEM4xcnoR9qEn",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -2123,7 +2247,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -2131,9 +2255,9 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/HqrTUBTJWH2TCBHDcBoNHD",
-            "works": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/works",
-            "collections": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/collections"
+            "profile": "/a/YNRAjHhmLjEM4xcnoR9qEn",
+            "works": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/works",
+            "collections": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/collections"
           }
         },
         "headers": {
@@ -2145,14 +2269,14 @@
         "label": "requester-name-operator",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "id": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "displayName": "Outcome operator",
           "kind": "person",
-          "revision": "https://rezics.com/id/7d6a7687-53a3-4f38-ba35-09a32db37b3d-agent-revision",
+          "revision": "https://rezics.com/id/61c0f330-0c36-413a-90d1-9eaf233f9ddd-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome operator",
@@ -2162,7 +2286,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "VgSagpyeaxjveShVH22HfX",
+            "key": "DLdrrDJ7GDRbHcGgtjzyax",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -2173,7 +2297,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -2181,9 +2305,9 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/VgSagpyeaxjveShVH22HfX",
-            "works": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/works",
-            "collections": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/collections"
+            "profile": "/a/DLdrrDJ7GDRbHcGgtjzyax",
+            "works": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/works",
+            "collections": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/collections"
           }
         },
         "headers": {
@@ -2195,23 +2319,23 @@
         "label": "request-inbox-page-0",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=1",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=1",
         "status": 200,
         "answer": {
           "generation": "2",
           "items": [
             {
-              "id": "af1a232f-e501-4235-aa34-073e59b56028",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "b19cca34-c8ee-4796-bbff-0fdee2ef6304",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.431Z"
+              "createdAt": "2026-10-14T15:13:42.467Z"
             }
           ],
-          "nextCursor": "eyJhZnRlciI6ImFmMWEyMzJmLWU1MDEtNDIzNS1hYTM0LTA3M2U1OWI1NjAyOCIsImJpbmRpbmciOiJmMDg5MjdlMGI0YzAzMTQxM2Q0MDk1NTM1MWM4M2YyM2U2YWUyZDY5OTNlNmU5NzAwMDE3OGI0N2RhYzA1OTQ2In0",
+          "nextCursor": "eyJhZnRlciI6ImIxOWNjYTM0LWM4ZWUtNDc5Ni1iYmZmLTBmZGVlMmVmNjMwNCIsImJpbmRpbmciOiJlZWJkNzZjOTlkZTkyMTQ4MzZhM2M2MjJmODZjNzNmN2Q2ZWVlNTAzZTE0MjU1NzE4ODgxYWZhMTBjMjRkMWUxIn0",
           "complete": false
         },
         "headers": {
@@ -2223,20 +2347,20 @@
         "label": "request-inbox-page-1",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=1&cursor=eyJhZnRlciI6ImFmMWEyMzJmLWU1MDEtNDIzNS1hYTM0LTA3M2U1OWI1NjAyOCIsImJpbmRpbmciOiJmMDg5MjdlMGI0YzAzMTQxM2Q0MDk1NTM1MWM4M2YyM2U2YWUyZDY5OTNlNmU5NzAwMDE3OGI0N2RhYzA1OTQ2In0",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=1&cursor=eyJhZnRlciI6ImIxOWNjYTM0LWM4ZWUtNDc5Ni1iYmZmLTBmZGVlMmVmNjMwNCIsImJpbmRpbmciOiJlZWJkNzZjOTlkZTkyMTQ4MzZhM2M2MjJmODZjNzNmN2Q2ZWVlNTAzZTE0MjU1NzE4ODgxYWZhMTBjMjRkMWUxIn0",
         "status": 200,
         "answer": {
           "generation": "2",
           "items": [
             {
-              "id": "d64248b4-fbc4-4368-beb3-03e974c6bccd",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "f9ee4301-dbfa-4dd7-b7ee-94b523c5e601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:14.055Z"
+              "createdAt": "2026-10-14T15:13:42.725Z"
             }
           ],
           "nextCursor": null,
@@ -2251,11 +2375,11 @@
         "label": "decision-settings-declined",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-b82d-7149-82e4-b263ad6191f3/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/spaces/01a13af9-eff3-71b1-8b08-e162cd477045/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
-          "space": "https://rezics.com/id/01a13876-b82d-7149-82e4-b263ad6191f3",
-          "realm": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
+          "space": "https://rezics.com/id/01a13af9-eff3-71b1-8b08-e162cd477045",
+          "realm": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
           "generation": "2",
           "settings": {
             "visibility": "private",
@@ -2273,9 +2397,9 @@
         "label": "request-decision-declined-0",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/d64248b4-fbc4-4368-beb3-03e974c6bccd/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/b19cca34-c8ee-4796-bbff-0fdee2ef6304/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "2",
           "expectedRequestGeneration": "0",
           "decision": "declined",
@@ -2283,8 +2407,8 @@
         },
         "status": 201,
         "answer": {
-          "receiptId": "35efd821-00c3-4c60-a293-1dd91655345c",
-          "requestId": "d64248b4-fbc4-4368-beb3-03e974c6bccd",
+          "receiptId": "100d9e1c-7cce-4954-b70a-c241a2a00c56",
+          "requestId": "b19cca34-c8ee-4796-bbff-0fdee2ef6304",
           "requestGeneration": "1",
           "generation": "3",
           "state": "declined",
@@ -2301,9 +2425,9 @@
         "label": "request-decision-declined-1",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/d64248b4-fbc4-4368-beb3-03e974c6bccd/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/b19cca34-c8ee-4796-bbff-0fdee2ef6304/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "2",
           "expectedRequestGeneration": "0",
           "decision": "declined",
@@ -2325,11 +2449,11 @@
         "label": "decision-settings-accepted",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-b82d-7149-82e4-b263ad6191f3/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/spaces/01a13af9-eff3-71b1-8b08-e162cd477045/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
-          "space": "https://rezics.com/id/01a13876-b82d-7149-82e4-b263ad6191f3",
-          "realm": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
+          "space": "https://rezics.com/id/01a13af9-eff3-71b1-8b08-e162cd477045",
+          "realm": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
           "generation": "3",
           "settings": {
             "visibility": "private",
@@ -2347,9 +2471,9 @@
         "label": "request-decision-accepted-0",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/af1a232f-e501-4235-aa34-073e59b56028/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/f9ee4301-dbfa-4dd7-b7ee-94b523c5e601/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "3",
           "expectedRequestGeneration": "0",
           "decision": "accepted",
@@ -2357,12 +2481,12 @@
         },
         "status": 201,
         "answer": {
-          "receiptId": "47b103c0-665a-45bb-ae2f-3836887728c6",
-          "requestId": "af1a232f-e501-4235-aa34-073e59b56028",
+          "receiptId": "045a632c-a7db-460a-8261-f678ef38adf4",
+          "requestId": "f9ee4301-dbfa-4dd7-b7ee-94b523c5e601",
           "requestGeneration": "1",
           "generation": "4",
           "state": "accepted",
-          "membershipId": "e1d51cbc-701a-4fa6-8c51-5edf74e4047a",
+          "membershipId": "51cd466c-b7fd-4004-895a-bb00403de5b0",
           "membershipGeneration": "1",
           "replayed": false
         },
@@ -2375,9 +2499,9 @@
         "label": "request-decision-accepted-1",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/af1a232f-e501-4235-aa34-073e59b56028/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/f9ee4301-dbfa-4dd7-b7ee-94b523c5e601/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "3",
           "expectedRequestGeneration": "0",
           "decision": "accepted",
@@ -2399,7 +2523,7 @@
         "label": "request-inbox-after-decisions",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "4",
@@ -2416,7 +2540,7 @@
         "label": "requests-after-decisions",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "4",
@@ -2433,7 +2557,7 @@
         "label": "person-preferences",
         "operationId": "getV1MePerson-preferences",
         "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "profile": "person-preferences-v1",
@@ -2454,20 +2578,20 @@
         "label": "decision-confirm-inbox-declined",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "4",
           "items": [
             {
-              "id": "916e9bae-ff8b-488d-be7c-010f42254b4e",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "19ffb42e-f45d-468d-bc0b-a931a4492767",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:22.467Z"
+              "createdAt": "2026-10-14T15:13:44.687Z"
             }
           ],
           "nextCursor": null,
@@ -2482,20 +2606,20 @@
         "label": "decision-confirm-selected-refreshed-declined",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "4",
           "items": [
             {
-              "id": "916e9bae-ff8b-488d-be7c-010f42254b4e",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "19ffb42e-f45d-468d-bc0b-a931a4492767",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:22.467Z"
+              "createdAt": "2026-10-14T15:13:44.687Z"
             }
           ],
           "nextCursor": null,
@@ -2510,9 +2634,9 @@
         "label": "decision-confirm-declined",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/916e9bae-ff8b-488d-be7c-010f42254b4e/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/19ffb42e-f45d-468d-bc0b-a931a4492767/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "4",
           "expectedRequestGeneration": "0",
           "decision": "declined",
@@ -2520,8 +2644,8 @@
         },
         "status": 201,
         "answer": {
-          "receiptId": "7328f1ac-4515-46a3-ae69-708d41066dfd",
-          "requestId": "916e9bae-ff8b-488d-be7c-010f42254b4e",
+          "receiptId": "36bcc2bc-dc85-4500-9386-dd059beb30b4",
+          "requestId": "19ffb42e-f45d-468d-bc0b-a931a4492767",
           "requestGeneration": "1",
           "generation": "5",
           "state": "declined",
@@ -2538,7 +2662,7 @@
         "label": "decision-confirm-inbox-after-declined",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "5",
@@ -2555,20 +2679,20 @@
         "label": "decision-confirm-inbox-accepted",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "5",
           "items": [
             {
-              "id": "ba5d5f30-f160-4a3c-a315-7a3d56fd836c",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "232b7f8e-a201-47d4-9db4-1d8fcd2e5423",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:23.971Z"
+              "createdAt": "2026-10-14T15:13:44.859Z"
             }
           ],
           "nextCursor": null,
@@ -2583,20 +2707,20 @@
         "label": "decision-confirm-selected-refreshed-accepted",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "5",
           "items": [
             {
-              "id": "ba5d5f30-f160-4a3c-a315-7a3d56fd836c",
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "id": "232b7f8e-a201-47d4-9db4-1d8fcd2e5423",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:31:23.971Z"
+              "createdAt": "2026-10-14T15:13:44.859Z"
             }
           ],
           "nextCursor": null,
@@ -2611,9 +2735,9 @@
         "label": "decision-confirm-accepted",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestDecisions",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests/ba5d5f30-f160-4a3c-a315-7a3d56fd836c/decisions",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests/232b7f8e-a201-47d4-9db4-1d8fcd2e5423/decisions",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
           "expectedGeneration": "5",
           "expectedRequestGeneration": "0",
           "decision": "accepted",
@@ -2621,12 +2745,12 @@
         },
         "status": 201,
         "answer": {
-          "receiptId": "73f1a7ca-5530-4cc9-a61d-8bbff810de78",
-          "requestId": "ba5d5f30-f160-4a3c-a315-7a3d56fd836c",
+          "receiptId": "a926de4c-181b-4c71-bd85-6b82dbe7e7b5",
+          "requestId": "232b7f8e-a201-47d4-9db4-1d8fcd2e5423",
           "requestGeneration": "1",
           "generation": "6",
           "state": "accepted",
-          "membershipId": "babfd5a6-368a-4b47-979f-a85bfb174663",
+          "membershipId": "fe8aa7b8-f584-4eba-a73c-19f59e151bad",
           "membershipGeneration": "1",
           "replayed": false
         },
@@ -2639,7 +2763,7 @@
         "label": "decision-confirm-inbox-after-accepted",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&limit=50&q=",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&limit=50&q=",
         "status": 200,
         "answer": {
           "generation": "6",
@@ -2656,27 +2780,27 @@
         "label": "members-before-invitation",
         "operationId": "getV1RealmsByRealmMembers",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "6",
           "items": [
             {
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:24.336Z",
+              "joinedAt": "2026-10-14T15:13:43.662Z",
               "roles": []
             },
             {
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:20.103Z",
+              "joinedAt": "2026-10-14T15:13:45.056Z",
               "roles": []
             }
           ],
@@ -2691,7 +2815,7 @@
         "label": "roles-before-invitation",
         "operationId": "getV1RealmsByRealmRoles",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "6",
@@ -2707,7 +2831,7 @@
         "label": "outgoing-invitations-before-confirm",
         "operationId": "getV1RealmsByRealmInvitations",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "items": [],
@@ -2719,67 +2843,17 @@
         }
       },
       {
-        "label": "members-before-invitation-name-stranger",
-        "operationId": "getV1AgentsById",
-        "method": "GET",
-        "path": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-        "status": 200,
-        "answer": {
-          "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-          "displayName": "Outcome stranger",
-          "kind": "person",
-          "revision": "https://rezics.com/id/7a2c42b8-b71c-44ae-ae45-7861498d07ee-agent-revision",
-          "bio": null,
-          "displayNameInfo": null,
-          "originalDisplayName": "Outcome stranger",
-          "localizedNames": null,
-          "avatarSelection": null,
-          "avatarUrl": null,
-          "handle": null,
-          "address": {
-            "prefix": "/a/",
-            "key": "HqrTUBTJWH2TCBHDcBoNHD",
-            "suffixSource": ""
-          },
-          "disclosure": "public",
-          "listing": "listed",
-          "discovery": {
-            "indexable": true,
-            "robots": "index",
-            "referrerPolicy": null
-          },
-          "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
-            "sequence": "13"
-          },
-          "library": {
-            "visibility": "private",
-            "statusShelvesVisible": false
-          },
-          "links": {
-            "profile": "/a/HqrTUBTJWH2TCBHDcBoNHD",
-            "works": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/works",
-            "collections": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/collections"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json"
-        }
-      },
-      {
         "label": "members-before-invitation-name-operator",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "id": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "displayName": "Outcome operator",
           "kind": "person",
-          "revision": "https://rezics.com/id/7d6a7687-53a3-4f38-ba35-09a32db37b3d-agent-revision",
+          "revision": "https://rezics.com/id/61c0f330-0c36-413a-90d1-9eaf233f9ddd-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome operator",
@@ -2789,7 +2863,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "VgSagpyeaxjveShVH22HfX",
+            "key": "DLdrrDJ7GDRbHcGgtjzyax",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -2800,7 +2874,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -2808,9 +2882,59 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/VgSagpyeaxjveShVH22HfX",
-            "works": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/works",
-            "collections": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/collections"
+            "profile": "/a/DLdrrDJ7GDRbHcGgtjzyax",
+            "works": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/works",
+            "collections": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/collections"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "members-before-invitation-name-stranger",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+          "displayName": "Outcome stranger",
+          "kind": "person",
+          "revision": "https://rezics.com/id/398a5983-37df-4026-9e18-8bad3551b43d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome stranger",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "YNRAjHhmLjEM4xcnoR9qEn",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "13"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": false
+          },
+          "links": {
+            "profile": "/a/YNRAjHhmLjEM4xcnoR9qEn",
+            "works": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/works",
+            "collections": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/collections"
           }
         },
         "headers": {
@@ -2822,7 +2946,7 @@
         "label": "invitation-confirm-roster",
         "operationId": "getV1RealmsByRealmMembers",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&search=https%3A%2F%2Frezics.com%2Fid%2F72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&search=https%3A%2F%2Frezics.com%2Fid%2F065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "generation": "6",
@@ -2838,22 +2962,22 @@
         "label": "invitation-confirm",
         "operationId": "postV1RealmsByRealmInvitations",
         "method": "POST",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/invitations",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/invitations",
         "body": {
-          "actingSubject": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
-          "member": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
+          "actingSubject": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
+          "member": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
           "expiresInSeconds": 604800
         },
         "status": 200,
         "answer": {
           "invitation": {
-            "id": "d58da3a7-89e8-4c84-a876-6fea0fea0c97",
-            "realm": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
-            "member": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
-            "inviter": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+            "id": "49a89a58-9c16-433c-85d2-8086bf514c49",
+            "realm": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
+            "member": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
+            "inviter": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
             "state": "pending",
-            "createdAt": "2026-10-14T03:31:25.043Z",
-            "expiresAt": "2026-10-21T03:31:25.036Z",
+            "createdAt": "2026-10-14T15:13:45.334Z",
+            "expiresAt": "2026-10-21T15:13:45.331Z",
             "membershipGeneration": "0",
             "policyRevision": "1",
             "termsRevision": "realm-membership-v1"
@@ -2869,16 +2993,16 @@
         "label": "invitation-refresh-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894&language=en",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad&language=en",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
-          "space": "https://rezics.com/id/01a13876-b82d-7149-82e4-b263ad6191f3",
-          "revision": "https://rezics.com/id/01a13876-b8da-7660-acc7-ed1093823dcc",
+          "id": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
+          "space": "https://rezics.com/id/01a13af9-eff3-71b1-8b08-e162cd477045",
+          "revision": "https://rezics.com/id/01a13af9-f022-7521-9bb9-d6fc58ed75f6",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:44cc33c1386266b1451f8d61b8895676260780897576a8b64ec1e380f75b10a7",
+          "policyRevision": "urn:rezics:receipt:f7ea437a37eda2cf59c65271b66e7376449adc559a1d2de70eb4d031e4573d56",
           "history": "from-admission",
           "name": {
             "value": "Original request review circle",
@@ -2890,7 +3014,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "c94188642bc56028b8dd6599d84c7d87"
+            "key": "b4619a26063747a0b8c02f0c62a7c208"
           },
           "originalName": {
             "value": "Original request review circle",
@@ -2922,12 +3046,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/works",
-            "decisions": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/decisions"
+            "works": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/works",
+            "decisions": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/decisions"
           }
         },
         "headers": {
@@ -2939,7 +3063,7 @@
         "label": "invitation-refresh-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -2956,27 +3080,27 @@
         "label": "members-after-invitation",
         "operationId": "getV1RealmsByRealmMembers",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "6",
           "items": [
             {
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:24.336Z",
+              "joinedAt": "2026-10-14T15:13:43.662Z",
               "roles": []
             },
             {
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:20.103Z",
+              "joinedAt": "2026-10-14T15:13:45.056Z",
               "roles": []
             }
           ],
@@ -2991,7 +3115,7 @@
         "label": "roles-after-invitation",
         "operationId": "getV1RealmsByRealmRoles",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "6",
@@ -3007,18 +3131,18 @@
         "label": "members-page-invitations-after-confirm",
         "operationId": "getV1RealmsByRealmInvitations",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d58da3a7-89e8-4c84-a876-6fea0fea0c97",
-              "realm": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
-              "member": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
-              "inviter": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+              "id": "49a89a58-9c16-433c-85d2-8086bf514c49",
+              "realm": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
+              "member": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
+              "inviter": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
               "state": "pending",
-              "createdAt": "2026-10-14T03:31:25.043Z",
-              "expiresAt": "2026-10-21T03:31:25.036Z",
+              "createdAt": "2026-10-14T15:13:45.334Z",
+              "expiresAt": "2026-10-21T15:13:45.331Z",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1"
@@ -3032,67 +3156,17 @@
         }
       },
       {
-        "label": "members-after-invitation-name-stranger",
-        "operationId": "getV1AgentsById",
-        "method": "GET",
-        "path": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-        "status": 200,
-        "answer": {
-          "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-          "displayName": "Outcome stranger",
-          "kind": "person",
-          "revision": "https://rezics.com/id/7a2c42b8-b71c-44ae-ae45-7861498d07ee-agent-revision",
-          "bio": null,
-          "displayNameInfo": null,
-          "originalDisplayName": "Outcome stranger",
-          "localizedNames": null,
-          "avatarSelection": null,
-          "avatarUrl": null,
-          "handle": null,
-          "address": {
-            "prefix": "/a/",
-            "key": "HqrTUBTJWH2TCBHDcBoNHD",
-            "suffixSource": ""
-          },
-          "disclosure": "public",
-          "listing": "listed",
-          "discovery": {
-            "indexable": true,
-            "robots": "index",
-            "referrerPolicy": null
-          },
-          "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
-            "sequence": "13"
-          },
-          "library": {
-            "visibility": "private",
-            "statusShelvesVisible": false
-          },
-          "links": {
-            "profile": "/a/HqrTUBTJWH2TCBHDcBoNHD",
-            "works": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/works",
-            "collections": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/collections"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json"
-        }
-      },
-      {
         "label": "members-after-invitation-name-operator",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "id": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "displayName": "Outcome operator",
           "kind": "person",
-          "revision": "https://rezics.com/id/7d6a7687-53a3-4f38-ba35-09a32db37b3d-agent-revision",
+          "revision": "https://rezics.com/id/61c0f330-0c36-413a-90d1-9eaf233f9ddd-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome operator",
@@ -3102,7 +3176,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "VgSagpyeaxjveShVH22HfX",
+            "key": "DLdrrDJ7GDRbHcGgtjzyax",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -3113,7 +3187,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -3121,9 +3195,59 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/VgSagpyeaxjveShVH22HfX",
-            "works": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/works",
-            "collections": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/collections"
+            "profile": "/a/DLdrrDJ7GDRbHcGgtjzyax",
+            "works": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/works",
+            "collections": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/collections"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "members-after-invitation-name-stranger",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+          "displayName": "Outcome stranger",
+          "kind": "person",
+          "revision": "https://rezics.com/id/398a5983-37df-4026-9e18-8bad3551b43d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome stranger",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "YNRAjHhmLjEM4xcnoR9qEn",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "13"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": false
+          },
+          "links": {
+            "profile": "/a/YNRAjHhmLjEM4xcnoR9qEn",
+            "works": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/works",
+            "collections": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/collections"
           }
         },
         "headers": {
@@ -3135,14 +3259,14 @@
         "label": "members-after-invitation-name-member",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308",
+        "path": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
+          "id": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
           "displayName": "Outcome member",
           "kind": "person",
-          "revision": "https://rezics.com/id/c03d4bff-0bf0-4ab7-a3d9-5e4c3ab850e7-agent-revision",
+          "revision": "https://rezics.com/id/1c8e5969-e338-445c-a084-e3b4d44faf07-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome member",
@@ -3152,7 +3276,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "FCNi7d4LoBH8gPvbS9vQwh",
+            "key": "1nZpAEEZ7sfPi8qm2oz9vz",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -3163,7 +3287,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -3171,9 +3295,9 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/FCNi7d4LoBH8gPvbS9vQwh",
-            "works": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308/works",
-            "collections": "/v1/agents/72f68053-7116-4ee2-a916-389f547d1308/collections"
+            "profile": "/a/1nZpAEEZ7sfPi8qm2oz9vz",
+            "works": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3/works",
+            "collections": "/v1/agents/065cb101-d165-43c9-994b-ad4ea2bf5ac3/collections"
           }
         },
         "headers": {
@@ -3185,27 +3309,27 @@
         "label": "invitation-refresh-members",
         "operationId": "getV1RealmsByRealmMembers",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "generation": "6",
           "items": [
             {
-              "member": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:24.336Z",
+              "joinedAt": "2026-10-14T15:13:43.662Z",
               "roles": []
             },
             {
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "member": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
               "state": "joined",
               "banned": false,
               "bannedUntil": null,
               "membershipGeneration": "1",
-              "joinedAt": "2026-10-14T03:31:20.103Z",
+              "joinedAt": "2026-10-14T15:13:45.056Z",
               "roles": []
             }
           ],
@@ -3217,67 +3341,17 @@
         }
       },
       {
-        "label": "invitation-refresh-member-name-stranger",
-        "operationId": "getV1AgentsById",
-        "method": "GET",
-        "path": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
-        "status": 200,
-        "answer": {
-          "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/886465e8-b1ad-4b69-8c4a-fee6a95e4d50",
-          "displayName": "Outcome stranger",
-          "kind": "person",
-          "revision": "https://rezics.com/id/7a2c42b8-b71c-44ae-ae45-7861498d07ee-agent-revision",
-          "bio": null,
-          "displayNameInfo": null,
-          "originalDisplayName": "Outcome stranger",
-          "localizedNames": null,
-          "avatarSelection": null,
-          "avatarUrl": null,
-          "handle": null,
-          "address": {
-            "prefix": "/a/",
-            "key": "HqrTUBTJWH2TCBHDcBoNHD",
-            "suffixSource": ""
-          },
-          "disclosure": "public",
-          "listing": "listed",
-          "discovery": {
-            "indexable": true,
-            "robots": "index",
-            "referrerPolicy": null
-          },
-          "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
-            "sequence": "13"
-          },
-          "library": {
-            "visibility": "private",
-            "statusShelvesVisible": false
-          },
-          "links": {
-            "profile": "/a/HqrTUBTJWH2TCBHDcBoNHD",
-            "works": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/works",
-            "collections": "/v1/agents/886465e8-b1ad-4b69-8c4a-fee6a95e4d50/collections"
-          }
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json"
-        }
-      },
-      {
         "label": "invitation-refresh-member-name-operator",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "id": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "displayName": "Outcome operator",
           "kind": "person",
-          "revision": "https://rezics.com/id/7d6a7687-53a3-4f38-ba35-09a32db37b3d-agent-revision",
+          "revision": "https://rezics.com/id/61c0f330-0c36-413a-90d1-9eaf233f9ddd-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome operator",
@@ -3287,7 +3361,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "VgSagpyeaxjveShVH22HfX",
+            "key": "DLdrrDJ7GDRbHcGgtjzyax",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -3298,7 +3372,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -3306,9 +3380,59 @@
             "statusShelvesVisible": false
           },
           "links": {
-            "profile": "/a/VgSagpyeaxjveShVH22HfX",
-            "works": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/works",
-            "collections": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/collections"
+            "profile": "/a/DLdrrDJ7GDRbHcGgtjzyax",
+            "works": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/works",
+            "collections": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/collections"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json"
+        }
+      },
+      {
+        "label": "invitation-refresh-member-name-stranger",
+        "operationId": "getV1AgentsById",
+        "method": "GET",
+        "path": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
+        "status": 200,
+        "answer": {
+          "profile": "agent-read-v1",
+          "id": "https://rezics.com/id/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f",
+          "displayName": "Outcome stranger",
+          "kind": "person",
+          "revision": "https://rezics.com/id/398a5983-37df-4026-9e18-8bad3551b43d-agent-revision",
+          "bio": null,
+          "displayNameInfo": null,
+          "originalDisplayName": "Outcome stranger",
+          "localizedNames": null,
+          "avatarSelection": null,
+          "avatarUrl": null,
+          "handle": null,
+          "address": {
+            "prefix": "/a/",
+            "key": "YNRAjHhmLjEM4xcnoR9qEn",
+            "suffixSource": ""
+          },
+          "disclosure": "public",
+          "listing": "listed",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "13"
+          },
+          "library": {
+            "visibility": "private",
+            "statusShelvesVisible": false
+          },
+          "links": {
+            "profile": "/a/YNRAjHhmLjEM4xcnoR9qEn",
+            "works": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/works",
+            "collections": "/v1/agents/fe08cfc0-77b4-4d0c-9b2b-c08246088d1f/collections"
           }
         },
         "headers": {
@@ -3320,18 +3444,18 @@
         "label": "outgoing-invitations-after-confirm",
         "operationId": "getV1RealmsByRealmInvitations",
         "method": "GET",
-        "path": "/v1/realms/01a13876-b8da-765e-a049-b10728d52245/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F140c12dd-5a92-45ab-bcec-a67b966a5894",
+        "path": "/v1/realms/01a13af9-f022-751f-b5f6-4c8aa9fcaf44/invitations?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F829f8f00-6258-43c8-996b-22941c441dad",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "d58da3a7-89e8-4c84-a876-6fea0fea0c97",
-              "realm": "https://rezics.com/id/01a13876-b8da-765e-a049-b10728d52245",
-              "member": "https://rezics.com/id/72f68053-7116-4ee2-a916-389f547d1308",
-              "inviter": "https://rezics.com/id/140c12dd-5a92-45ab-bcec-a67b966a5894",
+              "id": "49a89a58-9c16-433c-85d2-8086bf514c49",
+              "realm": "https://rezics.com/id/01a13af9-f022-751f-b5f6-4c8aa9fcaf44",
+              "member": "https://rezics.com/id/065cb101-d165-43c9-994b-ad4ea2bf5ac3",
+              "inviter": "https://rezics.com/id/829f8f00-6258-43c8-996b-22941c441dad",
               "state": "pending",
-              "createdAt": "2026-10-14T03:31:25.043Z",
-              "expiresAt": "2026-10-21T03:31:25.036Z",
+              "createdAt": "2026-10-14T15:13:45.334Z",
+              "expiresAt": "2026-10-21T15:13:45.331Z",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1"
@@ -3347,19 +3471,47 @@
     ],
     "moderator": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
+        "status": 200,
+        "answer": {
+          "profile": "realm-threads-v1",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "sort": "best",
+          "window": "week",
+          "items": [],
+          "nextCursor": null,
+          "sourcePosition": {
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
+            "sequence": "13"
+          },
+          "count": {
+            "value": 0,
+            "kind": "exact-page",
+            "total": null
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "joined-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -3371,7 +3523,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -3403,12 +3555,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -3420,7 +3572,7 @@
         "label": "joined-request-basis",
         "operationId": "getV1RealmsByRealmJoin-requestsBasis",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "policyRevision": "1",
@@ -3437,7 +3589,7 @@
         "label": "request-inbox-denied",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -3454,7 +3606,7 @@
         "label": "requests-refused",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee&limit=50&q=",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655&limit=50&q=",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -3471,10 +3623,10 @@
         "label": "joining-policy",
         "operationId": "getV1RealmsByRealmJoining",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
           "policyRevision": "1",
           "termsRevision": "realm-membership-v1",
           "open": true,
@@ -3491,12 +3643,12 @@
         "label": "realm-follow",
         "operationId": "getV1FollowsById",
         "method": "GET",
-        "path": "/v1/follows/01a13876-0a86-7200-9460-02734c9c0680?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/follows/01a13af9-bac6-7364-9cd1-52d690906b8d?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "follow-state-v1",
           "target": {
-            "id": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+            "id": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
             "kind": "space",
             "name": {
               "value": "Outcome private Realm",
@@ -3508,13 +3660,13 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "realm",
-              "key": "7266659ebcb22d8dee6167c842d19a85"
+              "key": "1c6a87c8e09980c919eece918ffbda23"
             },
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-            "href": "/r/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+            "href": "/r/01a13af9-bac6-7364-9cd1-52d690906b8d"
           },
           "following": true,
-          "revision": "7edb725b-ee25-4d16-babd-ff198b27a847",
+          "revision": "7b3bf63a-4445-42d4-b551-bf3b67be0459",
           "level": "highlights",
           "source": "join",
           "pinPosition": null,
@@ -3535,9 +3687,26 @@
         "path": "/v1/me/platform-access",
         "status": 200,
         "answer": {
-          "groups": [],
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
           "operations": [],
-          "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
+          "generation": "636151e5e0a89a9d873ceb3b75f553c00a7da4160a651d3a5b16142042c0160a"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -3548,7 +3717,7 @@
         "label": "own-ban-absent",
         "operationId": "getV1RealmsByRealmMember-ban",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/appeal_unavailable",
@@ -3565,7 +3734,7 @@
         "label": "requests-address-space-missing",
         "operationId": "getV1SpacesBySpace",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/space_unavailable",
@@ -3582,7 +3751,7 @@
         "label": "requests-address-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -3599,16 +3768,16 @@
         "label": "management-refused-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee&language=en",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655&language=en",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -3620,7 +3789,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -3652,12 +3821,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -3669,7 +3838,7 @@
         "label": "management-refused-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -3686,16 +3855,16 @@
         "label": "requests-access-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -3707,7 +3876,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -3739,12 +3908,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -3756,7 +3925,7 @@
         "label": "requests-access-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-07bb-7727-b514-4af5c7c58966/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/spaces/01a13af9-ba10-74f4-b09f-dd7be2b26f67/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -3778,8 +3947,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/fee19a4f-70a7-4f80-ab17-85dcd3743fee",
-            "revision": "b9b65027-d7ba-4c6a-80d1-65ba288c79b1",
+            "actingSubject": "https://rezics.com/id/53323573-e627-4ed1-a0be-fd7247001655",
+            "revision": "0c4b8d49-d0cb-4f4d-a271-4366af67dd46",
             "eligible": true
           },
           "mainAgent": {
@@ -3798,7 +3967,7 @@
         "label": "frame-person-preferences",
         "operationId": "getV1MePerson-preferences",
         "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "person-preferences-v1",
@@ -3826,7 +3995,7 @@
           "complete": true,
           "items": [
             {
-              "actingSubject": "https://rezics.com/id/fee19a4f-70a7-4f80-ab17-85dcd3743fee",
+              "actingSubject": "https://rezics.com/id/53323573-e627-4ed1-a0be-fd7247001655",
               "kind": "person",
               "handle": null,
               "displayName": {
@@ -3855,7 +4024,7 @@
           "authorityEpoch": "0",
           "contexts": [
             {
-              "actingSubject": "https://rezics.com/id/fee19a4f-70a7-4f80-ab17-85dcd3743fee",
+              "actingSubject": "https://rezics.com/id/53323573-e627-4ed1-a0be-fd7247001655",
               "displayName": "Outcome moderator",
               "handle": null,
               "kind": "person"
@@ -3876,14 +4045,14 @@
         "label": "frame-acting-agent-profile",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/fee19a4f-70a7-4f80-ab17-85dcd3743fee?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/agents/53323573-e627-4ed1-a0be-fd7247001655?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/fee19a4f-70a7-4f80-ab17-85dcd3743fee",
+          "id": "https://rezics.com/id/53323573-e627-4ed1-a0be-fd7247001655",
           "displayName": "Outcome moderator",
           "kind": "person",
-          "revision": "https://rezics.com/id/cd1b9e1f-2873-4a3f-b42c-594e094d5f52-agent-revision",
+          "revision": "https://rezics.com/id/7732f7ea-5ec4-487c-baa6-3fec886bbc83-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome moderator",
@@ -3893,7 +4062,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "YUUwtPHkqgpXBiD2hVQgSq",
+            "key": "BGrm5RYMdmvhh6bjHrbCkk",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -3904,7 +4073,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -3912,10 +4081,10 @@
             "statusShelvesVisible": true
           },
           "links": {
-            "profile": "/a/YUUwtPHkqgpXBiD2hVQgSq",
-            "works": "/v1/agents/fee19a4f-70a7-4f80-ab17-85dcd3743fee/works",
-            "collections": "/v1/agents/fee19a4f-70a7-4f80-ab17-85dcd3743fee/collections",
-            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee"
+            "profile": "/a/BGrm5RYMdmvhh6bjHrbCkk",
+            "works": "/v1/agents/53323573-e627-4ed1-a0be-fd7247001655/works",
+            "collections": "/v1/agents/53323573-e627-4ed1-a0be-fd7247001655/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655"
           }
         },
         "headers": {
@@ -3927,35 +4096,35 @@
         "label": "frame-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13876-0a86-7200-9460-02734c9c0680",
-          "holder": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "key": "01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "holder": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "status": "resolved",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-77880ce6-e33",
+            "key": "outcome-685ae236-508",
             "suffixSource": ""
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d"
           }
         },
         "headers": {
           "cache-control": "public, max-age=30, must-revalidate",
           "content-type": "application/json",
-          "etag": "\"address-identity-116212c824064dacb6f6fe3c2f4d1b1da3468f5441f546899de627fc045571d8\""
+          "etag": "\"address-identity-bc1c1090c20ae58658069a8d66c6b2546c45ec04848f079ee03a627214a006be\""
         }
       },
       {
         "label": "frame-public-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -3972,16 +4141,16 @@
         "label": "frame-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "realm-read-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
-          "revision": "https://rezics.com/id/01a13876-0a86-7202-b5b6-70c350bcbb51",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
+          "revision": "https://rezics.com/id/01a13af9-bac6-7366-bb8c-2e8f5a1cede2",
           "visibility": "private",
           "reviewMode": "open",
-          "policyRevision": "urn:rezics:receipt:3433b6d3d0e89ca3381387f07a11ec3cd1e77d8dc0430331ce15df39af1c4eb5",
+          "policyRevision": "urn:rezics:receipt:c945420dd8ee828bd2ba3d9b4783e9f2fb914055617a653b2fc81b65a3324096",
           "history": "from-admission",
           "name": {
             "value": "Outcome private Realm",
@@ -3993,7 +4162,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "realm",
-            "key": "7266659ebcb22d8dee6167c842d19a85"
+            "key": "1c6a87c8e09980c919eece918ffbda23"
           },
           "originalName": {
             "value": "Outcome private Realm",
@@ -4025,12 +4194,12 @@
             "items": []
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "links": {
-            "works": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/works",
-            "decisions": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/decisions"
+            "works": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/works",
+            "decisions": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/decisions"
           }
         },
         "headers": {
@@ -4042,7 +4211,7 @@
         "label": "frame-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4059,11 +4228,11 @@
         "label": "frame-presentation",
         "operationId": "getV1ZonesByIdPresentation",
         "method": "GET",
-        "path": "/v1/zones/4129d5b4-4c19-8990-8d93-497e7197cbf4/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/zones/890575f3-5fc9-819b-a8d1-998bc2ce0128/presentation?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "zone-presentation-response-v2",
-          "zone": "https://rezics.com/id/4129d5b4-4c19-8990-8d93-497e7197cbf4",
+          "zone": "https://rezics.com/id/890575f3-5fc9-819b-a8d1-998bc2ce0128",
           "realm": null,
           "listing": "listed",
           "discovery": {
@@ -4073,14 +4242,14 @@
           },
           "address": {
             "prefix": "/z/",
-            "key": "1Cg1RSk8ewn1KN4P1diWM5",
+            "key": "1Cg2M4B6j2CF8TDNpcyiPJ",
             "suffixSource": "Outcome Realm site"
           },
           "name": "Outcome Realm site",
           "language": "en",
           "direction": "ltr",
           "official": null,
-          "revision": "https://rezics.com/id/c9f8819e-2304-8e8a-877e-b663b4bba848",
+          "revision": "https://rezics.com/id/7da57b68-fe79-8f5f-91c8-dd19bfff9ce5",
           "presentation": {
             "profile": "zone-presentation-v2",
             "preset": "clean",
@@ -4142,17 +4311,17 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/json;charset=utf-8",
-          "etag": "\"76aba5f3fd5355886773cd1f951caf7b5c4d9777251fc1c1448b5da7a630e64d\""
+          "etag": "\"7adf523f359612d7cf3ffcceb2b104ebde9c681e51233e381c00c8b9f58f2385\""
         }
       },
       {
         "label": "frame-joining",
         "operationId": "getV1RealmsByRealmJoining",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
-          "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
+          "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
           "policyRevision": "1",
           "termsRevision": "realm-membership-v1",
           "open": true,
@@ -4169,12 +4338,12 @@
         "label": "frame-follow",
         "operationId": "getV1FollowsById",
         "method": "GET",
-        "path": "/v1/follows/01a13876-0a86-7200-9460-02734c9c0680?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/follows/01a13af9-bac6-7364-9cd1-52d690906b8d?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 200,
         "answer": {
           "profile": "follow-state-v1",
           "target": {
-            "id": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+            "id": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
             "kind": "space",
             "name": {
               "value": "Outcome private Realm",
@@ -4186,13 +4355,13 @@
               "kind": "fallback",
               "policy": "avatar-fallback-v1",
               "resourceType": "realm",
-              "key": "7266659ebcb22d8dee6167c842d19a85"
+              "key": "1c6a87c8e09980c919eece918ffbda23"
             },
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-            "href": "/r/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+            "href": "/r/01a13af9-bac6-7364-9cd1-52d690906b8d"
           },
           "following": true,
-          "revision": "7edb725b-ee25-4d16-babd-ff198b27a847",
+          "revision": "7b3bf63a-4445-42d4-b551-bf3b67be0459",
           "level": "highlights",
           "source": "join",
           "pinPosition": null,
@@ -4213,9 +4382,26 @@
         "path": "/v1/me/platform-access",
         "status": 200,
         "answer": {
-          "groups": [],
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
           "operations": [],
-          "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
+          "generation": "636151e5e0a89a9d873ceb3b75f553c00a7da4160a651d3a5b16142042c0160a"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -4226,7 +4412,7 @@
         "label": "frame-own-ban",
         "operationId": "getV1RealmsByRealmMember-ban",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Ffee19a4f-70a7-4f80-ab17-85dcd3743fee",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F53323573-e627-4ed1-a0be-fd7247001655",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/appeal_unavailable",
@@ -4242,6 +4428,23 @@
     ],
     "operator": [
       {
+        "label": "private-discussion-empty",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/threads?sort=best&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "platform-access",
         "operationId": "getV1MePlatform-access",
         "method": "GET",
@@ -4249,10 +4452,25 @@
         "status": 200,
         "answer": {
           "groups": [
-            "platform-admin"
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
           ],
           "operations": [],
-          "generation": "5b0fb9ffeda0d5988d7b7ee3d39b69ae2e00656bcf3e7db74560cdb402276e48"
+          "generation": "058e52b92dda02914cd198bf0c4f58843424a3b5751e4921c2ff069f5cbc385a"
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -4263,7 +4481,7 @@
         "label": "private-realm-hidden",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4280,7 +4498,7 @@
         "label": "request-inbox-denied",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -4297,7 +4515,7 @@
         "label": "requests-refused",
         "operationId": "getV1RealmsByRealmJoin-requests",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50&q=",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50&q=",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -4319,8 +4537,8 @@
         "answer": {
           "profile": "session-agent-v1",
           "sessionAgent": {
-            "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
-            "revision": "624390b5-39df-45fb-8cd1-acdbb30729a7",
+            "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
+            "revision": "415b93cb-b50f-4893-b167-e3d3825cbb39",
             "eligible": true
           },
           "mainAgent": {
@@ -4339,7 +4557,7 @@
         "label": "join-person-preferences",
         "operationId": "getV1MePerson-preferences",
         "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 200,
         "answer": {
           "profile": "person-preferences-v1",
@@ -4367,7 +4585,7 @@
           "complete": true,
           "items": [
             {
-              "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "kind": "person",
               "handle": null,
               "displayName": {
@@ -4396,7 +4614,7 @@
           "authorityEpoch": "0",
           "contexts": [
             {
-              "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "displayName": "Outcome operator",
               "handle": null,
               "kind": "person"
@@ -4417,14 +4635,14 @@
         "label": "join-acting-agent-profile",
         "operationId": "getV1AgentsById",
         "method": "GET",
-        "path": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 200,
         "answer": {
           "profile": "agent-read-v1",
-          "id": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "id": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "displayName": "Outcome operator",
           "kind": "person",
-          "revision": "https://rezics.com/id/7d6a7687-53a3-4f38-ba35-09a32db37b3d-agent-revision",
+          "revision": "https://rezics.com/id/61c0f330-0c36-413a-90d1-9eaf233f9ddd-agent-revision",
           "bio": null,
           "displayNameInfo": null,
           "originalDisplayName": "Outcome operator",
@@ -4434,7 +4652,7 @@
           "handle": null,
           "address": {
             "prefix": "/a/",
-            "key": "VgSagpyeaxjveShVH22HfX",
+            "key": "DLdrrDJ7GDRbHcGgtjzyax",
             "suffixSource": ""
           },
           "disclosure": "public",
@@ -4445,7 +4663,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           },
           "library": {
@@ -4453,10 +4671,10 @@
             "statusShelvesVisible": true
           },
           "links": {
-            "profile": "/a/VgSagpyeaxjveShVH22HfX",
-            "works": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/works",
-            "collections": "/v1/agents/e841a77c-5262-4773-b233-46ab27b5de32/collections",
-            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32"
+            "profile": "/a/DLdrrDJ7GDRbHcGgtjzyax",
+            "works": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/works",
+            "collections": "/v1/agents/63eb82d0-b485-424a-a5a4-96e4ee80ca39/collections",
+            "statusShelves": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39"
           }
         },
         "headers": {
@@ -4468,35 +4686,35 @@
         "label": "join-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/addresses/resolve?scope=space&key=01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 200,
         "answer": {
           "profile": "address-resolution-v1",
           "scope": "space",
-          "key": "01a13876-0a86-7200-9460-02734c9c0680",
-          "holder": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "key": "01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "holder": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "status": "resolved",
           "state": "current",
           "canonical": {
             "prefix": "/r/",
-            "key": "outcome-77880ce6-e33",
+            "key": "outcome-685ae236-508",
             "suffixSource": ""
           },
           "capabilities": {
-            "realm": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680"
+            "realm": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d"
           }
         },
         "headers": {
           "cache-control": "public, max-age=30, must-revalidate",
           "content-type": "application/json",
-          "etag": "\"address-identity-116212c824064dacb6f6fe3c2f4d1b1da3468f5441f546899de627fc045571d8\""
+          "etag": "\"address-identity-bc1c1090c20ae58658069a8d66c6b2546c45ec04848f079ee03a627214a006be\""
         }
       },
       {
         "label": "join-public-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4513,7 +4731,7 @@
         "label": "join-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4530,12 +4748,12 @@
         "label": "join-landing",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-page",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-page",
         "status": 200,
         "answer": {
           "profile": "realm-join-page-v1",
-          "id": "https://rezics.com/id/01a13876-0a86-7200-9460-02734c9c0680",
-          "space": "https://rezics.com/id/01a13876-07bb-7727-b514-4af5c7c58966",
+          "id": "https://rezics.com/id/01a13af9-bac6-7364-9cd1-52d690906b8d",
+          "space": "https://rezics.com/id/01a13af9-ba10-74f4-b09f-dd7be2b26f67",
           "name": {
             "value": "Outcome private Realm",
             "language": "en",
@@ -4546,9 +4764,9 @@
           "rules": [],
           "action": {
             "kind": "request",
-            "href": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+            "href": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
             "method": "POST",
-            "basis": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis"
+            "basis": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis"
           },
           "listing": "listed",
           "discovery": {
@@ -4557,7 +4775,7 @@
             "referrerPolicy": null
           },
           "sourcePosition": {
-            "dataEpoch": "22fb4903-5ae4-4f4e-9e19-4871301fc380",
+            "dataEpoch": "48b2fb9e-7b3d-4ce3-8ab7-231c8b8f7668",
             "sequence": "13"
           }
         },
@@ -4570,7 +4788,7 @@
         "label": "join-own-requests-before-request",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4587,7 +4805,7 @@
         "label": "join-request-basis",
         "operationId": "getV1RealmsByRealmJoin-requestsBasis",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/basis?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 200,
         "answer": {
           "policyRevision": "1",
@@ -4604,9 +4822,9 @@
         "label": "join-request-submitted",
         "operationId": "postV1RealmsByRealmJoin-requests",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests",
         "body": {
-          "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "expectedMembershipGeneration": "0",
           "expectedPolicyRevision": "1",
           "termsRevision": "realm-membership-v1",
@@ -4614,7 +4832,7 @@
         },
         "status": 201,
         "answer": {
-          "requestId": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
+          "requestId": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
           "requestGeneration": "0",
           "state": "pending",
           "replayed": false
@@ -4628,19 +4846,19 @@
         "label": "own-request-pending",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "0",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:01.827Z",
+              "createdAt": "2026-10-14T15:13:53.791Z",
               "state": "pending",
               "decidedAt": null
             }
@@ -4657,16 +4875,16 @@
         "label": "request-withdrawn",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/b4839d4b-36fa-4fa1-9a8b-b0314021a761/withdraw",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/7bdfb2d2-7f19-4a6c-975f-3656c2ae1601/withdraw",
         "body": {
-          "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "expectedRequestGeneration": "0",
           "reason": "Withdraw operator request"
         },
         "status": 201,
         "answer": {
-          "receiptId": "45d3fe22-f890-4771-b9bc-eb55b56ae35b",
-          "requestId": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
+          "receiptId": "7b95a89f-dd87-4bb1-b288-b34fee7a360b",
+          "requestId": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
           "requestGeneration": "1",
           "generation": "6",
           "state": "withdrawn",
@@ -4683,21 +4901,21 @@
         "label": "own-request-withdrawn",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:01.827Z",
+              "createdAt": "2026-10-14T15:13:53.791Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:32:02.396Z"
+              "decidedAt": "2026-10-14T15:13:53.895Z"
             }
           ],
           "nextCursor": null,
@@ -4712,7 +4930,7 @@
         "label": "requests-address-space-missing",
         "operationId": "getV1SpacesBySpace",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/space_unavailable",
@@ -4729,7 +4947,7 @@
         "label": "requests-address-settings-refused",
         "operationId": "getV1SpacesBySpaceSettings",
         "method": "GET",
-        "path": "/v1/spaces/01a13876-0a86-7200-9460-02734c9c0680/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/spaces/01a13af9-bac6-7364-9cd1-52d690906b8d/settings?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/realm_management_denied",
@@ -4746,7 +4964,7 @@
         "label": "management-refused-realm-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&language=en",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&language=en",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4763,7 +4981,7 @@
         "label": "management-refused-realm-zone",
         "operationId": "getV1RealmsByRealmZone",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4780,7 +4998,7 @@
         "label": "requests-access-realm",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -4797,33 +5015,33 @@
         "label": "withdraw-confirm-own-request",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "a64b4bc0-6e30-4dfa-968a-e73658affb39",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
-              "requestGeneration": "0",
-              "membershipGeneration": "0",
-              "policyRevision": "1",
-              "termsRevision": "realm-membership-v1",
-              "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:03.839Z",
-              "state": "pending",
-              "decidedAt": null
-            },
-            {
-              "id": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:01.827Z",
+              "createdAt": "2026-10-14T15:13:53.791Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:32:02.396Z"
+              "decidedAt": "2026-10-14T15:13:53.895Z"
+            },
+            {
+              "id": "933b8c27-1ed0-4554-aca5-8780b5c42e9a",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
+              "requestGeneration": "0",
+              "membershipGeneration": "0",
+              "policyRevision": "1",
+              "termsRevision": "realm-membership-v1",
+              "reason": "Read and discuss the original fixture stories",
+              "createdAt": "2026-10-14T15:13:54.385Z",
+              "state": "pending",
+              "decidedAt": null
             }
           ],
           "nextCursor": null,
@@ -4838,16 +5056,16 @@
         "label": "withdraw-confirm",
         "operationId": "postV1RealmsByRealmJoin-requestsByRequestWithdraw",
         "method": "POST",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/a64b4bc0-6e30-4dfa-968a-e73658affb39/withdraw",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/933b8c27-1ed0-4554-aca5-8780b5c42e9a/withdraw",
         "body": {
-          "actingSubject": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+          "actingSubject": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
           "expectedRequestGeneration": "0",
           "reason": "I cannot join this month."
         },
         "status": 201,
         "answer": {
-          "receiptId": "1c5de0b1-814e-4a57-b147-392deaf5fc2b",
-          "requestId": "a64b4bc0-6e30-4dfa-968a-e73658affb39",
+          "receiptId": "006cd014-2736-4499-8f8e-83ed51835ed2",
+          "requestId": "933b8c27-1ed0-4554-aca5-8780b5c42e9a",
           "requestGeneration": "1",
           "generation": "6",
           "state": "withdrawn",
@@ -4864,33 +5082,33 @@
         "label": "withdraw-confirm-own-request-after",
         "operationId": "getV1RealmsByRealmJoin-requestsMine",
         "method": "GET",
-        "path": "/v1/realms/01a13876-0a86-7200-9460-02734c9c0680/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe841a77c-5262-4773-b233-46ab27b5de32&limit=50",
+        "path": "/v1/realms/01a13af9-bac6-7364-9cd1-52d690906b8d/join-requests/mine?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F63eb82d0-b485-424a-a5a4-96e4ee80ca39&limit=50",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "a64b4bc0-6e30-4dfa-968a-e73658affb39",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "7bdfb2d2-7f19-4a6c-975f-3656c2ae1601",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:03.839Z",
+              "createdAt": "2026-10-14T15:13:53.791Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:32:04.156Z"
+              "decidedAt": "2026-10-14T15:13:53.895Z"
             },
             {
-              "id": "b4839d4b-36fa-4fa1-9a8b-b0314021a761",
-              "member": "https://rezics.com/id/e841a77c-5262-4773-b233-46ab27b5de32",
+              "id": "933b8c27-1ed0-4554-aca5-8780b5c42e9a",
+              "member": "https://rezics.com/id/63eb82d0-b485-424a-a5a4-96e4ee80ca39",
               "requestGeneration": "1",
               "membershipGeneration": "0",
               "policyRevision": "1",
               "termsRevision": "realm-membership-v1",
               "reason": "Read and discuss the original fixture stories",
-              "createdAt": "2026-10-14T03:32:01.827Z",
+              "createdAt": "2026-10-14T15:13:54.385Z",
               "state": "withdrawn",
-              "decidedAt": "2026-10-14T03:32:02.396Z"
+              "decidedAt": "2026-10-14T15:13:54.435Z"
             }
           ],
           "nextCursor": null,

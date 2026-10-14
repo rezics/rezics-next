@@ -1,0 +1,732 @@
+{
+  "version": 1,
+  "row": "realm/closure-rankings",
+  "personas": {
+    "visitor": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "stranger": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb39c2b5b-377a-4375-b1ae-0be6ca25b134",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb39c2b5b-377a-4375-b1ae-0be6ca25b134",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb39c2b5b-377a-4375-b1ae-0be6ca25b134",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb39c2b5b-377a-4375-b1ae-0be6ca25b134",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "member": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F549afce7-8f72-4886-b975-a347d8dcabfa",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F549afce7-8f72-4886-b975-a347d8dcabfa",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F549afce7-8f72-4886-b975-a347d8dcabfa",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F549afce7-8f72-4886-b975-a347d8dcabfa",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "owner": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fef84d5b5-31dd-4361-a1c4-fd9bceab283c",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fef84d5b5-31dd-4361-a1c4-fd9bceab283c",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fef84d5b5-31dd-4361-a1c4-fd9bceab283c",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fef84d5b5-31dd-4361-a1c4-fd9bceab283c",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "moderator": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F86c361b7-6256-45fb-87b7-25b778aae612",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F86c361b7-6256-45fb-87b7-25b778aae612",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F86c361b7-6256-45fb-87b7-25b778aae612",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F86c361b7-6256-45fb-87b7-25b778aae612",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ],
+    "operator": [
+      {
+        "label": "best-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=best&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fea4a196b-e819-49a1-90fd-317235d81859",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-week-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=week&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fea4a196b-e819-49a1-90fd-317235d81859",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-month-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=month&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fea4a196b-e819-49a1-90fd-317235d81859",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "top-all-missing",
+        "operationId": "getV1RealmsByRealmThreads",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/threads?sort=top&window=all&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fea4a196b-e819-49a1-90fd-317235d81859",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-day-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=day&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-week-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=week&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "ranking-module-month-missing",
+        "operationId": "getV1RealmsByRealmRankings",
+        "method": "GET",
+        "path": "/v1/realms/01a13af8-996f-7076-912d-7bce88c7cae1/rankings?interval=month&metric=reads&limit=10",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/work_unavailable",
+          "title": "Resource is unavailable",
+          "status": 404,
+          "code": "work_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      }
+    ]
+  }
+}

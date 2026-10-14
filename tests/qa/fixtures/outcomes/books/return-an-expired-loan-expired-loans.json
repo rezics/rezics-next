@@ -7,7 +7,7 @@
         "label": "active-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -24,7 +24,7 @@
         "label": "overdue-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -41,7 +41,7 @@
         "label": "returned-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 401,
         "answer": {
           "type": "https://rezics.com/problems/account_assertion_denied",
@@ -58,9 +58,9 @@
         "label": "return-loan-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/68b59569-f872-4fc4-a546-5d9b90d8fd42/return",
+        "path": "/v1/me/library-loans/a0214f75-d142-4f7c-b3c0-3f22ec87a2af/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 401,
@@ -81,7 +81,7 @@
         "label": "active-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -98,7 +98,7 @@
         "label": "overdue-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -115,7 +115,7 @@
         "label": "returned-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -132,9 +132,9 @@
         "label": "return-loan-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/68b59569-f872-4fc4-a546-5d9b90d8fd42/return",
+        "path": "/v1/me/library-loans/a0214f75-d142-4f7c-b3c0-3f22ec87a2af/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 403,
@@ -155,7 +155,7 @@
         "label": "active-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -172,7 +172,7 @@
         "label": "overdue-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -189,7 +189,7 @@
         "label": "returned-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -206,9 +206,9 @@
         "label": "return-loan-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/68b59569-f872-4fc4-a546-5d9b90d8fd42/return",
+        "path": "/v1/me/library-loans/a0214f75-d142-4f7c-b3c0-3f22ec87a2af/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 403,
@@ -227,7 +227,7 @@
         "label": "empty-active-loans",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F74e47ae1-ff8b-430a-8935-3dbca34c15c9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F10389d75-c16e-4c8d-920a-ef687584e7aa&state=active&limit=20",
         "status": 200,
         "answer": {
           "items": [],
@@ -247,9 +247,9 @@
         "method": "POST",
         "path": "/v1/me/library-copies",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 0,
-          "release": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+          "release": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
           "format": "paperback",
           "acquiredFrom": {
             "kind": "name",
@@ -258,9 +258,9 @@
         },
         "status": 201,
         "answer": {
-          "id": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-          "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-          "release": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+          "id": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "release": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
           "format": "paperback",
           "acquiredFrom": {
             "kind": "name",
@@ -271,7 +271,7 @@
           "ownedThrough": null,
           "removed": false,
           "version": 1,
-          "changedAt": "2026-10-13T21:15:09.665Z",
+          "changedAt": "2026-10-14T15:08:52.383Z",
           "replayed": false
         },
         "headers": {
@@ -285,31 +285,31 @@
         "method": "POST",
         "path": "/v1/me/library-loans",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 0,
-          "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
+          "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
           "direction": "lent",
           "counterparty": {
             "kind": "name",
             "name": "Private fixture borrower"
           },
-          "startedAt": "2026-10-10T21:15:11.107Z",
-          "dueAt": "2026-10-12T21:15:11.107Z"
+          "startedAt": "2026-10-11T15:08:52.426Z",
+          "dueAt": "2026-10-13T15:08:52.426Z"
         },
         "status": 201,
         "answer": {
-          "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-          "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
+          "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+          "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
           "direction": "lent",
           "counterparty": {
             "kind": "name",
             "name": "Private fixture borrower"
           },
-          "startedAt": "2026-10-10T21:15:11.107Z",
-          "dueAt": "2026-10-12T21:15:11.107Z",
+          "startedAt": "2026-10-11T15:08:52.426Z",
+          "dueAt": "2026-10-13T15:08:52.426Z",
           "returnedAt": null,
           "version": 1,
-          "changedAt": "2026-10-13T21:15:10.699Z",
+          "changedAt": "2026-10-14T15:08:52.479Z",
           "state": "overdue",
           "replayed": false
         },
@@ -322,18 +322,18 @@
         "label": "overdue-before-return",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
-              "copy": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
-              "dueAt": "2026-10-12T21:15:06.115Z",
+              "id": "https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
+              "copy": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
+              "dueAt": "2026-10-13T15:08:50.868Z",
               "version": 1,
-              "changedAt": "2026-10-13T21:15:05.669Z",
+              "changedAt": "2026-10-14T15:08:50.929Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:06.115Z",
+              "startedAt": "2026-10-11T15:08:50.868Z",
               "returnedAt": null,
               "counterparty": {
                 "kind": "name",
@@ -342,13 +342,13 @@
               "state": "overdue"
             },
             {
-              "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-              "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-              "dueAt": "2026-10-12T21:15:11.107Z",
+              "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+              "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+              "dueAt": "2026-10-13T15:08:52.426Z",
               "version": 1,
-              "changedAt": "2026-10-13T21:15:10.699Z",
+              "changedAt": "2026-10-14T15:08:52.479Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:11.107Z",
+              "startedAt": "2026-10-11T15:08:52.426Z",
               "returnedAt": null,
               "counterparty": {
                 "kind": "name",
@@ -369,7 +369,7 @@
         "label": "shelf-directory",
         "operationId": "getV1MeShelves",
         "method": "GET",
-        "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&limit=20",
+        "path": "/v1/me/shelves?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
         "status": 200,
         "answer": {
           "profile": "reader-shelves-v1",
@@ -377,7 +377,7 @@
             {
               "status": "reading",
               "count": 2,
-              "changedAt": "2026-10-13 21:15:02.062211+00"
+              "changedAt": "2026-10-14 15:08:49.364195+00"
             },
             {
               "status": "want-to-read",
@@ -393,7 +393,7 @@
           "items": [],
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "83e3a712-6183-48f6-b45a-133136b973fb",
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
             "sequence": "27"
           },
           "count": {
@@ -411,7 +411,7 @@
         "label": "library-visibility",
         "operationId": "getV1AgentsByIdLibrary-visibility",
         "method": "GET",
-        "path": "/v1/agents/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9/library-visibility",
+        "path": "/v1/agents/b1078f1f-8062-4b75-9681-9d543f388b22/library-visibility",
         "status": 200,
         "answer": {
           "visibility": "private",
@@ -438,7 +438,7 @@
           "items": [],
           "nextCursor": null,
           "sourcePosition": {
-            "dataEpoch": "83e3a712-6183-48f6-b45a-133136b973fb",
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
             "sequence": "27"
           },
           "count": {
@@ -456,18 +456,18 @@
         "label": "active-loans-page",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
-              "copy": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
-              "dueAt": "2026-10-12T21:15:06.115Z",
+              "id": "https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
+              "copy": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
+              "dueAt": "2026-10-13T15:08:50.868Z",
               "version": 1,
-              "changedAt": "2026-10-13T21:15:05.669Z",
+              "changedAt": "2026-10-14T15:08:50.929Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:06.115Z",
+              "startedAt": "2026-10-11T15:08:50.868Z",
               "returnedAt": null,
               "counterparty": {
                 "kind": "name",
@@ -476,13 +476,13 @@
               "state": "overdue"
             },
             {
-              "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-              "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-              "dueAt": "2026-10-12T21:15:11.107Z",
+              "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+              "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+              "dueAt": "2026-10-13T15:08:52.426Z",
               "version": 1,
-              "changedAt": "2026-10-13T21:15:10.699Z",
+              "changedAt": "2026-10-14T15:08:52.479Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:11.107Z",
+              "startedAt": "2026-10-11T15:08:52.426Z",
               "returnedAt": null,
               "counterparty": {
                 "kind": "name",
@@ -503,17 +503,17 @@
         "label": "copy-export-0",
         "operationId": "getV1MeLibrary-export",
         "method": "GET",
-        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&limit=20",
+        "path": "/v1/me/library-export?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&limit=20",
         "status": 200,
         "answer": {
           "profile": "rezics-library-export-v1",
           "rows": [
             {
               "kind": "entry",
-              "sourceId": "status:https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
+              "sourceId": "status:https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
               "target": null,
               "identifiers": [],
               "status": "reading",
@@ -531,10 +531,10 @@
             },
             {
               "kind": "entry",
-              "sourceId": "status:https://rezics.com/id/01a1371d-f282-7098-84ec-02e276ba3f7b",
+              "sourceId": "status:https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-f282-7098-84ec-02e276ba3f7b",
+              "work": "https://rezics.com/id/01a13af5-561d-7460-9ce3-45084c0a8169",
               "target": null,
               "identifiers": [],
               "status": "reading",
@@ -552,11 +552,11 @@
             },
             {
               "kind": "retained",
-              "sourceId": "copy:https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
+              "sourceId": "copy:https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-              "target": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "target": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
               "identifiers": [],
               "status": null,
               "startedOn": null,
@@ -569,13 +569,13 @@
               "session": null,
               "raw": {
                 "libraryCopy": {
-                  "id": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-                  "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
+                  "id": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
+                  "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
                   "format": "paperback",
-                  "release": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+                  "release": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
                   "removed": false,
                   "version": 1,
-                  "changedAt": "2026-10-13T21:15:09.665Z",
+                  "changedAt": "2026-10-14T15:08:50.830Z",
                   "ownedFrom": null,
                   "acquiredAt": null,
                   "acquiredFrom": {
@@ -587,12 +587,12 @@
                 "jsonLd": {
                   "@context": "https://schema.org",
                   "@type": "OwnershipInfo",
-                  "@id": "urn:rezics:ownership:449437ca-9d27-43d1-b916-65a65a1409c5",
+                  "@id": "urn:rezics:ownership:deded2fe-7120-4971-9128-8b4f6c4544b9",
                   "typeOfGood": {
-                    "@id": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
+                    "@id": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
                     "@type": "Product",
                     "isBasedOn": {
-                      "@id": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394"
+                      "@id": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6"
                     },
                     "additionalProperty": {
                       "@type": "PropertyValue",
@@ -608,11 +608,11 @@
             },
             {
               "kind": "retained",
-              "sourceId": "copy:https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
+              "sourceId": "copy:https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-              "target": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "target": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
               "identifiers": [],
               "status": null,
               "startedOn": null,
@@ -625,13 +625,13 @@
               "session": null,
               "raw": {
                 "libraryCopy": {
-                  "id": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
-                  "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
+                  "id": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+                  "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
                   "format": "paperback",
-                  "release": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+                  "release": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
                   "removed": false,
                   "version": 1,
-                  "changedAt": "2026-10-13T21:15:04.839Z",
+                  "changedAt": "2026-10-14T15:08:52.383Z",
                   "ownedFrom": null,
                   "acquiredAt": null,
                   "acquiredFrom": {
@@ -643,12 +643,12 @@
                 "jsonLd": {
                   "@context": "https://schema.org",
                   "@type": "OwnershipInfo",
-                  "@id": "urn:rezics:ownership:c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
+                  "@id": "urn:rezics:ownership:e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
                   "typeOfGood": {
-                    "@id": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
+                    "@id": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
                     "@type": "Product",
                     "isBasedOn": {
-                      "@id": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394"
+                      "@id": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6"
                     },
                     "additionalProperty": {
                       "@type": "PropertyValue",
@@ -664,11 +664,11 @@
             },
             {
               "kind": "retained",
-              "sourceId": "loan:https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
+              "sourceId": "loan:https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-              "target": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "target": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
               "identifiers": [],
               "status": null,
               "startedOn": null,
@@ -681,13 +681,13 @@
               "session": null,
               "raw": {
                 "libraryLoan": {
-                  "id": "https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
-                  "copy": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
-                  "dueAt": "2026-10-12T21:15:06.115Z",
+                  "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+                  "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+                  "dueAt": "2026-10-13T15:08:52.426Z",
                   "version": 1,
-                  "changedAt": "2026-10-13T21:15:05.669Z",
+                  "changedAt": "2026-10-14T15:08:52.479Z",
                   "direction": "lent",
-                  "startedAt": "2026-10-10T21:15:06.115Z",
+                  "startedAt": "2026-10-11T15:08:52.426Z",
                   "returnedAt": null,
                   "counterparty": {
                     "kind": "name",
@@ -699,19 +699,19 @@
                     "@vocab": "https://schema.org/",
                     "rezics": "https://rezics.com/vocab/"
                   },
-                  "@id": "https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
+                  "@id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
                   "@type": "LendAction",
                   "agent": {
-                    "@id": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9"
+                    "@id": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22"
                   },
                   "object": {
-                    "@id": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9"
+                    "@id": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060"
                   },
                   "borrower": {
                     "name": "Private fixture borrower"
                   },
-                  "startTime": "2026-10-10T21:15:06.115Z",
-                  "endTime": "2026-10-12T21:15:06.115Z",
+                  "startTime": "2026-10-11T15:08:52.426Z",
+                  "endTime": "2026-10-13T15:08:52.426Z",
                   "actionStatus": {
                     "@id": "https://schema.org/ActiveActionStatus"
                   }
@@ -720,11 +720,11 @@
             },
             {
               "kind": "retained",
-              "sourceId": "loan:https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
+              "sourceId": "loan:https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
               "title": "",
               "creators": [],
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-              "target": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "target": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
               "identifiers": [],
               "status": null,
               "startedOn": null,
@@ -737,13 +737,13 @@
               "session": null,
               "raw": {
                 "libraryLoan": {
-                  "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-                  "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-                  "dueAt": "2026-10-12T21:15:11.107Z",
+                  "id": "https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
+                  "copy": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
+                  "dueAt": "2026-10-13T15:08:50.868Z",
                   "version": 1,
-                  "changedAt": "2026-10-13T21:15:10.699Z",
+                  "changedAt": "2026-10-14T15:08:50.929Z",
                   "direction": "lent",
-                  "startedAt": "2026-10-10T21:15:11.107Z",
+                  "startedAt": "2026-10-11T15:08:50.868Z",
                   "returnedAt": null,
                   "counterparty": {
                     "kind": "name",
@@ -755,19 +755,19 @@
                     "@vocab": "https://schema.org/",
                     "rezics": "https://rezics.com/vocab/"
                   },
-                  "@id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
+                  "@id": "https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
                   "@type": "LendAction",
                   "agent": {
-                    "@id": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9"
+                    "@id": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22"
                   },
                   "object": {
-                    "@id": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5"
+                    "@id": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9"
                   },
                   "borrower": {
                     "name": "Private fixture borrower"
                   },
-                  "startTime": "2026-10-10T21:15:11.107Z",
-                  "endTime": "2026-10-12T21:15:11.107Z",
+                  "startTime": "2026-10-11T15:08:50.868Z",
+                  "endTime": "2026-10-13T15:08:50.868Z",
                   "actionStatus": {
                     "@id": "https://schema.org/ActiveActionStatus"
                   }
@@ -775,7 +775,7 @@
               }
             }
           ],
-          "snapshot": "8ytpTZ5GEZnJLYh69gfK5yggWiQvk4bHWrTD0Qy4nIrv9kdW1Jq_5oQQAVKsOBb--V0bJMmEnfQumdjt0nyQgGGZDWQPF3VZzbTwtX8pHyBcJfOHd_RvnnqPkywm6LoWnV0cupqPzcYkZpmkNzY4ZEZpvZx6dTNj5DmUEfUGF9767NVFC-RUEHLB1KxWoP-hpuU42Zr2kjwCUltGRUV_qBtGJZwFEW7cBjQwCAyGBKT6HWtcARKRg5OhXlyAQ1nYhI1Ax9g4ZomLHTnOpgpo_-V3iBgIA02D7cINNI0f6exjaa_td_lOtm5eaEA-9iZsMKTWvjQ0hR28paOeXBRzL68MnaBkqZUM4zjeqva9S1ZfOwh4i3TfXJZcXgwQRcwnRnCPAKpIPhxL1qHjuEzSG6XLkbzPygpKE9GMlmkM",
+          "snapshot": "DkToi1uIS1dmsHLQE0t7pO3_Y_6F7omHea2tOh2Fjt-48eLQuuNkG8L04lmJEoB99ttIm6ByyEIQl4OpVSA9xAHfCS96q1ao08wShs8fWRFv_gSm4Hwrqv4ARTHvRL4ONQpb2aDfJzDkkqSRBtZ7Bn3reMYyBiK6ZGE59ZJ3u7W8gPVLO086Rx_UWB_B_1GFS2_AR4bydHiaRhlRbj0-gHa-fh345OpgJOCB090BAn-ceDTMcnOJyYBB4oJf0Jf63F0Q6_iLI-99LAXpJP7v-ISYTwDQq5BAuYhKihZlcnAphr_mAis69yFa_Nkot2KZ-zdPpcP4Jxn_Qi6JBkC-JqGs7SPU4bClGfjuDP7K-6JS2ZTRq5X0be-m6cWLCf0gojIbf2s1rjXHvguGANTDZ3Z3NwRXGm0CezG_GfK9",
           "nextCursor": null
         },
         "headers": {
@@ -787,13 +787,13 @@
         "label": "loan-work-label",
         "operationId": "getV1WorksById",
         "method": "GET",
-        "path": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&language=en",
+        "path": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&language=en",
         "status": 200,
         "answer": {
           "profile": "work-read-v1",
-          "id": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-          "revision": "https://rezics.com/id/01a1371d-cd3d-73a5-8110-16fc0bddba28",
-          "mainVersion": "https://rezics.com/id/01a1371d-cd3d-73a4-8b16-d480c99f7fad",
+          "id": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "revision": "https://rezics.com/id/01a13af5-447a-768c-853b-2ff945041438",
+          "mainVersion": "https://rezics.com/id/01a13af5-447a-768b-bd1c-dbd2d2d78c19",
           "title": {
             "value": "Original outcome volume",
             "language": "en",
@@ -804,7 +804,7 @@
             "kind": "fallback",
             "policy": "avatar-fallback-v1",
             "resourceType": "work",
-            "key": "8ecca7c0bdc5c6e9b5647e8f00d3fe41"
+            "key": "1586e40a5de2ce2cf0c2f42d894dde43"
           },
           "types": [
             "https://schema.org/Book"
@@ -816,29 +816,30 @@
           "lastUpdatedAt": null,
           "disclosure": "public",
           "publicationState": "unpublished",
+          "structurePublicationHead": null,
           "descriptionObligations": {
             "status": "unassessed"
           },
           "description": null,
           "metadataRevision": null,
           "originalTitle": null,
-          "mainVersionRevision": "https://rezics.com/id/01a1371d-ec55-7463-a5f7-53b3d8974107",
+          "mainVersionRevision": "https://rezics.com/id/01a13af5-51d5-7318-ac6c-f39ffba8b888",
           "mainVersionLabel": null,
           "selectedLanguage": "en",
           "sourcePosition": {
-            "dataEpoch": "83e3a712-6183-48f6-b45a-133136b973fb",
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
             "sequence": "27",
-            "dependencyToken": "c3ad00b3a4f7de0226d96bb3da1e0dd31272067638bf9eacea7856ef25f03721"
+            "dependencyToken": "657073d6883a8ea7d3b4b8c7c3ac64dd10de531f46947eb1bdcce2ca2321da1a"
           },
           "links": {
             "versions": "/v1/query#work-versions",
-            "classifications": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/classifications",
+            "classifications": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/classifications",
             "adoptions": "/v1/query#work-adoptions",
-            "ratings": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/ratings",
-            "history": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/history",
-            "credits": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/credits",
-            "metadata": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/metadata",
-            "editions": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/editions"
+            "ratings": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/ratings",
+            "history": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/history",
+            "credits": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/credits",
+            "metadata": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/metadata",
+            "editions": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/editions"
           }
         },
         "headers": {
@@ -850,12 +851,12 @@
         "label": "loan-release-label",
         "operationId": "getV1WorksByIdReleasesByRelease",
         "method": "GET",
-        "path": "/v1/works/01a1371d-cd3d-73a3-9136-0f02a4f3362f/releases/c9317945-15e0-4aba-aa8c-368d5ee6b394?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+        "path": "/v1/works/01a13af5-447a-768a-9dd7-365928423f2f/releases/d63c25af-d369-4bf6-9ff0-2921671cf4f6?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22",
         "status": 200,
         "answer": {
           "profile": "release-v2",
-          "id": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
-          "revision": "https://rezics.com/id/01a1371e-5f6c-772e-890c-fe3aa2e81558",
+          "id": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
+          "revision": "https://rezics.com/id/01a13af5-75fa-7221-a6b5-86831e6fd097",
           "kind": "formal",
           "status": "official",
           "contentLanguages": [
@@ -879,8 +880,8 @@
             {
               "realization": null,
               "revision": null,
-              "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-              "mainVersion": "https://rezics.com/id/01a1371d-cd3d-73a4-8b16-d480c99f7fad",
+              "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+              "mainVersion": "https://rezics.com/id/01a13af5-447a-768b-bd1c-dbd2d2d78c19",
               "completeness": "unknown",
               "language": null
             }
@@ -891,7 +892,7 @@
           "territory": null,
           "snapshots": [],
           "sourcePosition": {
-            "dataEpoch": "83e3a712-6183-48f6-b45a-133136b973fb",
+            "dataEpoch": "910b283e-bc39-45b1-a8e8-3dde9db0901b",
             "sequence": "27"
           }
         },
@@ -904,9 +905,9 @@
         "label": "loaned-copy-removal-refused",
         "operationId": "deleteV1MeLibrary-copiesById",
         "method": "DELETE",
-        "path": "/v1/me/library-copies/449437ca-9d27-43d1-b916-65a65a1409c5",
+        "path": "/v1/me/library-copies/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 409,
@@ -925,21 +926,21 @@
         "label": "return-overdue-loan",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/6ab1965a-95c5-4bc5-9928-0919161f500c/return",
+        "path": "/v1/me/library-loans/191f0c3d-6749-4a8a-a142-9b75ae620c52/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 200,
         "answer": {
-          "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-          "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-          "dueAt": "2026-10-12T21:15:11.107Z",
+          "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+          "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+          "dueAt": "2026-10-13T15:08:52.426Z",
           "version": 2,
-          "changedAt": "2026-10-13T21:15:16.927Z",
+          "changedAt": "2026-10-14T15:08:55.206Z",
           "direction": "lent",
-          "startedAt": "2026-10-10T21:15:11.107Z",
-          "returnedAt": "2026-10-13T21:15:16.927Z",
+          "startedAt": "2026-10-11T15:08:52.426Z",
+          "returnedAt": "2026-10-14T15:08:55.206Z",
           "counterparty": {
             "kind": "name",
             "name": "Private fixture borrower"
@@ -956,22 +957,22 @@
         "label": "return-replayed",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/6ab1965a-95c5-4bc5-9928-0919161f500c/return",
+        "path": "/v1/me/library-loans/191f0c3d-6749-4a8a-a142-9b75ae620c52/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 200,
         "answer": {
-          "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-          "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-          "dueAt": "2026-10-12T21:15:11.107Z",
+          "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+          "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+          "dueAt": "2026-10-13T15:08:52.426Z",
           "state": "returned",
           "version": 2,
-          "changedAt": "2026-10-13T21:15:16.927Z",
+          "changedAt": "2026-10-14T15:08:55.206Z",
           "direction": "lent",
-          "startedAt": "2026-10-10T21:15:11.107Z",
-          "returnedAt": "2026-10-13T21:15:16.927Z",
+          "startedAt": "2026-10-11T15:08:52.426Z",
+          "returnedAt": "2026-10-14T15:08:55.206Z",
           "counterparty": {
             "kind": "name",
             "name": "Private fixture borrower"
@@ -987,9 +988,9 @@
         "label": "stale-return-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/6ab1965a-95c5-4bc5-9928-0919161f500c/return",
+        "path": "/v1/me/library-loans/191f0c3d-6749-4a8a-a142-9b75ae620c52/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 409,
@@ -1008,18 +1009,18 @@
         "label": "overdue-after-return",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "https://rezics.com/id/68b59569-f872-4fc4-a546-5d9b90d8fd42",
-              "copy": "https://rezics.com/id/c3a68fb8-7610-4f64-b9d6-7ea3218948b9",
-              "dueAt": "2026-10-12T21:15:06.115Z",
+              "id": "https://rezics.com/id/a0214f75-d142-4f7c-b3c0-3f22ec87a2af",
+              "copy": "https://rezics.com/id/deded2fe-7120-4971-9128-8b4f6c4544b9",
+              "dueAt": "2026-10-13T15:08:50.868Z",
               "version": 1,
-              "changedAt": "2026-10-13T21:15:05.669Z",
+              "changedAt": "2026-10-14T15:08:50.929Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:06.115Z",
+              "startedAt": "2026-10-11T15:08:50.868Z",
               "returnedAt": null,
               "counterparty": {
                 "kind": "name",
@@ -1040,19 +1041,19 @@
         "label": "returned-history",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 200,
         "answer": {
           "items": [
             {
-              "id": "https://rezics.com/id/6ab1965a-95c5-4bc5-9928-0919161f500c",
-              "copy": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-              "dueAt": "2026-10-12T21:15:11.107Z",
+              "id": "https://rezics.com/id/191f0c3d-6749-4a8a-a142-9b75ae620c52",
+              "copy": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+              "dueAt": "2026-10-13T15:08:52.426Z",
               "version": 2,
-              "changedAt": "2026-10-13T21:15:16.927Z",
+              "changedAt": "2026-10-14T15:08:55.206Z",
               "direction": "lent",
-              "startedAt": "2026-10-10T21:15:11.107Z",
-              "returnedAt": "2026-10-13T21:15:16.927Z",
+              "startedAt": "2026-10-11T15:08:52.426Z",
+              "returnedAt": "2026-10-14T15:08:55.206Z",
               "counterparty": {
                 "kind": "name",
                 "name": "Private fixture borrower"
@@ -1072,16 +1073,16 @@
         "label": "remove-returned-copy",
         "operationId": "deleteV1MeLibrary-copiesById",
         "method": "DELETE",
-        "path": "/v1/me/library-copies/449437ca-9d27-43d1-b916-65a65a1409c5",
+        "path": "/v1/me/library-copies/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 200,
         "answer": {
-          "id": "https://rezics.com/id/449437ca-9d27-43d1-b916-65a65a1409c5",
-          "work": "https://rezics.com/id/01a1371d-cd3d-73a3-9136-0f02a4f3362f",
-          "release": "https://rezics.com/id/c9317945-15e0-4aba-aa8c-368d5ee6b394",
+          "id": "https://rezics.com/id/e3e4c4a1-1ad5-44bb-aadc-c45ed01fd060",
+          "work": "https://rezics.com/id/01a13af5-447a-768a-9dd7-365928423f2f",
+          "release": "https://rezics.com/id/d63c25af-d369-4bf6-9ff0-2921671cf4f6",
           "format": "paperback",
           "acquiredFrom": {
             "kind": "name",
@@ -1092,7 +1093,7 @@
           "ownedThrough": null,
           "removed": true,
           "version": 2,
-          "changedAt": "2026-10-13T21:15:19.124Z",
+          "changedAt": "2026-10-14T15:08:55.456Z",
           "replayed": false
         },
         "headers": {
@@ -1106,7 +1107,7 @@
         "label": "active-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1123,7 +1124,7 @@
         "label": "overdue-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1140,7 +1141,7 @@
         "label": "returned-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1157,9 +1158,9 @@
         "label": "return-loan-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/68b59569-f872-4fc4-a546-5d9b90d8fd42/return",
+        "path": "/v1/me/library-loans/a0214f75-d142-4f7c-b3c0-3f22ec87a2af/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 403,
@@ -1180,7 +1181,7 @@
         "label": "active-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=active&limit=20",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=active&limit=20",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1197,7 +1198,7 @@
         "label": "overdue-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=overdue",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=overdue",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1214,7 +1215,7 @@
         "label": "returned-loans-refused",
         "operationId": "getV1MeLibrary-loans",
         "method": "GET",
-        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F3eeb9bf0-f959-4cca-b6be-6f62383fb5e9&state=returned",
+        "path": "/v1/me/library-loans?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fb1078f1f-8062-4b75-9681-9d543f388b22&state=returned",
         "status": 403,
         "answer": {
           "type": "https://rezics.com/problems/library_record_denied",
@@ -1231,9 +1232,9 @@
         "label": "return-loan-refused",
         "operationId": "postV1MeLibrary-loansByIdReturn",
         "method": "POST",
-        "path": "/v1/me/library-loans/68b59569-f872-4fc4-a546-5d9b90d8fd42/return",
+        "path": "/v1/me/library-loans/a0214f75-d142-4f7c-b3c0-3f22ec87a2af/return",
         "body": {
-          "actingSubject": "https://rezics.com/id/3eeb9bf0-f959-4cca-b6be-6f62383fb5e9",
+          "actingSubject": "https://rezics.com/id/b1078f1f-8062-4b75-9681-9d543f388b22",
           "expectedVersion": 1
         },
         "status": 403,
