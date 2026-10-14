@@ -542,7 +542,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     const threadUrl = await link.getAttribute('href');
     expect(await discussion(other).getByRole('link', { name: aboutDiscussionMessages.en.continueThread }).getAttribute('href')).toBe(threadUrl);
     await pressByKeyboard(page, link, found, 'Open the full discussion');
-    await expect(page).toHaveURL(/\/discussions\//);
+    await expect(page).toHaveURL(/\/discussions\//, { timeout: 30_000 });
     await page.reload();
     for (const body of bodies) await expect(page.getByText(body, { exact: true }).first()).toBeVisible({ timeout: 30_000 });
 

@@ -157,7 +157,7 @@ function AboutDiscussionEntry({ read, locale, href, api, retain = true, recovery
           </article>;
         })}
       </div>
-      <LocalizedLink href={threadPath} className="text-primary underline underline-offset-4">{t.continueThread}</LocalizedLink>
+      <LocalizedLink href={threadPath} documentNavigation className="text-primary underline underline-offset-4">{t.continueThread}</LocalizedLink>
     </> : read.kind === 'ready' ? <p className="text-muted-foreground text-sm">{t.empty}</p> : null}
     {mode === 'sign-in' ? <LocalizedLink href={signInPath(localizedPath(href, locale))}>{t.signIn}</LocalizedLink>
       : mode === 'identity' ? <LocalizedLink href={`/identity?next=${encodeURIComponent(localizedPath(href, locale))}`}>{t.chooseIdentity}</LocalizedLink>
