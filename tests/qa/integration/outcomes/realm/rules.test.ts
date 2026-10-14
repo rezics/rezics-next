@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
 import rules from '../../../../../scripts/qa/cases/outcomes/realm/rules.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordFrameReads } from '../../../support/frame-reads.ts';
@@ -157,6 +158,20 @@ async function pageReads(name: PersonaName, fixture: PersonaSessions, prefix: st
   const personal = recording.session(name, person);
   const anonymous = recording.session(name, fixture.visitor);
   const discard = async (pending: Promise<Response>) => { await (await pending).body?.cancel(); };
+  const clientRead = async (label: string, session: PersonaSession,
+    build: (client: ReturnType<typeof mainApiWithToken>) => PromiseLike<unknown>): Promise<Response> => {
+    let response: Response | undefined;
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const answer = await recording.session(name, session)(`${prefix}-${label}`,
+        init?.method ?? 'GET', url.pathname + url.search);
+      response = answer.clone();
+      return answer;
+    }) as typeof fetch;
+    await build(mainApiWithToken(undefined, { fetcher }));
+    if (!response) throw new Error(`Page read ${label} sent no request`);
+    return response;
+  };
   // Prefix each visit's frame labels; its requests and identities stay with the shared helper.
   const frameRecording = new Proxy(recording, {
     get(target, property, receiver) {
@@ -168,52 +183,76 @@ async function pageReads(name: PersonaName, fixture: PersonaSessions, prefix: st
       };
     },
   });
-  await recordFrameReads(frameRecording, name, person, fixture.visitor, fixture.realm,
+  const frame = recordFrameReads(frameRecording, name, person, fixture.visitor, fixture.realm,
     fixture.zone, 'space', fixture.realm.slice(-36), 'rules');
-  if (person.actingSubject) {
-    for (const [label, path] of [
-      ['agent-choices', '/v1/me/agents?languages=en'],
-      ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
-      ['acting-agent-profile', `/v1/agents/${person.actingSubject.slice(-36)}?${acting(person)}`],
-    ] as const) await discard(personal(`${prefix}-${label}`, 'GET', path));
-  }
-  if (fixture.visibility === 'private') {
-    await discard((person.actingSubject ? personal : anonymous)(`${prefix}-rules-header`, 'GET',
-      `${rootOf(fixture)}${person.actingSubject ? `?${acting(person)}` : ''}`));
-    if (!['member', 'owner', 'moderator'].includes(name))
-      await discard(anonymous(`${prefix}-join-page`, 'GET', `${rootOf(fixture)}/join-page`));
-  }
-  await discard(personal(`${prefix}-management-header`, 'GET',
-    `${rootOf(fixture)}?language=en${person.actingSubject ? `&${acting(person)}` : ''}`));
-  if (!person.actingSubject) return;
-  const zone = await personal(`${prefix}-management-zone`, 'GET', `${rootOf(fixture)}/zone?${acting(person)}`);
-  if (zone.ok) {
-    const data = await zone.json() as { zone: string };
-    await discard(personal(`${prefix}-management-editor`, 'GET',
-      `/v1/zones/${data.zone.slice(-36)}/showcase-editor?${acting(person)}`));
-  } else await zone.body?.cancel();
-  const access = await personal(`${prefix}-management-space-direct`, 'GET',
-    `/v1/spaces/${fixture.realm.slice(-36)}/settings?${acting(person)}`);
-  let settingsAllowed = access.ok;
-  const fallback = [403, 404].includes(access.status);
-  await access.body?.cancel();
-  if (fallback) {
-    const header = await personal(`${prefix}-management-access-header`, 'GET', `${rootOf(fixture)}?${acting(person)}`);
-    if (header.ok) {
-      const data = await header.json() as { space: string };
-      const settings = await personal(`${prefix}-management-space-settings`, 'GET',
-        `/v1/spaces/${data.space.slice(-36)}/settings?${acting(person)}`);
-      settingsAllowed = settings.ok;
-      await settings.body?.cancel();
-    } else await header.body?.cancel();
-  }
-  if (settingsAllowed)
-    await discard(personal(`${prefix}-management-rule-settings`, 'GET', `${rootOf(fixture)}/settings?${acting(person)}`));
+  const identity = person.actingSubject ? Promise.all([
+    ['agent-choices', '/v1/me/agents?languages=en'],
+    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
+    ['acting-agent-profile', `/v1/agents/${person.actingSubject.slice(-36)}?${acting(person)}`],
+  ].map(([label, path]) => discard(personal(`${prefix}-${label}`, 'GET', path!)))) : Promise.resolve();
+  const rulesPage = async () => {
+    if (fixture.visibility === 'private') {
+      await discard((person.actingSubject ? personal : anonymous)(`${prefix}-rules-header`, 'GET',
+        `${rootOf(fixture)}${person.actingSubject ? `?${acting(person)}` : ''}`));
+      if (!['member', 'owner', 'moderator'].includes(name))
+        await discard(anonymous(`${prefix}-join-page`, 'GET', `${rootOf(fixture)}/join-page`));
+    }
+    if (fixture.visibility === 'private' && !['member', 'owner', 'moderator'].includes(name)) return;
+    const attached = await clientRead('rules-site-link', person, client =>
+      client.v1.realms({ realm: fixture.realm.slice(-36) }).zone.get({
+        query: { actingSubject: person.actingSubject ?? undefined },
+      }));
+    if (attached.ok) {
+      const data = await attached.json() as { zone: string };
+      await discard(clientRead('rules-site-address', person, client =>
+        client.v1.zones({ id: data.zone.slice(-36) }).presentation.get({
+          query: { actingSubject: person.actingSubject ?? undefined },
+        })));
+    } else await attached.body?.cancel();
+  };
+  const managementFrame = async () => {
+    const header = discard(clientRead('management-header', person, client =>
+      client.v1.realms({ realm: fixture.realm.slice(-36) }).get({ query: {
+        language: 'en', actingSubject: person.actingSubject ?? undefined,
+      } })));
+    if (!person.actingSubject) { await header; return; }
+    const zone = await clientRead('management-zone', person, client =>
+      client.v1.realms({ realm: fixture.realm.slice(-36) }).zone.get({ query: { actingSubject: person.actingSubject! } }));
+    if (zone.ok) {
+      const data = await zone.json() as { zone: string };
+      await discard(personal(`${prefix}-management-editor`, 'GET',
+        `/v1/zones/${data.zone.slice(-36)}/showcase-editor?${acting(person)}`));
+    } else await zone.body?.cancel();
+    await header;
+  };
+  const managementAccess = async () => {
+    if (!person.actingSubject) return;
+    const access = await personal(`${prefix}-management-space-direct`, 'GET',
+      `/v1/spaces/${fixture.realm.slice(-36)}/settings?${acting(person)}`);
+    let settingsAllowed = access.ok;
+    const fallback = [403, 404].includes(access.status);
+    await access.body?.cancel();
+    if (fallback) {
+      const header = await personal(`${prefix}-management-access-header`, 'GET', `${rootOf(fixture)}?${acting(person)}`);
+      if (header.ok) {
+        const data = await header.json() as { space: string };
+        const settings = await personal(`${prefix}-management-space-settings`, 'GET',
+          `/v1/spaces/${data.space.slice(-36)}/settings?${acting(person)}`);
+        settingsAllowed = settings.ok;
+        await settings.body?.cancel();
+      } else await header.body?.cancel();
+    }
+    if (settingsAllowed)
+      await discard(personal(`${prefix}-management-rule-settings`, 'GET', `${rootOf(fixture)}/settings?${acting(person)}`));
+  };
+  await Promise.all([frame, identity, rulesPage(), managementFrame(), managementAccess()]);
 }
 
 async function readRules(name: PersonaName) {
-  await pageReads(name, publicRealm, 'public-page');
-  await pageReads(name, privateRealm, 'private-page');
+  await Promise.all([
+    pageReads(name, publicRealm, 'public-page'),
+    pageReads(name, privateRealm, 'private-page'),
+  ]);
   for (const fixture of [publicRealm, privateRealm]) {
     const person = fixture[name],
       allowed = fixture === publicRealm || ['member', 'owner', 'moderator'].includes(name);
