@@ -21,6 +21,8 @@ final class HeadCasPolicy {
     private static final Node REVISIONS = uri(CommandPolicy.REVISIONS);
     private static final Node RECEIPTS = uri(CommandPolicy.RECEIPTS);
     private static final Node HEAD = rv("head");
+    private static final Node WORK = uri("https://schema.org/CreativeWork");
+    private static final Node SCALAR = rv("scalarValue");
     private static final Node SELECTION_HEAD = rv("selectionHead");
     private static final Node WORK_STRUCTURE_PUBLICATION_HEAD = rv("workStructurePublicationHead");
     private static final Node STATEMENT = RDF.Statement.asNode();
@@ -44,6 +46,17 @@ final class HeadCasPolicy {
         collect(modify.getDeleteQuads(), deleted);
         Set<Key> keys = new HashSet<>(inserted.keySet());
         keys.addAll(deleted.keySet());
+        // Scalar/type state on a controlled Work must move with its head.
+        // The transition below binds its exact successor, receipt and scope.
+        for (List<Quad> changes : List.of(modify.getInsertQuads(), modify.getDeleteQuads())) for (Quad quad : changes) {
+            if (CURRENT.equals(quad.getGraph())
+                && (SCALAR.equals(quad.getPredicate()) || RDF.type.asNode().equals(quad.getPredicate()))
+                && data.contains(CURRENT, quad.getSubject(), RDF.type.asNode(), WORK)
+                && (data.contains(CURRENT, quad.getSubject(), rv("titleControlHead"), Node.ANY)
+                    || data.contains(CURRENT, quad.getSubject(), rv("protectionHead"), Node.ANY))
+                && !keys.contains(new Key(quad.getSubject(), HEAD)))
+                return new Snapshot(List.of(), "controlled Work scalar/type edit requires a head transition");
+        }
         List<Transition> transitions = new ArrayList<>();
         Set<String> mainRetirements = new HashSet<>();
         for (Key key : keys) {

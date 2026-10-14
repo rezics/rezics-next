@@ -253,6 +253,8 @@ public class TitleControlPolicyTest {
                     + " { " + iri(WORK) + " " + field + " . } GRAPH " + iri(CommandPolicy.RECEIPTS)
                     + " { " + iri(RECEIPT) + " rv:outcome rv:Succeeded . } } WHERE {}";
                 assertNull(fixture.capture(update));
+                assertEquals("controlled Work scalar/type edit requires a head transition",
+                    HeadCasPolicy.capture(fixture.data, CommandPolicy.parse(update, RECEIPT), RECEIPT).error());
                 var protection = ProtectionPolicy.capture(fixture.data, CommandPolicy.parse(update, RECEIPT), RECEIPT,
                     "digest", update, null, KEY);
                 if (mode.equals("Open")) assertNull(protection);
