@@ -30,9 +30,17 @@ export async function recordFrameReads(
   const discard = async (pending: Promise<Response>) => { await (await pending).body?.cancel(); };
   await discard(read(publicRead, 'frame-realm-header', root));
   await discard(read(publicRead, 'frame-facets', '/v1/facets'));
-  await discard(read(publicRead, 'frame-address', `/v1/addresses/resolve?${new URLSearchParams({
-    scope: addressScope, key: addressKey,
-  })}`, { 'accept-language': 'en', 'x-rezics-display-languages': 'en' }));
+  const addressHeaders = { 'accept-language': 'en', 'x-rezics-display-languages': 'en' };
+  // The page resolves the canonical URL key, not the fixture's identity.
+  const addressUrl = (key: string) => `/v1/addresses/resolve?${new URLSearchParams({
+    scope: addressScope, key,
+  })}`;
+  const resolved = await visitor.main('GET', addressUrl(addressKey), undefined, undefined, { headers: addressHeaders });
+  if (!resolved.ok) throw new Error(`Frame address ${addressKey}: HTTP ${resolved.status}: ${await resolved.text()}`);
+  const address = await resolved.json() as { status: string; canonical?: { key: string } };
+  if (address.status !== 'resolved' || !address.canonical?.key)
+    throw new Error(`Frame address ${addressKey} has no resolved canonical key`);
+  await discard(read(publicRead, 'frame-address', addressUrl(address.canonical.key), addressHeaders));
   if (zone) {
     const zoneRoot = `/v1/zones/${zone.slice(-36)}`;
     let after: string | null = null;
