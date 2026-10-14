@@ -41,6 +41,10 @@ test('Concept steward retires the exact current head without changing retained r
     await author.grant('context:create:root', 'context.create');
     await author.grant(`statement:speak:${author.actor}`, 'statement.record');
     const work = await stack.publicWork(author.actor, ['en'], 'Retained Concept reference');
+    await author.grant(`work:edit:${work.work}`, 'statement.record');
+    const tag = { work: work.work, mainVersion: work.mainVersion, actingSubject: author.actor,
+      tag: { concept: created.concept }, acceptance: { kind: 'global' } };
+    await home.json<object>(await call('/v1/tag-proposals', tag), 201);
     const context = await home.json<{ context: string; semanticRevision: string }>(await call('/v1/contexts', {
       profile: 'context-v1', role: 'shared', disclosure: 'public', base: null,
       entries: [{ target: created.concept, relation: CLASSIFIED_AS, state: 'defined',
@@ -104,8 +108,6 @@ test('Concept steward retires the exact current head without changing retained r
         meaningKey: statement.meaningKey, meaningBasis: statement.meaningBasis,
         sourcePosition: statement.sourcePosition, replayed: true });
     expect((await call('/v1/statements', statementInput)).status).toBe(409);
-    const tag = { work: work.work, mainVersion: work.mainVersion, actingSubject: author.actor,
-      tag: { concept: created.concept }, acceptance: { kind: 'global' } };
     expect((await call('/v1/tag-proposals', tag)).status).toBe(409);
     expect((await call('/v1/classification-vocabulary', { ...input,
       scheme: { id: created.scheme, expectedHead: created.schemeHead }, broader: [created.concept] })).status).toBe(409);
