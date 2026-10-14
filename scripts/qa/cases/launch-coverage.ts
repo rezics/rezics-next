@@ -562,7 +562,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/zone-realm-discussion.test.ts',
       'a published Zone page opens one canonical discussion and preserves independent concurrent contributions',
       'Posts independent concurrent contributions through Main, resumes a pending child and checks replay, stale bindings and retained-root recovery.'),
-    browser: missing('L10', 'missing until the Zone resource page passes under concurrent writes; posting and reopen tests are fixme'),
+    browser: journeyBrowser('apps/web/tests/zone-realm-attachment.e2e.ts', 'attached-realm-discussion',
+      'attached-realm-discussion: two Persons post concurrently and reopen the same thread after reload',
+      'Two Persons post English and Japanese messages concurrently on a published Zone Work page, recover genuine pending writes, reload both sessions to see both contributions, reopen and reload the same full Realm thread by keyboard, and return to the attached discussion in Japanese.'),
   },
   {
     kind: 'books',
