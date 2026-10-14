@@ -1,6 +1,6 @@
 import { CommandRejected, type CommandValidation } from '../../infrastructure/fuseki.ts';
 import { profileValidations } from '../../infrastructure/profile.ts';
-import { assertNotInvalidProfileReceipt, validatedCommand } from '../../infrastructure/invalid-receipt.ts';
+import { assertNotInvalidProfileReceipt, finalizeInvalidProfile } from '../../infrastructure/invalid-receipt.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
@@ -228,7 +228,7 @@ export async function createClassificationContext(env: WorkActivationEnvironment
   const event = `urn:rezics:event:${hash(operation)}`;
   let updateError: unknown;
   try {
-    const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: 10_000,
+    const result = await env.fuseki.commandWithReceipt({ receipt, digest, validations, deadlineMs: 10_000,
       update: `PREFIX rv: <${RV}> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
@@ -263,6 +263,9 @@ export async function createClassificationContext(env: WorkActivationEnvironment
           rv:classificationContext ${iri(context)} ; rv:realm ${iri(input.realm)} ;
           rv:contextRevision ${iri(revision)} ; rv:datasetId ${iri(DATASET)} ;
           rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next .
+        ${selection ? `${iri(receipt)} rv:commandFamily "classification-context-v2" ;
+          rv:action "classification.context.configure" .` : ''}
+        ${expectedHead ? `${iri(receipt)} rv:expectedHead ${iri(expectedHead)} .` : ''}
         ${scheme ? `${iri(receipt)} rv:classificationScheme ${iri(scheme.id)} .` : ''}
       }
       GRAPH ${iri(GRAPHS.outbox)} {
@@ -305,13 +308,23 @@ export async function createClassificationContext(env: WorkActivationEnvironment
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:realm ?globalRealm } }
       BIND(?n + 1 AS ?next)
-    }` }, admission);
+    }` });
     if (result.status === 'unknown-profile') throw new CommandRejected(result);
     if (result.status === 'invalid') {
-      throw new InvalidClassificationContextInput(`Classification context validation ${result.status}`);
+      // A competing replacement can invalidate the native prestate before its
+      // guarded update. Seal the domain refusal so an idempotent replay agrees.
+      if (selection) {
+        await assertSelectedScheme(env, scheme);
+        const current = await readRealmClassificationContext(env, input.realm);
+        if (expectedHead === null ? current !== null : current?.contextRevision !== expectedHead)
+          throw new StaleClassificationContext('Expected Context head is stale');
+      }
+      if (await finalizeInvalidProfile(env.fuseki, env.lineage, receipt, digest, admission) === 'rejected')
+        throw new InvalidClassificationContextInput(`Classification context validation ${result.status}`);
     }
   } catch (error) {
-    if (error instanceof InvalidClassificationContextInput || error instanceof CommandRejected) throw error;
+    if (error instanceof InvalidClassificationContextInput || error instanceof CommandRejected
+      || error instanceof StaleClassificationContext || error instanceof ClassificationSchemeUnavailable) throw error;
     updateError = error;
   }
   const committed = await readClassificationContextReceipt(env, admission.id);

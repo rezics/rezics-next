@@ -201,4 +201,51 @@ public class HeadCasPolicyTest {
         assertEquals("Main Version head moves only with its selection", component(false, false, false, true, false));
         assertEquals("Main Version head moves only with its selection", component(false, false, false, true, true));
     }
+    private static String classificationContext(String defect) {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        String realm = "urn:test:classification-realm";
+        String profile = "https://rezics.com/definition/classification-context-v2";
+        try {
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(COMPONENT) + " a rv:ClassificationContext ; rv:head " + iri(OLD_MAIN)
+                + " ; rv:realm " + iri(realm) + " ; rv:contextRole rv:RealmClassification ; rv:contextState rv:Active ;"
+                + " rv:definitionProfile " + iri(profile) + " . " + iri(realm)
+                + " rv:classificationContext " + iri(COMPONENT) + " } }", DatasetFactory.wrap(data));
+            String text = "PREFIX rv: <" + RV + "> DELETE { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " } } INSERT { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT) + " rv:head " + iri(NEW_MAIN)
+                + " } GRAPH " + iri(CommandPolicy.REVISIONS) + " { " + iri(NEW_MAIN)
+                + " a rv:RevisionAnchor ; rv:component " + iri(COMPONENT) + " ; rv:predecessor " + iri(OLD_MAIN)
+                + " ; rv:modelRevision " + iri(profile) + " } GRAPH " + iri(CommandPolicy.RECEIPTS)
+                + " { " + iri(RECEIPT) + " rv:outcome rv:Succeeded ; rv:admissionId \"" + ADMISSION
+                + "\" ; rv:authorityEpoch \"0\" ; rv:admittedScope \"classification:context:"
+                + (defect.equals("scope") ? MAIN : realm) + "\" ; rv:realm " + iri(realm)
+                + " ; rv:classificationContext " + iri(defect.equals("context") ? MAIN : COMPONENT)
+                + " ; rv:contextRevision " + iri(defect.equals("revision") ? OLD_MAIN : NEW_MAIN)
+                + " ; rv:commandFamily \"classification-context-v2\" ; rv:action \"classification.context.configure\""
+                + (defect.equals("expected-head") ? "" : " ; rv:expectedHead " + iri(OLD_MAIN))
+                + " } } WHERE { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT)
+                + " rv:head " + iri(OLD_MAIN) + " } }";
+            CommandPolicy.Plan plan = CommandPolicy.parse(text, RECEIPT);
+            HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            if (defect.equals("realm")) {
+                data.delete(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(COMPONENT),
+                    NodeFactory.createURI(RV + "realm"), NodeFactory.createURI(realm));
+                data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(COMPONENT),
+                    NodeFactory.createURI(RV + "realm"), NodeFactory.createURI(MAIN));
+            }
+            return HeadCasPolicy.check(data, RECEIPT, before);
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void classificationContextCasPreservesRealmAndConfigurationAuthority() {
+        assertNull(classificationContext("valid"));
+        assertEquals("head transition Access scope differs from target", classificationContext("scope"));
+        for (String defect : java.util.List.of("realm", "context", "revision"))
+            assertEquals("classification Context head differs from its receipt or Realm", classificationContext(defect));
+        assertEquals("receipt expected head differs from transaction prestate", classificationContext("expected-head"));
+    }
+
 }

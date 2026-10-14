@@ -26,10 +26,11 @@ final class HeadCasPolicy {
     private static final Node STATEMENT = RDF.Statement.asNode();
     private static final Node CONTEXT = rv("SemanticContext");
     private static final Node CONCEPT = uri("http://www.w3.org/2004/02/skos/core#Concept");
+    private static final Node CLASSIFICATION_CONTEXT = rv("ClassificationContext");
 
     private record Key(Node subject, Node predicate) {}
     private record Transition(Key key, Node before, Node next, Node ownerType,
-                              List<Node> preserved, String language, Node work, boolean mainVersion) {}
+                              List<Node> preserved, String language, Node work, boolean mainVersion, Node classificationRealm) {}
     record Snapshot(List<Transition> transitions, String error, Set<String> pendingMainRetirements) {
         Snapshot(List<Transition> transitions, String error) { this(transitions, error, Set.of()); }
     }
@@ -102,16 +103,18 @@ final class HeadCasPolicy {
             boolean statement = data.contains(CURRENT, key.subject(), RDF.type.asNode(), STATEMENT);
             boolean context = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONTEXT);
             boolean concept = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONCEPT);
-            if (statement && context || concept && (statement || context))
+            boolean classification = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CLASSIFICATION_CONTEXT);
+            if ((statement ? 1 : 0) + (context ? 1 : 0) + (concept ? 1 : 0) + (classification ? 1 : 0) > 1)
                 return new Snapshot(List.of(), "head target has ambiguous owner profile");
             if (concept && (!data.contains(CURRENT, key.subject(), rv("conceptState"), rv("Active"))
                 || data.contains(CURRENT, key.subject(), rv("conceptState"), rv("Retired"))))
                 return new Snapshot(List.of(), "Concept retirement requires an active predecessor");
             transitions.add(new Transition(key, before, nextValues.getFirst(),
-                statement ? STATEMENT : context ? CONTEXT : concept ? CONCEPT : null, preserved, language,
+                statement ? STATEMENT : context ? CONTEXT : concept ? CONCEPT : classification ? CLASSIFICATION_CONTEXT : null, preserved, language,
                 one(data, CURRENT, key.subject(), rv("work")),
                 data.contains(CURRENT, Node.ANY, rv("mainVersion"), key.subject())
-                    || data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion"))));
+                    || data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion")),
+                classification ? one(data, CURRENT, key.subject(), rv("realm")) : null));
         }
         if (transitions.size() > 2 || transitions.stream()
             .anyMatch(change -> WORK_STRUCTURE_PUBLICATION_HEAD.equals(change.key().predicate()))
@@ -204,11 +207,31 @@ final class HeadCasPolicy {
             boolean statement = STATEMENT.equals(transition.ownerType());
             boolean context = CONTEXT.equals(transition.ownerType());
             boolean concept = CONCEPT.equals(transition.ownerType());
+            boolean classification = CLASSIFICATION_CONTEXT.equals(transition.ownerType());
             if (statement != data.contains(CURRENT, subject, RDF.type.asNode(), STATEMENT)
                 || context != data.contains(CURRENT, subject, RDF.type.asNode(), CONTEXT)
-                || concept != data.contains(CURRENT, subject, RDF.type.asNode(), CONCEPT))
+                || concept != data.contains(CURRENT, subject, RDF.type.asNode(), CONCEPT)
+                || classification != data.contains(CURRENT, subject, RDF.type.asNode(), CLASSIFICATION_CONTEXT))
                 return "head target owner profile changed";
-            if (statement || context) {
+            if (classification) {
+                Node realm = transition.classificationRealm();
+                Node profile = uri("https://rezics.com/definition/classification-context-v2");
+                if (before == null || realm == null || !realm.isURI()
+                    || !data.contains(CURRENT, subject, RDF.type.asNode(), CLASSIFICATION_CONTEXT)
+                    || !same(data, CURRENT, subject, "realm", realm)
+                    || !same(data, CURRENT, subject, "contextRole", rv("RealmClassification"))
+                    || !same(data, CURRENT, subject, "contextState", rv("Active"))
+                    || !same(data, CURRENT, subject, "definitionProfile", profile)
+                    || !same(data, CURRENT, realm, "classificationContext", subject)
+                    || !same(data, RECEIPTS, own, "realm", realm)
+                    || !same(data, RECEIPTS, own, "classificationContext", subject)
+                    || !same(data, RECEIPTS, own, "contextRevision", next)
+                    || !same(data, RECEIPTS, own, "action", NodeFactory.createLiteralString("classification.context.configure"))
+                    || !same(data, RECEIPTS, own, "commandFamily", NodeFactory.createLiteralString("classification-context-v2"))
+                    || !same(data, REVISIONS, next, "modelRevision", profile))
+                    return "classification Context head differs from its receipt or Realm";
+                requiredScope = "classification:context:" + realm.getURI();
+            } else if (statement || context) {
                 String family = statement ? "statement-withdraw-v1" : "context-revise-v1";
                 Node revisionType = statement ? rv("StatementRevision") : rv("ContextSemanticRevision");
                 Node model = uri(statement ? "https://rezics.com/definition/statement-v1"
