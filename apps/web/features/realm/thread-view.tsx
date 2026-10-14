@@ -24,7 +24,7 @@ import { ReplyComposer, type ReplyMode, type ReplyTarget } from '../feed/reply-c
 import { ReplyBody, ReplyByline, ReplyList, type ThreadContext } from '../feed/reply-tree.tsx';
 import { mainThreadApi, type ThreadApi } from '../feed/thread-api.ts';
 import { replyTree, THREAD_DEPTH, type ThreadRead, type ThreadReply, type ThreadSort } from '../feed/thread.ts';
-import { mergeThreadPage, threadContinuationHref } from './thread-pages.ts';
+import { assertThreadPage, mergeThreadPage, threadContinuationHref } from './thread-pages.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { CommunityIcon } from '../shell/community-icon.tsx';
 import LocalizedLink from '../shell/localized-link.tsx';
@@ -314,6 +314,8 @@ export function ThreadView({
       if (!data) throw new Error('Thread continuation unavailable');
       page = data;
     }
+    // Reject into MoreReplies' retry state before a React updater can throw during render.
+    assertThreadPage(read, page, continuation);
     setLoaded(current => current.source === initialRead
       ? { ...current, read: mergeThreadPage(current.read, page, continuation) } : current);
   };

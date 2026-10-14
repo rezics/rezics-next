@@ -9,10 +9,14 @@ export function threadContinuationHref(path: string, query: string, cursor?: str
   return `${path}${params.size ? `?${params}` : ''}`;
 }
 
-/** Keep loaded branches in Main's sibling order and replace only the consumed control. */
-export function mergeThreadPage(current: ThreadRead, page: ThreadRead, consumed: Continuation): ThreadRead {
+export function assertThreadPage(current: ThreadRead, page: ThreadRead, consumed: Continuation): void {
   if (page.realm !== current.realm || page.work.id !== current.work.id || page.rootRevision !== current.rootRevision
     || page.sort !== current.sort || page.focus !== consumed.reply) throw new Error('Thread continuation changed');
+}
+
+/** Keep loaded branches in Main's sibling order and replace only the consumed control. */
+export function mergeThreadPage(current: ThreadRead, page: ThreadRead, consumed: Continuation): ThreadRead {
+  assertThreadPage(current, page, consumed);
   const items = new Map(current.items.map((item) => [item.reply, item]));
   for (const item of page.items) items.set(item.reply, item);
   const controls = new Map((current.continuations ?? []).map((value) => [continuationKey(value), value]));
