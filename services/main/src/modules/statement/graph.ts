@@ -272,6 +272,10 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
       : '';
   const realmGuard = input.speaker.kind === 'realm'
     ? `GRAPH ${iri(GRAPHS.current)} { ${iri(input.speaker.realm)} a rv:Realm ; rv:realmState rv:Active . }` : '';
+  // Existing pinned Statements survive retirement; every new use must still be live.
+  const conceptGuard = input.value.kind === 'resource'
+    ? `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${term(input.value.iri)} rv:conceptState rv:Retired . } }` : '';
   await beforeCommit?.(statement,commandReceiptIri(admission.id,family));
   const committed = await commitCommand(env, admission, { family, digest: request.digest, validations, operation,
     component: statement, revision, expectedHead: null,
@@ -294,7 +298,7 @@ export async function recordStatement(env: WorkActivationEnvironment, admission:
         rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }`,
     where: `GRAPH ${iri(GRAPHS.current)} { ${iri(meaning.subject)} a ?subjectType .
       ${meaning.subject !== input.subject ? `${iri(input.subject)} a rv:Projection ; rv:projectionOf ${iri(meaning.subject)} .` : ''} }
-      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard} ${definitions.guard} ${directInterpretationGuard}
+      ${realmGuard} ${pinGuard} ${selectionGuard} ${explicitGuard} ${definitionGuard} ${definitions.guard} ${directInterpretationGuard} ${conceptGuard}
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(statement)} ?p ?o } }`,
   });
   if (committed) return checkedCommandReceipt(committed, admission, request.digest);

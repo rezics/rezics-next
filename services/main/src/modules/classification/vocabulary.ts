@@ -9,6 +9,7 @@ import {
 } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
+import { readComponentState } from '../work/history.ts';
 import {
   DATASET,
   GRAPHS,
@@ -70,6 +71,17 @@ export interface VocabularyReceipt extends ClassificationPropositionReceipt {
   schemeHead?: string;
   conceptHead?: string;
 }
+export interface RetireVocabularyConceptInput {
+  actingSubject: string;
+  concept: { id: string; expectedHead: string };
+  state: 'retired';
+  scheme?: DefineVocabularyConceptInput['scheme'];
+  labels?: VocabularyLabel[];
+  alternativeLabels?: VocabularyLabel[];
+  broader?: string[];
+  narrower?: string[];
+}
+export type VocabularyCommandInput = DefineVocabularyConceptInput | RetireVocabularyConceptInput;
 
 /** Structural owner validation also serves restoration while audience reads are fenced. */
 export async function currentConceptValidations(env: WorkActivationEnvironment, concept: string,
@@ -139,8 +151,8 @@ function checked(input: DefineVocabularyConceptInput) {
   return { ...input, labels, alternativeLabels, broader, narrower };
 }
 
-export function vocabularyDigest(input: DefineVocabularyConceptInput) {
-  const value = checked(input);
+export function vocabularyDigest(input: VocabularyCommandInput) {
+  const value = 'concept' in input ? checkedRetirement(input) : checked(input);
   return hash(
     JSON.stringify({
       family: 'classification-proposition-v2',
@@ -148,6 +160,134 @@ export function vocabularyDigest(input: DefineVocabularyConceptInput) {
       scope: GLOBAL_CLASSIFICATION_CONTEXT,
     }),
   );
+}
+
+function checkedRetirement(input: RetireVocabularyConceptInput) {
+  if (input.state !== 'retired' || !native.test(input.concept.id) || !native.test(input.concept.expectedHead))
+    throw new InvalidVocabularyInput('invalid Concept retirement request');
+  // Existing callers may send the creation envelope. Those fields bind retries,
+  // but retirement preserves the stored labels and hierarchy.
+  const fields = checked({ actingSubject: input.actingSubject, scheme: input.scheme ?? null,
+    labels: input.labels ?? [{ language: 'en', value: 'Retirement' }],
+    alternativeLabels: input.alternativeLabels ?? [], broader: input.broader ?? [], narrower: input.narrower ?? [] });
+  return { actingSubject: fields.actingSubject, concept: { id: input.concept.id, expectedHead: input.concept.expectedHead },
+    state: input.state, ...(input.scheme !== undefined ? { scheme: fields.scheme } : {}),
+    ...(input.labels !== undefined ? { labels: fields.labels } : {}),
+    ...(input.alternativeLabels !== undefined ? { alternativeLabels: fields.alternativeLabels } : {}),
+    ...(input.broader !== undefined ? { broader: fields.broader } : {}),
+    ...(input.narrower !== undefined ? { narrower: fields.narrower } : {}) };
+}
+
+/** Access admits the existing command. Its native first revision fixes which
+ * Agent's Concept it affects; appending to a scheme never transfers stewardship. */
+function conceptStewardGuard(input: RetireVocabularyConceptInput) {
+  return `GRAPH ${iri(GRAPHS.current)} { ${iri(input.concept.id)} a <${SKOS}Concept> ;
+      rv:definitionProfile ${iri(VOCABULARY_PROFILE)} . }
+    GRAPH ${iri(GRAPHS.revisions)} { ?first a rv:RevisionAnchor ; rv:component ${iri(input.concept.id)} ;
+      rv:recordedBy ${iri(input.actingSubject)} ; rv:modelRevision ${iri(VOCABULARY_PROFILE)} .
+      FILTER NOT EXISTS { ?first rv:predecessor ?previous }
+      FILTER NOT EXISTS { ?first a rv:ErasedRevision }
+    }
+    GRAPH ${iri(GRAPHS.receipts)} { ?creation rv:concept ${iri(input.concept.id)} ; rv:conceptRevision ?first ;
+      rv:outcome rv:Succeeded ; rv:admittedScope "classification:define:global" . }`;
+}
+
+async function assertConceptSteward(env: WorkActivationEnvironment, input: RetireVocabularyConceptInput) {
+  if ((await env.fuseki.query(`PREFIX rv: <${RV}> ASK { ${conceptStewardGuard(input)} }`, 1024)).boolean !== true)
+    throw new AdmissionDenied('Concept steward authority is required');
+}
+
+export async function retireVocabularyConcept(env: WorkActivationEnvironment, admission: RegisteredAdmission,
+  input: RetireVocabularyConceptInput): Promise<VocabularyReceipt> {
+  const value = checkedRetirement(input), digest = vocabularyDigest(value);
+  if (admission.action !== 'classification.proposition.define' || admission.scope !== 'classification:define:global'
+    || admission.actingSubject !== value.actingSubject || admission.requestDigest !== digest)
+    throw new IdempotencyConflict('vocabulary retirement admission differs from intent');
+  const checkedReceipt = (receipt: VocabularyReceipt) => {
+    if (receipt.requestDigest !== digest || receipt.admissionId !== admission.id
+      || receipt.authorityEpoch !== admission.authorityEpoch || receipt.scope !== admission.scope)
+      throw new IdempotencyConflict('vocabulary retirement receipt differs from admission');
+    return receipt;
+  };
+  const prior = await readClassificationPropositionReceipt(env, admission.id);
+  if (prior) return checkedReceipt(prior);
+  if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('admission expired');
+  await assertConceptSteward(env, value);
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX skos: <${SKOS}>
+    SELECT ?scheme ?schemeHead ?path ?expression ?sense ?revision ?manifest WHERE {
+      GRAPH ${iri(GRAPHS.current)} {
+        ${iri(value.concept.id)} skos:inScheme ?scheme ; rv:head ${iri(value.concept.expectedHead)} ; rv:conceptState rv:Active .
+        ?scheme rv:schemeRevisionHead ?schemeHead ; rv:schemeState rv:Active .
+        ?path a rv:ConceptPath ; rv:terminalConcept ${iri(value.concept.id)} .
+        ?expression a rv:ClassificationExpression ; rv:path ?path ; rv:assertedConcept ${iri(value.concept.id)} .
+        ?sense a rv:ClassificationSense ; rv:path ?path ; rv:expression ?expression ; rv:head ?revision .
+      }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(value.concept.expectedHead)} rv:component ${iri(value.concept.id)} ; rv:manifest ?manifest . }
+    } LIMIT 2`, 4096)).results?.bindings ?? [];
+  const row = rows[0];
+  if (!row || (value.scheme && (row.scheme?.value !== value.scheme.id || row.schemeHead?.value !== value.scheme.expectedHead)))
+    return sealClassificationPropositionAdmission(env, admission);
+  if (rows.length !== 1 || ['scheme', 'schemeHead', 'path', 'expression', 'sense', 'revision'].some(key =>
+    row[key]?.type !== 'uri' || !native.test(row[key]!.value)) || !row.manifest)
+    throw new PendingActivation('Concept owner binding is unavailable or ambiguous');
+  const definitions: PropositionDefinitions = { scheme: row.scheme!.value, concept: value.concept.id,
+    path: row.path!.value, expression: row.expression!.value, sense: row.sense!.value };
+  const schemeHead = row.schemeHead!.value, revision = row.revision!.value;
+  const retained = readComponentState(env.objectDirectory, row.manifest.value, value.concept.id, VOCABULARY_PROFILE);
+  const conceptHead = ID + Bun.randomUUIDv7(), operation = ID + Bun.randomUUIDv7();
+  const manifest = prepareComponent(env.objectDirectory, value.concept.id, { ...retained,
+    state: 'retired', previousHead: value.concept.expectedHead, actingSubject: value.actingSubject }, VOCABULARY_PROFILE);
+  const validations = [...(await currentConceptValidations(env, value.concept.id, 'classification-proposition-v2')).validations,
+    ...await profileValidations(env.fuseki, 'concept-scheme-revision-v1', [{
+    shape: `${VOCABULARY_REVISION_PROFILE}/anchor-shape`, focus: [conceptHead], graphs: [GRAPHS.revisions],
+  }])];
+  const receipt = classificationPropositionReceiptIri(admission.id), batch = `urn:rezics:outbox:${hash(receipt)}`,
+    event = `urn:rezics:event:${hash(operation)}`;
+  const result = await validatedCommand(env, { receipt, digest, validations, deadlineMs: VOCABULARY_COST.deadlineMs,
+    update: `PREFIX rv: <${RV}> PREFIX skos: <${SKOS}>
+    DELETE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(value.concept.id)} rv:head ${iri(value.concept.expectedHead)} ; rv:conceptState rv:Active }
+    }
+    INSERT {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(value.concept.id)} rv:head ${iri(conceptHead)} ; rv:conceptState rv:Retired }
+      GRAPH ${iri(GRAPHS.revisions)} { ${iri(conceptHead)} a rv:RevisionAnchor ; rv:component ${iri(value.concept.id)} ;
+        rv:operation ${iri(operation)} ; rv:recordedBy ${iri(value.actingSubject)} ; rv:manifest ${iri(`urn:rezics:sha256:${manifest}`)} ;
+        rv:modelRevision ${iri(VOCABULARY_PROFILE)} ; rv:shapeRevision ${iri(VOCABULARY_PROFILE)} ;
+        rv:predecessor ${iri(value.concept.expectedHead)} ; rv:conceptState rv:Retired ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+        rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
+        rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
+        rv:scheme ${iri(definitions.scheme)} ; rv:concept ${iri(definitions.concept)} ; rv:path ${iri(definitions.path)} ;
+        rv:expression ${iri(definitions.expression)} ; rv:sense ${iri(definitions.sense)} ; rv:definitionRevision ${iri(revision)} ;
+        rv:schemeRevision ${iri(schemeHead)} ; rv:conceptRevision ${iri(conceptHead)} ;
+        rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
+      GRAPH ${iri(GRAPHS.outbox)} { ${iri(batch)} a rv:OutboxBatch ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:sequence ?next ; rv:eventCount 1 ; rv:event ${iri(event)} .
+        ${iri(event)} a rv:ClassificationPropositionDefinedEvent ; rv:ordinal 0 ;
+        rv:action "classification.proposition.define" ; rv:receipt ${iri(receipt)} ; rv:operation ${iri(operation)} . }
+    }
+    WHERE {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ${lit(env.lineage.dataEpoch)} ;
+        rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?n . }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }
+      GRAPH ${iri(GRAPHS.current)} { ${iri(value.concept.id)} skos:inScheme ${iri(definitions.scheme)} ;
+        rv:head ${iri(value.concept.expectedHead)} ; rv:conceptState rv:Active .
+        FILTER NOT EXISTS { ${iri(value.concept.id)} rv:conceptState rv:Retired }
+        FILTER NOT EXISTS { ${iri(value.concept.id)} rv:protectionHead ?protection }
+        ${iri(definitions.scheme)} rv:schemeState rv:Active ; rv:schemeRevisionHead ${iri(schemeHead)} .
+        ${iri(definitions.sense)} rv:head ${iri(revision)} . }
+      ${conceptStewardGuard(value)}
+      FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(conceptHead)} ?p ?o } }
+      BIND(?n + 1 AS ?next)
+    }` }, admission);
+  const committed = await readClassificationPropositionReceipt(env, admission.id);
+  if (committed) return checkedReceipt(committed);
+  if (result.status === 'guard-unmatched') return sealClassificationPropositionAdmission(env, admission);
+  throw new PendingActivation('Concept retirement outcome unknown');
 }
 
 /** One guarded append to a scheme, with a new head for the scheme and the new Concept. */
@@ -413,11 +553,12 @@ export async function defineAdmittedVocabularyConcept(
   account: Pick<AccountAssertionVerifier, 'verify'>,
   access: Pick<AccessAdmissionRegistry, 'register' | 'claim' | 'recordGraphOutcome'>,
   request: Request,
-  input: DefineVocabularyConceptInput & { idempotencyKey: string },
+  input: VocabularyCommandInput & { idempotencyKey: string },
 ): Promise<VocabularyReceipt & { replayed: boolean }> {
   const digest = vocabularyDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['classification:define']);
+  if ('concept' in input) await assertConceptSteward(env, input);
   const registered = await access.register({
     principal,
     actingSubject: input.actingSubject,
@@ -438,7 +579,8 @@ export async function defineAdmittedVocabularyConcept(
     if (admission.state !== 'sealed') {
       if (!admission.dispatchEligible || admission.state === 'registered') {
         await sealClassificationPropositionAdmission(env, admission);
-      } else await defineVocabularyConcept(env, admission, input);
+      } else if ('concept' in input) await retireVocabularyConcept(env, admission, input);
+      else await defineVocabularyConcept(env, admission, input);
     }
     const terminal = await readClassificationPropositionReceipt(env, registered.id);
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'classification-proposition');
@@ -461,7 +603,7 @@ export async function defineAdmittedVocabularyConcept(
     if (
       error instanceof IdempotencyConflict ||
       error instanceof CancelledActivation ||
-      error instanceof InvalidVocabularyInput
+      error instanceof InvalidVocabularyInput || error instanceof AdmissionDenied
     )
       throw error;
     throw new PendingAdmittedWork(registered.id, 'classification-proposition');

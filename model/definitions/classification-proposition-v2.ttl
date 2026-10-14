@@ -21,7 +21,7 @@
     sh:property [ sh:path skos:altLabel ; sh:maxCount 16 ; sh:datatype rdf:langString ] ;
     sh:property [ sh:path skos:broader ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path skos:narrower ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
-    sh:property [ sh:path rv:conceptState ; sh:hasValue rv:Active ; sh:maxCount 1 ] ;
+    sh:property [ sh:path rv:conceptState ; sh:minCount 1 ; sh:maxCount 1 ; sh:in (rv:Active rv:Retired) ] ;
     sh:property [ sh:path rv:head ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] .
 
 <https://rezics.com/definition/classification-proposition-v2/path-shape>

@@ -38,7 +38,7 @@ export const openApiOperations = {
 const vocabularyLabel = t.Object({ language: t.String({ minLength: 2, maxLength: 40 }),
   value: t.String({ minLength: 1, maxLength: 120 }) }, { additionalProperties: false });
 const vocabularyRef = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
-const vocabularyDefinition = t.Object({ profile: t.Literal('classification-proposition-v2'),
+const vocabularyCreation = t.Object({ profile: t.Literal('classification-proposition-v2'),
   scheme: t.Nullable(t.Object({ id: vocabularyRef, expectedHead: vocabularyRef },
     { additionalProperties: false })),
   labels: t.Array(vocabularyLabel, { minItems: 1, maxItems: 8 }),
@@ -47,6 +47,16 @@ const vocabularyDefinition = t.Object({ profile: t.Literal('classification-propo
   narrower: t.Array(vocabularyRef, { maxItems: 8, uniqueItems: true }),
   actingSubject: vocabularyRef,
 }, { additionalProperties: false });
+const vocabularyDefinition = t.Union([vocabularyCreation, t.Object({
+  profile: t.Literal('classification-proposition-v2'),
+  concept: t.Object({ id: vocabularyRef, expectedHead: vocabularyRef }, { additionalProperties: false }),
+  state: t.Literal('retired'), actingSubject: vocabularyRef,
+  scheme: t.Optional(vocabularyCreation.properties.scheme),
+  labels: t.Optional(vocabularyCreation.properties.labels),
+  alternativeLabels: t.Optional(vocabularyCreation.properties.alternativeLabels),
+  broader: t.Optional(vocabularyCreation.properties.broader),
+  narrower: t.Optional(vocabularyCreation.properties.narrower),
+}, { additionalProperties: false })]);
 const vocabularyResult = t.Object({ scheme: vocabularyRef, schemeHead: vocabularyRef,
   concept: vocabularyRef, conceptHead: vocabularyRef, path: vocabularyRef,
   expression: vocabularyRef, sense: vocabularyRef, definitionRevision: vocabularyRef,
