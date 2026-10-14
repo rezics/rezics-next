@@ -15,6 +15,7 @@ import { readAnimeReaderState } from './anime-hub-recorded-page.ts';
 import { booksEditionReads } from './books-edition-page.read.ts';
 import { messages } from './messages.ts';
 import { recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
+import { shownLine } from './types/recipe.tsx';
 import { RegionSkeleton } from './region.tsx';
 import { EVERYONE, workHref } from './route.ts';
 import type { RecipeWorkPage, WorkHeader } from './types.ts';
@@ -222,7 +223,7 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   await expect(canvas.getByText(`· ${acting ?? 'none'}`)).toBeVisible();
   await expect(canvas.getAllByRole('link', { name: 'Outcome owner' }).length).toBeGreaterThan(0);
   await expect(canvas.getByRole('heading', { name: copy.recipeMethod })).toBeVisible();
-  await expect(canvas.getByText(page.ingredients[0]!.line)).toBeVisible();
+  await expect(canvas.getByText(shownLine(page.ingredients[0]!, 'written', page))).toBeVisible();
   await expect(canvas.getByText(formatMeasure(yieldMeasure.value, yieldMeasure.unitText), { exact: false })).toBeVisible();
   await expect(canvas.queryByRole('radio', { name: copy.unitWritten })).toBeNull();
   await expect(canvas.queryByRole('heading', { name: copy.recipeNotes })).toBeNull();
@@ -285,7 +286,9 @@ export const Loading: Story = {
       .resolves.toBeVisible();
     await expect(canvas.getByRole('status', { name: messages.en.loadingRegion })).toBeVisible();
     await expect(canvas.getByText('visitor')).toBeVisible();
-    await expect(canvas.queryByText('1 1/2 cups tomato')).toBeNull();
+    const held = asRecipe(sample('visitor', 'recipe-start').answer);
+    await expect(canvas.queryByText(shownLine(held.ingredients[0]!, 'written', held))).toBeNull();
+    await expect(canvas.queryByText(held.ingredients[0]!.line)).toBeNull();
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
     await expectNoReplayMiss(canvasElement);
   },
@@ -316,7 +319,8 @@ export const Scaled: Story = {
     await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
     await waitFor(() => expect(canvas.getByRole('button', { name: messages.en.scaleRecipe })).toBeEnabled());
     await expect(canvas.queryByRole('alert')).toBeNull();
-    await expect(canvas.getByText(asRecipe(sample('visitor', 'recipe-start').answer).ingredients[0]!.line)).toBeVisible();
+    const scaled = asRecipe(sample('visitor', 'recipe-scaled-start').answer);
+    await expect(canvas.getByText(shownLine(scaled.ingredients[0]!, 'written', scaled))).toBeVisible();
     await showMore(canvasElement, 'en');
   },
 };

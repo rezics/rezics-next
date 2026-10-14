@@ -87,7 +87,8 @@ function StepTimer({ seconds, messages: t }: { seconds: number; messages: WorkPa
 /** The units a reader sees: each line as its cook wrote it, or all of them converted to one system. */
 type Units = 'written' | 'us' | 'metric';
 
-function shownLine(item: ReadableIngredient, units: Units, page: ReadableRecipe): string {
+/** The ingredient line the page shows: the cook's words, with Main's quantity in the kitchen fraction. */
+export function shownLine(item: ReadableIngredient, units: Units, page: ReadableRecipe): string {
   if (units !== 'written' && item.alternateSystem === units && item.alternateLine) return item.alternateLine;
   if (item.line && item.line !== item.originalText) return item.line;
   const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
