@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { loadRealmView } from '../../../../../apps/web/features/realm/realm-page.tsx';
+import { readFacets, readZoneBrowse, realmFrameReads, type RealmReadClient } from '../../../../../apps/web/features/realm/read.ts';
+import { mainBrowseQuery, parseBrowseState } from '../../../../../apps/web/features/zones/browse-state.ts';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/visual-novels/catalogue-browse-and-search-in-its-zone.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
@@ -217,8 +221,138 @@ async function pageReads(name: PersonaName) {
   await answer(sample('catalogue-reader-states', 'GET', `/v1/me/work-states?${new URLSearchParams({ actingSubject: person.actingSubject!, works: works.map(work => work.work).join(',') })}`));
 }
 
+/** The published site key, which is the Space the browse page resolves. */
+let publishedSiteKey: string | undefined;
+async function publishedSiteKeyOf(): Promise<string> {
+  if (publishedSiteKey) return publishedSiteKey;
+  const response = await sessions.visitor.main('GET', `/v1/zones/${short(sessions.zone)}/presentation`);
+  const raw = await response.text();
+  if (response.status !== 200) throw new Error(`Site presentation: HTTP ${response.status}: ${raw}`);
+  const body = JSON.parse(raw) as { address?: { key?: string } };
+  if (!body.address?.key) throw new Error('Site presentation has no address key');
+  publishedSiteKey = body.address.key;
+  return publishedSiteKey;
+}
+
+const identityHeaders = new Set(['authorization', 'cookie', 'x-session-key', 'host', 'content-length']);
+
+/** What the production client asked for, named from that request rather than from a hand-built URL. */
+function productionLabel(path: string): string {
+  const url = new URL(path, 'https://record.invalid');
+  const pathname = url.pathname;
+  if (pathname.endsWith('/modules/browse')) {
+    const q = url.searchParams.get('q');
+    const sort = url.searchParams.get('sort');
+    const nomatch = q?.endsWith('nomatch') === true;
+    const base = nomatch && sort === 'relevance' ? 'page-search-no-match-relevance'
+      : nomatch ? 'page-search-no-match'
+        : q && sort === 'relevance' ? 'page-search-relevance'
+          : q && sort === 'newest' ? 'page-search-newest'
+            : q && sort === 'updated' ? 'page-search-updated'
+              : q ? 'page-search-default'
+                : sort === 'newest' ? 'page-browse-newest'
+                  : sort === 'updated' ? 'page-browse-updated'
+                    : 'page-browse-default';
+    const extra = [...url.searchParams.keys()].some(key => !['q', 'sort', 'cursor'].includes(key));
+    return `${extra ? `${base}-shaped` : base}${url.searchParams.has('cursor') ? '-continuation' : ''}`;
+  }
+  if (pathname === '/v1/addresses/resolve') return 'frame-address';
+  if (pathname === '/v1/facets') return 'frame-facets';
+  if (pathname === '/v1/me/session-agent') return 'frame-session-agent';
+  if (pathname === '/v1/me/person-preferences') return 'frame-person-preferences';
+  if (pathname === '/v1/me/platform-access') return 'frame-platform-access';
+  if (pathname.endsWith('/member-ban')) return 'frame-member-ban';
+  if (pathname.includes('/follows/')) return 'frame-follow';
+  if (pathname.endsWith('/joining')) return 'frame-joining';
+  if (pathname.endsWith('/presentation')) return url.searchParams.has('after') ? 'frame-presentation-page' : 'frame-presentation';
+  if (pathname.endsWith('/routes')) return url.searchParams.has('cursor') ? 'frame-routes-continuation' : 'frame-routes';
+  if (pathname.endsWith('/zone')) return 'frame-zone';
+  if (/\/v1\/realms\/[0-9a-f-]{36}$/.test(pathname)) return 'frame-realm-header';
+  return `frame-${pathname.split('/').filter(Boolean).slice(1).join('-') || 'read'}`;
+}
+
+/**
+ * The browse page's own readers. Anonymous catalogue reads use the visitor
+ * session. The signed-in client carries presentation, routes and the host's
+ * session reads. Each label is the request the client actually emitted.
+ */
+async function recordProductionBrowse(name: PersonaName) {
+  const person = sessions[name];
+  const key = await publishedSiteKeyOf();
+  const counts = new Map<string, number>();
+  const clientFor = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
+    anonymous: !caller.actingSubject,
+    fetcher: (async (input, init) => {
+      const request = new Request(input instanceof Request ? input : String(input), init);
+      const url = new URL(request.url);
+      if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) throw new Error(`Expected the Main browser boundary: ${url.pathname}`);
+      const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+      const base = productionLabel(path);
+      const seen = counts.get(base) ?? 0;
+      counts.set(base, seen + 1);
+      const label = seen === 0 ? base : `${base}-${seen}`;
+      const raw = await request.text();
+      const headers: Record<string, string> = {};
+      request.headers.forEach((value, header) => {
+        if (!identityHeaders.has(header.toLowerCase())) headers[header] = value;
+      });
+      return recording.session(name, caller)(label, request.method, path,
+        raw ? JSON.parse(raw) as unknown : undefined,
+        request.headers.get('idempotency-key') ?? undefined,
+        { headers, settle: false });
+    }) as typeof fetch,
+  });
+  const anonymous = clientFor(sessions.visitor);
+  const personal = person.actingSubject ? clientFor(person) : anonymous;
+  const client: RealmReadClient = {
+    main: anonymous,
+    personal,
+    ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
+    signedIn: Boolean(person.actingSubject),
+  };
+  const view = await loadRealmView(key, 'en', {}, 'site', client);
+  if (view.kind !== 'view' || !view.realm.zone) throw new Error(`Browse frame did not resolve for ${name}: ${view.kind}`);
+  if (view.pkg?.catalogue || view.pkg?.releaseFilter) {
+    throw new Error('Visual novels browse loaded a catalogue package; the plain browse read is not the page query');
+  }
+  const frames = realmFrameReads({
+    main: anonymous,
+    personal,
+    ...(client.actingSubject ? { actingSubject: client.actingSubject } : {}),
+    keepProblem: false,
+  });
+  const zone = view.realm.zone.id;
+  await frames.readZoneRoute(zone, 'browse');
+  await readFacets(anonymous);
+  const pages: Record<string, string>[] = [
+    {},
+    { sort: 'newest' },
+    { sort: 'updated' },
+    { q: phrase },
+    { q: phrase, sort: 'relevance' },
+    { q: phrase, sort: 'newest' },
+    { q: phrase, sort: 'updated' },
+    { q: `${phrase}nomatch` },
+    { q: `${phrase}nomatch`, sort: 'relevance' },
+  ];
+  for (const pageOf of pages) {
+    let search = pageOf;
+    const followed = new Set<string>();
+    for (;;) {
+      if (search.cursor) await frames.readZoneRoute(zone, 'browse', search.cursor);
+      const page = await readZoneBrowse(view.realm.realm, 'en', mainBrowseQuery(parseBrowseState(search)), anonymous);
+      const cursor = page.ok ? page.data.nextCursor : null;
+      if (!cursor) break;
+      if (followed.has(cursor)) throw new Error('Browse continuation repeated a cursor');
+      followed.add(cursor);
+      search = { ...pageOf, cursor };
+    }
+  }
+}
+
 async function browse(name: PersonaName) {
   if (name === 'member') await pageReads(name);
+  await recordProductionBrowse(name);
   const person = proofSession(name);
   const root = `/v1/realms/${short(sessions.realm)}/modules`;
   const searchParams = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '10' });

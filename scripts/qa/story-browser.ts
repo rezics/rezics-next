@@ -23,8 +23,8 @@ export async function serveStoryAsset(route: Route, origin: string): Promise<voi
 }
 
 /** Load real Vite assets through host interface changes, with optional initialization diagnostics. */
-export function storyBrowser() {
-  const provider = playwright({});
+export function storyBrowser(options: Parameters<typeof playwright>[0] = {}) {
+  const provider = playwright(options);
   const log = process.env.STORYBOOK_BROWSER_LOG;
   const factory = provider.providerFactory;
   provider.providerFactory = project => {

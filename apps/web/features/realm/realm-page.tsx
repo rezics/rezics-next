@@ -166,6 +166,29 @@ async function replayBan(realm: string, actingSubject: string, replay: RealmRepl
   return read.ok ? read.reading : null;
 }
 
+/**
+ * The host learns the signed-in reader from the request cookie, then reads that
+ * person's language preferences. A supplied client has no cookie, so it carries
+ * the same two reads; the caller's acting person stays the one it already resolved.
+ */
+async function suppliedClientSession(client: RealmReadClient): Promise<void> {
+  const actingSubject = client.actingSubject;
+  if (!client.signedIn || !actingSubject) return;
+  const personal = client.personal ?? client.main;
+  // The route requires the session header. Replay matches the path, not that header.
+  await personal.v1.me['session-agent'].get({ headers: { 'x-session-key': 'recorded-visit' } });
+  await personal.v1.me['person-preferences'].get({ query: { actingSubject } });
+}
+
+/** Platform access and, only when that answer opens it, the reader's own ban. */
+async function suppliedClientBan(client: RealmReadClient, realm: string, actingSubject: string): Promise<BanReading | null> {
+  const personal = client.personal ?? client.main;
+  const access = await personal.v1.me['platform-access'].get();
+  const held = access.data ? parsePlatformAccess(access.data) : null;
+  const read = await readMemberBan(personal, realm, actingSubject, gateFor(held));
+  return read.ok ? read.reading : null;
+}
+
 /** The page's resolution, using the same readers production calls. */
 async function replayRealm(ref: string, locale: UiLocale, replay: RealmReplay): Promise<RealmResolution> {
   const languages = replay.languages ?? locale;
@@ -254,6 +277,7 @@ export async function loadRealmView(
       personal: client.personal ?? client.main,
       avatarQuery: client.actingSubject ? `?actingSubject=${encodeURIComponent(client.actingSubject)}` : '',
     } satisfies RealmReader : realmReader(),
+    client?.signedIn && client.actingSubject ? suppliedClientSession(client) : null,
   ]);
   const frameReads = replay ? realmFrameReads({
     main: browserMainApi(replay.origin, { anonymous: true, fetcher: replay.fetch }),
@@ -289,7 +313,9 @@ export async function loadRealmView(
         : null,
     replay
       ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay) : null
-      : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
+      : client && reader.actingSubject
+        ? suppliedClientBan(client, realm.header.id, reader.actingSubject)
+        : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {
     if (read && !read.ok && read.failure === 'missing') return { kind: 'missing' };
@@ -396,6 +422,12 @@ export function mountLinks(view: RealmView): SiteLink[] {
   }));
 }
 
+/** The fetch a replayed client already uses. Production omits the client and keeps the browser session. */
+function replayFetch(client: RealmReadClient): typeof fetch | undefined {
+  const carried = (client as RealmReadClient & { fetch?: typeof fetch }).fetch;
+  return typeof carried === 'function' ? carried : undefined;
+}
+
 /**
  * The Zone frame around one Realm tab, or around a page of the Zone's own site, which names its `address`
  * and the `crumbs` from the Zone's home to it.
@@ -453,6 +485,7 @@ export async function RealmFrame({
     ? await readingSelection(data, realm.zone.id, search)
     : { state: null, reading: null };
   // Join or Follow first, as every community page offers; the page style stays beside it.
+  const relationshipFetch = client ? replayFetch(client) : undefined;
   const actions = (
     <>
       <RealmMembership
@@ -465,6 +498,7 @@ export async function RealmFrame({
         rulesHref={realmHref(locale, realm.ref, 'about')}
         locale={locale}
         messages={messages}
+        transport={relationshipFetch ? { fetch: relationshipFetch, origin: '' } : undefined}
       />
       {realm.zone ? (
         <LocalizedLink

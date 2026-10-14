@@ -144,13 +144,26 @@ beforeAll(async () => {
   }), 201);
   // Catalogue filters consume a Realm Discovery generation. Build it through
   // its separately mandated platform API after all fixture publication writes.
+  // The refresh worker may already hold a build for this public Realm.
   await answer(sessions.visitor.main('GET', `${root}/modules/browse?limit=3`));
   const operator = sessions.operator;
   await grant(operator, 'recommendation:manage', 'recommendation.generation.manage');
-  let generation = await answer<{ generation: string; checkpoint: string; complete: boolean }>(operator.main('POST', '/v1/discovery/generation-builds', {
+  const build = {
     profile: 'discovery-generation-build-v1', actingSubject: operator.actingSubject,
     basis: { scope: 'realm', realm: sessions.realm, context: null },
-  }));
+  };
+  let generation: { generation: string; checkpoint: string; complete: boolean } | undefined;
+  for (let attempt = 0; attempt < 45 && !generation; attempt++) {
+    const response = await operator.main('POST', '/v1/discovery/generation-builds', build);
+    const raw = await response.text();
+    if (response.status === 409 && raw.includes('"code":"discovery_conflict"')) {
+      await Bun.sleep(1_000);
+      continue;
+    }
+    expect(response.status, `${response.status}: ${raw}`).toBe(200);
+    generation = JSON.parse(raw) as { generation: string; checkpoint: string; complete: boolean };
+  }
+  if (!generation) throw new Error('Discovery build stayed in conflict');
   while (!generation.complete) generation = await answer(operator.main('POST', `/v1/discovery/generations/${generation.generation}/advance`, {
     actingSubject: operator.actingSubject, expectedCheckpoint: generation.checkpoint,
   }));
@@ -164,6 +177,7 @@ async function browse(name: PersonaName) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
     'space', short(sessions.zone), 'browse');
+  await recordFollowHydration(name);
   await pageReads(name);
   const sample = recording.session(name, person), sampledCards = new Set<string>();
   const filters = [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
@@ -223,6 +237,30 @@ async function browse(name: PersonaName) {
       selectionBasis: 'realm-manager-review', actingSubject: person.actingSubject }), 403);
   }
 }
+/** The header control refetches when the server follow has no following or no level.
+ * That read is follow state for the Realm target; it sends no kind. */
+async function recordFollowHydration(name: PersonaName) {
+  const person = sessions[name];
+  const actingSubject = person.actingSubject;
+  if (!actingSubject) return;
+  const realmId = short(sessions.realm);
+  const headerResponse = await sessions.visitor.main('GET', `/v1/realms/${realmId}`);
+  if (!headerResponse.ok) throw new Error(`Realm header for follow state: HTTP ${headerResponse.status}: ${await headerResponse.text()}`);
+  const header = await headerResponse.json() as { id?: string };
+  if (!header.id) throw new Error('Realm header has no id for follow state');
+  const followResponse = await person.main('GET', `/v1/follows/${realmId}?${new URLSearchParams({
+    kind: 'realm', actingSubject,
+  })}`);
+  let refresh = true;
+  if (followResponse.ok) {
+    const follow = await followResponse.json() as { following?: boolean | null; level?: string | null };
+    refresh = follow.following == null || follow.level == null;
+  } else await followResponse.body?.cancel();
+  if (!refresh) return;
+  const params = new URLSearchParams({ actingSubject, target: header.id });
+  await answer(recording.session(name, person)('frame-follow-state', 'GET', `/v1/me/follow-state?${params}`));
+}
+
 async function pageReads(name: PersonaName) {
   const publicRead = recording.session(name, sessions.visitor);
   const realmRoot = `/v1/realms/${short(sessions.realm)}`;

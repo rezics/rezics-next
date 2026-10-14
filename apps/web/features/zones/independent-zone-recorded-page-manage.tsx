@@ -11,31 +11,28 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { manager } from '../manage/server.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
-import { PageContainer } from '../shell/page.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { parseTheme } from '../shell/preferences.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../zone-editor/api.ts';
-import { ZoneEditorDraftProvider } from '../zone-editor/draft-provider.tsx';
 import { zoneEditorDraftKey } from '../zone-editor/draft-state.ts';
-import { ZoneHomeEditor } from '../zone-editor/editor.tsx';
-import { ZoneEditorFrame } from '../zone-editor/frame.tsx';
 import { ZoneSavedHomeContent } from '../zone-editor/home-content.tsx';
-import { messages as editorMessages } from '../zone-editor/messages.ts';
-import { ZoneDraftPreview } from '../zone-editor/preview.tsx';
-import { loadZoneAuthoring, loadZoneLifecycle } from '../zone-editor/read.ts';
+import { readZoneManagementFrame } from '../zone-editor/authoring-reads.ts';
 import { zoneEditorPath } from '../zone-editor/routes.ts';
-import { loadSavedPreviewFrame, type SavedPreviewFrameLoad } from '../zone-editor/saved-preview-frame.ts';
-import { ZoneSavedPreviewFrame } from '../zone-editor/saved-preview-frame.tsx';
-import { ZoneAuthoringFailure } from '../zone-editor/states.tsx';
+import { loadSavedPreviewFrame } from '../zone-editor/saved-preview-frame.ts';
+import { zoneLookEnabled } from './execution.ts';
 import { messages as zoneMessages } from './messages.ts';
+import { zoneHomeView, zoneManagementShell, zonePreviewBody } from './independent-zone-recorded-page-routes.tsx';
+
+export { zoneHomeView, zoneManagementShell, zonePreviewBody };
 
 /** A management surface the production route can reach for one recorded persona. */
 export type IndependentZoneManagementPlace =
   | 'redirect' | 'manage' | 'manage-loading' | 'preview' | 'preview-loading' | 'save' | 'stale';
 
-const signedIn = ['stranger', 'member', 'owner', 'moderator'] as const;
+const signedIn = ['stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 type SignedInPersona = (typeof signedIn)[number];
+const editors = ['owner', 'operator'] as const;
 
 function recorded(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const found = record.personas[persona].filter(item => item.label === label);
@@ -67,7 +64,7 @@ function actingOf(record: AnswerRecord, persona: SignedInPersona): AgentOption {
   return { iri: actingSubject, label, handle: null, kind: 'person', path: 'direct-principal' };
 }
 
-/** Labels the production management and preview reads actually send. A second identical read replays the first sample. */
+/** Labels the production management and preview reads actually send. A repeated configuration replays the first sample. */
 function visitSelections(record: AnswerRecord, persona: SignedInPersona, place: IndependentZoneManagementPlace): {
   host: readonly RecordedSelection[];
   commands: readonly RecordedSelection[];
@@ -79,12 +76,13 @@ function visitSelections(record: AnswerRecord, persona: SignedInPersona, place: 
   const zone = recorded(record, persona, `${prefix}-zone`);
   const host: RecordedSelection[] = [
     { label: `${prefix}-configuration`, state: recordedState(recorded(record, persona, `${prefix}-configuration`)) },
-    { label: `${prefix}-address`, state: 'populated' },
-    { label: `${prefix}-site-presentation`, state: 'populated' },
+    { label: `${prefix}-address`, state: recordedState(recorded(record, persona, `${prefix}-address`)) },
     { label: `${prefix}-editor`, state: recordedState(editor) },
     { label: `${prefix}-zone`, state: recordedState(zone) },
   ];
-  if (place === 'preview' && persona === 'owner') host.push({ label: 'saved-preview-navigation', state: 'populated' });
+  if (place === 'preview' && (editors as readonly AnswerPersona[]).includes(persona)) {
+    host.push({ label: 'saved-preview-navigation', state: 'populated' });
+  }
   if (place === 'save') return { host, commands: [
     { label: 'editor-save', state: 'populated' },
     { label: 'editor-publication', state: 'populated' },
@@ -97,8 +95,8 @@ function visitSelections(record: AnswerRecord, persona: SignedInPersona, place: 
   return { host, commands: [] };
 }
 
-function savedDocument(record: AnswerRecord): string {
-  const body = recorded(record, 'owner', 'editor-save').body as { document?: DocumentSnapshot };
+function savedDocument(record: AnswerRecord, persona: SignedInPersona): string {
+  const body = recorded(record, persona, 'editor-save').body as { document?: DocumentSnapshot };
   if (!body.document) throw new Error('editor-save has no document');
   return serializeDocument(body.document);
 }
@@ -113,18 +111,6 @@ async function renderAsync(node: ReactNode): Promise<ReactNode> {
   return cloneElement(node, { children: await renderAsync(node.props.children) });
 }
 
-function EditorFrame({ name, space, agent, locale, children }: {
-  name: string; space: string; agent: AgentOption; locale: UiLocale; children: ReactNode;
-}) {
-  const copy = editorMessages[locale];
-  return <ZoneEditorFrame name={name} editorPath={zoneEditorPath(space)} agent={agent} locale={locale}
-    manageMessages={manageMessages} sectionsLabel={copy.sectionsLabel} sectionHome={copy.sectionHome}
-    sectionNavigation={copy.sectionNavigation} sectionRealm={copy.sectionRealm} sectionTheme={copy.sectionTheme}
-    sectionLifecycle={copy.sectionLifecycle} unsavedWork={copy.unsavedWork}>
-    {children}
-  </ZoneEditorFrame>;
-}
-
 function redirectTarget(error: unknown): string {
   if (error && typeof error === 'object' && 'digest' in error && typeof (error as { digest: unknown }).digest === 'string') {
     const digest = (error as { digest: string }).digest.split(';');
@@ -134,8 +120,8 @@ function redirectTarget(error: unknown): string {
 }
 
 /**
- * Management, saved preview and the owner's reachable commands for one independent Zone.
- * The host fetch is the production site resolver; the supplied client is the editor's.
+ * Management, saved preview and reachable commands for one independent Zone.
+ * Replay calls the same home, preview and layout decisions as the routes.
  * Save and a stale save cannot share a transport: their recorded bodies are identical.
  */
 export function IndependentZoneRecordedManagement({ record, persona, place, locale }: {
@@ -186,13 +172,17 @@ export function IndependentZoneRecordedManagement({ record, persona, place, loca
         if (!signed || !hostReplay) throw new Error(`${persona} has no recorded management visit`);
         const acting = actingOf(record, signed);
         const main = browserMainApi(window.location.origin, { fetcher: hostReplay.fetcher });
-        const authoring = commandReplay
+        const commands = commandReplay
           ? browserZoneAuthoring(browserMainApi(window.location.origin, { fetcher: commandReplay.fetcher })) : undefined;
         const space = spaceOf(record, signed);
-        const copy = editorMessages[locale];
+        const frame = await readZoneManagementFrame(main, space, locale, acting.iri);
+        if (!active) return;
+        const shell = (children: ReactNode) => zoneManagementShell({
+          space, frame, agent: acting, actingSubject: acting.iri, locale, manageMessages, children,
+        });
         if (place === 'preview' || place === 'preview-loading') {
           const loaded = await loadSavedPreviewFrame({
-            authoring: () => loadZoneAuthoring(main, space, locale, acting.iri),
+            authoring: async () => frame.authoring,
             navigation: saved => loadCompleteZoneNavigation(main, saved.model.zoneId, acting.iri, saved.model.state),
             presentation: async () => { throw new Error('saved preview requested a public presentation'); },
             realmHeader: async () => { throw new Error('saved preview requested a realm header'); },
@@ -201,35 +191,27 @@ export function IndependentZoneRecordedManagement({ record, persona, place, loca
               load: async slug => { throw new Error(`saved preview loaded package ${slug}`); },
               declarations: async slug => { throw new Error(`saved preview read package ${slug}`); },
             },
-          }, { locale, homeName: realmMessages.home, lookEnabled: true });
+          }, { locale, homeName: realmMessages.home, lookEnabled: zoneLookEnabled(undefined) });
           if (!active) return;
-          finish(await previewView(loaded, space, acting, locale, copy));
+          finish(shell(await renderAsync(await zonePreviewBody(loaded, {
+            locale, readerTheme: parseTheme(undefined), zoneMessages,
+          }))));
           return;
         }
-        const [loaded, lifecycle] = await Promise.all([
-          loadZoneAuthoring(main, space, locale, acting.iri),
-          loadZoneLifecycle(main, space, locale, acting.iri),
-        ]);
+        const seeded = (place === 'save' || place === 'stale') && frame.authoring.kind === 'ready'
+          ? { ...frame.authoring.model.state, value: savedDocument(record, signed) } : undefined;
+        if (seeded && frame.authoring.kind === 'ready') {
+          try { sessionStorage.removeItem(zoneEditorDraftKey(frame.authoring.model.zoneId, acting.iri, 'home')); } catch { /* The route memory is enough. */ }
+        }
+        const home = await zoneHomeView({
+          space, locale, actingSubject: acting.iri,
+          signInHref: signInPath(localizedPath(zoneEditorPath(space), locale)),
+          loadLifecycle: async () => frame.lifecycle,
+          loadAuthoring: async () => frame.authoring,
+          initial: seeded, api: commands,
+        });
         if (!active) return;
-        const name = loaded.kind === 'ready' ? loaded.model.name
-          : lifecycle.kind === 'ready' ? lifecycle.name : space;
-        if (loaded.kind !== 'ready') {
-          finish(<EditorFrame name={name} space={space} agent={acting} locale={locale}>
-            <ZoneAuthoringFailure failure={loaded.kind === 'failure' ? loaded.failure : 'missing'} copy={copy} />
-          </EditorFrame>);
-          return;
-        }
-        const initial = place === 'save' || place === 'stale'
-          ? { ...loaded.model.state, value: savedDocument(record) } : loaded.model.state;
-        try { sessionStorage.removeItem(zoneEditorDraftKey(loaded.model.zoneId, acting.iri, 'home')); } catch { /* The route memory is enough. */ }
-        finish(<EditorFrame name={name} space={space} agent={acting} locale={locale}>
-          <ZoneEditorDraftProvider zoneId={loaded.model.zoneId} actingSubject={acting.iri}>
-            <ZoneHomeEditor zoneId={loaded.model.zoneId} zoneIri={loaded.model.zoneIri} actingSubject={acting.iri}
-              locale={locale} copy={copy} initial={initial} editable={loaded.model.editable} document={loaded.model.document}
-              previewHref={loaded.previewPath} siteHref={loaded.sitePath}
-              signInHref={signInPath(localizedPath(zoneEditorPath(space), locale))} api={authoring} />
-          </ZoneEditorDraftProvider>
-        </EditorFrame>);
+        finish(shell(home));
       } catch (error) { fail(error); }
     })();
     return () => {
@@ -243,28 +225,3 @@ export function IndependentZoneRecordedManagement({ record, persona, place, loca
   if (!view) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
   return view;
 }
-
-async function previewView(loaded: SavedPreviewFrameLoad, space: string, agent: AgentOption, locale: UiLocale,
-  copy: (typeof editorMessages)[UiLocale]): Promise<ReactNode> {
-  if (loaded.kind !== 'ready') {
-    return <EditorFrame name={space} space={space} agent={agent} locale={locale}>
-      <ZoneAuthoringFailure failure={loaded.kind === 'failure' ? loaded.failure : 'missing'} copy={copy} />
-    </EditorFrame>;
-  }
-  const { frame } = loaded;
-  const { model, preview, editorPath, sitePath } = frame.saved;
-  const home = await renderAsync(<ZoneSavedHomeContent preview={preview} context={frame.context} zone={frame.zone}
-    pkg={frame.pkg} messages={zoneMessages} copy={copy} />);
-  return <EditorFrame name={model.name} space={space} agent={agent} locale={locale}>
-    <ZoneSavedPreviewFrame frame={frame} readerTheme={parseTheme(undefined)}>
-      <PageContainer>
-        <ZoneDraftPreview copy={copy} document={model.document} editorPath={editorPath} sitePath={sitePath}
-          status={preview.publicationStatus} pageSurface={frame.cuts.tokens.pageSurface}>
-          {home}
-        </ZoneDraftPreview>
-      </PageContainer>
-    </ZoneSavedPreviewFrame>
-  </EditorFrame>;
-}
-
-

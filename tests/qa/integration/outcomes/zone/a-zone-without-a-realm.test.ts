@@ -4,8 +4,13 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { AnswerRecordValidator, answerPersonas, answerRecord, type AnswerContract, type AnswerRecord } from '../../../../../scripts/api/answer-record.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { realmFrameReads, zonePresentationReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
-import { authoringModel, draftChoice, draftWire, publicationChoice } from '../../../../../apps/web/features/zone-editor/model.ts';
+import { readZoneManagementFrame } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
+import { draftChoice, draftWire, publicationChoice } from '../../../../../apps/web/features/zone-editor/model.ts';
+import { loadSavedPreviewFrame } from '../../../../../apps/web/features/zone-editor/saved-preview-frame.ts';
+import { declaredData } from '../../../../../apps/web/zones/official/declared.ts';
+import { installedDigest, loadPackage } from '../../../../../apps/web/zones/official/index.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import independent from '../../../../../scripts/qa/cases/outcomes/zone/a-zone-without-a-realm.ts';
@@ -296,10 +301,29 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
 }
 
 const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
+function managementLabel(prefix: 'management' | 'saved-preview') {
+  let configuration = 0;
+  let address = 0;
+  return (_method: string, requestPath: string) => {
+    const url = new URL(requestPath, 'https://record.invalid');
+    if (url.pathname === '/v1/addresses/resolve') {
+      address += 1;
+      return address === 1 ? `${prefix}-address` : `${prefix}-address-retry`;
+    }
+    if (url.pathname.endsWith('/configuration')) {
+      configuration += 1;
+      return configuration === 1 ? `${prefix}-configuration` : `${prefix}-lifecycle-configuration`;
+    }
+    if (url.pathname.endsWith('/showcase-editor')) return `${prefix}-editor`;
+    if (/\/v1\/zones\/[^/]+$/.test(url.pathname)) return `${prefix}-zone`;
+    throw new Error(`Unlabelled ${prefix} request: ${requestPath}`);
+  };
+}
 async function productionVisit(site: Site, person: PersonaSession) {
   // manager redirects a visitor to sign-in before loadZoneAuthoring or its layout reads.
   if (!person.actingSubject) return;
   const currentPersona = persona;
+  const subject = person.actingSubject;
   const observe = (caller: PersonaSession) => async (label: string, ...args: Parameters<PersonaSession['main']>) => {
     const response = await capture(currentPersona, caller, label, ...args);
     const [method, requestPath, body, key] = args;
@@ -310,11 +334,7 @@ async function productionVisit(site: Site, person: PersonaSession) {
   };
   const recorded = observe(person);
   const publicRecorded = observe(sessions.visitor);
-  const read = async <T = unknown,>(label: string, requestPath: string, publicRead = false) => {
-    const response = await (publicRead ? publicRecorded : recorded)(label, 'GET', requestPath);
-    return { status: response.status, data: await response.json() as T };
-  };
-  const main = browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+  const fetcher = (send: typeof recorded): typeof fetch => (async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     const requestPath = url.pathname.replace(/^\/api\/main/, '') + url.search;
     const method = init?.method ?? 'GET';
@@ -322,61 +342,50 @@ async function productionVisit(site: Site, person: PersonaSession) {
     if (!label) throw new Error(`Production request has no label: ${method} ${requestPath}`);
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
-    return recorded(label, method, requestPath, body, key);
-  }) as typeof fetch });
+    return send(label, method, requestPath, body, key);
+  }) as typeof fetch;
+  const main = browserMainApi('https://record.invalid', { fetcher: fetcher(recorded) });
+  const publicMain = browserMainApi('https://record.invalid', { anonymous: true, fetcher: fetcher(publicRecorded) });
   const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
+  const space = short(site.zone);
+  // /manage/z has no proxy address header, so the layout asks the acting person to resolve the Space.
+  const render = (prefix: 'management' | 'saved-preview') => requestLabels.run(managementLabel(prefix),
+    () => readZoneManagementFrame(main, space, 'en', subject));
+  const opened = await render('management');
+  const preview = await render('saved-preview');
+  const editorStatus = (prefix: string) => visitAnswers.find(item => item.persona === currentPersona && item.label === `${prefix}-editor`)?.status;
+  const zoneStatus = (prefix: string) => visitAnswers.find(item => item.persona === currentPersona && item.label === `${prefix}-zone`)?.status;
+  if (currentPersona === 'operator' && (['management', 'saved-preview'] as const).some(prefix => editorStatus(prefix) === 200 && zoneStatus(prefix) === 404))
+    operatorZoneRefused = true;
+  if (opened.authoring.kind !== 'ready' || preview.authoring.kind !== 'ready') return;
+  const frame = await loadSavedPreviewFrame({
+    authoring: async () => preview.authoring,
+    navigation: saved => requestLabels.run((_method, requestPath) => {
+      const url = new URL(requestPath, 'https://record.invalid');
+      if (url.pathname === path(site)) return 'saved-preview-navigation';
+      if (url.pathname.includes('/revisions/')) return `saved-preview-navigation-${url.searchParams.get('after')}`;
+      if (url.pathname.startsWith('/v1/collections/')) return `saved-preview-mount-name-${url.pathname.split('/')[3]}`;
+      if (url.pathname.startsWith('/v1/works/')) return `saved-preview-mount-work-${url.pathname.split('/')[3]}`;
+      throw new Error(`Unlabelled navigation request: ${requestPath}`);
+    }, () => loadCompleteZoneNavigation(main, saved.model.zoneId, subject, saved.model.state)),
+    presentation: zone => named('saved-preview-theme-report', () => zonePresentationReads(main, subject).readPresentation(zone)),
+    realmHeader: realm => named('saved-preview-realm-header', () => realmFrameReads({ main: publicMain, keepProblem: false }).readRealmHeader(realm)),
+    installedDigest, packages: { load: loadPackage, declarations: declaredData },
+  }, { locale: 'en', homeName: 'Home', lookEnabled: false });
+  if (frame.kind !== 'ready') throw new Error(`Production saved preview failed: ${frame.kind === 'failure' ? frame.failure : frame.kind}`);
+
   const client = browserZoneAuthoring(main);
-
-  async function authoring(prefix: 'management' | 'saved-preview') {
-    const configuration = await read<{ configuration: { space: string } }>(`${prefix}-configuration`, `${path(site)}/configuration?${acting(person)}`);
-    // resolveZoneManagementAddress falls back to the supplied Space key on denied/missing configuration.
-    if (![200, 403, 404].includes(configuration.status)) return null;
-    const key = configuration.status === 200
-      ? short(configuration.data.configuration.space as string) : short(site.zone);
-    const address = await read<{ status: string; capabilities?: { zone?: string } }>(`${prefix}-address`, `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key })}`, true);
-    if (address.status !== 200 || address.data.status !== 'resolved' || !address.data.capabilities?.zone) return null;
-    await read(`${prefix}-site-presentation`, `${path(site)}/presentation`, true);
-    // The layout's lifecycle read reuses the configuration binding, or reads it after the public site resolves.
-    const [editor, zone] = await Promise.all([
-      read<{ preview: { presentation: { official?: { theme?: string } } } }>(`${prefix}-editor`, `${path(site)}/showcase-editor?${acting(person)}`),
-      read(`${prefix}-zone`, `${path(site)}?${acting(person)}`),
-      ...(configuration.status === 200 ? [] : [read(`${prefix}-lifecycle-configuration`, `${path(site)}/configuration?${acting(person)}`)]),
-    ]);
-    if (currentPersona === 'operator' && editor.status === 200 && zone.status === 404) operatorZoneRefused = true;
-    if (editor.status !== 200 || zone.status !== 200) return null;
-    const model = authoringModel(editor.data, zone.data, short(site.zone), 'Independent original site');
-    if (!model) throw new Error('Production authoring model could not open the recorded reads');
-    return { model, preview: editor.data.preview };
-  }
-  const opened = await authoring('management');
-  const savedPreview = await authoring('saved-preview');
-  if (!opened || !savedPreview) return;
-  const navigation = await requestLabels.run((_method, requestPath) => {
-    if (requestPath.startsWith(`${path(site)}?`)) return 'saved-preview-navigation';
-    if (requestPath.includes('/revisions/')) return `saved-preview-navigation-${new URL(requestPath, 'https://record.invalid').searchParams.get('after')}`;
-    if (requestPath.startsWith('/v1/collections/')) return `saved-preview-mount-name-${requestPath.split('/')[3]}`;
-    if (requestPath.startsWith('/v1/works/')) return `saved-preview-mount-work-${requestPath.split('/')[3]}`;
-    throw new Error(`Unlabelled navigation request: ${requestPath}`);
-  }, () => loadCompleteZoneNavigation(main, short(site.zone), person.actingSubject!, savedPreview.model.state));
-  if (!navigation.ok) throw new Error(`Production saved navigation failed: ${navigation.failure}`);
-  // These Blocks have no mounts, Showcase sources or media. Saved composition is
-  // in showcase-editor; loadSavedPreviewFrame adds a public report only for an official theme.
-  if (savedPreview.preview.presentation.official?.theme) {
-    await read('saved-preview-theme-report', `${path(site)}/presentation?${acting(person)}`);
-  }
-
-  const state = opened.model.state;
-  const choice = draftChoice({ ...state, value: JSON.stringify(fromPlainText('Saved production garden', 'blocks')) },
-    person.actingSubject);
+  const state = opened.authoring.model.state;
+  const choice = draftChoice({ ...state, value: JSON.stringify(fromPlainText('Saved production garden', 'blocks')) }, subject);
   const saved = await named('editor-save', () => client.saveDraft(draftWire(choice), randomUUID()));
   if (!saved.ok) throw new Error(`Production save failed: ${saved.failure}`);
   const reopened = await requestLabels.run((_method, requestPath) => requestPath.includes('/showcase-editor')
-    ? 'editor-reopen-draft' : 'editor-reopen-heads', () => client.readDraft(short(site.zone), person.actingSubject!));
+    ? 'editor-reopen-draft' : 'editor-reopen-heads', () => client.readDraft(space, subject));
   if (!reopened.ok) throw new Error(`Production reopen failed: ${reopened.failure}`);
   await named('editor-stale-save', () => client.saveDraft(draftWire(choice), randomUUID()));
   const publication = publicationChoice({ ...state, value: choice.savedValue, savedValue: choice.savedValue,
     expectedHead: saved.data.revisionId, basis: saved.data });
   if (!publication) throw new Error('Production editor has no publishable saved choice');
-  const published = await named('editor-publication', () => client.publish(publication, person.actingSubject!, randomUUID(), short(site.zone)));
+  const published = await named('editor-publication', () => client.publish(publication, subject, randomUUID(), space));
   if (!published.ok) throw new Error(`Production publication failed: ${published.failure}`);
 }

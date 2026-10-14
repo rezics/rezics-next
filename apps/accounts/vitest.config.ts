@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
-import { playwright } from '@vitest/browser-playwright';
+import { storyBrowser } from '../../scripts/qa/story-browser.ts';
 import { storybookTest } from '@storybook/addon-vitest/vitest-plugin';
 import { STORY_SCREENSHOTS_ENV, storyScreenshotCommand } from '../../scripts/qa/story-screenshots.ts';
 
@@ -21,6 +21,6 @@ export default defineConfig({
       ...screenshotCommands,
       // Stories assert states, not transitions: with reduced motion (which Rezics
       // UI honours) a field error or dialog is complete when it appears.
-      provider: playwright({ contextOptions: { reducedMotion: 'reduce' } }), instances: [{ browser: 'chromium' }] } },
+      provider: storyBrowser({ contextOptions: { reducedMotion: 'reduce' } }), instances: [{ browser: 'chromium' }] } },
   }] },
 });
