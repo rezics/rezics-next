@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { AccessPlatformAdministrators, platformResourceAuthority } from '../../../services/main/src/modules/access/platform-administrator.ts';
 import { platformPermissionProof } from '../../../services/main/src/modules/access/platform-permissions.ts';
+import { reduceFixtureGrant } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../support/personas.ts';
 
 const permission = 'platform:resource:work.publish';
@@ -115,17 +116,17 @@ test('a later platform grant holder and a status-only operator cannot acquire th
 
 test('existing designation bootstrap is idempotent and preserves revoked ceilings and designation', async () => {
   const admins = new AccessPlatformAdministrators(pool);
-  const before = (await pool.query('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows;
+  const before = (await pool.query<{ id: string; active: boolean }>('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows;
   expect(await admins.designateFirst(issuer, sessions.operator.accountId!, () => undefined))
     .toMatchObject({ status: 'ignored' });
   expect((await pool.query('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows).toEqual(before);
   // Keep governance available while ending the original designation episode.
   const successor = (await issue({ permission: 'platform:grant', scopeId: 'platform:access' })).grant;
-  // Updates model terminal authority states; grants are only issued by the API/bootstrap.
+  // Negative fixture authority ends a ceiling; issuance stays in API/bootstrap.
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('UPDATE access.permission_grant SET active=false WHERE action=$1', [assignment]);
+    await reduceFixtureGrant(client, before[0]!.id, { active: false });
     const designation = (await client.query<{ receipt: string }>(
       "SELECT receipt FROM access.platform_grant_episode WHERE permission='platform:grant' ORDER BY created_at,id LIMIT 1")).rows[0]!;
     await client.query('SELECT access.seed_platform_grants($1,$2)', [operatorId, designation.receipt]);
