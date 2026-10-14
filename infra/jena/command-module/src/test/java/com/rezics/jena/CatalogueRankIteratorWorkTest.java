@@ -27,9 +27,12 @@ public class CatalogueRankIteratorWorkTest {
     private static RealmSearchSeekTest.Owner add(RealmSearchSeekTest.Fixture fixture, int n,
             boolean realm, String title, String body) throws Exception {
         var owner = fixture.owner(n, realm, false, body, null);
-        fixture.data.add(CURRENT, owner.work(), label(), NodeFactory.createLiteralLang(title, "fr"));
+        Node name = NodeFactory.createLiteralLang(title, "fr");
+        fixture.data.add(CURRENT, owner.work(), label(), name);
         fixture.data.add(CURRENT, owner.contribution(), p("author"), id(3));
         PublicNameProjection.refresh(fixture.data, owner.work());
+        assertTrue("each added Work must grow the real name projection", fixture.data.contains(
+            PUBLIC, PublicNameProjection.nameUnit(owner.work(), "work"), p("publicTitle"), name));
         fixture.index.refreshRankSubject(fixture.data, owner.unit().getURI());
         return owner;
     }
@@ -60,6 +63,8 @@ public class CatalogueRankIteratorWorkTest {
                 assertTrue("native page bound", hits.size() <= 1);
                 for (var value : hits) {
                     var hit = value.getAsObject();
+                    assertFalse("non-Work names must not consume native slots", hit.get("id").getAsString().value().startsWith(PublicNameProjection.PREFIX + "agent:"));
+                    assertFalse("directories must not consume native slots", hit.get("id").getAsString().value().startsWith(PublicNameProjection.DIRECTORY));
                     if (!hit.get("key").isNull()) {
                         assertFalse("a body/name witness must not repeat its Work", keys.contains(hit.get("key").getAsString().value()));
                         keys.add(hit.get("key").getAsString().value());
