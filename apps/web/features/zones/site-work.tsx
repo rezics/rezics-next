@@ -86,9 +86,13 @@ export async function ZoneWorkPage({
   /** The Zone the fact panel addresses. Omitted where the page has no catalogue package. */
   zone?: ZoneContext | null;
 }) {
-  const [work, messages] = await Promise.all([
+  const discussionAddress = aboutDiscussionAddress(base.path);
+  // Start the live attachment read with the frame, before its streamed Work regions spend the page deadline.
+  const [work, messages, discussion] = await Promise.all([
     loadWork(base.ref, locale),
     getMessages('workPage', locale),
+    discussionAddress ? ZoneAboutDiscussion({ spaceRef: discussionAddress.spaceRef, path: discussionAddress.path,
+      href: base.path, locale }) : null,
   ]);
   if (!work.ok) return <WorkUnavailable messages={messages} />;
   const common = { workRef: base, id: work.id, locale, messages };
@@ -102,10 +106,6 @@ export async function ZoneWorkPage({
     ? await readCatalogueFacts(work.id, locale, catalogue.count, catalogue.formatNames) : null;
   // The year is the Work's own accepted first-publication Statement; no year means none is recorded.
   const facts = read;
-  const discussionAddress = aboutDiscussionAddress(base.path);
-  const discussion = discussionAddress
-    ? <ZoneAboutDiscussion spaceRef={discussionAddress.spaceRef} path={discussionAddress.path}
-      href={base.path} locale={locale} /> : null;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}>
       {tab === 'overview' ? (
