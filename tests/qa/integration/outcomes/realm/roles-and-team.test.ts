@@ -1,5 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { chromium } from '@playwright/test';
 import team from '../../../../../scripts/qa/cases/outcomes/realm/roles-and-team.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
@@ -9,7 +12,19 @@ import {
   type PersonaSessions,
 } from '../../../support/personas.ts';
 
-setDefaultTimeout(120_000);
+setDefaultTimeout(245_000);
+const proofDeadlineMs = 120_000; // The original API outcome proof owns these 120 seconds.
+const recordDeadlineMs = 120_000;
+const fileWall = setTimeout(() => { throw new Error('Roles and team file exceeded 480 s'); }, 480_000);
+async function within(part: string, milliseconds: number, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+let dialogBundle: string;
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(team);
 let initialRole: string;
@@ -78,6 +93,7 @@ async function change(change: Change) {
   return intent;
 }
 beforeAll(async () => {
+  dialogBundle = await buildDialog();
   sessions = await personaSessions('private');
   await recording.prepare();
   const roles = await answer<Roles>(sessions.owner.main('GET', `${root()}/roles?${acting(sessions.owner)}`));
@@ -85,7 +101,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 async function renderRead(name: PersonaName, label: string, path: string, anonymous = false) {
@@ -124,12 +140,7 @@ async function refused(name: PersonaName) {
   const person = sessions[name],
     status = name === 'visitor' ? 401 : 403;
   const sample = recording.session(name, person);
-  if (name !== 'visitor') await pageSession(name);
   await Promise.all([
-    frameSite(name),
-    renderRead(name, 'official-address', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`, true),
-    ...(name !== 'visitor'
-      ? [renderRead(name, 'members-role-filter', `${root()}/members?${acting(person)}&role=${initialRole}`)] : []),
     answer(sample('roles-denied', 'GET', `${root()}/roles?${acting(person)}`), status),
     answer(sample('members-denied', 'GET', `${root()}/members?${acting(person)}`), status),
     answer(
@@ -159,27 +170,19 @@ async function refused(name: PersonaName) {
     status,
   );
 }
-outcomeTest(team, 'visitor', () => refused('visitor'), recording);
-outcomeTest(team, 'stranger', () => refused('stranger'), recording);
-outcomeTest(team, 'member', () => refused('member'), recording);
 
-outcomeTest(team, 'owner', async () => {
+async function ownerProof() {
   const owner = sessions.owner,
     stranger = sessions.stranger,
     moderator = sessions.moderator;
   const sample = recording.session('owner', owner);
-  await pageSession('owner');
   await Promise.all([
     answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`)),
     answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`)),
-    renderRead('owner', 'members-role-filter', `${root()}/members?${acting(owner)}&role=${initialRole}`),
-    renderRead('owner', 'official-address', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`, true),
     answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`)),
     answer(recording.session('owner', sessions.visitor)('member-profile', 'GET', `/v1/agents/${sessions.member.actingSubject!.slice(-36)}`)),
     answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`)),
     answer(sample('outgoing-invitations-empty', 'GET', `${root()}/invitations?${acting(owner)}`)),
-    frameSite('owner', 'management-site', false),
-    renderRead('owner', 'site-editor-access', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor?${acting(owner)}`),
     answer(recording.session('owner', sessions.visitor)('holder-name-owner', 'GET', `/v1/agents/${owner.actingSubject!.slice(-36)}`)),
     answer(recording.session('owner', sessions.visitor)('holder-name-moderator', 'GET', `/v1/agents/${moderator.actingSubject!.slice(-36)}`)),
   ]);
@@ -308,17 +311,151 @@ outcomeTest(team, 'owner', async () => {
   expect(
     (await answer<Roles>(owner.main('GET', `${root()}/roles?${acting(owner)}`))).generation,
   ).toBe(full.generation);
-}, recording);
-outcomeTest(team, 'moderator', async () => {
+}
+async function moderatorProof() {
   await refused('moderator');
   await answer(
     sessions.moderator.main('GET', `${root()}/moderation?${acting(sessions.moderator)}`),
   );
-}, recording);
-outcomeTest(team, 'operator', async () => {
+}
+async function operatorProof() {
   expect(await answer(recording.session('operator', sessions.operator)('platform-access', 'GET', '/v1/me/platform-access'))).toMatchObject({
     groups: ['platform-admin'],
   });
   await refused('operator');
   await answer(sessions.operator.main('GET', `${root()}/roles?${acting(sessions.owner)}`), 403);
-}, recording);
+}
+
+// Bundle the real browser hook and adapter: only the HTTP boundary is injected.
+async function buildDialog() {
+  const directory = resolve('.temp/role-dialog');
+  mkdirSync(directory, { recursive: true });
+  const entry = resolve(directory, 'entry.ts');
+  writeFileSync(entry, `
+import { createElement, useState } from 'react';
+import { createRoot } from 'react-dom/client';
+import { bffAdminApi, useRoleChange } from '../../apps/web/features/manage/admin-api.ts';
+import { roleDurations } from '../../apps/web/features/manage/members-view.tsx';
+const input = window.dialogInput;
+window.fetch = async (url, init = {}) => {
+  const result = await window.requestMain(String(url), init.method ?? 'GET', init.body,
+    new Headers(init.headers).get('idempotency-key'));
+  return new Response(result.body, { status: result.status, headers: result.headers });
+};
+const api = bffAdminApi(input.realm, input.actingSubject);
+function Dialog() {
+  const [openedAt] = useState(() => Math.max(input.now, Date.now()));
+  const days = roleDurations.find(([, days]) => days === 30)[1];
+  const change = { kind: 'assignment', roleId: input.roleId, member: input.member,
+    assigned: true, validUntil: new Date(openedAt + days * 86400000).toISOString() };
+  const result = useRoleChange(api, { ...input, change });
+  window.dialog = { ...result, openedAt, api };
+  return null;
+}
+window.startDialog = async () => {
+  const [roles, roster] = await Promise.all([api.roles(), api.members('', null)]);
+  if (!roles.ok || !roster.ok) throw new Error('Dialog basis could not be read');
+  const target = roster.data.items.find(item => item.member === input.member);
+  const held = new Set(target.roles.map(role => role.id));
+  const choices = roles.data.roles.filter(role => !held.has(role.id));
+  const role = choices.find(role => role.permissions.includes('governance.moderate'));
+  if (!role) throw new Error('Joined member has no moderation role choice');
+  input.roleId = role.id;
+  input.generation = roles.data.generation;
+  createRoot(document.getElementById('role-dialog-root')).render(createElement(Dialog));
+};
+`);
+  const result = await Bun.build({ entrypoints: [entry], target: 'browser', minify: false,
+    define: { 'process.env.NODE_ENV': JSON.stringify('production'), 'process.env': '{}' } });
+  if (!result.success) throw new AggregateError(result.logs, 'Role dialog bundle failed');
+  return result.outputs[0]!.text();
+}
+
+async function dialogSave() {
+  const person = sessions.owner;
+  const browser = await chromium.launch({ headless: true });
+  try {
+    const page = await browser.newPage();
+    await page.route('http://localhost/**', route => route.fulfill({
+      contentType: 'text/html', body: '<div id="role-dialog-root"></div>',
+    }));
+    await page.goto('http://localhost');
+    const sample = recording.session('owner', person);
+    let saving = false;
+    await page.exposeFunction('requestMain', async (url: string, method: string, raw?: string, key?: string) => {
+      const request = new URL(url);
+      const path = request.pathname.replace('/api/main', '') + request.search;
+      const body: unknown = raw ? JSON.parse(raw) : undefined;
+      // This preview's validUntil minus the selected 30 days is the exact openedAt
+      // clock. Its own label preserves that instant without inventing an API answer.
+      const label = path.endsWith('/role-impact')
+        ? saving ? 'dialog-role-save-preview' : 'role-dialog-opened-at'
+        : path.endsWith('/role-changes') ? 'dialog-role-assignment-receipt'
+        : path.includes('/agents/') ? 'dialog-impact-member-name'
+        : path.split('?')[0]!.endsWith('/members') ? saving ? 'dialog-members-assigned' : 'dialog-member-roster'
+        : saving ? 'dialog-roles-assigned' : 'dialog-roles';
+      const response = await sample(label, method, path, body, key ?? undefined);
+      return { status: response.status, body: await response.text(),
+        headers: Object.fromEntries(response.headers.entries()) };
+    });
+    await page.evaluate(input => { Object.assign(window, { dialogInput: input }); }, {
+      principal: person.accountId!, realm: sessions.realm.slice(-36), actingSubject: person.actingSubject!,
+      member: sessions.member.actingSubject!, now: Date.now(),
+    });
+    const browserErrors: string[] = [];
+    page.on('pageerror', error => browserErrors.push(error.message));
+    await page.addScriptTag({ content: dialogBundle });
+    await page.evaluate(() => (window as unknown as { startDialog(): Promise<void> }).startDialog());
+    await page.waitForFunction(() => (window as unknown as { dialog: { state: { kind: string }; names: Record<string, unknown> } }).dialog?.state?.kind === 'ready'
+      && Object.keys((window as unknown as { dialog: { names: Record<string, unknown> } }).dialog.names).length > 0)
+      .catch(async error => {
+        const state = await page.evaluate(() => (window as unknown as { dialog?: { state: unknown } }).dialog?.state);
+        throw new Error(`Dialog preview failed: ${JSON.stringify({ state, browserErrors })}`, { cause: error });
+      });
+    saving = true;
+    const saved = await page.evaluate(async () => {
+      const dialog = (window as unknown as { dialog: { save(reason: string): Promise<{ ok: boolean }>;
+        api: { roles(): Promise<unknown>; members(search: string, after: null): Promise<unknown> } } }).dialog;
+      const result = await dialog.save('Give the joined member the moderation role');
+      if (!result.ok) throw new Error(`Production role Save failed: ${JSON.stringify(result)}`);
+      await Promise.all([dialog.api.roles(), dialog.api.members('', null)]);
+      return result;
+    });
+    if (!saved.ok) throw new Error('Production role Save did not confirm');
+  } finally { await browser.close(); }
+}
+
+async function recordPage(name: PersonaName) {
+  const person = sessions[name];
+  if (name !== 'visitor') await pageSession(name);
+  await Promise.all([
+    frameSite(name, name === 'owner' ? 'management-site' : 'frame-site', name !== 'owner'),
+    renderRead(name, 'official-address', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`, true),
+    ...(name !== 'visitor' ? [renderRead(name, 'members-role-filter', `${root()}/members?${acting(person)}&role=${initialRole}`)] : []),
+    ...(name === 'owner' ? [
+      renderRead(name, 'site-editor-access', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor?${acting(person)}`),
+      renderRead(name, 'roster-name-moderator', `/v1/agents/${sessions.moderator.actingSubject!.slice(-36)}`, true),
+    ] : []),
+    ...(name === 'visitor' ? [renderRead(name, 'frame-site-acting', `${root()}/zone?${acting(person)}`)] : []),
+  ]);
+  if (name === 'owner') await dialogSave();
+}
+async function proveAndRecord(name: PersonaName, proof: () => Promise<void>) {
+  const start = performance.now();
+  let proofElapsed = 0;
+  const recordStart = { value: start };
+  try {
+    await within('proof', proofDeadlineMs, proof);
+    proofElapsed = performance.now() - start;
+    recordStart.value = performance.now();
+    await within('record', recordDeadlineMs, () => recordPage(name));
+  } finally {
+    console.info(`[roles-and-team] ${name} proof=${Math.round(proofElapsed || performance.now() - start)}ms record=${Math.round(proofElapsed ? performance.now() - recordStart.value : 0)}ms`);
+  }
+}
+outcomeTest(team, 'visitor', () => proveAndRecord('visitor', () => refused('visitor')), recording);
+outcomeTest(team, 'stranger', () => proveAndRecord('stranger', () => refused('stranger')), recording);
+outcomeTest(team, 'member', () => proveAndRecord('member', () => refused('member')), recording);
+outcomeTest(team, 'owner', () => proveAndRecord('owner', ownerProof), recording);
+outcomeTest(team, 'moderator', () => proveAndRecord('moderator', moderatorProof), recording);
+outcomeTest(team, 'operator', () => proveAndRecord('operator', operatorProof), recording);
