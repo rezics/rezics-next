@@ -1,4 +1,8 @@
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { readAddress } from '../../../../../apps/web/features/address/client.ts';
+import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
+import { mainApiWithToken } from '../../../../../apps/web/features/api/main.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID, createHash } from 'node:crypto';
@@ -7,7 +11,14 @@ import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
 } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+const recording = new OutcomeRecorder(declaration);
+const visitRequest = new AsyncLocalStorage<{
+  name: PersonaName;
+  label: (path: string) => string;
+}>();
+const originalFetch = globalThis.fetch;
+let recordingFailure: unknown;
 let closed: PersonaSessions;
 let live: PersonaSessions;
 let work: Awaited<ReturnType<typeof publish>>;
@@ -151,6 +162,20 @@ async function place(sessions: PersonaSessions, target: Work, text: string, pare
   return { reply, ...draft };
 }
 beforeAll(async () => {
+  await recording.prepare();
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const context = visitRequest.getStore();
+    if (!context || url.hostname !== 'record.invalid') return originalFetch(input, init);
+    const path = url.pathname + url.search;
+    const headers = new Headers(init?.headers);
+    // Public production reads omit credentials even for a signed-in visitor.
+    const caller = headers.has('authorization') ? closed[context.name] : closed.visitor;
+    try {
+      return await recording.session(context.name, caller)(context.label(path), init?.method ?? 'GET', path,
+        undefined, undefined, { headers: Object.fromEntries([...headers].filter(([key]) => key !== 'authorization')) });
+    } catch (error) { recordingFailure = error; throw error; }
+  }) as typeof fetch;
   closed = await personaSessions('public');
   live = await personaSessions('public');
   try {
@@ -169,7 +194,11 @@ beforeAll(async () => {
   if (setupFailure) console.log(`Discussion prerequisite: ${setupFailure}`);
   if (closureFailure) console.log(`Discussion closure prerequisite: ${closureFailure}`);
 }, 180_000);
-afterAll(async () => { await closed?.close(); });
+afterAll(async () => {
+  globalThis.fetch = originalFetch;
+  try { await recording.publish(); }
+  finally { await closed?.close(); }
+});
 
 function paths(realm: string, target: Work, first: Reply, child: Reply, person: PersonaSession) {
   const base = `/v1/realms/${short(realm)}`;
@@ -230,9 +259,72 @@ async function reads(name: PersonaName) {
     failures.push(`Independent publication GET ${publicationPath}: ${publication.status} ${publication.body}`);
   reportFailures(failures);
 }
-outcomeTest(declaration, 'visitor', () => closureCell(declaration, 'visitor', () => closed, () => reads('visitor')));
-outcomeTest(declaration, 'stranger', () => closureCell(declaration, 'stranger', () => closed, () => reads('stranger')));
-outcomeTest(declaration, 'member', () => closureCell(declaration, 'member', () => closed, () => reads('member')));
-outcomeTest(declaration, 'owner', () => closureCell(declaration, 'owner', () => closed, () => reads('owner')));
-outcomeTest(declaration, 'moderator', () => closureCell(declaration, 'moderator', () => closed, () => reads('moderator')));
-outcomeTest(declaration, 'operator', () => closureCell(declaration, 'operator', () => closed, () => reads('operator')));
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function productionVisit(name: PersonaName) {
+  const person = closed[name];
+  const named = <T,>(label: string | ((path: string) => string), run: () => Promise<T>) =>
+    visitRequest.run({ name, label: typeof label === 'string' ? () => label : label }, run);
+  const incoming = new Headers();
+  // Both /r/{realm}/discussions and /r/{realm}/discussions/{thread}
+  // enter through proxy's Space admission before their frame or thread readers.
+  const address = await named('discussion-space-address', () => readAddress(
+    { scope: 'space', key: short(closed.realm) }, 'en', 'https://record.invalid', incoming));
+  if (recordingFailure) throw recordingFailure;
+  if (address.kind !== 'missing') {
+    if (address.kind === 'retired' || address.kind === 'unavailable') return;
+    throw new Error('Closed discussion unexpectedly passed Space admission');
+  }
+  let actingSubject: string | undefined;
+  if (person.actingSubject) {
+    const session = await named('discussion-session-agent', () => mainApiWithToken('recorded-session', {
+      fetcher: (async (input, init) => {
+        const url = new URL(input instanceof Request ? input.url : String(input));
+        return globalThis.fetch(`https://record.invalid${url.pathname}${url.search}`, init);
+      }) as typeof fetch,
+    }).v1.me['session-agent'].get());
+    if (recordingFailure) throw recordingFailure;
+    if (session.data?.sessionAgent.eligible)
+      actingSubject = session.data.sessionAgent.actingSubject ?? undefined;
+  }
+  const page = await named(path => {
+    if (path.startsWith(`${root(closed)}/join-page`)) return 'discussion-join-page';
+    if (path.startsWith(root(closed))) return 'discussion-realm-header';
+    throw new Error(`Unlabelled production request: ${path}`);
+  }, () => readSpacePage(short(closed.realm), 'en', {
+    origin: 'https://record.invalid', incoming,
+    ...(person.actingSubject ? { token: 'recorded-session', actingSubject } : {}),
+  }));
+  if (recordingFailure) throw recordingFailure;
+  // Proxy sets SPACE_MISSING_HEADER: metadata and discussionView stop before
+  // Realm frame, thread, reply and command clients can send anything further.
+  if (page.kind !== 'missing') throw new Error(`Closed discussion reached ${page.kind}`);
+}
+
+async function qualify(name: PersonaName) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The proof retains its own 60 s; the subsequent production visit owns 120 s.
+    // The integration runner retains the file's 480 s wall.
+    await within(60_000, 'API proof', () => closureCell(declaration, name, () => closed, () => reads(name)));
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+outcomeTest(declaration, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(declaration, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(declaration, 'member', () => qualify('member'), recording);
+outcomeTest(declaration, 'owner', () => qualify('owner'), recording);
+outcomeTest(declaration, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(declaration, 'operator', () => qualify('operator'), recording);
