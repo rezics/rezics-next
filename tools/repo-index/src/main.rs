@@ -183,9 +183,24 @@ struct IndexedFile {
     syntax: SyntaxFacts,
     named_imports: Vec<NamedImport>,
     direct_call_names: BTreeSet<String>,
+    #[cfg(test)]
+    #[serde(skip)]
     function_facts: Vec<FunctionFact>,
+    #[cfg(test)]
+    #[serde(skip)]
     call_facts: Vec<CallFact>,
+    #[cfg(test)]
+    #[serde(skip)]
     aliases: Vec<AliasFact>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    graph_deflate: Option<String>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GraphFacts<'g> {
+    function_facts: &'g [FunctionFact],
+    call_facts: &'g [CallFact],
+    aliases: &'g [AliasFact],
 }
 #[derive(Serialize)]
 struct NamedImport {
@@ -538,9 +553,13 @@ fn indexed_mode(
             syntax: SyntaxFacts::default(),
             named_imports: vec![],
             direct_call_names: BTreeSet::new(),
+            #[cfg(test)]
             function_facts: vec![],
+            #[cfg(test)]
             call_facts: vec![],
+            #[cfg(test)]
             aliases: vec![],
+            graph_deflate: None,
         });
     }
     let allocator = Allocator::default();
@@ -600,6 +619,15 @@ fn indexed_mode(
     let function_facts = facts.function_facts;
     let call_facts = facts.call_facts;
     let aliases = facts.aliases;
+    let graph_deflate = if keep_runtime || service_graph_domain(&source.file) {
+        Some(compressed_json(&GraphFacts {
+            function_facts: &function_facts,
+            call_facts: &call_facts,
+            aliases: &aliases,
+        })?)
+    } else {
+        None
+    };
     let runtime = if compact_only || keep_runtime {
         RuntimeProjection {
             allocator: &allocator,
@@ -632,9 +660,13 @@ fn indexed_mode(
         syntax,
         named_imports,
         direct_call_names,
+        #[cfg(test)]
         function_facts,
+        #[cfg(test)]
         call_facts,
+        #[cfg(test)]
         aliases,
+        graph_deflate,
     })
 }
 fn service_graph_domain(file: &str) -> bool {
@@ -1287,6 +1319,65 @@ mod tests {
             }
         });
         assert_eq!(full_spans, runtime_spans);
+    }
+    #[test]
+    fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
+        let root = env::current_dir().unwrap();
+        let resolver = resolver(&root);
+        let decode = |facts: &IndexedFile| {
+            let bytes = STANDARD
+                .decode(facts.graph_deflate.as_ref().unwrap())
+                .unwrap();
+            let decoder = flate2::read::DeflateDecoder::new(bytes.as_slice());
+            serde_json::from_reader::<_, Value>(decoder).unwrap()
+        };
+        let facts = indexed(
+            Source {
+                file: "fixture.ts".into(),
+                text: "function write(){ helper() }; const callback = write;".into(),
+            },
+            &root,
+            &resolver,
+            false,
+        )
+        .unwrap();
+        let graph = decode(&facts);
+        assert_eq!(graph["functionFacts"][0]["name"], "write");
+        assert_eq!(graph["callFacts"][0]["calleeName"], "helper");
+        assert_eq!(graph["aliases"][0]["references"][0], "write");
+        let wire = serde_json::to_value(&facts).unwrap();
+        assert!(wire.get("functionFacts").is_none());
+        assert!(wire.get("callFacts").is_none());
+        assert!(wire.get("aliases").is_none());
+        let empty = indexed_mode(
+            Source {
+                file: "services/owner/src/empty.ts".into(),
+                text: "export {};".into(),
+            },
+            &root,
+            &resolver,
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        assert_eq!(
+            decode(&empty),
+            json!({"functionFacts":[],"callFacts":[],"aliases":[]})
+        );
+        let unrelated = indexed_mode(
+            Source {
+                file: "scripts/empty.ts".into(),
+                text: "export {};".into(),
+            },
+            &root,
+            &resolver,
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        assert!(unrelated.graph_deflate.is_none());
     }
     #[test]
     fn object_methods_have_canonical_owners_and_assignments_remain_anonymous() {
@@ -2108,8 +2199,11 @@ fn compressed_ast(ast: &str) -> Result<String> {
 }
 
 fn compressed_sql(sql: &SqlFacts) -> Result<String> {
+    compressed_json(sql)
+}
+fn compressed_json(value: &impl Serialize) -> Result<String> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
-    encoder.write_all(&serde_json::to_vec(sql)?)?;
+    encoder.write_all(&serde_json::to_vec(value)?)?;
     Ok(STANDARD.encode(encoder.finish()?))
 }
 
