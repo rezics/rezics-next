@@ -73,6 +73,8 @@ export type ReadFailure =
   /** Main refused the request as malformed, or over its read budget. */
   | 'invalid' | 'budget'
   /** Main or a source it reads is down or timed out; retrying may help. */
-  | 'unavailable';
+  | 'unavailable'
+  /** Main accepted the read but has not settled it (HTTP 202 only). */
+  | 'pending';
 
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure };
+export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; status?: number; problem?: unknown };

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import type { MediaApi, WorkMark, WorkStanding } from './media-api.ts';
 import { copyOf } from './messages.ts';
@@ -76,5 +76,16 @@ export const ChangedElsewhere: Story = {
     await view.findByRole('alert');
     await userEvent.click(view.getByRole('button', { name: 'Keep my change' }));
     await view.findByText('Completed', { exact: true });
+  },
+};
+
+let partsReads = 0;
+/** A composition uses its occurrence controls; a whole-Work mark is absent, not an unavailable retry. */
+export const HasParts: Story = {
+  args: { api: { ...memory(), async workStanding() { partsReads++; return { ok: false, failure: 'has-parts' }; } } },
+  async play({ canvasElement }) {
+    await waitFor(() => expect(partsReads).toBeGreaterThan(0));
+    await expect(within(canvasElement).queryByRole('alert')).not.toBeInTheDocument();
+    await expect(within(canvasElement).queryByRole('button', { name: 'Mark completed' })).not.toBeInTheDocument();
   },
 };

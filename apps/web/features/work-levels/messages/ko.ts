@@ -6,6 +6,7 @@ export default {
   nameNotShown: '이름이 표시되지 않음',
   parts: '구성', partsList: '출간 순서의 구성', partsPages: '구성 페이지',
   partsUnavailable: '구성을 불러오지 못했습니다.',
+  wholesUnavailable: '이 작품을 포함하는 작품을 불러오지 못했습니다.',
   partOf: '소속:', partOfList: '이 작품을 포함하는 묶음',
   openGroup: '그룹 열기', allParts: '모든 구성',
   noParts: '구성이 없습니다', noPartsBody: '이 작품에는 읽을 수 있는 순서 있는 구성이 없습니다.',

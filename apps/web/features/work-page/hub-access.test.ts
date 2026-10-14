@@ -142,5 +142,5 @@ test('an unpublished Hub work stays distinct from a closed publication', async (
 test('a temporary Hub failure remains recoverable for a permitted viewer', async () => {
   access = { groups: ['developer-extras'], operations: [], generation: 'group' };
   answer = { data: null, error: { status: 503 } };
-  expect(await readHubWorkPage(href)).toEqual({ ok: false, failure: 'unavailable' });
+  expect(await readHubWorkPage(href)).toEqual({ ok: false, failure: 'unavailable', status: 503 });
 });

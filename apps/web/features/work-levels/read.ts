@@ -1,6 +1,6 @@
 import { cache } from 'react';
-import { readWorkParts, readWorkRealizations } from '../work-page/anime-hub-recorded-page.ts';
-import { failureOf } from '../work-page/failure.ts';
+import { readWorkParts, readWorkRealizations, readWorkRelations, readWorkWholes } from '../work-page/anime-hub-recorded-page.ts';
+import { settle } from '../work-page/books-edition-page.read.ts';
 import { reader, readReviewer } from '../work-page/read.ts';
 import { agentsOf, relationRows } from './relation-rows.ts';
 import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, RealizationPage, Realization,
@@ -10,20 +10,6 @@ import type { CollectionMember, CollectionMembers, Loaded, Names, PartsPage, Rea
 // of throwing, so one section's failure never takes down another. Main decides
 // disclosure for public parts, wholes and relations reads. Collection reads
 // still require an acting Agent.
-
-type Answer<T> = { data: T | null; error: { status: number } | null };
-
-/** Main answers 409 when the graph moved during a read; a read that is not continuing a cursor starts again once. */
-async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<Loaded<T>> {
-  try {
-    let { data, error } = await call();
-    if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return { ok: false, failure: failureOf(error.status) };
-    return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
-  } catch {
-    return { ok: false, failure: 'unavailable' };
-  }
-}
 
 /** The acting Agent a read needs, or the reason the reader has none. */
 async function actor() {
@@ -41,15 +27,13 @@ export async function readParts(id: string, query: { parent?: string; after?: st
 
 export async function readWholes(id: string, query: { after?: string; limit?: number } = {}): Promise<Loaded<WholesPage>> {
   const current = await reader();
-  return settle(() => current.main.v1.resources({ resource: id }).wholes.get({ query: {
-    actingSubject: current.actingSubject, after: query.after, limit: query.limit ?? 20 } }), query.after);
+  return readWorkWholes(current.main, current.actingSubject, id, query);
 }
 
 export async function readRelations(id: string, query: { after?: string; limit?: number }):
   Promise<Loaded<RelationsPage>> {
   const current = await reader();
-  return settle(() => current.main.v1.resources({ resource: id }).relations.get({ query: {
-    actingSubject: current.actingSubject, after: query.after, limit: query.limit } }), query.after);
+  return readWorkRelations(current.main, current.actingSubject, id, query);
 }
 
 /** The members a franchise Collection places, in the order Main keeps them. */

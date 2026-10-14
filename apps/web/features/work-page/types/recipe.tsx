@@ -7,10 +7,10 @@ import { Clock3Icon, PencilIcon, XIcon } from 'lucide-react';
 import { type FormEvent, type ReactNode, useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { browserMainApi } from '../../api/browser.ts';
-import { followHref } from '../../entity-page/href.ts';
-import { appendRecipePage, readRecipePage, recipePageQuery } from '../../recipe-editor/pages.ts';
+import { appendRecipePage, readRecipePage } from '../../recipe-editor/pages.ts';
 import { formatMeasure } from '../../recipe-editor/quantity.ts';
 import Link from '../../shell/localized-link.tsx';
+import { recipePageReader } from '../recipe-reading-recorded-page.ts';
 import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
@@ -288,8 +288,7 @@ export function RecipeExperience({ initial, href, actingSubject, text, edit, mes
   const applied = useRef(wholeServings(initial));
   /** A newer scale or reload ignores a continuation that was already on its way. */
   const generation = useRef(0);
-  const read = readPage ?? ((query: { cursor?: string; servings?: number }) => followHref<RecipeWorkPage | null>(
-    browserMainApi(), href, recipePageQuery(actingSubject, query))());
+  const read = readPage ?? ((query: { cursor?: string; servings?: number }) => recipePageReader({ main: browserMainApi(), actingSubject }, href)(query));
   useEffect(() => {
     const open = () => setCooking(true);
     window.addEventListener('rezics-cook', open);

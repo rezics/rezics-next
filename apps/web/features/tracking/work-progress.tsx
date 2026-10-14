@@ -3,12 +3,14 @@
 import { Alert, AlertDescription } from '@rezics/ui/alert';
 import { Button } from '@rezics/ui/button';
 import { CheckIcon } from 'lucide-react';
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
+import { workStandingRead } from './work-standing.ts';
 import { ProgressConflict } from './conflict-panel.tsx';
 import type { MediaApi, WorkMark, WorkStanding } from './media-api.ts';
 import type { Copy } from './messages.ts';
 
-type Read = { status: 'loading' } | { status: 'absent' } | { status: 'failed' } | { status: 'ready'; mark: WorkMark };
+type ProgressApi = Pick<MediaApi, 'workStanding' | 'markWork'>;
+type Read = ({ status: 'loading' } | ReturnType<typeof workStandingRead>) & { work: string; api: ProgressApi };
 type Conflict = { current: WorkMark; submitted: WorkStanding };
 
 const playState = (standing: WorkStanding) => standing === 'started' ? 'playing' : standing === 'not-started' ? 'none' : standing;
@@ -21,34 +23,42 @@ export function WorkProgress({ work, api, verb, t, className }: {
   work: string; api: Pick<MediaApi, 'workStanding' | 'markWork'>; verb: 'play' | 'read'; t: Copy; className?: string;
 }) {
   const headingId = useId();
-  const [read, setRead] = useState<Read>({ status: 'loading' });
+  const [read, setRead] = useState<Read>({ status: 'loading', work, api });
+  const target = useRef({ work, api });
+  target.current = { work, api };
+  const applies = () => target.current.work === work && target.current.api === api;
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
   const [conflict, setConflict] = useState<Conflict | null>(null);
 
   useEffect(() => {
     let current = true;
+    setRead({ status: 'loading', work, api });
+    setSaving(false); setFailed(false); setConflict(null);
     void api.workStanding(work).then(found => {
       if (!current) return;
-      setRead(found.ok ? { status: 'ready', mark: found.data }
-        : found.failure === 'sign-in' || found.failure === 'missing' ? { status: 'absent' } : { status: 'failed' });
-    });
+      setRead({ ...workStandingRead(found), work, api });
+    }).catch(() => { if (current) setRead({ ...workStandingRead({ ok: false, failure: 'unavailable' }), work, api }); });
     return () => { current = false; };
   }, [api, work]);
 
   async function write(standing: WorkStanding) {
     setSaving(true);
     setFailed(false);
-    const written = await api.markWork(work, standing);
+    let written: Awaited<ReturnType<MediaApi['markWork']>>;
+    try { written = await api.markWork(work, standing); }
+    catch { if (applies()) { setSaving(false); setFailed(true); } return false; }
+    if (!applies()) return false;
     setSaving(false);
+    if (!written.ok && written.failure === 'has-parts') { setRead({ status: 'absent', work, api }); return false; }
     if (!written.ok && written.failure === 'stale') { setConflict({ current: written.current, submitted: written.submitted }); return false; }
     if (!written.ok) { setFailed(true); return false; }
     setConflict(null);
-    setRead({ status: 'ready', mark: written.data });
+    setRead({ status: 'ready', mark: written.data, work, api });
     return true;
   }
 
-  if (read.status === 'loading' || read.status === 'absent') return null;
+  if (read.work !== work || read.api !== api || read.status === 'loading' || read.status === 'absent') return null;
   if (read.status === 'failed') {
     return <section aria-labelledby={headingId} className={className}>
       <h2 id={headingId} className="sr-only">{t.workProgress}</h2>
@@ -78,7 +88,7 @@ export function WorkProgress({ work, api, verb, t, className }: {
     {conflict ? <ProgressConflict label={t.status} mine={word(conflict.submitted)} theirs={word(conflict.current.standing)}
       t={t} busy={saving} failed={failed}
       onKeep={() => void write(conflict.submitted)}
-      onUse={() => { setConflict(null); setRead({ status: 'ready', mark: conflict.current }); }} /> : null}
+      onUse={() => { setConflict(null); setRead({ status: 'ready', mark: conflict.current, work, api }); }} /> : null}
     <p role="status" className="text-destructive-foreground text-xs">{failed ? t.saveFailed : null}</p>
   </section>;
 }

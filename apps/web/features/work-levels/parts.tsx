@@ -28,13 +28,19 @@ export function WholesLines({
   names,
   t,
   pages,
+  messages,
 }: {
   wholes: Loaded<WholesPage> | null;
   names: Names;
   t: Copy;
   /** Where Main's cursor continues and where the list starts again; absent in a preview. */
   pages?: { first: string | null; next: (cursor: string) => string };
+  messages?: WorkPageMessages;
 }) {
+  if (wholes && !wholes.ok) return wholes.failure === 'missing' ? null : messages
+    ? <RegionFailure title={t.wholesUnavailable} failure={wholes.failure} messages={messages}
+      restartHref={pages?.first ?? undefined} />
+    : <p role="alert">{t.wholesUnavailable}</p>;
   if (!wholes?.ok || !wholes.data.wholes.length) return null;
   const next = wholes.data.next;
   return (
@@ -254,6 +260,7 @@ export function PartsSection({
         wholes={wholes}
         names={names}
         t={t}
+        messages={pageMessages}
         pages={{
           first: query.wholesAfter
             ? connectionsHref(workRef, { ...query, wholesAfter: undefined }, anchors.wholes)

@@ -43,7 +43,7 @@ export function readAnimeWorkCredits(main: MainClient, actingSubject: string | u
   return settle(async () => {
     const result = await main.v1.query.post({ profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits',
       revision: 1, parameters: { roots: [iriOf(id)] }, presentation: { actingSubject } });
-    return { error: result.error, data: result.data?.result.profile === 'template-result-v1'
+    return { ...result, problem: result.data, error: result.error, data: result.data?.result?.profile === 'template-result-v1'
       && result.data.result.query === 'https://rezics.com/query/work-credits' ? result.data.result : null };
   });
 }
@@ -107,4 +107,24 @@ export async function readUndatedAnimeHub(main: MainClient, actingSubject: strin
     readLinkedStatements(main, actingSubject, statementsHref, {}), reads.readReleases(id),
   ]);
   return { header, statements, releases };
+}
+
+/** The sourced publication's public credit page keeps author and transcriber roles supplied by Main. */
+export function readSelectedWorkCredits(main: MainClient, actingSubject: string | undefined, id: string, sourced: boolean) {
+  return sourced ? settle(() => main.v1.works({ id }).credits.get({ query: { actingSubject } }))
+    : readAnimeWorkCredits(main, actingSubject, id);
+}
+
+export function readWorkWholes(main: MainClient, actingSubject: string | undefined, id: string,
+  query: { after?: string; limit?: number } = {}) {
+  return settle(() => main.v1.resources({ resource: id }).wholes.get({ query: {
+    actingSubject, after: query.after, limit: query.limit ?? 20,
+  } }), query.after);
+}
+
+export function readWorkRelations(main: MainClient, actingSubject: string | undefined, id: string,
+  query: { after?: string; limit?: number }) {
+  return settle(() => main.v1.resources({ resource: id }).relations.get({ query: {
+    actingSubject, after: query.after, limit: query.limit,
+  } }), query.after);
 }

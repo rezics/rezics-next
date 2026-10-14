@@ -222,19 +222,28 @@ export function postPlaceHref(placements: readonly PostPlacement[], book?: strin
   return chapterPlaceHref({ work: chosen, occurrence: places.length === 1 ? places[0]!.occurrence : null }, language);
 }
 
-/** The Contents tab's level, language and page. */
+/** The Contents tab's level, language, label search and page. */
 /** `open` names the volume (a top-level group) Contents shows open, such as the one being read. */
-export interface ContentsQuery { parent?: string; language?: string; cursor?: string; open?: string }
+/** `q` is the entered label. The contents read does not accept it; the inventory does, at the same page size. */
+export interface ContentsQuery { parent?: string; language?: string; cursor?: string; open?: string; q?: string; limit?: number }
+
+/** Main refuses a label longer than this (`422`); the page refuses it before asking. */
+const contentsLabelLimit = 200;
 
 export function parseContentsQuery(params: SearchParams): ContentsQuery | null {
-  if ([params.parent, params.language, params.cursor, params.open].some(Array.isArray)) return null;
+  if ([params.parent, params.language, params.cursor, params.open, params.q, params.limit].some(Array.isArray)) return null;
   const parent = single(params.parent) || undefined;
   const language = contentLanguage(single(params.language));
   const cursor = single(params.cursor) || undefined;
   const open = single(params.open) || undefined;
+  const q = single(params.q)?.trim() || undefined;
+  const size = single(params.limit);
+  const limit = size ? Number(size) : undefined;
   if ((parent !== undefined && !uuid.test(parent)) || language === null
-    || (cursor !== undefined && cursor.length > 2048) || (open !== undefined && !uuid.test(open))) return null;
-  return { parent, language, cursor, ...(open ? { open } : {}) };
+    || (cursor !== undefined && cursor.length > 2048) || (open !== undefined && !uuid.test(open))
+    || (q !== undefined && q.length > contentsLabelLimit)
+    || (limit !== undefined && (!Number.isInteger(limit) || limit < 1 || limit > 100))) return null;
+  return { parent, language, cursor, ...(open ? { open } : {}), ...(q ? { q } : {}), ...(limit !== undefined ? { limit } : {}) };
 }
 
 /** The reader's optional content language; a malformed one is refused. */

@@ -6,6 +6,7 @@ export default {
   nameNotShown: '未显示名字',
   parts: '组成部分', partsList: '按出版顺序排列的组成部分', partsPages: '组成部分分页',
   partsUnavailable: '组成部分暂时无法加载。',
+  wholesUnavailable: '包含这部作品的整体暂时无法加载。',
   partOf: '属于', partOfList: '包含这部作品的整体',
   openGroup: '展开分组', allParts: '全部组成部分',
   noParts: '没有组成部分', noPartsBody: '这部作品没有你可以阅读的有序组成部分。',

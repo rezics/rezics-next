@@ -254,3 +254,20 @@ test('a structure write waits until the recipe has been read, and a failed read 
   expect(await blocked.submit({ kind: 'addLine', section: id(11), qualifier })).toEqual({ kind: 'busy' });
   expect(blocked.snapshot().loadFailure).toBe('failed');
 });
+
+test('recipe continuation preserves duplicate ingredient occurrences and refuses a different pinned revision', () => {
+  const duplicate = { ...tomato, occurrence: id(33) };
+  const first = { ...listed([group, tomato], 'next'), ingredients: [
+    { occurrence: tomato.occurrence, originalText: '1 cup tomato', line: '1 cup tomato' },
+  ] };
+  const next = { ...listed([duplicate, salt]), ingredients: [
+    { occurrence: duplicate.occurrence, originalText: '1 cup tomato', line: '1 cup tomato' },
+    { occurrence: salt.occurrence, originalText: '1 teaspoon salt', line: '1 teaspoon salt' },
+  ] };
+  const merged = appendRecipePage(first, next);
+  expect(merged.occurrences.map(item => item.occurrence)).toEqual([group.occurrence, tomato.occurrence,
+    duplicate.occurrence, salt.occurrence]);
+  expect(merged.ingredients.filter(item => item.originalText === '1 cup tomato')).toHaveLength(2);
+  expect(() => appendRecipePage(first, { ...next, revision: id(901) })).toThrow('pinned revision');
+  expect(() => appendRecipePage(first, { ...next, structure: id(902) })).toThrow('pinned revision');
+});

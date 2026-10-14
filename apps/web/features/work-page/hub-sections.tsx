@@ -20,7 +20,7 @@ import { editionsHref } from '../work-levels/route.ts';
 import type { WorkPageMessages } from './messages.ts';
 import { IdentityStatus, nextAction, NextActionView } from './primary-action.tsx';
 import { ProposeCorrectionSlot } from './correction-slot.tsx';
-import { readEditionPreference, readEditionRelease, readProgressSummary, readReleases, readStart, readingAgent, readWorkHeader } from './read.ts';
+import { readEditionPreference, readEditionRelease, readEditionRealization, readProgressSummary, readReleases, readStart, readingAgent, readWorkHeader } from './read.ts';
 import { Region } from './region.tsx';
 import { iriOf, workHref, type WorkAt, workRefOf } from './route.ts';
 import type { WorkHeader as Header } from './types.ts';
@@ -55,7 +55,7 @@ export async function PrimaryAction({ workRef, id, work, locale, messages }: Com
  * release is named by its own title; a chosen realization, which has none, by its language.
  */
 export async function Status({ id, locale, messages }: Common & { id: string }) {
-  const status = await readBooksEditionStatus({ readEditionPreference, readProgressSummary, readEditionRelease }, id, locale);
+  const status = await readBooksEditionStatus({ readEditionPreference, readProgressSummary, readEditionRelease, readEditionRealization }, id, locale);
   return <IdentityStatus {...status} locale={locale} messages={messages} />;
 }
 

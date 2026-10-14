@@ -6,10 +6,10 @@ import type { ResolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { requestLocale } from '../../i18n/server.ts';
 import { followHref } from '../entity-page/href.ts';
-import { readRecipePage, recipePageQuery } from '../recipe-editor/pages.ts';
+import { recipeReadingReads } from './recipe-reading-recorded-page.ts';
 import { failureOf } from './failure.ts';
 import type { MainClient } from '../discover/types.ts';
-import { booksEditionReads, settle } from './books-edition-page.read.ts';
+import { booksEditionReads, settle, refusedRead, settleNullable } from './books-edition-page.read.ts';
 import { readSuppliedContents, readSuppliedStart } from './games-hub-recorded-page.ts';
 import { booksLanguageReads } from './books-language-recorded-page.ts';
 import { WORK_MISSING_HEADER } from './admission.ts';
@@ -52,8 +52,10 @@ export const reader = cache(async () => {
 /** Main ranks rating populations by current votes and supplies the reader-community flag. */
 export const readRatingPopulations = cache(async (target: string, locale: UiLocale): Promise<Loaded<ListPage<RatingPopulation>>> => {
   const { main, actingSubject } = await reader();
-  try { return { ok: true, data: await discoveryApi(main, locale, actingSubject).populations(idOf(target) ? target : iriOf(target), { limit: 20 }) }; }
-  catch (error) { return { ok: false, failure: error instanceof BrowseReadError && error.status === 409 ? 'moved' : 'unavailable' }; }
+  try { return { ok: true, data: await discoveryApi(main, locale, actingSubject)
+    .populations(idOf(target) ? target : iriOf(target), { limit: 20 }) }; }
+  catch (error) { return error instanceof BrowseReadError
+    ? refusedRead({ status: error.status, value: error.problem }) : { ok: false, failure: 'unavailable' }; }
 });
 
 /** The session Agent the page reads as, for client components that write as it (reading progress). */
@@ -112,15 +114,7 @@ export const readWorkHeader = cache(async (id: string, _locale: UiLocale): Promi
 export async function readRecipeWorkPage(href: string, servings?: number): Promise<Loaded<RecipeWorkPage | null>> {
   try {
     const { main, actingSubject } = await reader();
-    const filled = await readRecipePage(async query => {
-      try {
-        return await followHref<RecipeWorkPage | null>(main, href, recipePageQuery(actingSubject, query))();
-      } catch {
-        return { data: null, error: { status: 0 } };
-      }
-    }, servings === undefined ? {} : { servings });
-    if (!filled.ok) return { ok: false, failure: failureOf(filled.error.status ?? 0) };
-    return { ok: true, data: filled.page };
+    return recipeReadingReads({ main, actingSubject }).readRecipe(href, servings === undefined ? {} : { servings });
   } catch {
     return { ok: false, failure: 'unavailable' };
   }
@@ -131,10 +125,11 @@ export async function readHubWorkPage(href: string): Promise<Loaded<HubWorkPage 
   if (operationOpen('getV1HubWorksById', await readPlatformAccess())) {
     const { main, actingSubject } = await reader();
     try {
-      const { data, error } = await followHref<HubWorkPage | null>(main, href, { actingSubject })();
+      const answer = await followHref<HubWorkPage | null>(main, href, { actingSubject })();
+      const { error } = answer;
       // The grant may have been revoked after the request's access summary was read.
       if (error && platformClosed(error.status, error.value)) return null;
-      return error ? { ok: false, failure: failureOf(error.status) } : { ok: true, data };
+      return settleNullable(async () => answer);
     } catch { return { ok: false, failure: 'unavailable' }; }
   }
   return null;
@@ -206,6 +201,10 @@ export const readReleases = cache(async (id: string) => {
 export const readEditionRelease = cache(async (id: string, release: string) =>
   booksEditionReads(await reader()).readEditionRelease(id, release));
 
+/** A saved realization is resolved at its exact retained revision. */
+export const readEditionRealization = cache(async (id: string, realization: string, revision: string) =>
+  booksEditionReads(await reader()).readEditionRealization(id, realization, revision));
+
 export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>> => {
   const { main, actingSubject } = await reader();
   return booksEditionReads({ main, actingSubject }).readCredits(id);
@@ -258,7 +257,7 @@ export async function readVersions(id: string, _locale: UiLocale, filter: Versio
   return settle(async () => {
     const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-versions',revision:1,
       parameters:{roots:[iriOf(id)],kind:filter.kind,contentLanguage:filter.language},presentation:{actingSubject},cursor:filter.cursor});
-    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-versions' ? result.data.result:null};
+    return {error:result.error,data:result.data?.result?.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-versions' ? result.data.result:null};
   },filter.cursor);
 }
 

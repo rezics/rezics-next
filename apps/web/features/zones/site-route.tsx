@@ -264,7 +264,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       {children}
     </RealmFrame>
   );
-  if (!read.ok) return frame(failure(read.failure, siteHref(locale, ref, path), view.messages,
+  if (!read.ok) return frame(failure(read.failure === 'pending' ? 'unavailable' : read.failure, siteHref(locale, ref, path), view.messages,
     'reference' in read ? read.reference : undefined));
   const route: ZoneRouteRead = read.data;
   const mountName = (segment: string) => {
@@ -381,7 +381,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       const projection = await readEntityProjection(id, state?.main);
       if (!projection.ok) {
         if (projection.failure === 'missing') notFound();
-        return frame(failure(projection.failure, siteHref(locale, ref, path), view.messages), [
+        return frame(failure(projection.failure === 'pending' ? 'unavailable' : projection.failure, siteHref(locale, ref, path), view.messages), [
           home,
           ...(mount ? [mount] : []),
           { label: zoneContentText(shortId(id)), href: null },

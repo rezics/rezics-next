@@ -127,12 +127,13 @@ test('member: the saved realization preference keeps its revision and progress c
   const main = transport('member', [
     { label: preference.label, state: 'populated' },
     { label: progress.label, state: 'populated' },
+    { label: 'saved-realization-detail', state: 'populated' },
   ], failures);
   const reads = booksEditionReads({ main, actingSubject: subjectOf('member', preference.label) });
   const status = await readBooksEditionStatus(reads, workId('member'), 'en');
   expect<unknown>(status.preference).toEqual({ ok: true, data: preference.answer });
   expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
-  expect(status.editionName).toBeNull();
+  expect(status.editionName).toBe(copyOf('en').originalText({ language: 'English' }));
   expect(failures).toEqual([]);
 });
 
@@ -255,7 +256,7 @@ for (const persona of choosers) {
     const status = await readBooksEditionStatus(reads, workId(persona), 'en');
     expect<unknown>(status.preference).toEqual({ ok: true, data: preference.answer });
     expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
-    expect(status.editionName).toBeNull();
+    expect(status.editionName).toBe(copyOf('en').originalText({ language: 'English' }));
     const saved = preference.answer as EditionPreference;
     expect(saved.edition?.kind).toBe('realization');
     expect<unknown>(await mainTrackingApi(actingSubject, () => main).edition(saved.work, saved.edition!))

@@ -27,7 +27,8 @@ import { readContentsGroup } from './contents-actions.ts';
 import { ProvisionalNotice } from '../catalogue-intake/provisional-notice.tsx';
 import { ContentsRegion } from './contents.tsx';
 import { DiscussionRegion } from './discussion.tsx';
-import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits } from './anime-hub-recorded-page.ts';
+import { publicationSource } from './publication-source.tsx';
+import { readAnimeAgentCredits, readAnimeReaderState, readAnimeWorkCredits, readSelectedWorkCredits } from './anime-hub-recorded-page.ts';
 import { oneTextLanguage, readAdoptions, readAgentWorks, readAlsoEnjoyed, readClassifications,
   readContents, readDiscussion, readHistory, readingAgent, readRatings, readRealm,
   readReviewer, readReviews, readVersions, readWorkStats, readRecipeWorkPage,
@@ -54,7 +55,7 @@ import { readEntityProjection } from '../entity-page/read.ts';
 import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
-import { RecipeExperience } from './types/recipe.tsx';
+import { RecipeRegionView } from './recipe-reading-recorded-page.tsx';
 import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
 import { recipeEditHref } from '../recipe-editor/route.ts';
 import { mayEdit } from '../work-levels-edit/allowed.ts';
@@ -107,9 +108,12 @@ const animeReaderState = cache(async (id: string) => {
   return readAnimeReaderState(main, actingSubject, id);
 });
 
-async function Credits({ id, locale, messages }: Common & { id: string }) {
-  const [agentCredits, credits] = await Promise.all([readAgentCredits(id), readCredits(id)]);
-  return <WorkCredits agentCredits={agentCredits} credits={credits} locale={locale} messages={messages} />;
+async function Credits({ id, work, locale, messages }: Common & { id: string; work: Header }) {
+  const source = publicationSource(work);
+  const host = await reader();
+  const [agentCredits, credits] = await Promise.all([readAgentCredits(id),
+    readSelectedWorkCredits(host.main, host.actingSubject, id, Boolean(source))]);
+  return <WorkCredits agentCredits={agentCredits} credits={credits} source={source} locale={locale} messages={messages} />;
 }
 
 /** The cover uses the same credited names as the header, without delaying the rest of the Work page. */
@@ -189,14 +193,14 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
     cover={<Suspense fallback={<WorkPageCover work={work} avatarQuery={avatarQuery} />}>
       <Cover id={id} work={work} avatarQuery={avatarQuery} locale={locale} messages={messages} /></Suspense>}
     credits={<Suspense fallback={<WorkCreditsSkeleton label={messages.loadingRegion} />}>
-      <Credits id={id} locale={locale} messages={messages} /></Suspense>}
+      <Credits id={id} work={work} locale={locale} messages={messages} /></Suspense>}
     ratingLine={<Suspense fallback={null}><RatingLineSlot id={id} experience={experience} locale={locale} messages={messages} /></Suspense>}
     sections={hubLabels(messages, plan, lead)}
     readAction={<Suspense fallback={experience.kind === 'book'
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
       <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
     </Suspense>}
-    status={experience.kind === 'book' ? <Suspense fallback={null}>
+    status={experience.kind === 'book' || experience.primaryAction === 'watch' || experience.primaryAction === 'play' ? <Suspense fallback={null}>
       <Status id={id} locale={locale} messages={messages} /></Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />
@@ -332,8 +336,7 @@ export async function TypeExperience({ id, work, experience, locale, messages }:
   if (experience.kind === 'recipe' && section) {
     const [recipe, text, agent, allowed] = await Promise.all([readRecipeWorkPage(section.href),
       readText(work.mainVersion, work.selectedLanguage ?? undefined), readingAgent(), readAllowedActions(id)]);
-    if (!recipe.ok) return <RegionFailure title={messages.recipeMethod} failure={recipe.failure} messages={messages} />;
-    return <RecipeExperience initial={recipe.data} href={section.href} actingSubject={agent.actingSubject}
+    return <RecipeRegionView recipe={recipe} href={section.href} actingSubject={agent.actingSubject}
       edit={mayEdit(allowed) ? { href: recipeEditHref(id), label: recipeEditorCopy(locale).editRecipe } : null}
       text={text.ok ? text.data.body : null} locale={locale} messages={messages} />;
   }

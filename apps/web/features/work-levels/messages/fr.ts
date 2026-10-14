@@ -6,6 +6,7 @@ export default {
   nameNotShown: 'Nom non affiché',
   parts: 'Parties', partsList: 'Parties par ordre de publication', partsPages: 'Pages des parties',
   partsUnavailable: 'Les parties n’ont pas pu être chargées.',
+  wholesUnavailable: 'Impossible de charger les œuvres contenant cette œuvre.',
   partOf: 'Fait partie de', partOfList: 'Ensembles qui contiennent cette œuvre',
   openGroup: 'Ouvrir le groupe', allParts: 'Toutes les parties',
   noParts: 'Aucune partie', noPartsBody: 'Cette œuvre n’a aucune partie ordonnée que vous puissiez lire.',

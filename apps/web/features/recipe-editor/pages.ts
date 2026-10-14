@@ -37,10 +37,12 @@ function mergeById<T extends { occurrence: string }>(current: readonly T[], inco
 }
 
 type RecipePageShape = { occurrences: readonly { occurrence: string }[];
-  ingredients: readonly { occurrence: string }[]; measures: readonly unknown[]; next?: string };
+  ingredients: readonly { occurrence: string }[]; revision?: string; structure?: string; measures: readonly unknown[]; next?: string };
 
 /** One recipe page followed by the next, in the order they were read. A section started earlier stays that section. */
 export function appendRecipePage<T extends RecipePageShape>(current: T, incoming: T): T {
+  if (current.revision !== incoming.revision || current.structure !== incoming.structure)
+    throw new Error('Recipe continuation changed the pinned revision');
   const merged = { ...incoming, occurrences: mergeById(current.occurrences, incoming.occurrences),
     ingredients: mergeById(current.ingredients, incoming.ingredients),
     measures: incoming.measures.length ? incoming.measures : current.measures };

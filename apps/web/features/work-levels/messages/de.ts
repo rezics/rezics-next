@@ -6,6 +6,7 @@ export default {
   nameNotShown: 'Name nicht angezeigt',
   parts: 'Teile', partsList: 'Teile in Erscheinungsreihenfolge', partsPages: 'Seiten der Teile',
   partsUnavailable: 'Die Teile konnten nicht geladen werden.',
+  wholesUnavailable: 'Übergeordnete Werke konnten nicht geladen werden.',
   partOf: 'Teil von', partOfList: 'Übergeordnete Werke, die dieses Werk enthalten',
   openGroup: 'Gruppe öffnen', allParts: 'Alle Teile',
   noParts: 'Keine Teile', noPartsBody: 'Dieses Werk hat keine geordneten Teile, die du lesen kannst.',

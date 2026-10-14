@@ -32,6 +32,7 @@ function failureText(failure: ReadFailure, t: WorkPageMessages): string {
     case 'invalid': return t.invalid;
     case 'missing': return t.regionMissing;
     case 'sign-in': case 'identity': return t.regionDenied;
+    case 'pending': return t.readPending;
     case 'unavailable': return t.regionUnavailable;
   }
 }
@@ -45,7 +46,7 @@ export function RegionFailure({ title, failure, messages, restartHref }: {
   title: string; failure: ReadFailure; messages: WorkPageMessages; restartHref?: string;
 }) {
   const restart = restartHref && (failure === 'moved' || failure === 'invalid');
-  return <Alert variant="destructive" role="alert">
+  return <Alert variant={failure === 'pending' ? 'default' : 'destructive'} role={failure === 'pending' ? 'status' : 'alert'}>
     <TriangleAlertIcon aria-hidden="true" />
     <AlertTitle>{title}</AlertTitle>
     <AlertDescription>{failureText(failure, messages)}</AlertDescription>

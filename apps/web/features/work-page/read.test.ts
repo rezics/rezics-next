@@ -54,6 +54,6 @@ test('a failed first page is the recipe region unavailable, and a later page is 
     calls += 1;
     return Promise.resolve({ data: null, error: { status: 503 } });
   };
-  await expect(readRecipeWorkPage(href)).resolves.toEqual({ ok: false, failure: 'unavailable' });
+  await expect(readRecipeWorkPage(href)).resolves.toEqual({ ok: false, failure: 'unavailable', status: 503 });
   expect(calls).toBe(1);
 });

@@ -300,7 +300,7 @@ export function RealmBrowseRoute(
               {failure(
                 view,
                 'browse',
-                found.failure === 'sign-in' || found.failure === 'identity'
+                found.failure === 'sign-in' || found.failure === 'identity' || found.failure === 'pending'
                   ? 'unavailable'
                   : found.failure,
               )}

@@ -67,10 +67,11 @@ export function PartsPreviewView({
   const shown = parts.ok ? parts.data.parts.slice(0, PREVIEW_COUNTS.parts) : [];
   const hasWholes = wholes?.ok && wholes.data.wholes.length > 0;
   const failure = !parts.ok && parts.failure !== 'missing' ? parts.failure : null;
-  if (!shown.length && !hasWholes && !failure) return null;
+  const wholeFailure = wholes && !wholes.ok && wholes.failure !== 'missing';
+  if (!shown.length && !hasWholes && !failure && !wholeFailure) return null;
   return (
     <Region id="parts-preview" title={t.parts}>
-      <WholesLines wholes={wholes} names={names} t={t} />
+      <WholesLines wholes={wholes} names={names} t={t} messages={pageMessages} />
       {failure ? (
         <RegionFailure title={t.partsUnavailable} failure={failure} messages={pageMessages} />
       ) : null}

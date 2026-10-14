@@ -1,6 +1,6 @@
 import type { UiLocale } from '../../i18n/define.ts';
 import type { MainClient } from '../discover/types.ts';
-import { releaseChoiceName } from '../tracking/display.ts';
+import { releaseChoiceName, languageName } from '../tracking/display.ts';
 import { copyOf } from '../tracking/messages.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { FacetList } from '../concept/types.ts';
@@ -8,36 +8,38 @@ import { iriOf, mainScope, type WorkScope } from './route.ts';
 import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, WorkHeader } from './types.ts';
 import { failureOf } from './failure.ts';
 
-export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
-/** The display category accompanies the unchanged HTTP problem; it never replaces it. */
-export type BooksRead<T> = Loaded<T> & { status?: number; problem?: unknown };
+export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null;
+  status?: number; response?: { status: number }; problem?: unknown };
+/** Every Work reader retains the complete HTTP refusal alongside its display category. */
+export type BooksRead<T> = Loaded<T>;
 
-const refused = (error: NonNullable<Answer<unknown>['error']>, keepProblem: boolean) => ({ ok: false as const,
-  failure: failureOf(error.status), ...(keepProblem && error.value !== undefined
-    ? { status: error.status, problem: error.value } : {}) });
+export const refusedRead = (error: NonNullable<Answer<unknown>['error']>) => ({ ok: false as const,
+  failure: failureOf(error.status), status: error.status,
+  ...(error.value !== undefined ? { problem: error.value } : {}) });
 
-/**
- * One Main read as a `Loaded` result. Main answers 409 when the graph moved
- * during the read; a read that is not continuing a cursor simply starts
- * again, once, as Main asks. A moved cursor is the reader's to restart.
- * Books retain the HTTP problem; legacy consumers keep their existing result shape.
- */
-export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string, keepProblem = false): Promise<BooksRead<T>> {
+function pendingRead<T>(answer: Answer<T>): BooksRead<T> | null {
+  return (answer.status ?? answer.response?.status) === 202
+    ? { ok: false, failure: 'pending', status: 202, problem: answer.problem ?? answer.data } : null;
+}
+
+/** A moved first page restarts once. A cursor's full refusal belongs to the reader to recover. */
+export async function settle<T>(call: () => Promise<Answer<T>>, cursor?: string): Promise<BooksRead<T>> {
   try {
-    let { data, error } = await call();
-    if (error?.status === 409 && !cursor) ({ data, error } = await call());
-    if (error) return refused(error, keepProblem);
-    return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };
+    let answer = await call();
+    if (answer.error?.status === 409 && !cursor) answer = await call();
+    if (answer.error) return refusedRead(answer.error);
+    return pendingRead(answer) ?? (answer.data === null
+      ? { ok: false, failure: 'unavailable' } : { ok: true, data: answer.data });
   } catch {
     return { ok: false, failure: 'unavailable' };
   }
 }
 
-/** These two type pages use JSON null for a visible Work without an owner-specific publication. */
-export async function settleNullable<T>(call: () => Promise<Answer<T>>, keepProblem = false): Promise<BooksRead<T | null>> {
+/** Owner-specific publications and the reader preference use JSON null for a visible empty state. */
+export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise<BooksRead<T | null>> {
   try {
-    const { data, error } = await call();
-    return error ? refused(error, keepProblem) : { ok: true, data };
+    const answer = await call();
+    return answer.error ? refusedRead(answer.error) : pendingRead(answer) ?? { ok: true, data: answer.data };
   } catch { return { ok: false, failure: 'unavailable' }; }
 }
 
@@ -45,18 +47,21 @@ export async function settleNullable<T>(call: () => Promise<Answer<T>>, keepProb
 export function booksEditionReads({ main, actingSubject }: { main: MainClient; actingSubject?: string }) {
   return {
     readWorkHeader: (id: string): Promise<BooksRead<WorkHeader>> =>
-      settle(() => main.v1.works({ id }).get({ query: { actingSubject } }), undefined, true),
+      settle(() => main.v1.works({ id }).get({ query: { actingSubject } })),
     readReleases: (id: string) =>
-      settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } }), undefined, true),
+      settle(() => main.v1.works({ id }).releases.get({ query: { limit: 20, actingSubject } })),
     readEditionRelease: (id: string, release: string) =>
       settle(() => main.v1.works({ id }).releases({ release: release.slice(-36) }).get({
-        query: { actingSubject } }), undefined, true),
+        query: { actingSubject } })),
+    readEditionRealization: (id: string, realization: string, revision: string) =>
+      settle(() => main.v1.works({ id }).realizations({ realization: realization.slice(-36) }).get({
+        query: { actingSubject, revision } })),
     readEditionPreference: (id: string): Promise<BooksRead<EditionPreference | null>> => actingSubject
-      ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }), true)
+      ? settleNullable(() => main.v1.me['edition-preferences']({ work: id }).get({ query: { actingSubject } }))
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
     readProgressSummary: (id: string, language?: string): Promise<BooksRead<ProgressSummary>> => actingSubject
       ? settle(() => main.v1.me['progress-summaries']({ resource: id }).get({
-        query: { actingSubject, ...(language ? { language } : {}) } }), undefined, true)
+        query: { actingSubject, ...(language ? { language } : {}) } }))
       : Promise.resolve({ ok: false, failure: 'sign-in' }),
     readAgentCredits: (id: string): Promise<BooksRead<AgentCreditPage>> =>
       settle(() => main.v1.works({ id })['agent-credits'].get({ query: { actingSubject } })),
@@ -66,8 +71,9 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
         parameters: { roots: [iriOf(id)] }, presentation: { actingSubject },
       });
       return {
+        ...result, problem: result.data,
         error: result.error,
-        data: result.data?.result.profile === 'template-result-v1'
+        data: result.data?.result?.profile === 'template-result-v1'
           && result.data.result.query === 'https://rezics.com/query/work-credits'
           ? result.data.result : null,
       };
@@ -84,8 +90,9 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
         parameters: { roots: [iriOf(id)] }, presentation: { actingSubject },
       });
       return {
+        ...result, problem: result.data,
         error: result.error,
-        data: result.data?.result.profile === 'template-result-v1'
+        data: result.data?.result?.profile === 'template-result-v1'
           && result.data.result.query === 'https://rezics.com/query/work-adoptions'
           ? result.data.result : null,
       };
@@ -96,7 +103,7 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
 export type BooksReleasePage = Extract<Awaited<ReturnType<ReturnType<typeof booksEditionReads>['readReleases']>>, { ok: true }>['data'];
 
 type BooksReads = ReturnType<typeof booksEditionReads>;
-type StatusReads = Pick<BooksReads, 'readEditionPreference' | 'readEditionRelease'> & {
+type StatusReads = Pick<BooksReads, 'readEditionPreference' | 'readEditionRelease'> & Partial<Pick<BooksReads, 'readEditionRealization'>> & {
   readProgressSummary: (id: string, language?: string) => Promise<{ ok: true; data: ProgressSummary } | { ok: false }>;
 };
 
@@ -106,9 +113,16 @@ export async function readBooksEditionStatus(reads: StatusReads,
   const preference = savedPreference ?? await reads.readEditionPreference(id);
   const language = preference.ok && preference.data ? preference.data.language : locale;
   const chosen = preference.ok ? preference.data?.edition : null;
-  const [progress, release] = await Promise.all([reads.readProgressSummary(id, language),
-    chosen?.kind === 'release' ? reads.readEditionRelease(id, chosen.resource) : Promise.resolve(null)]);
-  return { preference, progress, editionName: release?.ok ? releaseChoiceName(release.data, locale, copyOf(locale)) : null };
+  const [progress, release, realization] = await Promise.all([reads.readProgressSummary(id, language),
+    chosen?.kind === 'release' ? reads.readEditionRelease(id, chosen.resource) : Promise.resolve(null),
+    chosen?.kind === 'realization' && reads.readEditionRealization
+      ? reads.readEditionRealization(id, chosen.resource, chosen.revision) : Promise.resolve(null)]);
+  const t = copyOf(locale);
+  const editionName = release?.ok && release.data.revision === chosen?.revision
+    ? releaseChoiceName(release.data, locale, t) : realization?.ok && realization.data.revision === chosen?.revision
+      ? realization.data.kind === 'original' ? t.originalText({ language: languageName(realization.data.language, locale) })
+        : t.translationText({ language: languageName(realization.data.language, locale) }) : null;
+  return { preference, progress, editionName };
 }
 
 /** Bounded page reads; the host frame and the recorded frame supply the same readers. */

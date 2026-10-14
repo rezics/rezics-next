@@ -202,3 +202,25 @@ test('member search with no match is an empty recorded page', async () => {
   expect(recorded.nextCursor).toBeNull();
   expect(view.workIri).toBe(recorded.work);
 });
+
+test('entered label and page size select inventory even when legacy grouped contents succeeded', () => {
+  expect(contentsReadsInventory({ ok: true, data: {} }, { q: '重逢', limit: 1 })).toBe(true);
+  expect(contentsReadsInventory({ ok: true, data: {} }, { limit: 20 })).toBe(true);
+  expect(contentsReadsInventory({ ok: true, data: {} }, { q: '999', parent: 'group' })).toBe(false);
+});
+
+test('inventory continuation preserves language, entered label and the page size that issued the cursor', async () => {
+  const read = await readRecorded('member', 'inventory-page-1', 'populated');
+  const view = mapBooksContentsRecordedPage(read.answer, { workRef: read.work, workIri: iriOf(read.work),
+    locale: 'en', language: 'ja', q: '再会', limit: 2 });
+  expect(view.kind).toBe('page');
+  if (view.kind !== 'page') return;
+  for (const href of [view.firstHref, view.nextHref!]) {
+    const query = new URL(href, 'https://recorded.invalid').searchParams;
+    expect(query.get('language')).toBe('ja');
+    expect(query.get('q')).toBe('再会');
+    expect(query.get('limit')).toBe('2');
+  }
+  expect(new URL(view.nextHref!, 'https://recorded.invalid').searchParams.get('cursor'))
+    .toBe(read.answer.data?.nextCursor ?? null);
+});

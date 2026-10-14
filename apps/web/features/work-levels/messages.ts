@@ -14,6 +14,7 @@ import zhHant from './messages/zh-Hant.ts';
 const en = {
   parts: 'Parts', partsList: 'Parts in publication order', partsPages: 'Parts pages',
   partsUnavailable: 'Parts could not be loaded.',
+  wholesUnavailable: 'Containing Works could not be loaded.',
   partOf: 'Part of', partOfList: 'Wholes that contain this Work',
   openGroup: 'Open group', allParts: 'All parts',
   noParts: 'No parts', noPartsBody: 'This Work has no ordered parts you can read.',
