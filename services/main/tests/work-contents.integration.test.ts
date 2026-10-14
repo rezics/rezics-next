@@ -19,6 +19,7 @@ import { startMediaStack } from '../../../tests/qa/integration/media-support.ts'
 import { upgradeStoredMembership } from '../src/modules/structure/membership-normalize.ts';
 import { createMainApp } from '../src/app.ts';
 import type { VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { provisionFixturePerson } from '../src/modules/access/fixture-authority.ts';
 import { StructureProgressStore } from '../src/modules/progress/store.ts';
 import { activateMetadataWork, metadataWorkRequestDigest } from '../src/modules/work/activate.ts';
 import { mainSelectionDigest, selectMainDefault } from '../src/modules/work/select-main.ts';
@@ -145,6 +146,17 @@ test('Reader: public and private composition pages, current Content, cursor and 
     expect(secondChapter.next).toBeNull();
     expect(secondChapter.ordinal).toBe(2);
     expect(secondChapter.label.value).toBe('Chapter two');
+    // Progress requires completed Person provenance and direct control, beyond
+    // the representation grants used by the composition reader above.
+    const controller = await stack.accessPool.connect();
+    try {
+      await controller.query('BEGIN');
+      for (const member of [a, b]) await provisionFixturePerson(controller, {
+        principalId: member.principalId, actor: member.actor, dataEpoch: stack.env.lineage.dataEpoch,
+      });
+      await controller.query('COMMIT');
+    } catch (error) { await controller.query('ROLLBACK'); throw error; }
+    finally { controller.release(); }
     let privateReadActive = true;
     // Progress reads also disclose the placed Work's own summary. Public
     // Content eligibility alone does not publish that Work's Main selection.
