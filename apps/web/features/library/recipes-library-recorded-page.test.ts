@@ -37,6 +37,13 @@ function workId(path: string) {
   return `https://rezics.com/id/${id}`;
 }
 
+/** The page's reader store always refreshes; the action type leaves that optional for other adapters. */
+async function refreshed(store: ReturnType<typeof createReaderStore>, id: string) {
+  if (!store.refresh || !store.available) throw new Error('Library reader store cannot refresh');
+  await store.refresh(id);
+  return store.available();
+}
+
 const ownerGoal = sample('owner', 'library-reading-goal');
 const owner = actingSubject(ownerGoal.path);
 const work = workId(sample('owner', 'progress-summary-empty').path);
@@ -72,9 +79,8 @@ test('the library mapping reads the owner’s recorded goal, year, visibility an
   const readBack = sample('owner', 'reader-state-reading');
   const store = createReaderStore({ actingSubject: actingSubject(readBack.path), main: () => client('owner', [
     { label: 'reader-state-reading', state: 'populated' }]) });
-  await store.refresh(workId(readBack.path));
+  expect(await refreshed(store, workId(readBack.path))).toBe(true);
   expect(store.stateOf(workId(readBack.path)).status).toBe('reading');
-  expect(store.available()).toBe(true);
 });
 
 test('the owner’s recipe progress keeps its compare-and-set version, replay and stale refusal', async () => {
@@ -111,15 +117,13 @@ test('a visitor and another Person are refused the owner’s private recipe trac
     const state = sample(persona, 'peer-reader-state-denied');
     const store = createReaderStore({ actingSubject: actingSubject(state.path), main: () => client(persona, [
       { label: state.label, state: 'error' }]) });
-    await store.refresh(workId(state.path));
-    expect(store.available()).toBe(false);
+    expect(await refreshed(store, workId(state.path))).toBe(false);
   }
 
   const ownerPeer = sample('owner', 'peer-reader-state-denied');
   const ownerStore = createReaderStore({ actingSubject: actingSubject(ownerPeer.path), main: () => client('owner', [
     { label: ownerPeer.label, state: 'error' }]) });
-  await ownerStore.refresh(workId(ownerPeer.path));
-  expect(ownerStore.available()).toBe(false);
+  expect(await refreshed(ownerStore, workId(ownerPeer.path))).toBe(false);
 });
 
 test('the library page cannot show the recorded shelves: its directory query is not in the record', async () => {
