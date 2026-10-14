@@ -54,7 +54,7 @@ export interface SqlAncestor extends SyntaxSpan {
   firstArgument?: boolean;
 }
 export interface SqlNodeFact {
-  nodeAstDeflate: string;
+  nodeAstDeflate?: string;
   nodeAst?: AstNode;
   ancestors: SqlAncestor[];
 }
@@ -125,6 +125,7 @@ export interface IndexedFile {
   sqlAstDeflate?: string;
   fragmentAstDeflate?: string;
   traceAstDeflate?: string;
+  sqlNodeFactsDeflate?: string;
   graphDeflate?: string;
   syntax?: {
     hasFunctions: boolean;
@@ -288,6 +289,18 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           },
         });
     }
+    if (has('sqlNodeFactsDeflate'))
+      Object.defineProperty(facts, 'sqlNodeFacts', {
+        configurable: true,
+        enumerable: false,
+        get: () => {
+          const nodes = JSON.parse(
+            inflateRawSync(Buffer.from(facts.sqlNodeFactsDeflate!, 'base64')).toString(),
+          ) as SqlNodeFact[];
+          Object.defineProperty(facts, 'sqlNodeFacts', { value: nodes, enumerable: false });
+          return nodes;
+        },
+      });
     for (const field of ['ast', 'runtimeAst', 'sqlAst', 'fragmentAst', 'traceAst'] as const) {
       const encodedField = `${field}Deflate` as const;
       if (!has(encodedField)) continue;

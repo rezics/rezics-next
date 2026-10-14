@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { indexedFiles, indexedSource, indexedSql } from './repo-index.ts';
+import { indexedFiles, indexedSource, indexedSql, repositoryIndex } from './repo-index.ts';
 import { cruiseDependencies } from '../static/mechanism-dependencies.ts';
 
 function withTree(run: (root: string) => void) {
@@ -41,6 +41,26 @@ test('in-memory facts retain Unicode source and content-specific syntax', () => 
   expect(indexedSource({ ...source, text: 'const changed = 1;' }).text).toContain('changed');
   source.text = 'const replaced = 2;';
   expect(indexedSource(source).text).toBe(source.text);
+});
+
+test('grouped SQL syntax stays lazy and retains its own cache inode', () => {
+  withTree((root) => {
+    mkdirSync(join(root, 'services/fixture/src'), { recursive: true });
+    const path = join(root, 'services/fixture/src/query.ts');
+    writeFileSync(path, 'if (enabled) db.query("SELECT pg_advisory_lock($2)", [, 17]);');
+    const previous = repositoryIndex(root).files['services/fixture/src/query.ts']!;
+    expect(Object.getOwnPropertyDescriptor(previous, 'sqlNodeFacts')?.get).toBeDefined();
+    writeFileSync(path, 'db.query("SELECT changed");');
+    const current = repositoryIndex(root).files['services/fixture/src/query.ts']!;
+    const nodes = previous.sqlNodeFacts!;
+    expect(previous.sqlNodeFacts).toBe(nodes);
+    expect(nodes[0]!.nodeAst?.type).toBe('Program');
+    expect(nodes[0]!.nodeAstDeflate).toBeUndefined();
+    expect(JSON.stringify(nodes)).toContain('pg_advisory_lock($2)');
+    expect(JSON.stringify(nodes)).toContain('OmittedExpression');
+    expect(JSON.stringify(nodes[0]!.ancestors)).toContain('enabled');
+    expect(JSON.stringify(current.sqlNodeFacts)).toContain('SELECT changed');
+  });
 });
 
 test('import resolution invalidates when TypeScript path configuration changes', () => {
