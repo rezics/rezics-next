@@ -15,6 +15,35 @@ import { arrange, local, type Page, type Posted } from './zone-realm-discussion-
 type Interruption = 'draft' | 'identity' | 'preparation' | 'graph' | 'settlement';
 const interruption = () => new RealmReplyUnavailable('Interrupted owner response');
 
+/** Observe original owner errors before a caller translates them. No arguments,
+ * headers or database connection details enter the retained evidence. */
+function observeRecoveryErrors(home: HomeStack) {
+  const errors: { owner: string; class: string; message: string; stack: string | undefined }[] = [];
+  const restore: (() => void)[] = [];
+  const observe = <T extends object, K extends keyof T>(owner: T, key: K, label: string) => {
+    const original = owner[key] as (...args: unknown[]) => Promise<unknown>;
+    owner[key] = async function (this: T, ...args: unknown[]) {
+      try { return await original.apply(this, args); }
+      catch (error) {
+        if (error instanceof Error) errors.push({ owner: label, class: error.constructor.name,
+          message: error.message, stack: error.stack });
+        throw error;
+      }
+    } as T[K];
+    restore.push(() => { owner[key] = original as T[K]; });
+  };
+  observe(RealmAboutPostCommand.prototype, 'post', 'composer.post');
+  const composer = RealmAboutPostCommand.prototype as unknown as { basis: (...args: unknown[]) => Promise<unknown> };
+  observe(composer, 'basis', 'composer.basis');
+  const native = Object.getPrototypeOf(home.deps.realmReplies) as Record<string, (...args: unknown[]) => Promise<unknown>>;
+  for (const key of ['admission', 'place', 'placeAdmitted', 'fence', 'sealTerminal']) observe(native, key, `reply.${key}`);
+  for (const key of ['preparePlacement', 'readPlacement'] as const) observe(RealmReplyContentStore.prototype, key, `replyContent.${key}`);
+  for (const key of ['savedDraft', 'recordDispatch', 'refuseIntent'] as const) observe(RealmAboutThreadStore.prototype, key, `intent.${key}`);
+  observe(home.stack.content, 'saveDraft', 'content.saveDraft');
+  observe(home.stack.content, 'settlePublication', 'content.settlePublication');
+  return { errors, restore: () => { for (const undo of restore.reverse()) undo(); } };
+}
+
 /** Real owner effects commit first. Only their result transport is interrupted;
  * replay must resolve immutable receipts rather than make another contribution. */
 function interruptAfter(home: HomeStack, point: Interruption) {
@@ -113,6 +142,47 @@ async function refusal(response: Response, status: 403 | 409) {
   expect(response.status, body).toBe(status);
   return { status: response.status, body };
 }
+
+test('a graph-committed first post survives withdrawal and revocation during lost-response recovery', async () => {
+  const home = await startHomeStack('zone-realm-discussion-committed-recovery');
+  try {
+    const a = await arrange(home), page: Page = await a.page('committed-winner'), key = randomUUID();
+    const observed = observeRecoveryErrors(home);
+    const fault = interruptAfter(home, 'graph');
+    try {
+      const response = await a.post(page, a.author, 'Committed winner', home.author.token, key);
+      const body = await response.clone().text();
+      const intents = await home.stack.contentPool.query(`SELECT id,reply,variant_id,phase,terminal_refusal,
+        terminal_outcome,draft_operation_id,identity_operation_id,placement_admission_id,placement_receipt,
+        dispatch_zone,dispatch_zone_revision,dispatch_route_revision
+        FROM content.realm_about_post_operation WHERE realm=$1 AND about=$2`, [a.realm.realm, page.about]);
+      const preparations = await home.stack.contentPool.query(`SELECT p.operation_id,p.status,p.pin_active,p.revision_id
+        FROM content.publication_preparation p JOIN content.realm_placement_preparation r ON r.operation_id=p.operation_id
+        WHERE r.variant_id=ANY($1::text[])`, [intents.rows.map(row => row.variant_id)]);
+      const placements = await Promise.all(intents.rows.map(row => acceptedPlacements(home, a.realm.realm, row.reply)));
+      console.info('Discussion recovery evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID,
+        key, input: a.input(page, a.author, 'Committed winner'), status: response.status, body,
+        fired: fault.fired(), errors: observed.errors, intents: intents.rows, preparations: preparations.rows,
+        effects: await a.effects(page.about), placements }));
+      expect(response.status, body).toBe(503);
+      expect(fault.fired()).toBe(true);
+    } finally { fault.restore(); observed.restore(); }
+    const selected = await operation(home, a.realm.realm, page.about);
+    expect(await acceptedPlacements(home, a.realm.realm, selected.reply)).toHaveLength(1);
+    await withdraw(home, a);
+    await a.policy(a.realm.realm, 'mandatory');
+    const winner = await recovered(home, await a.post(page, a.author, 'Committed winner', home.author.token, key));
+    expect(winner.reply).toBe(selected.reply);
+    expect(await home.json(await a.post(page, a.author, 'Committed winner', home.author.token, key), 200)).toEqual(winner);
+    expect(await a.effects(page.about)).toEqual({ threads: 1, operations: 1, replies: 1, revisions: 1 });
+    expect(await acceptedPlacements(home, a.realm.realm, winner.reply)).toHaveLength(1);
+    expect((await operation(home, a.realm.realm, page.about)).phase).toBe('posted');
+    const preparation = await home.stack.contentPool.query(`SELECT p.status,p.pin_active
+      FROM content.publication_preparation p JOIN content.realm_placement_preparation r ON r.operation_id=p.operation_id
+      WHERE r.variant_id=$1`, [selected.variant_id]);
+    expect(preparation.rows).toEqual([{ status: 'active', pin_active: true }]);
+  } finally { await home.stop(); }
+}, 300_000);
 
 test('a fresh refusal overlapping a same-key dispatched winner preserves its immutable outcome', async () => {
   const home = await startHomeStack('zone-realm-discussion-same-key-refusal');
@@ -442,32 +512,7 @@ test('cancelled and expired first posts release their reservation while retainin
   } finally { await home.stop(); }
 }, 300_000);
 
-test('a graph-committed first post survives withdrawal and revocation during lost-response recovery', async () => {
-  const home = await startHomeStack('zone-realm-discussion-committed-recovery');
-  try {
-    const a = await arrange(home), page: Page = await a.page('committed-winner'), key = randomUUID();
-    const fault = interruptAfter(home, 'graph');
-    try {
-      const response = await a.post(page, a.author, 'Committed winner', home.author.token, key);
-      expect(response.status, await response.text()).toBe(503);
-      expect(fault.fired()).toBe(true);
-    } finally { fault.restore(); }
-    const selected = await operation(home, a.realm.realm, page.about);
-    expect(await acceptedPlacements(home, a.realm.realm, selected.reply)).toHaveLength(1);
-    await withdraw(home, a);
-    await a.policy(a.realm.realm, 'mandatory');
-    const winner = await recovered(home, await a.post(page, a.author, 'Committed winner', home.author.token, key));
-    expect(winner.reply).toBe(selected.reply);
-    expect(await home.json(await a.post(page, a.author, 'Committed winner', home.author.token, key), 200)).toEqual(winner);
-    expect(await a.effects(page.about)).toEqual({ threads: 1, operations: 1, replies: 1, revisions: 1 });
-    expect(await acceptedPlacements(home, a.realm.realm, winner.reply)).toHaveLength(1);
-    expect((await operation(home, a.realm.realm, page.about)).phase).toBe('posted');
-    const preparation = await home.stack.contentPool.query(`SELECT p.status,p.pin_active
-      FROM content.publication_preparation p JOIN content.realm_placement_preparation r ON r.operation_id=p.operation_id
-      WHERE r.variant_id=$1`, [selected.variant_id]);
-    expect(preparation.rows).toEqual([{ status: 'active', pin_active: true }]);
-  } finally { await home.stop(); }
-}, 300_000);
+
 
 
 async function editPage(home: HomeStack, a: Awaited<ReturnType<typeof arrange>>, page: Page): Promise<Page> {

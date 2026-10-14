@@ -4,7 +4,7 @@ import pg from 'pg';
 import { ensureFixtureScopeGate } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { comparableBody } from '../support/hidden-id-equality.ts';
 import { startHomeStack, type HomeStack } from './feed-read-support.ts';
-import { foregroundCounted } from './support/query-cost-meter.ts';
+import { attributeSqlCheckoutCallers, foregroundCounted } from './support/query-cost-meter.ts';
 import { arrange, local, type Posted } from './zone-realm-discussion-support.ts';
 
 /** A committed body-disclosure fixture, including its case, decision and target.
@@ -46,18 +46,45 @@ async function hideBody(home: HomeStack, actor: string, reply: string, revision:
 }
 
 const ownResultKeys = ['about', 'author', 'placement', 'profile', 'realm', 'reply', 'revisionId'];
+const parentPointer = 'SELECT thread,active FROM access.realm_thread_reference WHERE data_epoch=$1 AND realm=$2 AND reply=$3';
+type SqlStatement = { sql: string; caller: string; count: number };
+function sqlCounts(trace: SqlStatement[], omitParent = false) {
+  const counts = new Map<string, number>();
+  for (const entry of trace) {
+    if (omitParent && entry.sql === parentPointer) continue;
+    counts.set(entry.sql, (counts.get(entry.sql) ?? 0) + entry.count);
+  }
+  return Object.fromEntries([...counts].sort(([left], [right]) => left.localeCompare(right)));
+}
 
-test('hidden and absent openers give ordinary own-post responses with equal owner costs; unavailable targets give equal 404s', async () => {
+test('hidden and absent openers give undisclosing own-post responses with bounded owner costs; unavailable targets give equal 404s', async () => {
   // These commands do not project Feed. Leave its shared checkpoint untouched;
   // a graph cut is not a position in the acknowledged Main stream.
-  const home = await startHomeStack('zone-realm-discussion-equality');
+  const preparationStarted = performance.now();
+  // Composition captures connect and client.query in instance wrappers. Both
+  // hooks must precede construction; later prototype patches miss those clients.
+  const restoreCheckoutCallers = attributeSqlCheckoutCallers();
   const prototype = pg.Client.prototype as unknown as { query: (...args: unknown[]) => unknown };
   const originalQuery = prototype.query;
   let statements = 0, measuring = false;
+  let sqlTrace: SqlStatement[] = [];
   prototype.query = function (this: unknown, ...args: unknown[]) {
-    if (measuring && foregroundCounted()) statements++;
+    if (measuring && foregroundCounted()) {
+      statements++;
+      const query = args[0];
+      const sql = (typeof query === 'string' ? query : (query as { text?: string })?.text ?? '').replace(/\s+/g, ' ').trim();
+      const caller = new Error().stack?.split('\n').filter(line => /services\//.test(line)).slice(0, 5).join('\n') ?? '';
+      const entry = sqlTrace.find(item => item.sql === sql && item.caller === caller);
+      if (entry) entry.count++;
+      else sqlTrace.push({ sql, caller, count: 1 });
+    }
     return originalQuery.apply(this, args);
   };
+  const home = await startHomeStack('zone-realm-discussion-equality').catch(error => {
+    prototype.query = originalQuery;
+    restoreCheckoutCallers();
+    throw error;
+  });
   try {
     const a = await arrange(home);
     const firstPage = await a.page('hidden-opener');
@@ -75,18 +102,27 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
 
     // Warm only the existing principal-budget cache. Missing-key refusal makes no contribution.
     expect((await a.post(absentPage, a.reader, 'Warm principal attribution', home.reader.token, '')).status).toBe(400);
+    const preparationMs = performance.now() - preparationStarted;
+    console.info('Discussion preparation evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID, preparationMs }));
     const observe = async (request: () => Promise<Response>) => {
+      const warming = performance.now();
+      expect((await a.post(absentPage, a.reader, 'Warm principal attribution', home.reader.token, '')).status).toBe(400);
+      const warmMs = performance.now() - warming;
       const sql = statements, graph = home.stack.fuseki.queries;
+      sqlTrace = [];
       measuring = true;
+      const started = performance.now();
       try {
         const response = await request(), text = await response.text();
         return { status: response.status, text, body: JSON.parse(text) as Posted,
-          cost: { sql: statements - sql, graph: home.stack.fuseki.queries - graph } };
+          cost: { sql: statements - sql, graph: home.stack.fuseki.queries - graph }, sqlTrace,
+          warmMs, requestMs: performance.now() - started };
       } finally { measuring = false; }
     };
     const text = 'My own contribution.', hiddenKey = randomUUID(), absentKey = randomUUID();
     const hidden = await observe(() => a.post(hiddenPage, a.reader, text, home.reader.token, hiddenKey));
     const absent = await observe(() => a.post(absentPage, a.reader, text, home.reader.token, absentKey));
+    console.info('Discussion SQL evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID, hidden, absent }));
     await Bun.write(`.temp/zone-discussion-equality-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({
       runId: Bun.env.REZICS_QA_RUN_ID, persona: 'Person contributor viewing a hidden or absent opener',
       hidden: { request: { method: 'POST', path: `/v1/realms/${local(a.realm.realm)}/about-posts`,
@@ -103,7 +139,14 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
       expect(observed.text).not.toContain(opener.reply);
       expect(observed.text).not.toContain(opener.revisionId);
     }
-    expect(hidden.cost).toEqual(absent.cost);
+    // Settlement resolves one indexed parent pointer for a child and none for
+    // a new opener (rankings/realm-threads.ts). Every other statement must match;
+    // no thread/member inventory or unrelated background work is excused.
+    expect(sqlCounts(hidden.sqlTrace)[parentPointer]).toBe(1);
+    expect(sqlCounts(absent.sqlTrace)[parentPointer] ?? 0).toBe(0);
+    expect(sqlCounts(hidden.sqlTrace, true)).toEqual(sqlCounts(absent.sqlTrace, true));
+    expect(hidden.cost).toEqual({ ...absent.cost, sql: absent.cost.sql + 1 });
+    expect(hidden.cost.graph).toBeLessThanOrEqual(195);
     const hiddenReplay = await observe(() => a.post(hiddenPage, a.reader, text, home.reader.token, hiddenKey));
     const absentReplay = await observe(() => a.post(absentPage, a.reader, text, home.reader.token, absentKey));
     expect(hiddenReplay.status, hiddenReplay.text).toBe(200);
@@ -111,6 +154,7 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
     expect(hiddenReplay.body).toEqual(hidden.body);
     expect(absentReplay.body).toEqual(absent.body);
     expect(hiddenReplay.cost).toEqual(absentReplay.cost);
+    expect(sqlCounts(hiddenReplay.sqlTrace)).toEqual(sqlCounts(absentReplay.sqlTrace));
 
     const retained = await a.rows(hiddenPage.about), opened = await a.rows(absentPage.about);
     expect(retained).toHaveLength(2);
@@ -128,6 +172,20 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
       'SELECT parent_revision::text FROM content.reply WHERE id=$1', [hidden.body.reply]);
     expect(parent.rows).toEqual([{ parent_revision: opener.revisionId }]);
 
+    // A third contribution still selects the one canonical opener. Actual
+    // owner work must remain constant as the thread grows, statement by statement.
+    const grown = await observe(() => a.post(hiddenPage, a.reader, text, home.reader.token));
+    console.info('Discussion equality evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID,
+      hiddenReplay, absentReplay, grown }));
+    expect(grown.status, grown.text).toBe(201);
+    expect(Object.keys(grown.body).sort()).toEqual(ownResultKeys);
+    expect(grown.body).toMatchObject({ profile: 'realm-about-post-v1', realm: a.realm.realm, author: a.reader });
+    expect(grown.body.reply).not.toBe(hidden.body.reply);
+    expect(grown.text).not.toContain(opener.reply);
+    expect(grown.text).not.toContain(opener.revisionId);
+    expect(grown.cost).toEqual(hidden.cost);
+    expect(sqlCounts(grown.sqlTrace)).toEqual(sqlCounts(hidden.sqlTrace));
+
     // Only bodies are equal here: hidden/absent resource graph costs remain the known class B limit.
     // Use a readable mounted route so an about mismatch cannot reveal the hidden target first.
     const privateWork = await home.stack.privateWork(a.author, 'A private discussion target');
@@ -135,16 +193,17 @@ test('hidden and absent openers give ordinary own-post responses with equal owne
     const hiddenTarget = await a.post({ ...absentPage, about: privateWork.work }, a.reader, text, home.reader.token);
     const absentTarget = await a.post({ ...absentPage, about: missing }, a.reader, text, home.reader.token);
     const hiddenText = await hiddenTarget.text(), absentText = await absentTarget.text();
-    // Neither key has an allocated intent to retain a terminal disclosure
-    // refusal. Both stay recoverable without disclosing the target's existence.
-    expect(hiddenTarget.status, hiddenText).toBe(503);
-    expect(absentTarget.status, absentText).toBe(503);
+    // No selection or effect exists. These are ordinary disclosure refusals,
+    // not unknown dispatched outcomes requiring intent recovery.
+    expect(hiddenTarget.status, hiddenText).toBe(404);
+    expect(absentTarget.status, absentText).toBe(404);
     expect(comparableBody(hiddenText, privateWork.work)).toBe(comparableBody(absentText, missing));
     const noEffects = { threads: 0, operations: 0, replies: 0, revisions: 0 };
     expect(await a.effects(privateWork.work)).toEqual(noEffects);
     expect(await a.effects(missing)).toEqual(noEffects);
   } finally {
     prototype.query = originalQuery;
+    restoreCheckoutCallers();
     await home.stop();
   }
 }, 300_000);
