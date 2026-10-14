@@ -136,6 +136,12 @@ for (const locale of ['en', 'ja'] as const) {
       await expect(publicRoster).toHaveCount(0);
       await expect(writer.page.getByRole('main')).not.toContainText(writer.name);
       await owner.page.reload();
+      const memberRequest = `/api/main/v1/realms/${short(closed.realm)}/members?actingSubject=${encodeURIComponent(owner.actor)}`;
+      const memberAnswer = await owner.page.request.get(memberRequest);
+      const memberBody = await memberAnswer.text();
+      await info.attach('closed-management-roster-request', { contentType: 'application/json',
+        body: JSON.stringify({ method: 'GET', path: memberRequest, status: memberAnswer.status(), body: memberBody }) });
+      expect(memberAnswer.status(), `GET ${memberRequest}\nHTTP ${memberAnswer.status()}: ${memberBody}`).toBe(404);
       await expect(owner.page.getByRole('heading', { name: manage.missingTitle, exact: true })).toBeVisible();
       await expect(members).toHaveCount(0);
       await expect(owner.page.getByRole('main')).not.toContainText(writer.name);
