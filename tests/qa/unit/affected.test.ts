@@ -71,6 +71,16 @@ test('documentation and static configuration select no tests', () => {
     'scripts/static/ast-grep/rules/no-dynamic-code.yml', 'services/main/tsconfig.json']);
 });
 
+test('native repository parser changes select its guards without widening stack tiers', () => {
+  const guards = ['scripts/static/mechanism-dependencies.test.ts', 'scripts/static/web-acting-identity.test.ts',
+    'tests/qa/unit/serialization-points.test.ts', 'tests/qa/unit/g-1046-sql-relations.test.ts'];
+  const result = plan(['tools/repo-index/Cargo.lock', 'tools/repo-index/src/main.rs'], {
+    sources: new Map(guards.map(file => [file, ''])), exists: file => guards.includes(file),
+  });
+  expect(result.widened).toEqual([]);
+  for (const file of guards) expect(result.tests.unit).toContain(file);
+});
+
 test('outcome tree inputs select the declarations guard without an import edge', () => {
   const guard = 'scripts/qa/cases/outcomes.test.ts';
   const outcome = 'tests/qa/integration/outcomes/books/read-a-book.test.ts';
