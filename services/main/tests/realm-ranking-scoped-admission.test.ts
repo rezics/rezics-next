@@ -284,6 +284,46 @@ test.each(['rejected', undefined, 'future-outcome'] as const)(
     expect((await realmRankPage(access, session, otherRealm, 'best', 'all', 20)).rows.map(row => row.reply)).toEqual([other.reply]);
   });
 
+test.each([
+  ['succeeded', 'classification.context.configure', 'addition'],
+  ['rejected', 'classification.context.configure', 'none'],
+  [undefined, 'classification.context.configure', 'removal'],
+  ['succeeded', 'unknown.action', 'removal'],
+] as const)('board vocabulary replay (%s, %s) keeps the published cut only for a known non-removal', async (outcome, action, effect) => {
+  const realm = native(), item = await reference(realm), concept = native();
+  await access.query(`UPDATE access.realm_thread_reference SET concepts=ARRAY[$3]::text[]
+    WHERE data_epoch=$1 AND realm=$2`, [epoch, realm, concept]);
+  const { session } = reader('7', '4');
+  session.deps.realmReplyThreads = new RealmReplyThreadStore(nativeContent, access);
+  session.deps.content = {} as NonNullable<WorkReadSession['deps']['content']>;
+  const cuts = await Promise.all((['best', 'top', 'new'] as const).flatMap(sort =>
+    [undefined, concept].filter(board => sort !== 'new' || board !== undefined).map(async board => ({
+      sort, board, page: await realmRankPage(access, session, realm, sort, 'all', 20, undefined, undefined, board),
+    }))));
+  await nativeContent.query(`INSERT INTO relay.delivered_event
+    (stream_scope,source,event_id,data_epoch,sequence,envelope) VALUES($1,'realm-ranking',$2,$3,4,$4)`,
+  [MAIN_RELAY_STREAM_SCOPE, randomUUID(), epoch, JSON.stringify({ type: 'com.rezics.classification.context-created.v1',
+    data: { receipt: { realm, action, outcome } } })]);
+  // Stop after replay queues its work, before the next projection turn drains it.
+  await expect(new RealmThreadRankingProjection(access, nativeContent)
+    .tick(session, { data_epoch: epoch } as FeedCheckpoint, '4')).resolves.toBe(true);
+  expect((await access.query('SELECT effect FROM access.realm_thread_dirty WHERE data_epoch=$1 AND resource=$2',
+    [epoch, realm])).rows).toEqual(effect === 'none' ? [] : [{ effect }]);
+  for (const { sort, board, page } of cuts) {
+    if (effect === 'removal') {
+      await expect(realmRankPage(access, session, realm, sort, 'all', 20, undefined, undefined, board))
+        .rejects.toBeInstanceOf(RealmRankingsIncomplete);
+      continue;
+    }
+    expect(page.rows.map(row => row.reply)).toEqual([item.reply]);
+    expect(await realmRankPage(access, session, realm, sort, 'all', 20, undefined, undefined, board)).toEqual(page);
+    const anchor = page.rows[0]!;
+    expect(await realmRankPage(access, session, realm, sort, 'all', 20, {
+      rank: anchor.rank_key, time: anchor.time_key, placement: anchor.placement, revision: page.revision,
+    }, undefined, board)).toEqual({ revision: page.revision, rows: [] });
+  }
+});
+
 test('uninitialized and reset placements never masquerade as a complete empty population', async () => {
   const realm = native();
   await pending(realm);

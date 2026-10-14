@@ -460,6 +460,10 @@ export class RealmThreadRankingProjection {
             OR envelope->>'type'='com.rezics.contribution.draft-created.v1'
               AND envelope#>>'{data,receipt,action}'='contribution.create'
             OR envelope->>'type'='com.rezics.space.created.v1' AND envelope#>>'{data,receipt,action}'='space.create'
+            -- Selecting or clearing the board vocabulary changes navigation,
+            -- never the immutable placements in an established ranking cut.
+            OR envelope->>'type'='com.rezics.classification.context-created.v1'
+              AND envelope#>>'{data,receipt,action}'='classification.context.configure'
           ) THEN 'addition' ELSE 'removal' END AS effect
         FROM relay.delivered_event WHERE stream_scope=$1 AND data_epoch=$2 AND sequence<=$3::numeric
           AND (sequence>$4::numeric OR sequence=$4::numeric AND event_id>$5)
