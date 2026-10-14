@@ -60,14 +60,14 @@ export function failureText(failure: CommandFailure | 'changed', t: ReturnType<t
  * and unban them, and give or take roles with the impact shown first.
  */
 export function MembersView({ principal: givenPrincipal, realm, address = realm, actingSubject, first, agents: initialAgents, roles, now, locale,
-  messages, invitations: firstInvitations, roleFilter = null, api: givenApi }: {
+  messages, invitations: firstInvitations, roleFilter = null, api: givenApi, refresh }: {
   principal?: string; realm: string; address?: string; actingSubject: string; first: MemberPage; agents: Record<string, AgentSummary>;
   invitations: Loaded<InvitationPage>;
   /** Roles the person may give, or null without the Manage roles permission. */
   roles: readonly Role[] | null;
   /** When set, the list is people who hold this role. `name` is null when the role list could not name it. */
   roleFilter?: { id: string; name: string | null } | null;
-  now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi;
+  now: number; locale: UiLocale; messages: ManageMessages; api?: AdminApi; refresh?: () => void;
 }) {
   const t = useMemo(() => materializeData(messages, { locale }), [messages, locale]);
   const api = useMemo(() => givenApi ?? bffAdminApi(realm, actingSubject), [givenApi, realm, actingSubject]);
@@ -77,6 +77,8 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   const [invitations, setInvitations] = useState(firstInvitations);
   const [invitationBusy, setInvitationBusy] = useState<string | null>(null);
   const [agents, setAgents] = useState(initialAgents);
+  // A server refresh can name an invitee absent from the earlier roster.
+  useEffect(() => { setAgents(known => mergeAgents(known, initialAgents)); }, [initialAgents]);
   const [query, setQuery] = useState('');
   const [searched, setSearched] = useState('');
   const [searching, setSearching] = useState(false);
@@ -109,7 +111,7 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   async function done(message: string) {
     setOpen(null);
     setStatus(message);
-    router.refresh();
+    (refresh ?? router.refresh)();
     await load(memberReads.current.search);
     const refreshed = await api.invitations(null);
     setInvitations(refreshed);

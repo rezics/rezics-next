@@ -10,6 +10,8 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { RecordedMembershipPage } from './realm-membership-recorded-page.tsx';
 import { recordedSample, type MembershipSurface } from './realm-membership-recorded-page.ts';
+import { membershipInvitationLabels, membershipRefusalLabels, membershipSelections } from './realm-membership-recorded-samples.ts';
+import { materializeData } from 'native-i18n';
 import { realmHref } from './route.ts';
 
 const record = membershipRecord as AnswerRecord;
@@ -53,6 +55,7 @@ const joinedFrame = [
   { label: 'frame-address', state: 'populated' },
   { label: 'frame-public-realm', state: 'error' },
   { label: 'frame-realm', state: 'populated' },
+  { label: 'frame-realm-zone', state: 'error' },
   { label: 'frame-joining', state: 'populated' },
   { label: 'frame-follow', state: 'populated' },
   { label: 'frame-platform-access', state: 'populated' },
@@ -113,10 +116,10 @@ function ownerDecision(inbox: 'decision-confirm-inbox-declined' | 'decision-conf
   ];
 }
 
-function Recorded({ persona, selections, surface }: {
-  persona: AnswerPersona; selections: readonly RecordedSelection[]; surface: MembershipSurface;
+function Recorded({ persona, selections, surface, sequence = false }: {
+  persona: AnswerPersona; selections: readonly RecordedSelection[]; surface: MembershipSurface; sequence?: boolean;
 }) {
-  return <RecordedMembershipPage record={record} persona={persona} selections={selections} surface={surface} />;
+  return <RecordedMembershipPage record={record} persona={persona} selections={selections} surface={surface} sequence={sequence} />;
 }
 
 const meta = {
@@ -319,14 +322,22 @@ async function expectDecision(canvasElement: HTMLElement, decline: boolean) {
   await waitFor(() => expect(canvas.getByRole('button', { name: label })).toBeEnabled());
   await expect(canvas.getByText(text('owner', 'requester-name-stranger', 'displayName'))).toBeVisible();
   await expect(canvas.getByText(itemsOf(inbox)[0]!.reason)).toBeVisible();
+  await userEvent.click(canvas.getByRole('button', { name: access.refresh }));
+  await expect(canvas.findByText(access.empty)).resolves.toBeVisible();
+  await expect(canvas.queryByText(text('owner', 'requester-name-stranger', 'displayName'))).toBeNull();
+  await expect(canvas.queryByRole('button', { name: label })).toBeNull();
+  await expect(canvas.getByText(decline ? access.decisionDeclined : access.approved)).toBeVisible();
   await expectNoOverflow(canvasElement);
 }
 
-/** Owner: the recorded decline. Its receipt stays visible; refreshing repeats this inbox. */
+/** Owner: decline receipt, the recorded restored request, then the final refreshed inbox. */
 export const OwnerDecline: Story = {
   args: {
     persona: 'owner',
-    selections: ownerDecision('decision-confirm-inbox-declined', 'decision-confirm-declined'),
+    selections: [...ownerDecision('decision-confirm-inbox-declined', 'decision-confirm-declined'),
+      { label: 'decision-confirm-selected-refreshed-declined', state: 'populated' },
+      { label: 'decision-confirm-inbox-after-declined', state: 'empty' }],
+    sequence: true,
     surface: 'requests',
   },
   parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
@@ -334,11 +345,14 @@ export const OwnerDecline: Story = {
 };
 export const OwnerDeclinePhone: Story = { ...OwnerDecline, globals: phone };
 
-/** Owner: the recorded acceptance. Its receipt stays visible; refreshing repeats this inbox. */
+/** Owner: acceptance receipt, the recorded restored request, then the final refreshed inbox. */
 export const OwnerAccept: Story = {
   args: {
     persona: 'owner',
-    selections: ownerDecision('decision-confirm-inbox-accepted', 'decision-confirm-accepted'),
+    selections: [...ownerDecision('decision-confirm-inbox-accepted', 'decision-confirm-accepted'),
+      { label: 'decision-confirm-selected-refreshed-accepted', state: 'populated' },
+      { label: 'decision-confirm-inbox-after-accepted', state: 'empty' }],
+    sequence: true,
     surface: 'requests',
   },
   parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
@@ -356,3 +370,95 @@ export const OwnerLoading: Story = {
   play: async ({ canvasElement }) => { await expectLoading(canvasElement, text('owner', 'management-realm-header', 'name')); },
 };
 export const OwnerLoadingPhone: Story = { ...OwnerLoading, globals: phone };
+
+
+async function expectWithdrawal(canvasElement: HTMLElement, persona: 'stranger' | 'operator') {
+  await expectJoin(canvasElement, persona, true);
+  const canvas = within(canvasElement);
+  await userEvent.click(canvas.getByRole('button', { name: access.withdraw }));
+  const content = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: access.withdraw });
+  const dialog = within(content);
+  await userEvent.type(dialog.getByRole('textbox', { name: access.reason }), commandText(persona, 'withdraw-confirm', 'reason'));
+  await userEvent.click(dialog.getByRole('button', { name: access.withdraw }));
+  await waitFor(() => expect(within(canvasElement.ownerDocument.body).queryByRole('dialog')).toBeNull());
+  await expectJoin(canvasElement, persona, false);
+  await userEvent.click(canvas.getByRole('button', { name: access.refreshStatus }));
+  await expectJoin(canvasElement, persona, false);
+}
+
+/** Stranger: one real withdrawal control, receipt and owner-status refresh. */
+export const StrangerWithdraw: Story = {
+  args: { persona: 'stranger', surface: 'join', sequence: true, selections: [
+    ...joinRead('withdraw-confirm-own-request'),
+    { label: 'withdraw-confirm', state: 'populated' },
+    { label: 'withdraw-confirm-own-request-after', state: 'populated' },
+  ] },
+  play: async ({ canvasElement }) => { await expectWithdrawal(canvasElement, 'stranger'); },
+};
+export const StrangerWithdrawPhone: Story = { ...StrangerWithdraw, globals: phone };
+export const OperatorWithdraw: Story = {
+  ...StrangerWithdraw, args: { ...StrangerWithdraw.args, persona: 'operator' },
+  play: async ({ canvasElement }) => { await expectWithdrawal(canvasElement, 'operator'); },
+};
+export const OperatorWithdrawPhone: Story = { ...OperatorWithdraw, globals: phone };
+
+async function expectRefusal(canvasElement: HTMLElement, persona: 'member' | 'moderator' | 'stranger' | 'operator') {
+  const canvas = within(canvasElement);
+  const joined = persona === 'member' || persona === 'moderator';
+  const t = materializeData(manageMessages, { locale: 'en' });
+  await expect(canvas.findByRole('heading', { name: joined ? t.deniedTitle : t.missingTitle })).resolves.toBeVisible();
+  const prefix = joined ? 'frame-' : 'join-';
+  await expect(canvas.getByText(text(persona, prefix + 'acting-agent-profile', 'displayName'))).toBeVisible();
+  if (joined) await expect(canvas.getByRole('heading', { level: 1,
+    name: text(persona, 'management-refused-realm-header', 'name') })).toBeVisible();
+  await expect(canvas.queryByRole('button', { name: access.approve })).toBeNull();
+  await expect(canvas.queryByRole('button', { name: access.decline })).toBeNull();
+  await expectNoOverflow(canvasElement);
+}
+
+function refusal(persona: 'member' | 'moderator' | 'stranger' | 'operator'): Story {
+  return {
+    args: { persona, surface: 'requests', selections: membershipSelections(record, persona, membershipRefusalLabels(persona)) },
+    parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
+    play: async ({ canvasElement }) => { await expectRefusal(canvasElement, persona); },
+  };
+}
+export const MemberRequestsRefused = refusal('member');
+export const MemberRequestsRefusedPhone: Story = { ...MemberRequestsRefused, globals: phone };
+export const ModeratorRequestsRefused = refusal('moderator');
+export const ModeratorRequestsRefusedPhone: Story = { ...ModeratorRequestsRefused, globals: phone };
+export const StrangerRequestsRefused = refusal('stranger');
+export const StrangerRequestsRefusedPhone: Story = { ...StrangerRequestsRefused, globals: phone };
+export const OperatorRequestsRefused = refusal('operator');
+export const OperatorRequestsRefusedPhone: Story = { ...OperatorRequestsRefused, globals: phone };
+
+/** Owner: the reached members page, invitation confirm (HTTP 200) and both refresh paths. */
+export const OwnerInvite: Story = {
+  args: { persona: 'owner', surface: 'members', sequence: true,
+    selections: membershipSelections(record, 'owner', membershipInvitationLabels) },
+  parameters: { route: { pathname: '/en/manage/r/recorded/members' } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const t = materializeData(manageMessages, { locale: 'en' });
+    await expect(canvas.findByRole('heading', { level: 1, name: text('owner', 'management-realm-header', 'name') })).resolves.toBeVisible();
+    await expect(canvas.getByText(text('owner', 'acting-agent-profile', 'displayName'))).toBeVisible();
+    await expect(canvas.getByText(t.noOutgoingInvitations)).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: t.inviteMember }));
+    const content = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: t.inviteTitle });
+    const dialog = within(content);
+    await userEvent.type(dialog.getByRole('textbox', { name: t.whoLabel }), commandText('owner', 'invitation-confirm', 'member'));
+    await userEvent.click(dialog.getByRole('button', { name: t.inviteConfirm }));
+    await waitFor(() => expect(within(canvasElement.ownerDocument.body).queryByRole('dialog')).toBeNull());
+    await expect(canvas.findByText(text('owner', 'members-after-invitation-name-member', 'displayName'))).resolves.toBeVisible();
+    await expect(canvas.getByText(t.invitationPending, { exact: false })).toBeVisible();
+    await expect(canvas.getByRole('button', { name: t.cancelInvitation })).toBeVisible();
+    const answer = recordedSample(record, 'owner', 'invitation-confirm').answer as { invitation: { expiresAt: string } };
+    const invitee = commandText('owner', 'invitation-confirm', 'member');
+    await expect(canvas.getByRole('status')).toHaveTextContent(t.invitedNow({
+      name: t.agentFallback({ id: invitee.slice(-36, -28) }), date: date(answer.invitation.expiresAt, 'en'),
+    }));
+    await expect(canvas.queryByText(t.noOutgoingInvitations)).toBeNull();
+    await expectNoOverflow(canvasElement);
+  },
+};
+export const OwnerInvitePhone: Story = { ...OwnerInvite, globals: phone };

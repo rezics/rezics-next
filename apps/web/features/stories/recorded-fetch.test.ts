@@ -210,3 +210,23 @@ test('two stories on the same page own distinct fetches, answers and disposal', 
   expect(await (await ready.fetcher(request)).json()).toEqual(populated.answer);
   await expect(ready.fetcher(`https://same-page.invalid/api/other${populated.path}`)).rejects.toThrow('Unmatched');
 });
+
+test('ordered playback serves exact recorded withdrawal answers across the same status request', async () => {
+  const { default: fixture } = await import('../../../../tests/qa/fixtures/outcomes/realm/membership-and-admission.json');
+  const record = fixture as AnswerRecord;
+  const labels = ['withdraw-confirm-own-request', 'withdraw-confirm', 'withdraw-confirm-own-request-after'];
+  const samples = labels.map(label => record.personas.stranger.find(sample => sample.label === label)!);
+  const playback = recordedFetch(record, 'stranger', labels.map(label => ({ label, state: 'populated' })), { sequence: true });
+  disposals.push(playback.dispose);
+  const before = samples[0]!, command = samples[1]!, after = samples[2]!;
+  expect(before.path).toBe(after.path);
+  expect(before.answer).not.toEqual(after.answer);
+  expect(await (await playback.fetcher(before.path)).json()).toEqual(before.answer);
+  const key = 'recorded-confirm-key';
+  const response = await playback.fetcher(command.path, { method: command.method,
+    headers: { 'content-type': 'application/json', 'idempotency-key': key }, body: JSON.stringify(command.body) });
+  expect(response.status).toBe(command.status);
+  expect(await response.json()).toEqual(command.answer);
+  expect(await (await playback.fetcher(after.path)).json()).toEqual(after.answer);
+  expect(await (await playback.fetcher(after.path)).json()).toEqual(after.answer);
+});

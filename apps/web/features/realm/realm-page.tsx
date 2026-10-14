@@ -260,14 +260,17 @@ export async function loadRealmView(
       avatarQuery: client.actingSubject ? `?actingSubject=${encodeURIComponent(client.actingSubject)}` : '',
     } satisfies RealmReader : realmReader(),
   ]);
-  const readAttachment = (realmId: string) => hosted ? hosted.readRealmZone(realmId) : readRealmZone(realmId);
-  const readPublication = (zoneId: string) => hosted
-    ? hosted.readCompletePresentation(zoneId) : readCompletePresentation(zoneId);
+  const frameReads = replay ? realmFrameReads({
+    main: browserMainApi(replay.origin, { anonymous: true, fetcher: replay.fetch }),
+    personal: replay.personal, actingSubject: reader.actingSubject,
+  }) : hosted;
+  const readAttachment = (realmId: string) => frameReads ? frameReads.readRealmZone(realmId) : readRealmZone(realmId);
+  const readPublication = (zoneId: string) => frameReads
+    ? frameReads.readCompletePresentation(zoneId) : readCompletePresentation(zoneId);
   if (resolved.kind !== 'realm') return resolved;
   let realm = resolved;
   // A Realm entry can lack Zone capability; its attachment supplies the site address.
-  // Story replay already resolved the Realm from its recorded reads, so this host read stays on the production path.
-  if (!replay && (surface === 'community' || !realm.zone)) {
+  if (surface === 'community' || !realm.zone) {
     const attached = await readAttachment(realm.realm);
     if (attached.ok) {
       const zoneId = attached.data.zone.slice(-36);

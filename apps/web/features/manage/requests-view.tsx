@@ -6,6 +6,7 @@ import { Input } from '@rezics/ui/input';
 import { Textarea } from '@rezics/ui/textarea';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { confirmAdmissionDecision } from './admission-controls.ts';
 import { CommandDialog } from './command-dialog.tsx';
 import { browserSpaceAccessApi, newKey, type JoinDecision, type JoinRequest, type RequestPage, type SpaceAccessApi } from './settings-api.ts';
 import { accessMessages } from './settings-messages.ts';
@@ -67,16 +68,16 @@ export function RequestsView({ initial, space, realm, actingSubject, locale, api
       expectedRequestGeneration: selected.requestGeneration, decision, reason: reason.trim() };
     const body = JSON.stringify([selected.id, command]);
     if (intent.current?.body !== body) intent.current = { body, command, key: newKey() };
-    const result = await api.decide(selected.id, intent.current.command, intent.current.key);
-    if (result.ok) {
-      setPage(previous => ({ ...previous, generation: result.data.generation, items: previous.items.filter(item => item.id !== selected.id) }));
-      setSelected(null); setStatus(result.data.state === 'accepted' ? t.approved : t.decisionDeclined); setReason(''); intent.current = null;
-      // Every decision changes the inbox cursor context. Restart the applied
-      // search so continuation never reuses the pre-decision cursor.
-      const refreshed = await api.requests(null, appliedSearch);
-      if (refreshed.ok) { setPage(refreshed.data); setCursorStale(false); }
-      else { setCursorStale(true); setError(refreshed.failure === 'denied' ? t.denied : t.failed); }
-    } else {
+    const result = await confirmAdmissionDecision(api,
+      { request: selected.id, command: intent.current.command, key: intent.current.key }, appliedSearch,
+      receipt => {
+        setPage(previous => ({ ...previous, generation: receipt.generation, items: previous.items.filter(item => item.id !== selected.id) }));
+        setSelected(null); setStatus(receipt.state === 'accepted' ? t.approved : t.decisionDeclined); setReason(''); intent.current = null;
+      }, refreshed => {
+        if (refreshed.ok) { setPage(refreshed.data); setCursorStale(false); }
+        else { setCursorStale(true); setError(refreshed.failure === 'denied' ? t.denied : t.failed); }
+      });
+    if (!result.ok) {
       setError(result.failure === 'stale' ? t.staleRequest : result.failure === 'denied' ? t.denied : t.failed);
       if (result.failure === 'stale') { setStale(true); intent.current = null; }
     }

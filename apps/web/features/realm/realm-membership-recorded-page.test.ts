@@ -30,9 +30,9 @@ function answerOf<T>(persona: AnswerPersona, label: string): T {
 }
 
 async function withReplay<T>(persona: AnswerPersona, selections: readonly RecordedSelection[],
-  run: (main: MainClient, read: (path: string) => Promise<Response>, fetcher: typeof fetch) => Promise<T>): Promise<T> {
+  run: (main: MainClient, read: (path: string) => Promise<Response>, fetcher: typeof fetch) => Promise<T>, sequence = false): Promise<T> {
   let missed: string | null = null;
-  const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+  const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence });
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
     try { return await playback.fetcher(input, init); }
     catch (error) {
@@ -64,6 +64,7 @@ const joinedFrame = [
   { label: 'frame-address', state: 'populated' },
   { label: 'frame-public-realm', state: 'error' },
   { label: 'frame-realm', state: 'populated' },
+  { label: 'frame-realm-zone', state: 'error' },
   { label: 'frame-joining', state: 'populated' },
   { label: 'frame-follow', state: 'populated' },
   { label: 'frame-platform-access', state: 'populated' },
@@ -335,4 +336,160 @@ test('a confirm refresh repeats the request the page just read', () => {
     expect(before.body ?? null).toEqual(after.body ?? null);
     expect(before.answer).not.toEqual(after.answer);
   }
+});
+
+test('each refused requests route includes the recorded persona and management frame reads', async () => {
+  const { recordedRequestsRoute } = await import('./realm-membership-recorded-page.ts');
+  const { membershipRefusalLabels, membershipSelections } = await import('./realm-membership-recorded-samples.ts');
+  const { ManageFailure } = await import('../manage/parts.tsx');
+  for (const persona of ['member', 'moderator', 'stranger', 'operator'] as const) {
+    const selections = membershipSelections(record, persona, membershipRefusalLabels(persona));
+    const identity = recordedIdentity(record, persona, selections);
+    const frame = await withReplay(persona, selections, (main, _read, fetcher) =>
+      recordedRequestsRoute(main, fetcher, identity.realm, 'en')) as import('react').ReactElement<{
+        header: RealmHeader | null; agent: { iri: string; label: string }; children: import('react').ReactElement<{ failure: string }>;
+      }>;
+    const joined = persona === 'member' || persona === 'moderator';
+    const profile = answerOf<{ id: string; displayName: string }>(persona,
+      `${joined ? 'frame' : 'join'}-acting-agent-profile`);
+    expect(frame.props.agent.iri).toBe(profile.id);
+    expect(frame.props.agent.label).toBe(profile.displayName);
+    expect(frame.props.header).toEqual(joined ? answerOf<RealmHeader>(persona, 'management-refused-realm-header') : null);
+    expect(frame.props.children.type).toBe(ManageFailure);
+    expect(frame.props.children.props.failure).toBe(joined ? 'denied' : 'missing');
+  }
+});
+
+test('the withdrawal control confirms its retained intent, receipt and subsequent production status', async () => {
+  const { confirmWithdrawal } = await import('../manage/admission-controls.ts');
+  const { recordedRealmRoute } = await import('./realm-membership-recorded-page.ts');
+  const { membershipSelections, membershipSessionLabels } = await import('./realm-membership-recorded-samples.ts');
+  for (const persona of ['stranger', 'operator'] as const) {
+    const labels = [...membershipSessionLabels(persona), 'join-address', 'join-public-realm', 'join-realm', 'join-landing',
+      'withdraw-confirm-own-request', 'withdraw-confirm', 'withdraw-confirm-own-request-after'];
+    const selections = membershipSelections(record, persona, labels);
+    await withReplay(persona, selections, async (_main, _read, fetcher) => {
+      const identity = recordedIdentity(record, persona, selections);
+      const page = await recordedRealmRoute(recordedReplay(fetcher, true), identity.realm, 'en') as
+        import('react').ReactElement<{ api: import('../manage/settings-api.ts').SpaceAccessApi; actingSubject: string }>;
+      const api = page.props.api;
+      const current = await readCurrentRequest(api);
+      expect(current.ok).toBe(true);
+      if (!current.ok || !current.data.entry) throw new Error('The reached withdrawal has no request');
+      expect(current.data.state).toBe('pending');
+      const body = commandOf<import('../manage/settings-api.ts').JoinWithdraw>(persona, 'withdraw-confirm');
+      const intent = { request: current.data.entry.id, key: newKey(), command: {
+        actingSubject: page.props.actingSubject, expectedRequestGeneration: current.data.entry.requestGeneration, reason: body.reason,
+      } };
+      expect(intent.command).toEqual(body);
+      const events: string[] = [];
+      const result = await confirmWithdrawal(api, intent, receipt => {
+        events.push('receipt');
+        expect(receipt).toEqual(recordedSample(record, persona, 'withdraw-confirm').answer);
+      }, async () => {
+        events.push('refresh');
+        const after = await readCurrentRequest(api);
+        expect(after.ok).toBe(true);
+        if (!after.ok) return;
+        const recorded = answerOf<import('../manage/settings-api.ts').OwnRequestPage>(persona, 'withdraw-confirm-own-request-after');
+        expect(after.data.entry).toEqual(recorded.items.find(item => item.id === intent.request));
+        expect(after.data.state).toBe('withdrawn');
+      });
+      expect(result.ok).toBe(true);
+      expect(events).toEqual(['receipt', 'refresh']);
+    }, true);
+  }
+});
+
+test('the decision control keeps the receipt, reads the restored selection, then reaches the final inbox', async () => {
+  const { confirmAdmissionDecision } = await import('../manage/admission-controls.ts');
+  const { recordedRequestsRoute } = await import('./realm-membership-recorded-page.ts');
+  const { membershipSelections, membershipSessionLabels } = await import('./realm-membership-recorded-samples.ts');
+  for (const state of ['declined', 'accepted'] as const) {
+    const selections = membershipSelections(record, 'owner', [...membershipSessionLabels('owner'),
+      'request-address-space-missing', `decision-confirm-inbox-${state}`, `decision-confirm-selected-refreshed-${state}`,
+      `decision-confirm-inbox-after-${state}`, `decision-confirm-${state}`,
+      'management-realm-header', 'management-site-absent', 'requester-name-stranger']);
+    await withReplay('owner', selections, async (main, _read, fetcher) => {
+      const identity = recordedIdentity(record, 'owner', selections);
+      const frame = await recordedRequestsRoute(main, fetcher, identity.realm, 'en') as
+        import('react').ReactElement<{ children: import('react').ReactElement<{
+          initial: RequestPage; api: import('../manage/settings-api.ts').SpaceAccessApi; actingSubject: string;
+        }> }>;
+      const { initial, api, actingSubject } = frame.props.children.props;
+      const selected = initial.items[0];
+      if (!selected) throw new Error('The reached decision has no selected request');
+      const body = commandOf<import('../manage/settings-api.ts').JoinDecision>('owner', `decision-confirm-${state}`);
+      const intent = { request: selected.id, key: newKey(), command: {
+        actingSubject, expectedGeneration: initial.generation, expectedRequestGeneration: selected.requestGeneration,
+        decision: state, reason: body.reason,
+      } };
+      expect(intent.command).toEqual(body);
+      const events: string[] = [];
+      const result = await confirmAdmissionDecision(api, intent, '', receipt => {
+        events.push('receipt');
+        expect(receipt).toEqual(recordedSample(record, 'owner', `decision-confirm-${state}`).answer);
+        expect(receipt.requestId).toBe(selected.id);
+      }, restored => {
+        events.push('refresh');
+        expect(restored.ok).toBe(true);
+        if (!restored.ok) return;
+        expect(restored.data).toEqual(answerOf<RequestPage>('owner', `decision-confirm-selected-refreshed-${state}`));
+        expect(restored.data.items.find(item => item.id === selected.id)).toEqual(selected);
+      });
+      expect(result.ok).toBe(true);
+      expect(events).toEqual(['receipt', 'refresh']);
+      const final = await api.requests(null, '');
+      expect(final.ok).toBe(true);
+      if (!final.ok) return;
+      expect(final.data).toEqual(answerOf<RequestPage>('owner', `decision-confirm-inbox-after-${state}`));
+      expect(final.data.items).toHaveLength(0);
+      expect(final.data.complete).toBe(true);
+    }, true);
+  }
+});
+
+test('the reached members route invites with HTTP 200 and refreshes the production page and browser lists', async () => {
+  const { recordedMembersRoute } = await import('./realm-membership-recorded-page.ts');
+  const { membershipInvitationLabels, membershipSelections } = await import('./realm-membership-recorded-samples.ts');
+  const selections = membershipSelections(record, 'owner', membershipInvitationLabels);
+  await withReplay('owner', selections, async (main, _read, fetcher) => {
+    const identity = recordedIdentity(record, 'owner', selections);
+    type Frame = import('react').ReactElement<{ children: import('react').ReactElement<{
+      api: import('../manage/admin-api.ts').AdminApi; agents: Record<string, import('../manage/types.ts').AgentSummary>;
+      first: import('../manage/types.ts').MemberPage; invitations: import('../manage/types.ts').Loaded<import('../manage/types.ts').InvitationPage>;
+    }> }>;
+    const frame = await recordedMembersRoute(main, fetcher, identity.realm, 'en') as Frame;
+    const { api, first, invitations } = frame.props.children.props;
+    expect(first).toEqual(answerOf('owner', 'members-before-invitation'));
+    expect(invitations).toEqual({ ok: true, data: answerOf('owner', 'outgoing-invitations-before-confirm') });
+    const body = commandOf<import('../manage/types.ts').InvitationCommand>('owner', 'invitation-confirm');
+    const found = await api.lookup(body.member);
+    expect(found.ok).toBe(true);
+    if (!found.ok) return;
+    const roster = await api.members(found.data.iri, null);
+    expect(roster.ok).toBe(true);
+    if (roster.ok) expect(roster.data).toEqual(answerOf('owner', 'invitation-confirm-roster'));
+    const sent = await api.invite({ actingSubject: identity.actingSubject!, member: found.data.iri,
+      expiresInSeconds: inviteDurations.find(([label]) => label === 'duration7d')![1] }, newKey());
+    expect(sent.ok).toBe(true);
+    if (!sent.ok) return;
+    expect(recordedSample(record, 'owner', 'invitation-confirm').status).toBe(200);
+    expect(sent.data).toEqual(recordedSample(record, 'owner', 'invitation-confirm').answer);
+    expect(sent.data.invitation.state).toBe('pending');
+    const refreshed = await recordedMembersRoute(main, fetcher, identity.realm, 'en') as Frame;
+    expect(refreshed.props.children.props.first).toEqual(answerOf('owner', 'members-after-invitation'));
+    expect(refreshed.props.children.props.agents[body.member]?.label).toBe(
+      answerOf<{ displayName: string }>('owner', 'members-after-invitation-name-member').displayName);
+    const members = await api.members('', null);
+    expect(members.ok).toBe(true);
+    if (!members.ok) return;
+    expect(members.data).toEqual(answerOf('owner', 'invitation-refresh-members'));
+    await api.names(members.data.items.map(item => item.member));
+    const outgoing = await api.invitations(null);
+    expect(outgoing.ok).toBe(true);
+    if (!outgoing.ok) return;
+    expect(outgoing.data).toEqual(answerOf('owner', 'outgoing-invitations-after-confirm'));
+    expect(outgoing.data.items.find(item => item.id === sent.data.invitation.id)?.state).toBe('pending');
+  }, true);
 });

@@ -28,12 +28,14 @@ function requestKey(path: string): string {
 
 /** Each mount owns a transport and disposes it at teardown. Labels choose answers;
  * the caller knows which completed sample is empty. No domain rules run in this fetch.
- * JSON bodies and query parameters match by value; the path retains its exact wire spelling. */
+ * JSON bodies and query parameters match by value; the path retains its exact wire spelling.
+ * `sequence` admits successive recorded answers for repeated refresh requests,
+ * advancing only their exact matches and repeating their last recorded answer. */
 export function recordedFetch(
   record: AnswerRecord,
   persona: AnswerPersona,
   selections: readonly RecordedSelection[],
-  { pathPrefix = '' }: { pathPrefix?: string } = {},
+  { pathPrefix = '', sequence = false }: { pathPrefix?: string; sequence?: boolean } = {},
 ): { fetcher: typeof fetch; dispose: () => void } {
   if (pathPrefix && (!pathPrefix.startsWith('/') || pathPrefix.endsWith('/'))) {
     throw new Error('Recorded fetch pathPrefix must be a path without a trailing slash');
@@ -48,11 +50,11 @@ export function recordedFetch(
       (state === 'pending' && sample.status === 202) ||
       (state === 'error' && sample.status >= 400 && sample.status <= 599);
     if (!admitted) throw new Error(`Recorded sample ${label} (${sample.status}) cannot supply ${state}`);
-    return { sample, state };
+    return { sample, state, used: false };
   });
   for (let i = 0; i < samples.length; i++) {
     const current = samples[i]!.sample;
-    if (samples.slice(0, i).some(({ sample }) => sample.method === current.method &&
+    if (!sequence && samples.slice(0, i).some(({ sample }) => sample.method === current.method &&
       requestKey(sample.path) === requestKey(current.path) && sameBody(sample.body, current.body))) {
       throw new Error(`Ambiguous recorded request: ${current.method} ${current.path}`);
     }
@@ -79,8 +81,12 @@ export function recordedFetch(
     if (disposed) throw ended();
     request.signal.throwIfAborted();
     const key = requestKey(path);
-    const match = samples.find(({ sample }) => sample.method === request.method &&
+    const matches = samples.filter(({ sample }) => sample.method === request.method &&
       requestKey(sample.path) === key && sameBody(sample.body, body));
+    // A production refresh repeats a request after its command. In sequence mode
+    // matching samples advance in recorded order; the final answer remains current.
+    const match = sequence ? matches.find(item => !item.used) ?? matches.at(-1) : matches[0];
+    if (match && sequence) match.used = true;
     if (!match) throw new Error(`Unmatched recorded request (${record.row}/${persona}): ${JSON.stringify({
       method: request.method, path: url.pathname + url.search, body: body === undefined ? '<absent>' : body,
     })}`);

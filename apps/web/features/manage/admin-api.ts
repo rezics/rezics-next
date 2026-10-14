@@ -6,7 +6,7 @@ import { changeMember, changeRole, invite, newKey, type Outcome, previewRole, sa
 import type { ImpactState } from './impact-preview.tsx';
 import { attemptStorage, performCommand, readCommand, retainedCommands } from './safety-pending.ts';
 import { mergeAgents, readAgents, readHandle, readMembers, readOutgoingInvitations, readRoles, readSettings } from './read.ts';
-import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult, Loaded, MemberCommand, MemberPage, MemberReceipt,
+import type { AgentSummary, InvitationCommand, InvitationPage, InvitationResult, Loaded, MainClient, MemberCommand, MemberPage, MemberReceipt,
   RoleChange, RoleCommand, RoleImpact, RoleList, RoleReceipt, SettingsReceipt, SettingsView } from './types.ts';
 
 /** Members, roles and settings from the browser. Stories pass a stand-in. */
@@ -28,7 +28,11 @@ export interface AdminApi {
 }
 
 export function bffAdminApi(realm: string, actingSubject: string): AdminApi {
-  const main = () => browserMainApi();
+  return adminApi(() => browserMainApi(), realm, actingSubject);
+}
+
+/** The same browser adapter with a supplied typed transport for recorded paths. */
+export function adminApi(main: () => MainClient, realm: string, actingSubject: string): AdminApi {
   return {
     members: (search, after, role) => readMembers(main(), realm, { actingSubject, search, after, role }),
     names: iris => readAgents(main(), iris, actingSubject),

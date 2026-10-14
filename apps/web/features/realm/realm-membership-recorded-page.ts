@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { realmMembersBody } from '../../app/[locale]/manage/r/[realm]/members/page.tsx';
+import { adminApi } from '../manage/admin-api.ts';
 import { joinRequestsBody } from '../../app/[locale]/manage/r/[realm]/requests/page.tsx';
 import { realmManagementFrame } from '../../app/[locale]/manage/r/[realm]/layout.tsx';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
@@ -20,7 +22,7 @@ const recordedSessionKey = '00000000-0000-4000-8000-000000000001';
 const recordedToken = 'recorded';
 
 /** Which production route the story reaches. Basis is not one of them. */
-export type MembershipSurface = 'landing' | 'joined' | 'join' | 'requests';
+export type MembershipSurface = 'landing' | 'joined' | 'join' | 'requests' | 'members';
 
 export function recordedSample(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const found = record.personas[persona].filter(sample => sample.label === label);
@@ -118,3 +120,13 @@ export async function recordedRequestsRoute(main: MainClient, fetcher: typeof fe
 }
 
 export { readRequestsAtAddress };
+
+/** The reached invitation page uses the members route and its management frame. */
+export async function recordedMembersRoute(main: MainClient, fetcher: typeof fetch, realm: string, locale: UiLocale,
+  refresh?: () => void, now?: number): Promise<ReactNode> {
+  const { agent, actingSubject } = await recordedManagementAgent(fetcher, locale);
+  const anonymous = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
+  const body = await realmMembersBody({ main, anonymous, realm, actingSubject, locale,
+    principal: actingSubject, signInHref: '/auth/start', api: adminApi(() => main, realm, actingSubject), refresh, now });
+  return realmManagementFrame({ main, realm, address: realm, actingSubject, agent, locale, token: recordedToken, children: body });
+}

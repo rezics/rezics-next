@@ -1,4 +1,7 @@
 import type { Metadata } from 'next';
+import type { UiLocale } from '../../../../../../i18n/define.ts';
+import type { MainClient } from '../../../../../../features/manage/types.ts';
+import type { AdminApi } from '../../../../../../features/manage/admin-api.ts';
 import { notFound } from 'next/navigation';
 import { MembersView } from '../../../../../../features/manage/members-view.tsx';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
@@ -22,6 +25,16 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
   const locale = await requestLocale();
   const back = membersHref(address, role);
   const { principal, actingSubject, main, anonymous, signInHref } = await manager(locale, back);
+  return realmMembersBody({ main, anonymous, principal, realm, address, actingSubject, role, locale, signInHref });
+}
+
+/** The members route after its manager admits the acting Person. */
+export async function realmMembersBody({ main, anonymous, principal, realm, address = realm, actingSubject, role = null,
+  locale, signInHref, api, refresh, now = Date.now() }: {
+  main: MainClient; anonymous: MainClient; principal: string; realm: string; address?: string; actingSubject: string;
+  role?: string | null; locale: UiLocale; signInHref: string; api?: AdminApi; refresh?: () => void; now?: number;
+}) {
+  const back = membersHref(address, role);
   const [messages, page, roles, invitations] = await Promise.all([getMessages('manage', locale),
     readMembers(main, realm, { actingSubject, role }), readRoles(main, realm, actingSubject),
     readOutgoingInvitations(main, realm, actingSubject)]);
@@ -33,5 +46,5 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
   return <MembersView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} first={page.data} agents={agents}
     invitations={invitations} roles={roles.ok ? roles.data.roles : null}
     roleFilter={role ? { id: role, name: named } : null}
-    now={Date.now()} locale={locale} messages={messages} />;
+    now={now} locale={locale} messages={messages} api={api} refresh={refresh} />;
 }

@@ -5,6 +5,7 @@ import { Field, FieldLabel } from '@rezics/ui/field';
 import { Textarea } from '@rezics/ui/textarea';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { confirmWithdrawal } from '../manage/admission-controls.ts';
 import { CommandDialog } from '../manage/command-dialog.tsx';
 import { browserSpaceAccessApi, newKey, type JoinPage, type SpaceAccessApi } from '../manage/settings-api.ts';
 import { accessMessages } from '../manage/settings-messages.ts';
@@ -120,9 +121,9 @@ function JoinFlow({ page, actingSubject, signInHref, locale, api: provided, pers
         command: { actingSubject, expectedRequestGeneration: knownReceipt.requestGeneration, reason: withdrawReason.trim() } } });
     }
     const intent = journal.current.withdrawIntent!;
-    const result = await api.withdraw(intent.request, intent.command, intent.key);
-    if (result.ok) { retain({ ...journal.current, withdrawIntent: null, draftReason: '' }); await refreshStatus(); }
-    else {
+    const result = await confirmWithdrawal(api, intent,
+      () => retain({ ...journal.current, withdrawIntent: null, draftReason: '' }), () => refreshStatus());
+    if (!result.ok) {
       setError(result.failure === 'denied' ? t.denied : t.failed);
       if (result.failure === 'stale') { retain({ ...journal.current, withdrawIntent: null }); await refreshStatus(); }
     }

@@ -6,7 +6,7 @@ import { BFF_PREFIX } from '../api/browser.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import {
-  recordedIdentity, recordedRead, recordedReplay, recordedRequestsRoute, recordedRealmRoute,
+  recordedIdentity, recordedMembersRoute, recordedRead, recordedReplay, recordedRequestsRoute, recordedRealmRoute, recordedSample,
   type MembershipSurface,
 } from './realm-membership-recorded-page.ts';
 
@@ -15,18 +15,19 @@ import {
  * is a recorded request left unanswered, and every other state comes from the
  * production route.
  */
-export function RecordedMembershipPage({ record, persona, selections, surface, locale = 'en' }: {
+export function RecordedMembershipPage({ record, persona, selections, surface, sequence = false, locale = 'en' }: {
   record: AnswerRecord;
   persona: AnswerPersona;
   selections: readonly RecordedSelection[];
   surface: MembershipSurface;
+  sequence?: boolean;
   locale?: 'en';
 }) {
   const [view, setView] = useState<ReactNode>(null);
   useEffect(() => {
     let mounted = true;
     let missed: string | null = null;
-    const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence });
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try { return await playback.fetcher(input, init); }
       catch (error) {
@@ -35,17 +36,27 @@ export function RecordedMembershipPage({ record, persona, selections, surface, l
       }
     }) as typeof fetch;
     const identity = recordedIdentity(record, persona, selections);
-    const route = surface === 'requests'
-      ? recordedRequestsRoute(recordedReplay(fetcher, true).personal, fetcher, identity.realm, locale)
-      : recordedRealmRoute(recordedReplay(fetcher, surface !== 'landing'), identity.realm, locale);
-    void route.then(result => {
-      if (mounted && !missed) setView(result);
-    }).catch((error: unknown) => {
-      if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;
-      throw error;
-    });
+    const replay = recordedReplay(fetcher, surface !== 'landing');
+    const invitation = surface === 'members'
+      ? recordedSample(record, persona, 'invitation-confirm').answer as { invitation: { createdAt: string } } : null;
+    // Time-bound invitation controls are inspected at their recorded receipt time.
+    const now = invitation ? Date.parse(invitation.invitation.createdAt) : undefined;
+    const renderRoute = (): Promise<void> => {
+      const route = surface === 'members'
+        ? recordedMembersRoute(replay.personal, fetcher, identity.realm, locale, () => { void renderRoute(); }, now)
+        : surface === 'requests'
+          ? recordedRequestsRoute(replay.personal, fetcher, identity.realm, locale)
+          : recordedRealmRoute(replay, identity.realm, locale);
+      return route.then(result => {
+        if (mounted && !missed) setView(result);
+      }).catch((error: unknown) => {
+        if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;
+        throw error;
+      });
+    };
+    void renderRoute();
     return () => { mounted = false; playback.dispose(); };
-  }, [record, persona, selections, surface, locale]);
+  }, [record, persona, selections, surface, sequence, locale]);
   if (!view) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
   return view;
 }
