@@ -1,10 +1,18 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { pinnedCommunities, spaceCommunities } from '../../../../../apps/web/features/shell/communities-relationships.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
 import { randomUUID } from 'node:crypto';
 import declaration from '../../../../../scripts/qa/cases/outcomes/games/collection-tracking-and-progress.ts';
-import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest, outcomeResponse } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(90_000);
+setDefaultTimeout(215_000);
+const proofDeadlineMs = 90_000; // The original outcome proof owns these 90 seconds.
+const visitDeadlineMs = 120_000;
+const fileWall = setTimeout(() => { throw new Error('Games record file exceeded 480 s'); }, 480_000);
 type Work = { work: string; mainVersion: string };
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(declaration);
@@ -58,7 +66,7 @@ async function publish(game: Work) {
 }
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 type Standing = { standing: string; version: number; replayed?: boolean };
@@ -290,15 +298,126 @@ async function supportingReads(person: PersonaSession, sample: ReturnType<typeof
   await definition.body?.cancel();
 }
 
-outcomeTest(declaration, 'visitor', () => collection('visitor'), recording);
+outcomeTest(declaration, 'visitor', () => proveAndVisit('visitor'), recording);
 
-outcomeTest(declaration, 'stranger', () => collection('stranger'), recording);
+outcomeTest(declaration, 'stranger', () => proveAndVisit('stranger'), recording);
 
-outcomeTest(declaration, 'member', () => collection('member'), recording);
+outcomeTest(declaration, 'member', () => proveAndVisit('member'), recording);
 
-outcomeTest(declaration, 'owner', () => collection('owner'), recording);
+outcomeTest(declaration, 'owner', () => proveAndVisit('owner'), recording);
 
-outcomeTest(declaration, 'moderator', () => collection('moderator'), recording);
+outcomeTest(declaration, 'moderator', () => proveAndVisit('moderator'), recording);
 
-outcomeTest(declaration, 'operator', () => collection('operator'), recording);
+outcomeTest(declaration, 'operator', () => proveAndVisit('operator'), recording);
 
+
+async function libraryVisit(name: PersonaName, phase = 'visit') {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const publicSample = recording.session(name, { main: (method, path) => outcomeResponse(signal =>
+    fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), { method, signal })) });
+  const seen = new Map<string, Promise<Response>>();
+  const workNames = new Map([[short(game.work), 'game'], [short(composed.work), 'composed'], [short(sentinel.work), 'sentinel']]);
+  const transport = (anonymous: boolean): typeof fetch => async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const key = `${anonymous ? 'public' : 'acting'}:${request.method}${path}`;
+    let pending = seen.get(key);
+    if (!pending) {
+      // Labels describe the production request, including the page's distinct query.
+      const route = url.pathname.slice(BFF_PREFIX.length);
+      const names = (url.searchParams.get('works') ?? '').split(',').filter(Boolean)
+        .map(work => workNames.get(short(work)) ?? short(work)).join('-');
+      let label: string;
+      if (route === '/v1/types') label = 'frame-types';
+      else if (route === '/v1/zones') label = 'frame-official-zones';
+      else if (route.startsWith('/v1/realms/')) label = `frame-realm-${route.split('/').at(-1)}`;
+      else if (route === '/v1/me/session-agent') label = 'frame-session-agent';
+      else if (route === '/v1/me/acting-contexts') label = 'frame-acting-contexts';
+      else if (route === '/v1/me/agents') label = 'frame-session-agents';
+      else if (route === '/v1/me/platform-access') label = 'frame-platform-access';
+      else if (route === '/v1/me/person-preferences') label = 'frame-person-preferences';
+      else if (route === '/v1/me/managed-realms') label = 'frame-managed-realms';
+      else if (route === '/v1/me/notifications/unread-count') label = 'frame-unread-count';
+      else if (route === '/v1/me/follows') label = url.searchParams.get('order') === 'pinned'
+        ? 'frame-pinned-follows' : url.searchParams.get('kind') === 'space' ? 'frame-space-follows' : 'frame-follow-inventory';
+      else if (route.startsWith('/v1/agents/') && !route.endsWith('/library-visibility')) label = 'frame-session-profile';
+      else if (route === '/v1/me/shelves') label = 'overview';
+      else if (route.includes('/library-visibility')) label = 'visibility';
+      else if (route === '/v1/rating-contexts') label = 'rating-context';
+      else if (route === '/v1/me/reading-goal') label = 'reading-goal';
+      else if (route === '/v1/me/reading-stats') label = 'reading-year';
+      else if (route === '/v1/me/follows/authors') label = 'followed-authors';
+      else if (route.includes('/shelves/status/')) label = `shelf-${route.split('/')[5]}-${url.searchParams.get('sort')}-${url.searchParams.get('limit')}`;
+      else if (route === '/v1/me/work-states') label = `work-states-${names}`;
+      else if (route === '/v1/me/import-reviews') label = `import-reviews-${names}`;
+      else if (route.startsWith('/v1/me/continue/')) label = `resume-${workNames.get(route.split('/').at(-1)!)}`;
+      else if (route.startsWith('/v1/works/')) label = `header-${workNames.get(route.split('/').at(-1)!)}`;
+      else throw new Error(`Unlabelled library request: ${path}`);
+      pending = (anonymous ? publicSample : sample)(`${phase}-library-${label}`, request.method, path);
+      seen.set(key, pending);
+    }
+    return (await pending).clone();
+  };
+  const fetcher = transport(false);
+  const main = browserMainApi('http://record.invalid', { fetcher });
+  const anonymous = browserMainApi('http://record.invalid', { fetcher: transport(true), anonymous: true });
+  // LibraryRoute redirects signed-out visitors before any Main library read.
+  const reader = person.actingSubject ? { main, anonymous, actingSubject: person.actingSubject } : null;
+  await Promise.all([
+    libraryFrame(main, anonymous, person.actingSubject, fetcher),
+    loadBooksLibrary(reader, { state: parseLibraryState({}), locale: 'en', year: 2026, first: true }),
+  ]);
+  if (reader) {
+    await loadBooksLibrary(reader, { state: parseLibraryState({ shelf: 'reading' }), locale: 'en', year: 2026, first: false });
+    await loadBooksLibrary(reader, { state: parseLibraryState({ shelf: 'read' }), locale: 'en', year: 2026, first: false });
+  }
+}
+
+async function within(part: string, milliseconds: number, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function proveAndVisit(name: PersonaName) {
+  const started = performance.now();
+  let proved = started;
+  try {
+    await within('proof', proofDeadlineMs, () => collection(name));
+    proved = performance.now();
+    await within('visit', visitDeadlineMs, () => libraryVisit(name));
+  } finally {
+    console.info(`[games-library] ${name} proof=${Math.round(proved - started)}ms visit=${Math.round(performance.now() - proved)}ms`);
+  }
+}
+
+/** Main reads in RootLayout, LocaleLayout and ShellCommunities; Account viewer reads stay with Account. */
+async function libraryFrame(main: ReturnType<typeof browserMainApi>, anonymous: ReturnType<typeof browserMainApi>,
+  actingSubject: string | null, fetcher: typeof fetch) {
+  const [state, zones] = await Promise.all([
+    actingSubject ? main.v1.me['session-agent'].get() : null,
+    anonymous.v1.zones.get({ query: { official: 'true', limit: 6 } }),
+    anonymous.v1.types.get(),
+    actingSubject ? main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } }) : null,
+    actingSubject ? main.v1.me.agents.get({ query: { languages: 'en' } }) : null,
+    actingSubject ? main.v1.me['platform-access'].get() : null,
+  ]);
+  const actor = state?.data?.sessionAgent.eligible ? actingSubject : null;
+  const relationships = actor ? mainRelationships(actor, { origin: 'http://record.invalid/api/main', fetch: fetcher }) : null;
+  await Promise.all([
+    actor ? main.v1.me['managed-realms'].get({ query: { actingSubject: actor } }) : null,
+    actor ? main.v1.me['person-preferences'].get({ query: { actingSubject: actor } }) : null,
+    actor ? main.v1.agents({ id: short(actor) }).get({ query: { actingSubject: actor } }) : null,
+    actingSubject ? main.v1.me.notifications['unread-count'].get() : null,
+    relationships ? pinnedCommunities(relationships, '', null).catch(() => null) : null,
+    relationships ? spaceCommunities(relationships, '', null).catch(() => null) : null,
+    relationships ? relationships.follows().catch(() => null) : null,
+    ...((zones.data?.items ?? []).slice(0, 6).map(zone => anonymous.v1.realms({ realm: short(zone.realm) }).get())),
+  ]);
+
+}
