@@ -9,8 +9,8 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, type NavigationSnapshot } from './api.ts';
-import { zoneEditorDraftKey } from './draft-state.ts';
-import { ZoneEditorDraftProvider, useZoneEditorExit } from './draft-provider.tsx';
+import { writeZoneEditorDraft, zoneEditorDraftKey } from './draft-state.ts';
+import { ZoneEditorDraftProvider, useUnsavedZoneEditorSections, useZoneEditorExit } from './draft-provider.tsx';
 import { ZoneHomeEditor } from './editor.tsx';
 import { ZoneEditorFrame } from './frame.tsx';
 import { messages } from './messages.ts';
@@ -36,7 +36,7 @@ function capturedState(state: EditorState, label: string, saved: boolean): Edito
   if (body.resourceId !== state.homeDocument) throw new Error('Recorded draft differs from the prepared home');
   const next = { ...state, variantId: body.variantId, language: body.language, direction: body.direction,
     expectedHead: body.expectedHead, value: serializeDocument(body.document), embeds: body.embeds };
-  if (!saved) return next;
+  if (!saved) return reduceEditor({ ...next, value: state.value }, { type: 'edit', value: next.value });
   const answer = sample(label).answer as { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string }; replayed: boolean };
   return reduceEditor(next, { type: 'saved', captured: next.value, savedValue: next.value,
     basis: { revisionId: answer.revisionId, byteDigest: answer.byteDigest, contentEpoch: answer.sourcePosition.dataEpoch }, replayed: answer.replayed });
@@ -44,9 +44,10 @@ function capturedState(state: EditorState, label: string, saved: boolean): Edito
 
 function ExitControl() {
   const requestExit = useZoneEditorExit();
+  const dirty = useUnsavedZoneEditorSections();
   const [left, setLeft] = useState(false);
   return <div data-exit-completed={left}>
-    <Button onClick={() => requestExit(() => setLeft(true))}>{copy.preview}</Button>
+    <Button disabled={!dirty.includes('home')} onClick={() => requestExit(() => setLeft(true))}>{copy.preview}</Button>
   </div>;
 }
 
@@ -88,8 +89,13 @@ function RecordedAuthoring({ place }: { place: 'home' | 'navigation' | 'review' 
       const model = authoringModel(showcase.data, zone.data, zoneId, 'Recorded site');
       if (!model) throw new Error('Authorized recorded model unavailable');
       const firstSaved = capturedState(model.state, 'save-home-draft', true);
-      const state = capturedState(firstSaved, 'save-home-draft-over-head', place !== 'save' && place !== 'exit-save');
-      if (active) setLoaded({ model: { ...model, state, document: (sample('save-home-draft-over-head').body as DraftWire).document }, navigation: navigation.data, main });
+      const dirty = place === 'save' || place === 'exit-save';
+      const state = capturedState(firstSaved, 'save-home-draft-over-head', !dirty);
+      if (active) {
+        if (dirty) writeZoneEditorDraft(sessionStorage, zoneEditorDraftKey(zoneId, actingSubject, 'home'), state, true);
+        setLoaded({ model: { ...model, state: dirty ? firstSaved : state,
+          document: (sample(dirty ? 'save-home-draft' : 'save-home-draft-over-head').body as DraftWire).document }, navigation: navigation.data, main });
+      }
     }
     void load().catch(failure => { if (active) setError(failure as Error); });
     return () => { active = false; replay.dispose(); };
@@ -181,13 +187,15 @@ const save: NonNullable<Story['play']> = async context => {
 const exitSave: NonNullable<Story['play']> = async context => {
   const canvas = within(context.canvasElement);
   await expect(await canvas.findByRole('button', { name: copy.save })).toBeEnabled();
-  await userEvent.click(canvas.getByRole('button', { name: copy.preview }));
+  const preview = canvas.getByRole('button', { name: copy.preview });
+  await waitFor(() => expect(preview).toBeEnabled());
+  await userEvent.click(preview);
   const body = within(context.canvasElement.ownerDocument.body);
   const dialog = within(await body.findByRole('dialog', { name: copy.exitTitle }));
   await userEvent.click(dialog.getByRole('button', { name: copy.exitSave }));
   await waitFor(() => expect(context.canvasElement.querySelector('[data-exit-completed]'))
     .toHaveAttribute('data-exit-completed', 'true'));
-  await expect(body.queryByRole('dialog')).not.toBeInTheDocument();
+  await waitFor(() => expect(body.queryByRole('dialog')).not.toBeInTheDocument());
   await expect(canvas.getByText(copy.saved)).toBeVisible();
   await expect(context.canvasElement.querySelector('[data-accepted-statuses]')?.getAttribute('data-accepted-statuses')?.split(','))
     .toContain('201');

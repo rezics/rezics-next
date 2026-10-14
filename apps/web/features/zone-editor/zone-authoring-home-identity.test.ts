@@ -24,6 +24,10 @@ const zoneIri = `https://rezics.com/id/${zoneId}`;
 function capturedDraft(label: string, state: EditorState): EditorState {
   const body = sample(label).body as DraftWire;
   expect(body.resourceId).toBe(state.homeDocument);
+  if (label === 'save-home-draft-over-head') {
+    expect(state.expectedHead).toBe(body.expectedHead);
+    expect(state.variantId).toBe(body.variantId);
+  }
   return { ...state, variantId: body.variantId, language: body.language, direction: body.direction,
     expectedHead: body.expectedHead, value: serializeDocument(body.document), embeds: body.embeds };
 }
@@ -146,8 +150,9 @@ test('confirmed production review accepts the unchanged bundle and refuses a dif
 test('production saves accept both unchanged draft commands and carry their exact basis into publication', async () => {
   const s = session();
   try {
-    let state: EditorState = { ...opening().state, savedValue: null, basis: null };
+    let state: EditorState = { ...opening().state, savedValue: null, basis: null, expectedHead: null };
     for (const label of ['save-home-draft', 'save-home-draft-over-head']) {
+      expect(state.expectedHead).toBe((sample(label).body as DraftWire).expectedHead);
       const edited = capturedDraft(label, state);
       const choice = draftChoice(edited, actor);
       expect(draftWire(choice)).toEqual(sample(label).body);
