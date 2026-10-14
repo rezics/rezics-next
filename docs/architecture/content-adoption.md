@@ -484,3 +484,14 @@ public iFixit JSON shape. Remaining validation is implementation API behaviour,
 loss-aware exchange round trips (especially Paprika and Allrecipes), owned-data
 inventory, cross-owner recovery and human surface tasks. Documentation checks
 validate links/navigation only; they cannot qualify the replacement.
+
+## Decision (supermanager, 2026-10-14)
+
+Accepted, as a pre-public change. Recipes stay in the first public scope and open only after the vertical slice's API outcomes pass.
+
+1. **Instruction forms and one structured representation.** A Recipe's instructions admit an authored Post (Content), a retained media recording (an exact Media representation), a structured procedure, or an ordered combination of these through Structure's existing ordered selection. The single authoritative structured form is a bounded procedure block in the Content document, validated as an extension payload. `HowToSection`/`HowToStep` are the vocabulary for projection and exchange, not a second stored representation. If the slice's fixture cannot prove reuse, exact revision selection, export and bounded reading with this choice, revisit it before anything else is built on it.
+2. **Local terms.** Keep local terms only for occurrence substitution, scaling policy and measurement basis/coverage. Every other Recipe fact uses its standard term, constrained by SHACL in the Recipe profile.
+3. **Derivation and references.** Content owns a derivation record (PROV-O qualified derivation: exact input revisions or fragments, output revision, activity kind, responsible public Agent) and a general Resource reference (inline and block) with grain-qualified selectors. The Work-only reference block keeps its meaning.
+4. **Data first.** Inventory owned Recipe drafts, publications, supports and revision pins before choosing between conversion and reimport.
+
+Sequence: the inventory starts now. The vertical slice (an exact quantity with a note; Post, recording and procedure instructions; a tomato occurrence mention; a referenced intermediate recipe) starts once wave/1 has merged into main, and it is the acceptance gate. Its outcomes revise the estimate, then the fixtures, consumers and affected rows migrate and are reproved. The behaviours listed under "Behaviours a replacement must preserve" are the slice's falsifiers.
