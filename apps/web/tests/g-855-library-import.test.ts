@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import ts from 'typescript-6';
 import type { MainClient } from '../features/discover/types.ts';
 import { ImportError, mainImportApi } from '../features/library/import-api.ts';
 import { fakeImportApi, goodreadsRows, halfApplied } from '../features/library/import-fixtures.ts';
@@ -137,15 +138,46 @@ const sources = ['library', 'library-backup'].flatMap(directory => readdirSync(j
 const parsers: Array<[string, RegExp]> = [
   ['a CSV or XML parser package', /from\s+['"](?:papaparse|csv-[\w-]+|d3-dsv|fast-xml-parser|xml2js|sax|@xmldom\/[\w-]+|htmlparser2|xmlbuilder2?)['"]/],
   ['DOMParser', /\bDOMParser\b/],
-  ['a title compared as text', /\btitles?\b\)?\s*(?:===|!==)|\.(?:toLowerCase|toLocaleLowerCase)\(\)\s*(?:===|!==|\.includes)|localeCompare\(/],
+  ['text compared for matching', /\.(?:toLowerCase|toLocaleLowerCase)\(\)\s*(?:===|!==|\.includes)|localeCompare\(/],
   ['text folded for matching', /normalize\(\s*['"]NFK?[CD]['"]\s*\)/],
 ];
 
+// Type admission (typeof title === 'string') does not compare a title's content.
+function titleComparison(text: string): string | null {
+  const source = ts.createSourceFile('library.tsx', text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+  function titleValue(node: ts.Expression): boolean {
+    if (ts.isParenthesizedExpression(node)) return titleValue(node.expression);
+    if (ts.isIdentifier(node)) return /^titles?$/.test(node.text);
+    if (ts.isPropertyAccessExpression(node)) return /^titles?$/.test(node.name.text) || titleValue(node.expression);
+    if (ts.isElementAccessExpression(node)) return Boolean(node.argumentExpression &&
+      ts.isStringLiteralLike(node.argumentExpression) && /^titles?$/.test(node.argumentExpression.text)) || titleValue(node.expression);
+    if (ts.isCallExpression(node)) return titleValue(node.expression) || node.arguments.some(titleValue);
+    return false;
+  }
+  let found: string | null = null;
+  function visit(node: ts.Node) {
+    if (ts.isBinaryExpression(node) && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsToken,
+      ts.SyntaxKind.EqualsEqualsEqualsToken, ts.SyntaxKind.ExclamationEqualsEqualsToken].includes(node.operatorToken.kind) &&
+      (titleValue(node.left) || titleValue(node.right))) found ??= node.getText(source);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  return found;
+}
+
 describe('class guard: the browser parses and matches nothing', () => {
+  test('title shape checks are allowed while title content comparisons are refused', () => {
+    for (const source of ["typeof title === 'string'", "typeof (title) !== 'string'",
+      "typeof work.title?.value === 'string'"]) expect(titleComparison(source), source).toBeNull();
+    for (const source of ["title === 'Book'", "'Book' !== (title)", 'work.title.value === imported.title',
+      "work['title'] == importedName", 'titles !== candidates', 'fold(title) === importedName'])
+      expect(titleComparison(source), source).not.toBeNull();
+  });
   test('the Library has sources to check', () => { expect(sources.length).toBeGreaterThan(10); });
   for (const file of sources) {
     test(file, () => {
       const text = readFileSync(join(features, file), 'utf8');
+      expect(titleComparison(text), `${file} brings back a title compared as text`).toBeNull();
       for (const [what, pattern] of parsers) expect(text.match(pattern)?.[0] ?? null, `${file} brings back ${what}`).toBeNull();
     });
   }

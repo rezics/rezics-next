@@ -57,10 +57,11 @@ for (const state of [
     expect(html.includes('>Install</a>')).toBe(state.permitted);
     expect(html).toContain('Copy prompt');
   });
-  test(`workshop keeps copy text and public detail links while gating Try it: ${state.name}`, () => {
+  // Host-approved Try destinations are covered by zones/ai-workshop-actions.test.tsx.
+  test(`workshop keeps copy text and public detail links without a host Try destination: ${state.name}`, () => {
     const html = draw(<WorkshopCard work={skill} zone={zone} Link={LocalizedLink} layout="cover"
       nextVolume={null} fallback={null} />, access, state.signedIn);
-    expect(html.includes('class="aw-try"')).toBe(state.permitted);
+    expect(html).not.toContain('class="aw-try"');
     expect(html).toContain('Copy Skill');
     expect(html).toContain(skill.title!.value);
     expect(html).toContain(`href="/en${skill.href}"`);
