@@ -1,4 +1,4 @@
-import { proved, proved, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('realm/closure-notifications', {
   visitor: proved('requires authentication for recipient inbox, count and delivery state'),
