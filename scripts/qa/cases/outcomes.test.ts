@@ -231,6 +231,23 @@ test('the outcomes module loads in status without importing bun:test', () => {
   expect(result.status, result.stderr).toBe(0);
 });
 
+test('launch API outcome citations name proved tests and explain observed evidence or remaining gaps', async () => {
+  const outcomes = await loadOutcomes();
+  for (const row of launchCoverage) {
+    const id = rowId(row);
+    const declaration = outcomes.get(id)!;
+    if ('missing' in row.api && row.api.missing === 'gap')
+      expect(row.api.reason?.trim(), `${id}: explain the remaining API gap`).toBeTruthy();
+    if (!('file' in row.api) || !row.api.file.startsWith('tests/qa/integration/outcomes/')) continue;
+    const proof = row.api;
+    expect(personas.some(persona => {
+      const cell = declaration.cells[persona];
+      return cell?.state === 'proved' && cell.file === proof.file && outcomeTitle(declaration, persona) === proof.test;
+    }), `${id}: API citation must name a proved outcome in its file`).toBe(true);
+    expect(proof.evidence?.trim(), `${id}: explain the observed API outcome`).toBeTruthy();
+  }
+});
+
 test('the repository declarations load and register every proof title exactly once', async () => {
   // Use the same root and defaults as status, scope and admission; do not replace declarations with fixtures.
   const outcomes = await loadOutcomes();
