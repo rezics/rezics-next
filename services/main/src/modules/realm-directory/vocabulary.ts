@@ -18,24 +18,14 @@ export const CONTEXT_VOCABULARY_COST = { candidates: 64, labels: 512, page: 20 }
 export async function readContextVocabulary(session: WorkReadSession,
   input: { context: string; scheme?: string; q?: string; limit?: number; cursor?: string }) {
   const limit = input.limit ?? CONTEXT_VOCABULARY_COST.page;
+  if (!Number.isInteger(limit) || limit < 1 || limit > CONTEXT_VOCABULARY_COST.page)
+    throw new WorkReadInvalid('Vocabulary page limit is invalid');
   const search = input.q?.normalize('NFKC').trim().toLocaleLowerCase() ?? '';
   if (input.q !== undefined && !search) throw new WorkReadInvalid('Topic search is empty');
-  const principal = namePolicyPrincipal(session.viewer);
-  const binding = ['context-vocabulary-v1', input.context, input.scheme ?? null, input.q ?? null,
-    limit, session.options.language ?? null, session.displayLanguages,
-    principal ? [principal.issuer, principal.subject] : null, session.viewer];
-  const cursor = decodeReadCursor(input.cursor, binding, session.position);
-  let after: DirectoryAfter | undefined;
-  if (cursor) {
-    try {
-      after = JSON.parse(cursor.order) as DirectoryAfter;
-      if (!after || typeof after.id !== 'string' || after.score !== '0'
-        || !/^\d+$/.test(after.commit)) throw new Error('cursor');
-    } catch { throw new WorkReadInvalid('Vocabulary cursor is invalid'); }
-  }
-  const contexts = await session.query(`SELECT ?scope ?head ?realm WHERE {
+  const contexts = await session.query(`SELECT ?scope ?head ?realm ?selectedScheme WHERE {
     GRAPH ${iri(GRAPHS.current)} {
       ${iri(input.context)} a rv:ClassificationContext ; rv:contextState rv:Active ; rv:head ?head .
+      OPTIONAL { ${iri(input.context)} rv:classificationScheme ?selectedScheme }
       ${input.context === GLOBAL_CLASSIFICATION_CONTEXT
         ? `${iri(input.context)} rv:contextRole rv:GlobalClassification ;
           rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
@@ -52,8 +42,24 @@ export async function readContextVocabulary(session: WorkReadSession,
   } LIMIT 2`, 2);
   if (contexts.length > 1) throw new WorkReadUnavailable('Classification context is ambiguous');
   const context = contexts[0];
+  const selectedScheme = input.scheme ?? context?.selectedScheme?.value ?? null;
+  const principal = namePolicyPrincipal(session.viewer);
+  const binding = ['context-vocabulary-v2', input.context, context?.head?.value ?? null,
+    input.scheme ?? null, selectedScheme, input.q ?? null,
+    limit, session.options.language ?? null, session.displayLanguages,
+    principal ? [principal.issuer, principal.subject] : null, session.viewer];
+  const cursor = decodeReadCursor(input.cursor, binding, session.position);
+  let after: DirectoryAfter | undefined;
+  if (cursor) {
+    try {
+      after = JSON.parse(cursor.order) as DirectoryAfter;
+      if (!after || typeof after.id !== 'string' || after.score !== '0'
+        || !/^\d+$/.test(after.commit)) throw new Error('cursor');
+    } catch { throw new WorkReadInvalid('Vocabulary cursor is invalid'); }
+  }
+  let scheme = input.scheme ?? null;
   const empty = () => ({ profile: 'shared-vocabulary-v1' as const, context: input.context,
-    scheme: input.scheme ?? null, items: [] as { id: string; label: string }[], hasMore: false,
+    scheme, items: [] as { id: string; label: string }[], hasMore: false,
     nextCursor: null as string | null, sourcePosition: session.position,
     count: { value: 0, kind: 'exact-page' as const, total: null } });
   if (context && (!context.scope?.value || !context.head?.value))
@@ -78,16 +84,26 @@ export async function readContextVocabulary(session: WorkReadSession,
   if (contextDecisions.length !== contextTargets.length)
     throw new WorkReadUnavailable('Context disclosure is incomplete');
   if (!context || contextDecisions.some(decision => decision !== 'visible')) return empty();
+  scheme = selectedScheme;
+  if (input.context !== GLOBAL_CLASSIFICATION_CONTEXT && !scheme) return empty();
+  if (scheme) {
+    const active = await session.query(`SELECT ?scheme WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(scheme)} a skos:ConceptScheme ; rv:schemeState rv:Active .
+      FILTER NOT EXISTS { ${iri(scheme)} rv:schemeState rv:Retired }
+      BIND(${iri(scheme)} AS ?scheme)
+    } } LIMIT 1`, 1);
+    if (!active.length) return empty();
+  }
   const page = await publicNamePage(session, 'concept', 'identity', CONTEXT_VOCABULARY_COST.candidates, after);
   const candidates = page.rows.filter(row => row.available);
   const rows = candidates.length ? await session.query(`SELECT ?concept ?head ?label WHERE {
     ${candidates.map(row => `{ GRAPH ${iri(GRAPHS.current)} {
       BIND(${iri(row.id)} AS ?concept)
-      ${iri(row.id)} a skos:Concept ; skos:inScheme ${input.scheme ? iri(input.scheme) : '?scheme'} ;
+      ${iri(row.id)} a skos:Concept ; skos:inScheme ${scheme ? iri(scheme) : '?scheme'} ;
         skos:prefLabel ?label ; rv:conceptState rv:Active .
-      ${input.scheme ? iri(input.scheme) : '?scheme'} a skos:ConceptScheme ; rv:schemeState rv:Active .
+      ${scheme ? iri(scheme) : '?scheme'} a skos:ConceptScheme ; rv:schemeState rv:Active .
       FILTER NOT EXISTS { ${iri(row.id)} rv:conceptState rv:Retired }
-      FILTER NOT EXISTS { ${input.scheme ? iri(input.scheme) : '?scheme'} rv:schemeState rv:Retired }
+      FILTER NOT EXISTS { ${scheme ? iri(scheme) : '?scheme'} rv:schemeState rv:Retired }
       FILTER NOT EXISTS { ${iri(row.id)} rv:conceptRealm ?owner }
       FILTER NOT EXISTS { ${iri(row.id)} rv:protectionHead ?protection }
       FILTER EXISTS { ?selectedSense a rv:ClassificationSense ; rv:senseState rv:Active ;

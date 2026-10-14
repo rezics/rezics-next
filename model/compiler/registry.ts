@@ -219,7 +219,7 @@ export function commandBindingRead(profile: string, binding: RegistryBinding, sh
     triple('expression', 'assertedConcept', 'concept');
     triple('sense', 'path', 'path');
     triple('sense', 'expression', 'expression');
-  } else if (profile === 'classification-context-v1') {
+  } else if (/^classification-context-v[12]$/.test(profile)) {
     patterns.push(`VALUES ${variable('global')} { <urn:rezics:classification-context:global> }`);
     triple('realm', 'classificationContext', 'context');
     triple('context', 'realm', 'realm');

@@ -5,7 +5,8 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
 import { createAdmittedClassificationContext } from '../modules/classification/context-admitted.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY,
-  CLASSIFICATION_ISOLATE_POLICY } from '../modules/classification/context.ts';
+  readRealmClassificationContext, ClassificationSchemeUnavailable,
+  StaleClassificationContext } from '../modules/classification/context.ts';
 import { createAdmittedClassificationProposition }
   from '../modules/classification/proposition-admitted.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../modules/classification/proposition.ts';
@@ -220,12 +221,17 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
       } catch (error) { return commandError(error); }
     })
     .post('/v1/classification-contexts', {
-      body: t.Object({ profile: t.Literal('classification-context-v1'),
-        realm: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-        actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
-      }, { additionalProperties: false }),
-      response: { 200: classificationContextWriteResult, 201: classificationContextWriteResult,
-        202: pendingOperation, ...writeProblems },
+      body: t.Union([
+        t.Object({ profile: t.Literal('classification-context-v1'), realm: vocabularyRef,
+          actingSubject: vocabularyRef }, { additionalProperties: false }),
+        t.Object({ profile: t.Literal('classification-context-v2'), realm: vocabularyRef,
+          actingSubject: vocabularyRef, expectedHead: t.Nullable(vocabularyRef),
+          scheme: t.Nullable(t.Object({ id: vocabularyRef, expectedHead: vocabularyRef },
+            { additionalProperties: false })) }, { additionalProperties: false }),
+      ]),
+      response: { 200: t.Object({ ...classificationContextWriteResult.properties, scheme: t.Nullable(vocabularyRef) }),
+        201: t.Object({ ...classificationContextWriteResult.properties, scheme: t.Nullable(vocabularyRef) }),
+        202: pendingOperation, ...writeProblems, 404: readProblems[404] },
     }, async ({ request, body }) => {
       const idempotencyKey = request.headers.get('idempotency-key');
       if (!idempotencyKey || !/^[A-Za-z0-9:_./-]{1,128}$/.test(idempotencyKey)) {
@@ -233,51 +239,37 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
       }
       try {
         const receipt = await createAdmittedClassificationContext(work.environment,
-          work.account, work.access, request, { realm: body.realm,
-            actingSubject: body.actingSubject, idempotencyKey });
+          work.account, work.access, request, { ...body, idempotencyKey });
         return Response.json({ realm: receipt.realm, context: receipt.context,
           contextRevision: receipt.revision, role: 'realm-classification',
           fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
           inheritancePolicy: CLASSIFICATION_INHERIT_POLICY,
+          scheme: receipt.scheme ?? null,
           sourcePosition: { datasetId: 'product', dataEpoch: receipt.dataEpoch,
             sequence: receipt.sequence }, replayed: receipt.replayed }, {
-          status: receipt.replayed ? 200 : 201, headers: { 'cache-control': 'no-store' },
+          status: receipt.replayed || body.profile === 'classification-context-v2' && body.expectedHead !== null
+            ? 200 : 201, headers: { 'cache-control': 'no-store' },
         });
-      } catch (error) { return commandError(error); }
+      } catch (error) {
+        if (error instanceof ClassificationSchemeUnavailable)
+          return problem(404, 'classification_scheme_unavailable', 'Classification scheme is unavailable');
+        if (error instanceof StaleClassificationContext)
+          return problem(409, 'stale_head', 'Expected classification Context or scheme head is stale');
+        return commandError(error);
+      }
     })
     .get('/v1/realms/:realm/classification-context', {
       params: t.Object({ realm: t.String({ pattern: '^[0-9a-f-]{36}$' }) }),
-      response: { 200: classificationContextReadResult, ...readProblems },
+      response: { 200: t.Object({ ...classificationContextReadResult.properties, scheme: t.Nullable(vocabularyRef) }), ...readProblems },
     }, async ({ params }) => {
       try {
-        await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
         const realm = `https://rezics.com/id/${params.realm}`;
-        const result = await fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
-          SELECT ?context ?revision ?fallback ?policy WHERE {
-            GRAPH <urn:rezics:graph:current> {
-              ?space a rv:Space ; rv:realmCapability ${iri(realm)} ; rv:disclosure rv:Public .
-              ${iri(realm)} a rv:Realm ; rv:space ?space ; rv:realmState rv:Active ;
-                rv:classificationContext ?context .
-              ?context a rv:ClassificationContext ; rv:realm ${iri(realm)} ;
-                rv:contextRole rv:RealmClassification ; rv:contextState rv:Active ;
-                rv:fallbackContext ?fallback ; rv:inheritancePolicy ?policy ; rv:head ?revision .
-              ?fallback a rv:ClassificationContext ; rv:contextRole rv:GlobalClassification ;
-                rv:contextState rv:Active ;
-                rv:inheritancePolicy ${iri(CLASSIFICATION_ISOLATE_POLICY)} .
-              FILTER NOT EXISTS { ?fallback rv:fallbackContext ?other }
-            }
-          }`);
-        const rows = result.results?.bindings ?? [];
-        if (rows.length !== 1 || !rows[0]?.context || !rows[0]?.revision
-          || rows[0].fallback?.value !== GLOBAL_CLASSIFICATION_CONTEXT
-          || rows[0].policy?.value !== CLASSIFICATION_INHERIT_POLICY) {
+        const result = await readRealmClassificationContext(work.environment, realm);
+        if (!result) {
           return problem(404, 'classification_context_unavailable',
             'Realm classification context is unavailable');
         }
-        return Response.json({ realm, context: rows[0].context.value,
-          contextRevision: rows[0].revision.value, role: 'realm-classification',
-          fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
-          inheritancePolicy: CLASSIFICATION_INHERIT_POLICY },
+        return Response.json(result,
         { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return commandError(error); }
     });

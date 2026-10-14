@@ -6,7 +6,7 @@ import { CancelledActivation, IdempotencyConflict,
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { classificationContextDigest, createClassificationContext,
   readClassificationContextReceipt, sealClassificationContextAdmission,
-  ClassificationRealmUnavailable, type CreateClassificationContextInput,
+  ClassificationRealmUnavailable, ClassificationSchemeUnavailable, StaleClassificationContext, type CreateClassificationContextInput,
   type ClassificationContextReceipt } from './context.ts';
 
 export async function createAdmittedClassificationContext(
@@ -39,6 +39,9 @@ export async function createAdmittedClassificationContext(
           if (error instanceof IdempotencyConflict) throw error;
           if (error instanceof ClassificationRealmUnavailable) {
             await sealClassificationContextAdmission(env, admission);
+          } else if (error instanceof StaleClassificationContext || error instanceof ClassificationSchemeUnavailable) {
+            await sealClassificationContextAdmission(env, admission,
+              error instanceof StaleClassificationContext ? 'stale-head' : 'scheme-unavailable');
           }
         }
       }
@@ -51,12 +54,15 @@ export async function createAdmittedClassificationContext(
       || terminal.scope !== registered.scope) {
       throw new IdempotencyConflict('classification context admission differs from graph receipt');
     }
+    if (terminal.reason === 'stale-head') throw new StaleClassificationContext('Expected Context or scheme head is stale');
+    if (terminal.reason === 'scheme-unavailable') throw new ClassificationSchemeUnavailable('Classification scheme is unavailable');
     if (terminal.outcome === 'cancelled') {
       throw new CancelledActivation('classification context creation was cancelled');
     }
     return { ...terminal, replayed: registered.replayed };
   } catch (error) {
-    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation) throw error;
+    if (error instanceof IdempotencyConflict || error instanceof CancelledActivation
+      || error instanceof StaleClassificationContext || error instanceof ClassificationSchemeUnavailable) throw error;
     throw new PendingAdmittedWork(registered.id, 'classification-context');
   }
 }

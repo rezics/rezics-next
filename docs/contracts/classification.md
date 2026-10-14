@@ -23,6 +23,25 @@ different reading is a new attributed statement or labeled projection. The
 
 ## Installed profiles and transition
 
+Program decision, 2026-10-14. A Realm's boards are Concepts in one SKOS scheme
+selected by its classification Context. `classification-context-v2` stores one
+scheme pointer on that Context, reusing the vocabulary owner's graph object
+without a second collection engine. Several Realms may select the same scheme;
+there is no board identity or per-Concept membership list.
+
+The approved classification-context configuration contract retains v1 creation
+without a selection and adds v2 creation or replacement. V2 requires a null Context
+`expectedHead` for creation or its current head for replacement, and
+`scheme: { id, expectedHead } | null`. A non-null scheme must be active at that
+head. Selection changes retain Context identity and use the existing creation
+authority. Interpretation-Context selection remains a separate operation.
+
+A Realm vocabulary read without `scheme` uses this pointer. An absent selection
+returns an empty page with `scheme: null`; a retired selected scheme returns an
+empty page naming that scheme. An explicit query scheme preserves the existing
+caller filter. Continuations bind to the Context head, scheme, query, language,
+reader and page bound, so replacing a selection refuses an old cursor.
+
 The installed [Statement schema](../../services/main/src/modules/statement/schema.ts)
 defines exact meaning keys, bounded support and decision slots. Its v1 migration
 preserves retained Application/Sense/Decision heads and does not infer narrower

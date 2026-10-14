@@ -12,7 +12,10 @@ Realm identity with closed initial membership. It does not enroll members or
 grant the creator Realm management. Realm local adoption selects an exact
 eligible publication, and a local rejection suppresses Main fallback; another
 Realm may choose differently. The separate `classification-context-v1` profile
-binds an active Realm to a distinct Context under fixed Global inheritance.
+binds an active Realm to a distinct classification Context. The v2 profile
+selects one shared SKOS scheme for the Realm's vocabulary; v1 selects none.
+Classification interpretation keeps its Global fallback independently of that
+vocabulary selection.
 It does not implement the adopted shared Context model. Zone configuration and
 retirement use separate heads and preserve the Realm and mounted content.
 Current profiles and operations live in `model/definitions/space-realm-v1.ts`,
