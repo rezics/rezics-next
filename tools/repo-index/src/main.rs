@@ -147,8 +147,12 @@ struct CallFact {
     function_start: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
     callee_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    callee_kind: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    class_name: Option<String>,
     argument_names: BTreeSet<String>,
-    argument_texts: Vec<String>,
+    argument_spans: Vec<oxc_span::Span>,
     inline_function_spans: Vec<oxc_span::Span>,
 }
 #[derive(Serialize)]
@@ -156,7 +160,8 @@ struct CallFact {
 struct AliasFact {
     name: String,
     references: BTreeSet<String>,
-    initializer_text: String,
+    initializer_start: u32,
+    initializer_end: u32,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1274,7 +1279,7 @@ mod tests {
         let text = r#"declare function declaration(): void;
 function write(){db.query('UPDATE owner.records SET id=1')}
 function wrap(run=write){run()}
-const alias=write; const arrow=(arg)=>wrap(alias, () => write());
+const alias=write; const memberAlias=Writer.quoted; const arrow=(arg)=>wrap(alias, () => write());
 class Writer {
   constructor() { wrap() }
   #save(value) { this.#save(value); function nested(){write()} }
@@ -1328,6 +1333,8 @@ class Writer {
             .find(|call| call.callee_name.as_deref() == Some("#save"))
             .unwrap();
         assert_eq!(private.function_start, Some(named("#save").start));
+        assert_eq!(private.callee_kind, Some("this-member"));
+        assert_eq!(private.class_name.as_deref(), Some("Writer"));
         let callback = facts
             .call_facts
             .iter()
@@ -1335,20 +1342,35 @@ class Writer {
             .unwrap();
         assert_eq!(callback.function_start, Some(named("arrow").start));
         assert!(callback.argument_names.contains("alias"));
-        assert_eq!(callback.argument_texts[0], "alias");
-        assert!(
-            facts
-                .call_facts
-                .iter()
-                .any(|call| call.argument_texts == vec!["Writer.quoted"])
+        assert_eq!(
+            &text[callback.argument_spans[0].start as usize
+                ..callback.argument_spans[0].end as usize],
+            "alias"
         );
+        assert!(facts.call_facts.iter().any(|call| {
+            call.argument_spans
+                .iter()
+                .any(|span| &text[span.start as usize..span.end as usize] == "Writer.quoted")
+        }));
         let alias = facts
             .aliases
             .iter()
             .find(|alias| alias.name == "alias")
             .unwrap();
         assert!(alias.references.contains("write"));
-        assert_eq!(alias.initializer_text, "write");
+        assert_eq!(
+            &text[alias.initializer_start as usize..alias.initializer_end as usize],
+            "write"
+        );
+        assert!(
+            facts
+                .aliases
+                .iter()
+                .find(|alias| alias.name == "memberAlias")
+                .unwrap()
+                .references
+                .contains("Writer.quoted")
+        );
     }
     #[test]
     fn static_literal_metadata_preserves_raw_parent_names_cooked_templates_and_calls() {
@@ -1465,7 +1487,7 @@ impl Facts<'_> {
         for parameter in &params.items {
             parameters.push(self.raw(parameter.pattern.span()));
             if let Some(initializer) = &parameter.initializer {
-                ReferencedNames(&mut default_references).visit_expression(initializer);
+                ReferencedNames(&mut default_references, self.text).visit_expression(initializer);
             }
         }
         if let Some(rest) = &params.rest {
@@ -1576,11 +1598,12 @@ impl<'a> Visit<'a> for Facts<'_> {
                     (&node.id, &node.init)
                 {
                     let mut references = BTreeSet::new();
-                    ReferencedNames(&mut references).visit_expression(initializer);
+                    ReferencedNames(&mut references, self.text).visit_expression(initializer);
                     self.aliases.push(AliasFact {
                         name: binding.name.to_string(),
                         references,
-                        initializer_text: self.raw(initializer.span()),
+                        initializer_start: initializer.span().start,
+                        initializer_end: initializer.span().end,
                     });
                 }
             }
@@ -1719,7 +1742,7 @@ impl<'a> Visit<'a> for Facts<'_> {
         let mut argument_names = BTreeSet::new();
         let mut inline_function_spans = Vec::new();
         for argument in &node.arguments {
-            ReferencedNames(&mut argument_names).visit_argument(argument);
+            ReferencedNames(&mut argument_names, self.text).visit_argument(argument);
             match argument {
                 Argument::FunctionExpression(function) if function.body.is_some() => {
                     inline_function_spans.push(function.span)
@@ -1737,19 +1760,23 @@ impl<'a> Visit<'a> for Facts<'_> {
                 .functions
                 .last()
                 .map(|index| self.function_facts[*index].start),
+            callee_kind: callee_name.as_ref().map(|_| {
+                if matches!(&node.callee, Expression::Identifier(_)) {
+                    "identifier"
+                } else {
+                    "this-member"
+                }
+            }),
+            class_name: self.classes.last().and_then(Clone::clone),
             callee_name,
             argument_names,
-            argument_texts: node
-                .arguments
-                .iter()
-                .map(|argument| self.raw(argument.span()))
-                .collect(),
+            argument_spans: node.arguments.iter().map(GetSpan::span).collect(),
             inline_function_spans,
         });
         if let Expression::Identifier(name) = &node.callee {
             self.direct_call_names.insert(name.name.to_string());
         }
-        let mut references = ReferencedNames(&mut self.direct_call_names);
+        let mut references = ReferencedNames(&mut self.direct_call_names, self.text);
         for argument in &node.arguments {
             references.visit_argument(argument);
         }
@@ -1864,10 +1891,27 @@ fn compressed_sql(sql: &SqlFacts) -> Result<String> {
     Ok(STANDARD.encode(encoder.finish()?))
 }
 
-struct ReferencedNames<'r>(&'r mut BTreeSet<String>);
+struct ReferencedNames<'r>(&'r mut BTreeSet<String>, &'r str);
 impl<'a> Visit<'a> for ReferencedNames<'_> {
     fn visit_identifier_reference(&mut self, node: &IdentifierReference<'a>) {
         self.0.insert(node.name.to_string());
+    }
+    fn visit_static_member_expression(&mut self, node: &StaticMemberExpression<'a>) {
+        fn static_name(expression: &Expression<'_>) -> bool {
+            match expression {
+                Expression::Identifier(_) => true,
+                Expression::StaticMemberExpression(member) => static_name(&member.object),
+                _ => false,
+            }
+        }
+        if static_name(&node.object) {
+            self.0.insert(
+                self.1[node.span.start as usize..node.span.end as usize]
+                    .split_whitespace()
+                    .collect(),
+            );
+        }
+        walk::walk_static_member_expression(self, node);
     }
 }
 
