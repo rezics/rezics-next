@@ -50,7 +50,7 @@ export function ListFailure({ failure, reference, firstPage, messages }: {
     title={text.title} description={failureDetail(text.description, reference, messages.errorReference, text.reference)}>
     {text.action === 'none' ? null : text.action === 'sign-in'
       ? <LocalizedLink href={signInPath(firstPage)} className={buttonVariants()}>{messages.signIn}</LocalizedLink>
-      : <LocalizedLink href={firstPage} className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
+      : <LocalizedLink href={firstPage} documentNavigation className={buttonVariants({ variant: moved ? 'default' : 'outline' })}>
         {moved ? messages.startOver : messages.retry}</LocalizedLink>}
   </EmptyState>;
 }
