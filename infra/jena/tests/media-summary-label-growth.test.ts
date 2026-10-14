@@ -31,12 +31,10 @@ test('summary label UNION inputs have flat native work under unrelated populatio
   const cache = join(temporary, 'summary-label-maven-cache');
   mkdirSync(cache, { recursive: true });
   cpSync(join(root, 'infra/jena/command-module/pom.xml'), join(build, 'pom.xml'));
-  const java = 'src/test/java/com/rezics/jena/MediaSummaryLabelGrowthTest.java';
-  mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
-  cpSync(join(root, 'infra/jena/command-module', java), join(build, java));
+  cpSync(join(root, 'infra/jena/command-module/src'), join(build, 'src'), { recursive: true });
+  cpSync(join(root, 'services/main/src/modules/query/templates'), join(build, 'src/test/resources/query-templates'), { recursive: true });
   mkdirSync(join(build, 'tmp'));
   for (const [name, query] of Object.entries(queries)) {
-    writeFileSync(join(build, `summary-${name}.rq`), query);
     writeFileSync(join(evidence, `summary-${name}.rq`), query);
   }
   writeFileSync(join(evidence, 'queries.json'), JSON.stringify({ image,
@@ -58,7 +56,7 @@ test('summary label UNION inputs have flat native work under unrelated populatio
     expect(result.stdout).toMatch(/Tests run: [1-9][0-9]*, Failures: 0, Errors: 0/);
     for (const line of result.stdout.split('\n')) if (line.startsWith('summary labels ')) console.info(line);
   } finally {
-    for (const name of ['target/surefire-reports', 'summary-bounded.algebra', 'summary-baseline.algebra']) {
+    for (const name of ['target/surefire-reports']) {
       if (existsSync(join(build, name))) cpSync(join(build, name), join(evidence, name.split('/').at(-1)!), { recursive: true });
     }
     rmSync(build, { recursive: true, force: true });

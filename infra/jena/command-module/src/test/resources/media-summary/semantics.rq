@@ -1,0 +1,165 @@
+PREFIX rv: <https://rezics.com/vocab/> PREFIX schema: <https://schema.org/>
+    PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
+    SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?homeZone ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post  WHERE {
+      GRAPH <urn:rezics:graph:control> { <urn:rezics:dataset:product> rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { <urn:rezics:dataset:product> rv:restoreHold ?hold } }
+      
+      OPTIONAL {
+        VALUES ?r { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> <https://rezics.com/id/00000000-0000-4000-8000-000000000010> <https://rezics.com/id/00000000-0000-4000-8000-000000000011> <https://rezics.com/id/00000000-0000-4000-8000-000000000012> <https://rezics.com/id/00000000-0000-4000-8000-000000000013> <https://rezics.com/id/00000000-0000-4000-8000-000000000020> <https://rezics.com/id/00000000-0000-4000-8000-000000000021> <https://rezics.com/id/00000000-0000-4000-8000-000000000022> }
+        { GRAPH <urn:rezics:graph:current> {
+          { ?r a schema:CreativeWork ; rv:mainVersion ?main . BIND(?r AS ?work) BIND("work" AS ?type) }
+          UNION { ?r a rv:MainVersion ; rv:work ?work . BIND("main-version" AS ?type) }
+          UNION { ?r a rv:Release ; rv:work ?work . BIND("release" AS ?type) }
+          UNION { ?r a schema:ListItem ; rv:structure ?structure .
+            ?structure rv:structureOf ?component ; rv:selectedGeneration ?generation .
+            ?placement rv:generation ?generation ; rv:occurrence ?r ; a rv:OccurrencePlacement .
+            FILTER NOT EXISTS { ?placement rv:removedBy ?removedBy }
+            { ?component a rv:MainVersion ; rv:work ?work }
+            UNION { ?component a schema:CreativeWork ; rv:mainVersion ?main . BIND(?component AS ?work) }
+            BIND("occurrence" AS ?type) }
+          UNION { ?r a rv:TextContribution ; rv:work ?work ; rv:publicationHead ?publication .
+            BIND("realization" AS ?type) }
+          UNION { ?r a rv:Realization ; rv:work ?work ; rv:head ?realizationRevision .
+            BIND("realization" AS ?type) }
+          UNION { ?r a rv:Space . BIND("space" AS ?type) }
+          UNION { ?r a rv:Agent ; rv:head ?agentHead .
+            FILTER EXISTS { GRAPH <urn:rezics:graph:revisions> { ?agentHead a rv:RevisionAnchor ;
+              rv:component ?r ; rv:modelRevision <https://rezics.com/definition/agent-provision-v1> .
+              FILTER NOT EXISTS { ?agentHead a rv:ErasedRevision } } }
+            FILTER NOT EXISTS { ?r a rv:AgentTombstone }
+            FILTER NOT EXISTS { ?r rv:protectionHead ?agentProtection }
+            FILTER NOT EXISTS { ?r rv:profileDisclosure rv:Private }
+            BIND("agent" AS ?type) }
+          UNION { ?r a rv:Zone ; rv:zoneState rv:Active . BIND("zone" AS ?type) }
+          UNION { ?r a rv:Collection ; rv:collectionState rv:Active .
+            FILTER NOT EXISTS { ?r rv:protectionHead ?protection }
+            BIND("collection" AS ?type) }
+          UNION { ?r a rv:Realm ; rv:realmState rv:Active . BIND("realm" AS ?type) }
+          UNION { ?r a skos:Concept ; rv:conceptState rv:Active . BIND("concept" AS ?type) }
+          UNION { ?r a rv:SemanticContext ; rv:contextState rv:Active . BIND("context" AS ?type) }
+          UNION { ?r a rv:Character ; rv:semanticHead ?semanticHead . BIND("character" AS ?type) }
+          UNION { ?r a rv:Role ; rv:semanticHead ?semanticHead . BIND("role" AS ?type) }
+          UNION { ?r a rv:SemanticDefinition ; rv:definitionKind rv:RelationDefinition ;
+            rv:definitionHead ?definitionHead . BIND("relation-definition" AS ?type) }
+          UNION { ?r a rv:Projection ; rv:projectionOf ?projectionSubject ; rv:frame ?projectionFrame ;
+            rv:projectionHead ?projectionHead . BIND("projection" AS ?type) }
+          UNION { ?r a rv:ZoneHomeDocument ; rv:homeDocumentHead ?head .
+            ?homeZone a rv:Zone ; rv:zoneState rv:Active ; rv:homeDocument ?r ; rv:sitePublicationHead ?homeSite .
+            FILTER NOT EXISTS { ?otherHomeZone rv:homeDocument ?r . FILTER(?otherHomeZone != ?homeZone) }
+            FILTER EXISTS { GRAPH <urn:rezics:graph:revisions> {
+              ?head a rv:ZoneHomeRevision, rv:RevisionAnchor ; rv:component ?r .
+              ?homeSite a rv:ZoneRevision ; rv:component ?homeZone ; rv:homeDocument ?r ;
+                rv:homeRevision ?head ; rv:sitePublicationReceipt ?homeReceipt .
+            } GRAPH <urn:rezics:graph:receipts> {
+              ?homeReceipt a rv:OperationReceipt ; rv:outcome rv:Succeeded ;
+                rv:structureOwner ?homeZone ; rv:homeDocument ?r ; rv:homeRevision ?head .
+            } }
+            BIND("resource" AS ?type)
+            OPTIONAL { ?homeZone rdfs:label ?label } }
+          UNION { ?r rv:semanticHead ?semanticHead . FILTER NOT EXISTS { ?r a rv:ZoneHomeDocument } BIND("resource" AS ?type) }
+          UNION { ?r a rv:Post ; rv:head ?head ; rdfs:label ?label .
+            BIND(true AS ?post) BIND("resource" AS ?type) }
+        } }
+        UNION { GRAPH <urn:rezics:graph:revisions> {
+          ?r a rv:FixedRelease ; rv:work ?work . BIND("release" AS ?type) } }
+        OPTIONAL { GRAPH <urn:rezics:graph:current> { ?r rv:mergedInto ?mergedInto } }
+        OPTIONAL { FILTER(?type IN ("work", "main-version", "release", "occurrence", "realization"))
+          GRAPH <urn:rezics:graph:current> { ?work rdfs:label ?label } }
+        OPTIONAL { FILTER(?type IN ("work", "main-version", "release", "occurrence", "realization"))
+          GRAPH <urn:rezics:graph:current> { ?work rv:head ?head } }
+        OPTIONAL { FILTER(?type = "space") GRAPH <urn:rezics:graph:current> { ?r rdfs:label ?label } }
+        OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH <urn:rezics:graph:current> {
+          { VALUES ?r { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> <https://rezics.com/id/00000000-0000-4000-8000-000000000010> <https://rezics.com/id/00000000-0000-4000-8000-000000000011> <https://rezics.com/id/00000000-0000-4000-8000-000000000012> <https://rezics.com/id/00000000-0000-4000-8000-000000000013> <https://rezics.com/id/00000000-0000-4000-8000-000000000020> <https://rezics.com/id/00000000-0000-4000-8000-000000000021> <https://rezics.com/id/00000000-0000-4000-8000-000000000022> } ?r rdfs:label ?label }
+          UNION { VALUES ?r { <https://rezics.com/id/00000000-0000-4000-8000-000000000001> <https://rezics.com/id/00000000-0000-4000-8000-000000000010> <https://rezics.com/id/00000000-0000-4000-8000-000000000011> <https://rezics.com/id/00000000-0000-4000-8000-000000000012> <https://rezics.com/id/00000000-0000-4000-8000-000000000013> <https://rezics.com/id/00000000-0000-4000-8000-000000000020> <https://rezics.com/id/00000000-0000-4000-8000-000000000021> <https://rezics.com/id/00000000-0000-4000-8000-000000000022> } ?r a rv:Zone ; rv:space ?zoneSpace . FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
+            ?zoneSpace rdfs:label ?label }
+        } }
+        OPTIONAL { FILTER(?type = "agent") GRAPH <urn:rezics:graph:current> {
+          ?r rv:profileAvatarSelection ?profileAvatarSelection } }
+        OPTIONAL { FILTER(?type = "collection") GRAPH <urn:rezics:graph:current> { ?r schema:name ?label } }
+        OPTIONAL { FILTER(?type = "collection") GRAPH <urn:rezics:graph:current> { ?r rv:collectionNameHead ?nameHead }
+          OPTIONAL { GRAPH <urn:rezics:graph:revisions> { ?nameHead a rv:CollectionNameRevision ;
+            rv:component ?r ; rv:profilePayload ?namePayload } } }
+        OPTIONAL { FILTER(?type = "concept") GRAPH <urn:rezics:graph:current> { ?r skos:prefLabel ?label } }
+        BIND(IF(?type IN ("work", "main-version", "release", "occurrence", "realization"), EXISTS {
+          GRAPH <urn:rezics:graph:current> { ?variant rv:resource ?work ; rv:contentPublicationHead ?pin }
+          GRAPH <urn:rezics:graph:revisions> { ?pin rv:contentRevision ?contentRevision .
+            ?contentRevision a rv:ErasedRevision }
+        } || EXISTS { GRAPH <urn:rezics:graph:current> { ?work rv:head ?erasedHead }
+          GRAPH <urn:rezics:graph:revisions> { ?erasedHead a rv:ErasedRevision } }
+          || EXISTS { GRAPH <urn:rezics:graph:current> { ?work rv:protectionHead ?protection } }, false)
+          || EXISTS { GRAPH <urn:rezics:graph:revisions> { ?r a rv:ErasedRevision } }
+          || EXISTS { GRAPH <urn:rezics:graph:current> { ?r ?headPredicate ?resourceHead .
+            VALUES ?headPredicate { rv:head rv:releaseHead rv:semanticHead rv:projectionHead rv:homeDocumentHead } }
+            GRAPH <urn:rezics:graph:revisions> { ?resourceHead a rv:ErasedRevision } }
+          || EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:structure ?erasedStructure .
+            ?erasedStructure rv:structureHead ?structureRevision }
+            GRAPH <urn:rezics:graph:revisions> { ?structureRevision a rv:ErasedRevision } }
+          || EXISTS { GRAPH <urn:rezics:graph:revisions> { ?r rv:selectedDraft ?erasedDraft .
+            ?erasedDraft a rv:ErasedRevision } }
+          || EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:publicationHead ?publication }
+            GRAPH <urn:rezics:graph:revisions> { ?publication rv:selectedDraft ?erasedDraft .
+              ?erasedDraft a rv:ErasedRevision } } AS ?erased)
+        BIND(IF(BOUND(?post), EXISTS { GRAPH <urn:rezics:graph:current> {
+    ?r a rv:Post ; rv:head ?publicPostHead .
+    ?postVariant a rv:ContentVariant ; rv:resource ?r ;
+      rv:contentPublicationHead ?postPublication ; rv:publicSearchEligibilityHead ?postEligibility .
+  } GRAPH <urn:rezics:graph:revisions> {
+    ?postEligibility a rv:ContentSearchEligibilityDecision ;
+      rv:publicationDecision ?postPublication ; rv:disclosure rv:Public .
+    ?postPublication a rv:ContentPublicationDecision ; rv:resource ?r ; rv:contentRevision ?postRevision .
+    FILTER NOT EXISTS { ?postRevision a rv:ErasedRevision }
+  } FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {
+  ?erasedVariant rv:resource ?r ; rv:contentPublicationHead ?erasedPublication }
+  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .
+    ?erasedRevision a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:head ?erasedWorkHead }
+    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:protectionHead ?protection } } }, IF(?type = "realm", EXISTS { GRAPH <urn:rezics:graph:current> {
+          ?r rv:space ?realmSpace . ?realmSpace rv:realmCapability ?r ; rv:disclosure rv:Public } },
+          IF(?type = "concept", true,
+          IF(?type = "context" || ?type = "collection", EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:disclosure rv:Public } },
+          IF(?type IN ("space","zone"),
+          EXISTS { GRAPH <urn:rezics:graph:current> { ?r rv:disclosure rv:Public } },
+          IF(?type = "agent", true,
+          IF(?type IN ("work", "main-version", "release", "occurrence", "realization") && BOUND(?work), EXISTS { GRAPH <urn:rezics:graph:current> {
+  ?work a schema:CreativeWork ; rv:mainVersion ?pm .
+  ?pm a rv:MainVersion ; rv:work ?work . }
+  FILTER(EXISTS { GRAPH <urn:rezics:graph:current> {
+  ?work a schema:CreativeWork ; rv:mainVersion ?pm .
+  ?pm a rv:MainVersion ; rv:work ?work ; rv:selectionHead ?publicSelection .
+  ?publicContribution rv:work ?work ; rv:publicationHead ?publicDecision . }
+  GRAPH <urn:rezics:graph:revisions> { ?publicSelection a rv:PublicationSelection ;
+    rv:work ?work ; rv:mainVersion ?pm ;
+    rv:contribution ?publicContribution ; rv:publicationDecision ?publicDecision ; rv:selectedDraft ?publicDraft .
+    ?publicDecision a rv:PublicationDecision ; rv:component ?publicContribution ; rv:work ?work ;
+      rv:contribution ?publicContribution ; rv:disclosure rv:Public ; rv:selectedDraft ?publicDraft .
+    ?publicDraft a rv:RevisionAnchor ; rv:component ?publicContribution .
+    FILTER NOT EXISTS { ?publicDraft a rv:ErasedRevision } } }
+    || EXISTS { GRAPH <urn:rezics:graph:current> {
+  ?work a schema:CreativeWork ; rv:mainVersion ?pm ;
+    rv:workStructurePublicationHead ?structuredDecision .
+  ?pm a rv:MainVersion ; rv:work ?work .
+  ?structuredStructure a rv:Structure ; rv:structureOf ?pm ; rv:structureProfile ?structuredProfile .
+  ?structuredGeneration a rv:StructureGeneration ; rv:structure ?structuredStructure . }
+  GRAPH <urn:rezics:graph:revisions> {
+    ?structuredDecision a rv:WorkStructurePublicationDecision ; rv:component ?work ;
+      rv:publicationOutcome rv:Published ; rv:publicSource ?structuredSource ;
+      rv:disclosure rv:Public ; rv:rightsBasis rv:OriginalContribution .
+    ?structuredSource a rv:WorkStructurePublicSource ; rv:work ?work ; rv:component ?pm ;
+      rv:structureProfile ?structuredProfile ; rv:structure ?structuredStructure ; rv:structureRevision ?structuredRevision ;
+      rv:selectedGeneration ?structuredGeneration ; rv:sourceRoot ?structuredRoot .
+    ?structuredRevision a rv:StructureRevision ; rv:component ?structuredStructure ;
+      rv:generation ?structuredGeneration ; rv:manifest ?structuredRoot .
+    FILTER(REGEX(STR(?structuredRoot), "^urn:rezics:sha256:[0-9a-f]{64}$"))
+    FILTER NOT EXISTS { ?structuredRevision a rv:ErasedRevision } } }
+    || EXISTS { GRAPH <urn:rezics:graph:current> { ?work rv:catalogueVisible true } })
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> {
+  ?erasedVariant rv:resource ?work ; rv:contentPublicationHead ?erasedPublication }
+  GRAPH <urn:rezics:graph:revisions> { ?erasedPublication rv:contentRevision ?erasedRevision .
+    ?erasedRevision a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?work rv:head ?erasedWorkHead }
+    GRAPH <urn:rezics:graph:revisions> { ?erasedWorkHead a rv:ErasedRevision } }
+  FILTER NOT EXISTS { GRAPH <urn:rezics:graph:current> { ?work rv:protectionHead ?protection } } }, false)))))))
+          AS ?public)
+      }
+    }

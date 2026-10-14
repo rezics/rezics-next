@@ -1,6 +1,8 @@
 package com.rezics.jena;
 
 import static org.junit.Assert.*;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -12,16 +14,14 @@ import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.DatasetFactory;
 import org.apache.jena.query.QueryExecution;
-import org.apache.jena.query.QueryFactory;
 import org.apache.jena.query.ReadWrite;
-import org.apache.jena.sparql.algebra.Algebra;
 import org.apache.jena.sparql.core.DatasetGraph;
 import org.apache.jena.sparql.core.DatasetGraphWrapper;
 import org.apache.jena.sparql.core.DatasetGraphWrapperView;
 import org.apache.jena.sparql.core.Quad;
 import org.junit.Test;
 
-/** Executes the emitted production query, rather than a rewritten cost model. */
+/** Executes the production query snapshot checked against its TypeScript emitter. */
 public class MediaSummaryLabelGrowthTest {
     private static final String RV = "https://rezics.com/vocab/", RDFS = "http://www.w3.org/2000/01/rdf-schema#";
     private static final Node CURRENT = uri("urn:rezics:graph:current"), REVISIONS = uri("urn:rezics:graph:revisions");
@@ -76,6 +76,12 @@ public class MediaSummaryLabelGrowthTest {
         }
     }
     private record Read(List<String> rows, long quads) {}
+    private static String queryResource(String name) throws IOException {
+        try (var input = MediaSummaryLabelGrowthTest.class.getResourceAsStream("/" + name)) {
+            if (input == null) throw new IOException("Missing query test resource: " + name);
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8);
+        }
+    }
     private static Read read(DatasetGraph data, String query) {
         var measured = new Measured(data);
         List<String> rows = new ArrayList<>();
@@ -93,13 +99,10 @@ public class MediaSummaryLabelGrowthTest {
         return new Read(rows, measured.quads);
     }
     @Test public void unrelatedLabelsDoNotEnterEitherOptionalInput() throws Exception {
-        String bounded = Files.readString(Path.of("summary-bounded.rq"));
-        String baseline = Files.readString(Path.of("summary-baseline.rq"));
+        String bounded = queryResource("query-templates/media-summary.rq");
+        String baseline = queryResource("media-summary/baseline.rq");
+        String semantics = queryResource("media-summary/semantics.rq");
         assertNotEquals(baseline, bounded);
-        for (String name : List.of("bounded", "baseline")) {
-            String query = name.equals("bounded") ? bounded : baseline;
-            Files.writeString(Path.of("summary-" + name + ".algebra"), Algebra.optimize(Algebra.compile(QueryFactory.create(query))).toString());
-        }
         List<Long> fixedWork = new ArrayList<>(), oldWork = new ArrayList<>();
         for (int unrelated : new int[] {26, 200, 2000}) {
             Path directory = Files.createTempDirectory("summary-label-growth-");
@@ -129,7 +132,7 @@ public class MediaSummaryLabelGrowthTest {
                     assertEquals(old.rows(), fixed.rows());
                     oldWork.add(old.quads()); fixedWork.add(fixed.quads());
                     System.out.printf("summary labels unrelated=%d baselineQuads=%d boundedQuads=%d rows=%d%n", unrelated, old.quads(), fixed.quads(), fixed.rows().size());
-                    Read semantic = read(data, Files.readString(Path.of("summary-semantics.rq")));
+                    Read semantic = read(data, semantics);
                     assertEquals(new TreeSet<>(List.of(
                         id(1).getURI() + "|work|Work 1|false",
                         id(10).getURI() + "|agent|Agent 10|true", id(11).getURI() + "|agent|<absent>|true",
