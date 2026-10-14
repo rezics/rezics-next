@@ -92,11 +92,12 @@ struct SqlFacts {
     scan_error: Option<String>,
 }
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct SqlCandidate {
     text: String,
     start: usize,
     end: usize,
-    sql: SqlFacts,
+    sql_deflate: String,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -107,7 +108,7 @@ struct IndexedFile {
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    sql: Option<SqlFacts>,
+    sql_deflate: Option<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     parse_errors: Vec<String>,
     comments: Vec<Value>,
@@ -218,6 +219,9 @@ fn scan_tokens(sql: &str, base: usize, tokens: &mut Vec<Token>) -> Result<()> {
     Ok(())
 }
 fn sql_facts(sql: &str) -> SqlFacts {
+    sql_facts_with_parse(sql, true)
+}
+fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
     let timing = Instant::now();
     let mut tokens = Vec::new();
     let scan_error = scan_tokens(sql, 0, &mut tokens)
@@ -226,9 +230,13 @@ fn sql_facts(sql: &str) -> SqlFacts {
     if scan_error.is_some() {
         tokens = fallback_tokens(sql);
     }
-    let (tree, parse_error) = match pg_query::parse(sql) {
-        Ok(result) => (Some(serde_json::to_value(result.protobuf).unwrap()), None),
-        Err(error) => (None, Some(error.to_string())),
+    let (tree, parse_error) = if parse {
+        match pg_query::parse(sql) {
+            Ok(result) => (Some(serde_json::to_value(result.protobuf).unwrap()), None),
+            Err(error) => (None, Some(error.to_string())),
+        }
+    } else {
+        (None, None)
     };
     let mut references = Vec::new();
     if let Some(tree) = &tree {
@@ -262,7 +270,7 @@ fn sql_facts(sql: &str) -> SqlFacts {
                     let end = token.end as usize - delimiter_end;
                     let text = sql[start..end].to_string();
                     Some(SqlCandidate {
-                        sql: sql_facts(&text),
+                        sql_deflate: compressed_sql(&sql_facts_with_parse(&text, parse)).unwrap(),
                         text,
                         start,
                         end,
@@ -317,7 +325,7 @@ fn indexed(
             ast_deflate: None,
             imports: vec![],
             sql_candidates: vec![],
-            sql: Some(sql),
+            sql_deflate: Some(compressed_sql(&sql)?),
             parse_errors: vec![],
             comments: vec![],
         });
@@ -361,7 +369,7 @@ fn indexed(
         ast_deflate: Some(compressed_ast(&ast_json)?),
         imports,
         sql_candidates: candidates,
-        sql: None,
+        sql_deflate: None,
         parse_errors,
         comments,
     })
@@ -564,6 +572,7 @@ fn run() -> Result<()> {
 fn resolver(root: &Path) -> Resolver {
     Resolver::new(ResolveOptions {
         cwd: Some(root.to_path_buf()),
+        symlinks: false,
         tsconfig: Some(TsconfigDiscovery::Auto),
         extensions: [
             ".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json",
@@ -765,6 +774,34 @@ mod tests {
                 .collect::<Vec<_>>()
         );
     }
+    #[test]
+    fn dotted_literal_facts_are_scanned_and_compressed_without_parsing_prose() {
+        let root = env::current_dir().unwrap();
+        let facts = indexed(
+            Source {
+                file: "literals.ts".to_string(),
+                text: r#"const table = 'owner.records'; const description = "Author's data.";"#
+                    .to_string(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        assert_eq!(facts.sql_candidates.len(), 2);
+        let candidate = facts
+            .sql_candidates
+            .iter()
+            .find(|candidate| candidate.text == "owner.records")
+            .unwrap();
+        let bytes = STANDARD.decode(&candidate.sql_deflate).unwrap();
+        let tree: Value =
+            serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
+        assert_eq!(tree["tokens"][0]["text"], "owner");
+        assert_eq!(tree["tokens"][2]["text"], "records");
+        assert!(tree.get("tree").is_none());
+        assert!(tree.get("parseError").is_none());
+    }
 }
 
 struct Facts<'r> {
@@ -798,9 +835,9 @@ impl Facts<'_> {
         elapsed(&RESOLVING, timing);
     }
     fn candidate(&mut self, text: String, start: u32, end: u32) {
-        if is_sql(&text) {
+        if text.contains('.') || is_sql(&text) {
             self.candidates.push(SqlCandidate {
-                sql: sql_facts(&text),
+                sql_deflate: compressed_sql(&sql_facts_with_parse(&text, is_sql(&text))).unwrap(),
                 text,
                 start: start as usize,
                 end: end as usize,
@@ -897,5 +934,11 @@ impl<'a> Visit<'a> for Facts<'_> {
 fn compressed_ast(ast: &str) -> Result<String> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(ast.as_bytes())?;
+    Ok(STANDARD.encode(encoder.finish()?))
+}
+
+fn compressed_sql(sql: &SqlFacts) -> Result<String> {
+    let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
+    encoder.write_all(&serde_json::to_vec(sql)?)?;
     Ok(STANDARD.encode(encoder.finish()?))
 }

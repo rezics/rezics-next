@@ -98,8 +98,8 @@ resolves imports ([parser](https://docs.rs/oxc_parser/0.152.0/oxc_parser/),
 facts. Guard policy, messages and debt lists remain in TypeScript. The reader
 builds a missing or changed binary before use; its content digest reuses an
 unchanged JSON index under `.temp/`. `Cargo.lock` pins transitive crates.
-ASTs use compressed JSON strings so the import guard reads graph facts without
-materializing every syntax tree; source guards inflate the trees they inspect.
+ASTs and SQL facts use compressed JSON strings so each guard materializes only
+the syntax trees and query facts it inspects.
 Task keeps Cargo's registry and build output in this worktree's `.temp/`.
 Building needs a C compiler and libclang development headers for `pg_query`'s
 bindings. The Task command supplies the C compiler's system include directory
