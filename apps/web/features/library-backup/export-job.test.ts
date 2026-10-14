@@ -41,3 +41,14 @@ test('credit and private review text survive file assembly, with every file impo
   expect(files.flatMap(file => JSON.parse(file.text).rows)).toEqual(rows);
   for (const file of files) expect(new TextEncoder().encode(file.text).length).toBeLessThan(IMPORT_FILE_BYTES);
 });
+
+test('a different snapshot is refused before its rows can mix with the saved basis', async () => {
+  const store = memoryExportStore();
+  let page = 0;
+  await expect(collectExport({ store, agent: 'owner', onProgress: () => {}, api: {
+    page: async () => ({ profile: 'rezics-library-export-v1', rows: [exportRow(page)],
+      snapshot: ++page === 1 ? 'basis-a' : 'basis-b', nextCursor: page === 1 ? 'bound-a' : null }),
+  } })).rejects.toMatchObject({ failure: 'moved' });
+  expect(await store.progress('owner')).toMatchObject({ rows: 1, snapshot: 'basis-a' });
+  expect(await store.pages('owner')).toEqual([[exportRow(0)]]);
+});

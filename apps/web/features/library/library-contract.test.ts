@@ -148,6 +148,7 @@ for (const state of ['export-interrupted', 'export-moved'] as const) {
     expect(await store.progress(fixture.actor)).toMatchObject({ rows: 20, snapshot: 'snapshot-1', cursor: 'cursor-20' });
     if (state === 'export-moved') await store.clear(fixture.actor);
     const complete = await collectExport(input);
+    expect(complete.snapshot).toBe(state === 'export-moved' ? 'snapshot-2' : 'snapshot-1');
     expect(await collectedRows(store, fixture.actor, complete)).toHaveLength(43);
     const requests = fixture.calls.filter(call => call.path.startsWith('/v1/me/library-export'));
     const resumed = new URL(requests[2]!.path, 'https://contract.invalid');

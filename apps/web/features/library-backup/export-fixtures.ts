@@ -13,7 +13,8 @@ export function exportRow(index: number): ExportRow {
 
 export interface FakeExport { api: ExportApi; calls: Array<{ cursor?: string; snapshot?: string }> }
 
-export function fakeExportApi(total: number, options: { page?: number; failAt?: number; moved?: boolean; delayMs?: number } = {}): FakeExport {
+export function fakeExportApi(total: number, options: { page?: number; failAt?: number; moved?: boolean; delayMs?: number;
+  snapshot?: string } = {}): FakeExport {
   const { page = 20, delayMs = 0 } = options;
   const calls: FakeExport['calls'] = [];
   let failed = false;
@@ -24,7 +25,7 @@ export function fakeExportApi(total: number, options: { page?: number; failAt?: 
     if (options.moved && position.cursor) throw new ExportError('moved');
     if (options.failAt === from && !failed) { failed = true; throw new ExportError('unavailable'); }
     const rows = Array.from({ length: Math.max(0, Math.min(page, total - from)) }, (_, at) => exportRow(from + at));
-    return { profile: 'rezics-library-export-v1', rows, snapshot: 'snapshot-1',
+    return { profile: 'rezics-library-export-v1', rows, snapshot: options.snapshot ?? 'snapshot-1',
       nextCursor: from + page < total ? `cursor-${from + page}` : null } satisfies ExportPage;
   } } };
 }

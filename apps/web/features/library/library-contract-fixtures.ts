@@ -125,7 +125,7 @@ export function libraryContractFixture(medium: LibraryMedium, state: LibraryCont
         snapshot: url.searchParams.get('snapshot') ?? undefined })); }
       catch (failure) {
         if (failure instanceof ExportError && failure.failure === 'moved') {
-          exported = fakeExportApi(43).api;
+          exported = fakeExportApi(43, { snapshot: 'snapshot-2' }).api;
           return reply({ code: 'library_export_basis_changed' }, 409);
         }
         return reply({ code: 'unavailable' }, 503);
