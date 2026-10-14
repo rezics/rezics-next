@@ -235,8 +235,13 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
   const tracking = trackingCopy(locale);
   if (acting) {
     await expect(canvas.findByRole('button', { name: /^Follow/ }, { timeout: 8000 })).resolves.toBeVisible();
-    await expect(canvas.findByRole('heading', { name: tracking.workProgress }, { timeout: 8000 })).resolves.toBeVisible();
-    await expect(canvas.getByText(tracking.notStarted)).toBeVisible();
+    const progress = await canvas.findByRole('heading', { name: tracking.workProgress }, { timeout: 8000 });
+    progress.scrollIntoView();
+    await expect(progress).toBeVisible();
+    // The heading is drawn while the standing is still loading. Wait for the recorded mark.
+    const standing = await canvas.findByText(tracking.notStarted, {}, { timeout: 8000 });
+    standing.scrollIntoView();
+    await expect(standing).toBeVisible();
   } else {
     await expect(canvas.queryByRole('heading', { name: tracking.workProgress })).toBeNull();
   }
