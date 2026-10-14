@@ -1351,7 +1351,8 @@ final class CommandService extends ActionService {
                 result.put("templateIndex",templateDelta);
             }
             CommandWork.enter("projections");
-            PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes(), deadline);
+            PublicNameProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations, delta == null ? List.of() : delta.changes(), deadline,
+                AlsoEnjoyedCandidates.changedSubjects(primary.additions(), primary.removals()));
             RatingPopulationProjection.refresh(CommandWork.observe(dataset), plan, receipt, validations);
             CommandWork.enter("journal");
             if (delta != null) {

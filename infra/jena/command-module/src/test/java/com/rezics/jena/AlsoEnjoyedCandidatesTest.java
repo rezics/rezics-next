@@ -138,6 +138,8 @@ public class AlsoEnjoyedCandidatesTest {
                 p("dataEpoch"), NodeFactory.createLiteralString("replacement")));
             try { fixture.page(source, List.of(RECIPE), "en", null, 32); fail("read must refuse old qualification"); }
             catch (IllegalStateException expected) { assertTrue(expected.getMessage().contains("unprepared")); }
+            // The current-slot pass precedes the existing Work pass on a cold epoch.
+            fixture.write(() -> assertFalse(AlsoEnjoyedCandidates.prepare(fixture.data, Long.MAX_VALUE)));
             fixture.write(() -> assertTrue(AlsoEnjoyedCandidates.prepare(fixture.data, Long.MAX_VALUE)));
             assertEquals(List.of(), fixture.page(source, List.of(RECIPE), "en", null, 32).get("works"));
         }

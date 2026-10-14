@@ -220,6 +220,9 @@ final class PublicNameProjection {
         refresh(data, plan, receipt, validations, changes, Long.MAX_VALUE);
     }
     static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes, long deadline) {
+        refresh(data, plan, receipt, validations, changes, deadline, null);
+    }
+    static void refresh(DatasetGraph data, CommandPolicy.Plan plan, String receipt, java.util.List<CommandService.Validation> validations, java.util.List<SearchDeltaJournal.Change> changes, long deadline, Set<Node> alsoEnjoyedSubjects) {
         if (plan.bootstrap() || data.contains(uri(CommandPolicy.RECEIPTS), uri(receipt), p("namePoliciesComplete"),
             NodeFactory.createLiteralByValue(true, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean)))
             data.add(PUBLIC, POLICY, p("complete"), NodeFactory.createLiteralByValue(true,
@@ -266,7 +269,10 @@ final class PublicNameProjection {
             plan.current().contains(resource.getURI()) || changes.stream().anyMatch(change ->
                 resource.equals(change.work()) || data.contains(PUBLIC, uri(change.unit()), p("work"), resource))
             || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:"));
-        AlsoEnjoyedCandidates.refresh(data, resources, deadline);
+        // Public-name copy neighbours and validation targets are not primary
+        // also-enjoyed changes. Backfill explicitly owns the requested resources.
+        AlsoEnjoyedCandidates.refresh(data, alsoEnjoyedSubjects == null
+            || receipt.startsWith("urn:rezics:receipt:catalogue-search-index:") ? changed : alsoEnjoyedSubjects, deadline);
         refreshPrefixResources(data, resources, deadline, changes);
         if (plan.bootstrap() && !prefixWalkAvailable(data)) {
             var existingUnits = data.find(PUBLIC, Node.ANY, RDF.type.asNode(), p("MatchUnit"));

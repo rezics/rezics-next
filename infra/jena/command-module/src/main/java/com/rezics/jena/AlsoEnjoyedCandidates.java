@@ -8,6 +8,8 @@ import org.apache.jena.graph.Node;
 import org.apache.jena.graph.NodeFactory;
 import org.apache.jena.query.ReadWrite;
 import org.apache.jena.sparql.core.DatasetGraph;
+import org.apache.jena.sparql.core.DatasetGraphWrapper;
+import org.apache.jena.sparql.core.Quad;
 import org.apache.jena.vocabulary.RDF;
 
 /** Physical candidate pages for the existing also-enjoyed owner. Each partition
@@ -21,12 +23,65 @@ final class AlsoEnjoyedCandidates {
         CURRENT = uri(CommandPolicy.CURRENT), REVISIONS = uri(CommandPolicy.REVISIONS),
         CHILD = p("alsoEnjoyedChild"), MEMBER = p("alsoEnjoyedMember"),
         OWNER = p("alsoEnjoyedOwner"), ENTRY = p("alsoEnjoyedEntry"),
-        DEPENDENT = p("alsoEnjoyedWork"), PREPARATION = uri(PREFIX + "preparation");
+        DEPENDENT = p("alsoEnjoyedCurrentOwner"), DEPENDENCY = p("alsoEnjoyedCurrentSource"),
+        SLOT_WORK = p("alsoEnjoyedSlotWork"), WORK_SLOT = p("alsoEnjoyedCurrentSlot"),
+        ELIGIBLE = p("alsoEnjoyedEligible"), PUBLIC = NodeFactory.createLiteralByValue(true,
+            org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean),
+        PREPARATION = uri(PREFIX + "preparation"), FORM = NodeFactory.createLiteralString("current-edges-v1");
     static final int PAGE = 64;
     static final int MAX_VISITS = 3 * (PAGE + 1) * 32 * 16;
     private static Node uri(String value) { return NodeFactory.createURI(value); }
     private static Node p(String value) { return uri(RV + value); }
     private static void budget(long deadline) { TemplateIndexService.workScopeBudget(deadline); }
+    /** Count actual indexed probes, iterator consumption (including lookahead)
+     * and mutation calls. Counts are owner work, not distinct persisted tuples. */
+    private static DatasetGraph writer(DatasetGraph data) {
+        return data instanceof WriterGraph ? data : new WriterGraph(data);
+    }
+    private static final class WriterGraph extends DatasetGraphWrapper {
+        WriterGraph(DatasetGraph data) { super(data); }
+        @Override public Iterator<Quad> find(Node g, Node s, Node p, Node o) {
+            CommandWork.count("also_enjoyed_writer_probes", 1);
+            var rows = super.find(g, s, p, o);
+            return new org.apache.jena.atlas.iterator.IteratorCloseable<Quad>() {
+                private Quad next;
+                public boolean hasNext() {
+                    if (next == null && rows.hasNext()) {
+                        next = rows.next(); CommandWork.count("also_enjoyed_writer_rows", 1);
+                    }
+                    return next != null;
+                }
+                public Quad next() {
+                    if (!hasNext()) throw new NoSuchElementException();
+                    Quad value = next; next = null; return value;
+                }
+                public void close() { Iter.close(rows); }
+            };
+        }
+        @Override public boolean contains(Node g, Node s, Node p, Node o) {
+            var rows = find(g, s, p, o);
+            try { return rows.hasNext(); } finally { Iter.close(rows); }
+        }
+        @Override public void add(Node g, Node s, Node p, Node o) {
+            CommandWork.count("also_enjoyed_writer_adds", 1); super.add(g, s, p, o);
+        }
+        @Override public void delete(Node g, Node s, Node p, Node o) {
+            CommandWork.count("also_enjoyed_writer_deletes", 1); super.delete(g, s, p, o);
+        }
+        @Override public void deleteAny(Node g, Node s, Node p, Node o) {
+            var rows = find(g, s, p, o); List<Quad> removed = new ArrayList<>();
+            try { while (rows.hasNext()) removed.add(rows.next()); } finally { Iter.close(rows); }
+            for (Quad quad : removed) delete(quad.getGraph(), quad.getSubject(), quad.getPredicate(), quad.getObject());
+        }
+    }
+    /** Use the bounded net primary delta, not validation or search-copy
+     * neighbours. In particular a slot edit does not change its Work owner. */
+    static Set<Node> changedSubjects(Set<Quad> additions, Set<Quad> removals) {
+        Set<Node> result = new LinkedHashSet<>();
+        for (var quads : List.of(additions, removals)) for (Quad quad : quads)
+            if (quad.getGraph().equals(CURRENT) || quad.getGraph().equals(REVISIONS)) result.add(quad.getSubject());
+        return result;
+    }
     private static Node one(DatasetGraph data, Node graph, Node owner, Node predicate) {
         var rows = data.find(graph, owner, predicate, Node.ANY);
         try {
@@ -88,116 +143,209 @@ final class AlsoEnjoyedCandidates {
             data.add(STATE, owner, ENTRY, uri(leaf));
         }
     }
-    private static void dependency(DatasetGraph data, Node resource, Node work) {
-        if (PublicNameProjection.productResource(resource)) data.add(STATE, resource, DEPENDENT, work);
+    private static void dependency(Set<Node> desired, Node resource) {
+        if (resource != null && resource.isURI()) desired.add(resource);
+    }
+    /** The reverse inventory belongs to this current owner snapshot. Removing
+     * a source also removes its forward trigger in this same transaction.
+     * Legacy alsoEnjoyedWork edges are superseded, never read as a fallback. */
+    private static void dependencies(DatasetGraph data, Node owner, Set<Node> desired, long deadline) {
+        Set<Node> prior = new LinkedHashSet<>();
+        var rows = data.find(STATE, owner, DEPENDENCY, Node.ANY);
+        try { while (rows.hasNext()) { budget(deadline); prior.add(rows.next().getObject()); } }
+        finally { Iter.close(rows); }
+        for (Node source : prior) if (!desired.contains(source)) {
+            data.delete(STATE, owner, DEPENDENCY, source); data.delete(STATE, source, DEPENDENT, owner);
+        }
+        for (Node source : desired) if (!prior.contains(source)) {
+            data.add(STATE, owner, DEPENDENCY, source); data.add(STATE, source, DEPENDENT, owner);
+        }
+    }
+    private static boolean workOwner(DatasetGraph data, Node owner) {
+        return data.contains(CURRENT, owner, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+            || data.contains(STATE, owner, ELIGIBLE, Node.ANY);
     }
     static void refresh(DatasetGraph data, Set<Node> resources, long deadline) {
-        Set<Node> works = new LinkedHashSet<>();
+        data = writer(data);
+        Set<Node> owners = new LinkedHashSet<>();
         for (Node resource : resources) {
             budget(deadline);
-            if (data.contains(CURRENT, resource, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))) works.add(resource);
+            // A current or previously indexed slot owns only its own leaf.
+            if (data.contains(CURRENT, resource, RDF.type.asNode(), p("RealmPublicationSlot"))
+                || data.contains(STATE, resource, SLOT_WORK, Node.ANY)
+                || data.contains(STATE, resource, ENTRY, Node.ANY)
+                    && !workOwner(data, resource)) {
+                owners.add(resource); continue;
+            }
+            if (workOwner(data, resource)) owners.add(resource);
             for (String property : List.of("work", "resource", "component")) {
                 Node work = linkedWork(data, resource, p(property));
                 if (PublicNameProjection.productResource(work)
-                    && data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))) works.add(work);
+                    && data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))) owners.add(work);
             }
             var linked = data.find(STATE, resource, DEPENDENT, Node.ANY);
-            try { while (linked.hasNext()) { budget(deadline); works.add(linked.next().getObject()); } }
+            try { while (linked.hasNext()) { budget(deadline); owners.add(linked.next().getObject()); } }
             finally { Iter.close(linked); }
-            if (data.contains(CURRENT, resource, RDF.type.asNode(), p("RealmPublicationSlot"))
-                || data.contains(STATE, resource, ENTRY, Node.ANY)
-                    && !data.contains(CURRENT, resource, RDF.type.asNode(), uri("https://schema.org/CreativeWork")))
-                refreshSlot(data, resource, deadline);
         }
-        for (Node work : works) refreshWork(data, work, deadline);
+        // Rebind current slot adjacency before any Work fan-out, then refresh
+        // the changed Works and finally the explicit slots. Compound writes do
+        // not depend on primary-quad order or an old Work's cached eligibility.
+        Set<Node> slots = new LinkedHashSet<>();
+        for (Node owner : owners) if (!workOwner(data, owner)) {
+            slots.add(owner); linkSlot(data, owner, data.contains(CURRENT, owner, RDF.type.asNode(), p("RealmPublicationSlot"))
+                ? one(data, CURRENT, owner, p("work")) : null);
+        }
+        for (Node owner : owners) if (!slots.contains(owner)) refreshWork(data, owner, deadline);
+        for (Node slot : slots) refreshSlot(data, slot, deadline);
     }
     static void refreshWork(DatasetGraph data, Node work, long deadline) {
+        data = writer(data); CommandWork.count("also_enjoyed_writer_works", 1);
         budget(deadline);
         Set<String> desired = new HashSet<>();
+        Set<Node> sources = new LinkedHashSet<>();
         Node main = one(data, CURRENT, work, p("mainVersion"));
-        dependency(data, main, work);
+        dependency(sources, main);
+        for (Node owner : main == null ? List.of(work) : List.of(work, main))
+            for (String property : List.of("head", "semanticHead", "conceptHead", "collectionHead", "zoneHead"))
+                dependency(sources, one(data, CURRENT, owner, p(property)));
         boolean eligible = PublicNameProjection.candidateWork(data, work);
         // Work-level Content erasure is an authority fence, not a stale page.
         // This inventory is inspected only by the writer, never by the reader.
         var variants = data.find(CURRENT, Node.ANY, p("resource"), work);
         try { while (variants.hasNext()) {
-            budget(deadline); Node variant = variants.next().getSubject(); dependency(data, variant, work);
+            budget(deadline); Node variant = variants.next().getSubject(); dependency(sources, variant);
             Node publication = one(data, CURRENT, variant, p("contentPublicationHead"));
             Node revision = publication == null ? null : one(data, REVISIONS, publication, p("contentRevision"));
-            dependency(data, revision, work);
+            dependency(sources, publication); dependency(sources, revision);
             if (revision != null && data.contains(REVISIONS, revision, RDF.type.asNode(), p("ErasedRevision"))) eligible = false;
         } } finally { Iter.close(variants); }
         Set<String> languages = new HashSet<>(); languages.add("");
         if (main != null) for (Node selection : values(data, CURRENT, main, p("selectionHead"), 64)) {
             budget(deadline);
+            dependency(sources, selection);
             Node language = one(data, REVISIONS, selection, p("language"));
             if (language != null && language.isLiteral()) languages.add(language.getLiteralLexicalForm());
             for (String property : List.of("contribution", "selectedDraft", "publicationDecision"))
-                dependency(data, one(data, REVISIONS, selection, p(property)), work);
+                dependency(sources, one(data, REVISIONS, selection, p(property)));
+            Node contribution = one(data, REVISIONS, selection, p("contribution"));
+            if (contribution != null) for (String property : List.of("head", "semanticHead", "conceptHead", "collectionHead", "zoneHead"))
+                dependency(sources, one(data, CURRENT, contribution, p(property)));
         }
         Node structureDecision = one(data, CURRENT, work, p("workStructurePublicationHead"));
         if (structureDecision != null) {
-            dependency(data, structureDecision, work);
+            dependency(sources, structureDecision);
             Node source = one(data, REVISIONS, structureDecision, p("publicSource"));
-            dependency(data, source, work);
+            dependency(sources, source);
             if (source != null) for (String property : List.of("structure", "structureRevision", "selectedGeneration"))
-                dependency(data, one(data, REVISIONS, source, p(property)), work);
+                dependency(sources, one(data, REVISIONS, source, p(property)));
         }
         if (eligible) for (Node type : values(data, CURRENT, work, RDF.type.asNode(), 16)) {
             if (!type.isURI() || type.getURI().equals("https://schema.org/CreativeWork")) continue;
             for (String language : languages) desired.add(root("type", type.getURI(), language) + key(work));
         }
+        // This Work-owned proof includes every current Content erasure. Slot
+        // edits consume it in one point probe instead of rescanning variants.
+        Node eligibility = NodeFactory.createLiteralByValue(eligible, org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean);
+        if (!eligibility.equals(one(data, STATE, work, ELIGIBLE))) {
+            data.deleteAny(STATE, work, ELIGIBLE, Node.ANY); data.add(STATE, work, ELIGIBLE, eligibility);
+        }
+        dependencies(data, work, sources, deadline);
         replace(data, work, work, desired, deadline);
         // Only a changed Work's own Realm slots fan out, in the writer. The
         // native page never catches up, folds logs or enumerates these slots.
-        var slots = data.find(CURRENT, Node.ANY, p("work"), work);
+        var slots = data.find(STATE, work, WORK_SLOT, Node.ANY);
+        List<Node> currentSlots = new ArrayList<>();
         try { while (slots.hasNext()) {
-            budget(deadline); Node slot = slots.next().getSubject();
-            if (data.contains(CURRENT, slot, RDF.type.asNode(), p("RealmPublicationSlot"))) refreshSlot(data, slot, eligible, deadline);
+            budget(deadline); currentSlots.add(slots.next().getObject());
         } } finally { Iter.close(slots); }
+        for (Node slot : currentSlots) refreshSlot(data, slot, eligible, deadline);
+    }
+    /** Current adjacency, including private slots, is pruned atomically by its
+     * slot writer. Work writes never enumerate Contributions or removed slots. */
+    private static void linkSlot(DatasetGraph data, Node slot, Node work) {
+        Node prior = one(data, STATE, slot, SLOT_WORK);
+        if (Objects.equals(prior, work)) return;
+        if (prior != null) { data.delete(STATE, slot, SLOT_WORK, prior); data.delete(STATE, prior, WORK_SLOT, slot); }
+        if (work != null) { data.add(STATE, slot, SLOT_WORK, work); data.add(STATE, work, WORK_SLOT, slot); }
     }
     static void refreshSlot(DatasetGraph data, Node slot, long deadline) {
+        data = writer(data);
         Node work = one(data, CURRENT, slot, p("work"));
-        refreshSlot(data, slot, work != null && PublicNameProjection.candidateWork(data, work), deadline);
+        refreshSlot(data, slot, work != null && data.contains(CURRENT, work, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))
+            && data.contains(STATE, work, ELIGIBLE, PUBLIC), deadline);
     }
     private static void refreshSlot(DatasetGraph data, Node slot, boolean publicWork, long deadline) {
+        CommandWork.count("also_enjoyed_writer_slots", 1);
         budget(deadline);
-        Node work = one(data, CURRENT, slot, p("work")), realm = one(data, CURRENT, slot, p("realm"));
-        Node selection = one(data, CURRENT, slot, p("selectionHead"));
+        boolean current = data.contains(CURRENT, slot, RDF.type.asNode(), p("RealmPublicationSlot"));
+        Node work = current ? one(data, CURRENT, slot, p("work")) : null,
+            realm = current ? one(data, CURRENT, slot, p("realm")) : null;
+        Node selection = current ? one(data, CURRENT, slot, p("selectionHead")) : null;
+        linkSlot(data, slot, work);
         Set<String> desired = new HashSet<>();
+        Set<Node> sources = new LinkedHashSet<>(); dependency(sources, selection);
         if (publicWork && PublicNameProjection.productResource(work) && PublicNameProjection.productResource(realm) && selection != null
             && data.contains(REVISIONS, selection, RDF.type.asNode(), p("PublicationSelection"))
             && data.contains(REVISIONS, selection, p("work"), work)) {
             Node decision = one(data, REVISIONS, selection, p("publicationDecision"));
+            dependency(sources, decision);
             if (decision != null && data.contains(REVISIONS, decision, p("disclosure"), p("Public")))
                 desired.add(root("realm", realm.getURI(), "") + key(work));
         }
-        if (work != null) dependency(data, slot, work);
+        dependencies(data, slot, sources, deadline);
         replace(data, slot, work, desired, deadline);
     }
     static boolean prepared(DatasetGraph data) {
         Node epoch = one(data, uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("dataEpoch"));
         return epoch != null && epoch.equals(one(data, STATE, PREPARATION, p("alsoEnjoyedEpoch")))
+            && FORM.equals(one(data, STATE, PREPARATION, p("alsoEnjoyedForm")))
             && !data.contains(uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("restoreHold"), NodeFactory.createLiteralByValue(true,
                 org.apache.jena.datatypes.xsd.XSDDatatype.XSDboolean));
     }
     /** The existing cold Work-scope preparer advances one physical type page.
      * Old schema upgrades cannot be warmed or rebuilt by an HTTP reader. */
     static boolean prepare(DatasetGraph data, long deadline) {
+        data = writer(data);
         if (prepared(data)) return true;
         Node epoch = one(data, uri(CommandPolicy.CONTROL), uri("urn:rezics:dataset:product"), p("dataEpoch"));
         if (epoch == null) throw new IllegalStateException("candidate epoch is unavailable");
-        if (!epoch.equals(one(data, STATE, PREPARATION, p("alsoEnjoyedBuildEpoch")))) {
+        if (!epoch.equals(one(data, STATE, PREPARATION, p("alsoEnjoyedBuildEpoch")))
+            || !FORM.equals(one(data, STATE, PREPARATION, p("alsoEnjoyedBuildForm")))) {
             data.deleteAny(STATE, PREPARATION, Node.ANY, Node.ANY);
             data.add(STATE, PREPARATION, p("alsoEnjoyedBuildEpoch"), epoch);
+            data.add(STATE, PREPARATION, p("alsoEnjoyedBuildForm"), FORM);
+            data.add(STATE, PREPARATION, p("alsoEnjoyedBuildPhase"), NodeFactory.createLiteralString("slots"));
         }
         Node after = one(data, STATE, PREPARATION, p("alsoEnjoyedAfter"));
-        var page = TemplateIndexService.ownerTypePage(data, "https://schema.org/CreativeWork",
+        boolean slots = NodeFactory.createLiteralString("slots").equals(one(data, STATE, PREPARATION, p("alsoEnjoyedBuildPhase")));
+        var page = TemplateIndexService.ownerTypePage(data, slots ? RV + "RealmPublicationSlot" : "https://schema.org/CreativeWork",
             after == null ? "" : after.getLiteralLexicalForm(), deadline);
-        for (Node work : page.owners()) refreshWork(data, work, deadline);
+        for (Node owner : page.owners()) {
+            if (slots) {
+                CommandWork.count("also_enjoyed_source_rows_visited", 1);
+                // Cold qualification fences readers until all Work proofs are
+                // rebuilt. Remove old leaves while registering current slots.
+                refreshSlot(data, owner, false, deadline);
+            }
+            else refreshWork(data, owner, deadline);
+        }
         data.deleteAny(STATE, PREPARATION, p("alsoEnjoyedAfter"), Node.ANY);
         if (page.more()) data.add(STATE, PREPARATION, p("alsoEnjoyedAfter"), NodeFactory.createLiteralString(page.after()));
-        else data.add(STATE, PREPARATION, p("alsoEnjoyedEpoch"), epoch);
+        else if (slots) {
+            data.deleteAny(STATE, PREPARATION, p("alsoEnjoyedBuildPhase"), Node.ANY);
+            data.add(STATE, PREPARATION, p("alsoEnjoyedBuildPhase"), NodeFactory.createLiteralString("works"));
+            // An empty fresh dataset can qualify in this turn; populated cuts
+            // keep the Work pass in the existing next maintenance turn.
+            if (!data.contains(CURRENT, Node.ANY, RDF.type.asNode(), uri("https://schema.org/CreativeWork"))) {
+                data.add(STATE, PREPARATION, p("alsoEnjoyedEpoch"), epoch); data.add(STATE, PREPARATION, p("alsoEnjoyedForm"), FORM);
+                return true;
+            }
+            return false;
+        }
+        else {
+            data.add(STATE, PREPARATION, p("alsoEnjoyedEpoch"), epoch);
+            data.add(STATE, PREPARATION, p("alsoEnjoyedForm"), FORM);
+        }
         return !page.more();
     }
     private static final class Visits {
