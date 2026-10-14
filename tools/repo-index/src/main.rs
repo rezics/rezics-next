@@ -581,6 +581,14 @@ fn indexed_mode(
         classes: Vec::new(),
     };
     facts.visit_program(&parsed.program);
+    // Service guards trace executable helper effects; the other repository
+    // consumers need imports/literals and do not read these larger graph facts.
+    // Explicit fixture requests retain the complete factual interface.
+    if !keep_runtime && !service_graph_domain(&source.file) {
+        facts.function_facts.clear();
+        facts.call_facts.clear();
+        facts.aliases.clear();
+    }
     let imports = facts.imports;
     let candidates = facts.candidates;
     let syntax = facts.syntax;
@@ -625,6 +633,10 @@ fn indexed_mode(
         call_facts,
         aliases,
     })
+}
+fn service_graph_domain(file: &str) -> bool {
+    let mut parts = file.split('/');
+    parts.next() == Some("services") && parts.next().is_some() && parts.next() == Some("src")
 }
 fn main() {
     if let Err(error) = run() {
@@ -1274,6 +1286,57 @@ mod tests {
         assert_eq!(full_spans, runtime_spans);
     }
     #[test]
+    fn repository_graph_projection_keeps_all_service_owners_and_explicit_fixtures() {
+        let root = env::current_dir().unwrap();
+        let resolver = resolver(&root);
+        let parse = |file: &str, explicit| {
+            indexed_mode(
+                Source {
+                    file: file.to_string(),
+                    text: "function call(){ helper(() => inner()); } const alias = call;"
+                        .to_string(),
+                },
+                &root,
+                &resolver,
+                false,
+                true,
+                explicit,
+            )
+            .unwrap()
+        };
+        for file in [
+            "services/main/src/helper.ts",
+            "services/future/src/nested/helper.ts",
+        ] {
+            assert_eq!(parse(file, false).function_facts.len(), 2);
+        }
+        for file in [
+            "scripts/helper.ts",
+            "apps/web/helper.ts",
+            "services/main/tests/helper.ts",
+        ] {
+            let facts = parse(file, false);
+            assert!(facts.function_facts.is_empty());
+            assert!(facts.call_facts.is_empty());
+            assert!(facts.aliases.is_empty());
+            assert_eq!(parse(file, true).function_facts.len(), 2);
+        }
+        let facts = parse("services/main/src/helper.ts", false);
+        let call = facts
+            .call_facts
+            .iter()
+            .find(|call| call.callee_name.as_deref() == Some("helper"))
+            .unwrap();
+        assert_eq!(call.inline_function_spans.len(), 1);
+        assert!(!call.argument_names.contains("inner"));
+        assert!(
+            facts
+                .call_facts
+                .iter()
+                .any(|call| call.callee_name.as_deref() == Some("inner"))
+        );
+    }
+    #[test]
     fn executable_graph_facts_preserve_defaults_aliases_callbacks_and_method_owners() {
         let root = env::current_dir().unwrap();
         let text = r#"declare function declaration(): void;
@@ -1742,7 +1805,14 @@ impl<'a> Visit<'a> for Facts<'_> {
         let mut argument_names = BTreeSet::new();
         let mut inline_function_spans = Vec::new();
         for argument in &node.arguments {
-            ReferencedNames(&mut argument_names, self.text).visit_argument(argument);
+            // Immediate callback arguments are represented by their function
+            // spans; their bodies have their own owned call/function records.
+            if !matches!(
+                argument,
+                Argument::FunctionExpression(_) | Argument::ArrowFunctionExpression(_)
+            ) {
+                ReferencedNames(&mut argument_names, self.text).visit_argument(argument);
+            }
             match argument {
                 Argument::FunctionExpression(function) if function.body.is_some() => {
                     inline_function_spans.push(function.span)
