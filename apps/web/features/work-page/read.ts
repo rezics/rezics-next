@@ -27,7 +27,7 @@ import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
 import type { AdoptionPage, AgentCreditPage, AgentWorksPage, AlsoEnjoyedPage, ChapterRead, ClassificationPage,
   ContentsPage, CreditPage, DiscussionPage, HistoryKind, HistoryPage, Loaded, Progress, RatingContextPage, RatingRead,
   ReadFailure, RealmHeader, Reviewer, ReviewPage, ReviewQuery, RecipeWorkPage, HubWorkPage,
-  VersionPage, WorkHeader, WorkStats, WorkText }
+  VersionPage, WorkHeader, WorkStats }
   from './types.ts';
 
 // Server reads for the Work page. Each returns a `Loaded` result instead of
@@ -391,7 +391,7 @@ export type ReadStart =
  * The text a Work is read as when it has no contents: its Main Version's selected publication, in the
  * named language or the one Main selects.
  */
-export const readText = cache(async (mainVersion: string, language: string | undefined): Promise<Loaded<WorkText>> => {
+export const readText = cache(async (mainVersion: string, language: string | undefined) => {
   return booksLanguageReads(await reader()).readText(mainVersion, language);
 });
 

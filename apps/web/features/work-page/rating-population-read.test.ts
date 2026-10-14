@@ -7,7 +7,7 @@ test('a rating-population refusal keeps its entire HTTP problem through the disc
   const problem = { type: 'problem', status: 503, code: 'population_read_unavailable', title: 'Read unavailable',
     recovery: { position: 'exact-position', retryAfter: 2 } };
   const main = browserMainApi('https://recorded.invalid', { anonymous: true,
-    fetcher: (async () => Response.json(problem, { status: 503 })) as typeof fetch });
+    fetcher: Object.assign(async () => Response.json(problem, { status: 503 }), { preconnect: fetch.preconnect }) });
   try {
     await discoveryApi(main, 'en').populations(target);
     throw new Error('Refusal did not throw');
@@ -20,9 +20,9 @@ test('a rating-population refusal keeps its entire HTTP problem through the disc
 });
 
 test('retaining a problem does not remove the population continuation consistency check', async () => {
-  const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: (async () => Response.json({
+  const main = browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: Object.assign(async () => Response.json({
     profile: 'rating-populations-v1', target, items: [], complete: false, nextCursor: null,
     count: { value: 0, kind: 'exact' },
-  })) as typeof fetch });
+  }), { preconnect: fetch.preconnect }) });
   await expect(discoveryApi(main, 'en').populations(target)).rejects.toBeInstanceOf(BrowseReadError);
 });

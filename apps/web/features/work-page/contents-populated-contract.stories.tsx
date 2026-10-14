@@ -14,8 +14,10 @@ const work = iri('100'), structure = iri('101'), revision = iri('102'), target =
 const q = 'Episode 1000 重逢';
 function page(repeated: boolean): ReadingPositionPage {
   const item = { ...baseline.items[0]!, work, structure, revision, parent: structure,
-    occurrence: iri('1000'), target, ordinal: 1000, displayLabel: q, labels: [{ value: q, language: 'en' }] };
-  const items = repeated ? [{ ...item, occurrence: iri('999'), ordinal: 999, displayLabel: 'Episode 999 再会',
+    occurrence: iri('1000'), target, ordinal: 1000,
+    segmentKey: baseline.items[1]!.segmentKey, orderKey: baseline.items[1]!.orderKey, displayLabel: q, labels: [{ value: q, language: 'en' }] };
+  const items = repeated ? [{ ...item, occurrence: iri('999'), ordinal: 999,
+    segmentKey: baseline.items[0]!.segmentKey, orderKey: baseline.items[0]!.orderKey, displayLabel: 'Episode 999 再会',
     labels: [{ value: 'Episode 999 再会', language: 'en' }] }, item] : [item];
   return { ...baseline, work, items, complete: true, next: null, nextCursor: null, visibility: 'visible',
     count: { value: items.length, kind: 'exact-page', total: null }, search: { status: 'current' } };
