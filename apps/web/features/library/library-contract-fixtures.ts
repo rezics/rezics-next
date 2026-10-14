@@ -8,7 +8,7 @@ import bookImport from '../../../../tests/qa/fixtures/outcomes/books/library-imp
 import { browserMainApi, BFF_PREFIX } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import type { WorkStanding } from '../tracking/media-api.ts';
-import type { MyShelves, ReaderStateItem, ShelfStatus, StatusShelfItem } from './types.ts';
+import type { MyShelves, PrivateImportReview, ReaderStateItem, ShelfStatus, StatusShelfItem } from './types.ts';
 import { parseLibraryState } from './state.ts';
 import type { ApplyProgress, ImportRow } from './import-api.ts';
 import { fakeExportApi } from '../library-backup/export-fixtures.ts';
@@ -16,7 +16,7 @@ import { ExportError } from '../library-backup/export-api.ts';
 
 export type LibraryMedium = 'books' | 'recipes' | 'games' | 'visual-novels';
 export type LibraryContractState = 'populated' | 'empty' | 'error' | 'loading' | 'stale' | 'replay' | 'pending'
-  | 'export-interrupted' | 'export-moved';
+  | 'export-interrupted' | 'export-moved' | 'private-review';
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type Header = Ok<ReturnType<MainClient['v1']['works']>['get']>;
 
@@ -47,7 +47,7 @@ export function libraryContractFixture(medium: LibraryMedium, state: LibraryCont
     : item.path.includes('/reader-state') ? [item.answer as ReaderStateItem]
       : item.path.includes('/work-states') ? (item.answer as { items: ReaderStateItem[] }).items : []);
   const works = medium === 'books'
-    ? (sample('currently-reading-preview') as { items: StatusShelfItem[] }).items
+    ? (sample(state === 'private-review' ? 'finished-shelf' : 'currently-reading-preview') as { items: StatusShelfItem[] }).items
     : medium === 'games'
       ? [sample('game-header'), sample('composed-header')].map(value => {
         const header = value as Header;
@@ -72,7 +72,7 @@ export function libraryContractFixture(medium: LibraryMedium, state: LibraryCont
   } : null;
   const pageState = parseLibraryState(medium === 'recipes' && state !== 'empty'
     ? { shelf: recipeCollection!.collection.slice(-36) }
-    : state === 'empty' ? {} : { shelf: medium === 'games' ? 'want-to-read' : 'reading' });
+    : state === 'empty' ? {} : { shelf: state === 'private-review' ? 'read' : medium === 'games' ? 'want-to-read' : 'reading' });
   const calls: (AnswerCall & { state: string; responseStatus?: number })[] = [];
   const importId = '00000000-0000-4000-8000-000000000030';
   const imported = (bookImport as AnswerRecord).personas.owner.find(item => item.label === 'production-import-review')!;
@@ -114,10 +114,17 @@ export function libraryContractFixture(medium: LibraryMedium, state: LibraryCont
       : medium === 'books' ? 'followed-authors' : medium === 'games' ? 'followed-authors' : 'library-empty-followed-authors'));
     if (path === '/v1/me/work-states') {
       const selected = new Set(url.searchParams.get('works')?.split(','));
-      return reply({ profile: 'reader-work-states-v1', items: entries.filter(entry => selected.has(entry.work)),
-        sourcePosition: directory.sourcePosition });
+      return reply({ profile: 'reader-work-state-batch-v1', items: entries.filter(entry => selected.has(entry.work)),
+        sourcePosition: directory.sourcePosition } satisfies Ok<MainClient['v1']['me']['work-states']['get']>);
     }
-    if (path === '/v1/me/import-reviews') return reply({ items: [] });
+    if (path === '/v1/me/import-reviews') return reply({ items: state === 'private-review' ? [{
+      work: entries[0]!.work, text: 'Original author — private imported reading note.', language: 'en',
+      spoiler: false, version: 1, changedAt: '2026-10-14T00:00:00.000Z',
+    } satisfies PrivateImportReview] : [] });
+    if (path.startsWith('/v1/resources/') && path.endsWith('/reviews')) return reply({
+      profile: 'reader-review-page-v1', items: [], nextCursor: null, sourcePosition: directory.sourcePosition,
+      count: { value: 0, kind: 'exact-page', total: null },
+    } satisfies Ok<ReturnType<MainClient['v1']['resources']>['reviews']['get']>);
     if (path === `/v1/me/library-imports/${importId}/rows`) return reply({ rows: [importRow], nextCursor: null });
     if (path === `/v1/me/library-imports/${importId}/apply`) return reply(pending, request.method === 'POST' ? 202 : 200);
     if (path === '/v1/me/library-export') {

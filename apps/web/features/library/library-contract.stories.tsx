@@ -35,6 +35,16 @@ export const Books: Story = {
   },
 };
 export const BooksPhone: Story = { ...Books, ...phone };
+export const BookPrivateReview: Story = {
+  args: { medium: 'books', persona: 'owner', state: 'private-review' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await canvas.findByRole('heading', { name: 'Original outcome volume' });
+    await expect(canvas.getByText('Private review · Only you can see this imported review.')).toBeVisible();
+    await expect(canvas.getByText('Original author — private imported reading note.')).toBeVisible();
+  },
+};
+export const BookPrivateReviewPhone: Story = { ...BookPrivateReview, ...phone };
 
 export const RepeatedRecipes: Story = {
   args: { medium: 'recipes', persona: 'owner' },

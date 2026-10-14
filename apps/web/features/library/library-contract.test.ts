@@ -122,6 +122,17 @@ test('a Library import waits for the HTTP 202 job rather than reporting completi
   expect(fixture.calls.find(call => call.method === 'POST' && call.path.endsWith('/apply'))?.responseStatus).toBe(202);
 });
 
+test('the Read shelf carries the owner’s private imported review through the production reader', async () => {
+  const fixture = contractFixture('books', 'private-review', 'owner');
+  const loaded = await load(fixture);
+  if (!loaded.view.ok) throw new Error('Library did not load');
+  expect(loaded.view.data.rows[0]!.privateReview).toMatchObject({ ok: true, data: {
+    work: loaded.view.data.rows[0]!.work.id, text: 'Original author — private imported reading note.', language: 'en',
+  } });
+  const path = fixture.calls.find(call => call.path.startsWith('/v1/me/import-reviews'))!.path;
+  expect(new URL(path, 'https://contract.invalid').searchParams.get('actingSubject')).toBe(fixture.actor);
+});
+
 test('game required and bonus routes share the Work seam but keep independent marks', async () => {
   const fixture = contractFixture('games');
   const loaded = await load(fixture);
