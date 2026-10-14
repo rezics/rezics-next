@@ -74,36 +74,57 @@ type ShelfPreview = { items: { work: string; status: string; version: number; ca
 type ProgressMark = { work: string; standing: WorkStanding; version: number; parts?: boolean; replayed?: boolean };
 type StatusWrite = { actingSubject: string; expectedVersion: number; status: ReadingStatus | null };
 
-const memberLibrary = (checkpoint: 'empty' | 'reading' | 'read'): RecordedSelection[] => [
-  { label: `library-${checkpoint}-overview`, state: 'populated' },
-  { label: 'library-visibility', state: 'populated' },
-  { label: `library-${checkpoint}-rating-context`, state: 'populated' },
-  // Goal, reading stats and followed authors were recorded with the empty shelves. The page reads those same paths.
-  { label: 'library-empty-reading-goal', state: 'populated' },
-  { label: 'library-empty-reading-stats', state: 'populated' },
-  { label: 'library-empty-followed-authors', state: 'populated' },
-  ...(checkpoint === 'reading' ? [
-    { label: 'library-reading-reading-preview', state: 'populated' as const },
-    { label: 'library-reading-resume', state: 'populated' as const },
-  ] : []),
-];
+const populated = (labels: readonly string[]): RecordedSelection[] =>
+  labels.map(label => ({ label, state: 'populated' as const }));
 
-function recordedYear() {
-  return Number(new URL(sample(collection, 'member', 'library-empty-reading-goal').path, 'https://recorded.invalid')
-    .searchParams.get('year'));
+/** What `/library` reads on All before any visual novel is shelved. */
+const emptyLibrary = populated([
+  'library-empty-overview', 'library-visibility', 'library-empty-rating-context', 'library-empty-reading-goal',
+  'library-empty-reading-stats', 'library-empty-followed-authors',
+]);
+
+/** The recorded All visit while the visual novel is on Currently reading, including its one-work reader state. */
+const readingLibrary = populated([
+  'visit-library-reading-all-overview', 'visit-library-reading-all-visibility', 'visit-library-reading-all-rating-context',
+  'visit-library-reading-all-reading-goal', 'visit-library-reading-all-reading-stats', 'visit-library-reading-all-followed-authors',
+  'visit-library-reading-all-shelf-reading', 'visit-library-reading-all-work-states', 'visit-library-reading-all-resume-work',
+]);
+
+/** The recorded All visit after the visual novel is marked read. Nothing is left on Currently reading. */
+const readAllLibrary = populated([
+  'visit-library-read-all-overview', 'visit-library-read-all-visibility', 'visit-library-read-all-rating-context',
+  'visit-library-read-all-reading-goal', 'visit-library-read-all-reading-stats', 'visit-library-read-all-followed-authors',
+]);
+
+/** The recorded Read shelf visit: the shelf page, that work's reader state, and its import review. */
+const readShelfLibrary = populated([
+  'visit-library-read-read-overview', 'visit-library-read-read-visibility', 'visit-library-read-read-rating-context',
+  'visit-library-read-read-reading-goal', 'visit-library-read-read-reading-stats', 'visit-library-read-read-shelf-read',
+  'visit-library-read-read-work-states', 'visit-library-read-read-import-reviews',
+]);
+
+function recordedYear(record: AnswerRecord, persona: AnswerPersona, label: string) {
+  return Number(new URL(sample(record, persona, label).path, 'https://recorded.invalid').searchParams.get('year'));
 }
 
-async function loadMember(checkpoint: 'empty' | 'reading' | 'read', missed: string[] = []) {
-  const overview = sample(collection, 'member', `library-${checkpoint}-overview`);
-  const main = client(collection, 'member', memberLibrary(checkpoint), missed);
+function titleOf(row: { work: { title: { value: string } | null } }) {
+  return row.work.title && 'value' in row.work.title ? row.work.title.value : null;
+}
+
+async function loadVisit(record: AnswerRecord, persona: AnswerPersona, selections: readonly RecordedSelection[],
+  overviewLabel: string, goalLabel: string, shelf: Record<string, string>, missed: string[]) {
+  const overview = sample(record, persona, overviewLabel);
+  const main = client(record, persona, selections, missed);
+  const state = parseLibraryState(shelf);
   return loadBooksLibrary({ main, anonymous: main, actingSubject: actingSubject(overview.path) },
-    { state: parseLibraryState({}), locale: 'en', year: recordedYear(), first: true });
+    { state, locale: 'en', year: recordedYear(record, persona, goalLabel), first: state.shelf.kind === 'all' && state.cursor === null });
 }
 
 test('the member’s empty visual-novel library is the recorded zero shelves', async () => {
   const overview = sample(collection, 'member', 'library-empty-overview').answer as ShelfDirectory;
   const missed: string[] = [];
-  const loaded = await loadMember('empty', missed);
+  const loaded = await loadVisit(collection, 'member', emptyLibrary, 'library-empty-overview', 'library-empty-reading-goal',
+    {}, missed);
   expect(missed).toEqual([]);
   expect(loaded.overview.ok).toBe(true);
   if (!loaded.overview.ok) return;
@@ -120,35 +141,34 @@ test('the member’s empty visual-novel library is the recorded zero shelves', a
 });
 
 test('the member’s reading shelf shows the recorded visual novel and no next chapter', async () => {
-  const preview = sample(collection, 'member', 'library-reading-reading-preview');
+  const preview = sample(collection, 'member', 'visit-library-reading-all-shelf-reading');
   const item = (preview.answer as ShelfPreview).items[0]!;
-  const resume = sample(collection, 'member', 'library-reading-resume').answer as { nextUnread: unknown; unreadCount: unknown };
-  const recordedStates = sample(collection, 'member', 'library-reading-work-states');
+  const states = sample(collection, 'member', 'visit-library-reading-all-work-states');
+  const resume = sample(collection, 'member', 'visit-library-reading-all-resume-work').answer as {
+    nextUnread: unknown; unreadCount: unknown };
   const missed: string[] = [];
-  const loaded = await loadMember('reading', missed);
+  const loaded = await loadVisit(collection, 'member', readingLibrary, 'visit-library-reading-all-overview',
+    'visit-library-reading-all-reading-goal', {}, missed);
+  expect(missed).toEqual([]);
   expect(loaded.overview.ok).toBe(true);
   if (!loaded.overview.ok) return;
   expect(loaded.overview.data.counts.reading).toBe(1);
-  expect(loaded.reading.map(row => row.work.title && 'value' in row.work.title ? row.work.title.value : null))
-    .toEqual([item.card.title.value]);
+  expect(new URL(states.path, 'https://recorded.invalid').searchParams.get('works')).toBe(item.work);
+  expect(loaded.reading.map(titleOf)).toEqual([item.card.title.value]);
   expect(loaded.reading.map(row => row.status)).toEqual([recordedShelfStatus(item.status)]);
   expect(loaded.reading.map(row => row.version)).toEqual([item.version]);
   expect(loaded.reading.map(row => row.types)).toEqual([item.card.types]);
+  expect(loaded.reading.map(row => row.stateRead)).toEqual([true]);
   expect(resume.nextUnread).toBeNull();
+  expect(resume.unreadCount).toBeNull();
   expect(loaded.reading[0]?.progress).toEqual({ next: null, left: null, chapters: null });
-  // The shelf lists one work. The recorded reader-state batch names that work and another, so this read matches neither.
-  const asked = `${BFF_PREFIX}/v1/me/work-states?${new URLSearchParams({
-    works: item.work, actingSubject: actingSubject(preview.path) })}`;
-  expect(new URL(recordedStates.path, 'https://recorded.invalid').searchParams.get('works')?.split(',')).toEqual([
-    item.work, expect.any(String)]);
-  expect(missed).toEqual([`Unmatched recorded request (${collection.row}/member): ${JSON.stringify({
-    method: 'GET', path: asked, body: '<absent>' })}`]);
 });
 
-test('the member’s read shelf count is the recorded one work, with nothing left in progress', async () => {
-  const overview = sample(collection, 'member', 'library-read-overview').answer as ShelfDirectory;
+test('the member’s All page after the visual novel is read keeps the recorded counts and no current title', async () => {
+  const overview = sample(collection, 'member', 'visit-library-read-all-overview').answer as ShelfDirectory;
   const missed: string[] = [];
-  const loaded = await loadMember('read', missed);
+  const loaded = await loadVisit(collection, 'member', readAllLibrary, 'visit-library-read-all-overview',
+    'visit-library-read-all-reading-goal', {}, missed);
   expect(missed).toEqual([]);
   expect(loaded.overview.ok && loaded.overview.data.counts).toEqual({
     reading: recordedCount(overview, 'reading'),
@@ -156,7 +176,69 @@ test('the member’s read shelf count is the recorded one work, with nothing lef
     read: recordedCount(overview, 'read'),
   });
   expect(loaded.reading).toEqual([]);
+  expect(loaded.view.ok && loaded.view.data.rows).toEqual([]);
 });
+
+test('the member’s Read shelf lists the recorded visual novel', async () => {
+  const shelf = sample(collection, 'member', 'visit-library-read-read-shelf-read');
+  const item = (shelf.answer as ShelfPreview).items[0]!;
+  const states = sample(collection, 'member', 'visit-library-read-read-work-states');
+  const missed: string[] = [];
+  const loaded = await loadVisit(collection, 'member', readShelfLibrary, 'visit-library-read-read-overview',
+    'visit-library-read-read-reading-goal', { shelf: 'read' }, missed);
+  expect(missed).toEqual([]);
+  expect(loaded.reading).toEqual([]);
+  expect(loaded.authors).toBeNull();
+  expect(loaded.view.ok).toBe(true);
+  if (!loaded.view.ok) return;
+  expect(new URL(states.path, 'https://recorded.invalid').searchParams.get('works')).toBe(item.work);
+  expect(loaded.view.data.rows.map(titleOf)).toEqual([item.card.title.value]);
+  expect(loaded.view.data.rows.map(row => row.status)).toEqual([recordedShelfStatus(item.status)]);
+  expect(loaded.view.data.rows.map(row => row.version)).toEqual([item.version]);
+  expect(loaded.view.data.rows.map(row => row.stateRead)).toEqual([true]);
+  expect(loaded.view.data.rows[0]?.privateReview).toEqual({ ok: true, data: null });
+  expect(item.status).toBe('read');
+});
+
+// `/library` does not read work progress. These are the shelves the page reached after the winning mark.
+const deviceAll = (persona: 'member' | 'owner') => populated([
+  'visit-library-final-all-overview', 'visit-library-final-all-visibility', 'visit-library-final-all-rating-context',
+  'visit-library-final-all-reading-goal', 'visit-library-final-all-reading-stats', 'visit-library-final-all-followed-authors',
+  ...(persona === 'owner' ? [
+    'visit-library-final-all-shelf-reading', 'visit-library-final-all-work-states',
+    'visit-library-final-all-resume-visitor-work', 'visit-library-final-all-resume-visitor-other-work',
+  ] : []),
+]);
+
+for (const persona of ['member', 'owner'] as const) {
+  test(`${persona}: the recorded library after the winning mark does not list that visual novel`, async () => {
+    const overview = sample(devices, persona, 'visit-library-final-all-overview').answer as ShelfDirectory;
+    const mark = sample(devices, persona, 'primary-get-works-progress-0').answer as ProgressMark;
+    const missed: string[] = [];
+    const loaded = await loadVisit(devices, persona, deviceAll(persona), 'visit-library-final-all-overview',
+      'visit-library-final-all-reading-goal', {}, missed);
+    expect(missed).toEqual([]);
+    expect(loaded.overview.ok && loaded.overview.data.counts).toEqual({
+      reading: recordedCount(overview, 'reading'),
+      'want-to-read': recordedCount(overview, 'want-to-read'),
+      read: recordedCount(overview, 'read'),
+    });
+    const shown = [
+      ...loaded.reading.map(row => row.work.id),
+      ...loaded.view.ok ? loaded.view.data.rows.map(row => row.work.id) : [],
+    ];
+    expect(shown).not.toContain(mark.work);
+    expect(mark).toMatchObject({ standing: 'completed', version: 2 });
+    if (persona === 'owner') {
+      const preview = sample(devices, persona, 'visit-library-final-all-shelf-reading').answer as ShelfPreview;
+      expect(loaded.reading.map(titleOf)).toEqual(preview.items.map(item => item.card.title.value));
+      expect(loaded.reading.map(row => row.status)).toEqual(preview.items.map(item => recordedShelfStatus(item.status)));
+      expect(loaded.reading.every(row => row.progress?.next === null)).toBe(true);
+    } else {
+      expect(loaded.reading).toEqual([]);
+    }
+  });
+}
 
 for (const persona of ['member', 'owner'] as const) {
   test(`${persona}: the other device’s winning visual-novel progress is the recorded completed mark`, async () => {

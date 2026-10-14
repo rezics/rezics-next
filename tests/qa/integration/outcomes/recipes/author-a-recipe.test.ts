@@ -1,6 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import authoring from '../../../../../scripts/qa/cases/outcomes/recipes/author-a-recipe.ts';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { readRecipeVisitFrame } from '../../../../../apps/web/features/recipe-editor/recipe-authoring-recorded-page.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
@@ -176,9 +178,77 @@ async function within<T>(milliseconds: number, phase: string, run: () => Promise
   } finally { clearTimeout(timer); }
 }
 
+// One stable label per production frame read. Realm names use the Realm id, never a counter.
+function frameLabel(path: string): string {
+  const url = new URL(path, 'https://record.invalid');
+  const pathname = url.pathname;
+  if (pathname === '/v1/me/platform-access') return 'frame-platform-access';
+  if (pathname === '/v1/types') return 'frame-types';
+  if (pathname === '/v1/zones') return 'frame-official-zones';
+  if (/^\/v1\/realms\/[^/]+$/.test(pathname)) return `frame-official-realm-${pathname.split('/').pop()}`;
+  if (pathname === '/v1/me/acting-contexts') return 'frame-acting-contexts';
+  if (pathname === '/v1/me/agents') return 'frame-agent-choices';
+  if (pathname === '/v1/me/session-agent') return 'frame-session-agent';
+  if (/^\/v1\/agents\/[^/]+$/.test(pathname)) return 'frame-agent-profile';
+  if (pathname === '/v1/me/person-preferences') return 'frame-person-preferences';
+  if (pathname === '/v1/me/managed-realms') return 'frame-managed-realms';
+  if (pathname === '/v1/me/follows') {
+    const order = url.searchParams.get('order');
+    const kind = url.searchParams.get('kind');
+    if (order === 'pinned' && !kind) return 'frame-pinned-communities';
+    if (kind === 'space' && order === 'recent') return 'frame-space-communities';
+    if (!order && !kind) return 'frame-follow-inventory';
+  }
+  throw new Error(`Unlabeled production frame request ${path}`);
+}
+
+function mainPath(href: string): string {
+  const url = new URL(href, 'https://record.invalid');
+  const pathname = url.pathname === BFF_PREFIX || url.pathname.startsWith(`${BFF_PREFIX}/`)
+    ? url.pathname.slice(BFF_PREFIX.length) || '/' : url.pathname;
+  return pathname + url.search;
+}
+
+// The layout client issues the page's reads. Types, Zones and Realms stay anonymous,
+// matching the public shell. The persona session already sends its own session key;
+// the frame's placeholder must not replace it.
+async function recordProductionFrame(name: PersonaName) {
+  const person = sessions[name];
+  const reads = new Map<string, Promise<Response>>();
+  let failure: unknown;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = input instanceof Request ? input : null;
+    const href = request?.url ?? (input instanceof URL ? input.href : String(input));
+    const path = mainPath(href);
+    const pathname = path.split('?')[0] ?? path;
+    const anonymous = pathname === '/v1/types' || pathname === '/v1/zones' || pathname.startsWith('/v1/realms/');
+    const method = (init?.method ?? request?.method ?? 'GET').toUpperCase();
+    const key = `${method} ${path}`;
+    let pending = reads.get(key);
+    if (!pending) {
+      const sample = recording.session(name, anonymous ? sessions.visitor : person);
+      pending = (async () => {
+        const raw = request ? await request.clone().text()
+          : typeof init?.body === 'string' ? init.body : '';
+        return sample(frameLabel(path), method, path, raw ? JSON.parse(raw) as unknown : undefined);
+      })().catch(error => {
+        failure = error;
+        throw error;
+      });
+      reads.set(key, pending);
+    }
+    return (await pending).clone();
+  }) as typeof fetch;
+  const main = browserMainApi('https://record.invalid', { anonymous: name === 'visitor', fetcher });
+  const framed = await readRecipeVisitFrame(main, fetcher, {
+    actingSubject: person.actingSubject, locale: 'en', origin: 'https://record.invalid',
+  });
+  if (failure) throw failure;
+  if (!framed.ok) throw new Error(framed.detail);
+}
+
 async function visit(name: PersonaName) {
-  const person = sessions[name], sample = recording.session(name, person);
-  await Promise.all([sample('frame-types', 'GET', '/v1/types'), editorReads(name, recipe.work)]);
+  await Promise.all([recordProductionFrame(name), editorReads(name, recipe.work)]);
   const destination = name === 'owner' ? recipe : destinations.get(name);
   if (destination) await workReads(name, destination);
 }

@@ -1,6 +1,18 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { Pool } from 'pg';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { workExperience } from '../../../../../apps/web/features/entity-page/experience.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { pinnedCommunities, spaceCommunities } from '../../../../../apps/web/features/shell/communities-relationships.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { readResourcePage, readLinkedStatements, readAnimeAgentCredits, readAnimeReaderState,
+  readWorkParts, readWorkRealizations, readWorkRelations } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { booksEditionReads, readBooksEditionStatus } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { readSuppliedStart } from '../../../../../apps/web/features/work-page/games-hub-recorded-page.ts';
+import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
 import hub, { grantMangaFixtureAuthority } from '../../../../../scripts/qa/cases/outcomes/manga/work-hub-and-edition-choice.ts';
 import { seedFirstPublicationDate } from '../../../../../scripts/dev/seed/relation-lexicon.ts';
 import { classificationContextBody, classifiedStatementBody } from '../../../../../scripts/dev/seed/classified-statement.ts';
@@ -10,7 +22,9 @@ import { personaSessions, type PersonaName, type PersonaSession, type PersonaSes
 type Work = { work: string; mainVersion: string };
 type Release = { id: string; revision: string; title: { value: string } };
 type Preference = { work: string; language: string; edition: { kind: string; resource: string; revision: string }; version: number };
-setDefaultTimeout(90_000);
+setDefaultTimeout(300_000);
+const fileWall = setTimeout(() => { throw new Error('Manga work hub file exceeded 35 min'); }, 35 * 60_000);
+fileWall.unref?.();
 let sessions: PersonaSessions;
 let pool: Pool;
 let manga: Work, undated: Work;
@@ -117,6 +131,7 @@ beforeAll(async () => {
   }), 201);
 }, 180_000);
 afterAll(async () => {
+  clearTimeout(fileWall);
   try { await recording.publish(); }
   finally { await sessions?.close(); await pool?.end(); }
 });
@@ -192,28 +207,151 @@ async function pageReads(sample: ReturnType<OutcomeRecorder['session']>, person:
   }));
 }
 
+// The Work page, through the production client. Reads run while the preference is
+// still empty, so progress uses the English interface language. Writes stay in the proof.
+async function productionVisit(name: PersonaName) {
+  const person = sessions[name];
+  const labels = new AsyncLocalStorage<string | ((path: string) => string)>();
+  const sample = recording.session(name, person);
+  const publicSample = recording.session(name, sessions.visitor);
+  const requests = new Map<string, Promise<Response>>();
+  const used = new Set<string>();
+  const transport = (anonymous = false): typeof fetch => async (input, init) => {
+    const url = new URL(String(input)), method = init?.method ?? 'GET';
+    const path = (url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) : url.pathname) + url.search;
+    const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
+    const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+    const cacheKey = JSON.stringify([anonymous, method, path, body]);
+    let pending = requests.get(cacheKey);
+    if (!pending) {
+      const stored = labels.getStore();
+      if (!stored) throw new Error(`Unlabelled production request ${method} ${path}`);
+      let label = typeof stored === 'function' ? stored(path) : stored;
+      let n = 2;
+      while (used.has(label)) label = `${typeof stored === 'function' ? stored(path) : stored}-${n++}`;
+      used.add(label);
+      pending = (anonymous ? publicSample : sample)(label, method, path, body, key).catch(error => {
+        throw new Error(`${name} ${label}: ${method} ${path} body=${JSON.stringify(body)}: ${String(error)}`);
+      });
+      requests.set(cacheKey, pending);
+    }
+    return (await pending).clone();
+  };
+  const main = browserMainApi('http://record.invalid', { fetcher: transport() });
+  const publicMain = browserMainApi('http://record.invalid', { anonymous: true, fetcher: transport(true) });
+  const named = <T,>(label: string | ((path: string) => string), run: () => Promise<T>) => labels.run(label, run);
+  const actingSubject = person.actingSubject ?? undefined;
+  const query = { actingSubject };
+  const reads = booksEditionReads({ main, actingSubject });
+  const id = short(manga.work);
+  const work = manga.work;
+  const zones = await named('visit-official-zones', () => publicMain.v1.zones.get({ query: { official: 'true', limit: 6 } }));
+  await Promise.all((zones.data?.items ?? []).slice(0, 6).map(zone => named(`visit-official-realm-${short(zone.realm)}`,
+    () => publicMain.v1.realms({ realm: short(zone.realm) }).get())));
+  const sessionAgent = actingSubject
+    ? await named('visit-session-agent', () => main.v1.me['session-agent'].get()) : null;
+  await Promise.all([
+    named('visit-platform-access', () => main.v1.me['platform-access'].get()),
+    actingSubject ? named('visit-acting-contexts', () => main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } })) : null,
+    actingSubject ? named('visit-session-agents', () => main.v1.me.agents.get({ query: { languages: 'en' } })) : null,
+  ]);
+  if (actingSubject && sessionAgent?.data?.sessionAgent.eligible) {
+    const relationships = mainRelationships(actingSubject, { origin: 'http://record.invalid', fetch: transport() });
+    await Promise.all([
+      named('visit-person-preferences', () => main.v1.me['person-preferences'].get({ query })),
+      named('visit-agent-profile', () => main.v1.agents({ id: short(actingSubject) }).get({ query })),
+      named('visit-pinned-follows', () => pinnedCommunities(relationships, '', null)),
+      named('visit-space-follows', () => spaceCommunities(relationships, '', null)),
+      named('visit-follow-inventory', () => relationships.follows()),
+      named('visit-managed-realms', () => main.v1.me['managed-realms'].get({ query })),
+      named('visit-notification-unread', () => main.v1.me.notifications['unread-count'].get()),
+    ]);
+  } else if (actingSubject) {
+    await named('visit-notification-unread', () => main.v1.me.notifications['unread-count'].get());
+  }
+  const header = await named('visit-work-header', () => reads.readWorkHeader(id));
+  if (!header.ok) return;
+  const [projection, credits, contexts] = await Promise.all([
+    named('visit-projection', () => readResourcePage(main, actingSubject, id)),
+    named('visit-agent-credits', () => readAnimeAgentCredits(main, actingSubject, id)),
+    named('visit-rating-contexts', () => main.v1.resources({ resource: id })['rating-contexts'].get({ query: { ...query, scope: 'global' } })),
+    named('visit-reader-state', () => readAnimeReaderState(main, actingSubject, id)),
+    named('visit-work-credits', () => reads.readCredits(id)),
+    named('visit-work-adoptions', () => reads.readAdoptions(id)),
+    named('visit-showcase', () => publicMain.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [work] })),
+    named('visit-facets', () => publicMain.v1.facets.get()),
+    named('visit-rating-populations', () => main.v1['rating-populations'].get({ query: { limit: 20, target: work, ...query } })),
+    named('visit-releases', () => reads.readReleases(id)),
+    named('visit-also-enjoyed', () => reads.readAlsoEnjoyed(id)),
+    named('visit-classifications', () => reads.readClassifications(id, { kind: 'global' })),
+    named(path => path.includes('/edition-preferences/') ? 'visit-status-preference'
+      : path.includes('/progress-summaries/') ? 'visit-status-progress' : 'visit-status-release',
+    () => readBooksEditionStatus(reads, id, 'en')),
+    named('visit-start', () => readSuppliedStart({ main, actingSubject }, id, work, async () => header.data.selectedLanguage)),
+  ]);
+  const context = contexts.data?.items[0]?.context;
+  const plan = hubPlan(projection.ok ? projection.data : null);
+  const experience = workExperience(projection.ok ? projection.data : null, header.data.types);
+  const tracking = actingSubject && experience.kind === 'book' ? mainTrackingApi(actingSubject, () => main) : null;
+  // Claim the chooser labels before later regions repeat the same inventories.
+  if (tracking) {
+    await named(path => path.includes('/realizations') ? 'visit-realizations' : 'visit-chooser-releases',
+      () => tracking.editions(work));
+    await named('visit-chooser-preference', () => tracking.preference(work));
+  }
+  await Promise.all([
+    !contexts.error ? named('visit-ratings', () => main.v1.resources({ resource: id }).ratings.get({
+      query: { ...query, scope: 'global', context } })) : null,
+    named('visit-reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { ...query, context } })),
+    plan.includes('parts') ? named('visit-parts', () => readWorkParts(main, actingSubject, id, { limit: 7 })) : null,
+    plan.includes('parts') ? named('visit-wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { ...query, limit: 3 } })) : null,
+    plan.includes('parts') || plan.includes('wiki') ? named('visit-relations', () => readWorkRelations(main, actingSubject, id, { limit: 20 })) : null,
+    tracking && plan.includes('parts') ? Promise.all([
+      named('visit-panel-preference', () => tracking.preference(work)),
+      named(path => path.includes('/realizations') ? 'visit-panel-realizations' : 'visit-panel-releases', () => tracking.editions(work)),
+      named('visit-panel-relations', () => tracking.relations(work)),
+      named('visit-correspondence', () => tracking.definition('correspondence-equivalent')),
+    ]).then(([preference]) => named('visit-panel-series', () => tracking.series(work,
+      preference.ok ? preference.data?.language ?? 'en' : 'en'))) : null,
+    ...projection.ok ? projection.data.sections.flatMap(section => {
+      if (section.id === 'statements') return [named('visit-facts', () => readLinkedStatements(main, actingSubject, section.href))];
+      if (section.id === 'discussion') return [named('visit-discussion', () => followHref(main, section.href, query)())];
+      return [];
+    }) : [],
+    context && plan.includes('ratings') ? named('visit-reviews', () => main.v1.resources({ resource: id }).reviews.get({
+      query: { context, sort: 'helpful', limit: 10, ...query } })) : null,
+    context && plan.includes('ratings') ? named('visit-review-relations', () => readWorkRelations(main, actingSubject, id, { limit: 32 })) : null,
+    context && plan.includes('ratings') ? named('visit-review-realizations', () => readWorkRealizations(main, actingSubject, id)) : null,
+    ...credits.ok ? [...new Set(credits.data.items.filter(item => item.role === 'author').map(item => item.agent))].slice(0, 1)
+      .map(agent => named('visit-author-works', () => main.v1.agents({ id: short(agent) }).works.get({ query: { ...query, limit: 12 } }))) : [],
+  ]);
+}
+
 async function reader(name: Exclude<PersonaName, 'visitor'>) {
   const person = sessions[name];
   const sample = recording.session(name, person);
   await publicHub(name);
   expect(await answer(sample('edition-preference-empty', 'GET', `${preferencePath()}?${acting(person)}`))).toBeNull();
+  const visited = performance.now();
+  await productionVisit(name);
+  console.info(`[manga-hub] ${name} visit=${Math.round(performance.now() - visited)}ms`);
   const commands = releases.map(release => ({ body: choice(person, release), key: randomUUID() }));
-  const responses = await Promise.all(commands.map(command => person.main('PUT', preferencePath(), command.body, command.key)));
+  const responses = await Promise.all(commands.map((command, index) => sample(`preference-save-release-${index}`, 'PUT', preferencePath(), command.body, command.key)));
   expect(responses.map(response => response.status).sort()).toEqual([200, 409]);
   const index = responses.findIndex(response => response.status === 200), winner = commands[index]!;
   const saved = await answer<Preference & { replayed: boolean }>(Promise.resolve(responses[index]!));
   const { replayed: _replayed, ...retained } = saved;
   expect(retained).toMatchObject({ work: manga.work, language: 'ja', version: 1, edition: winner.body.edition });
   expect(await answer(Promise.resolve(responses[1 - index]!), 409)).toMatchObject({ code: 'stale_edition_preference', current: retained });
-  expect(await answer(person.main('PUT', preferencePath(), winner.body, winner.key))).toEqual({ ...retained, replayed: true });
+  expect(await answer(sample('preference-save-replay', 'PUT', preferencePath(), winner.body, winner.key))).toEqual({ ...retained, replayed: true });
   expect(await answer(sample('progress-summary', 'GET', `${summaryPath()}?language=ja&${acting(person)}`))).toMatchObject({ preference: retained, language: 'ja' });
   await answer(sample('edition-preference', 'GET', `${preferencePath()}?${acting(person)}`));
-  expect(await answer(person.main('PUT', preferencePath(), { ...choice(person, releases[0]!, 1), language: 'fr' }), 400)).toMatchObject({ code: 'invalid_edition_preference' });
-  expect(await answer(person.main('PUT', `/v1/me/edition-preferences/${short(undated.work)}`, choice(person, releases[0]!)), 404)).toMatchObject({ code: 'work_unavailable' });
+  expect(await answer(sample('preference-save-invalid-language', 'PUT', preferencePath(), { ...choice(person, releases[0]!, 1), language: 'fr' }), 400)).toMatchObject({ code: 'invalid_edition_preference' });
+  expect(await answer(sample('preference-save-unavailable', 'PUT', `/v1/me/edition-preferences/${short(undated.work)}`, choice(person, releases[0]!)), 404)).toMatchObject({ code: 'work_unavailable' });
   const target = name === 'owner' ? sessions.member : sessions.owner;
   const before = await answer(target.main('GET', `${preferencePath()}?${acting(target)}`));
   for (const [index, path] of [preferencePath(), summaryPath()].entries()) expect(await answer(sample(`other-reader-refused-${index}`, 'GET', `${path}?${acting(person, target.actingSubject!)}`), 403)).toMatchObject({ code: 'progress_denied' });
-  expect(await answer(person.main('PUT', preferencePath(), choice(person, releases[0]!, 1, target.actingSubject)), 403)).toMatchObject({ code: 'progress_denied' });
+  expect(await answer(sample('preference-save-foreign', 'PUT', preferencePath(), choice(person, releases[0]!, 1, target.actingSubject)), 403)).toMatchObject({ code: 'progress_denied' });
   expect(await answer(target.main('GET', `${preferencePath()}?${acting(target)}`))).toEqual(before);
   if (name === 'moderator' || name === 'operator') {
     const selected = releases[0]!;
@@ -248,7 +386,10 @@ outcomeTest(hub, 'visitor', async () => {
   const response = await contents('contents-region', 'GET', `/v1/works/${short(manga.work)}/contents`);
   await response.body?.cancel();
   for (const [index, path] of [preferencePath(), summaryPath()].entries()) await answer(sample(`sign-in-required-${index}`, 'GET', `${path}?${acting(person, sessions.owner.actingSubject!)}`), 401);
-  await answer(person.main('PUT', preferencePath(), choice(person, releases[0]!, 0, sessions.owner.actingSubject)), 401);
+  await answer(sample('preference-save-refused', 'PUT', preferencePath(), choice(person, releases[0]!, 0, sessions.owner.actingSubject)), 401);
+  const visited = performance.now();
+  await productionVisit('visitor');
+  console.info(`[manga-hub] visitor visit=${Math.round(performance.now() - visited)}ms`);
 }, recording);
 outcomeTest(hub, 'stranger', () => reader('stranger'), recording);
 outcomeTest(hub, 'member', () => reader('member'), recording);

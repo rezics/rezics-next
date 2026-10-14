@@ -4,7 +4,7 @@ import { cache, type ReactNode, Suspense } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { getMessages } from '../../i18n/server.ts';
-import { readPlatformAccess } from '../api/main.ts';
+import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
 import { signInPath } from '../auth/paths.ts';
 import { browseReader } from '../discover/server.ts';
@@ -55,14 +55,47 @@ import { readEntityProjection } from '../entity-page/read.ts';
 import { showsEditionStatus, type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
-import { RecipeResourceBody } from '../recipe-editor/resource-page.tsx';
-import { loadRecipeReading } from '../recipe-editor/resource-page.ts';
+import type { RecipeWorkHost } from './recipe-reading-recorded-page.ts';
+import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
 import { HubExperience } from './types/hub.tsx';
 import { GuideExperience } from './types/guide.tsx';
 
 // Server compositions for the `/w/[ref]` routes: each region reads Main on its
 // own under Suspense, so the page streams as answers arrive and one failure
 // stays in its region.
+
+/** The shared showcase read is an anonymous browser client. Perform it with the anonymous server client. */
+async function anonymousShowcaseFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const request = input instanceof Request ? input : new Request(input, init);
+  const body: unknown = await request.json();
+  const record = body && typeof body === 'object' ? body as { profile?: unknown; targets?: unknown; context?: unknown } : {};
+  if (record.profile !== 'work-showcase-batch-v1' || !Array.isArray(record.targets)
+    || record.targets.some(target => typeof target !== 'string')) {
+    return Response.json({ title: 'Showcase unavailable' }, { status: 502 });
+  }
+  const result = await mainApiWithToken(undefined).v1.resources.showcase.post({
+    profile: 'work-showcase-batch-v1',
+    targets: record.targets as string[],
+    ...(typeof record.context === 'string' ? { context: record.context } : {}),
+  });
+  if (result.error) {
+    return Response.json(result.error.value ?? { title: 'Showcase unavailable' }, { status: result.error.status });
+  }
+  return Response.json(result.data ?? { title: 'Showcase unavailable' }, { status: result.data ? 200 : 502 });
+}
+
+/** The host the recipe frame and overview share. Showcase stays on the anonymous client. */
+async function recipePageHost(): Promise<RecipeWorkHost> {
+  const { main, actingSubject, signedIn } = await reader();
+  return {
+    main,
+    anonymous: mainApiWithToken(undefined),
+    publicOrigin: 'http://127.0.0.1',
+    publicFetch: anonymousShowcaseFetch as typeof fetch,
+    actingSubject: actingSubject ?? null,
+    signedIn,
+  };
+}
 
 interface Common { locale: UiLocale; messages: WorkPageMessages }
 
@@ -169,8 +202,12 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
   /** The sections a Zone's page leads with (`ZonePackage.hubOrder`). */
   lead?: readonly HubSection[];
 }) {
-  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, experience, plan, art, showcaseMessages] = await Promise.all([
-    readingAgent(), browseReader(), animeReaderState(id), readRatings(id, EVERYONE, undefined), readExperience(id, work.types),
+  const experience = await readExperience(id, work.types);
+  if (experience.kind === 'recipe') {
+    return recipeWorkFrame({ host: await recipePageHost(), workRef, id, work, locale, messages, children });
+  }
+  const [{ signedIn, actingSubject }, { avatarQuery }, seed, ratings, plan, art, showcaseMessages] = await Promise.all([
+    readingAgent(), browseReader(), animeReaderState(id), readRatings(id, EVERYONE, undefined),
     readHubPlan(id),
     // One batch for the page, so the art costs one round trip however many layers it has, and one for
     // the header's images, so they are drawn (or masked) in the server's HTML.
@@ -331,10 +368,7 @@ export async function TypeExperience({ id, work, experience, locale, messages }:
   experience: WorkExperience }) {
   const section = experience.typeSection;
   if (experience.kind === 'recipe' && section) {
-    const agent = await reader();
-    const content = await loadRecipeReading(agent.main, agent.actingSubject, work, section.href);
-    return <RecipeResourceBody {...content} href={section.href} actingSubject={agent.actingSubject ?? null}
-      work={id} locale={locale} messages={messages} />;
+    return recipeRegion({ host: await recipePageHost(), id, work, href: section.href, locale, messages });
   }
   if ((experience.kind === 'prompt' || experience.kind === 'skill') && section) {
     const hub = await readHubWorkPage(section.href);
@@ -360,6 +394,9 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
   lead?: readonly HubSection[];
 }) {
   const [experience, plan] = await Promise.all([readExperience(id, work.types), readHubPlan(id)]);
+  if (experience.kind === 'recipe') {
+    return recipeWorkOverview({ host: await recipePageHost(), workRef, id, work, scope, locale, messages, lead });
+  }
   const access = await readPlatformAccess();
   const t = messages;
   const loading = t.loadingRegion;
@@ -369,15 +406,13 @@ export async function WorkOverview({ workRef, id, work, scope, context, locale, 
     <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense>;
   return <OverviewLayout messages={messages} plan={plan} lead={lead}
     // Specialist reading or cooking leads; the description and tags follow.
-    // A recipe's description reads straight under its title, before the method.
+    // A recipe returns above, through the shared recipe overview.
     type={experience.kind === 'prompt' || experience.kind === 'skill'
       ? operationOpen('getV1HubWorksById', access) ? <Suspense fallback={<RegionSkeleton
         id="work-type-loading" title={work.title.value} label={loading} lines={5} />}>
         <TypeExperience id={id} work={work} experience={experience} locale={locale} messages={messages} /></Suspense> : null
-      : experience.kind === 'book' || experience.kind === 'plain' ? null : <>
-      {experience.kind === 'recipe' ? <WorkAbout work={work} locale={locale} messages={messages} /> : null}
-      {specialist}</>}
-    about={experience.kind === 'recipe' ? null : <WorkAbout work={work} locale={locale} messages={messages} />}
+      : experience.kind === 'book' || experience.kind === 'plain' ? null : specialist}
+    about={<WorkAbout work={work} locale={locale} messages={messages} />}
     facts={<Suspense fallback={null}><AboutFacts {...common} /></Suspense>}
     availability={<>
       <Suspense fallback={<RegionSkeleton id="work-availability-loading" title={t.sectionAvailability} label={loading}

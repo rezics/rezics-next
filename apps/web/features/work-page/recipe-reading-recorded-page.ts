@@ -18,6 +18,26 @@ import type { AgentCredit, AgentCreditPage, ReadFailure, RecipeWorkPage, WorkHea
 
 export type RecipeReadingHost = { main: Pick<MainClient, 'v1'>; actingSubject?: string | null };
 
+/**
+ * The client boundary the recipe page and its stories share. Production passes
+ * the request-cached host and an anonymous client for showcase and facets.
+ * A story passes the replaying client at the same boundary.
+ */
+export type RecipeWorkHost = {
+  main: MainClient;
+  /** Facets stay public. */
+  anonymous: MainClient;
+  /**
+   * Showcase is public. The page names an anonymous browser client so the
+   * acting-identity check can see that, and this fetch performs the read:
+   * the replaying fetch in a story, the anonymous server client on the page.
+   */
+  publicOrigin: string;
+  publicFetch: typeof fetch;
+  actingSubject: string | null;
+  signedIn: boolean;
+};
+
 type CallResult<T> = { data: T | null; error: { status: number; value?: unknown } | null };
 
 /** A recorded transport reports its own mismatch; other failures stay in the region. */

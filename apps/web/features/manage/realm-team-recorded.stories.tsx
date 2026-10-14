@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { materializeData } from 'native-i18n';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { chooseMenuItem, chooseOption } from '../stories/choose-option.ts';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import team from '../../../../tests/qa/fixtures/outcomes/realm/roles-and-team.json';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -8,8 +9,9 @@ import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
-import { agentShort, date } from './format.ts';
+import { date } from './format.ts';
 import { messages } from './messages.ts';
+import { roleDurations } from './members-view.tsx';
 import { RealmTeamRecordedPage } from './realm-team-recorded-page.tsx';
 import { realmHref } from './routes.ts';
 import type { InvitationPage, MemberPage, RealmHeader, RoleList } from './types.ts';
@@ -39,16 +41,7 @@ function realmId(persona: AnswerPersona, label: string): string {
   return id;
 }
 
-function actingSubject(persona: AnswerPersona, label: string): string {
-  const subject = new URL(sample(persona, label).path, origin).searchParams.get('actingSubject');
-  if (!subject) throw new Error(`Recorded ${label} has no acting Subject`);
-  return subject;
-}
-
 function routeIdentity(persona: AnswerPersona): { realm: string; actingSubject: string } {
-  if (persona === 'visitor') {
-    return { realm: realmId(persona, 'roles-denied'), actingSubject: actingSubject(persona, 'roles-denied') };
-  }
   const session = sample(persona, 'session-agent').answer as { sessionAgent: { actingSubject: string } };
   const header = persona === 'owner' ? 'management-realm-header' : 'frame-realm';
   return { realm: realmId(persona, header), actingSubject: session.sessionAgent.actingSubject };
@@ -58,16 +51,15 @@ function actorSelections(persona: AnswerPersona): RecordedSelection[] {
   return ['acting-contexts', 'agent-choices', 'session-agent', 'acting-agent-profile'].map(label => selection(persona, label));
 }
 
-/** Signed-in frames include the Zone read. An unsigned visitor is redirected before the layout sends it. */
+/** The management layout's Realm header and Zone read. A 404 Zone does not continue into the editor. */
 function frameSelections(persona: AnswerPersona): RecordedSelection[] {
   if (persona === 'owner') return [selection(persona, 'management-realm-header'), selection(persona, 'management-site')];
-  if (persona === 'visitor') return [selection(persona, 'frame-realm')];
   return [selection(persona, 'frame-realm'), selection(persona, 'frame-site')];
 }
 
 function pageSelections(persona: AnswerPersona, labels: readonly string[]): RecordedSelection[] {
   return [
-    ...persona === 'visitor' ? [] : actorSelections(persona),
+    ...actorSelections(persona),
     ...frameSelections(persona),
     ...labels.map(label => selection(persona, label, label === 'member-search-empty')),
   ];
@@ -93,6 +85,85 @@ const ownerName = () => (sample('owner', 'acting-agent-profile').answer as { dis
 const moderatorName = () => (sample('owner', 'holder-name-moderator').answer as { displayName: string }).displayName;
 const memberName = () => (sample('owner', 'member-profile').answer as { displayName: string }).displayName;
 const strangerName = () => (sample('owner', 'holder-name-stranger').answer as { displayName: string }).displayName;
+
+/** The dialog's recorded assignment: a roster member, a role the dialog can choose, and its 7-day duration. */
+function dialogSave() {
+  const roles = (sample('owner', 'dialog-roles').answer as RoleList).roles;
+  const roster = sample('owner', 'dialog-member-roster').answer as MemberPage;
+  const preview = sample('owner', 'role-dialog-opened-at').body as {
+    expectedGeneration: string; reason: string;
+    change: { roleId: string; member: string; assigned: boolean; validUntil: string };
+  };
+  const member = roster.items.find(item => item.member === preview.change.member);
+  if (!member) throw new Error('Recorded dialog target is not on the roster');
+  const held = new Set(member.roles.map(role => role.id));
+  const choices = roles.filter(role => !held.has(role.id));
+  const chosen = choices.find(role => role.permissions.includes('governance.moderate'));
+  if (!chosen || chosen.id !== preview.change.roleId) {
+    throw new Error('Recorded preview is not the dialog’s first moderation role for that member');
+  }
+  const days = roleDurations.find(([, value]) => value === 7)?.[1];
+  if (days === undefined) throw new Error('Role dialog has no 7-day duration');
+  const openedAt = Date.parse(preview.change.validUntil) - days * 86_400_000;
+  if (new Date(openedAt + days * 86_400_000).toISOString() !== preview.change.validUntil) {
+    throw new Error('Recorded validity is not the dialog’s 7-day duration');
+  }
+  const reason = (sample('owner', 'dialog-role-save-preview').body as { reason: string }).reason;
+  if (!reason || reason === preview.reason) throw new Error('Recorded save has no reason of its own');
+  return { roleName: chosen.name, memberName: memberName(), reason, openedAt, defaultRole: choices[0]?.id === chosen.id };
+}
+
+const savedMembers = [
+  ...actorSelections('owner'),
+  ...frameSelections('owner'),
+  selection('owner', 'dialog-member-roster'),
+  selection('owner', 'dialog-roles'),
+  selection('owner', 'outgoing-invitations-empty'),
+  selection('owner', 'member-profile'),
+  selection('owner', 'holder-name-moderator'),
+  selection('owner', 'role-dialog-opened-at'),
+  selection('owner', 'dialog-impact-member-name'),
+  selection('owner', 'dialog-role-save-preview'),
+  selection('owner', 'dialog-role-assignment-receipt'),
+  selection('owner', 'dialog-members-assigned'),
+  selection('owner', 'dialog-refreshed-name-member'),
+  selection('owner', 'dialog-refreshed-name-moderator'),
+  selection('owner', 'dialog-invitations-refreshed'),
+] as const satisfies readonly RecordedSelection[];
+
+/**
+ * The dialog previews 350ms after a change. Holding that one delay lets the story
+ * select the recorded role before the default choice asks for an unrecorded preview.
+ */
+function holdPreviewDelay() {
+  const realSet = globalThis.setTimeout;
+  const realClear = globalThis.clearTimeout;
+  const held = new Map<number, () => void>();
+  let next = 1;
+  globalThis.setTimeout = ((handler: TimerHandler, delay?: number, ...args: unknown[]) => {
+    if (typeof handler === 'function' && delay === 350) {
+      const id = next++;
+      held.set(id, () => { handler(...args); });
+      return id;
+    }
+    return realSet(handler, delay, ...args);
+  }) as typeof globalThis.setTimeout;
+  globalThis.clearTimeout = ((id?: number) => {
+    if (typeof id === 'number' && held.delete(id)) return;
+    realClear(id);
+  }) as typeof globalThis.clearTimeout;
+  return {
+    flush() {
+      const runs = [...held.values()];
+      held.clear();
+      for (const run of runs) run();
+    },
+    restore() {
+      globalThis.setTimeout = realSet;
+      globalThis.clearTimeout = realClear;
+    },
+  };
+}
 
 const meta = {
   title: 'Manage/Recorded realm team',
@@ -213,13 +284,51 @@ function refusalPlay(persona: AnswerPersona, surface: 'roles' | 'members') {
     }
     const back = localizedPath(realmHref(realm, surface), 'en');
     if (signIn) await expect(canvas.getByRole('link', { name: title })).toHaveAttribute('href', signInPath(back));
-    if (persona === 'visitor') {
-      await expect(canvas.getByText(t.agentFallback({ id: agentShort(actingSubject(persona, label)) }))).toBeVisible();
-    } else {
-      const name = (sample(persona, 'acting-agent-profile').answer as { displayName: string }).displayName;
-      await expect(canvas.getByText(name)).toBeVisible();
-    }
+    const name = (sample(persona, 'acting-agent-profile').answer as { displayName: string }).displayName;
+    await expect(canvas.getByText(name)).toBeVisible();
   };
+}
+
+const body = () => within(document.body);
+
+async function savedMembersPlay({ canvasElement }: { canvasElement: HTMLElement }) {
+  const canvas = within(canvasElement);
+  const { roleName, memberName: person, reason, defaultRole } = dialogSave();
+  const gain = t.impactGain({ count: 1, permission: messages.permModerate });
+  await expect(canvas.findByRole('heading', { level: 1, name: ownerRealm() })).resolves.toBeVisible();
+  // The joined member is on the roster and in the accepted invitations.
+  const memberLines = canvas.getAllByText(person);
+  await expect(memberLines).toHaveLength(2);
+  for (const line of memberLines) await expect(line).toBeVisible();
+  const clock = holdPreviewDelay();
+  try {
+    await userEvent.click(canvas.getByRole('button', { name: t.memberActions({ name: person }) }));
+    await chooseMenuItem(body(), 'menuitem', messages.giveRoleAction);
+    const dialog = within(await body().findByRole('dialog', { name: t.giveRoleTitle({ name: person }) }));
+    await expect(dialog.getByRole('combobox', { name: messages.validForLabel })).toHaveTextContent(messages.validFor7);
+    const roleBox = dialog.getByRole('combobox', { name: messages.roleLabel });
+    if (!defaultRole) {
+      await userEvent.click(roleBox);
+      await chooseOption(body(), roleName);
+      await waitFor(() => expect(roleBox).toHaveTextContent(roleName));
+    }
+    clock.flush();
+    const impact = within(dialog.getByRole('region', { name: messages.impactTitle }));
+    await waitFor(() => expect(impact.getAllByText(gain).length).toBeGreaterThan(0));
+    await expect(impact.getAllByText(person).length).toBeGreaterThan(0);
+    await expect(dialog.getByRole('button', { name: messages.giveRole })).toBeEnabled();
+    await userEvent.type(dialog.getByRole('textbox', { name: messages.changeReasonLabel }), reason);
+    await userEvent.click(dialog.getByRole('button', { name: messages.giveRole }));
+  } finally {
+    clock.restore();
+  }
+  await expect(canvas.findByText(t.roleGiven({ name: person, role: roleName }))).resolves.toBeVisible();
+  await expect(canvas.getByText(roleName)).toBeVisible();
+  const moderatorLines = canvas.getAllByText(moderatorName());
+  await expect(moderatorLines).toHaveLength(2);
+  for (const line of moderatorLines) await expect(line).toBeVisible();
+  await expect(canvas.queryByRole('link', { name: messages.editSite })).toBeNull();
+  await expect(body().queryByRole('dialog')).toBeNull();
 }
 
 function at(story: Story, viewport: 'phone' | 'desktop'): Story {
@@ -250,6 +359,13 @@ const loadingRolesStory = {
   parameters: { route: { pathname: localizedPath(realmHref(realmId('owner', 'roles-initial'), 'roles'), locale) } },
   play: loadingPlay,
 } satisfies Story;
+const savedMembersStory = {
+  args: {
+    selections: savedMembers, surface: 'members' as const, sequence: true, now: dialogSave().openedAt,
+  },
+  parameters: { route: { pathname: localizedPath(realmHref(realmId('owner', 'dialog-member-roster'), 'members'), locale) } },
+  play: savedMembersPlay,
+} satisfies Story;
 
 function refusalStory(persona: AnswerPersona, surface: 'roles' | 'members'): Story {
   const label = surface === 'roles' ? 'roles-denied' : 'members-denied';
@@ -274,15 +390,21 @@ export const AssignedOwnerRolesPhone: Story = at(assignedRolesStory, 'phone');
 export const AssignedOwnerRolesDesktop: Story = at(assignedRolesStory, 'desktop');
 export const LoadingOwnerRolesPhone: Story = at(loadingRolesStory, 'phone');
 export const LoadingOwnerRolesDesktop: Story = at(loadingRolesStory, 'desktop');
-export const RefusalVisitorRolesPhone: Story = at(refusalStory('visitor', 'roles'), 'phone');
-export const RefusalVisitorRolesDesktop: Story = at(refusalStory('visitor', 'roles'), 'desktop');
-export const RefusalVisitorMembersPhone: Story = at(refusalStory('visitor', 'members'), 'phone');
-export const RefusalVisitorMembersDesktop: Story = at(refusalStory('visitor', 'members'), 'desktop');
+export const SavedOwnerMembersPhone: Story = at(savedMembersStory, 'phone');
+export const SavedOwnerMembersDesktop: Story = at(savedMembersStory, 'desktop');
 export const RefusalStrangerRolesPhone: Story = at(refusalStory('stranger', 'roles'), 'phone');
 export const RefusalStrangerRolesDesktop: Story = at(refusalStory('stranger', 'roles'), 'desktop');
+export const RefusalStrangerMembersPhone: Story = at(refusalStory('stranger', 'members'), 'phone');
+export const RefusalStrangerMembersDesktop: Story = at(refusalStory('stranger', 'members'), 'desktop');
 export const RefusalMemberRolesPhone: Story = at(refusalStory('member', 'roles'), 'phone');
 export const RefusalMemberRolesDesktop: Story = at(refusalStory('member', 'roles'), 'desktop');
+export const RefusalMemberMembersPhone: Story = at(refusalStory('member', 'members'), 'phone');
+export const RefusalMemberMembersDesktop: Story = at(refusalStory('member', 'members'), 'desktop');
 export const RefusalModeratorRolesPhone: Story = at(refusalStory('moderator', 'roles'), 'phone');
 export const RefusalModeratorRolesDesktop: Story = at(refusalStory('moderator', 'roles'), 'desktop');
+export const RefusalModeratorMembersPhone: Story = at(refusalStory('moderator', 'members'), 'phone');
+export const RefusalModeratorMembersDesktop: Story = at(refusalStory('moderator', 'members'), 'desktop');
 export const RefusalOperatorRolesPhone: Story = at(refusalStory('operator', 'roles'), 'phone');
 export const RefusalOperatorRolesDesktop: Story = at(refusalStory('operator', 'roles'), 'desktop');
+export const RefusalOperatorMembersPhone: Story = at(refusalStory('operator', 'members'), 'phone');
+export const RefusalOperatorMembersDesktop: Story = at(refusalStory('operator', 'members'), 'desktop');

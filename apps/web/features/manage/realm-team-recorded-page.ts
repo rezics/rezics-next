@@ -1,10 +1,8 @@
-import { agentOptions, identityOptions, resolveSessionAgent, type AgentOption } from '../auth/acting-identity.ts';
 import { changeRole, previewRole, type Outcome } from './commands.ts';
 import { readAgents, readMembers, readOutgoingInvitations, readRealmHeader, readRoles, settle } from './read.ts';
 import { realmEditSite } from './realm-site.ts';
 import type { AgentSummary, InvitationPage, Loaded, MainClient, MemberPage, ReadFailure, RealmHeader, Role,
   RoleCommand, RoleImpact, RoleList, RoleReceipt } from './types.ts';
-import { uuidOf } from './types.ts';
 
 /**
  * Roles and members, from the reads the management routes already issue.
@@ -98,36 +96,6 @@ export async function readRealmTeamFrame(main: MainClient, realm: string, acting
     }),
   ]);
   return { header: header.ok ? header.data : null, siteHref };
-}
-
-/**
- * Session-agent resolution the management frame shows, against a supplied client.
- * The record keeps no session cookie; replay matching ignores headers, and the
- * typed session read still sends one.
- */
-export const replaySessionKey = '00000000-0000-4000-8000-000000000000';
-
-export async function readManagementActor(main: MainClient, locale: string): Promise<AgentOption> {
-  const [contexts, listed, session] = await Promise.all([
-    main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } }),
-    main.v1.me.agents.get({ query: { languages: locale } }),
-    main.v1.me['session-agent'].get({ headers: { 'x-session-key': replaySessionKey } }),
-  ]);
-  if (contexts.error || !contexts.data) throw new Error('Recorded acting contexts did not parse');
-  if (listed.error || !listed.data) throw new Error('Recorded agent list did not parse');
-  if (session.error || !session.data?.sessionAgent.actingSubject) throw new Error('Recorded session agent did not parse');
-  const resolved = resolveSessionAgent(
-    identityOptions(listed.data, agentOptions(contexts.data)),
-    session.data.sessionAgent.actingSubject,
-  );
-  if (resolved.status !== 'selected') throw new Error(`Recorded session agent is ${resolved.status}`);
-  const profile = await main.v1.agents({ id: uuidOf(resolved.agent.iri) }).get({
-    query: { actingSubject: resolved.agent.iri } });
-  if (!profile.error && profile.data && typeof profile.data.displayName === 'string') {
-    resolved.agent.label = profile.data.displayName;
-    resolved.agent.avatarUrl = profile.data.avatarUrl;
-  }
-  return resolved.agent;
 }
 
 /** Each role card names its first three holders. A Realm at the cap is 32 cards. */

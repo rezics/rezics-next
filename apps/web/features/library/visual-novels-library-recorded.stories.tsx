@@ -2,8 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/visual-novels/collection-tracking-and-progress.json';
+import { localizedPath } from '../../i18n/locale.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { workHref } from '../work-page/route.ts';
 import { BooksLibraryRecorded } from './books-library-recorded-page.tsx';
+import { parseLibraryState } from './state.ts';
 
 const collection = collectionRecord as AnswerRecord;
 
@@ -30,32 +33,44 @@ function counts(label: string) {
   return { reading, want, read, total: reading + want + read };
 }
 
-function librarySelections(checkpoint: 'empty' | 'reading' | 'read'): RecordedSelection[] {
-  return [
-    { label: `library-${checkpoint}-overview`, state: 'populated' },
-    { label: 'library-visibility', state: 'populated' },
-    { label: `library-${checkpoint}-rating-context`, state: 'populated' },
-    // Goal, reading stats and followed authors were recorded with the empty shelves. The page reads those same paths.
-    { label: 'library-empty-reading-goal', state: 'populated' },
-    { label: 'library-empty-reading-stats', state: 'populated' },
-    { label: 'library-empty-followed-authors', state: 'populated' },
-    ...(checkpoint === 'reading' ? [
-      { label: 'library-reading-reading-preview', state: 'populated' as const },
-      { label: 'library-reading-resume', state: 'populated' as const },
-    ] : []),
-  ];
+function populated(labels: readonly string[]): RecordedSelection[] {
+  return labels.map(label => ({ label, state: 'populated' }));
 }
 
-const year = Number(new URL(sample('member', 'library-empty-reading-goal').path, 'https://recorded.invalid')
+const emptyLibrary = populated([
+  'library-empty-overview', 'library-visibility', 'library-empty-rating-context', 'library-empty-reading-goal',
+  'library-empty-reading-stats', 'library-empty-followed-authors',
+]);
+
+const readingLibrary = populated([
+  'visit-library-reading-all-overview', 'visit-library-reading-all-visibility', 'visit-library-reading-all-rating-context',
+  'visit-library-reading-all-reading-goal', 'visit-library-reading-all-reading-stats', 'visit-library-reading-all-followed-authors',
+  'visit-library-reading-all-shelf-reading', 'visit-library-reading-all-work-states', 'visit-library-reading-all-resume-work',
+]);
+
+const readShelfLibrary = populated([
+  'visit-library-read-read-overview', 'visit-library-read-read-visibility', 'visit-library-read-read-rating-context',
+  'visit-library-read-read-reading-goal', 'visit-library-read-read-reading-stats', 'visit-library-read-read-shelf-read',
+  'visit-library-read-read-work-states', 'visit-library-read-read-import-reviews',
+]);
+
+const year = Number(new URL(sample('member', 'visit-library-reading-all-reading-goal').path, 'https://recorded.invalid')
   .searchParams.get('year'));
-const member = actingSubject(sample('member', 'library-empty-overview').path);
-const readingTitle = ((sample('member', 'library-reading-reading-preview').answer as {
-  items: { card: { title: { value: string } } }[] }).items[0]?.card.title.value);
-if (!readingTitle) throw new Error('Recorded reading shelf has no title');
+const member = actingSubject(sample('member', 'visit-library-reading-all-overview').path);
+const readingShelf = sample('member', 'visit-library-reading-all-shelf-reading').answer as {
+  items: { work: string; card: { title: { value: string } } }[] };
+const readingItem = readingShelf.items[0];
+const readingTitle = readingItem?.card.title.value;
+const readShelf = sample('member', 'visit-library-read-read-shelf-read').answer as {
+  items: { work: string; card: { title: { value: string } } }[] };
+const readItem = readShelf.items[0];
+const readTitle = readItem?.card.title.value;
+if (!readingTitle || !readingItem || !readTitle || !readItem) throw new Error('Recorded library shelf has no title');
+const workLink = (work: string) => localizedPath(workHref(work.slice(-36)), 'en');
 
 const meta = {
   title: 'Library/Recorded visual novels', component: BooksLibraryRecorded,
-  args: { record: collection, persona: 'member' as const, selections: librarySelections('reading'),
+  args: { record: collection, persona: 'member' as const, selections: readingLibrary,
     actingSubject: member, year },
   parameters: { controls: { disable: true }, route: { pathname: '/en/library' } },
   globals: { viewport: { value: 'desktop' } },
@@ -83,7 +98,7 @@ async function expectShelfCounts(canvasElement: HTMLElement, label: string) {
 
 /** Member’s recorded shelves before any visual novel is saved. */
 export const MemberEmpty: Story = {
-  args: { selections: librarySelections('empty') },
+  args: { selections: emptyLibrary },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('heading', { level: 1, name: 'Library' })).toBeVisible();
@@ -102,31 +117,41 @@ export const MemberEmptyPhone: Story = { ...MemberEmpty, ...phone };
 /** Member’s recorded visual novel on Currently reading, with no chapter to continue. */
 export const MemberReading: Story = {
   play: async ({ canvasElement }) => {
-    await expectShelfCounts(canvasElement, 'library-reading-overview');
+    await expectShelfCounts(canvasElement, 'visit-library-reading-all-overview');
     const canvas = within(canvasElement);
     const reading = within(canvas.getByRole('region', { name: 'Currently reading' }));
     await expect(reading.getByRole('heading', { level: 3, name: readingTitle })).toBeVisible();
-    await expect(reading.getByRole('link', { name: new RegExp(`^Open\\b.*${readingTitle}`) })).toBeVisible();
+    const open = reading.getByRole('link', { name: new RegExp(`^Open\\b.*${readingTitle}`) });
+    await expect(open).toBeVisible();
+    await expect(open).toHaveAttribute('href', workLink(readingItem.work));
     await expect(reading.queryByText(/Next:/)).toBeNull();
+    await expect(reading.getByText('Your progress')).toBeVisible();
+    canvas.getByRole('region', { name: 'Currently reading' }).scrollIntoView({ block: 'start' });
   },
 };
 export const MemberReadingPhone: Story = { ...MemberReading, ...phone };
 
-/** Member’s recorded library after the visual novel is marked read. All does not list its title. */
+/** Member’s recorded Read shelf, with the visual novel’s title and played status. */
 export const MemberRead: Story = {
-  args: { selections: librarySelections('read') },
+  args: { selections: readShelfLibrary, state: parseLibraryState({ shelf: 'read' }) },
   play: async ({ canvasElement }) => {
-    await expectShelfCounts(canvasElement, 'library-read-overview');
+    await expectShelfCounts(canvasElement, 'visit-library-read-read-overview');
     const canvas = within(canvasElement);
+    const shelf = within(canvas.getByRole('region', { name: /^Read(?!ing)/ }));
+    const title = shelf.getByRole('heading', { level: 3, name: readTitle });
+    await expect(title).toBeVisible();
+    await expect(within(title).getByRole('link')).toHaveAttribute('href', workLink(readItem.work));
+    await expect(shelf.getByText('Played')).toBeVisible();
+    await expect(shelf.getByRole('button', { name: new RegExp(`^Read\\b.*${readTitle}`) })).toBeVisible();
     await expect(canvas.queryByRole('region', { name: 'Currently reading' })).toBeNull();
-    await expect(canvas.queryByRole('heading', { level: 3, name: readingTitle })).toBeNull();
+    canvas.getByRole('region', { name: /^Read(?!ing)/ }).scrollIntoView({ block: 'start' });
   },
 };
 export const MemberReadPhone: Story = { ...MemberRead, ...phone };
 
 /** The shelf read is held unanswered, so the page stays at its loading status. */
 export const MemberLoading: Story = {
-  args: { selections: [{ label: 'library-reading-overview', state: 'loading' }] },
+  args: { selections: [{ label: 'visit-library-reading-all-overview', state: 'loading' }] },
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(await canvas.findByRole('status')).toHaveTextContent('Loading…');

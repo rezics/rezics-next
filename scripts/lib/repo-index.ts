@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync } from 'node:fs';
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync, renameSync, rmSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { delimiter, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -144,7 +144,7 @@ export interface RepoIndex {
 
 const repository = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 const cache = join(repository, '.temp/repo-index');
-const binary = join(repository, '.temp/repo-index-build/release/repo-index');
+let binary: string;
 const objects = new Map<string, { digest: string; index: RepoIndex }>();
 const sources = new Map<string, IndexedFile>();
 const sourceObjects = new WeakMap<
@@ -153,7 +153,7 @@ const sourceObjects = new WeakMap<
 >();
 const sql = new Map<string, SqlFacts | (() => SqlFacts)>();
 const sqlByHash = new Map<string, (text: string) => SqlFacts>();
-let built = false;
+
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 
 type PayloadFile = IndexedFile & {
@@ -225,35 +225,168 @@ function readIndex(output: string): RepoIndex {
   }
 }
 
-function ensureBinary(): void {
-  if (!built) {
-    // Task owns the pinned native build and its target directory. Its sources
-    // are inputs even when an older executable is already present.
-    // Manager services do not source the shell's Rustup PATH. Preserve any
-    // configured tool first, then expose Rustup before Task isolates CARGO_HOME.
-    const path = [
-      process.env.PATH,
-      process.env.CARGO_HOME ? join(process.env.CARGO_HOME, 'bin') : undefined,
-      join(homedir(), '.cargo/bin'),
-    ]
-      .filter(Boolean)
-      .join(delimiter);
-    const result = Bun.spawnSync(['task', 'repo-index:build'], {
-      cwd: repository,
-      env: { ...process.env, PATH: path },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    if (result.exitCode !== 0) throw new Error(Buffer.from(result.stderr).toString());
-    if (!existsSync(binary))
-      throw new Error('Repository index build did not produce its executable');
-    built = true;
+const cargoVersion = 'cargo 1.98.1 (797e8a9bc 2026-08-05)';
+
+function cargoEnvironment(cacheRoot: string): NodeJS.ProcessEnv {
+  // Preserve configured Cargo precedence while exposing Rustup in manager shells.
+  const path = [
+    process.env.PATH,
+    process.env.CARGO_HOME ? join(process.env.CARGO_HOME, 'bin') : undefined,
+    join(homedir(), '.cargo/bin'),
+  ]
+    .filter(Boolean)
+    .join(delimiter);
+  return { ...process.env, PATH: path, CARGO_HOME: join(cacheRoot, 'cargo') };
+}
+
+function command(command: string[], root: string, env: NodeJS.ProcessEnv): string {
+  const result = Bun.spawnSync(command, {
+    cwd: root,
+    env,
+    stdout: 'pipe',
+    stderr: 'pipe',
+  });
+  if (result.exitCode !== 0)
+    throw new Error(
+      `Repository index command failed: ${command[0]}\n${Buffer.from(result.stderr).toString()}`,
+    );
+  return Buffer.from(result.stdout).toString().trim();
+}
+
+/** Paths and bytes, including Cargo.lock, identify inputs independently of worktree location. */
+export function repoIndexBuildKey(root: string, version: string): string {
+  const hash = createHash('sha256')
+    .update(version)
+    .update(`\0${process.platform}\0${process.arch}\0`);
+  const visit = (relative: string) => {
+    const directory = join(root, relative);
+    for (const entry of readdirSync(directory, { withFileTypes: true }).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
+      const path = `${relative}/${entry.name}`;
+      if (entry.isDirectory()) visit(path);
+      else {
+        const bytes = readFileSync(join(root, path));
+        hash.update(`${path.length}:${path}:${bytes.length}:`).update(bytes);
+      }
+    }
+  };
+  visit('tools/repo-index');
+  return hash.digest('hex');
+}
+
+/** Every Task and guard caller uses the same locked, content-addressed binary. */
+export function ensureRepoIndexBinary(
+  root = repository,
+  cacheRoot = process.env.REZICS_REPO_INDEX_CACHE ?? join(homedir(), '.cache/rezics/repo-index'),
+): string {
+  cacheRoot = resolve(cacheRoot);
+  const env = cargoEnvironment(cacheRoot);
+  const version = command(['cargo', '--version'], root, env);
+  if (version !== cargoVersion)
+    throw new Error(`Repository index requires ${cargoVersion}; found ${version}`);
+  const key = repoIndexBuildKey(root, version);
+  const executable = join(cacheRoot, key, 'repo-index');
+  if (!existsSync(executable)) {
+    mkdirSync(cacheRoot, { recursive: true });
+    command(
+      [
+        'flock',
+        '--exclusive',
+        join(cacheRoot, `${key}.lock`),
+        process.execPath,
+        fileURLToPath(import.meta.url),
+        '--build-locked',
+        root,
+        cacheRoot,
+        key,
+      ],
+      root,
+      env,
+    );
+  }
+  if (!existsSync(executable))
+    throw new Error('Repository index build did not produce its executable');
+  return executable;
+}
+
+function buildLocked(root: string, cacheRoot: string, key: string): void {
+  const env = cargoEnvironment(cacheRoot);
+  const checkInputs = () => {
+    if (
+      command(['cargo', '--version'], root, env) !== cargoVersion ||
+      repoIndexBuildKey(root, cargoVersion) !== key
+    )
+      throw new Error('Repository index inputs changed during build; retry');
+  };
+  checkInputs();
+  const destination = join(cacheRoot, key);
+  if (existsSync(join(destination, 'repo-index'))) return;
+  const target = join(cacheRoot, `${key}.build`);
+  mkdirSync(target, { recursive: true });
+  try {
+    const includes =
+      env.BINDGEN_EXTRA_CLANG_ARGS ??
+      `-isystem ${command(['cc', '-print-file-name=include'], root, env)}`;
+    const result = Bun.spawnSync(
+      [
+        'cargo',
+        'build',
+        '--release',
+        '--locked',
+        '--manifest-path',
+        join(root, 'tools/repo-index/Cargo.toml'),
+        '--target-dir',
+        target,
+      ],
+      {
+        cwd: root,
+        env: { ...env, BINDGEN_EXTRA_CLANG_ARGS: includes },
+        stdout: 'inherit',
+        stderr: 'inherit',
+      },
+    );
+    if (result.exitCode !== 0) throw new Error('Repository index Cargo build failed');
+    checkInputs();
+    // Publish only a complete executable, while holding the kernel lock.
+    mkdirSync(destination, { recursive: true });
+    renameSync(join(target, 'release/repo-index'), join(destination, 'repo-index'));
+  } finally {
+    rmSync(target, { recursive: true, force: true });
   }
 }
 
-// Build during guard module loading, before Bun starts a test's deadline.
-// Cold native dependency compilation belongs to preparation, not rule timing.
-ensureBinary();
+if (import.meta.main) {
+  const [mode, ...args] = process.argv.slice(2);
+  if (mode === '--build-locked') buildLocked(args[0]!, args[1]!, args[2]!);
+  else if (mode === '--build')
+    console.log(ensureRepoIndexBinary(args[0] ? resolve(args[0]) : repository));
+  else if (mode === '--cargo') {
+    const cacheRoot =
+      process.env.REZICS_REPO_INDEX_CACHE ?? join(homedir(), '.cache/rezics/repo-index');
+    const env = cargoEnvironment(cacheRoot);
+    if (command(['cargo', '--version'], repository, env) !== cargoVersion)
+      throw new Error(`Repository index requires ${cargoVersion}`);
+    const result = Bun.spawnSync(['cargo', ...args], {
+      cwd: repository,
+      env,
+      stdout: 'inherit',
+      stderr: 'inherit',
+    });
+    process.exit(result.exitCode);
+  } else if (mode === '--run') {
+    const result = Bun.spawnSync([ensureRepoIndexBinary(), ...args], {
+      cwd: repository,
+      stdout: 'inherit',
+      stderr: 'inherit',
+      stdin: 'inherit',
+    });
+    process.exit(result.exitCode);
+  } else throw new Error('usage: repo-index.ts --build | --run [arguments] | --cargo [arguments]');
+} else {
+  // Prepare outside Bun test deadlines; a cold native build can take minutes.
+  binary = ensureRepoIndexBinary();
+}
 
 function run(root: string, key: string, args: string[], input?: string): RepoIndex {
   mkdirSync(cache, { recursive: true });

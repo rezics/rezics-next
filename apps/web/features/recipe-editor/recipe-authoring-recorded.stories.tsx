@@ -41,6 +41,8 @@ type Header = { id: string; title: { value: string } };
 
 const authorTitle = (recorded(authoring, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
+const authorRecipe = recorded(authoring, 'owner', 'editor-recipe-draft').answer as RecipeAnswer;
+const authorHeader = recorded(authoring, 'owner', 'editor-work-header').answer as Header;
 const exchangeRecipe = recorded(exchange, 'owner', 'editor-recipe').answer as RecipeAnswer;
 const exchangeTitle = (recorded(exchange, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
@@ -119,7 +121,6 @@ const meta = {
     persona: 'owner' as const,
     selections: exchangeReads,
     locale: 'en' as const,
-    frame: true,
   },
   render: (args, { globals }) => (
     <RecipeAuthoringRecordedPage
@@ -186,13 +187,29 @@ async function loadingVisitor({ canvasElement }: { canvasElement: HTMLElement })
 const loadingAuthorStory = {
   args: {
     record: authoring,
-    frame: false,
     selections: [
+      ...signedInFrame,
       { label: 'editor-authority', state: 'loading' },
       { label: 'editor-work-header', state: 'populated' },
     ] as const,
   },
   play: loadingAuthor,
+} satisfies Story;
+const populatedAuthorStory = {
+  args: {
+    record: authoring,
+    selections: [
+      ...signedInFrame,
+      ...authoring.personas.owner.filter(item => item.label.startsWith('editor-'))
+        .map(item => ({ label: item.label, state: 'populated' as const })),
+    ],
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expectRecipe(canvas, authorTitle, authorRecipe, authorHeader.id);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.getByText(copy.allSaved)).toBeVisible();
+  },
 } satisfies Story;
 const populatedExchangeStory = { play: populatedExchange } satisfies Story;
 const signInVisitorStory = {
@@ -221,12 +238,81 @@ const loadingVisitorStory = {
   play: loadingVisitor,
 } satisfies Story;
 
+const destinationReads = [
+  ...signedInFrame,
+  ...exchange.personas.owner.filter(item => item.label.startsWith('file-destination-editor-')
+    && item.label !== 'file-destination-editor-recipe')
+    .map(item => ({ label: item.label, state: 'populated' as const })),
+  { label: 'recipe-empty', state: 'empty' },
+] as const satisfies readonly RecordedSelection[];
+const destinationHeader = recorded(exchange, 'owner', 'file-destination-editor-work-header').answer as Header;
+const destinationTitle = (recorded(exchange, 'owner', 'file-destination-editor-resource-summary').answer as Named).name.value;
+const importedRecipe = recorded(exchange, 'owner', 'imported-recipe').answer as RecipeAnswer;
+
+async function importFile(canvas: ReturnType<typeof within>, label: string) {
+  const file = new File([JSON.stringify(recorded(exchange, 'owner', label).body)], 'recipe.json', {
+    type: 'application/json',
+  });
+  const input = await canvas.findByLabelText(copy.importAction, { selector: 'input' });
+  await waitFor(() => expect(input).toBeEnabled());
+  await userEvent.upload(input, file);
+}
+
+const importedStory = {
+  args: {
+    headerLabel: 'file-destination-editor-work-header',
+    newImportId: () => 'recipe-file-import:recorded',
+    selections: [
+      ...destinationReads,
+      { label: 'file-import', state: 'populated' },
+      { label: 'imported-recipe', state: 'populated' },
+      { label: 'round-trip-export', state: 'populated' },
+    ] as const,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('textbox', { name: copy.title })).resolves.toHaveValue(destinationTitle);
+    await importFile(canvas, 'file-import');
+    const revision = (recorded(exchange, 'owner', 'file-import').answer as { revision: string }).revision.slice(-36);
+    await expect(canvas.findByText(copy.importedRevision({ revision }))).resolves.toBeVisible();
+    await expectRecipe(canvas, destinationTitle, importedRecipe, destinationHeader.id);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: copy.exportAction }));
+    await expect(canvas.findByText(copy.exportedRevision({ revision }))).resolves.toBeVisible();
+  },
+} satisfies Story;
+
+const staleImportStory = {
+  args: {
+    headerLabel: 'file-destination-editor-work-header',
+    newImportId: () => 'recipe-file-import:stale',
+    selections: [
+      ...destinationReads,
+      { label: 'file-import-stale', state: 'error' },
+      { label: 'file-import-stale-refresh', state: 'populated' },
+    ] as const,
+  },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('textbox', { name: copy.title })).resolves.toHaveValue(destinationTitle);
+    await importFile(canvas, 'file-import-stale');
+    const refusal = recorded(exchange, 'owner', 'file-import-stale').answer as { title: string };
+    await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(refusal.title);
+    await expect(canvas.getByRole('button', { name: copy.importStaleAction })).toBeEnabled();
+    await expectRecipe(canvas, destinationTitle, importedRecipe, destinationHeader.id);
+    const revision = (recorded(exchange, 'owner', 'file-import').answer as { revision: string }).revision.slice(-36);
+    await expect(canvas.queryByText(copy.importedRevision({ revision }))).toBeNull();
+  },
+} satisfies Story;
+
 function at(story: Story, viewport: 'phone' | 'desktop'): Story {
   return { ...story, globals: { viewport: { value: viewport } } };
 }
 
 export const LoadingOwnerPhone: Story = at(loadingAuthorStory, 'phone');
 export const LoadingOwnerDesktop: Story = at(loadingAuthorStory, 'desktop');
+export const PopulatedOwnerPhone: Story = at(populatedAuthorStory, 'phone');
+export const PopulatedOwnerDesktop: Story = at(populatedAuthorStory, 'desktop');
 export const PopulatedExchangeOwnerPhone: Story = at(populatedExchangeStory, 'phone');
 export const PopulatedExchangeOwnerDesktop: Story = at(populatedExchangeStory, 'desktop');
 export const SignInVisitorPhone: Story = at(signInVisitorStory, 'phone');
@@ -235,3 +321,8 @@ export const NoAuthorityStrangerPhone: Story = at(noAuthorityStory, 'phone');
 export const NoAuthorityStrangerDesktop: Story = at(noAuthorityStory, 'desktop');
 export const LoadingVisitorPhone: Story = at(loadingVisitorStory, 'phone');
 export const LoadingVisitorDesktop: Story = at(loadingVisitorStory, 'desktop');
+
+export const ImportedOwnerPhone: Story = at(importedStory, 'phone');
+export const ImportedOwnerDesktop: Story = at(importedStory, 'desktop');
+export const StaleImportOwnerPhone: Story = at(staleImportStory, 'phone');
+export const StaleImportOwnerDesktop: Story = at(staleImportStory, 'desktop');

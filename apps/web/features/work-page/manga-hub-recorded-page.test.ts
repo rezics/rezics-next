@@ -167,3 +167,75 @@ test('owner: an empty preference reads the recorded English progress summary', a
   expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
   expect(failures).toEqual([]);
 });
+
+test('visitor: the production release list is the recorded limit of 20', async () => {
+  const listed = sample('visitor', 'visit-releases');
+  const query = new URL(listed.path, 'https://recorded.invalid').searchParams;
+  expect(query.get('limit')).toBe('20');
+  expect(query.has('actingSubject')).toBe(false);
+  const failures: string[] = [];
+  const main = transport('visitor', [{ label: listed.label, state: 'populated' }], failures);
+  const reads = booksEditionReads({ main });
+  expect<unknown>(await reads.readReleases(workId('visitor'))).toEqual({ ok: true, data: listed.answer });
+  const titles = (listed.answer as { items: { title: { value: string }; publisher: string | null }[] }).items;
+  expect(new Set(titles.map(item => item.title.value))).toEqual(new Set(['Ink Garden tankōbon', 'Ink Garden omnibus']));
+  expect(titles.map(item => item.publisher)).toEqual(['Original fixture owner', 'Original fixture owner']);
+  expect(failures).toEqual([]);
+});
+
+for (const persona of signedIn) {
+  test(`${persona}: the release list and chooser are that person's recorded limit of 20`, async () => {
+    const header = sample(persona, 'work');
+    const listed = sample(persona, 'visit-releases');
+    const realizations = sample(persona, 'visit-realizations');
+    const subject = actingSubject(header.path);
+    expect(listed.path).toContain('limit=20');
+    expect(realizations.path).toContain('limit=20');
+    expect(actingSubject(listed.path)).toBe(subject);
+    expect(actingSubject(realizations.path)).toBe(subject);
+    const failures: string[] = [];
+    const main = transport(persona, [
+      { label: listed.label, state: 'populated' },
+      { label: realizations.label, state: 'populated' },
+    ], failures);
+    const reads = booksEditionReads({ main, actingSubject: subject });
+    expect<unknown>(await reads.readReleases(workId(persona))).toEqual({ ok: true, data: listed.answer });
+    const releasePage = listed.answer as { items: { id: string; title: { value: string } }[]; nextCursor: string | null };
+    const realizationPage = realizations.answer as { items: { id: string }[]; nextCursor: string | null };
+    expect<unknown>(await mainTrackingApi(subject, () => main).editions((header.answer as { id: string }).id)).toEqual({
+      ok: true,
+      data: {
+        realizations: realizationPage.items,
+        releases: releasePage.items,
+        realizationsCursor: realizationPage.nextCursor,
+        releasesCursor: releasePage.nextCursor,
+        more: Boolean(realizationPage.nextCursor || releasePage.nextCursor),
+      },
+    });
+    const preference = sample(persona, 'edition-preference').answer as EditionPreference;
+    const pinned = releasePage.items.filter(item => item.id === preference.edition?.resource);
+    expect(pinned).toHaveLength(1);
+    expect(releasePage.items).toHaveLength(2);
+    expect(pinned[0]!.title.value).not.toBe(releasePage.items.find(item => item.id !== pinned[0]!.id)!.title.value);
+    expect(failures).toEqual([]);
+  });
+
+  test(`${persona}: an empty preference reads that person's recorded English progress`, async () => {
+    const header = sample(persona, 'work');
+    const empty = sample(persona, 'edition-preference-empty');
+    const progress = sample(persona, 'visit-status-progress');
+    expect(progress.path).toContain('language=en');
+    expect(actingSubject(progress.path)).toBe(actingSubject(header.path));
+    const failures: string[] = [];
+    const main = transport(persona, [
+      { label: empty.label, state: 'empty' },
+      { label: progress.label, state: 'populated' },
+    ], failures);
+    const status = await readBooksEditionStatus(
+      booksEditionReads({ main, actingSubject: actingSubject(header.path) }), workId(persona), 'en');
+    expect(status.preference).toEqual({ ok: true, data: null });
+    expect(status.editionName).toBeNull();
+    expect<unknown>(status.progress).toEqual({ ok: true, data: progress.answer });
+    expect(failures).toEqual([]);
+  });
+}

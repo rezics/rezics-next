@@ -1,5 +1,8 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import type { UiLocale } from '../../../../../../i18n/define.ts';
+import type { MainClient } from '../../../../../../features/manage/types.ts';
+import type { AdminApi } from '../../../../../../features/manage/admin-api.ts';
 import { ManageFailure } from '../../../../../../features/manage/parts.tsx';
 import { mapRealmRoles, readRealmRolesPage } from '../../../../../../features/manage/realm-team-recorded-page.ts';
 import { RolesView } from '../../../../../../features/manage/roles-view.tsx';
@@ -19,11 +22,20 @@ export default async function RealmRolesRoute({ params }: { params: Promise<{ re
   const { id: realm, address } = target;
   const locale = await requestLocale();
   const { principal, actingSubject, main, anonymous, signInHref } = await manager(locale, realmHref(address, 'roles'));
+  return realmRolesBody({ main, anonymous, principal, realm, address, actingSubject, locale, signInHref });
+}
+
+/** The roles route after its manager admits the acting Person. */
+export async function realmRolesBody({ main, anonymous, principal, realm, address = realm, actingSubject, locale,
+  signInHref, api }: {
+  main: MainClient; anonymous: MainClient; principal: string; realm: string; address?: string; actingSubject: string;
+  locale: UiLocale; signInHref: string; api?: AdminApi;
+}) {
   const [messages, loaded] = await Promise.all([getMessages('manage', locale),
     readRealmRolesPage({ main, anonymous }, { realm, actingSubject })]);
   const mapped = mapRealmRoles(loaded.roles);
   if (mapped.kind === 'refusal') return <ManageFailure failure={mapped.failure} locale={locale} messages={messages}
     signInHref={signInHref} retryHref={localizedPath(realmHref(address, 'roles'), locale)} />;
   return <RolesView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} list={mapped.list} agents={loaded.agents}
-    locale={locale} messages={messages} />;
+    locale={locale} messages={messages} api={api} />;
 }
