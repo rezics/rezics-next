@@ -144,5 +144,21 @@
     "read": "anonymous.v1.realms({ realm: uuidOf(item.realm) }).get({ query: { language } })",
     "input": "{ language }",
     "reason": "Analyzer cannot trace readInvitationPage's anonymous parameter from notifications/page.tsx to shellReader().anonymous. Guard debt: trace cross-module client provenance."
+  },
+  {
+    "id": "published-frame-realm-header-supplied-client",
+    "path": "apps/web/features/realm/zone-presentation-read.ts",
+    "operation": "GET /v1/realms/{realm}",
+    "read": "main.v1.realms({ realm }).get({ query: {} })",
+    "input": "{}",
+    "reason": "Analyzer cannot trace realmFrameReads's main parameter to its anonymous callers: production passes mainApiWithToken(undefined) and a recorded story passes browserMainApi with anonymous: true. The published Realm header sends no actingSubject query. Guard debt: trace cross-module client provenance."
+  },
+  {
+    "id": "published-frame-address-supplied-client",
+    "path": "apps/web/features/realm/zone-presentation-read.ts",
+    "operation": "GET /v1/addresses/resolve",
+    "read": "main.v1.addresses.resolve.get({ query: { scope: 'space', key } })",
+    "input": "{ scope: 'space', key }",
+    "reason": "Analyzer cannot trace realmFrameReads's main parameter to its anonymous callers. Production resolveSite supplies resolveAddress; the in-reader fallback serves the recorded anonymous client and sends no actingSubject. Guard debt: trace cross-module client provenance."
   }
 ]
