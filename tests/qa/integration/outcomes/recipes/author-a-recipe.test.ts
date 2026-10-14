@@ -192,7 +192,19 @@ async function workReads(name: PersonaName, value: Recipe) {
   const parameters = (extra: Record<string, string> = {}) => `?${new URLSearchParams({
     actingSubject: person.actingSubject!, ...extra,
   })}`;
-  const read = async <T,>(label: string, path: string): Promise<T> => (await sample(label, 'GET', path)).json() as Promise<T>;
+  const read = async <T,>(label: string, path: string): Promise<T> => {
+    const started = performance.now();
+    let status: number | 'error' = 'error';
+    try {
+      const response = await sample(label, 'GET', path);
+      status = response.status;
+      return await response.json() as T;
+    } finally {
+      if (label === 'destination-also-enjoyed') console.info('[destination-also-enjoyed]', JSON.stringify({
+        persona: name, method: 'GET', path, elapsedMs: Math.round(performance.now() - started), status,
+      }));
+    }
+  };
   const template = async (label: string, kind: string) => (await sample(label, 'POST', '/v1/query', {
     profile: 'template-query-v1', query: `https://rezics.com/query/work-${kind}`, revision: 1,
     parameters: { roots: [value.work] }, presentation: { actingSubject: person.actingSubject },
