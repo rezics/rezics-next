@@ -185,7 +185,11 @@ opinion, such as
 4. **Let the tool decide landings.** A task lands on its gates, and on one
    review pass where the method asks for one. At the attempt cap the task stops
    and you choose, in the brief: cut the row's scope, split, or write a design
-   note. Do not grant an exception in a mail.
+   note. Do not grant an exception in a mail. A wave build task
+   (docs/goals/wave.md) is never landed on its own: accept its `RESULT: done`
+   once its commits are on `wave/<n>`, and it reaches `main` with the wave.
+   (2026-10-14: managers ran `land` on wave tasks, and each run cost a
+   settlement that the wave hold then refused.)
 5. **Keep a later list.** A finding no row's persona meets goes to `later.md`
    in the Goal's directory, in one line. Promotion into scope is the
    supermanager's.
