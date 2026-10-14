@@ -1,5 +1,6 @@
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { recordRealmDiscussion } from '../../../support/realm-discussion-recording.ts';
+import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { readAddress } from '../../../../../apps/web/features/address/client.ts';
 import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
@@ -28,6 +29,7 @@ type Reply = { reply: string; revisionId: string; revisionDigest: string };
 let opener: Reply;
 let descendant: Reply;
 let liveOpener: Reply;
+let boardConcept: string;
 let setupFailure: string | null = null;
 let closureFailure: string | null = null;
 const absentRealm = `https://rezics.com/id/${randomUUID()}`;
@@ -179,6 +181,14 @@ beforeAll(async () => {
   }) as typeof fetch;
   closed = await personaSessions('public');
   live = await personaSessions('public');
+  await grantPersonaFixtureAuthority(closed.owner, [
+    { scope: 'classification:define:global', action: 'classification.proposition.define' },
+  ]);
+  boardConcept = (await command<{ concept: string }>(closed.owner, 'POST', '/v1/classification-vocabulary', {
+    profile: 'classification-proposition-v2', scheme: null,
+    labels: [{ language: 'en', value: `Original closure discussion board ${randomUUID()}` }],
+    alternativeLabels: [], broader: [], narrower: [], actingSubject: closed.owner.actingSubject,
+  }, 201)).concept;
   try {
     work = await publish(closed, false);
     liveWork = await publish(live, false);
@@ -261,6 +271,8 @@ async function reads(name: PersonaName) {
   for (const sort of ['best', 'new', 'top'] as const) {
     await reads(`closed-threads-${sort}`).threads({ sort, window: 'week' });
     await absentReads(`absent-threads-${sort}`).threads({ sort, window: 'week' });
+    await reads(`closed-board-threads-${sort}`).threads({ sort, window: 'week', concept: boardConcept });
+    await absentReads(`absent-board-threads-${sort}`).threads({ sort, window: 'week', concept: boardConcept });
     await reads(`closed-thread-${sort}`).thread(opener.reply, sort);
     await absentReads(`absent-thread-${sort}`).thread(opener.reply, sort);
     await reads(`closed-descendant-${sort}`).thread(descendant.reply, sort);
