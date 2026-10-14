@@ -2,10 +2,16 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { typeEntry, seedTypes } from '../../../../../apps/web/features/catalogue/types.ts';
+import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
+import { standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
+import { workExperience } from '../../../../../apps/web/features/entity-page/experience.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
-import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { pinnedCommunities, spaceCommunities } from '../../../../../apps/web/features/shell/communities-relationships.ts';
+import { booksEditionReads, readBooksEditionStatus } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
 import { readResourcePage, readLinkedStatements, readAnimeAgentCredits, readAnimeReaderState,
-  readWorkRealizations, readWorkParts, availabilityShown } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+  readWorkRealizations, readWorkParts, readWorkWholes, readWorkRelations, availabilityShown } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
 import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
 import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
 import { Pool } from 'pg';
@@ -164,9 +170,9 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
   const publicSample = samplesFor(name, sessions.visitor);
   const requests = new Map<string, Promise<Response>>();
   const faults: Error[] = [];
-  const client = (anonymous = false) => browserMainApi('http://record.invalid', { fetcher: (async (input, init) => {
+  const transport = (anonymous = false): typeof fetch => async (input, init) => {
     const url = new URL(String(input)), method = init?.method ?? 'GET';
-    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const path = (url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) : url.pathname) + url.search;
     const label = labels.getStore();
     if (!label) throw new Error(`Unlabelled production request ${method} ${path}`);
     const baseLabel = typeof label === 'function' ? label(path) : label;
@@ -186,18 +192,41 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
       requests.set(cacheKey, pending);
     }
     return (await pending).clone();
-  }) as typeof fetch });
-  const main = client(), publicMain = client(true);
+  };
+  const main = browserMainApi('http://record.invalid', { fetcher: transport() });
+  const publicMain = browserMainApi('http://record.invalid', { anonymous: true, fetcher: transport(true) });
   const named = <T,>(label: string | ((path: string) => string), run: () => Promise<T>) => labels.run(label, run);
   const actingSubject = person.actingSubject ?? undefined, query = { actingSubject };
   const reads = booksEditionReads({ main, actingSubject });
   const id = short(target.work), work = main.v1.works({ id }), resource = main.v1.resources({ resource: id });
-  await Promise.all([
-    named('hub-platform-access', () => main.v1.me['platform-access'].get()),
+  const official = named('frame-official-zones', () => publicMain.v1.zones.get({ query: { official: 'true', limit: 6 } }))
+    .then(zones => Promise.all((zones.data?.items.slice(0, 6) ?? []).map(zone =>
+      named(`frame-official-realm-${zone.routeSegment}`, () => publicMain.v1.realms({ realm: short(zone.realm) }).get()))));
+  const [state] = await Promise.all([
     actingSubject ? named('hub-session-agent', () => main.v1.me['session-agent'].get()) : null,
+    named('hub-platform-access', () => main.v1.me['platform-access'].get()),
+    named('frame-type-registry', () => publicMain.v1.types.get()).then(answer => { if (answer.data) seedTypes(answer.data); }),
+    official,
+    actingSubject ? named('frame-acting-contexts', () => main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } })) : null,
+    actingSubject ? named('frame-session-agents', () => main.v1.me.agents.get({ query: { languages: 'en' } })) : null,
   ]);
+  let navigation: Promise<unknown> = Promise.resolve();
+  if (actingSubject && state?.data?.sessionAgent.eligible) {
+    await Promise.all([
+      named('frame-person-preferences', () => main.v1.me['person-preferences'].get({ query })),
+      named('frame-agent-profile', () => main.v1.agents({ id: short(actingSubject) }).get({ query })),
+    ]);
+    const relationships = mainRelationships(actingSubject, { origin: 'http://record.invalid', fetch: transport() });
+    navigation = Promise.all([
+      named('frame-pinned-follows', () => pinnedCommunities(relationships, '', null)),
+      named('frame-space-follows', () => spaceCommunities(relationships, '', null)),
+      named('frame-follow-inventory', () => relationships.follows()),
+      named('frame-managed-realms', () => main.v1.me['managed-realms'].get({ query })),
+      named('frame-notification-unread-count', () => main.v1.me.notifications['unread-count'].get()),
+    ]);
+  }
   const header = await named('hub-work-header', () => reads.readWorkHeader(id));
-  if (!header.ok) { if (faults.length) throw faults[0]; return; }
+  if (!header.ok) { await navigation; if (faults.length) throw faults[0]; return; }
   const [projection, contexts, credits] = await Promise.all([
     named('hub-resource-page', () => readResourcePage(main, actingSubject, id)),
     named('hub-rating-contexts', () => resource['rating-contexts'].get({ query: { ...query, scope: 'global' } })),
@@ -211,6 +240,8 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
   ]);
   const context = contexts.data?.items[0]?.context;
   const plan = hubPlan(projection.ok ? projection.data : null);
+  const experience = workExperience(projection.ok ? projection.data : null, header.data.types);
+  const statusShown = experience.kind === 'book' || experience.primaryAction === 'watch' || experience.primaryAction === 'play';
   const tracking = actingSubject ? mainTrackingApi(actingSubject, () => main) : null;
   const inventories = () => named(path => path.includes('/realizations') ? 'chooser-realizations' : 'chooser-releases',
     () => tracking!.editions(target.work));
@@ -221,18 +252,43 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
   ]) : Promise.resolve(null);
   const chooser = availability.then(offered => tracking && offered && availabilityShown({
     realizations: offered[0], releases: offered[1], parts: offered[2],
-  }) ? Promise.all([named('chooser-preference', () => tracking.preference(target.work)), inventories()]) : null);
+  }) ? Promise.all([named('chooser-preference', () => tracking.preference(target.work)), inventories()]).then(async setup => {
+    const preference = setup[0];
+    if (preference.ok && preference.data?.edition) await named('chooser-current-edition',
+      () => tracking.edition(target.work, preference.data!.edition!));
+    return setup;
+  }) : null);
+  const mediumProgress = async () => {
+    if (!tracking?.media) return;
+    const types = await named('panel-work-types', () => tracking.media!.types(target.work));
+    if (!types.ok && types.failure === 'missing') return;
+    const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
+    const choice = await named(path => path.includes('/parts') ? 'panel-progress-structure' : 'panel-progress-scope',
+      () => progressControl(tracking.media!, tracking.episodes ?? null, target.work, presentation));
+    if (choice.kind === 'episodes' && tracking.episodes) await named(path => path.includes('/parts')
+      ? 'panel-progress-structure' : path.includes('/compositions/') ? 'panel-episode-page' : 'panel-episode-resume',
+    () => standingOf(tracking.episodes!, target.work));
+    else if (choice.kind === 'chapters') {
+      const standing = await named('panel-chapter-standing', () => tracking.media!.standing(target.work));
+      if (standing.ok && !standing.data.opened) await named('panel-chapter-positions', () => tracking.media!.positions(target.work));
+    } else if (choice.kind === 'work') await named('panel-work-standing', () => tracking.media!.workStanding(target.work));
+  };
   await Promise.all([
+    navigation,
     chooser,
     !contexts.error ? named('hub-ratings', () => resource.ratings.get({ query: { ...query, scope: 'global', context } })) : null,
     named('hub-reader-stats', () => work['reader-stats'].get({ query: { ...query, context } })),
     plan.includes('about') ? named('hub-classifications', () => reads.readClassifications(id, { kind: 'global' })) : null,
     plan.includes('lists') ? named('hub-also-enjoyed', () => reads.readAlsoEnjoyed(id)) : null,
     availability,
+    statusShown ? named(path => path.includes('/edition-preferences/') ? 'hub-status-preference'
+      : path.includes('/progress-summaries/') ? 'hub-status-progress' : 'hub-status-release',
+    () => readBooksEditionStatus(reads, id, 'en')) : null,
     ...plan.includes('parts') ? [
+      mediumProgress(),
       named('hub-parts-preview', () => readWorkParts(main, actingSubject, id, { limit: 7 })),
-      named('hub-wholes-preview', () => resource.wholes.get({ query: { ...query, limit: 3 } })),
-      named('hub-connections-preview', () => resource.relations.get({ query: { ...query, limit: 20 } })),
+      named('hub-wholes-preview', () => readWorkWholes(main, actingSubject, id, { limit: 3 })),
+      named('hub-connections-preview', () => readWorkRelations(main, actingSubject, id, { limit: 20 })),
       tracking ? Promise.all([
         named('panel-preference', () => tracking.preference(target.work)),
         named(path => path.includes('/realizations') ? 'panel-realizations' : 'panel-releases', () => tracking.editions(target.work)),
@@ -247,8 +303,11 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
       return [];
     }) : [],
     context && plan.includes('ratings') ? named('hub-reviews', () => resource.reviews.get({
-      query: { context, sort: 'helpful', limit: 10, ...query } })).then(() =>
-      named('hub-review-target-relations', () => resource.relations.get({ query: { ...query, limit: 32 } }))) : null,
+      query: { context, sort: 'helpful', limit: 10, ...query } })).then(() => Promise.all([
+      named('hub-review-target-relations', () => readWorkRelations(main, actingSubject, id, { limit: 32 })),
+      named('hub-releases', () => reads.readReleases(id)),
+      named('hub-realizations', () => readWorkRealizations(main, actingSubject, id)),
+    ])) : null,
     ...credits.ok ? credits.data.items.filter(item => item.role === 'author').slice(0, 1).map(author =>
       named('hub-author-works', () => main.v1.agents({ id: short(author.agent) }).works.get({ query: { ...query, limit: 12 } }))) : [],
   ]);
@@ -263,7 +322,13 @@ async function recordHubVisit(name: PersonaName, person: PersonaSession, target:
   if (faults.length) throw faults[0];
   if (!saved.ok) return;
   // YourEdition refreshes the server and notifies the series panel after the command succeeds.
-  await named('chooser-saved-progress', () => tracking.series(target.work, saved.data?.language ?? 'en'));
+  await Promise.all([
+    named('chooser-saved-progress', () => tracking.series(target.work, saved.data?.language ?? 'en')),
+    saved.data?.edition ? named('chooser-selected-edition', () => tracking.edition(target.work, saved.data!.edition!)) : null,
+    statusShown ? named(path => path.includes('/edition-preferences/') ? 'chooser-saved-preference'
+      : path.includes('/progress-summaries/') ? 'chooser-status-progress' : 'chooser-status-release',
+    () => readBooksEditionStatus(reads, id, 'en')) : null,
+  ]);
   if (faults.length) throw faults[0];
 }
 
