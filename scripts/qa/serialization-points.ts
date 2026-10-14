@@ -6,6 +6,7 @@ import {
   indexedOffsets,
   indexedSourceNodes,
   indexedScopedDeclarations,
+  indexedHasDeclaration,
   indexedSqlNodes,
   indexedTraceNodes,
   indexedFragmentSourceFile,
@@ -631,6 +632,7 @@ function initializer(node: ts.Node, name: string): ts.Expression | undefined {
   }
 }
 function findInitializer(node: ts.Node, name: string): ts.Expression | undefined {
+  if (indexedHasDeclaration(node, name) === false) return;
   let scope: ts.Node | undefined = node;
   while (scope) {
     let declarations = scopeDeclarations.get(scope);
@@ -1516,6 +1518,19 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
         });
     }
   }
+  const triggerTargets = new Map<string, Map<string, Trigger[]>>();
+  for (const trigger of triggers.values()) {
+    const operations = triggerTargets.get(trigger.relation) ?? new Map<string, Trigger[]>();
+    for (const operation of trigger.operations) {
+      const values = operations.get(operation) ?? [];
+      values.push(trigger);
+      operations.set(operation, values);
+    }
+    triggerTargets.set(trigger.relation, operations);
+  }
+  for (const operations of triggerTargets.values())
+    for (const values of operations.values())
+      values.sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name));
   const dispatch = (
     input: Token[],
     call: (name: string, arguments_: Token[][]) => void,
@@ -1533,11 +1548,7 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
       if (!relation) continue;
       // PostgreSQL runs BEFORE statement/row triggers before AFTER row/statement
       // triggers, then sorts equal-kind triggers by name.
-      for (const trigger of [...triggers.values()]
-        .filter(
-          (trigger) => trigger.relation === relation.name && trigger.operations.has(operation),
-        )
-        .sort((left, right) => left.phase - right.phase || left.name.localeCompare(right.name)))
+      for (const trigger of triggerTargets.get(relation.name)?.get(operation) ?? [])
         triggered(trigger);
     }
   };

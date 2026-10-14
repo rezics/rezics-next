@@ -599,17 +599,19 @@ function containsScopedDeclaration(raw: AstNode): boolean {
 }
 
 const declarationNames = new WeakMap<IndexedFile, Set<string>>();
+export function indexedHasDeclaration(node: ts.Node, name: string): boolean | undefined {
+  const index = (node as IndexedNode).sourceContext?.declarationIndex;
+  if (!index) return undefined;
+  let names = declarationNames.get(index);
+  if (!names && index.aliases) {
+    names = new Set(index.aliases.map((alias) => alias.name));
+    declarationNames.set(index, names);
+  }
+  return names?.has(name);
+}
 export function indexedScopedDeclarations(scope: ts.Node, name?: string): ts.VariableDeclaration[] {
   const context = (scope as IndexedNode).sourceContext;
-  const index = context.declarationIndex;
-  if (name !== undefined && index) {
-    let names = declarationNames.get(index);
-    if (!names && index.aliases) {
-      names = new Set(index.aliases.map((alias) => alias.name));
-      declarationNames.set(index, names);
-    }
-    if (names && !names.has(name)) return [];
-  }
+  if (name !== undefined && indexedHasDeclaration(scope, name) === false) return [];
   if (context.variableFacts) {
     const raw = (scope as IndexedNode).rawSyntax;
     const facts = variableScopes(context.variableFacts).get(scopeKey(raw));
