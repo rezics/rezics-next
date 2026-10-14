@@ -12,9 +12,9 @@ export async function publishWhenSettled(input: {
   notes: { whenIdle(): Promise<void>; publish(body: string): Promise<PublishOutcome> };
   /** Read after the writes ahead of publication have settled, so the field is what gets published. */
   body: string | (() => string);
-  /** The Structure publication is separate from optional notes publication. */
   /** An unsaved/refused lane cannot become a successful publication. */
   failure?: () => SaveRefusal | null;
+  /** The Structure publication is separate from optional notes publication. */
   publishRecipe?: () => Promise<PublishOutcome>;
 }): Promise<PublishOutcome> {
   await Promise.all([input.recipe.whenIdle(), input.details.whenIdle(), input.notes.whenIdle()]);

@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: '메모는 한번 쓰면 비워 둘 수 없습니다. 대신 편집하세요.',
   mainSays: '이유',
 
+  publicationDenied: '이 레시피를 게시할 수 없습니다. 서버가 제공한 이유를 확인해 주세요.',
   publicationChanged: '레시피가 변경되었습니다. 최신 버전을 불러와 확인한 후 게시해 주세요.',
   loadingRecipe: '레시피 불러오는 중…',
   loadingRest: '이 레시피의 나머지를 불러오는 중…',

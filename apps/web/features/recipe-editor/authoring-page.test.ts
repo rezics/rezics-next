@@ -7,7 +7,7 @@ import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { settle } from '../studio/read.ts';
 import { loadRecipeAuthoring, readRecipeNotes } from './authoring-page.ts';
-import { fakeMain, id, noNotes, startRecipe, work, actingSubject } from './fixtures.ts';
+import { fakeMain, fixtureAnswer, id, noNotes, startRecipe, work, actingSubject } from './fixtures.ts';
 import { plan } from './intents.ts';
 import { parseLine, qualifierOf } from './ingredient-line.ts';
 import { stateOf } from './model.ts';
@@ -23,10 +23,10 @@ for (const record of [authoringJson, exchangeJson] as AnswerRecord[]) {
     const selections = samples.filter(sample => sample.label.startsWith('editor-')).map(sample => ({ label: sample.label, state: 'populated' as const }));
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
     const requests: string[] = [], misses: unknown[] = [];
-    const fetcher: typeof fetch = async (input, init) => {
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       requests.push(new URL(input instanceof Request ? input.url : String(input)).pathname);
       try { return await replay.fetcher(input, init); } catch (error) { misses.push(error); throw error; }
-    };
+    }) as typeof fetch;
     const main = browserMainApi('https://recorded.invalid', { anonymous: persona === 'visitor', fetcher });
     try {
       const view = await loadRecipeAuthoring(main, { id, actingSubject, signedIn: persona !== 'visitor' });
@@ -53,13 +53,17 @@ test('notes failures and an unfinished inventory do not become an empty editable
   seedServedTypes();
   const fake = fakeMain({ recipe: startRecipe });
   const main = fake.main();
+  const originalGet = main.v1.me.contributions.get;
   const problem = { type: 'about:blank', status: 403, code: 'authority_denied', title: 'No access', detail: 'Revoked', extension: ['kept'] };
-  main.v1.me.contributions.get = (async () => ({ data: null, error: { status: 403, value: problem } })) as typeof main.v1.me.contributions.get;
+  main.v1.me.contributions.get = Object.assign(async () => fixtureAnswer(403, { ...problem, status: 403 as const }), { '~path': '/v1/me/contributions' }) as typeof main.v1.me.contributions.get;
   expect(await readRecipeNotes(main, actingSubject, work, 'en')).toEqual({ ok: false, failure: 'denied', status: 403, problem });
   expect(await loadRecipeAuthoring(main, { id: work.slice(-36), actingSubject, signedIn: true })).toEqual({
     kind: 'unavailable', refusal: { ok: false, failure: 'denied', status: 403, problem },
   });
-  main.v1.me.contributions.get = (async () => ({ data: { items: [], nextCursor: 'still-more' }, error: null })) as typeof main.v1.me.contributions.get;
+  main.v1.me.contributions.get = Object.assign(async () => {
+    const first = await originalGet();
+    return fixtureAnswer(200, { ...first.data!, items: [], nextCursor: 'still-more' });
+  }, { '~path': '/v1/me/contributions' }) as typeof main.v1.me.contributions.get;
   expect(await readRecipeNotes(main, actingSubject, work, 'en')).toEqual({ ok: false, failure: 'unavailable' });
 });
 

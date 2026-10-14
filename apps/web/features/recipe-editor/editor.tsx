@@ -47,12 +47,14 @@ export interface RecipeEditorProps {
   main?: () => MainClient;
   /** When set, file import uses this client. Production keeps the browser fetch. */
   importApi?: RecipeImportApi;
+  /** A deterministic command-key source for control stories. */
+  newImportId?: () => string;
   /** When set, replaces the browser download after the export reader succeeds. */
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }
 
 export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main,
-  importApi, saveExport }: RecipeEditorProps) {
+  importApi, newImportId, saveExport }: RecipeEditorProps) {
   const t = useMemo(() => materializeData(catalog, { locale }), [catalog, locale]);
   const client = main ?? browserMain;
   const [store] = useState(() => createRecipeStore({ work, mainVersion, actingSubject, initial: initial.recipe, main: client,
@@ -105,6 +107,8 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
   useEffect(() => setTypedNotes(written.notes.body), [written.notes.body]);
   const publish = async () => {
     if (store.snapshot().revoked || details.snapshot().revoked || notes.snapshot().revoked) return;
+    setDismissed({ details: null, notes: null });
+    let notesAtPublication: string | null = null;
     // A cooking time can be waiting behind preparation. Publication waits for every such write,
     // then reads the notes field, which may not have been left yet.
     const outcome = await publishWhenSettled({
@@ -112,12 +116,13 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
       body: () => (notesField.current?.value ?? notes.snapshot().notes.body).trim(),
       failure: () => details.snapshot().failure ?? notes.snapshot().failure
         ?? (store.snapshot().failure ? 'unavailable' : null),
-      publishRecipe: () => publication.publish(),
+      publishRecipe: () => { notesAtPublication = notes.snapshot().notes.head; return publication.publish(); },
     });
-    if (outcome.kind === 'published') { setPublished(true); setPublishedNotesHead(notes.snapshot().notes.head); }
+    if (outcome.kind === 'published') { setPublished(true); setPublishedNotesHead(notesAtPublication); }
   };
 
   return <div className="grid gap-6">
+    <h1 className="sr-only">{t.pageTitle}</h1>
     <div className="sticky top-0 z-20 -mx-4 grid gap-2 border-border/60 border-b bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:rounded-b-2xl sm:px-4">
       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
         <Link href={workHref} aria-disabled={saving || undefined} onClick={event => { if (saving) event.preventDefault(); }}
@@ -125,8 +130,8 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
           <ArrowLeftIcon aria-hidden="true" />{t.backToRecipe}</Link>
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
-            messages={catalog} disabled={saving || recipe.loading || accessRemoved} api={exportApi}
-            importApi={importApi} save={saveExport}
+            messages={catalog} disabled={saving || held || accessRemoved} api={exportApi}
+            importApi={importApi} newId={newImportId} save={saveExport}
             prepareImport={async () => {
               const result = await store.submit({ kind: 'ensureRecipe' });
               const current = store.snapshot().state;
@@ -153,7 +158,8 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
     {published && publicationState.revision === state.head && publishedNotesHead === written.notes.head && !saving ? <Alert variant="success" role="status"><CircleCheckIcon aria-hidden="true" />
       <AlertDescription>{t.publishedNotice}</AlertDescription></Alert> : null}
     {publicationState.failure ? <FailureAlert t={t} refusal={{ kind: publicationState.failure }} detail={publicationState.detail}
-      title={publicationState.failure === 'moved' ? t.publicationChanged : undefined}
+      title={publicationState.failure === 'moved' ? t.publicationChanged
+        : publicationState.failure === 'denied' ? t.publicationDenied : undefined}
       onRefresh={publicationState.failure === 'moved' ? () => void store.reload().then(loaded => { if (loaded) publication.dismiss(); }) : undefined}
       onRetry={() => void publish()} onDismiss={publication.dismiss} /> : null}
     {recipe.failure ? <FailureAlert t={t} refusal={recipe.failure.refusal}

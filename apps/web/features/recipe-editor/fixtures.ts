@@ -45,6 +45,14 @@ export const detailsValues: DetailsValues = { originalTitle: '', originalLanguag
   entries: [{ language: 'en', title: 'Lemon muffins', description: 'Bright and tender.', tagline: '', label: null }] };
 export const noNotes: NotesState = { text: null, head: null, body: '', publicationHead: null };
 
+/** The full response envelope the typed client exposes, for contract models in unit tests/stories. */
+export function fixtureAnswer<T, const S extends number>(status: S, value: T) {
+  const response = Response.json(value, { status });
+  return status >= 400
+    ? { data: null, error: { status, value }, status, response, headers: response.headers }
+    : { data: value, error: null, status, response, headers: response.headers };
+}
+
 export interface Call { name: string; body?: unknown; key?: string }
 
 /** Fixed order of the stand-in's revision numbers, so a story's heads are the same every run. */

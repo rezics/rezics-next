@@ -9,6 +9,8 @@ import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import { englishMessages } from '../work-page/messages.ts';
 import { RegionSkeleton } from '../work-page/region.tsx';
+import { fakeMain, fixtureAnswer, emptyStart, work, mainVersion, actingSubject as contractActor } from './fixtures.ts';
+import type { MainClient } from '../studio/types.ts';
 import { mainRecipeExportApi } from './export-api.ts';
 import { copyOf } from './messages.ts';
 import { recipeProveStates } from './prove-states.ts';
@@ -31,7 +33,7 @@ function ResourceVisit({ persona, state }: { persona: AnswerPersona; state: 'pop
     ], { pathPrefix: BFF_PREFIX });
     const header = record.personas[persona].find(item => item.label === 'editor-work-header')!.answer as { mainVersion: string };
     const selection = `${BFF_PREFIX}/v1/main-versions/${header.mainVersion.slice(-36)}/selection`;
-    const fetcher: typeof fetch = async (input, init) => {
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url);
       // This exact production request has no recorded answer. An explicitly identified contract
@@ -40,7 +42,7 @@ function ResourceVisit({ persona, state }: { persona: AnswerPersona; state: 'pop
         return Response.json({ type: 'about:blank', status: 404, title: 'No selected text', code: 'not_found' }, { status: 404 });
       }
       return replay.fetcher(input, init);
-    };
+    }) as typeof fetch;
     const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher });
     void booksEditionReads({ main, actingSubject }).readWorkHeader(id).then(async loaded => {
       if (!loaded.ok) throw new Error('Recorded header failed');
@@ -51,6 +53,31 @@ function ResourceVisit({ persona, state }: { persona: AnswerPersona; state: 'pop
   }, [actingSubject, id, path.pathname, persona, state]);
   return <PageContainer>{ready ? <RecipeResourceBody {...ready.content} href={path.pathname} actingSubject={actingSubject ?? null}
     work={id} locale="en" messages={englishMessages} exportApi={ready.exportApi} saveExport={() => { /* Local story download is discarded. */ }} />
+    : <RegionSkeleton id="recipe-experience" title={englishMessages.recipeMethod} label={englishMessages.loading} />}</PageContainer>;
+}
+/** An own Work with no Composition, or an unavailable region: unrecorded contract states. */
+function ContractResource({ state }: { state: 'empty' | 'error' }) {
+  const [fake] = useState(() => {
+    const model = fakeMain({ recipe: emptyStart });
+    if (state === 'error') {
+      const recipes = model.main().v1.recipes;
+      model.main().v1.recipes.works = ((target: Parameters<typeof recipes.works>[0]) => ({ ...recipes.works(target),
+        get: async () => fixtureAnswer(503, { type: 'about:blank', status: 503 as const,
+          title: 'Recipe unavailable', code: 'read_unavailable' }),
+      })) as MainClient['v1']['recipes']['works'];
+    }
+    return model;
+  });
+  const [content, setContent] = useState<Awaited<ReturnType<typeof loadRecipeReading>> | null>(null);
+  const href = `/v1/recipes/works/${work.slice(-36)}`;
+  useEffect(() => {
+    let mounted = true;
+    void loadRecipeReading(fake.main(), contractActor, { id: work, mainVersion, selectedLanguage: null }, href)
+      .then(next => { if (mounted) setContent(next); });
+    return () => { mounted = false; };
+  }, [fake, href]);
+  return <PageContainer>{content ? <RecipeResourceBody {...content} href={href} actingSubject={contractActor}
+    work={work} locale="en" messages={englishMessages} />
     : <RegionSkeleton id="recipe-experience" title={englishMessages.recipeMethod} label={englishMessages.loading} />}</PageContainer>;
 }
 const meta = { title: 'Recipe resource/Production region visit', component: ResourceVisit,
@@ -93,3 +120,19 @@ export const Loading: Story = { args: { state: 'loading' }, play: async ({ canva
   await expect(await within(canvasElement).findByRole('status')).toHaveAttribute('aria-busy', 'true');
 } };
 export const LoadingPhone: Story = { ...Loading, ...phone };
+
+export const EmptyOwnWork: Story = { render: () => <ContractResource state="empty" />,
+  parameters: { docs: { description: { story: 'Unrecorded contract state: GET /v1/recipes/works/{own Work}?actingSubject={author} returns HTTP 200 JSON null; optional text selection is 404.' } } },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText(englishMessages.recipeUnstructured)).toBeVisible();
+    await expect(canvas.getByRole('link', { name: copyOf('en').editRecipe })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: copyOf('en').exportAction })).toBeNull();
+  },
+};
+export const EmptyOwnWorkPhone: Story = { ...EmptyOwnWork, ...phone };
+export const Unavailable: Story = { render: () => <ContractResource state="error" />,
+  parameters: { docs: { description: { story: 'Unrecorded contract state: the own Work recipe-region GET returns HTTP 503 read_unavailable; the production region offers retry.' } } },
+  play: async ({ canvasElement }) => { await expect(await within(canvasElement).findByRole('alert')).toBeVisible(); },
+};
+export const UnavailablePhone: Story = { ...Unavailable, ...phone };

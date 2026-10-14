@@ -57,7 +57,7 @@ export async function loadRecipeAuthoring(
       ),
   ]);
   if (!allowed.ok) return allowed.failure === 'denied' || allowed.failure === 'missing'
-    ? { kind: 'no-authority', signedIn: input.signedIn, refusal: allowed } : { kind: 'unavailable', refusal: allowed };
+    ? { kind: 'no-authority', signedIn: allowed.status === 401 ? false : input.signedIn, refusal: allowed } : { kind: 'unavailable', refusal: allowed };
   if (!mayEdit(allowedActionsOf(allowed.data))) return { kind: 'no-authority', signedIn: input.signedIn };
   if (!header.ok) return { kind: 'unavailable', refusal: header };
   if (!actingSubject) return { kind: 'no-authority', signedIn: input.signedIn };

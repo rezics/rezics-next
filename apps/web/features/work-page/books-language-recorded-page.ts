@@ -128,7 +128,7 @@ export function booksLanguageReading(input: {
  * The shared `booksEditionReads.readWorkHeader` selects the language. The
  * selection query carries only `language`, omitted when the header selects none.
  */
-export function booksLanguageReads(host: { main: MainClient; actingSubject?: string }) {
+export function booksLanguageReads(host: { main: Pick<MainClient, 'v1'>; actingSubject?: string }) {
   const { main } = host;
   const shared = booksEditionReads(host);
   const readText = (mainVersion: string, language: string | undefined): Promise<Answered<WorkText>> => {

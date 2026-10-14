@@ -5,6 +5,7 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import exchangeJson from '../../../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
+import type { RecipeWorkPage } from '../work-page/types.ts';
 import { englishMessages } from '../work-page/messages.ts';
 import { readSuppliedRecipePage } from './resource-page.ts';
 import { RecipeResourceBody } from './resource-page.tsx';
@@ -17,16 +18,18 @@ test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as
     const actingSubject = path.searchParams.get('actingSubject') ?? undefined;
     const replay = recordedFetch(record, persona, [{ label: sample.label, state: 'populated' }], { pathPrefix: BFF_PREFIX });
     const misses: unknown[] = [];
-    const main = browserMainApi('https://recorded.invalid', { anonymous: persona === 'visitor', fetcher: async (...args) => {
+    const main = browserMainApi('https://recorded.invalid', { anonymous: persona === 'visitor', fetcher: (async (...args: Parameters<typeof fetch>) => {
       try { return await replay.fetcher(...args); } catch (error) { misses.push(error); throw error; }
-    } });
+    }) as typeof fetch });
     try {
       const recipe = await readSuppliedRecipePage(main, actingSubject, path.pathname);
-      expect(recipe).toEqual({ ok: true, data: sample.answer });
+      expect(recipe.ok).toBe(true);
+      if (!recipe.ok) throw new Error('Recorded recipe read failed');
       expect(misses).toEqual([]);
       const html = renderToStaticMarkup(createElement(RecipeResourceBody, { recipe, href: path.pathname,
         actingSubject: actingSubject ?? null, allowed: [], work: path.pathname.split('/').pop()!, text: null,
         locale: 'en', messages: englishMessages }));
+      expect(recipe.data).toEqual(sample.answer as RecipeWorkPage);
       expect(html).toContain('1 ½ cup flour');
       expect(html).toContain('¼ cup flour');
       expect(html).toContain('lang="fr"');

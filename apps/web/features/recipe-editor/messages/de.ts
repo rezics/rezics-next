@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: 'Anmerkungen dürfen nach dem Schreiben nicht leer sein. Bearbeite sie stattdessen.',
   mainSays: 'Grund',
 
+  publicationDenied: 'Dieses Rezept konnte nicht veröffentlicht werden. Prüfe die Begründung des Servers.',
   publicationChanged: 'Dieses Rezept wurde geändert. Lade die neueste Version und prüfe sie vor dem Veröffentlichen.',
   loadingRecipe: 'Rezept wird geladen…',
   loadingRest: 'Der Rest dieses Rezepts wird geladen…',

@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: 'Las notas no pueden quedar en blanco una vez escritas. Edítalas en su lugar.',
   mainSays: 'Motivo',
 
+  publicationDenied: 'No se pudo publicar esta receta. Revisa el motivo indicado por el servidor.',
   publicationChanged: 'Esta receta ha cambiado. Carga la última versión y revísala antes de publicar.',
   loadingRecipe: 'Cargando receta…',
   loadingRest: 'Cargando el resto de esta receta…',

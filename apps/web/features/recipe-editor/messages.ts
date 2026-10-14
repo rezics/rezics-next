@@ -89,6 +89,7 @@ const en = {
   publishNeeds: 'To publish:',
   needTitle: 'give it a title', needIngredient: 'add an ingredient', needStep: 'add a step', needNotes: 'write a note',
 
+  publicationDenied: 'This recipe could not be published. Review the server’s reason.',
   publicationChanged: 'This recipe changed. Load the latest version and review it before publishing.',
   loadingRecipe: 'Loading recipe…',
   loadingRest: 'Loading the rest of this recipe…',

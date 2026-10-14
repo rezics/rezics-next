@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: 'Les notes ne peuvent pas être vides une fois écrites. Modifiez-les plutôt.',
   mainSays: 'Raison',
 
+  publicationDenied: 'Cette recette n’a pas pu être publiée. Consultez la raison fournie par le serveur.',
   publicationChanged: 'Cette recette a changé. Chargez la dernière version et vérifiez-la avant de publier.',
   loadingRecipe: 'Chargement de la recette…',
   loadingRest: 'Chargement de la suite de cette recette…',

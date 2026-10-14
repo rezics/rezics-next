@@ -14,7 +14,7 @@ export type MyText = ContributionPage['items'][number];
 /** One page of the Studio Agent's Works (`GET /v1/me/agents/{agent}/works`). */
 export type InventoryPage = Ok<ReturnType<Main['v1']['me']['agents']>['works']['get']>;
 export type InventoryWork = InventoryPage['items'][number];
-/** Main's state of an inventory Work, from the Agent's own texts: none yet, drafts only, or published. */
+/** Main's authoring state: Recipes follow their Structure publication; other Works follow the Agent's texts. */
 export type InventoryState = InventoryWork['state'];
 export type SubmissionPage = Ok<Main['v1']['my']['submissions']['get']>;
 export type Submission = Omit<SubmissionPage['items'][number], 'state'> & { state: SubmissionState };

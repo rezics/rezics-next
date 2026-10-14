@@ -207,7 +207,7 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
       </p> : null}
       {importStage.kind === 'stale' || importStage.kind === 'stale-refresh-failed'
         ? <p role="alert" className="max-w-80 text-left text-xs text-destructive sm:text-right">
-          {t.importStale}{importStage.kind === 'stale-refresh-failed' ? ` ${t.importRefreshFailed}` : ''}
+          {importStage.kind === 'stale-refresh-failed' ? t.importRefreshFailed : t.importStale}
           {importStage.detail ? <><span> {t.mainSays}: </span>{importStage.detail}</> : null}</p> : null}
       {importStage.kind === 'done' ? <>
         <p role="status" className="max-w-80 text-left text-xs text-muted-foreground sm:text-right">

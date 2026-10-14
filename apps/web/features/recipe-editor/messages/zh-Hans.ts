@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: '备注写下后就不能留空。请改为编辑。',
   mainSays: '原因',
 
+  publicationDenied: '这份菜谱无法发布。请查看服务器提供的原因。',
   publicationChanged: '这份菜谱已变更。请加载最新版本，确认后再发布。',
   loadingRecipe: '正在加载菜谱…',
   loadingRest: '正在加载这道食谱的其余部分…',

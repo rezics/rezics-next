@@ -44,7 +44,7 @@ export async function settleNullable<T>(call: () => Promise<Answer<T>>): Promise
 }
 
 /** Work reads shared by the server page and its recorded surface. */
-export function booksEditionReads({ main, actingSubject }: { main: MainClient; actingSubject?: string }) {
+export function booksEditionReads({ main, actingSubject }: { main: Pick<MainClient, 'v1'>; actingSubject?: string }) {
   return {
     readWorkHeader: (id: string): Promise<BooksRead<WorkHeader>> =>
       settle(() => main.v1.works({ id }).get({ query: { actingSubject } })),

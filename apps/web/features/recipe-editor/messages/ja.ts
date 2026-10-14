@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: 'メモは、書いたあとに空にはできません。代わりに編集してください。',
   mainSays: '理由',
 
+  publicationDenied: 'このレシピは公開できませんでした。サーバーからの理由を確認してください。',
   publicationChanged: 'レシピが変更されました。最新版を読み込み、確認してから公開してください。',
   loadingRecipe: 'レシピを読み込み中…',
   loadingRest: 'このレシピの続きを読み込んでいます…',

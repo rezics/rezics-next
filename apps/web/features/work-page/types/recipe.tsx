@@ -89,6 +89,7 @@ type Units = 'written' | 'us' | 'metric';
 
 function shownLine(item: ReadableIngredient, units: Units, page: ReadableRecipe): string {
   if (units !== 'written' && item.alternateSystem === units && item.alternateLine) return item.alternateLine;
+  if (item.line && item.line !== item.originalText) return item.line;
   const qualifier = page.occurrences.find(node => node.occurrence === item.occurrence)?.qualifier;
   // An exchanged line may carry its quantity separately from its name. Render the retained
   // exact quantity, using Main's scaled amount when present; never merge duplicate occurrences.

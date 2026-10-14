@@ -93,6 +93,7 @@ export default {
   failEmptyNotes: '備註寫下後就不能留空。請改為編輯。',
   mainSays: '原因',
 
+  publicationDenied: '這份食譜無法發布。請查看伺服器提供的原因。',
   publicationChanged: '這份食譜已變更。請載入最新版本，確認後再發布。',
   loadingRecipe: '正在載入食譜…',
   loadingRest: '正在載入這道食譜的其餘部分…',

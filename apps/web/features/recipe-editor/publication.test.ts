@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { seedServedTypes } from '../catalogue/type-fixtures.ts';
 import { createRecipePublisher } from './publication.ts';
-import { actingSubject, fakeMain, id, mainVersion, startRecipe, work } from './fixtures.ts';
+import { actingSubject, fakeMain, fixtureAnswer, id, mainVersion, startRecipe, work } from './fixtures.ts';
 import { missingBeforePublishing } from './publish.tsx';
 import { publishWhenSettled } from './publish-settled.ts';
 import type { MainClient } from '../studio/types.ts';
@@ -56,7 +56,7 @@ test('a readable imported structure remains a draft when original publication is
   seedServedTypes();
   const fake = fakeMain({ recipe: startRecipe });
   const problem = { type: 'about:blank', status: 403, code: 'authority_denied', title: 'Unknown file rights', detail: 'Not an original contribution' };
-  fake.main().v1['work-publications'].post = (async () => ({ data: null, error: { status: 403, value: problem } })) as MainClient['v1']['work-publications']['post'];
+  fake.main().v1['work-publications'].post = Object.assign(async () => fixtureAnswer(403, { ...problem, status: 403 as const }), { '~path': '/v1/work-publications' }) as MainClient['v1']['work-publications']['post'];
   const publisher = createRecipePublisher({ main: fake.main, work, actingSubject, recipe: () => startRecipe });
   expect(await publisher.publish()).toEqual({ kind: 'refused', refusal: 'denied' });
   expect(publisher.snapshot()).toMatchObject({ busy: false, revision: null, status: 403, problem, detail: problem.detail });

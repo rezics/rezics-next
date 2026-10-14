@@ -39,6 +39,9 @@ beforeAll(async () => {
   const header = await answer<{ revision: string; mainVersion: string; structurePublicationHead: string | null }>(owner.main('GET',
     `/v1/works/${short(work)}?actingSubject=${encodeURIComponent(actingSubject!)}`));
   expect(header.structurePublicationHead).toBeNull();
+  const draftInventory = await answer<{ items: { id: string; state: string }[] }>(owner.main('GET',
+    `/v1/me/agents/${short(actingSubject!)}/works?limit=20&view=authored`));
+  expect(draftInventory.items.find(item => item.id === work)?.state).toBe('draft');
   const published = await answer<{ publicationDecision: string }>(owner.main('POST', '/v1/work-publications', {
     profile: 'work-structure-publication-v1', operation: 'publish', work, actingSubject,
     expectedWorkHead: header.revision, expectedMainVersion: header.mainVersion, structure,
@@ -46,6 +49,9 @@ beforeAll(async () => {
     rightsBasis: 'original-contribution', disclosure: 'public',
   }, randomUUID()), 201);
   decision = published.publicationDecision;
+  const inventory = await answer<{ items: { id: string; state: string }[] }>(owner.main('GET',
+    `/v1/me/agents/${short(actingSubject!)}/works?limit=20&view=authored`));
+  expect(inventory.items.find(item => item.id === work)?.state).toBe('published');
 }, 180_000);
 afterAll(async () => { await sessions?.close(); });
 

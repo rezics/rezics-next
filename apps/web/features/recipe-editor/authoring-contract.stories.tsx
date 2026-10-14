@@ -10,10 +10,10 @@ import type { MainClient } from '../studio/types.ts';
 import { globalWorkHref } from '../work-page/route.ts';
 import { loadRecipeAuthoring, type RecipeAuthoringMapped } from './authoring-page.ts';
 import { RecipeAuthoringBody, RecipeAuthoringPending } from './authoring-page.tsx';
-import { actingSubject, emptyStart, fakeMain, id, startRecipe, work } from './fixtures.ts';
+import { actingSubject, emptyStart, fakeMain, fixtureAnswer, id, startRecipe, work } from './fixtures.ts';
 import { mainRecipeImportApi } from './import-api.ts';
 import { copyOf } from './messages.ts';
-import { stateOf } from './model.ts';
+import { stateOf, type RecipeState } from './model.ts';
 import { recipeProveStates } from './prove-states.ts';
 import { recipeEditHref } from './route.ts';
 
@@ -22,32 +22,44 @@ const exportSample = exchange.personas.owner.find(item => item.label === 'schema
 const recipeFile = () => new File([JSON.stringify((exportSample.answer as { recipe: unknown }).recipe)], 'recipe.json', { type: 'application/ld+json' });
 const importedSample = exchange.personas.owner.find(item => item.label === 'imported-recipe')!;
 const retainedImport = stateOf(importedSample.answer as Parameters<typeof stateOf>[0]);
+function importedFor(structure: string, head: string): RecipeState {
+  const occurrences = new Map(retainedImport.nodes.map((node, index) => [node.occurrence, id(2000 + index)]));
+  return { ...retainedImport, structure, head, nodes: retainedImport.nodes.map(node => {
+    const base = { occurrence: occurrences.get(node.occurrence)!, parent: node.parent === retainedImport.structure
+      ? structure : occurrences.get(node.parent)! };
+    if (node.role === 'step') return { ...node, ...base, qualifier: { ...node.qualifier,
+      usesIngredient: node.qualifier.usesIngredient.map(value => occurrences.get(value)!) } };
+    return { ...node, ...base };
+  }) };
+}
 type Scenario = 'populated' | 'empty' | 'save-refusal' | 'publication-denied' | 'publication-pending' | 'import' | 'import-pending' | 'import-stale';
 let current: { fake: ReturnType<typeof fakeMain>; imports: { key: string; body: unknown; expectedHead: string | null }[] };
 
 /** Contract models for unrecorded controls. The production loader, editor and HTTP file adapter run unchanged. */
 function ContractVisit({ scenario, locale }: { scenario: Scenario; locale: UiLocale }) {
   const [boundary] = useState(() => {
-    const fake = fakeMain({ recipe: scenario === 'empty' || scenario.startsWith('import') ? emptyStart : startRecipe });
+    const importedState = importedFor(startRecipe.structure!, id(1100));
+    const fake = fakeMain({ recipe: scenario === 'publication-denied' ? importedState
+      : scenario === 'empty' || scenario.startsWith('import') ? emptyStart : startRecipe });
     const imports: typeof current.imports = [];
     current = { fake, imports };
     if (scenario === 'save-refusal') fake.interference.writeStatus = 403;
     if (scenario === 'publication-denied') {
-      fake.main().v1['work-publications'].post = (async () => ({ data: null, error: { status: 403, value: {
-        type: 'about:blank', title: 'Imported file rights are unknown', code: 'authority_denied', status: 403,
+      fake.main().v1['work-publications'].post = Object.assign(async () => fixtureAnswer(403, {
+        type: 'about:blank', title: 'Imported file rights are unknown', code: 'authority_denied', status: 403 as const,
         detail: 'This imported Structure is not an original contribution.',
-      } } })) as MainClient['v1']['work-publications']['post'];
+      }), { '~path': '/v1/work-publications' }) as MainClient['v1']['work-publications']['post'];
     }
     if (scenario === 'publication-pending') {
       const post = fake.main().v1['work-publications'].post;
       let calls = 0;
       fake.main().v1['work-publications'].post = (async (...args: Parameters<typeof post>) => {
-        if (++calls === 1) return { status: 202, error: null, data: { operationId: 'queued', status: 'reconciling', phase: 'dispatch',
-          result: null, retry: { allowed: true, afterMs: 100 } } };
+        if (++calls === 1) return fixtureAnswer(202, { operationId: 'queued', status: 'reconciling' as const, phase: 'dispatch',
+          result: null, retry: { allowed: true as const, afterMs: 100 } });
         return post(...args);
       }) as typeof post;
     }
-    const fetcher: typeof fetch = async (input, init) => {
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = input instanceof Request ? input : new Request(input, init);
       const url = new URL(request.url), key = request.headers.get('idempotency-key')!;
       const body: unknown = await request.json();
@@ -60,11 +72,11 @@ function ContractVisit({ scenario, locale }: { scenario: Scenario; locale: UiLoc
       }
       const root = fake.world().recipe.structure!;
       const revision = id(1100);
-      fake.replaceRecipe({ ...retainedImport, structure: root, head: revision,
-        nodes: retainedImport.nodes.map(node => ({ ...node, parent: node.parent === retainedImport.structure ? root : node.parent })) });
+      fake.replaceRecipe(importedFor(root, revision));
+      const replayed = scenario === 'import-pending' && imports.length > 1;
       return Response.json({ structure: root, revision, sourceObservation: id(1101), residualDigest: 'a'.repeat(64),
-        receipts: [id(1102)], replayed: imports.length > 1 }, { status: imports.length > 1 ? 200 : 201 });
-    };
+        receipts: [id(1102)], replayed }, { status: replayed ? 200 : 201 });
+    }) as typeof fetch;
     return { fake, importApi: mainRecipeImportApi({ fetch: fetcher, origin: 'https://contract.invalid' }) };
   });
   const [view, setView] = useState<RecipeAuthoringMapped | null>(null);

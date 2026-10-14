@@ -1,6 +1,8 @@
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadLimit, WorkReadMissing, WorkReadMoved,
   WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { GRAPHS, RV, iri, lit } from '../work/activate.ts';
+import { workTypeEntries } from '../types/registry.ts';
+import { publishedStructuredWork } from '../work/public-patterns.ts';
 import { FALLBACK_POLICY } from '../media/summary.ts';
 
 export const STUDIO_WORK_COST = { pageSize: 20, candidateAdmissions: 200, textsPerPage: 200,
@@ -19,6 +21,19 @@ const writerCreditPattern = (work: string, writer: string) => `
     rv:component ?credit ; rv:work ${work} ; rv:agent ${writer} .
     FILTER NOT EXISTS { ?creditHead a rv:ErasedRevision } }`;
 
+/** Recipe state follows its Structure publication, independently of optional notes. */
+export function studioWorkState(texts: readonly { publicationHead: string | null }[], recipe?: {
+  started: boolean; published: boolean;
+}): 'published' | 'draft' | 'empty' {
+  if (recipe) return recipe.published ? 'published' : recipe.started || texts.length ? 'draft' : 'empty';
+  return texts.some(text => text.publicationHead) ? 'published' : texts.length ? 'draft' : 'empty';
+}
+
+const recipeStateBindings = (work: string, main: string) => `
+  BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?studioRecipe a rv:Structure ; rv:structureOf ${main} ;
+    rv:structureProfile ${iri(`${RV}RecipeComposition`)} ; rv:structureHead ?studioRecipeHead . } } AS ?recipeStarted)
+  BIND(EXISTS { ${publishedStructuredWork(work, main)} } AS ?recipePublished)`;
+
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
   view?: 'authored' | 'curated' }
 
@@ -32,12 +47,13 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
   }
   const first = await access.studioWork(principal, agent, work);
   if (!first.row) throw new WorkReadMissing('Studio Work is unavailable');
-  const heads = await session.query(`SELECT ?main ?head ?mainHead ?title ?disclosure WHERE {
+  const heads = await session.query(`SELECT ?main ?head ?mainHead ?title ?disclosure ?recipeStarted ?recipePublished WHERE {
     GRAPH ${iri(GRAPHS.current)} { ${iri(work)} a schema:CreativeWork ; rv:head ?head ;
       rv:mainVersion ?main ; rdfs:label ?title .
       ?main a rv:MainVersion ; rv:head ?mainHead ; rv:work ${iri(work)} .
       OPTIONAL { ${iri(work)} rv:disclosure ?disclosure }
       FILTER NOT EXISTS { ${iri(work)} rv:protectionHead ?protection } }
+    ${recipeStateBindings(iri(work), "?main")}
   } LIMIT 2`, 2);
   if (heads.length !== 1 || !heads[0]?.main || !heads[0]?.head || !heads[0]?.mainHead
     || !heads[0]?.title) throw new WorkReadMissing('Studio Work is unavailable');
@@ -81,8 +97,8 @@ export async function readStudioWork(session: WorkReadSession, agent: string, wo
       policy: FALLBACK_POLICY, key: work, resourceType: 'work' as const },
     types: typeRows.map(row => row.type?.value).filter((value): value is string => !!value),
     disclosure: head.disclosure?.value === `${RV}Public` ? 'public' as const : 'restricted' as const,
-    state: texts.some(text => text.publicationHead) ? 'published' as const
-      : texts.length ? 'draft' as const : 'empty' as const,
+    state: studioWorkState(texts, workTypeEntries.some(entry => entry.presentation === 'recipe' && typeRows.some(row => row.type?.value === entry.type))
+      ? { started: head.recipeStarted?.value === 'true', published: head.recipePublished?.value === 'true' } : undefined),
     texts, submissions: details.submissions.map(item => ({ id: item.id, realm: item.realm,
       state: item.state, openedAt: item.opened_at.toISOString(), updatedAt: item.updated_at.toISOString() })),
     createdAt, updatedAt }, sourcePosition: session.position };
@@ -109,7 +125,7 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
   const byAdmission = new Map(admissions.map(row => [row.id, row]));
   const proven = admissions.filter(row => row.generation !== null);
   const workRows = proven.length ? await session.query(`SELECT ?admission ?work ?main ?head ?mainHead ?title
-    ?disclosure WHERE {
+    ?disclosure ?recipeStarted ?recipePublished WHERE {
       VALUES (?admission ?writer) { ${proven.map(row => `(${lit(row.id)} ${iri(row.writer)})`).join(' ')} }
       GRAPH ${iri(GRAPHS.receipts)} { ?receipt a rv:OperationReceipt ; rv:admissionId ?admission ;
         rv:outcome rv:Succeeded ; rv:work ?work ; rv:mainVersion ?main .
@@ -123,6 +139,7 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
       FILTER ${view === 'authored' ? 'EXISTS' : 'NOT EXISTS'} {
         ${writerCreditPattern('?work', '?writer')}
       }
+      ${recipeStateBindings("?work", "?main")}
     } LIMIT ${STUDIO_WORK_COST.candidateAdmissions + 1}`,
   STUDIO_WORK_COST.candidateAdmissions + 1) : [];
   const order = new Map(admissions.map((row, index) => [row.id, index]));
@@ -187,8 +204,8 @@ export async function readStudioWorks(session: WorkReadSession, agent: string,
     const ownTexts = texts.get(work) ?? [];
     const workTypes = typeMap.get(work) ?? [];
     if (filters.type && !workTypes.includes(filters.type)) return [];
-    const state = ownTexts.some(text => text.publicationHead) ? 'published'
-      : ownTexts.length ? 'draft' : 'empty';
+    const state = studioWorkState(ownTexts, workTypeEntries.some(entry => entry.presentation === 'recipe' && workTypes.includes(entry.type))
+      ? { started: row.recipeStarted?.value === 'true', published: row.recipePublished?.value === 'true' } : undefined);
     if (filters.state && state !== filters.state) return [];
     const cover = covers.get(work);
     const createdAt = admission.created_at.toISOString();

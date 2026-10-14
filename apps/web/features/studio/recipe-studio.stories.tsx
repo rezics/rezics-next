@@ -22,7 +22,8 @@ function RecipeStudio({ state }: { state: 'populated' | 'empty' | 'error' | 'loa
       if (state === 'error') return { data: null, error: { status: 503, value: {
         status: 503, type: 'about:blank', code: 'read_unavailable', title: 'Inventory unavailable',
       } } };
-      return { data: { ...inventory.page, items: state === 'empty' ? [] : inventory.page.items.filter(item => item.id === ids.recipe) }, error: null };
+      const items = state === 'empty' ? [] : inventory.page.items.filter(item => item.id === ids.recipe);
+      return { data: { ...inventory.page, items, count: { ...inventory.page.count, value: items.length } }, error: null };
     } } }) } } } as unknown as MainClient;
     void readInventory(agent.iri, {}, undefined, main).then(answer => { if (mounted) setLoaded(answer); });
     return () => { mounted = false; release?.(); };

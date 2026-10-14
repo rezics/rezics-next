@@ -3,7 +3,7 @@
 import { Skeleton } from '@rezics/ui/skeleton';
 import { ChefHatIcon } from 'lucide-react';
 import type { UiLocale } from '../../i18n/define.ts';
-import type { browserMainApi } from '../api/browser.ts';
+import type { MainClient } from '../studio/types.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
 import { copyOf as editCopy } from '../work-levels-edit/messages.ts';
@@ -22,6 +22,7 @@ export function RecipeAuthoringBody({
   signInHref,
   main,
   importApi,
+  newImportId,
   saveExport,
 }: {
   view: RecipeAuthoringMapped;
@@ -29,8 +30,9 @@ export function RecipeAuthoringBody({
   workRef: string;
   workHref: string;
   signInHref: string;
-  main?: () => ReturnType<typeof browserMainApi>;
+  main?: () => MainClient;
   importApi?: RecipeImportApi;
+  newImportId?: () => string;
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }) {
   const t = copyOf(locale);
@@ -80,6 +82,7 @@ export function RecipeAuthoringBody({
       messages={messages[locale]}
       main={main}
       importApi={importApi}
+      newImportId={newImportId}
       saveExport={saveExport}
     />
   );
