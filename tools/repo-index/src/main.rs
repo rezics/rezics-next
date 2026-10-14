@@ -154,6 +154,7 @@ struct FunctionFact {
 struct CallFact {
     start: u32,
     end: u32,
+    callee_span: oxc_span::Span,
     #[serde(skip_serializing_if = "Option::is_none")]
     function_start: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -1651,6 +1652,40 @@ mod tests {
         );
     }
     #[test]
+    fn call_facts_preserve_static_computed_and_wrapped_callee_spans() {
+        let root = env::current_dir().unwrap();
+        let text = "class Helpers { static run(callback){ callback(); } } Helpers.run(callback); Helpers['run'](callback); (Helpers.run)(callback);";
+        let facts = indexed(
+            Source {
+                file: "calls.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        for callee in ["Helpers.run", "Helpers['run']", "(Helpers.run)"] {
+            let call = facts
+                .call_facts
+                .iter()
+                .find(|call| {
+                    &text[call.callee_span.start as usize..call.callee_span.end as usize] == callee
+                })
+                .unwrap();
+            assert_eq!(
+                &text[call.argument_spans[0].start as usize..call.argument_spans[0].end as usize],
+                "callback"
+            );
+            assert!(call.callee_name.is_none());
+        }
+        assert!(
+            facts.call_facts.iter().all(
+                |call| call.callee_span.start >= call.start && call.callee_span.end <= call.end
+            )
+        );
+    }
+    #[test]
     fn sparse_sql_syntax_preserves_scopes_initializers_types_and_full_query_arguments() {
         let root = env::current_dir().unwrap();
         let text = r#"type Query = 'SELECT * FROM owner.types';
@@ -2482,6 +2517,7 @@ impl<'a> Visit<'a> for Facts<'_> {
         self.call_facts.push(CallFact {
             start: node.span.start,
             end: node.span.end,
+            callee_span: node.callee.span(),
             function_start: self
                 .functions
                 .last()
