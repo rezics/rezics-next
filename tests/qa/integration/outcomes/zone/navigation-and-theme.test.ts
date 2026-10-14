@@ -8,8 +8,9 @@ import { realmFrameReads, zonePresentationReads } from '../../../../../apps/web/
 import { browserZoneAuthoring, browserZoneNavigation, browserZoneTheme, loadZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
 import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
 import { authoringModel } from '../../../../../apps/web/features/zone-editor/model.ts';
+import { readMembership } from '../../../../../apps/web/features/realm/membership-state.ts';
 import { settle } from '../../../../../apps/web/features/manage/read.ts';
-import type { ZonePresentationBaseline } from '../../../../../apps/web/features/zone-editor/theme.ts';
+import { zoneThemePatch } from '../../../../../apps/web/features/zone-editor/theme.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/navigation-and-theme.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
@@ -27,7 +28,6 @@ type Receipt = { receipt: string; revision: string; homeDocument: string; homeRe
 setDefaultTimeout(180_000);
 const fileWall = setTimeout(() => { throw new Error('Navigation and theme file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
-let visitSessions: PersonaSessions;
 const recording = new OutcomeRecorder(row);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
@@ -42,8 +42,6 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 beforeAll(async () => {
   await recording.prepare();
   sessions = await personaSessions('public');
-  visitSessions = await personaSessions('public');
-  visitFixture = Promise.resolve(await prepareSite(true, visitSessions));
 }, 180_000);
 afterAll(async () => {
   try {
@@ -57,8 +55,7 @@ afterAll(async () => {
 let fixture: Promise<Awaited<ReturnType<typeof prepareSite>>> | undefined;
 const site = () => fixture ??= prepareSite();
 
-async function prepareSite(recordVisit = false, people = sessions) {
-  const sessions = people;
+async function prepareSite() {
   const owner = sessions.owner;
   const created = await answer<{ space: string; zone: string; zoneRevision: string; navigationRevision: string }>(
     owner.main('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Published site',
@@ -117,7 +114,7 @@ async function prepareSite(recordVisit = false, people = sessions) {
   const receipt = await answer<Receipt>(owner.main('POST', `${path}/site-publications`, body, key), 201);
   const draftDocument = fromPlainText('Private subsequent owner text', 'blocks');
   const draft = await save(draftDocument, page.revisionId);
-  const draftNavigation = recordVisit ? mounted : await answer<{ revision: string; occurrences: string[] }>(owner.main('POST', `${path}/mounts`, {
+  const draftNavigation = await answer<{ revision: string; occurrences: string[] }>(owner.main('POST', `${path}/mounts`, {
     expectedHead: mounted.revision, target: collection, routeSegment: 'draft-link',
     disclosure: 'public', actingSubject: owner.actingSubject,
   }));
@@ -257,7 +254,6 @@ async function supportingReads(sample: ReturnType<typeof recording.session>, f: 
 }
 
 const proofRequests = (person: PersonaSession) => (_label: string, ...args: Parameters<PersonaSession['main']>) => person.main(...args);
-let visitFixture: Promise<Awaited<ReturnType<typeof prepareSite>>> | undefined;
 const visitRequests: Array<{ persona: PersonaName; label: string; method: string; path: string; body?: unknown; key?: string }> = [];
 const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
 
@@ -285,12 +281,12 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
 }
 
 async function productionVisit(name: PersonaName) {
-  const f = await visitFixture!;
-  const person = visitSessions[name];
+  const f = await site();
+  const person = sessions[name];
   const zoneId = f.path.split('/').at(-1)!;
   const named = <T,>(label: string | ((method: string, path: string) => string), run: () => Promise<T>) =>
     requestLabels.run(typeof label === 'string' ? () => label : label, run);
-  const labels = new Set<string>();
+  const requests = new Map<string, { call: string; response: Promise<Response> }>();
   let fatal: Error | undefined;
   const client = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
     fetcher: (async (input, init) => {
@@ -298,31 +294,51 @@ async function productionVisit(name: PersonaName) {
       const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
       const method = init?.method ?? 'GET';
       const label = requestLabels.getStore()?.(method, path);
-      if (!label || labels.has(label)) {
-        fatal = new Error(`Production label must name exactly one request: ${label}: ${method} ${path}`);
-        throw fatal;
-      }
-      labels.add(label);
       const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
       const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+      const call = JSON.stringify([method, path, body, key]);
+      if (!label || requests.has(label) && requests.get(label)!.call !== call) {
+        fatal = new Error(`Production label is ambiguous: ${label}: ${method} ${path}`);
+        throw fatal;
+      }
       visitRequests.push({ persona: name, label, method, path, ...(body === undefined ? {} : { body }), ...(key === undefined ? {} : { key }) });
-      try { return await recording.session(name, caller)(label, method, path, body, key); }
-      catch (error) { fatal = new Error(`${label}: ${method} ${path}: ${String(error)}`); throw fatal; }
+      try {
+        const previous = requests.get(label);
+        if (previous) {
+          // Two mounts of one target send the same name reads in parallel. Keep
+          // both sends, but one exact answer for the label the replay selects.
+          const response = await caller.main(method, path, body, key);
+          const original = await previous.response;
+          if (response.status !== original.status || await response.clone().text() !== await original.clone().text())
+            throw new Error(`Repeated production request changed its answer: ${label}: ${response.status}: ${await response.clone().text()}`);
+          return response;
+        }
+        const response = recording.session(name, caller)(label, method, path, body, key);
+        requests.set(label, { call, response });
+        return (await response).clone();
+      } catch (error) { fatal = new Error(`${label}: ${method} ${path}: ${String(error)}`); throw fatal; }
+
     }) as typeof fetch,
   });
   const main = client(person);
   // These public server readers use an anonymous client in production; no other bearer is used.
-  const publicMain = name === 'visitor' ? main : client(visitSessions.visitor);
+  const publicMain = name === 'visitor' ? main : client(sessions.visitor);
   const frames = realmFrameReads({ main: publicMain, personal: main, actingSubject: person.actingSubject ?? undefined });
   const publicReads = zonePresentationReads(main, person.actingSubject ?? undefined);
-  const siteLabels = (prefix: string) => (_method: string, path: string) =>
-    `${prefix}-${path.includes('/addresses/') ? 'address' : 'presentation'}`;
+  const siteLabels = (prefix: string) => (_method: string, path: string) => {
+    if (path.includes('/addresses/')) return `${prefix}-address`;
+    if (path.includes('/realms/')) return `${prefix}-realm-header`;
+    return prefix === 'site' ? 'published-presentation' : `${prefix}-presentation`;
+  };
   const stop = () => { if (fatal) throw fatal; };
   if (name === 'visitor') {
     const resolved = await named(siteLabels('site'), () => frames.resolveSite(short(f.space), 'en'));
     stop();
     if (resolved.kind !== 'site') return;
-    await named('published-home', () => publicReads.readZoneRoute(zoneId, '/'));
+    await Promise.all([
+      named('published-home', () => publicReads.readZoneRoute(zoneId, '/')),
+      named(siteLabels('site'), () => frames.resolveRealm(short(f.space), 'en', 'site')),
+    ]);
     await named('published-index-empty', () => publicReads.readZoneRoute(zoneId, '/published-link'));
     await named('unpublished-route-refused', () => publicReads.readZoneRoute(zoneId, '/draft-link'));
     stop();
@@ -340,9 +356,9 @@ async function productionVisit(name: PersonaName) {
   if (address.kind !== 'site') return;
   // Layout and page share address resolution; their independent reads start in the same render.
   const [editor, zone, lifecycle] = await Promise.all([
-    named('showcase-editor', () => settle(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }), { management: true })),
-    named('draft-navigation', () => settle(() => main.v1.zones({ id: zoneId }).get({ query: { actingSubject } }), { management: true })),
-    named('layout-configuration', () => theme.readConfiguration(zoneId, actingSubject)),
+    named(name === 'owner' ? 'management-editor' : 'showcase-editor', () => settle(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }), { management: true })),
+    named('management-navigation', () => settle(() => main.v1.zones({ id: zoneId }).get({ query: { actingSubject } }), { management: true })),
+    named(name === 'owner' ? 'layout-configuration' : 'draft-configuration-refused', () => theme.readConfiguration(zoneId, actingSubject)),
   ]);
   stop();
   if (!editor.ok || !zone.ok || !lifecycle.ok) return;
@@ -351,54 +367,43 @@ async function productionVisit(name: PersonaName) {
   const configuration = await named('draft-configuration', () => theme.readConfiguration(zoneId, actingSubject));
   stop();
   if (!configuration.ok) return;
-  const presentation = f.draftPresentation as unknown as ZonePresentationBaseline;
-  // The stale refusal leaves the user's edited presentation in the theme editor.
+  const patch = zoneThemePatch(configuration.data.configuration, { density: 'comfortable', pageSurface: 'flat' });
+  if (!patch) throw new Error('Production theme patch is unavailable');
   await named('stale-configuration-refused', () => theme.saveConfiguration(zoneId, {
-    expectedHead: f.receipt.revision, presentation: f.publishedPresentation as unknown as ZonePresentationBaseline, actingSubject,
+    expectedHead: f.receipt.revision, presentation: f.publishedPresentation as Parameters<typeof theme.saveConfiguration>[1]['presentation'], actingSubject,
   }, randomUUID()));
   stop();
   const reviewed = await named('review-theme-configuration', () => theme.readConfiguration(zoneId, actingSubject));
   stop();
   if (!reviewed.ok) return;
   const savedTheme = await named('save-theme', () => theme.saveConfiguration(zoneId, {
-    expectedHead: reviewed.data.revision, presentation, actingSubject,
+    expectedHead: reviewed.data.revision, presentation: patch.presentation, actingSubject,
   }, randomUUID()));
   stop();
   if (!savedTheme.ok) return;
   const navLabels = (_method: string, path: string) => path.includes('/collections/')
-    ? 'mount-target-collection-name' : path.includes('/works/') ? 'mount-target-work' : 'navigation-initial';
-  const navigation = await named(navLabels, () => loadZoneNavigation(main, zoneId, actingSubject));
+    ? 'mount-target-collection-name' : path.includes('/works/') ? 'mount-target-work' : 'draft-navigation-editor';
+  const [draft, navigation] = await Promise.all([
+    named((_method, path) => path.includes('/showcase-editor') ? 'showcase-editor' : 'draft-navigation',
+      () => browserZoneAuthoring(main).readDraft(zoneId, actingSubject)),
+    named(navLabels, () => loadZoneNavigation(main, zoneId, actingSubject)),
+  ]);
   stop();
-  if (!navigation.ok) return;
-  const mounted = await named('insert-draft-link', () => browserZoneNavigation(main).insertMount(zoneId, {
-    expectedHead: navigation.data.head, target: f.collection, routeSegment: 'draft-link',
-    disclosure: 'public', position: 'last', actingSubject,
+  if (!draft.ok || !navigation.ok) return;
+  const moved = await named('move-draft-link', () => browserZoneNavigation(main).moveMount(navigation.data.navigation, {
+    expectedHead: navigation.data.head, occurrence: f.draftNavigation.occurrences[0]!,
+    position: 'first', actingSubject,
   }, randomUUID()));
   stop();
-  if (!mounted.ok) return;
-  const authoring = browserZoneAuthoring(main);
-  const variantId = `urn:rezics:variant:${randomUUID()}`;
-  const first = await named('save-home-draft', () => authoring.saveDraft({
-    ...f.draftBody(f.publishedDocument, null), variantId,
-  }, randomUUID()));
+  if (!moved.ok) return;
+  await named('saved-preview', () => settle(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }), { management: true }));
+  const resolved = await named(siteLabels('republished'), () => frames.resolveRealm(short(f.space), 'en', 'site'));
   stop();
-  if (!first.ok) return;
-  const draft = await named('save-home-draft-over-head', () => authoring.saveDraft({
-    ...f.draftBody(f.draftDocument, first.data.revisionId), variantId,
-  }, randomUUID()));
-  stop();
-  if (!draft.ok) return;
-  const heads = await named((_method, path) => path.includes('/configuration') ? 'publish-configuration' : 'publish-navigation',
-    () => authoring.readHeads(zoneId, actingSubject));
-  stop();
-  if (!heads.ok) return;
-  const published = await named('publish-site-bundle', () => authoring.publish({
-    ...draft.data, page: f.homeDocument, variantId, zoneHead: heads.data.zoneHead,
-    routesRevision: heads.data.navigationRevision, navigationRevision: heads.data.navigationRevision,
-  }, actingSubject, randomUUID(), zoneId));
-  stop();
-  if (!published.ok) return;
-  await named('republished-presentation', () => publicReads.readCompletePresentation(zoneId));
-  await named('republished-home', () => publicReads.readZoneRoute(zoneId, '/'));
+  if (resolved.kind !== 'realm') return;
+  await Promise.all([
+    named('republished-presentation', () => publicReads.readCompletePresentation(zoneId)),
+    named((_method, path) => path.includes('/joining') ? 'site-membership' : 'site-follow',
+      () => readMembership(main, resolved.header.id, actingSubject)),
+  ]);
   stop();
 }
