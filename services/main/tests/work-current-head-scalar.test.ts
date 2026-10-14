@@ -6,7 +6,7 @@ import { CommandRejected } from '../src/infrastructure/fuseki.ts';
 import { AdmissionConflict, AdmissionDenied } from '../src/modules/access/admission.ts';
 import { reduceFixtureGrant } from '../src/modules/access/fixture-authority.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
-import { editAdmittedMetadataWork, setAdmittedWorkScalar } from '../src/modules/work/edit-admitted.ts';
+import { editAdmittedMetadataWork, setAdmittedWorkScalar, type AdmittedWorkScalarInput } from '../src/modules/work/edit-admitted.ts';
 import { setWorkScalar, StaleWorkHead, workScalarEditDigest } from '../src/modules/work/edit.ts';
 import { readExactWorkRevision } from '../src/modules/work/history.ts';
 import { readTitleControl } from '../src/modules/work/title-control.ts';
@@ -63,9 +63,9 @@ for (const loss of ['expired', 'revoked'] as const) {
     const { member, created, grant, originalTitle, titleInput, title } = await setup();
     // This is the advance request retained by the title-control replay setup.
     const input = { work: created.work, expectedHead: await head(created.work),
-      scalarValue: { kind: 'boolean' as const, lexical: 'false' },
+      scalarValue: { kind: 'boolean' as const, lexical: 'false' as const },
       actingSubject: member.actor, idempotencyKey: randomUUID() };
-    const command = (body = input) => setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), body);
+    const command = (body: AdmittedWorkScalarInput = input) => setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), body);
     const result = await recorded(`${loss}-authorized`, { titleInput, title, scalarInput: input }, () => command());
     expect(result).toMatchObject({ work: created.work, predecessor: title.revision, replayed: false });
     expect(result.revision).not.toBe(title.revision);
@@ -79,7 +79,7 @@ for (const loss of ['expired', 'revoked'] as const) {
     expect(await readExactWorkRevision(stack.env, created.workRevision, async owner => owner === created.work))
       .toMatchObject({ title: originalTitle });
     expect(await command()).toEqual({ ...result, replayed: true });
-    await expect(command({ ...input, scalarValue: { kind: 'boolean', lexical: 'true' } }))
+    await expect(command({ ...input, scalarValue: { kind: 'unknown' } }))
       .rejects.toBeInstanceOf(AdmissionConflict);
     const beforeStale = await snapshot(created.work);
     const stale = { ...input, idempotencyKey: randomUUID() };
@@ -109,7 +109,7 @@ test('type edit shares the Work revision owner after admitted title control', as
 
 test('revision owner accepts the claimed scalar request at the actual admitted title head', async () => {
   const { member, created, title } = await setup();
-  const scalarValue = { kind: 'boolean' as const, lexical: 'false' };
+  const scalarValue = { kind: 'boolean' as const, lexical: 'false' as const };
   const expectedHead = await head(created.work);
   const digest = workScalarEditDigest(created.work, expectedHead, scalarValue);
   const principal = await account().verify(request(member), ['work:edit']);
@@ -127,7 +127,7 @@ test('stale scalar head refuses after admitted title control and preserves histo
   const before = await snapshot(created.work);
   const retained = await readExactWorkRevision(stack.env, title.revision, async owner => owner === created.work);
   const input = { work: created.work, expectedHead: created.workRevision,
-    scalarValue: { kind: 'boolean' as const, lexical: 'false' },
+    scalarValue: { kind: 'boolean' as const, lexical: 'false' as const },
     actingSubject: member.actor, idempotencyKey: randomUUID() };
   await expect(recorded('independent-stale', input, () =>
     setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), input))).rejects.toBeInstanceOf(StaleWorkHead);
@@ -143,7 +143,7 @@ for (const loss of ['expired', 'revoked'] as const) {
     const retained = await readExactWorkRevision(stack.env, title.revision, async owner => owner === created.work);
     await reduceFixtureGrant(stack.accessPool, grant, loss === 'expired' ? { validUntil: new Date(0) } : { active: false });
     const input = { work: created.work, expectedHead: await head(created.work),
-      scalarValue: { kind: 'boolean' as const, lexical: 'false' },
+      scalarValue: { kind: 'boolean' as const, lexical: 'false' as const },
       actingSubject: member.actor, idempotencyKey: randomUUID() };
     await expect(recorded(`independent-${loss}`, input, () =>
       setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), input))).rejects.toBeInstanceOf(AdmissionDenied);
