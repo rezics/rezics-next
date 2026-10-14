@@ -29,11 +29,25 @@ export function groupName(item: Pick<Item, 'label' | 'division' | 'number'>, loc
 
 /** The line under a group's name: which volume it is, when its title does not say, and its chapter count. */
 function groupFacts(item: Item, locale: UiLocale, t: Translated): string {
+  if (item.division === null) return '';
   const kind = item.division === 'volume' && item.number
     ? item.label && !numberedTitle(item.label.value) ? volumeName(item.number, locale, t) : null
     : item.division === 'extras' ? item.label ? t.extras : null : t.part;
   return [kind, item.childCount === null ? null : t.groupChapters(item.childCount)]
     .filter((part): part is string => part !== null).join(' · ');
+}
+
+/** Work parts open the target Work; their occurrence is not a text chapter. */
+function PartEntry({ item, t }: { item: Extract<Item, { role: 'part' }>; t: Translated }) {
+  const target = item.target ? idOf(item.target) : null;
+  const label = item.label?.value ?? item.displayLabel ?? t.untitledPart;
+  const body = <><ListTreeIcon aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
+    <span lang={item.label?.language} className="min-w-0 flex-1 truncate font-medium">{label}</span></>;
+  return <li>{target && item.availability === 'available'
+    ? <Link href={workHref(target)} className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 outline-none
+      transition-colors hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring">
+      {body}<ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground rtl:rotate-180" /></Link>
+    : <div aria-disabled="true" className="flex items-center gap-3 py-3 opacity-70">{body}</div>}</li>;
 }
 
 /** A chapter's entry: its title, or its number when it has none; unavailable ones are listed but not linked. */
@@ -104,18 +118,20 @@ function ContentsGroup({ item, workRef, query, initial, loadGroup, locale, t }: 
       <CollapsibleContent>
         <div className="border-border/60 border-s ps-4 ms-2">
           {page.status === 'loaded' ? page.items.length ? <ol className="grid divide-y divide-border/60">
-            {page.items.map(child => child.role === 'chapter'
-              ? <ChapterEntry key={child.occurrence} item={child} workRef={workRef} language={query.language} t={t} />
-              : null)}
-          </ol> : <p className="py-3 text-muted-foreground text-sm">{t.noGroupChapters}</p>
+            {page.items.map(child => child.role === 'part'
+              ? <PartEntry key={child.occurrence} item={child} t={t} />
+              : child.role === 'group' ? <ContentsGroup key={child.occurrence} item={child} workRef={workRef}
+                query={query} initial={null} loadGroup={loadGroup} locale={locale} t={t} />
+                : <ChapterEntry key={child.occurrence} item={child} workRef={workRef} language={query.language} t={t} />)}
+          </ol> : <p className="py-3 text-muted-foreground text-sm">{item.division === null ? t.noContents : t.noGroupChapters}</p>
             : page.status === 'failed' ? <p role="alert" className="flex flex-wrap items-center gap-2 py-3 text-sm
-              text-destructive-foreground">{t.groupChaptersFailed}
+              text-destructive-foreground">{item.division === null ? t.regionUnavailable : t.groupChaptersFailed}
               <button type="button" onClick={() => void load()} className={buttonVariants({ variant: 'outline',
                 size: 'sm' })}>{t.retry}</button></p>
-            : <div role="status" aria-label={t.loadingGroup} className="grid gap-2 py-3">
+            : <div role="status" aria-label={item.division === null ? t.loadingRegion : t.loadingGroup} className="grid gap-2 py-3">
               <Skeleton className="h-5 w-2/3" /><Skeleton className="h-5 w-1/2" /></div>}
           {page.status === 'loaded' && page.more ? <Link href={groupHref} className={cn(buttonVariants({
-            variant: 'ghost', size: 'sm' }), 'my-2')}>{t.allGroupChapters({ group: name })}</Link> : null}
+            variant: 'ghost', size: 'sm' }), 'my-2')}>{item.division === null ? t.contents : t.allGroupChapters({ group: name })}</Link> : null}
         </div>
       </CollapsibleContent>
     </Collapsible>
@@ -228,7 +244,8 @@ export function ContentsRegion({ contents, workRef, id, query, oneText = null, o
             </span>
             <ChevronRightIcon aria-hidden="true" className="size-4 text-muted-foreground rtl:rotate-180" /></Link>
         </li>
-        : <ChapterEntry key={item.occurrence} item={item} workRef={workRef} language={query.language} t={t} />)}
+        : item.role === 'part' ? <PartEntry key={item.occurrence} item={item} t={t} />
+          : <ChapterEntry key={item.occurrence} item={item} workRef={workRef} language={query.language} t={t} />)}
     </ol> : <EmptyState icon={ListTreeIcon} headingLevel={3} title={t.noContents} />}
     {query.cursor || nextCursor ? <nav aria-label={t.pagination} className="flex flex-wrap justify-between gap-2">
       {query.cursor ? <Link href={firstPage} className={buttonVariants({ variant: 'outline', size: 'sm' })}>

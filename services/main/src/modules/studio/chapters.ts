@@ -1,6 +1,7 @@
 import { readCompositionHeader, readPlacements } from '../structure/graph.ts';
 import { countSerialWords } from '../work/serial-projection.ts';
 import { readContents } from '../work-contents/read.ts';
+import { structureProfileFor } from '../structure/profiles.ts';
 import { fenceStudioVariantHeads } from './variant-heads.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
 import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable,
@@ -43,6 +44,9 @@ export async function readStudioChapters(session: WorkReadSession, agent: string
   const header = await readCompositionHeader(session.deps.environment, page.composition);
   if (!header || header.head !== page.compositionRevision || header.work !== book) {
     throw new WorkReadMoved('Studio composition changed');
+  }
+  if (!structureProfileFor(header.profile).roles.includes('chapter')) {
+    throw new WorkReadMissing('Studio chapters are unavailable');
   }
   const chapters = page.items.filter(item => item.role === 'chapter');
   const placements = await readPlacements(session.deps.environment, header.generation,

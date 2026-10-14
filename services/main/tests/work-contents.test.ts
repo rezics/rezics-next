@@ -91,7 +91,8 @@ const placedChapterRecord = (n: number, parent: string, at: number,
     : { target: chapterTestId(n + 100_000), selection: { mode: 'follow-context' as const } }),
 });
 
-async function chapterTreeFixture(records: OccurrenceRecord[], includeTopGroups = true) {
+async function chapterTreeFixture(records: OccurrenceRecord[], includeTopGroups = true,
+  profile: 'book-composition' | 'work-composition' = 'book-composition') {
   const objects = new CountedChapterObjects();
   const cost = newCost();
   const recordRoot = await recordTree(objects).apply(await recordTree(objects).empty(cost),
@@ -108,14 +109,14 @@ async function chapterTreeFixture(records: OccurrenceRecord[], includeTopGroups 
   const topGroups = includeTopGroups ? await orderTree(objects).apply(await orderTree(objects).empty(cost),
     new Map(groupEntries.map(entry => [orderTreeKey(entry), entry])), cost) : undefined;
   const manifest: StructureManifest = { format: STRUCTURE_MANIFEST_FORMAT,
-    structure: chapterTestId(1), structureOf: chapterTestId(2), profile: 'book-composition',
+    structure: chapterTestId(1), structureOf: chapterTestId(2), profile,
     generation: chapterTestId(3), pageFormat: STRUCTURE_PAGE_FORMAT, records: recordRoot,
     order: orderRoot, ...(topGroups ? { topGroups } : {}),
     placementCount: records.length, measures: [], model: STRUCTURE_PROFILE,
     shape: STRUCTURE_PROFILE };
   const digest = await objects.put(chapterTestBytes(manifest));
   const header: CompositionHeader = { structure: manifest.structure, component: manifest.structureOf,
-    profile: 'book-composition', owner: chapterTestId(5), work: chapterTestId(5),
+    profile, owner: chapterTestId(5), work: chapterTestId(5),
     mainVersion: manifest.structureOf, head: chapterTestId(4), generation: manifest.generation,
     placementCount: records.length, manifest: `urn:rezics:sha256:${digest}` };
   const graphQueries: string[] = [];
@@ -161,6 +162,41 @@ async function populatedChapterFixture(chapters: number) {
 }
 
 const readableChapterTarget = async () => true;
+
+test('Work parts retain all thousand occurrence identities with bounded I/O at larger stored populations', async () => {
+  for (const size of [1000, 10_000]) {
+    const records: OccurrenceRecord[] = Array.from({ length: size }, (_, index) => ({
+      occurrence: chapterTestId(1000 + index), state: 'active', parent: chapterTestId(1),
+      segmentKey: 'a', orderKey: index.toString(36).padStart(8, '0'), role: 'part',
+      target: chapterTestId(100_000 + index % 4), labels: [{ value: `Episode ${index + 1}`, language: 'en' }],
+      introducedBy: chapterTestId(4), qualifier: { type: 'work-part', displayLabel: `Episode ${index + 1}`,
+        inclusion: 'required' },
+    }));
+    const f = await chapterTreeFixture(records, true, 'work-composition');
+    const snapshot = await f.snapshot();
+    const seen: string[] = [];
+    let after: string | undefined;
+    do {
+      f.objects.reset();
+      const page = await readCompositionPage(f.env, { structure: f.header.structure, header: f.header,
+        snapshot, parent: f.header.structure, limit: WORK_CONTENTS_COST.pageSize,
+        ...(after ? { after } : {}), outline: true, canReadTarget: readableChapterTarget });
+      expect(f.objects.gets).toBeLessThanOrEqual(64);
+      expect(f.objects.bytes).toBeLessThanOrEqual(WORK_CONTENTS_COST.bodyBytes);
+      expect(page.occurrences.every(record => record.role === 'part' && !record.selection)).toBe(true);
+      expect(page.childCounts).toBeUndefined();
+      expect(page.placementCount).toBe(0); // Physical counts are withheld by this profile.
+      seen.push(...page.occurrences.map(record => record.occurrence));
+      after = page.next ?? undefined;
+      if (size > 1000) break; // Same page bound with ten times as much stored inventory.
+    } while (after);
+    expect(seen).toEqual(records.slice(0, size === 1000 ? size : WORK_CONTENTS_COST.pageSize)
+      .map(record => record.occurrence));
+    expect(new Set(seen).size).toBe(seen.length);
+    if (size === 1000) expect(after).toBeUndefined();
+    expect(f.graphQueries).toHaveLength(1);
+  }
+});
 
 test('Catalog and concealed native chapters retain bounded ordered inventory positions', async () => {
   const root = chapterTestId(1);

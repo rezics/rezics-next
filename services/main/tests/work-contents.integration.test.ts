@@ -1289,11 +1289,23 @@ test('Engine Work composition: Anime and Manga acknowledged headers disclose ord
       expect(own.items.every(item => item.availability === 'available' && item.selectedRevision === null)).toBe(true);
       expect((await stack.call('GET', `/v1/chapters/${short(changed.occurrences[0]!)}`)).status).toBe(404);
       expect((await stack.call('GET', `${prepared.path}?parent=${encodeURIComponent(randomUUID())}`)).status).toBe(400);
+      const foreignParent = prepared === anime ? manga.made.structure : anime.made.structure;
+      expect((await stack.call('GET', `${prepared.path}?parent=${encodeURIComponent(foreignParent)}`)).status).toBe(404);
+      expect((await stack.call('GET', `${prepared.path}?version=${encodeURIComponent(target.mainVersion)}`)).status).toBe(404);
       await json(await owner.send('POST', `/v1/compositions/${short(prepared.made.structure)}/changes`, {
         profile: 'work-composition', expectedHead: changed.revision, actingSubject: owner.actor,
         operations: [{ op: 'insert', parent: prepared.made.structure, position: 'last', role: 'group' }] }));
       expect((await stack.call('GET', `${path}&cursor=${encodeURIComponent(first.nextCursor!)}`)).status).toBe(409);
     }
+    await owner.grant(`work:edit:${hidden.work}`, 'work.edit');
+    await json(await owner.send('POST', '/v1/compositions', { profile: 'work-composition',
+      work: hidden.work, mainVersion: hidden.mainVersion, actingSubject: owner.actor }), 201);
+    const hiddenPath = `/v1/works/${short(hidden.work)}/contents`;
+    expect((await stack.call('GET', hiddenPath)).status).toBe(404);
+    expect((await stranger.read(hiddenPath)).status).toBe(404);
+    expect((await owner.read(hiddenPath)).status).toBe(200);
+    expect((await stack.call('GET', `/v1/works/${short(target.work)}/contents`)).status).toBe(404);
+    expect((await stack.call('GET', `/v1/works/${randomUUID()}/contents`)).status).toBe(404);
     // Independent identity/header regressions must not be masked by profile acceptance.
     const duplicate = `https://rezics.com/id/${randomUUID()}`;
     await stack.fuseki.update(`PREFIX rv: <${RV}> INSERT DATA { GRAPH ${iri(GRAPHS.current)} {

@@ -9,7 +9,7 @@ import {
   type LocalOAuthClient,
 } from '../../../../../scripts/lib/oauth-client.ts';
 import inventory from '../../../../../scripts/qa/cases/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.ts';
-import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -33,7 +33,6 @@ let privateWork: Work;
 const episodes: Work[] = [];
 const occurrences: string[] = [];
 const recording = new OutcomeRecorder(inventory);
-const contentsRefusals = new Set<PersonaName>();
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession, fields: Record<string, string> = {}) =>
   new URLSearchParams({
@@ -181,8 +180,6 @@ beforeAll(async () => {
 }, 600_000);
 afterAll(async () => {
   try {
-    // An unrelated failure must not satisfy a pending contents proof.
-    expect([...contentsRefusals].sort()).toEqual(['member', 'moderator', 'operator', 'owner', 'stranger', 'visitor']);
     await recording.publish();
   }
   finally { await sessions?.close(); }
@@ -207,18 +204,16 @@ async function credit(person: PersonaSession, work: Work, sample?: ReturnType<Ou
   );
 }
 
-// Read the known contents refusal once so pending proofs fail on the answer, not a retry timeout.
+// Page reads return their first answer, including any dependency failure.
 const isContentsRead = (method: string, path: string) =>
   method === 'GET' && /^\/v1\/works\/[^/?]+\/contents(?:\?|$)/.test(path);
 
 async function readingSession(person: PersonaSession): Promise<PersonaSession> {
   if (!person.accountId) return {
     ...person,
-    main: (method, path, ...args) => isContentsRead(method, path)
-      ? fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
-        method, redirect: 'manual', signal: AbortSignal.timeout(5000),
-      })
-      : person.main(method, path, ...args),
+    main: (method, path) => fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
+        method, redirect: 'manual', signal: AbortSignal.timeout(isContentsRead(method, path) ? 5000 : 30_000),
+      }),
   };
   const stack = resolve('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
   const directory = readdirSync(stack).find((name) => name.startsWith('g-1005-auth-'));
@@ -273,117 +268,122 @@ async function readingSession(person: PersonaSession): Promise<PersonaSession> {
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
       if (isContentsRead(method, path)) return request(AbortSignal.timeout(5000));
-      return ['GET', 'HEAD'].includes(method)
-        ? outcomeResponse(request)
-        : request(AbortSignal.timeout(30_000));
+      return request(AbortSignal.timeout(30_000));
     },
   };
 }
 
 async function navigate(name: PersonaName) {
-  const person = await readingSession(sessions[name]);
-  const sample = recording.session(name, {
-    main: async (...args) => {
-      const response = await person.main(...args);
-      if (isContentsRead(args[0], args[1])) {
-        const problem = await response.clone().json() as { code?: string };
-        if (response.status === 503 && problem.code === 'work_read_unavailable') {
-          // The route's log identifies the underlying composition_mapping_differs.
-          contentsRefusals.add(name);
-          console.info(`${name} ${args[0]} ${args[1]}: ${response.status} ${JSON.stringify(problem)}`);
-        }
-      }
-      return response;
-    },
-  });
-  const path = `/v1/reading-positions/${short(published.work)}`;
-  const read = (fields: Record<string, string> = {}, label?: string) =>
-    answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
-      : person.main('GET', `${path}?${query(person, fields)}`));
-  await contentsPageReads(name, sample, person);
-  await credit(person, published, sample);
-  const seen: string[] = [];
-  let cursor: string | null = null;
-  let pages = 0;
-  let restarts = 0;
-  do {
-    expect(++pages).toBeLessThan(1100);
-    const response = await person.main(
-      'GET',
-      `${path}?${query(person, { limit: '100', ...(cursor ? { cursor } : {}) })}`,
-    );
-    if (response.status === 409) {
-      expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
-      expect(++restarts).toBeLessThan(20);
-      seen.length = 0;
-      cursor = null;
-      continue;
-    }
-    const page = await answer<Page>(Promise.resolve(response));
-    expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
-    expect(page.complete).toBe(page.nextCursor === null);
-    seen.push(...page.items.map((item) => item.occurrence));
-    cursor = page.nextCursor;
-  } while (cursor || seen.length === 0);
-  expect(seen).toEqual(occurrences);
-  expect(new Set(seen).size).toBe(1000);
-  // Work composition uses label search. A bare numeric seek is a separately
-  // refused contract and is unnecessary to find the numbered distant episode.
-  for (const [q, number] of [['Episode 1000 重逢', 1000]] as const) {
-    const matches: Page['items'] = [];
-    let searchCursor: string | null = null;
-    let searchPages = 0;
+  let partName = 'authorization';
+  let partRequests = ['Account authorize, consent and token exchange'];
+  let partStarted = performance.now();
+  const elapsed = () => {
+    const ms = performance.now() - partStarted;
+    console.info(`${name} ${partName}: ${ms.toFixed(2)}ms${ms > 60_000 ? ` requests: ${partRequests.join('; ')}` : ''}`);
+  };
+  const nextPart = (label: string, requests: string[]) => {
+    elapsed(); partName = label; partRequests = requests; partStarted = performance.now();
+  };
+  try {
+    const person = await readingSession(sessions[name]);
+    const sample = recording.session(name, person);
+    const path = `/v1/reading-positions/${short(published.work)}`;
+    const read = (fields: Record<string, string> = {}, label?: string) =>
+      answer<Page>(label ? sample(label, 'GET', `${path}?${query(person, fields)}`)
+        : person.main('GET', `${path}?${query(person, fields)}`));
+    nextPart('contents-page', ['GET /v1/works/{id}, /v1/works/{id}/contents (all pages), /v1/reading-positions/{id} (preview and search)']);
+    await contentsPageReads(name, sample, person);
+    nextPart('credits', ['GET /v1/works/{id}/credits, /v1/main-versions/{id}/native-variants']);
+    await credit(person, published, sample);
+    nextPart('inventory', ['GET /v1/reading-positions/{id}?position=start&limit=100 (all pages)']);
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    let pages = 0;
+    let restarts = 0;
     do {
-      expect(++searchPages).toBeLessThan(1100);
-      const fields = {
-        q,
-        limit: '100',
-        ...(searchCursor ? { cursor: searchCursor } : {}),
-      };
-      const page = await read(fields, searchPages === 1 ? 'distant-episode-search' : undefined);
-      // A search can scan empty windows before finding the distant episode.
-      // Retain its successful page as well as its first window for the story.
-      if (page.items.length) await read(fields, 'distant-episode-match');
-      expect(page.search).toEqual({ status: 'current' });
+      expect(++pages).toBeLessThan(1100);
+      const response = await person.main(
+        'GET',
+        `${path}?${query(person, { limit: '100', ...(cursor ? { cursor } : {}) })}`,
+      );
+      if (response.status === 409) {
+        expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
+        expect(++restarts).toBeLessThan(20);
+        seen.length = 0;
+        cursor = null;
+        continue;
+      }
+      const page = await answer<Page>(Promise.resolve(response));
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.complete).toBe(page.nextCursor === null);
-      matches.push(...page.items);
-      searchCursor = page.nextCursor;
-    } while (searchCursor);
-    expect(matches, `Completed GET ${path}?q=${q}: ${JSON.stringify(matches)}`).toHaveLength(1);
-    expect(matches[0]?.occurrence).toBe(occurrences[number - 1]);
-    expect(matches[0]?.labels).toContainEqual({ value: q, language: 'en' });
-    await credit(person, episodes[(number - 1) % episodes.length]!, sample, 'distant-episode');
-  }
-  const first = await read({ limit: '2' }, 'inventory-start');
-  expect(first.nextCursor).not.toBeNull();
-  const second = await read({ limit: '2', cursor: first.nextCursor! }, 'inventory-continuation');
-  expect(second.items.map((item) => item.occurrence)).toEqual(occurrences.slice(2, 4));
-  await answer(
-    sample('cursor-query-refused',
-      'GET',
-      `${path}?${query(person, { q: 'Episode 8', limit: '2', cursor: first.nextCursor! })}`,
-    ),
-    400,
-  );
-  const other = sessions[name === 'stranger' ? 'member' : 'stranger'];
-  await answer(
-    other.main('GET', `${path}?${query(other, { limit: '2', cursor: first.nextCursor! })}`),
-    400,
-  );
-  const hiddenPath = `/v1/reading-positions/${short(privateWork.work)}?${query(person)}`;
-  if (name === 'owner') await answer(sample('private-inventory', 'GET', hiddenPath));
-  else
-    expect(await answer(sample('private-inventory-refused', 'GET', hiddenPath), 404)).toEqual(
-      await answer(
-        person.main('GET', `/v1/reading-positions/${randomUUID()}?${query(person)}`),
-        404,
+      seen.push(...page.items.map((item) => item.occurrence));
+      cursor = page.nextCursor;
+    } while (cursor || seen.length === 0);
+    expect(seen).toEqual(occurrences);
+    expect(new Set(seen).size).toBe(1000);
+    nextPart('distant-search', ['GET /v1/reading-positions/{id}?q=Episode 1000 重逢 (all windows), episode credits and native variants']);
+    // Work composition uses label search. A bare numeric seek is a separately
+    // refused contract and is unnecessary to find the numbered distant episode.
+    for (const [q, number] of [['Episode 1000 重逢', 1000]] as const) {
+      const matches: Page['items'] = [];
+      let searchCursor: string | null = null;
+      let searchPages = 0;
+      do {
+        expect(++searchPages).toBeLessThan(1100);
+        const fields = {
+          q,
+          limit: '100',
+          ...(searchCursor ? { cursor: searchCursor } : {}),
+        };
+        const page = await read(fields, searchPages === 1 ? 'distant-episode-search' : undefined);
+        // A search can scan empty windows before finding the distant episode.
+        // Retain its successful page as well as its first window for the story.
+        if (page.items.length) await read(fields, 'distant-episode-match');
+        expect(page.search).toEqual({ status: 'current' });
+        expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
+        expect(page.complete).toBe(page.nextCursor === null);
+        matches.push(...page.items);
+        searchCursor = page.nextCursor;
+      } while (searchCursor);
+      expect(matches, `Completed GET ${path}?q=${q}: ${JSON.stringify(matches)}`).toHaveLength(1);
+      expect(matches[0]?.occurrence).toBe(occurrences[number - 1]);
+      expect(matches[0]?.labels).toContainEqual({ value: q, language: 'en' });
+      await credit(person, episodes[(number - 1) % episodes.length]!, sample, 'distant-episode');
+    }
+    nextPart('continuation-and-concealment', ['GET /v1/reading-positions/{id} (cursor, identity, private Work and empty-search controls), Work credits']);
+    const first = await read({ limit: '2' }, 'inventory-start');
+    expect(first.nextCursor).not.toBeNull();
+    const second = await read({ limit: '2', cursor: first.nextCursor! }, 'inventory-continuation');
+    expect(second.items.map((item) => item.occurrence)).toEqual(occurrences.slice(2, 4));
+    await answer(
+      sample('cursor-query-refused',
+        'GET',
+        `${path}?${query(person, { q: 'Episode 8', limit: '2', cursor: first.nextCursor! })}`,
       ),
+      400,
     );
-  await credit(person, published);
-  const empty = await read({ q: 'An episode label that does not exist', limit: '2' }, 'inventory-search-empty');
-  expect(empty.items).toEqual([]);
-  if (name === 'owner') await inventoryPageReads(sample, person);
+    const other = await readingSession(sessions[name === 'stranger' ? 'member' : 'stranger']);
+    await answer(
+      other.main('GET', `${path}?${query(other, { limit: '2', cursor: first.nextCursor! })}`),
+      400,
+    );
+    const hiddenPath = `/v1/reading-positions/${short(privateWork.work)}?${query(person)}`;
+    if (name === 'owner') await answer(sample('private-inventory', 'GET', hiddenPath));
+    else
+      expect(await answer(sample('private-inventory-refused', 'GET', hiddenPath), 404)).toEqual(
+        await answer(
+          person.main('GET', `/v1/reading-positions/${randomUUID()}?${query(person)}`),
+          404,
+        ),
+      );
+    await credit(person, published);
+    const empty = await read({ q: 'An episode label that does not exist', limit: '2' }, 'inventory-search-empty');
+    expect(empty.items).toEqual([]);
+    if (name === 'owner') {
+      nextPart('owner-page', ['GET Work header, page, statements, credits, parts, compositions, wholes, relations, releases, realizations, ratings, reader state, progress and edition preference']);
+      await inventoryPageReads(sample, person);
+    }
+  } finally { elapsed(); }
 }
 
 // Copy the contents route's own reads, including the inventory builder's key order.
@@ -393,7 +393,38 @@ async function contentsPageReads(name: PersonaName, sample: ReturnType<OutcomeRe
   const suffix = viewer.size ? `?${viewer}` : '';
   // The owner's header remains in inventoryPageReads with its existing label and request.
   if (name !== 'owner') await answer(sample('work-header', 'GET', `/v1/works/${id}${suffix}`));
-  await answer(sample('contents-read', 'GET', `/v1/works/${id}/contents${suffix}`));
+  const seen: string[] = [];
+  let cursor: string | null = null;
+  let pages = 0;
+  let revision: string | null = null;
+  do {
+    expect(++pages).toBeLessThanOrEqual(50);
+    const fields = new URLSearchParams({ limit: '20', ...(cursor ? { cursor } : {}),
+      ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) });
+    const page = await answer<{ composition: string; compositionRevision: string; version: string;
+      items: { occurrence: string; parent: string; role: string; target: string; availability: string;
+        number: null; division: null; selectedRevision: null; progress: null; displayLabel: string; inclusion: string }[];
+      nextCursor: string | null; count: { value: number; kind: string; total: null } }>(
+      sample(pages === 1 ? 'contents-read' : `contents-read-continuation-${pages}`, 'GET',
+        pages === 1 ? `/v1/works/${id}/contents${suffix}` : `/v1/works/${id}/contents?${fields}`));
+    expect(page.version).toBe(published.mainVersion);
+    revision ??= page.compositionRevision;
+    expect(page.compositionRevision).toBe(revision);
+    expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
+    expect(page.items).toHaveLength(20);
+    for (const [index, item] of page.items.entries()) {
+      const at = seen.length + index;
+      expect(item).toMatchObject({ occurrence: occurrences[at], parent: page.composition,
+        role: 'part', target: episodes[at % episodes.length]!.work, availability: 'available',
+        number: null, division: null, selectedRevision: null, progress: null, inclusion: 'required' });
+      expect(item.displayLabel).toBe(at === 999 ? 'Episode 1000 重逢' : at === 998 ? 'Episode 999 再会' : `Episode ${at + 1}`);
+    }
+    seen.push(...page.items.map(item => item.occurrence));
+    cursor = page.nextCursor;
+    expect(cursor === null).toBe(seen.length === 1000);
+  } while (cursor);
+  expect(seen).toEqual(occurrences);
+  expect(new Set(seen).size).toBe(1000);
   const inventoryQuery = (q?: string, cursor?: string) => new URLSearchParams({
     position: 'start',
     language: 'en',

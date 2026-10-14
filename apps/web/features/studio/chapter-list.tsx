@@ -68,7 +68,9 @@ export interface ChapterListProps {
 
 /** One level of the outline as Studio holds it: the loaded items in order and Main's cursor for more. */
 interface Level { status: 'idle' | 'loading' | 'loaded' | 'failed'; items: ContentsItem[]; next: string | null }
-const levelOf = (page: ContentsPage): Level => ({ status: 'loaded', items: page.items, next: page.nextCursor });
+const levelOf = (page: ContentsPage): Level => page.items.some(item => item.role === 'part')
+  ? { status: 'failed', items: [], next: null }
+  : { status: 'loaded', items: page.items, next: page.nextCursor };
 /** What is being dragged, and where it would land. */
 type Drag = { occurrence: string; role: 'chapter' | 'group'; parent: string };
 type Drop = { occurrence: string; edge: 'before' | 'after' | 'into' } | { end: true };
@@ -179,7 +181,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     setLevels(current => ({ ...current, [group]: { ...(current[group] ?? { items: [], next: null }),
       status: 'loading' } }));
     const loaded = await read(group, cursor).catch(() => null);
-    setLevels(current => ({ ...current, [group]: loaded ? { status: 'loaded', next: loaded.nextCursor,
+    setLevels(current => ({ ...current, [group]: loaded && levelOf(loaded).status === 'loaded' ? { status: 'loaded', next: loaded.nextCursor,
       items: cursor ? [...current[group]?.items ?? [], ...loaded.items] : loaded.items }
       : { ...(current[group] ?? { items: [], next: null }), status: 'failed' } }));
   };
@@ -263,14 +265,15 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
    * row under the pointer shows where it would land, and releasing moves it there. Escape cancels.
    */
   const startDrag = (event: ReactPointerEvent<HTMLElement>, item: ContentsItem) => {
-    if (busy !== null || event.button !== 0) return;
+    const role = item.role;
+    if (role === 'part' || busy !== null || event.button !== 0) return;
     event.preventDefault();
     const origin = { x: event.clientX, y: event.clientY };
     let at: Drop | null = null;
     const move = (next: PointerEvent) => {
       if (!dragging.current) {
         if (Math.hypot(next.clientX - origin.x, next.clientY - origin.y) < 4) return;
-        dragging.current = { occurrence: item.occurrence, role: item.role, parent: item.parent };
+        dragging.current = { occurrence: item.occurrence, role, parent: item.parent };
         setDrag(dragging.current);
       }
       // Near the window's edge the page scrolls, to reach volumes out of view.
@@ -702,7 +705,7 @@ export function ChapterList({ agent, agents = [agent], book, page, opened = null
     {top.next ? <Button type="button" variant="outline" className="justify-self-start"
       isLoading={top.status === 'loading'} onClick={() => {
         setTop(current => ({ ...current, status: 'loading' }));
-        void read(null, top.next!).then(more => setTop(current => more ? { status: 'loaded',
+        void read(null, top.next!).then(more => setTop(current => more && levelOf(more).status === 'loaded' ? { status: 'loaded',
           items: [...current.items, ...more.items], next: more.nextCursor } : { ...current, status: 'failed' }));
       }}>{t.moreChapters}</Button> : null}
     {error ? <Alert variant="destructive"><TriangleAlertIcon aria-hidden="true" />

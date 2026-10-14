@@ -5,7 +5,8 @@ import { orderTree, recordTree, structureObjects } from '../structure/change.ts'
 import { seekChapter } from '../structure/reading-order.ts';
 import { ReadingOrderIndex } from '../reading-position/immutable-order.ts';
 import { checkOccurrenceRecord, InvalidStructureObject, type OccurrenceRecord } from '../structure/format.ts';
-import { isCatalogTarget } from '../structure/profiles.ts';
+import { isCatalogTarget, structureProfileFor } from '../structure/profiles.ts';
+import { compositionWorkBatchReader } from '../composition/visible-targets.ts';
 import { orderTreeKey } from '../structure/graph.ts';
 import { StructureObjectCorrupt, StructureObjectUnavailable } from '../structure/tree.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../../infrastructure/immutable-objects.ts';
@@ -78,7 +79,7 @@ function structureError(error: unknown): never {
   throw error;
 }
 
-async function canReadTarget(session: WorkReadSession, target: string): Promise<boolean> {
+async function canReadChapterTarget(session: WorkReadSession, target: string): Promise<boolean> {
   if (isCatalogTarget('book-composition', target)) return false;
   if (session.principal && session.options.actingSubject
     && await session.deps.access.canReadWork(session.principal, session.options.actingSubject, target)) {
@@ -130,9 +131,21 @@ async function composition(session: WorkReadSession, work: string, version?: str
     .catch(structureError);
   if (!selected) throw missing();
   const header = await readCompositionHeader(session.deps.environment, selected).catch(structureError);
-  if (!header || header.profile !== 'book-composition' || header.work !== work
-    || header.mainVersion !== basis.card.mainVersion) throw new WorkReadUnavailable('Composition mapping differs');
+  assertContentsCompositionMapping(header, work, basis.card.mainVersion);
   return { basis, header };
+}
+
+/** Profile compatibility must never replace the independent identity checks. */
+export function assertContentsCompositionMapping(header: CompositionHeader | null, work: string,
+  mainVersion: string): asserts header is CompositionHeader {
+  if (!header || header.work !== work || header.mainVersion !== mainVersion) {
+    throw new WorkReadUnavailable('Composition mapping differs');
+  }
+}
+
+function contentsRole(role: OccurrenceRecord['role']) {
+  if (role === 'group' || role === 'chapter' || role === 'part') return role;
+  throw new WorkReadUnavailable('Contents roles are unavailable');
 }
 
 type Division = 'volume' | 'part' | 'extras';
@@ -244,6 +257,10 @@ export async function readContents(session: WorkReadSession, work: string,
   try {
     session.options.localBasis = true;
     const { basis, header } = await composition(session, work, options.version);
+    const profile = structureProfileFor(header.profile);
+    for (const role of profile.roles) contentsRole(role);
+    const chapters = profile.roles.includes('chapter');
+    const partTargets = profile.roles.includes('part') ? compositionWorkBatchReader(session) : null;
     const snapshot = await neighbourhood(session, header);
     const cursorPosition = { ...session.position, dependencyToken: readDependencyToken([
       basis.dependencyToken, header.head, header.generation, header.manifest]) };
@@ -257,13 +274,16 @@ export async function readContents(session: WorkReadSession, work: string,
     const page = await readCompositionPage(session.deps.environment, {
       structure: header.structure, header, snapshot, parent, limit: session.options.limit ?? WORK_CONTENTS_COST.pageSize,
       ...(cursor ? { after: cursor.after } : {}), outline: true,
-      canReadTarget: target => canReadTarget(session, target),
+      canReadTarget: target => partTargets
+        ? partTargets([target]).then(readable => readable.has(target)) : canReadChapterTarget(session, target),
+      ...(partTargets ? { canReadTargets: partTargets } : {}),
     });
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
-    const groups = await topGroups(session, header, snapshot);
+    const groups = chapters ? await topGroups(session, header, snapshot) : null;
     const group = parent === header.structure ? null : groups?.find(item => item.occurrence === parent);
     const numbered = new Map<string, number | null>();
     for (const [index, record] of page.occurrences.entries()) {
+      if (!chapters || record.role === 'part') continue;
       const at = (page.offset ?? 0) + index;
       numbered.set(record.occurrence, record.role === 'group' ? groups && volumeNumber(groups, record.occurrence)
         : !group ? parent === header.structure
@@ -283,27 +303,35 @@ export async function readContents(session: WorkReadSession, work: string,
           variant: selected.variant, language });
       }
       return { occurrence: record.occurrence, parent: record.parent,
-        role: record.role as 'group' | 'chapter', label, division: recordDivision(record),
+        role: contentsRole(record.role), label, division: chapters ? recordDivision(record) : null,
         number: numbered.get(record.occurrence) ?? null,
         childCount: record.role === 'group' ? page.childCounts?.[record.occurrence] ?? null : null,
         target: record.target?.startsWith('https://rezics.com/id/') ? record.target : null,
         selectedRevision: selected?.revision ?? null,
         progress: selected ? { composition: header.structure, occurrence: record.occurrence,
           selectedRevision: selected.revision } : null,
-        availability: record.role === 'group' || selected ? 'available' as const : 'unavailable' as const };
+        ...(record.qualifier?.type === 'work-part' ? { displayLabel: record.qualifier.displayLabel,
+          inclusion: record.qualifier.inclusion } : {}),
+        availability: record.role === 'group' || record.role === 'part' && record.target || selected
+          ? 'available' as const : 'unavailable' as const };
     }));
     const derived = await legacyChapterLabels(session, legacy);
     for (const item of items) if (item.selectedRevision && missingTitle(item.label)) {
       item.label = derived.get(item.selectedRevision) ?? item.label;
     }
-    const decisions = await session.disclosure(items.map(item => ({ owner: 'graph',
+    // Work uses and their labels have already passed the composition disclosure
+    // owner inside the bounded scan, including lookahead. Text disclosure belongs
+    // only to chapter contents; applying it to parts fabricates unavailable Works.
+    const textItems = chapters ? items.filter(item => item.role !== 'part') : [];
+    const decisions = await session.disclosure(textItems.map(item => ({ owner: 'graph',
       resource: item.target ?? item.occurrence, component: 'name',
       work, ...(item.role === 'group' ? { revision: header.head } : {}) })), 'read');
-    const bodyDecisions = await session.disclosure(items.map(item => ({ owner: 'content',
+    const bodyDecisions = await session.disclosure(textItems.map(item => ({ owner: 'content',
       resource: item.target ?? item.occurrence, component: 'body',
       revision: item.selectedRevision, work })), 'read');
-    const visibleItems = items.filter((_item, index) => decisions[index] === 'visible'
-      && bodyDecisions[index] === 'visible');
+    const visibleText = new Set(textItems.filter((_item, index) => decisions[index] === 'visible'
+      && bodyDecisions[index] === 'visible').map(item => item.occurrence));
+    const visibleItems = items.filter(item => !textItems.includes(item) || visibleText.has(item.occurrence));
     await fenceWorkBasis(session, basis);
     return { profile: 'work-contents-v1' as const, work, version: header.component,
       composition: header.structure, compositionRevision: header.head, language,
@@ -323,7 +351,7 @@ async function neighbor(session: WorkReadSession, header: CompositionHeader,
       if (++candidates > WORK_CONTENTS_COST.navigationCandidates) {
         throw new WorkReadLimit('Navigation exceeds its candidate budget');
       }
-      return canReadTarget(session, target);
+      return canReadChapterTarget(session, target);
     },
     accept: async record => {
       if (!record.target || !record.selection) return false;
@@ -358,7 +386,7 @@ export async function readChapterContinuation(session: WorkReadSession, work: st
     language = contentLanguage(language, null);
     const read = async (id: string) => {
       const page = await readCompositionPage(session.deps.environment, { structure, header, snapshot,
-        occurrence: id, limit: 1, canReadTarget: target => canReadTarget(session, target) });
+        occurrence: id, limit: 1, canReadTarget: target => canReadChapterTarget(session, target) });
       if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
       const record = page.occurrences[0];
       if (!record || record.state !== 'active' || record.role !== 'chapter' || !record.target
@@ -404,7 +432,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     const language = contentLanguage(options.language, basis.selectedLanguage);
     const snapshot = await neighbourhood(session, header);
     const page = await readCompositionPage(session.deps.environment, { structure: header.structure, header, snapshot,
-      occurrence, limit: 1, canReadTarget: target => canReadTarget(session, target) });
+      occurrence, limit: 1, canReadTarget: target => canReadChapterTarget(session, target) });
     const record = page.occurrences[0];
     if (page.revision !== header.head) throw new WorkReadMoved('Composition changed');
     if (!record || record.state !== 'active' || record.role !== 'chapter' || !record.target
@@ -439,7 +467,7 @@ export async function readChapter(session: WorkReadSession, occurrence: string,
     await fenceWorkBasis(session, basis);
     const again = await selectedContent(session, record.target, language,
       record.selection.mode === 'fixed-revision' ? record.selection.revision : null);
-    if (!await canReadTarget(session, record.target) || again?.revision !== selected.revision) throw missing();
+    if (!await canReadChapterTarget(session, record.target) || again?.revision !== selected.revision) throw missing();
     const savedLabel = localizedLabel(record.labels, language);
     const heading = missingTitle(savedLabel) ? firstChapterHeading(exact.body) : null;
     return { profile: 'work-chapter-v1' as const, work: header.work, version: header.component,

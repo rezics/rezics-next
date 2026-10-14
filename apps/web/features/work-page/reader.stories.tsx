@@ -331,12 +331,46 @@ const volumeIri = (n: number) => `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-
 const volumeOne = volumeIri(1), volumeTwo = volumeIri(2), extras = volumeIri(3);
 type ContentsItem = ContentsPage['items'][number];
 const baseContents = (fixture.contents as { ok: true; data: ContentsPage }).data;
+const baseChapter = baseContents.items.find((item): item is Exclude<ContentsItem, { role: 'part' }> => item.role === 'chapter');
+if (!baseChapter) throw new Error('Reader fixture has no chapter');
+const partTarget = 'https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-000000000777';
+const workPart: ContentsItem = { occurrence: volumeIri(7), parent: baseContents.composition, role: 'part',
+  label: { value: 'Episode 1000 重逢', language: 'en' }, division: null, number: null, childCount: null,
+  target: partTarget, selectedRevision: null, progress: null, availability: 'available',
+  displayLabel: 'Episode 1000 重逢', inclusion: 'required' };
+
+export const WorkParts: Story = {
+  render: () => <ContentsRegion contents={{ ok: true, data: { ...baseContents, items: [workPart], nextCursor: null } }}
+    workRef={fixture.workRef} query={{}} locale="en" messages={messages.en} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: 'Episode 1000 重逢' }))
+      .toHaveAttribute('href', localizedPath(workHref(partTarget), 'en'));
+    await expect(canvas.queryByRole('link', { name: 'Start reading' })).toBeNull();
+  },
+};
+
+export const GroupedWorkParts: Story = {
+  render: () => <ContentsRegion contents={{ ok: true, data: { ...baseContents, nextCursor: null, items: [{
+    occurrence: volumeOne, parent: baseContents.composition, role: 'group', target: null,
+    label: { value: 'Season one', language: 'en' }, division: null, number: null, childCount: null,
+    selectedRevision: null, progress: null, availability: 'available',
+  }] } }} workRef={fixture.workRef} query={{}} locale="en" messages={messages.en}
+    loadGroup={async () => ({ ...baseContents, items: [{ ...workPart, parent: volumeOne }], nextCursor: null })} />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: 'Season one' }));
+    await expect(await canvas.findByRole('link', { name: 'Episode 1000 重逢' }))
+      .toHaveAttribute('href', localizedPath(workHref(partTarget), 'en'));
+    await expect(canvas.queryByText(/chapter/i)).toBeNull();
+  },
+};
 const group = (occurrence: string, value: string, division: 'volume' | 'extras', number: number | null,
   childCount: number): ContentsItem => ({ occurrence, parent: baseContents.composition, role: 'group',
   label: { value, language: 'zh-Hans' }, division, number, childCount, target: null, selectedRevision: null,
   progress: null, availability: 'available' });
 const inGroup = (parent: string, n: number, value: string, number: number | null): ContentsItem => ({
-  ...baseContents.items[1]!, occurrence: `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-0000000008${String(n).padStart(2, '0')}`,
+  ...baseChapter, occurrence: `https://rezics.com/id/b5c7d9e1-f3a5-4b7c-9d1e-0000000008${String(n).padStart(2, '0')}`,
   parent, label: { value, language: 'zh-Hans' }, number });
 const levels: Record<string, ContentsItem[]> = {
   [volumeOne]: [inGroup(volumeOne, 1, '第一章 雨夜', 1), inGroup(volumeOne, 2, '第二章 未寄出的信', 2)],

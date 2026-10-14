@@ -12,9 +12,9 @@ export const chapterQuery = t.Object({ revision: t.Optional(readId), language: t
 const label = t.Object({ value: t.String(), language: t.String() });
 const progress = t.Object({ composition: readId, occurrence: readId,
   selectedRevision: contentRevision });
-/** How a group divides the Book; a group that does not say reads as a part. Null for a chapter. */
+/** Book group division; null for Work groups and leaf occurrences. */
 const division = t.Nullable(t.Union([t.Literal('volume'), t.Literal('part'), t.Literal('extras')]));
-export const contentsItem = t.Object({ occurrence: readId, parent: readId,
+const textContentsItem = t.Object({ occurrence: readId, parent: readId,
   role: t.Union([t.Literal('group'), t.Literal('chapter')]),
   label: t.Nullable(label), division,
   /**
@@ -22,12 +22,20 @@ export const contentsItem = t.Object({ occurrence: readId, parent: readId,
    * whole Book; null for parts, for chapters in extras, and past the numbering budget.
    */
   number: t.Nullable(t.Integer({ minimum: 1 })),
-  /** A group's active children; null for a chapter. */
+  /** Active children when the profile discloses their count; null otherwise. */
   childCount: t.Nullable(t.Integer({ minimum: 0 })),
   target: t.Nullable(readId),
   selectedRevision: t.Nullable(contentRevision),
   progress: t.Nullable(progress),
   availability: t.Union([t.Literal('available'), t.Literal('unavailable')]) });
+/** Work parts select a Work, without a chapter body, numbering or text progress.
+ * Unreadable uses are withheld by the registered Work composition owner. */
+const workPartItem = t.Object({ ...textContentsItem.properties, role: t.Literal('part'),
+  target: readId, division: t.Null(), number: t.Null(), childCount: t.Null(),
+  selectedRevision: t.Null(), progress: t.Null(), availability: t.Literal('available'),
+  displayLabel: t.String(),
+  inclusion: t.Union([t.Literal('required'), t.Literal('optional'), t.Literal('extra')]) });
+export const contentsItem = t.Union([textContentsItem, workPartItem]);
 export const contentsPage = t.Object({ profile: t.Literal('work-contents-v1'), work: readId,
   version: readId, composition: readId, compositionRevision: readId,
   language: t.Nullable(readLanguage), items: t.Array(contentsItem, { maxItems: 20 }), ...pageFields });
