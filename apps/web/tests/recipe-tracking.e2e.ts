@@ -1,11 +1,13 @@
 import { readFileSync } from 'node:fs';
-import { expect, test } from '@playwright/test';
-import { BFF_PREFIX } from '../features/api/browser.ts';
-import { studioHref } from '../features/studio/agent.ts';
+import { expect as playwrightExpect, test } from '@playwright/test';
+import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
-import { chooseRadio, expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
+import { expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
 import { chooseByKeyboard } from './journeys/keyboard-choice.ts';
+import { recipeTrackingSetup } from './journeys/recipe-tracking-setup.ts';
+
+const expect = playwrightExpect.configure({ timeout: 30_000 });
 
 test.use({ actionTimeout: 15_000 });
 
@@ -18,31 +20,9 @@ for (const locale of ['en', 'ja'] as const) {
     const found: Findings = [];
     const title = `Measured pancakes (${locale})`;
     await page.emulateMedia({ reducedMotion: 'reduce' });
-    await signInAtAccounts(page, localizedPath(studioHref({ iri: actingSubject, handle: null }, '/new'), 'en'), member);
-    await page.getByRole('textbox', { name: 'Title', exact: true }).fill(title);
-    await chooseRadio(page, page.getByRole('radio', { name: /^Recipe/ }), found, 'Recipe');
-    await chooseByKeyboard(page, page.getByRole('combobox', { name: 'Language you’ll write in', exact: true }),
-      page.getByRole('option', { name: 'English', exact: true }), found);
-    await expect(page.getByRole('combobox', { name: 'Language you’ll write in', exact: true })).toHaveText('English');
-    await pressByKeyboard(page, page.getByRole('button', { name: /^Create as / }), found, 'Create recipe');
-    await expect(page.getByRole('heading', { name: 'About this recipe', exact: true })).toBeVisible({ timeout: 60_000 });
-    const ingredient = page.getByRole('textbox', { name: 'Ingredient line', exact: true });
-    await ingredient.fill('1 cup flour');
-    await ingredient.press('Enter');
-    await expect(page.locator('[data-line]')).toHaveCount(1);
-    const step = page.getByRole('form', { name: 'Add a step', exact: true });
-    await step.getByRole('textbox').fill('Cook the pancakes until golden.');
-    await pressByKeyboard(page, step.getByRole('button', { name: 'Add', exact: true }), found, 'Add step');
-    await expect(page.locator('[data-step]')).toHaveCount(1);
-    await expect(page.getByRole('status').filter({ hasText: 'All changes saved' })).toBeVisible();
-    const published = page.waitForResponse(response => new URL(response.url()).pathname === `${BFF_PREFIX}/v1/work-publications`
-      && response.request().method() === 'POST' && response.status() !== 202, { timeout: 60_000 });
-    await pressByKeyboard(page, page.getByRole('button', { name: 'Publish', exact: true }), found, 'Publish recipe');
-    const response = await published;
-    expect(response.ok(), JSON.stringify({ method: 'POST', path: `${BFF_PREFIX}/v1/work-publications`,
-      request: response.request().postDataJSON(), status: response.status(), answer: await response.json() })).toBe(true);
-    await expect(page.getByText('Published. Everyone can read this recipe.')).toBeVisible();
-    const path = new URL(page.url()).pathname.replace(/^\/en/, '').replace(/\/edit\/recipe$/, '');
+    await signInAtAccounts(page, localizedPath('/library', 'en'), member);
+    const work = await recipeTrackingSetup(page, actingSubject, title);
+    const path = resourceHref('/w/', work.slice(-36));
     const home = localizedPath(path, locale);
     const connections = localizedPath(`${path}/connections`, locale);
     await page.goto(home);

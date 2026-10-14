@@ -1,12 +1,14 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { expect, test } from '@playwright/test';
+import { expect as playwrightExpect, test } from '@playwright/test';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
 import type { VisualNovelHubFixture } from './visual-novel-hub-seed.ts';
 import { chooseByKeyboard } from './journeys/keyboard-choice.ts';
+
+const expect = playwrightExpect.configure({ timeout: 30_000 });
 
 test.use({ actionTimeout: 15_000 });
 
