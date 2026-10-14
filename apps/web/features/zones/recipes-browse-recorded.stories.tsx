@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { materializeData } from 'native-i18n';
 import { useEffect, useState, type ReactNode } from 'react';
-import { expect, within } from 'storybook/test';
+import { expect, waitFor, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import browseFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-browse-and-search-in-its-zone.json';
 import paginationFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-pagination-in-its-zone.json';
@@ -169,7 +169,9 @@ function at(base: Story, viewport: 'phone' | 'desktop'): Story {
 
 /** The header refresh settles after the catalogue. A missing follow-state answer draws this notice. */
 async function expectNoRelationshipNotice(canvas: ReturnType<typeof within>) {
-  await expect.poll(() => canvas.queryByText(relationshipCopy.unavailable)).toBeNull();
+  await waitFor(() => {
+    expect(canvas.queryByText(relationshipCopy.unavailable)).toBeNull();
+  });
 }
 
 const playPopulated: Play = async ({ canvasElement, args }) => {
