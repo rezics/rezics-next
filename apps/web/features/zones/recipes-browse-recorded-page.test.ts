@@ -11,6 +11,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { buildBrowsePage } from '../realm/browse-page.ts';
 import { readBrowseAnswer, readFacetAnswer } from '../realm/browse-page-read.ts';
+import { recordedFollowRefresh } from '../realm/realm-page.tsx';
 import type { Loaded, ZoneBrowsePage } from '../realm/types.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import type { BrowseModel } from './browse-view.ts';
@@ -539,3 +540,30 @@ async function visitInjected(page: string) {
   });
   return { ...seen, model: findBrowse(rendered) };
 }
+
+const knownFollow = { policy: null, following: false, followRevision: null, level: null, source: null, pinPosition: null };
+
+test('an unmatched follow-state refresh keeps the follow the page already read', async () => {
+  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => {
+    throw new Error('Unmatched recorded request (recipes/catalogue-browse-and-search-in-its-zone/stranger): {}');
+  }, knownFollow);
+  expect(await api.state('https://rezics.com/id/realm')).toEqual({
+    following: false, revision: null, level: null, source: null, pinPosition: null,
+  });
+});
+
+test('a recorded follow-state answer is returned unchanged', async () => {
+  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => Response.json({
+    following: true, revision: 'r', level: 'highlights', source: 'explicit', pinPosition: 1,
+  }), knownFollow);
+  expect(await api.state('https://rezics.com/id/realm')).toEqual({
+    following: true, revision: 'r', level: 'highlights', source: 'explicit', pinPosition: 1,
+  });
+});
+
+test('a follow-state failure other than a missing record still fails', async () => {
+  const api = recordedFollowRefresh('https://rezics.com/id/person', async () => {
+    throw new Error('network down');
+  }, knownFollow);
+  await expect(api.state('https://rezics.com/id/realm')).rejects.toThrow('network down');
+});

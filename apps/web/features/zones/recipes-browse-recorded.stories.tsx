@@ -118,6 +118,7 @@ function ProductionVisit({ source, persona, label, routeLabel, state }: {
       personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher: replay.fetcher }),
       actingSubject: actingSubjectOf(record, persona),
       signedIn: persona !== 'visitor',
+      fetch: replay.fetcher,
     };
     void ZoneSiteRoute({
       params: Promise.resolve({ locale, space: addressKey(record, persona, addressLabel), path: ['browse'] }),
