@@ -7,8 +7,9 @@ import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch
 import { readPublishedRealmHeader, realmFrameReads } from './read.ts';
 
 const record = manga as AnswerRecord;
-const realm = '01a13738-258e-75fc-8fad-9632795f42a6';
-const zone = '88e711d2-e971-8847-8f2d-11979aee1101';
+const realm = '01a137cb-bd72-774d-9b57-e048179e856d';
+const zone = '777d533e-408a-8f2c-8aa7-47a56f2df0a4';
+const siteKey = '1Cg1BFuSog8nCaEwJY4TrN';
 const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 
@@ -58,14 +59,14 @@ for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'o
     const reads = realmFrameReads({ main: published.main, personal: personal.main, actingSubject: actor });
     const header = await reads.readRealmHeader(realm);
     const facets = await reads.readFacets();
-    const address = await reads.readAddress(zone, 'en');
+    const address = await reads.readAddress(siteKey, 'en');
     expect<unknown>(header).toEqual({ ok: true, data: sample(persona, 'frame-realm-header').answer });
     expect<unknown>(facets).toEqual({ ok: true, data: sample(persona, 'frame-facets').answer });
     expect<unknown>(address).toEqual({ kind: 'resolved', data: sample(persona, 'frame-address').answer });
     // A site with no Realm capability remains a site; it does not invent a Realm or private fallback.
-    expect<unknown>(await reads.resolveSite(zone, 'en')).toEqual({ kind: 'site',
+    expect<unknown>(await reads.resolveSite(siteKey, 'en')).toEqual({ kind: 'site',
       address: sample(persona, 'frame-address').answer, zone, realm: null });
-    expect(await reads.resolveRealm(zone, 'en')).toEqual({ kind: 'missing' });
+    expect(await reads.resolveRealm(siteKey, 'en')).toEqual({ kind: 'missing' });
     expect<unknown>(await reads.readCompletePresentation(zone)).toEqual({ ok: true,
       data: sample(persona, 'frame-presentation').answer });
     const refused = await reads.readZoneRoute(zone, 'browse');
@@ -75,7 +76,7 @@ for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'o
       { path: `/v1/realms/${realm}`, query: {}, authorization: null },
       { path: `/v1/facets`, query: {}, authorization: null },
       ...Array.from({ length: 3 }, () => ({ path: `/v1/addresses/resolve`,
-        query: { scope: 'space', key: zone }, authorization: null })),
+        query: { scope: 'space', key: siteKey }, authorization: null })),
     ]);
     expect(personal.requests).toEqual([
       { path: `/v1/zones/${zone}/presentation`, query: actor ? { actingSubject: actor } : {},

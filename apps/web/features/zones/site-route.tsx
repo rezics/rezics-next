@@ -69,7 +69,7 @@ export interface ZoneSiteProps {
   searchParams: Promise<Search>;
 }
 
-const routePath = (path: readonly string[]) => `/${path.join('/')}`;
+const routePath = (path: readonly string[]) => path.length === 1 && path[0] === 'browse' ? 'browse' : `/${path.join('/')}`;
 /** `cursor` pages a mount's own index; below the mount it belongs to a Work's tabs. */
 const routeCursor = (path: readonly string[], search: Search) =>
   path.length === 1 ? parseCursor(search) : undefined;
@@ -83,8 +83,12 @@ export async function zoneSiteMetadata({ params, searchParams }: ZoneSiteProps):
   const resolved = await resolveSite(space, locale);
   if (resolved.kind === 'join')
     return { title: resolved.page.name.value, robots: { index: false }, referrer: 'no-referrer' };
-  if (resolved.kind !== 'site' || !resolved.realm) return metadata;
-  const realm = await resolveRealm(space, locale);
+  if (resolved.kind !== 'site') return metadata;
+  if (!resolved.realm) {
+    const presentation = await readCompletePresentation(resolved.zone);
+    if (!presentation.ok || !presentation.data.realm) return metadata;
+  }
+  const realm = await resolveRealm(space, locale, 'site');
   if (realm.kind === 'join')
     return { title: realm.page.name.value, robots: { index: false }, referrer: 'no-referrer' };
   if (realm.kind !== 'realm') return metadata;
@@ -187,7 +191,10 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
       reference={resolved.reference} />;
   if (resolved.kind === 'join')
     return privateJoinPage(resolved.page, locale, siteHref(locale, space, path));
-  if (!resolved.realm) return standaloneSite(resolved, locale, path, search);
+  if (!resolved.realm) {
+    const presentation = await readCompletePresentation(resolved.zone);
+    if (!presentation.ok || !presentation.data.realm) return standaloneSite(resolved, locale, path, search);
+  }
   const communityProps = {
     params: Promise.resolve({ locale, realm: space }),
     searchParams: Promise.resolve(search),
@@ -214,7 +221,7 @@ export async function ZoneSiteRoute({ params, searchParams }: ZoneSiteProps): Pr
   }
   // Resolve mounts before the starter Browse renderer, so a mount named browse is never shadowed.
   const routed = await readZoneRoute(resolved.zone, routePath(path), routeCursor(path, search));
-  if (!routed.ok && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
+  if (!routed.ok && routed.status === 404 && routed.failure === 'missing' && path.length === 1 && path[0] === 'browse') {
     return RealmBrowseRoute(communityProps);
   }
   const view = await loadRealmView(space, locale, search, 'site');

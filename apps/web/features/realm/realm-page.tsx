@@ -40,14 +40,14 @@ import type { BanReading } from '../realm-appeal/reading.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
-import { readCompletePresentation, type RealmResolution, resolveRealm } from './read.ts';
+import { readCompletePresentation, readRealmZone, type RealmResolution, resolveRealm } from './read.ts';
 import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { type RealmTab, realmHref } from './route.ts';
 import { siteHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
-import { spaceHref } from '../address/path.ts';
+import { addressKey, spaceHref } from '../address/path.ts';
 import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
 import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
 import { privateDiscovery, realmDiscovery } from '../address/space-read.ts';
@@ -141,14 +141,31 @@ export async function loadRealmView(
   search: Search,
   surface: 'community' | 'site' = 'community',
 ): Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
-  const [realm, messages, zoneMessages, jar, reader] = await Promise.all([
-    resolveRealm(ref, locale),
+  const [resolved, messages, zoneMessages, jar, reader] = await Promise.all([
+    resolveRealm(ref, locale, surface),
     getMessages('realm', locale),
     getMessages('zones', locale),
     cookies(),
     realmReader(),
   ]);
-  if (realm.kind !== 'realm') return realm;
+  if (resolved.kind !== 'realm') return resolved;
+  let realm = resolved;
+  // A Realm entry can lack Zone capability; its attachment supplies the site address.
+  if (surface === 'community' || !realm.zone) {
+    const attached = await readRealmZone(realm.realm);
+    if (attached.ok) {
+      const zoneId = attached.data.zone.slice(-36);
+      const publication = await readCompletePresentation(zoneId);
+      const address = publication.ok && publication.data.address
+        ? { ...publication.data.address, prefix: '/z/' as const } : null;
+      if (publication.ok && publication.data.zone === attached.data.zone
+        && publication.data.realm === realm.header.id && address
+        && publication.data.address?.prefix === address.prefix) {
+        realm = { ...realm, zone: { id: zoneId, segment: attached.data.routeSegment },
+          siteRef: addressKey(address) };
+      }
+    }
+  }
   const [read, membership, ban] = await Promise.all([
     surface === 'site' && realm.zone ? readCompletePresentation(realm.zone.id) : null,
     reader.actingSubject
@@ -197,6 +214,7 @@ export async function loadRealmView(
   });
   const header = realm.header;
   const mounts = read?.ok ? read.data.navigation : [];
+  const siteRef = realm.siteRef ?? (realm.zone ? realm.ref : null);
   const zone: ZoneContext = {
     slug,
     realm: header.id,
@@ -207,9 +225,9 @@ export async function loadRealmView(
     tokens: presentation.tokens,
     locale,
     links: {
-      home: siteHref(locale, realm.ref, []),
-      browse: siteHref(locale, realm.ref, ['browse']),
-      works: siteHref(locale, realm.ref, ['browse']),
+      home: siteRef ? siteHref(locale, siteRef, []) : '',
+      browse: siteRef ? siteHref(locale, siteRef, ['browse']) : '',
+      works: siteRef ? siteHref(locale, siteRef, ['browse']) : '',
       discussions: realmHref(locale, realm.ref, 'discussions'),
       decisions: realmHref(locale, realm.ref, 'decisions'),
       about: realmHref(locale, realm.ref, 'about'),
@@ -238,7 +256,7 @@ export async function loadRealmView(
     mounts,
     context: {
       locale,
-      ref: realm.ref,
+      ref: surface === 'site' && siteRef ? siteRef : realm.ref,
       realm: realm.realm,
       avatarQuery: reader.avatarQuery,
       ...(read?.ok ? { publishedHome: { moduleData: read.data.moduleData, slideMedia: read.data.slideMedia } } : {}),
@@ -300,7 +318,7 @@ export async function RealmFrame({
   const frameZone = site && structuralPreview && siteTokens ? { ...zone, tokens: siteTokens } : zone;
   const siteCuts = site ? savedSiteCuts({ tokens, navigation: siteNavigation ?? presentation.navigation },
     siteMounts ?? view.mounts.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
-    realm.ref, locale, messages.home) : null;
+    view.context.ref, locale, messages.home) : null;
   const theme = zoneTheme(siteCuts?.tokens ?? tokens, {
     reader: parseTheme(jar.get(THEME_COOKIE)?.value),
     enabled: structuralPreview || lookEnabled,
@@ -327,7 +345,7 @@ export async function RealmFrame({
       />
       {realm.zone ? (
         <LocalizedLink
-          href={site ? realmHref(locale, realm.ref) : siteHref(locale, realm.ref, [])}
+          href={site ? realmHref(locale, realm.ref) : zone.links.home}
           className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent"
         >
           {site ? surfaceText.community[locale] : surfaceText.site[locale]}

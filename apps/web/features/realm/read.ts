@@ -32,6 +32,7 @@ import {
   type RealmHeader,
   type RealmRoster,
   type RealmWorksPage,
+  type RealmZoneRead,
   type ZoneChapterPage,
   type ZoneDecisionPage,
   type ZoneEditorLists,
@@ -62,6 +63,8 @@ export type RealmResolution =
       realm: string;
       header: RealmHeader;
       zone: { id: string; segment: string | null } | null;
+      /** The attached Zone may occupy a different Space from this Realm. */
+      siteRef?: string;
     }
   | { kind: 'missing' }
   | { kind: 'join'; page: JoinPage }
@@ -94,12 +97,15 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
     resolveAddress?: typeof resolveAddress;
     readPrivateRealm?: typeof readPrivateRealm;
     readRealmHeader?: typeof readRealmHeader;
+    readCompletePresentation?: typeof readCompletePresentation;
   };
 }) {
   const presentation = zonePresentationReads(personal, actingSubject, keepProblem);
   const readRealmHeader = (realm: string): Promise<RealmFrameRead<RealmHeader>> =>
     settleFrame(() => main.v1.realms({ realm }).get({ query: {} }), undefined, keepProblem);
   const readHeader = resolution?.readRealmHeader ?? ((realm: string, _locale: UiLocale) => readRealmHeader(realm));
+  const readPublication = resolution?.readCompletePresentation
+    ?? presentation.readCompletePresentation;
   const resolve = resolution?.resolveAddress ?? (async (_scope: 'space', key: string, _locale: UiLocale, _fresh = false): Promise<AddressRead> => {
     try {
       const answer = await main.v1.addresses.resolve.get({ query: { scope: 'space', key } });
@@ -129,10 +135,14 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
   });
   return {
     readRealmHeader,
+    readRealmZone: (realm: string): Promise<RealmFrameRead<RealmZoneRead>> =>
+      settleFrame(() => personal.v1.realms({ realm }).zone.get({ query: { actingSubject } }), undefined, keepProblem),
     readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get(), undefined, keepProblem),
     readAddress: (ref: string, locale: UiLocale, fresh = false) => resolve('space', ref, locale, fresh),
     ...presentation,
-    resolveRealm: async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
+    readZoneRoute: (zone: string, path: string, cursor?: string): Promise<RealmFrameRead<ZoneRouteRead>> =>
+      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor),
+    resolveRealm: async (ref: string, locale: UiLocale, surface: 'community' | 'site' = 'community'): Promise<RealmResolution> => {
       const resolved = await resolve('space', ref, locale);
       if (resolved.kind !== 'resolved') {
         if (resolved.kind !== 'missing')
@@ -151,19 +161,27 @@ export function realmFrameReads({ main, personal = main, actingSubject, resoluti
           zone: null,
         };
       }
-      const realm = idOf(resolved.data.capabilities?.realm ?? '');
+      const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
+      let realm = idOf(resolved.data.capabilities?.realm ?? '');
+      const attached = surface === 'site' && zoneId && !realm;
+      if (attached) {
+        const publication = await readPublication(zoneId);
+        if (!publication.ok) return publication.failure === 'missing' ? { kind: 'missing' }
+          : { kind: 'unavailable', failure: publication.failure, ...(publication.reference ? { reference: publication.reference } : {}) };
+        realm = idOf(publication.data.realm ?? '');
+      }
       if (!realm) return { kind: 'missing' };
       const header = await readHeader(realm, locale);
       const page = header.ok
         ? { kind: 'realm' as const, header: header.data }
         : header.failure === 'missing'
-          ? await privateRealm(ref, locale, resolved.data)
+          ? await privateRealm(attached ? realm : ref, locale, attached ? undefined : resolved.data)
           : { kind: 'unavailable' as const, failure: header.failure, ...(header.reference ? { reference: header.reference } : {}) };
       if (page.kind !== 'realm') return page;
-      const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
       return {
         kind: 'realm',
-        ref: addressKey(resolved.data.canonical),
+        ref: attached ? idOf(page.header.space)! : addressKey(resolved.data.canonical),
+        ...(surface === 'site' ? { siteRef: addressKey(resolved.data.canonical) } : {}),
         realm,
         header: page.header,
         zone: zoneId ? { id: zoneId, segment: null } : null,
@@ -219,10 +237,14 @@ const frameReader = cache(async () => {
 });
 
 /** Main's shared Space resolver, retaining the proxy's concealed-address shortcut. */
-export const resolveRealm = cache(async (ref: string, locale: UiLocale): Promise<RealmResolution> => {
+export const resolveRealm = cache(async (ref: string, locale: UiLocale, surface: 'community' | 'site' = 'community'): Promise<RealmResolution> => {
   if ((await headers()).get(SPACE_MISSING_HEADER) === '1') return { kind: 'missing' };
-  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader } }).resolveRealm(ref, locale);
+  return realmFrameReads({ keepProblem: false, main: main(), resolution: { resolveAddress, readPrivateRealm, readRealmHeader, readCompletePresentation } }).resolveRealm(ref, locale, surface);
 });
+
+export const readRealmZone = cache(async (realm: string): Promise<RealmFrameRead<RealmZoneRead>> =>
+  (await frameReader()).readRealmZone(realm),
+);
 
 /** Site resolution never guesses a Zone segment or requires a Realm capability. */
 export const resolveSite = cache(async (ref: string, locale: UiLocale, fresh = false): Promise<SiteResolution> => {
