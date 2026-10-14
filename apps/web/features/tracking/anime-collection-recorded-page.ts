@@ -3,7 +3,7 @@ import type { ReadingStatus } from '../catalogue/reader-actions.tsx';
 import type { MainClient } from '../discover/types.ts';
 import { failedRead, failureOf, isOfflineError, settle, uuidOf, type Loaded, type ReadFailure } from '../feed/types.ts';
 import { dayText, momentText } from '../library/format.ts';
-import type { LibraryItem, StatusShelfItem } from '../library/types.ts';
+import type { CustomShelf, LibraryItem, StatusShelfItem } from '../library/types.ts';
 import { shelfCard } from '../profile/cards.ts';
 import { workHref } from '../work-page/route.ts';
 import { resumeName } from './media.ts';
@@ -31,7 +31,7 @@ export function statusShelfRows(items: readonly StatusShelfItem[]): LibraryItem[
 /** Every custom-shelf page, in Main's order, at the library reader's page size. */
 export async function readCustomShelfPages(main: MainClient, actingSubject: string) {
   let first: Awaited<ReturnType<MainClient['v1']['me']['shelves']['get']>>['data'] = null;
-  const items: NonNullable<typeof first>['items'] = [];
+  const items: CustomShelf[] = [];
   let cursor: string | undefined;
   let nextCursor: string | null = null;
   for (let page = 0; page < MAX_CUSTOM_PAGES; page++) {

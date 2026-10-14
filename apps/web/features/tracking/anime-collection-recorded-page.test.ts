@@ -285,8 +285,9 @@ test('the page shelf read matches the session reader on the recorded library', a
     const main = client(persona, [{ label: 'library-production-custom-shelves', state: 'populated' }], seen);
     const shelves = await readCustomShelfPages(main, subjectOf(persona));
     expect(seen).toEqual([{ method: 'GET', path: chosen.path, body: undefined }]);
-    expect(shelves.ok && shelves.data.statusShelves).toEqual(
-      (chosen.answer as { statusShelves: unknown }).statusShelves);
+    if (!shelves.ok) throw new Error(shelves.failure);
+    expect(shelves.data.statusShelves).toEqual(
+      (chosen.answer as { statusShelves: typeof shelves.data.statusShelves }).statusShelves);
     const items = (sample(persona, 'library-watching-shelf').answer as { items: Parameters<typeof statusShelfItems>[0] }).items;
     expect(statusShelfRows(items)).toEqual(statusShelfItems(items));
   }
