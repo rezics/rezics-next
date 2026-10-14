@@ -11,6 +11,7 @@ import type { AgentOption } from '../auth/acting-identity.ts';
 import { pageRequest } from '../entity-page/request-fixture.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import * as i18nServer from '../../i18n/server.ts';
+import { messages as manageCatalog } from '../manage/messages.ts';
 import * as manageServer from '../manage/server.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { readCompletePresentation, resolveSite } from '../realm/read.ts';
@@ -172,7 +173,6 @@ test('production and replay install the same management boundaries', async () =>
     lifecycleAddress: { zoneId: space, spaceId: space, returnAddress: space },
     draftZoneId: space, authoring: { kind: 'missing' }, lifecycle: { kind: 'missing' },
   };
-  const manageMessages = { title: 'Manage' };
   const main = { v1: {} };
   const shellSpy = spyOn(shellRoutes, 'zoneManagementShell');
   const managerSpy = spyOn(manageServer, 'manager').mockResolvedValue({
@@ -180,7 +180,7 @@ test('production and replay install the same management boundaries', async () =>
   } as Awaited<ReturnType<typeof manageServer.manager>>);
   const localeSpy = spyOn(i18nServer, 'requestLocale').mockResolvedValue(locale);
   const messagesSpy = spyOn(i18nServer, 'getMessages').mockResolvedValue(
-    manageMessages as Awaited<ReturnType<typeof i18nServer.getMessages>>,
+    manageCatalog as Awaited<ReturnType<typeof i18nServer.getMessages>>,
   );
   const frameSpy = spyOn(editorRead, 'loadZoneManagementFrame').mockResolvedValue(frame);
   disposals.push(() => {
@@ -197,9 +197,9 @@ test('production and replay install the same management boundaries', async () =>
   expect(frameSpy).toHaveBeenCalledWith(main, space, locale, actingSubject);
   expect(shellSpy).toHaveBeenCalledTimes(1);
   expect(shellSpy.mock.calls[0]?.[0]).toEqual({
-    space, frame, agent, actingSubject, locale, manageMessages, children,
+    space, frame, agent, actingSubject, locale, manageMessages: manageCatalog, children,
   });
-  expect(rendered).toBe(shellSpy.mock.results[0]?.value);
+  expect(shellSpy.mock.results[0]?.value).toBe(rendered);
 });
 
 const managed = ['stranger', 'member', 'moderator', 'owner', 'operator'] as const;
