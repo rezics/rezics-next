@@ -353,7 +353,8 @@ describe('Main typed route contracts', () => {
         operation.security?.some(requirement => Object.keys(requirement).length === 0)
           && operation.security?.some(requirement => 'bearerAuth' in requirement)
           ? [`${method.toUpperCase()} ${path}`] : []));
-    expect(contentOptionalBearerOperations).toEqual(['GET /v1/content-revisions/{revision}']);
+    expect(contentOptionalBearerOperations).toEqual(['GET /v1/content-revisions/{revision}',
+      'GET /v1/content-revisions/{revision}/derivations']);
     const draft = spec.paths['/v1/content-drafts']!.post!;
     expect(draft.security).toEqual([{ bearerAuth: [] }]);
     expect(draft.parameters?.some(parameter => parameter.name === 'Idempotency-Key'

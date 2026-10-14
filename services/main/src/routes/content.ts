@@ -31,6 +31,7 @@ import { isZonePublishedPageRevision } from '../modules/zone/publication.ts';
 import { discloseContent } from '../modules/disclosure/assembly.ts';
 import { disclosureViewer, withDisclosureViewer } from '../modules/disclosure/viewer.ts';
 import { graphErasedContentRevisions } from '../modules/erasure/graph.ts';
+import { isPublicContentRevision } from '../modules/content-publication/public-selection.ts';
 
 const textDraftFields = {
   notes: t.Optional(t.Object({ before: t.Optional(authoredBodySchema({}, 8192)),
@@ -423,7 +424,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           return problem(404, 'revision_unavailable', 'Revision is unavailable');
         }
         const published = target.zone
-          ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision) : false;
+          ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
+          : await isPublicContentRevision(work.environment, resourceId, params.revision);
         let principal = null;
         if (!published) {
           if (!query.actingSubject) return problem(404, 'revision_unavailable', 'Revision is unavailable');
@@ -437,8 +439,8 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
         }
         const viewer = disclosureViewer(principal, query.actingSubject);
         const read = () => work.content!.readExactBatch([params.revision], async ids => new Set(ids));
-        let results = await (target.zone ? withDisclosureViewer(viewer, read) : read());
-        if (target.zone) results = await discloseContent(work.environment, results,
+        let results = await withDisclosureViewer(viewer, read);
+        results = await discloseContent(work.environment, results,
           viewer);
         const exact = results[0];
         if (exact?.status === 'available'
@@ -447,9 +449,10 @@ export function contentRoutes(fuseki: FusekiClient, work: MainWorkDependencies) 
           && await revisionDeliverable(params.revision)) {
           // Rights and delivery checks can await while the bundle or editor's
           // owner proof moves. Recheck the same Zone path immediately before bytes leave.
-          if (target.zone) {
+          if (target.zone || published) {
             const readable = published
-              ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
+              ? target.zone ? await isZonePublishedPageRevision(work.environment, target.zone, resourceId, params.revision)
+                : await isPublicContentRevision(work.environment, resourceId, params.revision)
               : principal && query.actingSubject && await canReadContentTarget(work.environment,
                 work.access, principal, query.actingSubject, resourceId, target);
             if (!readable) return problem(404, 'revision_unavailable', 'Revision is unavailable');

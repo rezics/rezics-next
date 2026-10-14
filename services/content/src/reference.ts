@@ -26,15 +26,18 @@ export async function resolveResourceReference(value: ResourceReference, owners:
       if (!content) break;
       document = content.document; text = content.body; available = true;
       if (s.block) {
-        const block = document && contentDocumentNodes(document).find(node => node.attrs?.id === s.block);
-        if (!block || !document) { available = false; break; }
+        const matches = document ? contentDocumentNodes(document).filter(node => node.attrs?.id === s.block) : [];
+        const block = matches[0];
+        if (!block || matches.length !== 1 || !document) { available = false; break; }
         // Inline units cannot become standalone documents; spans select text within a block.
         try { document = { ...document, doc: { type: 'doc', content: [block] } }; text = documentText(document); }
         catch { available = false; break; }
       }
       if (s.span) {
         if (!text || s.span.end > text.length) { available = false; break; }
-        text = text.slice(s.span.start, s.span.end); document = undefined;
+        text = text.slice(s.span.start, s.span.end);
+        if (Buffer.from(text, 'utf8').toString('utf8') !== text) { available = false; break; }
+        document = undefined;
       }
       break;
     }

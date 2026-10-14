@@ -12,6 +12,9 @@ import { GRAPHS, iri } from '../work/activate.ts';
 import { type WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
 import { canReadContentTarget, ContentDraftUnavailable, resolveContentTarget } from './draft.ts';
 import { publicDomainRevisionCurrent } from './public-domain-read.ts';
+import { isPublicContentRevision } from './public-selection.ts';
+import { CompositionUnavailable } from '../structure/graph.ts';
+import { readWorkComponentState } from '../work/history.ts';
 
 /** Main connects Content's closed selectors to existing Semantic, Structure and Media owners. */
 export function contentReferenceOwners(session: WorkReadSession): ReferenceOwners {
@@ -22,15 +25,21 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
     readers: { media: deps.media, mediaAccess: deps.mediaAccess } }, async target => !!principal && !!actingSubject
       && (!!await deps.access.canReadSemanticResource?.(principal, actingSubject, target)
         || await deps.access.canReadWork(principal, actingSubject, target)));
-  const resource = async (target: string) => (await disclosed([target])).has(target);
+  const resource = async (target: string) => {
+    const read = async () => (await disclosed([target])).has(target);
+    const available = await read(); session.observeDependency(`resource-reference:${target}`, available, read);
+    return available;
+  };
   const structure = async (target: string, id: string, revision: string, occurrence?: string): Promise<boolean> => {
     const header = await readCompositionHeader(env, id);
     if (!header || ![header.owner, header.component, header.structure].includes(target)) return false;
     // Publication or represented preview selects the requested exact Structure.
-    if (await selectWorkCompositionRevision(session, header, revision) !== revision) return false;
-    const page = await readCompositionPage(env, { structure: id, revision, occurrence, limit: 1,
-      canReadTarget: resource, canReadTargets: disclosed, header });
-    return !occurrence || page.occurrences.some(item => item.occurrence === occurrence);
+    try {
+      if (await selectWorkCompositionRevision(session, header, revision) !== revision) return false;
+      const page = await readCompositionPage(env, { structure: id, revision, occurrence, limit: 1,
+        canReadTarget: resource, canReadTargets: disclosed, header });
+      return !occurrence || page.occurrences.some(item => item.occurrence === occurrence);
+    } catch (error) { if (error instanceof CompositionUnavailable) return false; throw error; }
   };
   return {
     resource,
@@ -38,7 +47,19 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
       if (!await resource(target)) return false;
       const header = await readCompositionHeader(env, target);
       if (header) return structure(target, target, revision);
-      return (await readSemanticRevision(env, target, revision, disclosed)) !== null;
+      if (await readSemanticRevision(env, target, revision, disclosed)) return true;
+      const anchors = await session.query(`SELECT ?manifest ?model WHERE {
+        GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a <https://rezics.com/vocab/RevisionAnchor> ;
+          <https://rezics.com/vocab/component> ${iri(target)} ; <https://rezics.com/vocab/manifest> ?manifest ;
+          <https://rezics.com/vocab/modelRevision> ?model .
+          VALUES ?model { <https://rezics.com/definition/work-metadata-v1> <https://rezics.com/definition/post-v1>
+            <https://rezics.com/definition/agent-provision-v1> }
+          FILTER NOT EXISTS { ${iri(revision)} a <https://rezics.com/vocab/ErasedRevision> }
+        }
+      } LIMIT 2`, 2);
+      if (anchors.length !== 1 || !anchors[0]?.manifest || !anchors[0]?.model) return false;
+      await readWorkComponentState(env, anchors[0].manifest.value, target, anchors[0].model.value);
+      return resource(target);
     },
     occurrence: (target, id, revision, occurrence) => structure(target, id, revision, occurrence),
     content: async (target, variant, revision) => {
@@ -50,17 +71,15 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
           target, await resolveContentTarget(env, target)); }
         catch (error) { if (!(error instanceof ContentDraftUnavailable)) throw error; }
       }
-      const published = async () => (await session.query(`SELECT ?publication WHERE {
-        GRAPH ${iri(GRAPHS.current)} { ${iri(variant)} <https://rezics.com/vocab/contentPublicationHead> ?publication ;
-          <https://rezics.com/vocab/publicSearchEligibilityHead> ?eligibility }
-        GRAPH ${iri(GRAPHS.revisions)} { ?publication a <https://rezics.com/vocab/ContentPublicationDecision> ;
-          <https://rezics.com/vocab/contentRevision> ${iri(`urn:rezics:content:revision:${revision}`)} .
-          ?eligibility a <https://rezics.com/vocab/ContentSearchEligibilityDecision> ;
-          <https://rezics.com/vocab/publicationDecision> ?publication ;
-          <https://rezics.com/vocab/disclosure> <https://rezics.com/vocab/Public> }
-      } LIMIT 2`, 2)).length === 1;
+      const published = async () => {
+        const read = () => isPublicContentRevision(env, target, revision, variant);
+        const visible = await read(); session.observeDependency(`content-public-selection:${variant}:${revision}`, visible, read);
+        return visible;
+      };
       if (!privateReadable && !await published()) return null;
-      const result = (await discloseContent(env, await deps.content.readExactBatch([revision], async ids => new Set(ids)), viewer))[0];
+      const read = async () => (await discloseContent(env,
+        await deps.content!.readExactBatch([revision], async ids => new Set(ids)), viewer))[0];
+      const result = await read(); session.observeDependency(`content-reference:${revision}`, result, read);
       if (result?.status !== 'available' || result.reference.resourceId !== target
         || result.reference.variantId !== variant || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store)) return null;
       if (privateReadable && principal && actingSubject) {

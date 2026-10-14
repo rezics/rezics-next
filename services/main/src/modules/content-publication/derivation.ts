@@ -54,7 +54,7 @@ export type DisclosedDerivation = Omit<ContentDerivationRecord, 'inputs' | 'resp
 };
 /** Every input is fenced again on every page. An unavailable input loses its identities. */
 export async function readContentDerivations(session: WorkReadSession, revision: string,
-  limit = 20, cursor?: string): Promise<{ revision: string; items: DisclosedDerivation[]; nextCursor: string | null }> {
+  limit = 20, cursor?: string): Promise<{ revision: string; items: DisclosedDerivation[]; nextCursor: string | null; complete: boolean }> {
   const content = session.deps.contentAuthoring;
   if (!content) throw new WorkReadUnavailable('Content owner is unavailable');
   const resource = await content.owningResourceForRevision(revision);
@@ -79,6 +79,6 @@ export async function readContentDerivations(session: WorkReadSession, revision:
   }
   // Publication can close while input checks await. Re-fence the output too.
   if ((await resolveResourceReference(output, owners)).status !== 'available') throw new WorkReadMissing('Revision is unavailable');
-  return { revision, items, nextCursor: next ? encodeReadCursor(binding, session.position, page.at(-1)!.derivation,
+  return { revision, items, complete: !next, nextCursor: next ? encodeReadCursor(binding, session.position, page.at(-1)!.derivation,
     '', Date.now() + 15 * 60_000) : null };
 }

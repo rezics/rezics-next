@@ -51,7 +51,13 @@ export const registeredHiddenParentOutputReads = [
   'GET /v1/member-replies',
   'GET /v1/realms/{realm}/threads/{reply}',
 ] as const;
+/** Content's owner stack proof compares hidden and absent revision responses and
+ * conceals private input identities. It makes no equal-query-count claim. */
+export const registeredHiddenContentRevisionReads = [
+  'GET /v1/content-revisions/{revision}/derivations',
+] as const;
 export const registeredHiddenIdOperations = [...registeredHiddenIdReads, ...registeredHiddenParentOutputReads,
+  ...registeredHiddenContentRevisionReads,
   ...registeredHiddenIdWrites].sort();
 
 // The posting contract declares disclosure inputs, separately from its observed

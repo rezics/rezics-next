@@ -143355,6 +143355,9 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "complete": {
+                      "type": "boolean"
+                    },
                     "items": {
                       "items": {
                         "properties": {
@@ -143680,7 +143683,8 @@
                   "required": [
                     "revision",
                     "items",
-                    "nextCursor"
+                    "nextCursor",
+                    "complete"
                   ],
                   "type": "object"
                 }

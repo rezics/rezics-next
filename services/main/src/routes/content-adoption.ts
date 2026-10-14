@@ -5,7 +5,7 @@ import { ContentDerivationStale } from '../../../content/src/derivation.ts';
 import { documentSnapshotSchema } from '../api-document.ts';
 import { readContentDerivations, recordContentDerivation } from '../modules/content-publication/derivation.ts';
 import { resolveContentReference } from '../modules/content-publication/reference.ts';
-import { workRead } from '../modules/work/read-session.ts';
+import { workRead, WorkReadLimit } from '../modules/work/read-session.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
@@ -59,7 +59,7 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
     response: { 200: t.Object({ revision: readUuid, items: t.Array(t.Object({ ...record,
       inputs: t.Array(t.Union([resourceReferenceSchema, unavailable]), { maxItems: 16 }),
       responsibleAgent: t.Union([readId, unavailable]), projection: t.Optional(t.Record(t.String(), t.Unknown())) }), { maxItems: 20 }),
-      nextCursor: t.Nullable(t.String()) }), ...workReadProblems },
+      nextCursor: t.Nullable(t.String()), complete: t.Boolean() }), ...workReadProblems },
   }, async ({ request, params, query }) => {
     try { return Response.json(await workRead(deps, request, query, session =>
       readContentDerivations(session, params.revision, query.limit, query.cursor)), { headers }); }
@@ -74,6 +74,7 @@ export function contentAdoptionRoutes(deps: MainWorkDependencies) {
   }, async ({ request, body }) => {
     try { return Response.json(await workRead(deps, request, { actingSubject: body.actingSubject, readOnlyTemplate: true }, async session => {
       const items = []; for (const reference of body.references) items.push(await resolveContentReference(session, reference));
+      if (Buffer.byteLength(JSON.stringify(items), 'utf8') > 1_048_576) throw new WorkReadLimit('Resource reference response exceeds 1 MiB');
       return { items };
     }), { headers }); } catch (error) {
       if (error instanceof ContentAdoptionInvalid) return problem(400, 'invalid_resource_reference', error.message);

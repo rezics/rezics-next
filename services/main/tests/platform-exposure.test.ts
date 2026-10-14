@@ -238,7 +238,7 @@ test('every served Main route, including transports, has a reviewed exposure', (
     .toMatchObject({ rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
   expect(matrix.find(entry => entry.path === '/v1/resource-reference-resolutions'))
     .toMatchObject({ rateLimitFamily: 'read', bearer: 'optional' });
-  expect(publicOperations).toHaveLength(533);
+  expect(publicOperations).toHaveLength(534);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );

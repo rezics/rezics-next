@@ -551,6 +551,14 @@
     "status": "unregistered"
   },
   {
+    "operation": "GET /v1/content-revisions/{revision}/derivations",
+    "ids": [
+      "path:revision",
+      "query:actingSubject"
+    ],
+    "status": "registered"
+  },
+  {
     "operation": "GET /v1/context-definition-equivalences",
     "ids": [
       "query:actingSubject",
