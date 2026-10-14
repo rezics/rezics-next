@@ -115,7 +115,7 @@ function servedPage<T, Profile extends string>(
   return page;
 }
 
-export function discoveryApi(main: MainClient, locale: string, actingSubject?: string) {
+export function discoveryApi(main: Pick<MainClient, 'v1'>, locale: string, actingSubject?: string) {
   const contract = main;
   const headers = { 'accept-language': locale };
   return {
