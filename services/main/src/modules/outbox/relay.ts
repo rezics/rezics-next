@@ -10,6 +10,7 @@ import { ownerOutboxEventHandler, type OwnerCloudEvent,
 import { GLOBAL_RATING_POPULATION_OWNER } from '../rating/global.ts';
 import { GLOBAL_TARGET_CONTEXT_SCOPE, GLOBAL_TARGET_CONTEXT_PROFILE } from '../rating/target-context-authority.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from './relay-position.ts';
+import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE } from '../classification/context.ts';
 
 const SOURCE = 'https://rezics.com/services/main';
 
@@ -626,6 +627,53 @@ async function revisionManifest(fuseki: FusekiClient, revision: string): Promise
     throw new OutboxIncomplete('event revision manifest is unavailable or ambiguous');
   }
   return manifest;
+}
+
+/** A replacement receipt must retain the same Context and its exact CAS basis.
+ * Use historical anchors, not the current head: delayed delivery and replay can
+ * follow another replacement or a scheme retirement. */
+async function classificationContextManifest(fuseki: FusekiClient, batch: MainOutboxBatch,
+  receipt: string, context: string, revision: string, operation: string,
+  expectedHead: string | undefined): Promise<string> {
+  const result = await fuseki.query(`PREFIX rv: <${RV}>
+    SELECT ?manifest ?component ?operation ?profile ?shape ?epoch ?sequence
+      ?predecessor ?priorComponent ?priorProfile ?priorShape ?priorEpoch ?priorSequence ?family ?receiptAction WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} {
+        ${iri(revision)} a rv:RevisionAnchor ; rv:manifest ?manifest ; rv:component ?component ;
+          rv:operation ?operation ; rv:modelRevision ?profile ; rv:shapeRevision ?shape ;
+          rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?epoch ; rv:sequence ?sequence .
+        OPTIONAL { ${iri(revision)} rv:predecessor ?predecessor .
+          OPTIONAL { ?predecessor a rv:RevisionAnchor ; rv:component ?priorComponent ;
+            rv:modelRevision ?priorProfile ; rv:shapeRevision ?priorShape ;
+            rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ?priorEpoch ; rv:sequence ?priorSequence . } }
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        OPTIONAL { ${iri(receipt)} rv:commandFamily ?family }
+        OPTIONAL { ${iri(receipt)} rv:action ?receiptAction }
+      }
+    } LIMIT 2`, 8192);
+  const rows = result.results?.bindings ?? [];
+  const row = rows[0];
+  const value = (key: string) => row?.[key]?.value;
+  const profile = value('profile');
+  const v2 = profile === CLASSIFICATION_CONTEXT_V2_PROFILE;
+  if (rows.length !== 1 || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(value('manifest') ?? '')
+    || value('component') !== context || value('operation') !== operation
+    || value('epoch') !== batch.dataEpoch || value('sequence') !== batch.sequence
+    || (!v2 && profile !== CLASSIFICATION_CONTEXT_PROFILE) || value('shape') !== profile
+    || value('predecessor') !== expectedHead
+    || (v2 ? value('family') !== 'classification-context-v2'
+      || value('receiptAction') !== 'classification.context.configure'
+      : expectedHead !== undefined || value('family') !== undefined || value('receiptAction') !== undefined)
+    || (expectedHead !== undefined && (expectedHead === revision || value('priorComponent') !== context
+      || ![CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE].includes(value('priorProfile') ?? '')
+      || value('priorShape') !== value('priorProfile') || !value('priorEpoch')
+      || decimal(value('priorSequence') ?? '') <= 0n
+      || (value('priorEpoch') === batch.dataEpoch
+        && decimal(value('priorSequence') ?? '') >= decimal(batch.sequence))))) {
+    throw new OutboxIncomplete('classification Context receipt differs from its retained revision');
+  }
+  return value('manifest')!;
 }
 
 const contentEventTypes: Record<string, ContentBoundaryCloudEvent['type']> = {
@@ -1633,7 +1681,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
         || value('eventOperation') !== operation || value('eventRealm') !== realm
         || work || main || space || contribution || selection || reason || owner
         || spaceRevision || realmRevision || slot || rejection || matchUnit
-        || expectedHead || author || language))
+        || author || language))
     || (type === 'com.rezics.classification.context-cancelled.v1'
       && (action !== 'classification.context.configure' || outcome !== `${RV}Cancelled`
         || !scope.startsWith('classification:context:')
@@ -1736,6 +1784,9 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     } }`, 1024);
     if (proof.boolean !== true) throw new OutboxIncomplete('Global target creation has no retained v4 profile proof');
   }
+  const classificationManifest = type === 'com.rezics.classification.context-created.v1'
+    ? await classificationContextManifest(fuseki, batch, receiptId, classificationContext!,
+      contextRevision!, operation!, expectedHead) : undefined;
   const receipt: MainCloudEvent['data']['receipt'] = {
     id: receiptId, action: action as MainCloudEvent['data']['receipt']['action'],
     outcome: outcome === `${RV}Succeeded` ? 'succeeded' : 'cancelled',
@@ -1771,7 +1822,7 @@ async function readMainOutboxGraphEnvelope(fuseki: FusekiClient, batch: MainOutb
     ...(reasonCode ? { reasonCode: 'not-approved' as const } : {}),
     ...(classificationContext ? { classificationContext } : {}),
     ...(contextRevision ? { contextRevision,
-      contextManifest: await revisionManifest(fuseki, contextRevision) } : {}),
+      contextManifest: classificationManifest ?? await revisionManifest(fuseki, contextRevision) } : {}),
     ...(scheme ? { scheme } : {}), ...(concept ? { concept } : {}),
     ...(path ? { path } : {}), ...(expression ? { expression } : {}),
     ...(sense ? { sense } : {}),
