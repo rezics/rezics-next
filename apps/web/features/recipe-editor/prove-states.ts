@@ -3,7 +3,8 @@
 export const recipeProveStates = [
   { personas: ['stranger', 'member', 'owner', 'moderator', 'operator'], method: 'GET',
     path: '/api/account/content-preferences/viewer', query: null, state: 'signed-in locale frame; Account owns the media viewer seam' },
-  { personas: ['owner'], method: 'GET', path: '/v1/types', query: null,
+  // Name the public read exactly: a bare path also names the closed type-creation command.
+  { personas: ['owner'], method: 'GET', operation: 'getV1Types', query: null,
     state: 'author-a-recipe layout registry; stories use the compiled served registry, never a visitor record' },
   { personas: ['stranger', 'member', 'owner'], method: 'GET', path: '/v1/me/agents/{actingSubject}/works',
     query: { limit: 20, view: 'authored' }, state: 'Studio recipe inventory, empty inventory and read refusal' },
