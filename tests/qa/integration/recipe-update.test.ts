@@ -297,8 +297,10 @@ test('Recipe atomic reference edits overlay each removed ingredient without chan
     // A garnish replacement cannot retarget the sauce mention, even though
     // both occurrences have exactly the same tomato wording.
     const tomatoes = await seed('step');
-    const sauce = await f.json<Change>(await change(tomatoes.current, [
+    const mentioned = await f.json<Change>(await change(tomatoes.current, [
       update(tomatoes.referrer, step('Stir the sauce tomato.', [tomatoes.a])),
+    ]), 200);
+    const sauce = await f.json<Change>(await change(mentioned, [
       { op: 'insert', parent: tomatoes.current.structure, position: 'last', role: 'ingredient',
         qualifier: ingredient('Garnish replacement', [tomatoes.b]) },
     ]), 200);

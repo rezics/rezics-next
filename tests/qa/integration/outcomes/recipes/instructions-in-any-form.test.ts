@@ -157,12 +157,20 @@ async function prepareSlice(): Promise<Slice> {
   // These four revisions belong to the same Recipe. Every persona reads each
   // while it is the active publication, so history access is not assumed.
   for (const selected of [[references[0]!], [references[1]!], [references[2]!], references]) {
-    const operations: object[] = adopted.map(occurrence => ({ op: 'remove', occurrence }));
-    if (!stages.length) for (const occurrence of recipe.occurrenceIds.slice(-2)) operations.push({ op: 'remove', occurrence });
-    operations.push(...selected.map(reference => ({ op: 'insert', parent: recipe.structure,
+    const removed = stages.length ? adopted : recipe.occurrenceIds.slice(-2);
+    // Existing Structure changes admit one operation kind per batch. Replacing
+    // an ordered selection is two private revisions, then one publication;
+    // neither the contract nor the test claims this is an atomic replacement.
+    const detached = await answer<{ revision: string }>(owner.main('POST',
+      `/v1/compositions/${short(recipe.structure)}/changes`, {
+        profile: 'recipe-composition', expectedHead: head, actingSubject: actor,
+        operations: removed.map(occurrence => ({ op: 'remove', occurrence })),
+      }));
+    head = detached.revision;
+    const operations = selected.map(reference => ({ op: 'insert', parent: recipe.structure,
       position: 'last', role: 'instruction', target: reference.target,
       selection: { mode: 'fixed-revision', revision: 'revision' in reference.selector ? reference.selector.revision : '',
-        selector: reference.selector } })));
+        selector: reference.selector } }));
     const command = { profile: 'recipe-composition', expectedHead: head, actingSubject: actor, operations };
     const key = randomUUID();
     const changed = await answer<{ revision: string; occurrences: string[] }>(owner.main('POST',

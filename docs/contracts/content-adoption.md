@@ -93,6 +93,11 @@ changed retry payloads conflict. Reads use the read family, optional authenticat
 `actingSubject` and private/no-store caching. New exposure declarations require
 trust-ops review at implementation.
 
+Structure retains its existing one-operation-kind batch admission (and the
+existing Recipe update/remove exception for reference-safe deletion). Removing
+and inserting instructions therefore creates separate private revisions before
+publication; an interrupted sequence stays partial, not an atomic replacement.
+
 | Operation | Request | Response |
 | --- | --- | --- |
 | **New** `POST /v1/posts` | `authored-post-v1`, title `{value,language}`, language, document, actor | 201 (200 replay) `{ post, variantId, revisionId, byteDigest, author, replayed }`: native Post custody and private Content draft, not a Work or public publication |
