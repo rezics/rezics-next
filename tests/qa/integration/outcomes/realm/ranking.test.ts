@@ -226,14 +226,16 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
     let page: Page;
     let pageNumber = 0;
     do {
-      page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
-      if (pageNumber < 2 || !page.nextCursor) {
+      const finalPage = (pageNumber + 1) * 20 >= expected.length;
+      if (pageNumber < 2 || finalPage) {
         const prefix = sessions === privateRealm ? 'private-' : '';
-        const suffix = pageNumber === 0 ? '' : page.nextCursor ? '-continuation-start' : '-continuation';
+        const suffix = pageNumber === 0 ? '' : finalPage ? '-continuation' : '-continuation-start';
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
-      }
+        if (!recorded.ok) throw new Error('Ranked traversal read failed');
+        page = recorded.data;
+      } else page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
       pageNumber++;
       expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
       expect(page.items.length).toBeLessThanOrEqual(20);

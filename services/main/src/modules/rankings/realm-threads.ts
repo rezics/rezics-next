@@ -284,6 +284,10 @@ export class RealmThreadRankingProjection {
       });
       return true;
     }
+    // A newly admitted reader's history cut is built from settled references.
+    // Do not queue it behind unrelated Content and Main replay; the scoped read
+    // still fences removals and live disclosure before delivering that cut.
+    if (await this.projectPopulation(session, epoch)) return true;
     // NULL marks only pre-migration references. The existing owner consumes
     // their exact keys in its normal bounded turn, with no migration scan.
     const backfill = (await this.access.query<{ realm: string; reply: string }>(
@@ -485,7 +489,6 @@ export class RealmThreadRankingProjection {
       });
       return true;
     }
-    if (await this.projectPopulation(session, epoch)) return true;
     const expired = await this.access.query(
       `DELETE FROM access.realm_thread_order WHERE
       (data_epoch,realm,sort,period,reply) IN (SELECT data_epoch,realm,sort,period,reply
