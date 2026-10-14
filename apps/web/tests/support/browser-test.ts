@@ -8,6 +8,9 @@ export const test = base.extend({
     const origin = process.env.REZICS_WEB_E2E_BASE_URL ?? 'http://127.0.0.1:3003';
     const restore = browserName === 'chromium' ? protectJourneyBrowser(browser, new URL(origin).origin) : () => {};
     try { await use(browser); }
-    finally { restore(); }
+    finally {
+      await Promise.all(browser.contexts().map(context => context.unrouteAll({ behavior: 'wait' })));
+      restore();
+    }
   }, { scope: 'worker' }],
 });

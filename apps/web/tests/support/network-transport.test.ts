@@ -19,8 +19,8 @@ test('journey contexts load real resources through transport loss and preserve A
     const first = await browser.newPage();
     const second = await browser.newContext();
     for (const page of [first, await second.newPage()]) {
-      await page.context().setOffline(true);
       await page.goto(server.url.origin);
+      await page.context().setOffline(true);
       expect(await page.title()).toBe('Journey transport');
       expect(await page.evaluate(async () => { const path = '/redirect.js'; return (await import(path)).value; })).toBe(42);
       const failed = page.waitForResponse(`${server.url.origin}/broken.js`);

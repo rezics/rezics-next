@@ -1,6 +1,6 @@
 import type { Browser, Route } from 'playwright';
 
-const resourceTypes = new Set(['document', 'script', 'stylesheet', 'font', 'image']);
+const resourceTypes = new Set(['script', 'stylesheet', 'font', 'image']);
 
 export async function serveJourneyResource(route: Route, origin: string): Promise<void> {
   const request = route.request();
@@ -12,9 +12,9 @@ export async function serveJourneyResource(route: Route, origin: string): Promis
   }
   // Native Docker changes host interfaces while other QA stacks run. Chromium can
   // cancel healthy loopback requests; Node HTTP keeps the real response alive.
-  // Navigation redirects must update the address bar. Asset redirects stay on
-  // Node HTTP too: Playwright does not route a redirected browser request again.
-  const response = await route.fetch({ maxRedirects: request.isNavigationRequest() ? 0 : 20, maxRetries: 0 });
+  // Documents keep browser streaming and redirects. Asset redirects stay on Node
+  // HTTP too: Playwright does not route a redirected browser request again.
+  const response = await route.fetch({ maxRetries: 0 });
   try { await route.fulfill({ response, body: await response.body() }); }
   finally { await response.dispose(); }
 }
@@ -25,6 +25,13 @@ export function protectJourneyBrowser(browser: Browser, origin: string): () => v
   browser.newContext = async options => {
     const context = await original.call(browser, options);
     await context.route('**/*', route => serveJourneyResource(route, origin));
+    const close = context.close.bind(context);
+    context.close = async closeOptions => {
+      // Closing a context while Node is fulfilling its last asset otherwise
+      // reports a route callback error after the journey has already passed.
+      await context.unrouteAll({ behavior: 'wait' });
+      await close(closeOptions);
+    };
     return context;
   };
   return () => { browser.newContext = original; };
