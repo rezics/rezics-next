@@ -216,6 +216,10 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/review/source-publication-authority.test.ts',
   // Restores a bootstrapped Access baseline between destructive designation controls.
   'tests/qa/integration/review/governance-designation-revocation.test.ts',
+  // Realm closure directory and search close their Realm and read population-wide orderings; after another file on
+  // the same stack they fail (422 on the directory query, 503 on search) and pass alone (2026-10-14 wave prove).
+  'tests/qa/integration/outcomes/realm/closure-directory.test.ts',
+  'tests/qa/integration/outcomes/realm/closure-search.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
