@@ -1,5 +1,5 @@
 import type { CanonicalAddress } from '@rezics/model/address';
-import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
+import type { ZoneContext } from '@rezics/zone-sdk';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { addressKey } from '../address/path.ts';
@@ -7,13 +7,10 @@ import type { browserMainApi } from '../api/browser.ts';
 import { isOfflineError } from '../feed/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { failureOf as managementFailure, type ReadFailure as ManagementFailure } from '../manage/types.ts';
-import { zoneText } from '../realm/adapt.ts';
 import { completePublicNavigation } from '../realm/public-navigation.ts';
 import { idOf, siteHref } from '../realm/route.ts';
 import { failureOf, type ReadFailure, type ZonePresentationRead } from '../realm/types.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
-import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from './site-cuts.ts';
-import { zoneTheme, type ReaderTheme } from './theme.ts';
 import {
   mapZoneSiteRecordedPage,
   zoneSitePrefix,
@@ -24,8 +21,8 @@ import {
 } from './zone-site-recorded-page.ts';
 
 /**
- * Published home of a Zone with no Realm. The standalone route builds the same
- * context and frame; stories replay the visit through the supplied client.
+ * Published home of a Zone with no Realm. The standalone route builds this
+ * context and the shared published frame; stories replay the visit through the supplied client.
  * A presentation or route that names a Realm is a different page.
  */
 
@@ -144,31 +141,6 @@ export function independentZoneContext(
       },
     },
   };
-}
-
-/** Cuts and theme the standalone frame paints, including a saved preview's token override. */
-export function independentZoneFrame({ zone, address, locale, homeName, presentation, siteMounts, siteTokens,
-  siteNavigation, readerTheme }: {
-  zone: ZoneContext;
-  address: string;
-  locale: UiLocale;
-  homeName: string;
-  presentation: ZonePresentationRead;
-  siteMounts?: readonly SiteMountCut[];
-  siteTokens?: ZoneTokens;
-  siteNavigation?: SitePresentationCut['navigation'];
-  readerTheme: ReaderTheme;
-}) {
-  const tokens = siteTokens ?? presentation.presentation.tokens;
-  const frameZone = siteTokens ? { ...zone, tokens: siteTokens } : zone;
-  const cuts = savedSiteCuts(
-    { tokens, navigation: siteNavigation ?? presentation.presentation.navigation },
-    siteMounts ?? presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
-    address,
-    locale,
-    homeName,
-  );
-  return { zone: frameZone, cuts, theme: zoneTheme(cuts.tokens, { reader: readerTheme, enabled: true }) };
 }
 
 function zoneIdentity(value: unknown): IndependentZoneIdentity | { detail: string } {

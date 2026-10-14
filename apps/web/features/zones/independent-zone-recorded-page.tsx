@@ -15,6 +15,7 @@ import manageKo from '../manage/messages/ko.ts';
 import manageZhHans from '../manage/messages/zh-Hans.ts';
 import manageZhHant from '../manage/messages/zh-Hant.ts';
 import { zoneText } from '../realm/adapt.ts';
+import { publishedFrameModel } from '../realm/zone-presentation-read.ts';
 import { messages as realmMessages, type RealmMessages } from '../realm/messages.ts';
 import realmDe from '../realm/messages/de.ts';
 import realmEs from '../realm/messages/es.ts';
@@ -41,7 +42,6 @@ import { MemberList, ZoneDocumentHome } from './site-pages.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
 import {
-  independentZoneFrame,
   independentZoneVisit,
   readIndependentZonePublished,
   type IndependentZoneRead,
@@ -73,13 +73,16 @@ function Frame({ load, locale, children }: {
   children: ReactNode;
 }) {
   const homeName = { ...realmMessages, ...realmOverlays.get(locale) }.home;
-  const framed = independentZoneFrame({
-    zone: load.zone, address: load.ref, locale, homeName, presentation: load.presentation, readerTheme: 'system',
+  const model = publishedFrameModel(load.presentation, load.zoneId, locale, homeName, '', {
+    reader: 'system',
+    ref: load.ref,
+    zone: load.zone,
   });
+  const { zone: frameZone, cuts, theme } = model;
   const actions = load.editor?.ok ? <EditSiteLink space={load.ref} locale={locale} /> : null;
-  return <ZoneFrame zone={framed.zone} dataZone={load.zoneId} theme={framed.theme} pkg={null}
-    masthead={<ZoneMasthead zone={framed.zone} members={null} actions={actions} />} actions={actions} members={null}
-    tabs={null} site={{ label: framed.zone.name.value, links: framed.cuts.navigation }}>
+  return <ZoneFrame zone={frameZone} dataZone={load.zoneId} theme={theme} pkg={null}
+    masthead={<ZoneMasthead zone={frameZone} members={null} actions={actions} />} actions={actions} members={null}
+    tabs={null} site={{ label: frameZone.name.value, links: cuts.navigation }}>
     {children}
   </ZoneFrame>;
 }
