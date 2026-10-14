@@ -7,6 +7,7 @@ import {
   indexedOffsets,
   indexedRelationNodes,
   indexedTemplateNodes,
+  indexedLineStarts,
 } from '../lib/repo-index-ast.ts';
 import {
   parseSources,
@@ -533,13 +534,9 @@ function sourceRelationFacts(
     candidates?.every((candidate) => candidate.literalKind && 'enclosingTemplateStart' in candidate)
   ) {
     const offset = indexedOffsets(source.text);
-    let lines: number[] | undefined;
+    let lines: readonly number[] | undefined;
     const lineAt = (position: number) => {
-      if (!lines) {
-        lines = [0];
-        for (let at = 0; at < source.text.length; at++)
-          if (source.text[at] === '\n') lines.push(at + 1);
-      }
+      lines ??= indexedLineStarts(source.text);
       let low = 0,
         high = lines.length;
       while (low + 1 < high) {

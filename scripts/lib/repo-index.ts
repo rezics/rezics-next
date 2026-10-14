@@ -51,6 +51,7 @@ export interface IndexedFile {
   runtimeAst?: AstNode;
   sqlAst?: AstNode;
   fragmentAst?: AstNode;
+  traceAst?: AstNode;
   variableFacts?: VariableFact[];
   imports: IndexedImport[];
   namedImports?: { local: string; imported: string; source: string }[];
@@ -109,6 +110,7 @@ export interface IndexedFile {
   runtimeAstDeflate?: string;
   sqlAstDeflate?: string;
   fragmentAstDeflate?: string;
+  traceAstDeflate?: string;
   graphDeflate?: string;
   syntax?: {
     hasFunctions: boolean;
@@ -271,7 +273,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           },
         });
     }
-    for (const field of ['ast', 'runtimeAst', 'sqlAst', 'fragmentAst'] as const) {
+    for (const field of ['ast', 'runtimeAst', 'sqlAst', 'fragmentAst', 'traceAst'] as const) {
       const encodedField = `${field}Deflate` as const;
       if (!has(encodedField)) continue;
       Object.defineProperty(facts, field, {

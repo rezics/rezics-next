@@ -382,3 +382,50 @@ test('quoted transaction words and comments cannot separate gate effects', () =>
       ).map((finding) => finding.rule),
     ).toEqual(expected);
 });
+
+test('wrapped callees retain the original named-call analysis boundary', () => {
+  for (const callee of ['(write)', '(write as typeof write)', 'write!'])
+    expect(
+      serializationFindings(
+        [],
+        [
+          {
+            file: 'wrapped-call.ts',
+            text: `function write(db) {
+              db.query('UPDATE probe.scope_gate SET revision=2 WHERE id=1');
+            }
+            function run(db) {
+              db.query('SELECT id FROM probe.scope_gate WHERE id=1 FOR SHARE');
+              ${callee}(db);
+            }`,
+          },
+        ],
+        [],
+      ),
+    ).toEqual([]);
+});
+
+test('source finding lines preserve CR, CRLF and Unicode separators', () => {
+  for (const separator of ['\r', '\r\n', '\n', '\u2028', '\u2029']) {
+    expect(
+      sourceRelations(
+        {
+          file: 'source-lines.ts',
+          text: `const before=1;${separator}const q='SELECT * FROM access.missing';`,
+        },
+        schemas,
+      ),
+    ).toEqual([{ file: 'source-lines.ts', line: 2, relation: 'access.missing' }]);
+    for (const statement of [
+      "db.query('SELECT pg_advisory_lock(12)');",
+      "const q='SELECT pg_advisory_lock(12)';",
+    ])
+      expect(
+        serializationFindings(
+          [],
+          [{ file: 'source-lines.ts', text: `const before=1;${separator}${statement}` }],
+          [],
+        ).map((finding) => [finding.line, finding.target]),
+      ).toEqual([[2, '12']]);
+  }
+});

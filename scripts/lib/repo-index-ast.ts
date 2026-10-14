@@ -281,9 +281,7 @@ export function indexedSourceFile(
       set('text', text);
       set('getLineAndCharacterOfPosition', (at: number) => {
         if (!positions) {
-          positions = [0];
-          for (let index = 0; index < text.length; index++)
-            if (text[index] === '\n') positions.push(index + 1);
+          positions = indexedLineStarts(text);
         }
         let low = 0,
           high = positions.length;
@@ -401,6 +399,15 @@ export function indexedOffsets(text: string): (value: number) => number {
   };
 }
 
+/** SourceFile line breaks include CR and Unicode separators; SQL fragment
+ * rules retain their separate historical LF-only line calculations. */
+export function indexedLineStarts(text: string): number[] {
+  const starts = [0];
+  for (const match of text.matchAll(/\r\n|[\n\r\u2028\u2029]/g))
+    starts.push(match.index + match[0].length);
+  return starts;
+}
+
 const selectedSyntax = new WeakMap<ts.Node, Map<string, ts.Node[]>>();
 const functionTypes = new Set([
   'FunctionDeclaration',
@@ -467,9 +474,9 @@ function selectIndexedNodes(
     }
     return parent!;
   };
-  const walk = (value: unknown) => {
+  const walk = (value: unknown, ownerStart: number | null = null) => {
     if (Array.isArray(value)) {
-      for (const child of value) walk(child);
+      for (const child of value) walk(child, ownerStart);
       return;
     }
     if (!value || typeof value !== 'object' || !('type' in value) || !('start' in value)) return;
@@ -489,24 +496,6 @@ function selectIndexedNodes(
     )
       return;
     path.push(raw);
-    let ownerStart: number | null = null;
-    if (mode === 'trace')
-      for (let at = path.length - 2; at >= 0; at--) {
-        const ancestor = path[at],
-          before = path[at - 1];
-        if (
-          isIndexedFunction(ancestor) &&
-          !(
-            ancestor.type === 'FunctionExpression' &&
-            before &&
-            isIndexedMethod(before) &&
-            before.value === ancestor
-          )
-        ) {
-          ownerStart = ancestor.start;
-          break;
-        }
-      }
     const callee = raw.callee as AstNode | undefined;
     const property = callee?.property as AstNode | undefined;
     const selected =
@@ -546,7 +535,9 @@ function selectIndexedNodes(
       path.pop();
       return;
     }
-    for (const child of syntaxChildren(raw)) walk(child);
+    const childOwner =
+      mode === 'trace' && isIndexedFunction(raw) && !methodBody ? raw.start : ownerStart;
+    for (const child of syntaxChildren(raw)) walk(child, childOwner);
     path.pop();
   };
   walk(indexed.rawSyntax);
@@ -702,7 +693,15 @@ export function indexedTraceNodes(
   source: { file: string; text: string },
   functions: ReadonlySet<number | null>,
 ): ts.Node[] {
-  return selectIndexedNodes(indexedSourceFile(source), 'trace', functions);
+  return selectIndexedNodes(indexedTraceSourceFile(source), 'trace', functions);
+}
+
+export function indexedTraceSourceFile(source: { file: string; text: string }): ts.SourceFile {
+  const facts = indexedSource(source);
+  const ast = indexedSourceFile(source, facts.traceAst ?? facts.runtimeAst ?? facts.ast);
+  if (facts.traceAst && facts.variableFacts)
+    (ast as IndexedNode).sourceContext.variableFacts = facts.variableFacts;
+  return ast;
 }
 
 export function indexedTemplateNodes(

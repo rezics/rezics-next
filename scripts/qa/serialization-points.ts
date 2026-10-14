@@ -10,6 +10,8 @@ import {
   indexedTraceNodes,
   indexedFragmentSourceFile,
   indexedFragmentNodes,
+  indexedTraceSourceFile,
+  indexedLineStarts,
 } from '../lib/repo-index-ast.ts';
 import {
   parseSources,
@@ -394,6 +396,17 @@ function textLine(text: string, offset: number): number {
   while (low < high) {
     const middle = (low + high) >>> 1;
     if (offsets[middle] < offset) low = middle + 1;
+    else high = middle;
+  }
+  return low + 1;
+}
+function sourceLine(text: string, offset: number): number {
+  const starts = indexedLineStarts(text);
+  let low = 0,
+    high = starts.length;
+  while (low + 1 < high) {
+    const middle = (low + high) >>> 1;
+    if (starts[middle] <= offset) low = middle;
     else high = middle;
   }
   return low + 1;
@@ -881,7 +894,7 @@ function computeSourceFragments(source: SqlSource, indexed: IndexedFile): SqlFra
             fragment: {
               file: source.file,
               text: candidate.text,
-              line: textLine(source.text, offset(candidate.start)),
+              line: sourceLine(source.text, offset(candidate.start)),
               conditions: [],
             },
           });
@@ -1319,6 +1332,34 @@ function gateEffectFindings(
   return findings;
 }
 
+function sqlNameHints(names: Iterable<string>, calls = false): (text: string) => boolean {
+  const pieces = [...names].map((name) => ({
+    text: (name.split('.').at(-1) ?? '')
+      .split('"')
+      .sort((left, right) => right.length - left.length)[0]
+      .toLowerCase(),
+    call: calls && /^[a-z_][a-z_0-9$]*\.[a-z_][a-z_0-9$]*$/i.test(name),
+  }));
+  // A quoted identifier can contain doubled quotes. Any unescaped segment is
+  // a necessary raw spelling; an empty segment gives no usable exclusion.
+  if (pieces.some((piece) => !piece.text)) return () => true;
+  if (!pieces.length) return () => false;
+  const spellings = [true, false].flatMap((call) => {
+    const matching = [
+      ...new Set(pieces.filter((piece) => piece.call === call).map((piece) => piece.text)),
+    ];
+    if (!matching.length) return [];
+    return [
+      new RegExp(
+        `(?:^|[^a-z_0-9$])(?:${matching
+          .map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+          .join('|')})${call ? '"?\\s*\\(' : '(?=$|[^a-z_0-9$])'}`,
+      ),
+    ];
+  });
+  return (text: string) => spellings.some((spelling) => spelling.test(text));
+}
+
 /** Use migration-head function and trigger definitions, not superseded trigger
  * bodies. A write can update a gate without spelling UPDATE in TypeScript. */
 let lastDatabaseEffects:
@@ -1426,26 +1467,8 @@ function computeDatabaseEffects(migrations: SqlSource[]): (fragment: SqlFragment
         });
     }
   }
-  const hints = (names: Iterable<string>) => {
-    const pieces = [...names].map((name) =>
-      (name.split('.').at(-1) ?? '')
-        .split('"')
-        .sort((left, right) => right.length - left.length)[0]
-        .toLowerCase(),
-    );
-    // A quoted identifier can contain doubled quotes. Any unescaped segment is
-    // a necessary raw spelling; an empty segment gives no usable exclusion.
-    if (pieces.some((piece) => !piece)) return () => true;
-    if (!pieces.length) return () => false;
-    const spelling = new RegExp(
-      `(?:^|[^a-z_0-9$])(?:${[...new Set(pieces)]
-        .map((piece) => piece.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
-        .join('|')})(?=$|[^a-z_0-9$])`,
-    );
-    return (text: string) => spelling.test(text);
-  };
-  const functionHint = hints(functions.keys()),
-    triggerHint = hints([...triggers.values()].map((trigger) => trigger.relation));
+  const functionHint = sqlNameHints(functions.keys(), true),
+    triggerHint = sqlNameHints([...triggers.values()].map((trigger) => trigger.relation));
   const mayReachGate = (text: string) => {
     if (/gate\b|\b(?:begin|commit|rollback)\b|\\|\/\*|--|__dynamic__/i.test(text)) return true;
     const lower = text.toLowerCase();
@@ -1981,7 +2004,7 @@ function gateUpgrades(
       ? indexedTraceNodes(source, selection.functions.get(source.file)!)
       : indexedSourceNodes(source);
     const fragments = byFile.get(source.file) ?? [];
-    const ast = indexedSourceFile(source);
+    const ast = selection ? indexedTraceSourceFile(source) : indexedSourceFile(source);
     const moduleId = `${source.file}:module`;
     functionNodes.set(ast, moduleId);
     traces.set(moduleId, {
@@ -2345,6 +2368,7 @@ export function serializationFindings(
           target,
           detail: 'One-row design needs a classified reason and explicit writers',
         });
+  const singletonHint = sqlNameHints(singletons.keys());
   for (const source of [...migrations, ...sources]) {
     const fragments = source.file.endsWith('.sql')
       ? [{ ...source, line: 1 }]
@@ -2359,7 +2383,14 @@ export function serializationFindings(
             target: lock.key,
             detail: 'Advisory key has no per-object value',
           });
-      for (const effect of sqlEffects(fragment))
+      // This rule can only report a current singleton target. Uncertain SQL
+      // spellings retain token analysis; gate traces evaluate their own effects.
+      const singletonEffects =
+        singletons.size > 0 &&
+        (/\\|\/\*|--|__dynamic__/.test(fragment.text) || singletonHint(fragment.text.toLowerCase()))
+          ? sqlEffects(fragment)
+          : [];
+      for (const effect of singletonEffects)
         if (
           (effect.kind === 'write' || effect.kind === 'exclusive') &&
           singletons.has(effect.relation) &&
