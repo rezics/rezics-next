@@ -15,13 +15,15 @@ import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/
 import { deactivateFixtureController, ensureFixtureScopeGate, expireFixtureAuthority,
   grantFixtureAuthority, registerFixtureIdentity, reduceFixtureGrant } from '../src/modules/access/fixture-authority.ts';
 import { AccessAgentControl } from '../src/modules/access/agent-control.ts';
-import { ControlDenied } from '../src/modules/access/topology-control.ts';
-import { AgentProfileDenied, AgentPublicProfiles } from '../src/modules/agent/profile.ts';
-import { AdmissionDenied } from '../src/modules/access/admission.ts';
-import { GovernanceDenied, GLOBAL_CONTEXT } from '../src/modules/governance/store.ts';
+import { ControlConflict, ControlDenied } from '../src/modules/access/topology-control.ts';
+import { AgentProfileConflict, AgentProfileDenied, AgentPublicProfiles } from '../src/modules/agent/profile.ts';
+import { AdmissionConflict, AdmissionDenied } from '../src/modules/access/admission.ts';
+import { GovernanceConflict, GovernanceDenied, GLOBAL_CONTEXT } from '../src/modules/governance/store.ts';
+import { GovernanceRules, RULE_PUBLISH_ACTION } from '../src/modules/governance/rules.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { readTitleControl } from '../src/modules/work/title-control.ts';
-import { SourceNativeWorkAdoptionStore } from '../src/modules/source/native-work-adoption.ts';
+import { SourceAdoptionConflict, SourceNativeWorkAdoptionStore } from '../src/modules/source/native-work-adoption.ts';
+import { hash } from '../src/modules/work/activate.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDirectory = join(root, '.temp/goal/replay-authorization');
@@ -38,12 +40,15 @@ interface Scenario {
   lose: (loss: Loss) => Promise<void>;
   snapshot: () => Promise<unknown>;
   advance?: () => Promise<void>;
+  restore?: () => Promise<void>;
 }
 interface ReplayFamily {
   family: string;
   owners: string[];
   subcases: string[];
   denied: new (...args: never[]) => Error;
+  conflict: new (...args: never[]) => Error;
+  registration: 'turned' | 'registered-failing';
   fixture: (subcase: string, loss: Loss) => Promise<Scenario>;
   losses?: Loss[];
 }
@@ -145,13 +150,16 @@ const sourceSnapshot = async (work: string, receipt: string, actor: string) => (
   [actor])).rows,
   applications: (await stack.contentPool.query(`SELECT to_jsonb(a) AS row
     FROM source.native_work_title_application a WHERE work = $1 ORDER BY id`, [work])).rows,
+  admissions: (await stack.accessPool.query(`SELECT to_jsonb(a) AS row
+    FROM access.admission a WHERE acting_subject = $1 ORDER BY id`, [actor])).rows,
 });
 
 // Each row names real owners reached by public callers. Saved witnesses remain
 // part of the original command; losing live authority must not disclose them.
 const replayFamilies: ReplayFamily[] = [
   { family: 'shared Access admissions', owners: ['modules/work/create-admitted.ts#createAdmittedMetadataWork'],
-    subcases: ['represented Work creation'], denied: AdmissionDenied,
+    subcases: ['represented Work creation'], denied: AdmissionDenied, conflict: AdmissionConflict,
+    registration: 'registered-failing',
     fixture: async () => {
       const member = await stack.member(randomUUID());
       const grant = await member.grant('work:create:root', 'work.create');
@@ -165,10 +173,12 @@ const replayFamilies: ReplayFamily[] = [
         saved ??= result;
         return result;
       }, lose: loss => loseGrant(member, grant, loss),
-      snapshot: () => graphSnapshot(saved.work, saved.receipt) };
+      snapshot: async () => ({ graph: await graphSnapshot(saved.work, saved.receipt),
+        admissions: (await stack.accessPool.query(`SELECT to_jsonb(a) AS row FROM access.admission a
+          WHERE principal_id = $1 ORDER BY id`, [member.principalId])).rows }) };
     } },
   { family: 'Agent profile changes', owners: ['modules/agent/profile.ts#AgentPublicProfiles.change'],
-    subcases: ['public profile v1'], denied: AgentProfileDenied,
+    subcases: ['public profile v1'], denied: AgentProfileDenied, conflict: AgentProfileConflict, registration: 'turned',
     fixture: async (_subcase, loss) => {
       const legacy = loss === 'expired';
       const member = legacy ? legacyController : await stack.member(randomUUID());
@@ -203,10 +213,15 @@ const replayFamilies: ReplayFamily[] = [
             await pool.query(readFileSync(join(root, 'services/main/migrations/access', file), 'utf8'));
           }
         } else await deactivateFixtureController(pool, control);
+      }, restore: async () => {
+        await grantFixtureAuthority(pool, { scope: 'work:create:root', requireDispatch: true,
+          representations: [{ principalId: member.principalId, actor: member.actor, action: 'agent.control', lifetime: 'infinity' }],
+          grant: { actor: member.actor, action: 'agent.control', lifetime: 'infinity' } });
       }, snapshot: () => graphSnapshot(member.actor, saved.receipt) };
     } },
   { family: 'report and rights complaint submission', owners: ['modules/governance/store.ts#GovernanceStore.submitReport'],
-    subcases: ['content_report', 'rights_complaint'], denied: GovernanceDenied,
+    subcases: ['content_report', 'rights_complaint'], denied: GovernanceDenied, conflict: GovernanceConflict,
+    registration: 'registered-failing',
     fixture: async (subcase, loss) => {
       const member = await stack.member(randomUUID());
       let revokedController: string | undefined;
@@ -240,11 +255,14 @@ const replayFamilies: ReplayFamily[] = [
       },
       snapshot: async () => (await stack.accessPool.query(`SELECT to_jsonb(r) AS report,
         (SELECT jsonb_agg(to_jsonb(e) ORDER BY ordinal) FROM access.governance_evidence e
-          WHERE report_id = r.id) AS evidence FROM access.governance_report r
+          WHERE report_id = r.id) AS evidence,
+        (SELECT to_jsonb(c) FROM access.rights_complaint c WHERE report_id = r.id) AS complaint
+        FROM access.governance_report r
         WHERE principal_id = $1 ORDER BY id`, [member.principalId])).rows };
     } },
   { family: 'native source Work adoption', owners: ['modules/source/native-work-adoption.ts#SourceNativeWorkAdoptionStore.adopt'],
-    subcases: ['represented-agent'], denied: AdmissionDenied,
+    subcases: ['represented-agent'], denied: AdmissionDenied, conflict: SourceAdoptionConflict,
+    registration: 'registered-failing',
     fixture: async () => {
       const member = await stack.member(randomUUID());
       const grant = await member.grant('work:create:root', 'work.create');
@@ -265,7 +283,8 @@ const replayFamilies: ReplayFamily[] = [
       snapshot: () => sourceSnapshot(saved.adoption.work, saved.adoption.receipt, member.actor) };
     } },
   { family: 'source title application', owners: ['modules/source/native-work-adoption.ts#SourceNativeWorkAdoptionStore.applyTitle'],
-    subcases: ['represented-agent'], denied: AdmissionDenied,
+    subcases: ['represented-agent'], denied: AdmissionDenied, conflict: SourceAdoptionConflict,
+    registration: 'registered-failing',
     fixture: async () => {
       const member = await stack.member(randomUUID());
       await member.grant('work:create:root', 'work.create');
@@ -295,7 +314,8 @@ const replayFamilies: ReplayFamily[] = [
     } },
   { family: 'Agent control policy (authorized before shared receipted helper)',
     owners: ['modules/access/agent-control.ts#AccessAgentControl.configure'],
-    subcases: ['controller policy'], losses: ['revoked'], denied: ControlDenied,
+    subcases: ['controller policy'], losses: ['revoked'], denied: ControlDenied, conflict: ControlConflict,
+    registration: 'turned',
     fixture: async () => {
       const member = await stack.member(randomUUID()), recovery = await stack.member(randomUUID());
       const authority = await grantFixtureAuthority(stack.accessPool, { scope: 'work:create:root', requireDispatch: true,
@@ -304,14 +324,33 @@ const replayFamilies: ReplayFamily[] = [
         grant: { actor: member.actor, action: 'agent.control', lifetime: 'infinity' } });
       await ensureFixtureScopeGate(stack.accessPool, 'access:representation-topology', { open: true });
       const owner = new AccessAgentControl(stack.accessPool);
-      const receipt = { idempotencyKey: randomUUID(), requestDigest: 'c'.repeat(64) };
       const input = { subjectId: member.actor, recoverySubject: recovery.actor, recoveryApprovals: 1,
         recoveryDelaySeconds: 0, minControllers: 1, maxControllers: 8 };
-      return { command: async fresh => owner.configure(await principal(member),
-        fresh ? { ...receipt, idempotencyKey: randomUUID() } : receipt, input),
+      const receipt = { idempotencyKey: randomUUID(), requestDigest: hash(JSON.stringify(input)) };
+      return { command: async (fresh, changed) => {
+        const intent = changed ? { ...input, maxControllers: 7 } : input;
+        return owner.configure(await principal(member), { ...receipt, requestDigest: hash(JSON.stringify(intent)),
+          ...(fresh ? { idempotencyKey: randomUUID() } : {}) }, intent);
+      },
       lose: async () => { await deactivateFixtureController(stack.accessPool, authority.representationIds[0]!); },
       snapshot: async () => (await stack.accessPool.query(`SELECT to_jsonb(c) AS row
         FROM access.agent_control c WHERE subject_id = $1`, [member.actor])).rows };
+    } },
+  { family: 'governance rule publication', owners: ['modules/governance/rules.ts#GovernanceRules.publish'],
+    subcases: ['rule revision'], denied: GovernanceDenied, conflict: GovernanceConflict, registration: 'turned',
+    fixture: async () => {
+      const member = await stack.member(randomUUID());
+      const grant = await member.grant('governance:platform', RULE_PUBLISH_ACTION);
+      const owner = new GovernanceRules(stack.accessPool);
+      const input = { ref: `urn:rezics:rule:${randomUUID()}`, scopeId: 'governance:platform',
+        actingSubject: member.actor, expectedRevision: null, document: { rule: 'Review retained evidence.' },
+        idempotencyKey: randomUUID() };
+      return { command: async (fresh, changed) => owner.publish(await principal(member), { ...input,
+        ...(fresh ? { idempotencyKey: randomUUID() } : {}),
+        ...(changed ? { document: { rule: 'Different binding.' } } : {}) }),
+      lose: loss => loseGrant(member, grant, loss),
+      snapshot: async () => (await stack.accessPool.query(`SELECT to_jsonb(r) AS row
+        FROM access.governance_rule_revision r WHERE ref = $1 ORDER BY revision`, [input.ref])).rows };
     } },
 ];
 
@@ -324,14 +363,14 @@ async function refusal(command: () => Promise<unknown>) {
   catch (error) { return { error }; }
 }
 for (const row of replayFamilies) for (const subcase of row.subcases) for (const loss of row.losses ?? ['expired', 'revoked'] as const) {
-  test(`${row.family} / ${subcase} / ${loss}: exact replay requires current authority`, async () => {
+  let observed: Awaited<ReturnType<typeof refusal>>;
+  let freshRefusal: Error;
+  test(`${row.family} / ${subcase} / ${loss}: original, binding, fresh refusal and preservation controls`, async () => {
     const fixture = await row.fixture(subcase, loss);
     const original = await fixture.command();
     expect(original).toBeTruthy();
     expect(originalResult(await fixture.command())).toEqual(originalResult(original));
-    if (row.family !== 'Agent control policy (authorized before shared receipted helper)') {
-      expect((await refusal(() => fixture.command(false, true))).error).toBeInstanceOf(Error);
-    }
+    expect((await refusal(() => fixture.command(false, true))).error).toBeInstanceOf(row.conflict);
     await fixture.advance?.();
     expect(originalResult(await fixture.command())).toEqual(originalResult(original));
     const before = await fixture.snapshot();
@@ -344,9 +383,24 @@ for (const row of replayFamilies) for (const subcase of row.subcases) for (const
         (_key, value: unknown) => value instanceof Error ? { name: value.name, message: value.message } : value, 2));
     expect(after).toEqual(before);
     expect(fresh.error).toBeInstanceOf(row.denied);
-    expect(replay.error, JSON.stringify(replay)).toBeInstanceOf(row.denied);
-    expect((replay.error as Error).message).toBe((fresh.error as Error).message);
+    if (row.family === 'Agent profile changes') {
+      const changed = await refusal(() => fixture.command(false, true));
+      expect(changed.error).toBeInstanceOf(row.denied);
+      expect((changed.error as Error).message).toBe((fresh.error as Error).message);
+    }
+    observed = replay;
+    freshRefusal = fresh.error as Error;
+    if (fixture.restore) {
+      await fixture.restore();
+      expect(originalResult(await fixture.command())).toEqual(originalResult(original));
+      expect(await fixture.snapshot()).toEqual(before);
+    }
   }, 60_000);
+  (row.registration === 'registered-failing' ? test.failing : test)(
+    `${row.family} / ${subcase} / ${loss}: exact replay requires current authority`, () => {
+      expect(observed.error, JSON.stringify(observed)).toBeInstanceOf(row.denied);
+      expect((observed.error as Error).message).toBe(freshRefusal.message);
+    });
 }
 
 // Resolve symbols from public HTTP handlers through actual owner methods and
