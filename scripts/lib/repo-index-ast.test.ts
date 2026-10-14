@@ -326,3 +326,59 @@ test('runtime namespace declarations remain available to SQL parameter rules', (
     ).map((finding) => [finding.rule, finding.target]),
   ).toEqual([['constant-advisory-key', '12']]);
 });
+
+test('indexed declaration membership preserves conservative source scope and order', () => {
+  for (const [body, key] of [
+    ["var KEY=7; var KEY=8; db.query('SELECT pg_advisory_lock($1)', [KEY]);", '7'],
+    [
+      "const KEY=9; function nested(){const KEY=10;} db.query('SELECT pg_advisory_lock($1)', [KEY]);",
+      '9',
+    ],
+    ["{ const KEY=11; } db.query('SELECT pg_advisory_lock($1)', [KEY]);", '11'],
+    ["const KEY=12; { const KEY=13; db.query('SELECT pg_advisory_lock($1)', [KEY]); }", '13'],
+  ] as const)
+    expect(
+      serializationFindings([], [{ file: 'scope.ts', text: `function run(db){${body}}` }], []).map(
+        (finding) => [finding.rule, finding.target],
+      ),
+    ).toEqual([['constant-advisory-key', key]]);
+});
+
+test('module initializer lookup retains complete source bounds after query projection', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'module.ts',
+          text: "// 读取\nconst KEY=14;\ndb.query('SELECT pg_advisory_lock($1)', [KEY]);\n// trailing source trivia\n",
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([['constant-advisory-key', '14']]);
+});
+
+test('quoted transaction words and comments cannot separate gate effects', () => {
+  for (const [middle, expected] of [
+    ["SELECT 'COMMIT'", ['gate-lock-upgrade']],
+    ['SELECT 1 /* COMMIT */', ['gate-lock-upgrade']],
+    ['COMMIT /* transaction ended */', []],
+  ] as const)
+    expect(
+      serializationFindings(
+        [],
+        [
+          {
+            file: 'boundary.ts',
+            text: `function run(db) {
+              db.query('SELECT id FROM probe.scope_gate WHERE id=1 FOR SHARE');
+              db.query(${JSON.stringify(middle)});
+              db.query('UPDATE probe.scope_gate SET revision=2 WHERE id=1');
+            }`,
+          },
+        ],
+        [],
+      ).map((finding) => finding.rule),
+    ).toEqual(expected);
+});

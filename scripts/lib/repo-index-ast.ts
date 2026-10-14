@@ -1,5 +1,5 @@
 import ts from 'typescript-6';
-import { indexedSource, type AstNode } from './repo-index.ts';
+import { indexedSource, type AstNode, type SyntaxSpan, type VariableFact } from './repo-index.ts';
 
 // The guards use TypeScript's node vocabulary for their rules. This view maps
 // oxc's indexed syntax to that vocabulary without invoking a second parser.
@@ -65,9 +65,13 @@ function syntaxChildren(raw: AstNode): readonly AstNode[] {
 }
 const sourceViews = new WeakMap<AstNode, ts.SourceFile>();
 type SourceContext = {
+  file: string;
   text: string;
   ast?: ts.SourceFile;
   make?: (raw: AstNode, parent?: ts.Node) => ts.Node;
+  offset: (value: number) => number;
+  variableFacts?: VariableFact[];
+  declarations?: WeakMap<VariableFact, ts.VariableDeclaration>;
 };
 type IndexedNode = ts.Node & { sourceContext: SourceContext; rawSyntax: AstNode };
 const nodePrototype = {
@@ -105,7 +109,7 @@ export function indexedSourceFile(
   const offset = indexedOffsets(text);
   const wrappers = new WeakMap<object, ts.Node>();
   let ast: ts.SourceFile;
-  const sourceContext: SourceContext = { text };
+  const sourceContext: SourceContext = { file: source.file, text, offset };
   const make = (raw: AstNode, parent?: ts.Node): ts.Node => {
     const previous = wrappers.get(raw);
     if (previous) return previous;
@@ -187,6 +191,7 @@ export function indexedSourceFile(
     }
     if (
       [
+        'ExpressionStatement',
         'ParenthesizedExpression',
         'TSAsExpression',
         'TSSatisfiesExpression',
@@ -578,9 +583,108 @@ function containsScopedDeclaration(raw: AstNode): boolean {
 }
 
 export function indexedScopedDeclarations(scope: ts.Node): ts.VariableDeclaration[] {
+  const context = (scope as IndexedNode).sourceContext;
+  if (context.variableFacts) {
+    const raw = (scope as IndexedNode).rawSyntax;
+    const facts = variableScopes(context.variableFacts).get(scopeKey(raw));
+    return facts?.map((fact) => variableDeclaration(context, fact)) ?? [];
+  }
   return containsScopedDeclaration((scope as IndexedNode).rawSyntax)
-    ? (selectIndexedNodes(scope, 'declarations') as ts.VariableDeclaration[])
+    ? (selectIndexedNodes(scope, 'declarations').filter(
+        (node) => (node as IndexedNode).rawSyntax.init != null,
+      ) as ts.VariableDeclaration[])
     : [];
+}
+
+const variableScopeMaps = new WeakMap<VariableFact[], Map<string, VariableFact[]>>();
+// Each fact array belongs to one source file with one module scope. ESTree
+// computes Program bounds from retained statements, so trimming declarations
+// or trailing trivia must not give that module scope a different identity.
+const scopeKey = (span: SyntaxSpan) =>
+  span.type === 'Program' ? 'Program' : `${span.type}:${span.start}:${span.end}`;
+function variableScopes(facts: VariableFact[]): Map<string, VariableFact[]> {
+  const previous = variableScopeMaps.get(facts);
+  if (previous) return previous;
+  const scopes = new Map<string, VariableFact[]>();
+  for (const fact of facts)
+    for (const key of new Set(fact.scopes.map(scopeKey))) {
+      const declarations = scopes.get(key) ?? [];
+      declarations.push(fact);
+      scopes.set(key, declarations);
+    }
+  variableScopeMaps.set(facts, scopes);
+  return scopes;
+}
+
+function ancestorView(context: SourceContext, span: SyntaxSpan, parent?: ts.Node): ts.Node {
+  return Object.assign(Object.create(nodePrototype), {
+    kind: ts.SyntaxKind[(kindNames[span.type] ?? 'Unknown') as keyof typeof ts.SyntaxKind],
+    pos: context.offset(span.start),
+    end: context.offset(span.end),
+    parent,
+    sourceContext: context,
+    rawSyntax: span,
+  }) as ts.Node;
+}
+
+function variableDeclaration(context: SourceContext, fact: VariableFact): ts.VariableDeclaration {
+  context.declarations ??= new WeakMap();
+  const previous = context.declarations.get(fact);
+  if (previous) return previous;
+  const declaration = ancestorView(context, {
+    type: 'VariableDeclarator',
+    start: fact.start,
+    end: fact.end,
+  }) as ts.VariableDeclaration;
+  context.declarations.set(fact, declaration);
+  Object.defineProperty(declaration, 'name', {
+    value: { kind: ts.SyntaxKind.Unknown, getText: () => fact.name },
+  });
+  Object.defineProperty(declaration, 'initializer', {
+    configurable: true,
+    get: () => {
+      if (!fact.initializerAst)
+        throw new Error(`Missing indexed initializer: ${context.file}:${fact.start}`);
+      const ast = indexedSourceFile(context, fact.initializerAst);
+      const initializerContext = (ast as IndexedNode).sourceContext;
+      initializerContext.variableFacts = context.variableFacts;
+      initializerContext.ast = context.ast;
+      const expression = (ast.statements[0] as ts.ExpressionStatement).expression;
+      // Independent expression payloads share the original source's ancestry,
+      // including the declaration itself. Scope membership comes from parser
+      // facts; the TypeScript rule still chooses the first preceding binding.
+      let parent: ts.Node | undefined;
+      for (const span of [...fact.initializerAncestors].reverse()) {
+        if (span.type === 'Program') parent = context.ast;
+        else if (
+          span.type === 'VariableDeclarator' &&
+          span.start === fact.start &&
+          span.end === fact.end
+        ) {
+          (declaration as unknown as { parent?: ts.Node }).parent = parent;
+          parent = declaration;
+        } else parent = ancestorView(context, span, parent);
+      }
+      (expression as unknown as { parent?: ts.Node }).parent = parent ?? declaration;
+      Object.defineProperty(declaration, 'initializer', { value: expression });
+      return expression;
+    },
+  });
+  return declaration;
+}
+
+/** Query/literal syntax and declaration membership are independent payloads.
+ * Unused initializers stay compressed instead of widening the source walk. */
+export function indexedFragmentSourceFile(source: { file: string; text: string }): ts.SourceFile {
+  const facts = indexedSource(source);
+  const ast = indexedSourceFile(source, facts.fragmentAst ?? facts.sqlAst);
+  if (facts.fragmentAst && facts.variableFacts)
+    (ast as IndexedNode).sourceContext.variableFacts = facts.variableFacts;
+  return ast;
+}
+
+export function indexedFragmentNodes(source: { file: string; text: string }): ts.Node[] {
+  return selectIndexedNodes(indexedFragmentSourceFile(source), 'sql');
 }
 
 export function indexedRelationNodes(source: { file: string; text: string }): ts.Node[] {

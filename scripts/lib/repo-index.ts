@@ -31,11 +31,27 @@ export interface SqlFacts {
   references: { relation: string; offset: number }[];
   bodies?: { text: string; sql?: SqlFacts; sqlDeflate?: string }[];
 }
+export interface SyntaxSpan {
+  type: string;
+  start: number;
+  end: number;
+}
+export interface VariableFact {
+  name: string;
+  start: number;
+  end: number;
+  scopes: SyntaxSpan[];
+  initializerAncestors: SyntaxSpan[];
+  initializerAstDeflate: string;
+  initializerAst?: AstNode;
+}
 export interface IndexedFile {
   text: string;
   ast: AstNode;
   runtimeAst?: AstNode;
   sqlAst?: AstNode;
+  fragmentAst?: AstNode;
+  variableFacts?: VariableFact[];
   imports: IndexedImport[];
   namedImports?: { local: string; imported: string; source: string }[];
   directCallNames?: string[];
@@ -92,6 +108,7 @@ export interface IndexedFile {
   astDeflate?: string;
   runtimeAstDeflate?: string;
   sqlAstDeflate?: string;
+  fragmentAstDeflate?: string;
   graphDeflate?: string;
   syntax?: {
     hasFunctions: boolean;
@@ -176,6 +193,7 @@ function readIndex(output: string): RepoIndex {
             const value = readPayload(range);
             if (field === 'sqlCandidates')
               rememberCandidates(value as IndexedFile['sqlCandidates']);
+            if (field === 'variableFacts') rememberVariables(value as VariableFact[]);
             Object.defineProperty(facts, field, { value, enumerable: false });
             return value;
           },
@@ -253,7 +271,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           },
         });
     }
-    for (const field of ['ast', 'runtimeAst', 'sqlAst'] as const) {
+    for (const field of ['ast', 'runtimeAst', 'sqlAst', 'fragmentAst'] as const) {
       const encodedField = `${field}Deflate` as const;
       if (!has(encodedField)) continue;
       Object.defineProperty(facts, field, {
@@ -291,6 +309,7 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     } else {
       rememberSqlRecord(facts);
       rememberCandidates(facts.sqlCandidates);
+      rememberVariables(facts.variableFacts);
     }
     for (const [hash, candidate] of payload.sqlHashes ?? []) {
       if (sqlByHash.has(hash)) continue;
@@ -303,6 +322,24 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     }
   }
   return index;
+}
+
+function rememberVariables(variables?: VariableFact[]): void {
+  for (const variable of variables ?? []) {
+    if (!variable.initializerAstDeflate) continue;
+    const encoded = variable.initializerAstDeflate;
+    Object.defineProperty(variable, 'initializerAst', {
+      configurable: true,
+      enumerable: false,
+      get: () => {
+        const ast = JSON.parse(
+          inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
+        ) as AstNode;
+        Object.defineProperty(variable, 'initializerAst', { value: ast, enumerable: false });
+        return ast;
+      },
+    });
+  }
 }
 
 function rememberCandidates(candidates: IndexedFile['sqlCandidates']): void {
@@ -423,9 +460,15 @@ export function indexedSource(source: { file: string; text: string }): IndexedFi
 }
 
 export function prepareSql(texts: readonly string[]): void {
-  const missing = [...new Set(texts)].filter(
-    (text) => !sql.has(text) && !sqlByHash.has(digest(text)),
-  );
+  const missing: string[] = [];
+  for (const text of new Set(texts)) {
+    if (sql.has(text)) continue;
+    const load = sqlByHash.get(digest(text));
+    // A prepared literal keeps its lazy loader by text, so subsequent rule
+    // passes neither hash the same SQL again nor decode unused parse trees.
+    if (load) sql.set(text, () => load(text));
+    else missing.push(text);
+  }
   if (!missing.length) return;
   const input = JSON.stringify(missing.map((text, index) => ({ file: `${index}.sql`, text })));
   run(repository, `sql:${digest(input)}`, ['--sql', '--stdin'], input);
