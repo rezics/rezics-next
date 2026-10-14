@@ -13,7 +13,7 @@ export const WORKER_TYPE_PROJECTS = [
     project: `${root}tsconfig.json`, task: undefined })),
 ];
 
-/** Membership and import resolution only: no ASTs, libraries or type-checker state.
+/** Membership and import resolution only: no whole-program ASTs, libraries or type-checker state.
  * The source index may supply the same resolved graph without changing selection. */
 export function workerTypePlans(root: string, changed: readonly string[], graph?: readonly GraphModule[]): WorkerTypePlan[] {
   if (!changed.some(file => source.test(file) || configuration.test(file))) return [];
@@ -87,7 +87,8 @@ export function workerTypePlans(root: string, changed: readonly string[], graph?
     // Ambient declarations apply without an import edge, so preserve them in a narrowed project.
     for (const file of entries) if ((/\.d\.[cm]?ts$/.test(file) || ambient.has(file)) && !selected.includes(file)) selected.push(file);
     const broadDeclaration = touched.some(file => /\.d\.[cm]?ts$/.test(file)
-      && (affected.size >= Math.max(1, entries.size / 2) || !/\b(?:import|export)\b/.test(scanned.get(file)?.text ?? '')));
+      && (affected.size >= Math.max(1, entries.size / 2) || !ts.isExternalModule(
+        ts.createSourceFile(file, scanned.get(file)?.text ?? '', ts.ScriptTarget.Latest, false))));
     plans.push({ workspace, project, ...(!configChanged && workspace !== 'apphost' && !touched.some(file => ambient.has(file)) && !broadDeclaration && selected.length < entries.size
       ? { files: selected.map(file => relative(root, file)).sort() } : {}) });
   }

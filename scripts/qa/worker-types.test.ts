@@ -110,3 +110,8 @@ test('the Rust index adapter supplies type-only edges and unresolved imports ret
     .toEqual(['task', 'goal:type-files', '--', '--project', 'services/main/tsconfig.json',
       'services/main/src/public.ts', 'services/main/src/use.ts', 'services/main/src/value.ts']);
 });
+
+test('comments mentioning exports cannot hide a global declaration from workspace fallback', () => {
+  const f = fixture(); f.write('services/main/src/global.d.ts', '// import this contract or export a wrapper\ndeclare const ambient: string;');
+  expect(workerTypePlans(f.root, ['services/main/src/global.d.ts'])[0]!.files).toBeUndefined();
+});
