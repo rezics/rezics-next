@@ -6,10 +6,13 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
+import { createReaderStore } from '../catalogue/reader-store.ts';
 import { mainExportApi } from '../library-backup/export-api.ts';
 import type { ExportStore } from '../library-backup/export-store.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { loadBooksLibrary } from './books-library-recorded-page.ts';
+import { mainLibraryApi, saveYearlyGoal } from './api.ts';
+import { mainCopiesApi } from './loans/api.ts';
 import { mainImportApi } from './import-api.ts';
 import type { ImportShelf } from './import-store.ts';
 import { LibraryImport } from './library-import.tsx';
@@ -39,18 +42,31 @@ export function BooksLibraryRecorded({ record, persona, selections, actingSubjec
   state?: LibraryState; importShelf?: ImportShelf; exportStore?: ExportStore;
 }) {
   const client = useRecordedClient(record, persona, selections);
-  const [loaded, setLoaded] = useState<Awaited<ReturnType<typeof loadBooksLibrary>> | null>(null);
+  const [loaded, setLoaded] = useState<{
+    client: MainClient; actingSubject: string; state: LibraryState; locale: UiLocale; year: number;
+    record: AnswerRecord; persona: AnswerPersona; selections: readonly RecordedSelection[];
+    page: Awaited<ReturnType<typeof loadBooksLibrary>>;
+  } | null>(null);
   const t = materializeData(messages, { locale });
   useEffect(() => {
     if (!client) return;
     let current = true;
     const reader = { main: client, anonymous: client, actingSubject };
     void loadBooksLibrary(reader, { state, locale, year, first: state.shelf.kind === 'all' && state.cursor === null })
-      .then(page => { if (current) setLoaded(page); });
+      .then(page => { if (current) setLoaded({ client, actingSubject, state, locale, year,
+        record, persona, selections, page }); });
     return () => { current = false; };
-  }, [actingSubject, client, locale, state, year]);
-  if (!client || !loaded) return <p role="status">{t.loading}</p>;
-  return <LibraryPage state={state} {...loaded} now={0} locale={locale} messages={messages}
+  }, [actingSubject, client, locale, state, year, record, persona, selections]);
+  if (!client || !loaded || loaded.client !== client || loaded.actingSubject !== actingSubject
+    || loaded.state !== state || loaded.locale !== locale || loaded.year !== year || loaded.record !== record
+    || loaded.persona !== persona || loaded.selections !== selections) return <p role="status">{t.loading}</p>;
+  const page = loaded.page;
+  return <LibraryPage key={`${actingSubject}:${persona}`} state={state} {...page} now={0} locale={locale} messages={messages}
+    api={mainLibraryApi(actingSubject, () => client)}
+    saveGoal={(agent, year, target, version) => saveYearlyGoal(agent, year, target, version, () => client)}
+    copiesApi={mainCopiesApi(actingSubject, () => client)}
+    readerActions={createReaderStore({ actingSubject, main: () => client,
+      seed: page.view.ok ? page.view.data.seed : {} })}
     importApi={mainImportApi(actingSubject, () => client)} importShelf={importShelf}
     exportApi={mainExportApi(actingSubject, () => client)} exportStore={exportStore} />;
 }

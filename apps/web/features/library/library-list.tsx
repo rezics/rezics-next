@@ -24,6 +24,8 @@ import { CopyLoanActions } from './loans/row-actions.tsx';
 import { formatDay } from './format.ts';
 import { hasKindWords, isUseWork, rowStatusLabel, statusLabel } from './labels.ts';
 import { useLibrary } from './library-context.tsx';
+import { LibraryProgress } from './library-progress.tsx';
+import { libraryRowKey, selectedLibraryRows, selectedWorks } from './selection.ts';
 import type { LibraryMessages } from './messages.ts';
 import { OwnRating, PrivateReviewCell, ReadDates, ReadingProgress, ReviewCell } from './row-parts.tsx';
 import { type LibraryShelf, libraryHref, parseLibraryState, statusShelves } from './state.ts';
@@ -103,6 +105,7 @@ function Row({ row, selecting, selected, onSelect, now, avatarQuery, locale, mes
             ? <OwnRating row={row} locale={locale} messages={messages} /> : null}
           {row.status === 'read' ? <ReviewCell row={row} locale={locale} messages={messages} /> : null}
           {row.status === 'read' ? <PrivateReviewCell row={row} locale={locale} messages={messages} /> : null}
+          <LibraryProgress work={row.work.id} title={title} locale={locale} />
         </>}
         <RowMeta row={row} now={now} locale={locale} t={t} />
       </div>
@@ -144,6 +147,7 @@ function Tile({ row, slot, selecting, selected, onSelect, avatarQuery, locale, m
         && '[&_[data-slot=work-cover]]:ring-4 [&_[data-slot=work-cover]]:ring-primary')} />
     {row.rating !== null ? <RatingInline rating={{ mean: row.rating, count: 0, max: 5, own: true }} locale={locale}
       className="mt-1" /> : null}
+    <LibraryProgress work={row.work.id} title={title} locale={locale} />
     {row.status === 'reading' && chapters ? <div className="mt-2 grid gap-1">
       <div aria-hidden="true" className="h-1.5 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-primary" style={{ width: `${(chapters.read / chapters.total) * 100}%` }} />
@@ -182,7 +186,8 @@ function SelectionBar({ selected, rows, shelf, custom, customShelves, clear, loc
   if (selected.size && selected.size !== count) setCount(selected.size);
   // Clear of the phone's bottom navigation.
   const onPhone = useSyncExternalStore(subscribePhone, () => matchMedia(phone).matches, () => false);
-  const works = rows.filter(row => selected.has(row.work.id));
+  const works = selectedLibraryRows(rows, selected);
+  const workIds = selectedWorks(works);
 
   async function run(action: () => Promise<number>, done: string) {
     setBusy(true);
@@ -191,11 +196,11 @@ function SelectionBar({ selected, rows, shelf, custom, customShelves, clear, loc
     announce(refused ? { tone: 'destructive', text: t.someFailed(refused) } : { tone: 'default', text: done });
     if (!refused) clear();
   }
-  const move = (status: ShelfStatus | null) => run(() => moveWorks(works.map(row => row.work.id), status),
-    status ? t.movedTo({ count: works.length, shelf: statusLabel(status, t) }) : t.removedWorks(works.length));
+  const move = (status: ShelfStatus | null) => run(() => moveWorks(workIds, status),
+    status ? t.movedTo({ count: workIds.length, shelf: statusLabel(status, t) }) : t.removedWorks(workIds.length));
   const add = (target: CustomShelf) => run(async () => {
     const adding = works.filter(row => !row.customShelves.some(item => item.id === target.id));
-    const written = adding.length ? await api.addToShelf(target.id, adding.map(row => row.work.id))
+    const written = adding.length ? await api.addToShelf(target.id, selectedWorks(adding))
       : { ok: true as const, data: null };
     refresh();
     return written.ok ? 0 : adding.length;
@@ -264,7 +269,7 @@ export function LibraryList({ rows, shelf, custom, customShelves, layout, contro
   const { notice } = useLibrary();
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
-  const shown = new Set(rows.map(row => row.work.id));
+  const shown = new Set(rows.map(libraryRowKey));
   // A Work that left the page (moved off this shelf) is no longer selected.
   const chosen = new Set([...selected].filter(work => shown.has(work)));
   const toggle = (work: string, checked: boolean) => setSelected(current => {
@@ -272,7 +277,7 @@ export function LibraryList({ rows, shelf, custom, customShelves, layout, contro
     if (checked) next.add(work); else next.delete(work);
     return next;
   });
-  const every = rows.length > 0 && chosen.size === rows.length;
+  const every = rows.length > 0 && chosen.size === shown.size;
   const slot = slotRatio(rows.map(row => row.work));
   return <div className="grid gap-4">
     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
@@ -284,17 +289,17 @@ export function LibraryList({ rows, shelf, custom, customShelves, layout, contro
     {notice ? <p role={notice.tone === 'destructive' ? 'alert' : 'status'} className={cn('rounded-xl px-4 py-2.5 text-sm',
       notice.tone === 'destructive' ? 'bg-destructive/10 text-destructive-foreground' : 'bg-muted')}>
       {notice.text}</p> : null}
-    {selecting ? <Checkbox className="flex w-fit cursor-pointer items-center gap-3 text-sm" checked={chosen.size > 0 && !every ? 'indeterminate' : every} onCheckedChange={event => setSelected(event.checked === true ? new Set(rows.map(row => row.work.id)) : new Set())}>
+    {selecting ? <Checkbox className="flex w-fit cursor-pointer items-center gap-3 text-sm" checked={chosen.size > 0 && !every ? 'indeterminate' : every} onCheckedChange={event => setSelected(event.checked === true ? new Set(rows.map(libraryRowKey)) : new Set())}>
       {t.selectPage}</Checkbox> : null}
     {layout === 'grid'
       ? <ul className="grid grid-cols-2 gap-x-4 gap-y-8 sm:grid-cols-3 sm:gap-x-6 md:grid-cols-4 xl:grid-cols-5">
-        {rows.map(row => <Tile key={row.work.id} row={row} slot={slot} selecting={selecting}
-          selected={chosen.has(row.work.id)} onSelect={checked => toggle(row.work.id, checked)}
+        {rows.map(row => <Tile key={libraryRowKey(row)} row={row} slot={slot} selecting={selecting}
+          selected={chosen.has(libraryRowKey(row))} onSelect={checked => toggle(libraryRowKey(row), checked)}
           avatarQuery={avatarQuery} locale={locale} messages={messages} />)}
       </ul>
       : <ol className="grid divide-y divide-border/70">
-        {rows.map(row => <Row key={row.work.id} row={row} selecting={selecting} selected={chosen.has(row.work.id)}
-          onSelect={checked => toggle(row.work.id, checked)} now={now} avatarQuery={avatarQuery} locale={locale}
+        {rows.map(row => <Row key={libraryRowKey(row)} row={row} selecting={selecting} selected={chosen.has(libraryRowKey(row))}
+          onSelect={checked => toggle(libraryRowKey(row), checked)} now={now} avatarQuery={avatarQuery} locale={locale}
           messages={messages} />)}
       </ol>}
     <SelectionBar selected={chosen} rows={rows} shelf={shelf} custom={custom} customShelves={customShelves}

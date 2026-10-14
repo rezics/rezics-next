@@ -129,6 +129,7 @@ export function statusShelfItems(items: readonly StatusShelfItem[]): LibraryItem
  */
 async function readStates(main: MainClient, actingSubject: string, works: readonly string[], alone = false):
   Promise<Map<string, ReaderStateItem>> {
+  works = [...new Set(works)];
   const read = (batch: readonly string[]) => settle(() => main.v1.me['work-states'].get({ query: {
     works: batch.join(','), actingSubject } }));
   const batches = Array.from({ length: Math.ceil(works.length / READER_BATCH) },
@@ -179,7 +180,7 @@ async function readProgress(reader: LibraryActingReader, rows: readonly LibraryI
     const total = chapters.get(row.work.id);
     const left = item?.unreadCount ?? null;
     return [row.work.id, { next: item?.nextUnread ? { title: item.nextUnread.title, href: item.nextUnread.href } : null, left,
-      chapters: total !== undefined && left?.kind === 'exact' && left.value <= total
+      chapters: total !== undefined && total > 0 && left?.kind === 'exact' && left.value <= total
         ? { read: total - left.value, total } : null }];
   }));
 }

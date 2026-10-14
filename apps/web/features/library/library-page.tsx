@@ -18,6 +18,7 @@ import { PageContainer } from '../shell/page.tsx';
 import type { ExportApi } from '../library-backup/export-api.ts';
 import type { ExportStore } from '../library-backup/export-store.ts';
 import type { LibraryApi } from './api.ts';
+import type { saveYearlyGoal } from './api.ts';
 import type { ImportApi } from './import-api.ts';
 import type { ImportShelf } from './import-store.ts';
 import type { CopiesApi } from './loans/api.ts';
@@ -25,6 +26,7 @@ import { BringIntoRow } from './loans/bring-into-row.tsx';
 import { CopiesApiProvider } from './loans/provider.tsx';
 import { NewShelf, SortControl, VisibilityControl } from './controls.tsx';
 import { LibraryProvider } from './library-context.tsx';
+import { LibraryProgress } from './library-progress.tsx';
 import { statusLabel } from './labels.ts';
 import { LibraryList } from './library-list.tsx';
 import { LibraryExport } from '../library-backup/library-export.tsx';
@@ -134,6 +136,7 @@ function CurrentlyReading({ rows, total, state, avatarQuery, locale, messages }:
                 <Link href={row.work.href} className="rounded-sm outline-none hover:underline focus-visible:ring-2
                   focus-visible:ring-ring">{workTitle(row.work, locale)}</Link></h3>
               <ReadingProgress row={row} locale={locale} messages={messages} />
+              <LibraryProgress work={row.work.id} title={workTitle(row.work, locale)} locale={locale} />
             </>}
         </div>
       </li>)}
@@ -334,6 +337,7 @@ export interface LibraryPageProps {
   avatarQuery?: string;
   /** Stories supply these; pages write to Main. */
   api?: LibraryApi;
+  saveGoal?: typeof saveYearlyGoal;
   /** Recorded stories pass the page's import and export adapters; the page builds them when omitted. */
   importApi?: ImportApi;
   importShelf?: ImportShelf;
@@ -353,7 +357,7 @@ export interface LibraryPageProps {
  * progress. Shelves beside the list, Currently reading first, and every
  * shelf sortable, as a list or a grid, with several Works moved at once.
  */
-export function LibraryPage({ state, overview, view, reading, authors, goal, stats, now, avatarQuery, api,
+export function LibraryPage({ state, overview, view, reading, authors, goal, stats, now, avatarQuery, api, saveGoal,
   importApi, importShelf, exportApi, exportStore, copiesApi, loansView, readerActions, locale,
   messages }: LibraryPageProps) {
   const t = materializeData(messages, { locale });
@@ -364,7 +368,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
   const titles = Object.fromEntries([...reading, ...view.ok ? view.data.rows : []]
     .map(row => [row.work.id, workTitle(row.work, locale)]));
   // One provider per view: its reader store starts from this view's seed, and a note or selection stays behind.
-  return <LibraryProvider key={libraryHref(state)} actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
+  return <LibraryProvider key={`${data.agent}:${libraryHref(state)}`} actingSubject={data.agent} seed={view.ok ? view.data.seed : {}}
     ratingContext={data.ratingContext} titles={titles} api={api} readerActions={readerActions} locale={locale}
     messages={messages}>
     <CopiesApiProvider api={copiesApi}>
@@ -378,7 +382,7 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
         <VisibilityControl initial={data.visibility} locale={locale} messages={messages} />
       </header>
       {loansView ? null : <>
-        {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} /> : null}
+        {goal ? <ReadingGoal agent={data.agent} initial={goal} locale={locale} messages={messages} save={saveGoal} /> : null}
         {stats ? <ReadingStats stats={stats} locale={locale} messages={messages} /> : null}
         <LibraryImport agent={data.agent} context={data.ratingContext} locale={locale} messages={messages}
           api={importApi} shelf={importShelf} />
