@@ -88,3 +88,22 @@ test('missing and infrastructure evidence cannot confirm cells, and an older run
     expect(confirmedScopeReport([row], [row.rowId], failed)).toContain('Declared proved rows seen failing: books/pass');
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+test('a private confirmation keeps run evidence without creating or replacing the main judge', () => {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync('.temp/private-confirmed-');
+  try {
+    const row = declaredOutcome('books/pass');
+    const manifest = { runId: 'wave', atCommit: 'wave', startedAt: '2026-10-13T02:00:00Z', checkout: directory,
+      batches: [] } as unknown as Manifest;
+    const privateRecord = recordConfirmation(directory, join(directory, 'wave'), manifest, [row], undefined, false);
+    expect(latestConfirmation(directory)).toBeUndefined();
+    expect(latestConfirmation(join(directory, 'wave'))).toEqual(privateRecord);
+    manifest.runId = 'main'; manifest.atCommit = 'main';
+    recordConfirmation(directory, join(directory, 'main'), manifest, [row]);
+    const judge = readFileSync(join(directory, 'confirmed.json'), 'utf8');
+    manifest.runId = 'wave'; manifest.atCommit = 'wave';
+    recordConfirmation(directory, join(directory, 'wave'), manifest, [row], undefined, false);
+    expect(readFileSync(join(directory, 'confirmed.json'), 'utf8')).toBe(judge);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

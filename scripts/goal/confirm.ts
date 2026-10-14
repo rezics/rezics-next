@@ -6,7 +6,7 @@ import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaMode
 import { newRunId } from '../qa/core.ts';
 import { directoryLeaseHeld, readDirectoryLease, releaseDirectoryLease, transferDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
 import type { RowOutcomes } from '../qa/cases/outcome-cells.ts';
-import { batchTestResults, cellReadings, confirmationCounts, latestConfirmation, recordConfirmation } from './confirmed.ts';
+import { batchTestResults, cellReadings, confirmationCounts, confirmationRecord, confirmationSummary, latestConfirmation, recordConfirmation } from './confirmed.ts';
 import { createPinnedCheckout, prepareCheckout, regressionBatchQaDirectory, regressionCheckoutRoot, runBatch,
   type Batch, type Execution, type Manifest, type RegressionOptions, type RegressionTier } from './regress.ts';
 
@@ -15,12 +15,40 @@ export interface ConfirmationOptions {
   stateDir: string;
   checkoutRoot?: string;
   runId?: string;
+  at?: string;
+  lanes?: number;
   slots?: number;
   outcomeRegistry?: RegressionOptions['outcomeRegistry'];
   prepare?: RegressionOptions['prepare'];
   runner?: RegressionOptions['runner'];
   /** The pump transfers its reservation to the detached child before the child starts. */
   leaseToken?: string;
+}
+
+export const confirmationUsage = 'Usage: goalctl confirm [--at <rev>] [--lanes <n>] | confirm --status [--run <id>]';
+
+export function parseConfirmationArgs(args: string[]): { at?: string; lanes?: number; status?: boolean; run?: string } {
+  const options: ReturnType<typeof parseConfirmationArgs> = {};
+  for (let index = 0; index < args.length; index++) {
+    const flag = args[index];
+    if (flag === '--status' && !options.status) { options.status = true; continue; }
+    if (flag !== '--at' && flag !== '--lanes' && flag !== '--run') throw new Error(confirmationUsage);
+    const value = args[++index];
+    if (!value || value.startsWith('--')) throw new Error(confirmationUsage);
+    if (flag === '--at' && options.at === undefined) options.at = value;
+    else if (flag === '--run' && options.run === undefined) options.run = value;
+    else if (flag === '--lanes' && options.lanes === undefined && /^[1-9]\d*$/.test(value)
+      && Number.isSafeInteger(Number(value))) options.lanes = Number(value);
+    else throw new Error(confirmationUsage);
+  }
+  if ((options.run && !options.status) || (options.status && (options.at !== undefined || options.lanes !== undefined)))
+    throw new Error(confirmationUsage);
+  if (options.run) validateRunId(options.run);
+  return options;
+}
+
+function validateRunId(runId: string): void {
+  if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(runId)) throw new Error('Invalid confirmation run ID');
 }
 
 function git(repo: string, args: string[]): string {
@@ -59,7 +87,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
   mkdirSync(stateDir, { recursive: true });
   const lock = join(stateDir, 'confirm.lock');
   const runId = options.runId ?? `confirm-${newRunId()}`;
-  if (!/^[a-z0-9][a-z0-9-]{0,60}$/.test(runId)) throw new Error('Invalid confirmation run ID');
+  validateRunId(runId);
   const startedAt = new Date().toISOString();
   let token = options.leaseToken;
   if (token) {
@@ -78,9 +106,13 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
   const save = () => atomic(join(directory, 'manifest.json'), manifest);
   try {
     writeFileSync(join(stateDir, 'confirm-last-start'), `${startedAt}\n`);
-    const pinned = git(repo, ['rev-parse', '--verify', 'main^{commit}']);
+    const main = git(repo, ['rev-parse', '--verify', 'main^{commit}']);
+    const pinned = options.at === undefined ? main : git(repo, ['rev-parse', '--verify', '--end-of-options', `${options.at}^{commit}`]);
     const slots = options.slots ?? (await import('./qa-slots.ts')).qaSlotCount(join(stateDir, 'qa-slots'));
     if (!Number.isSafeInteger(slots) || slots < 1) throw new Error('GOAL_QA_SLOTS must be a positive integer');
+    const lanes = options.lanes ?? Math.min(2, slots);
+    if (!Number.isSafeInteger(lanes) || lanes < 1 || lanes > slots)
+      throw new Error(`Confirmation lanes must be a positive integer at most the QA slot count (${slots})`);
     if (existsSync(join(directory, 'manifest.json'))) throw new Error(`Confirmation run already exists: ${runId}`);
     mkdirSync(directory, { recursive: true });
     const acquired = tryAcquireDirectoryLease(join(directory, 'lock'));
@@ -92,7 +124,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     atomic(join(directory, 'checkouts.json'), { [`${pinned}:pinned`]: checkout });
     manifest = { version: 1, runId, atCommit: pinned, checkout, startedAt, shards: 1, partial: false,
       status: 'running', files: [], batches: [], preflight: { commit: pinned, ok: false, artifactPaths: [] }, diagnoses: [],
-      laneCount: Math.min(2, slots) };
+      laneCount: lanes };
     save();
     manifest.preflight = { commit: pinned, ...await (options.prepare ?? (tree =>
       prepareCheckout(tree, join(directory, 'preflight'))))(checkout) };
@@ -100,6 +132,8 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     const declarations: readonly RowOutcomes[] = options.outcomeRegistry ? await options.outcomeRegistry(checkout)
       : [...(await (await import(pathToFileURL(join(checkout, 'scripts/qa/cases/outcomes.ts')).href) as
         typeof import('../qa/cases/outcomes.ts')).loadOutcomes({ root: checkout })).values()];
+    // Keep the pinned declarations for status after the disposable checkout is removed.
+    atomic(join(directory, 'declarations.json'), declarations);
     const files = [...new Set(declarations.flatMap(row => Object.values(row.cells)
       .flatMap(cell => cell && cell.state !== 'notApplicable' ? [cell.file!] : [])))].sort();
     manifest.files = files.map(file => ({ file, tier: outcomeTier(file), outcome: 'pending' }));
@@ -127,7 +161,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
       await Promise.all(Array.from({ length: manifest.laneCount! }, async () => {
         while (next < manifest!.batches.length) await execute(manifest!.batches[next++]!);
       }));
-      // Drain both lanes before retrying a timeout, so its second attempt runs alone.
+      // Drain all lanes before retrying a timeout, so its second attempt runs alone.
       for (const batch of manifest.batches)
         if (confirmationTimeoutOnly(manifest, batch, batch.attempts.at(-1)!)) await execute(batch);
     }
@@ -135,7 +169,7 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
     manifest.status = !manifest.preflight.ok || manifest.batches.some(batch => batch.attempts.at(-1)?.code)
       ? 'failed' : manifest.files.every(file => file.outcome === 'passed') ? 'passed' : 'incomplete';
     save();
-    recordConfirmation(stateDir, directory, manifest, declarations, manifest.finishedAt);
+    recordConfirmation(stateDir, directory, manifest, declarations, manifest.finishedAt, pinned === main);
     return manifest;
   } catch (error) {
     if (manifest) { manifest.status = 'incomplete'; manifest.finishedAt = new Date().toISOString(); save(); }
@@ -150,7 +184,19 @@ export async function runConfirmation(options: ConfirmationOptions): Promise<Man
   }
 }
 
-export function confirmationStatus(stateDir: string, now = Date.now()): string {
+export function confirmationStatus(stateDir: string, now = Date.now(), runId?: string): string {
+  if (runId !== undefined) {
+    validateRunId(runId);
+    const directory = join(stateDir, 'confirm', runId);
+    const manifest = JSON.parse(readFileSync(join(directory, 'manifest.json'), 'utf8')) as Manifest;
+    const declarationsPath = join(directory, 'declarations.json');
+    const record = manifest.status === 'running' || !latestConfirmation(directory)
+      ? confirmationRecord(manifest, existsSync(declarationsPath)
+        ? JSON.parse(readFileSync(declarationsPath, 'utf8')) as RowOutcomes[] : [], new Date(now).toISOString())
+      : latestConfirmation(directory);
+    return [`Confirmation ${runId}: ${manifest.atCommit}; ${manifest.status}; started ${manifest.startedAt}`,
+      `Running: ${manifest.status === 'running' ? 'yes' : 'no'}`, ...confirmationSummary(record)].join('\n');
+  }
   const record = latestConfirmation(stateDir);
   const counts = confirmationCounts(record);
   return [record ? `Last confirmation ${record.runId}: ${record.atCommit}; age ${Math.max(0,
