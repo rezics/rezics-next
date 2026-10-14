@@ -23,7 +23,7 @@ import { RealmNotFound } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { RealmThreadContent, ThreadSkeleton } from './thread-content.tsx';
 
-type State = 'populated' | 'empty' | 'error' | 'gone' | 'loading' | 'thread' | 'thread-error' | 'thread-gone' | 'siblings';
+type State = 'populated' | 'empty' | 'error' | 'gone' | 'loading' | 'thread' | 'thread-empty' | 'thread-loading' | 'thread-error' | 'thread-gone' | 'siblings';
 const concept = 'https://rezics.com/id/00000001-aaaa-4000-a000-000000000001';
 const context = 'https://rezics.com/id/00000002-aaaa-4000-a000-000000000001';
 const realm = storyRealm.id.slice(-36);
@@ -33,7 +33,7 @@ const feedCatalogs = { en: {}, 'zh-Hans': zhHans, 'zh-Hant': zhHant, ja, ko, de,
 /** Missing recordings: these are contract-built answers, never captured HTTP evidence.
  * Prove requests: GET /v1/realms/{realm}/classification-context; GET /v1/classification-vocabulary?context={context}&limit=20;
  * GET /v1/realms/{realm}/threads?sort=best&concept={concept} (200 populated/empty, 503, 404);
- * GET /v1/realms/{realm}/threads/{reply}?sort=best (200 thread/branch, 503, 404);
+ * GET /v1/realms/{realm}/threads/{reply}?sort=best (200 thread/branch/opener without replies, 503, 404);
  * GET /v1/realms/{realm}/threads/{reply}?sort=best&cursor=siblings%2F%2B%3D%3D (200 next siblings).
  * Loading holds the request. These GET contracts declare no 202 pending state.
  */
@@ -49,13 +49,13 @@ function contractClient(state: State) {
     if (url.pathname.endsWith('/classification-context')) return Response.json({ context });
     if (url.pathname.endsWith('/classification-vocabulary')) return Response.json(boards);
     if (!url.pathname.includes('/threads')) throw new Error(`Unexpected contract story request: ${url.pathname}`);
-    if (state === 'loading') return new Promise<Response>(() => {});
+    if (state === 'loading' || state === 'thread-loading') return new Promise<Response>(() => {});
     if (state === 'error' || state === 'thread-error') return Response.json({ code: 'realm_threads_unavailable' }, { status: 503 });
     if (state === 'gone' || state === 'thread-gone') return Response.json({ code: 'not_found' }, { status: 404 });
     if (url.pathname.endsWith('/threads')) return Response.json(page);
     const read: ThreadRead = state === 'siblings' ? { ...storyThread, complete: false,
       continuations: [{ kind: 'siblings', reply: storyThread.focus, cursor: 'siblings/+==' }],
-    } : storyThread;
+    } : state === 'thread-empty' ? { ...storyThread, items: [storyThread.items[0]!] } : storyThread;
     return Response.json(url.searchParams.has('cursor') ? storyThread : read);
   }) as typeof fetch;
   return browserMainApi('https://contract.invalid', { anonymous: true, fetcher });
@@ -135,3 +135,8 @@ export const ClosedThread: Story = { args: { state: 'thread-gone' } };
 export const ClosedThreadPhone: Story = { ...ClosedThread, globals: phone };
 export const Siblings: Story = { args: { state: 'siblings' } };
 export const SiblingsPhone: Story = { ...Siblings, globals: phone };
+
+export const ThreadWithoutReplies: Story = { args: { state: 'thread-empty' } };
+export const ThreadWithoutRepliesPhone: Story = { ...ThreadWithoutReplies, globals: phone };
+export const ThreadLoading: Story = { args: { state: 'thread-loading' } };
+export const ThreadLoadingPhone: Story = { ...ThreadLoading, globals: phone };
