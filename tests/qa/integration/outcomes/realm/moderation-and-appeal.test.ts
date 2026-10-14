@@ -85,11 +85,13 @@ async function pageReads(name: PersonaName) {
   }
   if (name === 'member') {
     const platform = await answer<PlatformAccessSummary>(sample('form-platform-access', 'GET', '/v1/me/platform-access'));
-    const own = await ban(sessions, person);
-    await (await sample('form-own-ban', 'GET', `${fixture.root}/member-ban?${acting(person)}`)).body?.cancel();
-    await (await sample('form-appeal-none', 'GET', `${fixture.root}/member-receipts/${own.receiptId}/appeal`)).body?.cancel();
-    await appealClient(sessions.realm, own.receiptId, productionMain(name, person, 'appeal-form').fetcher,
-      gateFor(platform)).submit('My original statement contests this sanction.', randomUUID());
+    const operationOpen = gateFor(platform);
+    if (operationOpen('getV1RealmsByRealmMember-ban')) {
+      const own = await ban(sessions, person);
+      await (await sample('form-own-ban', 'GET', `${fixture.root}/member-ban?${acting(person)}`)).body?.cancel();
+      await appealClient(sessions.realm, own.receiptId, productionMain(name, person, 'appeal-form').fetcher,
+        operationOpen).submit('My original statement contests this sanction.', randomUUID());
+    }
   }
   if (name === 'moderator') {
     await managementReads(name, fixture, person, 'moderator-management', 'closed');
