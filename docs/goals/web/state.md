@@ -20,8 +20,13 @@ verification tasks stay stopped. The fourteen replacement briefs were
 already committed and submitted; this retry admits nothing twice. Earlier
 accepted builds retain their proof remainders below; G-2333's shared
 production/replay assembly continuation retains its own result event.
-Program owns shared tooling failures and the single prove record run.
-Missing records, browser inspection and complete gates remain prove work;
+Program owns shared tooling failures. **Program decision, 2026-10-14 21:45
+UTC:** wave/1 merged into main at `4975c3b80` and its single record run is
+over. A surface now records the requests its row's record lacks itself, per
+[the method](../method.md): it claims the outcome test and record, imports the
+production client, changes no assertion or cell, and runs the recording run
+and the answer-records guard. Do not mail program for a record run; resume the
+surface. Browser inspection and complete gates remain prove work;
 pending requires reached HTTP 202. Next assess those proof results against
 the committed briefs, with no individual wave landing or missing-input
 worker restart. Later handoffs, landing results and rulings retain their
