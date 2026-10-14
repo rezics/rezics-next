@@ -727,10 +727,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 47, missingRows: 21, missingProofs: 23 });
+    .toEqual({ rows: 68, provedPairs: 48, missingRows: 20, missingProofs: 22 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 5, L26: 0, gap: 14, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 5, L26: 0, gap: 13, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
