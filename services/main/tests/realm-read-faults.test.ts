@@ -11,28 +11,42 @@ const realm = '00000000-0000-4000-8000-000000000001';
 const paths = ['', '/join-page', '/zone', '/works', '/decisions', `/decisions/${realm}`];
 const coded = <T extends Error>(error: T, code: string) => Object.assign(error, { code });
 
-test('uncoded dependency throws retain distinct useful reasons without exposing raw messages', async () => {
-  const reasons: unknown[] = [];
-  for (const message of ['Dependency connection closed', 'Dependency response truncated']) {
+async function faultIdentity(error: Error) {
     const output = spyOn(console, 'error').mockImplementation(() => {});
     try {
       const app = realmReadRoutes({ environment: {
         lineage: { dataEpoch: 'fault-epoch', routingEpoch: '1' },
-        fuseki: { query: async () => { throw new Error(message); } },
+        fuseki: { query: async () => { throw error; } },
       } } as unknown as MainWorkDependencies);
       const response = await app.handle(new Request(`http://main.local/v1/realms/${realm}/zone`));
       expect(response.status).toBe(503);
       expect(output.mock.calls).toHaveLength(1);
       const line = String(output.mock.calls[0]![0]);
       const event = JSON.parse(line) as Record<string, unknown>;
-      expect(event['error.class']).toBe('Error');
-      expect(line).not.toContain(message);
-      reasons.push(event['error.code']);
+      expect(line).not.toContain(error.message);
+      return { event: event.event, worker: event['rezics.worker.name'],
+        class: event['error.class'], code: event['error.code'] };
     } finally { output.mockRestore(); }
-  }
-  expect(reasons[0]).toBeDefined();
-  expect(reasons[1]).toBeDefined();
-  expect(reasons[0]).not.toBe(reasons[1]);
+}
+
+test('distinct dependency classes and provider codes remain distinguishable without messages', async () => {
+  const plain = await faultIdentity(new Error('Hidden dependency details'));
+  const typed = await faultIdentity(new TypeError('Hidden dependency details'));
+  expect(plain.class).toBe('Error');
+  expect(typed.class).toBe('TypeError');
+  const reset = await faultIdentity(coded(new Error('Hidden dependency details'), 'ECONNRESET'));
+  const timeout = await faultIdentity(coded(new Error('Hidden dependency details'), 'ETIMEDOUT'));
+  expect(reset.code).toBe('ECONNRESET');
+  expect(timeout.code).toBe('ETIMEDOUT');
+  expect(reset).not.toEqual(timeout);
+});
+
+test('bare dependency errors differing only in message emit the same private diagnostic event', async () => {
+  const closed = await faultIdentity(new Error('Dependency connection closed'));
+  const truncated = await faultIdentity(new Error('Dependency response truncated'));
+  expect(closed).toEqual({ event: 'worker_fault', worker: 'main.route.dependency_unavailable',
+    class: 'Error', code: undefined });
+  expect(truncated).toEqual(closed);
 });
 
 for (const path of paths) {
