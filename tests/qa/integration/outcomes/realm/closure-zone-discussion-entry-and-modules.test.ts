@@ -2,6 +2,7 @@ import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-zone-discussion-entry-and-modules.ts';
+import { publishClosureOriginals } from './closure-original-credit-setup.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
@@ -59,68 +60,7 @@ async function independent(person: PersonaSession) {
 }
 
 async function publishOriginals() {
-  const owner = sessions.owner;
-  const root = `/v1/realms/${short(sessions.realm)}`;
-  const roleId = randomUUID();
-  for (const change of [
-    { kind: 'role', roleId, name: 'Original catalogue editors', permissions: ['publication.adopt'] },
-    {
-      kind: 'assignment', roleId, member: owner.actingSubject, assigned: true,
-      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
-    },
-  ]) {
-    const roles = await answer<{ generation: string }>(owner.main('GET', `${root}/roles?${acting(owner)}`));
-    const command = {
-      actingSubject: owner.actingSubject, expectedGeneration: roles.generation,
-      reason: 'Adopt original fixture publications while preserving their authors', change,
-    };
-    const preview = await answer<{ digest: string }>(owner.main('POST', `${root}/role-impact`, command));
-    await answer(owner.main('POST', `${root}/role-changes`, { ...command, impactDigest: preview.digest }), 201);
-  }
-  for (let index = 0; index < 3; index++) {
-    const work = await answer<Work>(owner.main('POST', '/v1/works', {
-      profile: 'metadata-only-v1', title: `${phrase} ${index}`, language: 'en',
-      semanticTypes: ['https://schema.org/Book'], authoring: 'own-work',
-      actingSubject: owner.actingSubject,
-    }), 201);
-    await answer(owner.main('POST', `/v1/works/${short(work.work)}/agent-credits`, {
-      profile: 'native-agent-credit-v1', credit: `https://rezics.com/id/${randomUUID()}`,
-      agent: owner.actingSubject, role: 'author', expectedWorkHead: work.workRevision,
-      actingSubject: owner.actingSubject,
-    }), 201);
-    const draft = await answer<{ contribution: string; draftRevision: string }>(
-      owner.main('POST', '/v1/contributions', {
-        profile: 'text-contribution-v1', work: work.work, language: 'en',
-        body: `Original ${phrase} story ${index}: a gardener plants a seed.`,
-        actingSubject: owner.actingSubject,
-      }), 201,
-    );
-    const published = await answer<{ publicationDecision: string }>(
-      owner.main('POST', '/v1/contribution-publications', {
-        profile: 'text-publication-v1', contribution: draft.contribution,
-        expectedDraftHead: draft.draftRevision, expectedPublicationHead: null,
-        rightsBasis: 'original-contribution', disclosure: 'public',
-        actingSubject: owner.actingSubject,
-      }), 201,
-    );
-    const selected = {
-      work: work.work, contribution: draft.contribution,
-      publicationDecision: published.publicationDecision, expectedSelectionHead: null,
-      actingSubject: owner.actingSubject,
-    };
-    await answer(owner.main('POST', '/v1/publication-selections', {
-      ...selected, profile: 'main-default-selection-v1',
-      context: { kind: 'main-version-default', id: work.mainVersion }, selectionBasis: 'main-maintainer',
-    }), 201);
-    const adoption = await answer<{ selection: string }>(
-      owner.main('POST', '/v1/publication-selections', {
-        ...selected, profile: 'realm-local-selection-v1',
-        context: { kind: 'realm-local', id: sessions.realm }, mainVersion: work.mainVersion,
-        selectionBasis: 'realm-manager-review',
-      }), 201,
-    );
-    publications.push({ ...work, ...draft, ...published, selection: adoption.selection });
-  }
+  await publishClosureOriginals(sessions, publications, phrase);
 }
 
 beforeAll(async () => {
