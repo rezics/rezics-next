@@ -196,7 +196,7 @@ async function compose(page: Page, body: string, language: string, spoiler: bool
   await input.focus();
   await page.keyboard.type(body);
   await expect(input).toHaveValue(body);
-  await area.getByRole('button', { name: /^Content language:/ }).press('Enter');
+  await area.getByRole('button', { name: new RegExp(`^${aboutDiscussionMessages.en.language}:`) }).press('Enter');
   const search = page.getByRole('searchbox', { name: 'Find a language', exact: true });
   await search.fill(language === 'ar' ? 'Arabic' : language === 'en' ? 'English' : 'Japanese');
   await search.press('Enter');
