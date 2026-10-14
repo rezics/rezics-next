@@ -2,15 +2,17 @@ import { expect } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import ts from 'typescript-6';
 import { registerTelemetryPeers, shutdownTelemetry, startTelemetry, withTelemetrySpan } from '../src/runtime.ts';
 
 // Evaluate the actual harness functions with owner clients injected, without loading or starting QA storage.
 function fixtureFunction(path: string, name: string, scope: Record<string, unknown>) {
   const source = readFileSync(resolve(path), 'utf8');
-  const start = source.indexOf(`export async function ${name}(`);
-  if (start < 0) throw new Error(`Missing fixture function ${name}`);
-  const code = new Bun.Transpiler({ loader: 'ts' }).transformSync(source.slice(start))
-    .replace(/^export /m, '');
+  const parsed = ts.createSourceFile(path, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const fn = parsed.statements.find(statement => ts.isFunctionDeclaration(statement) && statement.name?.text === name);
+  if (!fn) throw new Error(`Missing fixture function ${name}`);
+  // Later exported helpers are independent fixtures, not part of this function.
+  const code = new Bun.Transpiler({ loader: 'ts' }).transformSync(fn.getText(parsed).replace(/^export\s+/, ''));
   return new Function(...Object.keys(scope), `${code}\nreturn ${name};`)(...Object.values(scope));
 }
 
@@ -126,8 +128,10 @@ try {
     const releaseShared = registerTelemetryPeers({ MAIN_ORIGIN: sharedOrigin });
     const ratingAccount = fixtureFunction('tests/qa/support/rating-account.ts', 'ratingAccount', {
       Bun, expect, randomBytes, randomUUID, signupPolicyFixture: {}, registerTelemetryPeers,
-      Pool: class { async end() { poolClosed = true;
-        if (scenario === 'pool-close') throw new Error('pool-close'); } },
+      sharedAccountPool: fixtureFunction('tests/qa/support/rating-account.ts', 'sharedAccountPool', {
+        Pool: class { async end() { poolClosed = true;
+          if (scenario === 'pool-close') throw new Error('pool-close'); } },
+      }),
       freePort: async () => {
         const reservation = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response(null) });
         const port = reservation.port!;

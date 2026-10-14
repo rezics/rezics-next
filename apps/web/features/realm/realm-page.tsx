@@ -282,9 +282,11 @@ export async function loadRealmView(
   }
   const [read, membership, ban] = await Promise.all([
     surface === 'site' && realm.zone ? readPublication(realm.zone.id) : null,
-    reader.actingSubject
-      ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
-      : null,
+    replay
+      ? reader.actingSubject ? readMembership(replay.personal, realm.header.id, reader.actingSubject) : null
+      : reader.actingSubject
+        ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
+        : null,
     replay
       ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay) : null
       : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,

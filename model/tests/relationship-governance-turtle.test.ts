@@ -28,7 +28,8 @@ const originalPins = {
   'space-zone-v1': 'dfe09fb0e4f2bc850e1f561f8f32dfdc3bf6f7070166c0b04fe8cd54ab273803',
   'erasure-graph-v1': 'bd9971be037b45f57efd2077d835acd861617add61d6cd10a968a15243b26ea5',
   'statement-decision-v1': 'f5d5c72e0473c6abd0816c0cddceb6c70c8075a47a4d2eeb81b28f9e598b2490',
-  'classification-proposition-v2': '22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6',
+  // Concept retirement widened the accepted state without changing registry roles.
+  'classification-proposition-v2': '2d36768887e2fc049b85d876f0efc9165211106a4eaa283ee5ece8dbe2594c0d',
   'correction-proposal-v1': '9339a7d90b95ee5e93f40031bbd1564b60aff045081c590d579ff89f8e347fc5',
   'correction-decision-v1': '7bd209b0f518409342d5e0ed62ffb4afd17b10dec40ce06caf54bdd3432b358b',
   'event-time-v1': '99a65a3caed9f50d636b3112150a957172c87974b253248d212001449ae8a0ae',
@@ -205,6 +206,8 @@ test('event time, statement targets and classification labels keep their local a
   })).toBe(true);
   expect(Value.Check(slotShape, { ...slot, 'rv:decisionTarget': [] })).toBe(false);
   expect(Value.Check(conceptShape, concept)).toBe(true);
+  expect(Value.Check(conceptShape, { ...concept, 'rv:conceptState': [`${vocabulary}Retired`] })).toBe(true);
+  expect(Value.Check(conceptShape, { ...concept, 'rv:conceptState': [`${vocabulary}Unknown`] })).toBe(false);
   expect(Value.Check(conceptShape, {
     ...concept,
     'skos:prefLabel': [

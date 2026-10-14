@@ -200,9 +200,9 @@ export interface StartupSlotGate {
 const startupSlotRequester = randomUUID();
 let startupSlotSequence = 0;
 /** Request the lifetime lease under admission, but poll it between transactions. */
-function waitForStartupSlot(options: StartupMemoryOptions): { ready: () => boolean; cancel: () => void } {
+function waitForStartupSlot(options: StartupMemoryOptions): { gated: boolean; ready: () => boolean; cancel: () => void } {
   const path = (options.env ?? process.env).REZICS_QA_STARTUP_SLOT_GATE;
-  if (!path) return { ready: () => true, cancel: () => {} };
+  if (!path) return { gated: false, ready: () => true, cancel: () => {} };
   const now = options.now ?? Date.now;
   const announce = options.announce ?? console.log;
   let sequence = ++startupSlotSequence;
@@ -213,7 +213,7 @@ function waitForStartupSlot(options: StartupMemoryOptions): { ready: () => boole
     sequence = ++startupSlotSequence;
     announced = false;
   };
-  return { cancel, ready: () => {
+  return { gated: true, cancel, ready: () => {
     if (now() >= options.deadline) throw new Error('QA startup slot deadline reached; no work started');
     let gate = JSON.parse(readFileSync(path, 'utf8')) as StartupSlotGate;
     // Sibling startups can share the mailbox. A completed foreign reply may have
@@ -504,8 +504,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           mutex.exec('ALTER TABLE startup_waiters ADD COLUMN slot_ready INTEGER NOT NULL DEFAULT 0');
         if (!registered) {
           mutex.query(`INSERT INTO startup_waiters
-            (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-            .run(promiseId, process.pid, identity, need.vm, need.host, need.vmReserve, need.hostReserve, arrivedAt, arrivalSequence);
+            (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq, slot_ready) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+            .run(promiseId, process.pid, identity, need.vm, need.host, need.vmReserve, need.hostReserve, arrivedAt, arrivalSequence, Number(!slotReady.gated));
         }
         // Registration and admission are short transactions. Docker reads never own the writer lock.
         mutex.exec('COMMIT');
@@ -584,7 +584,9 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         // their turn, under the same admission transaction.
         const leaseReady = readingFits && (loadExpired ? loadLeaseReady
           : now() < options.deadline && slotReady.ready() && now() < options.deadline);
-        mutex.query('UPDATE startup_waiters SET slot_ready = ? WHERE id = ?').run(Number(leaseReady), promiseId);
+        // An ungated waiter already owns its lifetime admission. Waiting for memory
+        // must not erase that readiness and let a fresh arrival bypass it.
+        mutex.query('UPDATE startup_waiters SET slot_ready = ? WHERE id = ?').run(Number(!slotReady.gated || leaseReady), promiseId);
         const readyWaiters = waiters.filter(waiter => waiter.id === promiseId ? leaseReady : waiter.slot_ready === 1);
         const first = readyWaiters.find(fits);
         if (first?.id === promiseId) headSince ??= new Date(now()).toISOString();

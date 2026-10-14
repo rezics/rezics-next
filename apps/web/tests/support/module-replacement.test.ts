@@ -33,7 +33,9 @@ test('value exports and uninstalled delegates are refused without changing the t
 
 test('cleanup in the first file leaves later module replacements effective', () => {
   const fixtures = join(import.meta.dir, 'module-replacement');
-  const result = spawnSync('task', ['goal:unit-files', '--',
+  // These files deliberately share a module cache; the inventory guard runner
+  // now isolates each file and cannot prove restoration within one process.
+  const result = spawnSync(process.execPath, ['test',
     join(fixtures, 'first.fixture.ts'), join(fixtures, 'second.fixture.ts')], {
     cwd: join(import.meta.dir, '../../../..'), encoding: 'utf8',
   });

@@ -1264,7 +1264,9 @@ export async function runRegression(options: RegressionOptions): Promise<Manifes
       for (const batch of manifest.batches) if (batch.state === 'running') batch.state = 'pending';
       // Older runs nested the full run ID and SHA, which prevented owner gates from binding PostgreSQL sockets.
       // Preserve verified passes and void only batches that actually failed to start pg_ctl under that long path.
-      if (manifest.checkout !== checkout && pinnedPostgresSocketByteLength(manifest.checkout) > POSTGRES_SOCKET_LIMIT) {
+      // Recorded failures predate short socket aliases: inspect the path those
+      // attempts actually bound, rather than today's alias for that checkout.
+      if (manifest.checkout !== checkout && Buffer.byteLength(physicalPath(manifest.checkout) + postgresSocketSuffix) > POSTGRES_SOCKET_LIMIT) {
         for (const batch of manifest.batches) {
           const result = batch.attempts.at(-1);
           if (batch.state !== 'done' || !result?.code || !/pg_ctl[\s\S]*pg-sock/.test(result.evidence ?? '')) continue;

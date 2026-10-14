@@ -8,7 +8,7 @@ import * as acceptance from '../../../scripts/qa/acceptance.ts';
 import * as qaCore from '../../../scripts/qa/core.ts';
 import { ownerTierBudgetMs } from '../../../scripts/qa/owner-tier-budget.ts';
 import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts';
-import { failedSelection, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
+import { failedSelection, nativeModuleSuiteTest, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
 import { NativeProofImageUnavailable, runPreparedNativeProofBatch } from '../../../scripts/qa/native-proof-execution.ts';
 import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
 import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, typecheckWorkspaces, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
@@ -37,7 +37,7 @@ const sources = new Map<string, string>([
 ]);
 const files = new Set([...graph.map(module => module.source), 'scripts/operations/rebuild.ts']);
 const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, nativeUnionTest,
-  workNameScopeBasisTest, heldReplayNativeTest,
+  workNameScopeBasisTest, heldReplayNativeTest, nativeModuleSuiteTest,
   'infra/jena/tests/command-module-startup.test.ts',
   'infra/jena/tests/native-visit-profile.test.ts',
   'infra/jena/tests/occurrence-label-growth.test.ts',
@@ -530,7 +530,8 @@ test('runtime-image proofs follow every Fuseki build input, including later-stag
   for (const path of ['infra/jena/fuseki-owner.sh', 'infra/jena/patches/ThriftConvert.java',
     'infra/jena/fuseki-text-qa.ttl']) {
     expect(plan([path], { nativeModuleDockerfile: dockerfile, exists }).tests.owner)
-      .toEqual([nativeIntegerPreservationTest, restart]);
+      // The full native suite also follows every Jena edit, including runtime inputs.
+      .toEqual([nativeIntegerPreservationTest, nativeModuleSuiteTest, restart]);
   }
 });
 

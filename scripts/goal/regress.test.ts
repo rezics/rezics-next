@@ -13,6 +13,7 @@ import { isHeavyTest } from './goalctl.ts';
 import { verticalJourneys, verticalJourneyFilter, type VerticalJourney } from '../qa/cases/vertical-journeys.ts';
 import * as goalctl from './goalctl.ts';
 import { tryAcquireDirectoryLease } from '../qa/process/lease.ts';
+import { postgresSocketByteLength, postgresSocketPath } from './postgres-socket.ts';
 import { reapScopeLabel } from '../qa/container-reaper.ts';
 import { confirmedScopeReport, latestConfirmation } from './confirmed.ts';
 import { runConfirmation } from './confirm.ts';
@@ -2073,7 +2074,10 @@ test('detached worktree names leave room for owner PostgreSQL Unix sockets', () 
   const root = '/home/edge/.cache/rezics-r/example';
   const length = checkoutNameLength(root);
   expect(Buffer.byteLength(join(root, 'a'.repeat(length), '.temp/pg-sock/.s.PGSQL.65535'))).toBeLessThanOrEqual(107);
-  expect(() => checkoutNameLength(`/disk/${'a'.repeat(100)}`)).toThrow('GOAL_REGRESS_CHECKOUT_ROOT');
+  // Native owner clusters use a short alias when the physical checkout is deep.
+  const deep = `/disk/${'a'.repeat(100)}`;
+  expect(checkoutNameLength(deep)).toBeGreaterThanOrEqual(2);
+  expect(postgresSocketByteLength(join(deep, 'a'.repeat(checkoutNameLength(deep))))).toBeLessThanOrEqual(107);
 });
 
 test('default checkout cache is independent of a source filesystem and refuses RAM before allocation', () => {
@@ -2137,7 +2141,9 @@ test('socket length counts the physical checkout root behind a short symlink', (
     const target = join(r.dir, '.temp', 'deep'.repeat(30));
     mkdirSync(target, { recursive: true });
     const alias = join(r.dir, '.temp/short'); symlinkSync(target, alias);
-    expect(() => checkoutNameLength(alias)).toThrow('shorter disk path');
+    expect(postgresSocketPath(alias)).toBe(postgresSocketPath(target));
+    expect(postgresSocketByteLength(alias)).toBeLessThanOrEqual(107);
+    expect(checkoutNameLength(alias)).toBe(checkoutNameLength(target));
   } finally { r.cleanup(); }
 });
 
@@ -2179,7 +2185,7 @@ test('RAM-backed legacy checkouts relocate to disk without deleting old trees or
   } finally { probe?.mockRestore(); r.cleanup(); }
 });
 
-test('deep legacy checkout maps relocate to a short cache while preserving prior passes', async () => {
+test('deep legacy checkout maps retain prior passes with short native socket aliases', async () => {
   const r = repo();
   try {
     await r.run({ runId: 'legacy-deep' });
@@ -2193,8 +2199,10 @@ test('deep legacy checkout maps relocate to a short cache while preserving prior
     writeFileSync(join(directory, 'manifest.json'), JSON.stringify(recorded));
     r.calls.length = 0;
     const resumed = await r.run({ resume: 'legacy-deep' });
-    expect(resumed.checkout).not.toBe(legacy);
-    expect(existsSync(legacy)).toBe(true);
+    expect(postgresSocketByteLength(legacy)).toBeLessThanOrEqual(107);
+    expect(resumed.checkout).toBe(legacy);
+    // The completed run removes the checkout it reused, as it does short ones.
+    expect(existsSync(legacy)).toBe(false);
     expect(resumed.status).toBe('passed');
     expect(r.calls).toHaveLength(0);
   } finally { r.cleanup(); }

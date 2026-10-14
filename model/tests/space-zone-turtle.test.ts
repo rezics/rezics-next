@@ -115,8 +115,12 @@ const roles = (id: string) =>
   id.startsWith('space-')
     ? ['space', 'realm']
     : id === 'zone-capability-v1'
-      ? ['navigation-link', 'zone', 'mount', 'revision']
+      ? ['navigation-link', 'zone', 'home-document', 'home-revision', 'mount', 'revision']
       : ['zone'];
+const beforeHome = (profile: ProfileDefinition): ProfileDefinition => ({
+  ...profile,
+  shapes: profile.shapes.filter((shape) => !/\/home-(?:document|revision)-shape$/.test(shape.iri)),
+});
 interface RegistryManifest {
   profiles: { id: string; binding?: RegistryBinding }[];
   canonical: { type: string; routes: RegistryRoute[] }[];
@@ -194,7 +198,7 @@ const revision = () => ({
   'rv:sequence': [1],
 });
 
-test('Space Realm and Zone discovery emits six profiles once, preserving 81 properties and twelve roles', () => {
+test('Space Realm and Zone discovery preserves twelve roles and 81 properties alongside the two home roles', () => {
   const path = directory();
   for (const id of ids)
     writeFileSync(
@@ -204,13 +208,13 @@ test('Space Realm and Zone discovery emits six profiles once, preserving 81 prop
   const discovered = discoverProfiles(path, modules);
   expect(discovered.map((profile) => profile.id)).toEqual(ids);
   expect(profiles.map((profile) => profile.id)).toEqual(ids);
-  expect(discovered.flatMap((profile) => profile.shapes)).toHaveLength(12);
+  expect(discovered.flatMap((profile) => profile.shapes)).toHaveLength(14);
   expect(
-    discovered.flatMap((profile) => profile.shapes.flatMap((shape) => shape.properties)),
+    discovered.map(beforeHome).flatMap((profile) => profile.shapes.flatMap((shape) => shape.properties)),
   ).toHaveLength(81);
   const published = commandProfiles(discovered, options);
   for (const profile of discovered) {
-    expect(digest(constraints(profile))).toBe(original[profile.id as keyof typeof original][1]);
+    expect(digest(constraints(beforeHome(profile)))).toBe(original[profile.id as keyof typeof original][1]);
     const expectedRoles = roles(profile.id);
     expect(profile.shapes.map((shape) => shape.iri)).toEqual(
       expectedRoles.map((role) => `${definition}${profile.id}/${role}-shape`),
@@ -228,7 +232,7 @@ test('Space Realm and Zone discovery emits six profiles once, preserving 81 prop
     expect(isTurtleProfile(profile)).toBe(true);
     expect(String(file)).toBe(`${profile.id}.ts`);
     expect(profileSource(profile)).toBe(readFileSync(join(path, `${profile.id}.ttl`), 'utf8'));
-    expect(digest(constraints(profile))).toBe(original[profile.id as keyof typeof original][1]);
+    expect(digest(constraints(beforeHome(profile)))).toBe(original[profile.id as keyof typeof original][1]);
     expect(Object.entries(module).filter(([name]) => name.endsWith('Declaration'))).toHaveLength(1);
   }
   const realm = discovered.find(profile => profile.id === 'space-realm-v1')!;
@@ -238,8 +242,9 @@ test('Space Realm and Zone discovery emits six profiles once, preserving 81 prop
     canonical: [], bindingDemands: [],
   });
   const registry = selectedRegistry(commandProfiles(authoredProfiles).manifest);
+  // The current registry also advertises the Zone home document and revision.
   expect(digest(JSON.stringify(registry))).toBe(
-    '975c03f2144abb28e3145c6eab3c9a2ac99b8925c2013228d5bbc046a2552990',
+    'e77347a2af5159b9a5277368d0ac23ce13b661e2a7c3b50b74df506751ffea61',
   );
   // Standalone registries order types lexically; full registry preserves historical type precedence.
   const isolated = selectedRegistry(published.manifest);
@@ -280,12 +285,16 @@ test('Space versions preserve discriminator priority and presentation versions r
 test('Space Realm and Zone historical pins remain exact across current author-byte reloads', () => {
   const path = directory();
   const historicalProfiles = profiles.map((profile) => {
-    const source = profileSource(profile);
+    // The Zone home extension is current authored state; historical pins must
+    // be reconstructed from their retained bytes, not by trimming current bytes.
+    const source = profile.id === 'zone-capability-v1'
+      ? readFileSync(new URL('./fixtures/zone-capability-before-home.ttl', import.meta.url), 'utf8')
+      : profileSource(profile);
     expect(source.endsWith(authorComment)).toBe(true);
     const pinnedBytes = source.slice(0, -authorComment.length);
     expect(digest(pinnedBytes)).toBe(original[profile.id as keyof typeof original][0]);
     const canonical = Object.fromEntries(
-      profile.shapes
+      beforeHome(profile).shapes
         .filter((shape) => shape.canonical)
         .map((shape) => [shape.iri.split('/').at(-1)!.slice(0, -6), shape.canonical!]),
     );
