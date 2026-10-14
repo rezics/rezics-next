@@ -3,7 +3,7 @@ import type { MainClient } from '../discover/types.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { mainReadHeaders } from '../api/main-read.ts';
 import { serviceOrigin } from '../api/origins.ts';
-import { operationOpen } from '../api/platform-access.ts';
+import { gateFor, operationOpen } from '../api/platform-access.ts';
 import { readPlatformAccess } from '../api/main.ts';
 import { SERVER_READ_LIMITS } from '../api/server-fetch.ts';
 import { serverRead } from '../api/server-read.ts';
@@ -24,8 +24,8 @@ export async function readOwnRealmBan(realm: string, actingSubject: string, clie
   // A caller that already holds the request client (the page, or a replay) uses it.
   // The platform gate stays here, so a closed operation still makes no request.
   if (client) {
-    if (!operationOpen('getV1RealmsByRealmMember-ban', await readPlatformAccess())) return null;
-    const read = await readMemberBan(client, realm, actingSubject);
+    const access = await readPlatformAccess();
+    const read = await readMemberBan(client, realm, actingSubject, gateFor(access));
     return read.ok ? read.reading : null;
   }
   try {

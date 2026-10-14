@@ -27,7 +27,7 @@ export function appealClient(realm: string, receiptId: string, fetchImpl: typeof
     { fetcher: fetchImpl, cache: 'no-store' });
   async function read(): Promise<BanReading | null | 'closed'> {
     if (operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
-      const read = await readAppealReceipt(main, realm, receiptId);
+      const read = await readAppealReceipt(main, realm, receiptId, operationOpen);
       if (!read.ok) {
         if (read.status === 403 && read.code === 'platform_closed') return 'closed';
         return null;
@@ -40,7 +40,7 @@ export function appealClient(realm: string, receiptId: string, fetchImpl: typeof
     async submit(statement, key) {
       if (operationOpen('postV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
         if (operationOpen('getV1RealmsByRealmMember-receiptsByReceiptIdAppeal')) {
-          const { error } = await postMemberAppeal(main, realm, receiptId, statement, key);
+          const { error } = await postMemberAppeal(main, realm, receiptId, statement, key, operationOpen);
           if (!error) {
             const reading = await read();
             if (reading === 'closed') return { kind: 'closed' };

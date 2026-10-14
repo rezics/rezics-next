@@ -11,7 +11,7 @@ import { readingSelection, type ZoneData } from '../wiki/selection.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
-import { operationOpen, parsePlatformAccess } from '../api/platform-access.ts';
+import { gateFor, parsePlatformAccess } from '../api/platform-access.ts';
 import { readAddress } from '../address/client.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
@@ -39,7 +39,8 @@ import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from '../z
 import { mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
-import { readingFromBanResponse, type BanReading } from '../realm-appeal/reading.ts';
+import type { BanReading } from '../realm-appeal/reading.ts';
+import { readMemberBan } from '../realm-appeal/ban-read.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
@@ -157,18 +158,12 @@ async function replaySubject(replay: RealmReplay): Promise<string | null> {
   return sessionReadSubject(await response.json() as MainSessionAgentState);
 }
 
-async function replayBan(realm: string, actingSubject: string, read: RealmReplay['read']): Promise<BanReading | null> {
-  const access = await read('/v1/me/platform-access', true);
+async function replayBan(realm: string, actingSubject: string, replay: RealmReplay): Promise<BanReading | null> {
+  const access = await replay.read('/v1/me/platform-access', true);
   const held = access.ok ? parsePlatformAccess(await access.json()) : null;
   if (!access.ok) await access.body?.cancel();
-  if (!operationOpen('getV1RealmsByRealmMember-ban', held)) return null;
-  const response = await read(
-    `/v1/realms/${realm}/member-ban?actingSubject=${encodeURIComponent(actingSubject)}`, true);
-  if (response.status !== 200) {
-    await response.body?.cancel();
-    return null;
-  }
-  return readingFromBanResponse(response.status, await response.json());
+  const read = await readMemberBan(replay.personal, realm, actingSubject, gateFor(held));
+  return read.ok ? read.reading : null;
 }
 
 /** The page's resolution, using the same readers production calls. */
@@ -291,7 +286,7 @@ export async function loadRealmView(
       ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
       : null,
     replay
-      ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay.read) : null
+      ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay) : null
       : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {

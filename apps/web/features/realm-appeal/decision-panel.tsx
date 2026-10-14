@@ -18,6 +18,7 @@ import { readAppealReceipt } from './ban-read.ts';
 import { appealDecisionCommand, resolveRealmAppeal } from './decision-api.ts';
 import type { BanReading } from './reading.ts';
 import { reviewText } from './review-messages.ts';
+import { useOperationGate } from '../shell/shell-provider.tsx';
 
 /** The production queue's sanction appeal: the retained reason and statement precede the decision. */
 export function RealmAppealDecisionPanel({ item, realm, actingSubject, principal, authority, locale, messages,
@@ -27,6 +28,7 @@ export function RealmAppealDecisionPanel({ item, realm, actingSubject, principal
 }) {
   const t = materializeData(messages, { locale });
   const copy = reviewText[locale];
+  const operationOpen = useOperationGate();
   const client = useMemo(() => supplied ?? browserMainApi(), [supplied]);
   const [loaded, setLoaded] = useState<{ basis: DecisionBasis; reading: BanReading } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +45,7 @@ export function RealmAppealDecisionPanel({ item, realm, actingSubject, principal
     const prior = readCommand<ModerationDecisionCommand>(realm, actingSubject, operation, store)?.input ?? null;
     setLoaded(null); setError(null); setOutcome(null); setRationale(prior?.rationale ?? ''); setRetained(prior);
     void Promise.all([readDecisionBasis(client, realm, item.id, actingSubject),
-      readAppealReceipt(client, realm, item.target.resource)]).then(([basis, read]) => {
+      readAppealReceipt(client, realm, item.target.resource, operationOpen)]).then(([basis, read]) => {
       if (!active) return;
       if (!basis.ok || !read.ok) {
         setError(!basis.ok ? basis.problem?.title ?? t.unavailableHelp : !read.ok ? read.problem?.title ?? t.unavailableHelp : null);
@@ -55,7 +57,7 @@ export function RealmAppealDecisionPanel({ item, realm, actingSubject, principal
       setLoaded({ basis: basis.data, reading: read.reading });
     }).catch(() => { if (active) setError(t.unavailableHelp); });
     return () => { active = false; };
-  }, [client, realm, item.id, item.target.resource, actingSubject, operation, store, t.unavailableHelp]);
+  }, [client, realm, item.id, item.target.resource, actingSubject, operation, operationOpen, store, t.unavailableHelp]);
 
   async function submit() {
     if (!loaded || !outcome || sending) return;
