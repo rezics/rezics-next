@@ -35,7 +35,15 @@ over. A surface now records the requests its row's record lacks itself, per
 [the method](../method.md): it claims the outcome test and record, imports the
 production client, changes no assertion or cell, and runs the recording run
 and the answer-records guard. Do not mail program for a record run; resume the
-surface. Browser inspection and complete gates remain prove work;
+surface. **Standing authority, program, 2026-10-14 22:00 UTC:** the web
+manager decides and resumes, without mailing program, a surface's continuation
+for its own story, type or test failures, for recording its own reads
+(including frame and relationship hydration reads through the shared frame
+reader), and for a rerun after a host timeout. When a task has used its two
+fix rounds, the web manager writes the `## Decision` (a design note naming the
+cause) itself. Program is mailed only for a wrong API answer (name the
+request), a tool or harness fault, or a claim held by another Goal's task.
+Browser inspection and complete gates remain prove work;
 pending requires reached HTTP 202. Next assess those proof results against
 the committed briefs, with no duplicate worker start or individual wave
 landing. Later handoffs, landing results and rulings retain their
