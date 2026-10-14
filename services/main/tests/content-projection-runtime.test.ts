@@ -4,6 +4,7 @@ import type { ContentProjectionCursor } from '../../content/src/projection-curso
 import { profileRegistry } from '../../../packages/model/src/generated/profiles.ts';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { ContentProjectionWorker } from '../src/content-projection-worker.ts';
+import { currentWorkerTick } from '../src/worker-tick.ts';
 import { FusekiClient, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { contentSearchEligibilityDecisionIri, contentSearchEligibilityDigest,
   contentSearchEligibilityReceiptIri } from '../src/modules/content-publication/eligibility.ts';
@@ -242,10 +243,14 @@ test('SEARCH19: Content route and readiness fail closed on lag and graph outage'
 test('SEARCH19/OPS16: worker retries a failed poll and restarted instance resumes its checkpoint', async () => {
   let checkpoint = 0;
   let attempts = 0;
+  const ticks: (string | undefined)[] = [];
   const errors: unknown[] = [];
   let completed!: () => void;
   const firstProgress = new Promise<void>(resolve => { completed = resolve; });
   const poll = async () => {
+    ticks.push(currentWorkerTick());
+    await Promise.resolve();
+    ticks.push(currentWorkerTick());
     attempts++;
     if (attempts === 1) throw new Error('temporary graph failure');
     if (checkpoint === 0) {
@@ -262,7 +267,11 @@ test('SEARCH19/OPS16: worker retries a failed poll and restarted instance resume
   expect(errors).toHaveLength(1);
   expect(attempts).toBeGreaterThanOrEqual(2);
   expect(checkpoint).toBe(1);
+  expect(ticks.length).toBeGreaterThanOrEqual(4);
+  expect(ticks.every(tick => tick === 'main.content.projection')).toBe(true);
+  expect(currentWorkerTick()).toBeUndefined();
   const restarted = new ContentProjectionWorker(async () => {
+    expect(currentWorkerTick()).toBe('main.content.projection');
     const next = ++checkpoint;
     return { sourceEpoch: contentEpoch, sourceSequence: String(next), disposition: 'ignored' };
   });

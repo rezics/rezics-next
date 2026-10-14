@@ -50,7 +50,10 @@ async function publish(title: string): Promise<Work & { contribution: string; pu
 }
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally {
+    try { await sessions?.close(); }
+    finally { sql.restore(); }
+  }
 });
 
 import catalogue from '../../../../../scripts/qa/cases/outcomes/anime/catalogue-browse-and-search-in-its-zone.ts';
@@ -194,6 +197,7 @@ beforeAll(async () => {
   draft = await answer<Work>(owner.main('POST', '/v1/works', { profile: 'metadata-only-v1',
     title: `${phrase} unpublished original animation`, language: 'en', semanticTypes: ['https://schema.org/TVSeries'],
     authoring: 'own-work', actingSubject: actor }), 201);
+  await catalogueReady();
   } finally {
     preparationDurationMs = Date.now() - started;
     await Bun.write(`.temp/anime-catalogue-preparation-${Bun.env.REZICS_QA_RUN_ID}.json`,
@@ -299,6 +303,30 @@ outcomeTest(catalogue, 'operator', () => qualify('operator'), recording);
 import { meterStatements } from '../../feed-read-support.ts';
 import { foregroundCounted } from '../../support/operation-cost.ts';
 
+// Request pools capture their driver methods on first checkout. Install the
+// meter before persona setup, then compare deltas for each foreground read.
+const sql = meterStatements();
+
+async function catalogueReady() {
+  const path = `/v1/realms/${short(sessions.realm)}/modules/browse?${new URLSearchParams({
+    sort: 'newest', limit: '20', concept: tv,
+  })}`;
+  const deadline = performance.now() + 45_000;
+  let last: unknown;
+  do {
+    const response = await sessions.visitor.main('GET', path);
+    const page = await response.json() as Page & { window?: { complete: boolean } };
+    last = { status: response.status, page };
+    // Concept Conditions require current Discovery Tags. A complete page also
+    // proves that the browse owner has consumed all committed adoptions.
+    if (response.status === 200 && page.window?.complete && page.matches.kind === 'exact'
+      && page.items.length === tvWorks.length) return;
+    if (response.status !== 200 && response.status !== 503) break;
+    await Bun.sleep(Math.min(200, Math.max(0, deadline - performance.now())));
+  } while (performance.now() < deadline);
+  throw new Error(`Anime catalogue did not catch up within 45s: ${JSON.stringify(last)}`);
+}
+
 type Observation = { population: number; request: string; status: number; graphStatements: number;
   postgresStatements: number; retries: number; answer: unknown };
 const observations: Observation[] = [];
@@ -323,7 +351,7 @@ async function nativeSearchTraversal() {
   }
 }
 async function observe(population: number, path: string) {
-  const sql = meterStatements();
+  const postgresBefore = sql.count();
   const originalFetch = globalThis.fetch;
   let graphStatements = 0, requests = 0;
   globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
@@ -335,10 +363,10 @@ async function observe(population: number, path: string) {
   try {
     const response = await sessions.visitor.main('GET', path);
     observations.push({ population, request: `GET ${path}`, status: response.status,
-      graphStatements, postgresStatements: sql.count(), retries: Math.max(0, requests - 1),
+      graphStatements, postgresStatements: sql.count() - postgresBefore, retries: Math.max(0, requests - 1),
       answer: await response.json() });
   } finally {
-    sql.restore(); globalThis.fetch = originalFetch;
+    globalThis.fetch = originalFetch;
   }
 }
 async function restriction(population: number) {
@@ -409,6 +437,7 @@ async function restriction(population: number) {
 }
 async function populationReads(population: number) {
   await restriction(population);
+  await catalogueReady();
   for (const path of [
     `/v1/search/catalogue?q=${phrase}&realm=${encodeURIComponent(sessions.realm)}&limit=5`,
     `/v1/sitemap?after=${encodeURIComponent(works[population - 6]!.work)}`,

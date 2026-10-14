@@ -62,10 +62,10 @@ export class ContentProjectionWorker {
   private async run(): Promise<void> {
     while (!this.stopSignal.signal.aborted) {
       let idle = false;
-      try { idle = (await withWorkerTelemetry('main.content.projection', () => this.pollComplete(), tick => ({
+      try { idle = (await runWorkerTick('main.content.projection', () => withWorkerTelemetry('main.content.projection', () => this.pollComplete(), tick => ({
         outcome: tick.deferred ? 'deferred' : tick.result === null ? 'idle' : 'worked',
         processed: tick.result === null ? 0 : 1, unit: 'event',
-      }))).result === null; }
+      })))).result === null; }
       catch (error) { this.onError(error); idle = true; }
       if (idle && !this.stopSignal.signal.aborted) {
         await waitForPoll(this.intervalMs, this.stopSignal.signal);
