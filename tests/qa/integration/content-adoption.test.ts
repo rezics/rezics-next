@@ -43,6 +43,7 @@ test('Content APIs author Posts through chapters, validate procedures, pin deriv
     }), 201);
     const exactPath = `/v1/content-revisions/${output.revisionId}`;
     const before = await answer(owner.main('GET', `${exactPath}${actorQuery(owner)}`), 200);
+    expect(before).toMatchObject({ reference: { provenance: { author: actingSubject } } });
     const ai = await answer<{ agent: string }>(owner.main('POST', '/v1/agents', {
       profile: 'agent-provision-v1', kind: 'service', displayName: 'Content procedure transformer',
     }), 201);

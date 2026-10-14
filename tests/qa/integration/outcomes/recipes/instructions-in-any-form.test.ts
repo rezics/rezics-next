@@ -73,6 +73,9 @@ async function authoredPost(title: string, value: BlocksDocument): Promise<Autho
   const draftKey = randomUUID();
   const draft = await answer<{ revisionId: string; byteDigest: string }>(owner.main('POST', '/v1/content-drafts', draftBody, draftKey), 201);
   expect(await answer(owner.main('POST', '/v1/content-drafts', draftBody, draftKey), 200)).toMatchObject({ ...draft, replayed: true });
+  const exact = await answer<{ reference: { provenance: { author: string } } }>(owner.main('GET',
+    `/v1/content-revisions/${draft.revisionId}${query(owner)}`), 200);
+  expect(exact.reference.provenance.author).toBe(actingSubject);
   return { post: created.post, variantId: created.variantId, ...draft, author: actingSubject, replayed: false };
 }
 
