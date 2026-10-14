@@ -1,21 +1,21 @@
 # State
 
-Checkpoint ede3be87-d2cb-4321-9d1c-604eb229e7ef consolidates handled events
-mail:69c6395f-8f6d-4273-bf4f-a25afb51da6c,
-mail:44158680-373c-46a5-98f9-d9731b1591db,
-mail:54a8fc2c-d1e5-49f9-874c-e6c7a35a1f1a,
-mail:e21e1082-d35b-4395-923c-3d95601198de,
-mail:6692d184-6cef-47a7-8b72-156d008ed7b2 and task:G-2457:1.
-Carry forward unaffected decisions from checkpoint fb73e0e7. G-2227 is
-closed verified after recovery merged. G-2238's loading-only step is installed;
-its remaining production visits stay held. G-2237 received one browse/search
-continuation; pagination stays held. G-2241 awaits G-2472 and web's queued
-G-2475 refusal-adapter repair. All fourteen new surface briefs are queued,
-claim their outcome tests/records and record production gaps themselves.
-G-2234/G-2332 remain paused with four shared paths released. G-2457 received
-one fresh-session retry for a transport fault before work. Later handoffs,
-landing results and rulings retain their own events. This checkpoint edits
-only this file.
+Checkpoint 844479ae-6d2b-40ab-9bf5-c354e2a48337 consolidates handled events
+task:G-2462:1, task:G-2333:3,
+mail:5762bd12-3d0b-4197-baa3-58ff54df78e4,
+mail:bcd19516-747b-4d04-8ff2-00967206e1eb,
+mail:2b5aa0b5-8784-4b1b-8b08-b9a3a5beb80f,
+mail:95d67abb-3e99-4520-900d-f554a78988c1 and
+mail:73b78faa-05d8-4c25-bed4-23e0b1e1c601.
+Carry forward unaffected decisions from checkpoint ede3be87. G-2462's frame
+seam is admitted but its continuation stays held for G-2232's landing result
+and claim release. G-2333 attempt 3 has no handoff; attempt 4 was already
+recorded, with no duplicate resume. Program owns G-2232's landing retry;
+G-2498 is the separately queued wave second cut. Thirteen other wave briefs
+now use tooling kind; all fourteen require repair, not tests alone. Their
+live metadata question is with Program. These events prove no additional row
+and close no task. Later handoffs, landing results and rulings retain their
+own events. This checkpoint edits only this file.
 
 ## Scope and measures
 
@@ -30,23 +30,23 @@ Token and classified-tool measures below are retained from checkpoint
 | --- | --- |
 | Program API scope | 50 of 67 rows proved; 319 persona cells proved, 83 pending, 0 not applicable, 0 missing; concurrent ledger reading |
 | Web surfaces | Complete surface-row total unavailable; G-2240's landed step and G-2332's accepted management evidence are not whole-row proof; G-2234/G-2237 are bounded steps; G-2333/G-2235 remain unaccepted; G-2381 is a mechanism with no rows |
-| Raw web attempts | Concurrent ledger: 107 across 51 attempted tasks, 51 first and 56 subsequent; queued work excluded; raw first share 48% |
-| Attempts per landed web task | Concurrent raw ledger sample: median 2, maximum 5 across 34 merged or verified web tasks; bounded steps are included |
+| Raw web attempts | Concurrent ledger: 124 across 65 attempted tasks, 65 first and 59 subsequent; queued work excluded; raw first share 52% |
+| Attempts per landed web task | Concurrent raw ledger sample: median 2, maximum 6 across 35 merged or verified web tasks; bounded steps are included; ledger state does not accept a later landing mail |
 | Web tool measures | Retained: 73% first share, daily 38% (6 of 16); 45 first, 32 step, 17 fix; 4 fixes inferred from unavailable handoffs; different denominator from raw ledger |
 | Web tokens | 973.4M input, 6.9M output, 5 unavailable sessions; tokens per proved row unavailable |
 | Web recorded refusals | 0 outcome, 8 gate, 0 failing-test finding, 13 other in retained reports; Program owns the classified tool/main/host faults below |
 | Program measures | 64% first attempts, today 72% (23 of 32); landed-task median 1, maximum 9 (G-1427); 1412M input, 6.3M output, 70 unavailable sessions; tokens per proved row unavailable |
 | Program refusals | 0 outcome, 9 gate, 0 failing-test finding, 4 other in retained reports |
-| Accounts | Concurrent status: codex 39%, codex-1 65% of weekly windows |
+| Accounts | Concurrent status: codex 42%, codex-1 67% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
-The concurrent API reading is 50 of 67; these handled events close G-2227,
-but supply no complete web-row total. The raw attempts are a concurrent ledger snapshot; retained
+The concurrent API reading is 50 of 67; these handled events close no task
+and supply no complete web-row total. The raw attempts are a concurrent ledger snapshot; retained
 tool classifications use a different denominator. Audit 5 measures delayed executable disposition;
 it does not measure tokens per proved row. Its deciding turn accounted for prior
 commands and found all eight queued surfaces missing prerequisites on main.
-The raw first share is now below half at 48%; the retained tool daily share
-is also below half at 38%, requiring classification of repeated work. Repeated work
+The raw first share is 52%; the retained tool daily share
+is below half at 38%, requiring classification of repeated work. Repeated work
 comes from incomplete production-path records, omitted layout decisions,
 shared routing and test-order or host-pressure gate failures. The recorded
 dispositions remove those causes: landed whole-visit inputs admit bounded
@@ -84,6 +84,15 @@ the answer-records guard. G-2234/G-2332's four released paths remove idle
 claim holds; re-admit and reclaim them before either resumes. G-2457's
 pre-work transport failure and G-2475's ledger-lock/capacity refusal are tool
 faults, not surface findings; each received one executable retry/admission.
+This checkpoint adds three classifications: G-2462's locked frame path is an
+ownership hold, G-2333's missing handoff is not accepted surface evidence,
+and G-2232's public OpenAPI movement after the retry gate is a main-concurrency
+fault referred to Program, not a new worker correction. Wave build briefs
+remove per-task stack/record waits and require code repair before handoff;
+proof and recording run in the wave's prove phase. The maximum raw landed
+attempt count is now six (G-2232), recording prior work rather than granting
+another round. The thirteen kind corrections prevent unproved build rows
+from invoking the surface gate; Program has the live metadata question.
 Unavailable tokens per proved row establish no efficiency improvement. Program's measures cover other Goals as well; concurrent status
 and ledger measurements do not decide later handoffs or landing results.
 
@@ -106,7 +115,7 @@ and ledger measurements do not decide later handoffs or landing results.
 | G-2224 | Task:G-2224:2 remains partial/unaccepted despite supplemental passes; the complete gate refused because the thousand-episode row is not proved on main. Mail:bd5211f4 confirms production contents 503 `work_read_unavailable`/`composition_mapping_differs`: API G-2323 lands, then G-2355 repair, then row-cell promotion, then Program G-2413 whole-path recording/landing and labels. Keep exited with no attempt, resume or landing until that Program mail and one dated decision. G-2413 supplies six contents/headers, page-size-100 first/continuation windows, distant search with each persona's own cursor and reached private/cursor refusals, plus other whole-path reads; Program decides unreachable probes API-only. Pending visibility is not 202. Eight exact message paths were checked unclaimed, committed and reclaimed for narrow search copy. Preserve injected production inventory, entered q/language/page size/preceding reads/409 retry/problems/assertions and phone/desktop/full gate. No transplanted cursor, manufactured answer or SEO/Zone follow-up. |
 | G-2233 | First partial held at `9dcd81e3e`: gate and 24 stories do not prove production queue/receipt/refusal/loading. Moderation is `/manage/r/[realm]`; `/requests` is separate. `af174991d` keeps the correct appeal gate: API must report deployment-open platform groups, then Program briefs one record correction with language-qualified headers, out-of-Realm moderator refusal, moderation context and owner's decided case/supporting reads. Owner Zone 503 is also an API fault; no pending/join-request proof is required. Mail:f3512f42 confirms G-2396 is held on API G-2431's deployment-open-group repair; Program resumes the record after it lands. Nothing in this held surface needs a worker fix meanwhile. Keep exited until fix and records land. Claim/reclaim exact queue/frame/Realm-home/appeal seams before the bounded correction; remove record-driven readers, preserve access, actual Zone requests, problems, command keys and subsequent receipt flow, inspect phone/desktop and pass full gate. Mail:31f41691 decision `c04fe59f0` additionally requires `realm-appeal/read.test.ts` to use G-2416's single delegate-table helper inside its next independently authorized continuation, preserving real exports/assertions and removing only its shrinking guard exception after exact admission/reclaim. No resume or landing accepted. |
 | G-2235 | Partial handoff remains unaccepted and worker exited. Mail:ad338980's committed `2db92d677` keeps owner's role assignment a production-dialog Save: its record's target is outside the roster and duration unsupported. Program's G-2436 supplies a whole Save with roster member, selectable role, `validUntil` from `roleDurations` and recorded dialog instant, actual preview answer, save and read afterward. Resume once after Program's landing mail, replacing identities/command values together; stranger assignment remains API evidence. Members/roles/reachable refusals are independent but start no extra missing-input attempt here. Retain the narrow G-2234 `manage/read.ts` settle loan, exact problem propagation, injected production actor/frame/redirect, removal of fabricated visitor panel, all-persona Zone-404 branch, anonymous profile, CAS/keys/assertions and phone/desktop/full gate; admit exact seams before editing. No accepted step or whole row. |
-| G-2232 | Mail:d5b7ba32's dated 04:28 UTC cut at `a54572624` authorized fresh attempt 6 for the selected `requests-access-realm` problem title at line 181 for stranger/operator, retaining 404/missing/code and every other assertion without reader/record/production/story changes. Mail:897e68cb confirms that cut and supersedes Program's earlier assumption that attempt 5 was done. The deciding turn verified the completed attempt-6 first cut and started `land G-2232 --step` once; task:G-2232:6 accepts it and found the landing already running, issuing no duplicate command or brief edit. Await its result. Mail:6cadf6f0 confirms G-2397's supporting/refresh records landed at 04:05 UTC; the second cut follows the first cut's landing result, not this checkpoint. Task and row stay open. Classified hub-actions/main/G-2435 and Docker/startup/host/G-2434 faults remain Program's; any host-only refusal goes there without a surface correction. |
+| G-2232 | The attempt-6 first cut at `c5b6a697e` remains accepted as a step with its gates and assertions unchanged. Mail:5762bd12 reports the landing stopped because main touched `generated/openapi/main/public.json` after the retry unit gate; its deciding turn referred recovery to Program in mail:86503116, without worker or landing restart. Mail:bcd19516 confirms Program started one `land G-2232 --step` at 06:15 UTC with main quiet during wave builds. Await its result event; no repeat landing or locked-brief edit. That turn committed and queued G-2498 for the second cut, requiring the landed first-cut file and starting from its implementation. G-2397's supporting records are on main; task and row stay open. Classified hub-actions/main/G-2435 and Docker/startup/host/G-2434 faults remain Program's. |
 | G-2229 | Task:G-2229:2 remains partial/unaccepted. Mail:47004d68 supplies G-2376 at `e8449c24e69f`: replace every identity together from the whole refreshed Manga record, with canonical frame key `1Cg1BFuSog8nCaEwJY4TrN`. Visitor `search-newest` now says `current`; show that answer, or use another persona's unchanged stale sample through its complete frame. Preserve labels/counts/statuses/problems and the correct Zone-only address, attached Realm presentation and missing browse mount. This lifts only the canonical-key input hold. Keep exited until G-2381's route/links, shared frame/page wiring, G-2342 reads and G-2319 year Conditions are on main; admit remaining exact wiring claims before one bounded continuation. Consume shared corrections without editing their files; phone/desktop/full gate required. G-2377 creation is no prerequisite. |
 | G-2240 | Prior bounded step installed at `1df3192e57ff`: visitor release comparison and signed-in empty chooser, with whole hub/frame remainder open. G-2412 `341058dc6d` supplies 188 whole-visit samples, post-save releases/realizations and empty `zh-Hans` progress. Mail:25697081 confirms Program resumed attempt 3; deciding turns found its landing lock and left the brief untouched. Mail:945b006c answers mail:495718f1: attempt 3 requires no dated decision; Program's resume is recorded, so write nothing during landing. Its result decides any further attempt and then needs a decision. No duplicate resume/landing or new acceptance. Preserve fresh identities together, exact requests/CAS/keys/problems/assertions and phone/desktop/full gate; no second seam or fabricated agent/rights display. |
 | G-2319 | Brief committed at `9ec3b4749`; the queue-refusal event records concurrency 34/34 and a ledger lock. Its deciding turn initiated one durable queue retry, which reported the lock; no brief change or worker registration was established. Retain the intended queued work and decide later queue events separately; do not dispatch or retry here. Shared `BrowseState`, API query, links/continuations/search retain `publicationYear` value/range as a removable Condition; clear-all removes it. `official: null` declares no year control while honoring the address. Production-model units only; required on main for G-2229's full row; mail:e5789d7d separately authorized its bounded frame resume. |
@@ -115,7 +124,8 @@ and ledger measurements do not decide later handoffs or landing results.
 | G-2230 | Task:G-2230:1 holds the first partial unaccepted: the passing gate at `236e1d741` and preference mapping do not prove the omitted visitor release comparison or signed-in chooser. Mail:116f02bd assigns running G-2358 the whole production rerecording: six-persona `limit=20` releases, missing chooser realizations and empty-state progress, plus exact preference writes previously outside the recorder (concurrent CAS saves/409, winner replay, 400 language, 404 Work, foreign 403 and visitor 401, bodies and stable keys). Hold until Program's landing mail, then resume once with fresh Works/releases/Persons through existing `books-edition-page` and its production readers; no second seam. Admit exact shared OWNER CHANGES before edits, retain refusal unit proof/persona/CAS/keys, inspect phone/desktop and pass full gate. |
 | G-2328 | Mail:41ba0806 supplies G-2399's whole six-persona production visit at `0dfd22ef33` (288 new labels); Program already resumed attempt 3. Decision `aadcc9597` requires unchanged fixture identities/labels together, actual Work/frame and Library/session/custom-shelves/watching reads, real status/watched/clear controls with preceding reads and refreshes. Remove parallel sample-driven readers, mount-triggered writes and substituted shelves requests. Keep production `episode:<n>` bodies; lawful null-position samples remain API-only. G-2215 holds the Library reader until successful landing/release; additional edits need exact claims or loans. Preserve applicability, requests/versions/keys/problems/credit/assertions and phone/desktop/full gate. No handoff/landing accepted; another partial at the cap needs cut/split/design. Apply the decision at handoff without another resume or interruption. |
 | G-2332 | Task:G-2332:3 accepts only management read-only evidence at `35d0e632f` plus type repair `7b2965f22`; decision committed at `04b379027`. Production layout and recorded page share authoring/lifecycle frame decisions. Units assert one owner configuration read, two exact reads for stranger/member/moderator/operator, lifecycle and draft-provider decisions; complete `run-k5GXBR` passed with fourteen inspected phone/desktop management stories including loading/German. Do not land; preserve all six commits. No Agent-profile or visitor Zone-read proof, and parallel public stories prove no production public visit. Public visits/subsequent mandated-publication presentation remain after G-2340; publication, lost acknowledgement, competition, receipt replay, mandated owner credit and refusal interactions remain after G-2267. Keep task/row open; no further worker attempt or landing authorized until the prerequisite events decide remaining cuts. Preserve cached clients/proxy headers/acting Person, conditional return-address, exact cuts/receipts/authority/credit/CAS/retry/refusal assertions. Mail:e21e1082 keeps the worker paused and confirms Program removed/reclaimed `realm/read.ts`, `realm/routes.tsx`, `manage/read.ts` and `zone-editor/read.ts` from these two briefs. Restore the needed paths and reclaim before a separately authorized resume. |
-| G-2333 | Published-only handoff remains unaccepted. Mail:6cadf6f0 reports G-2422 landed at `1e8db369d`; decision `dfdd79773` queued one continuation for visitor, stranger, member, owner and moderator through the refreshed whole production record and existing boundaries. Complete their published-home, management, saved-preview and reachable save/reopen/stale-draft/publication work. Operator proof and complete gate stay held for API G-2432's promotion after a whole passing six-persona run; hand off that exact remainder if absent. Apply the byte-identical 17-line `next-headers.ts` loan from G-2232's `a8eb30820` and drop `media-provider.tsx`. Preserve whole identities/labels, visitor redirect before editor reads, no home `routes?path=/`, cached/conditional requests, credit, every assertion and phone/desktop; run named mapping/story checks. Shared authoring remains G-2267, creation/attachment G-2377. No handoff, landing or close accepted. |
+| G-2333 | Task:G-2333:3 found no handoff for attempt 3, which remains unaccepted. The ledger already recorded attempt 4; its deciding turn issued no duplicate resume or landing and changed no brief. Mail:6cadf6f0 reports G-2422 landed at `1e8db369d`; decision `dfdd79773` queued one continuation for visitor, stranger, member, owner and moderator through the refreshed whole production record and existing boundaries. Complete their published-home, management, saved-preview and reachable save/reopen/stale-draft/publication work. Operator proof and complete gate stay held for API G-2432's promotion after a whole passing six-persona run; hand off that exact remainder if absent. Apply the byte-identical 17-line `next-headers.ts` loan from G-2232's `a8eb30820` and drop `media-provider.tsx`. Preserve whole identities/labels, visitor redirect before editor reads, no home `routes?path=/`, cached/conditional requests, credit, every assertion and phone/desktop; run named mapping/story checks. Shared authoring remains G-2267, creation/attachment G-2377. No handoff, landing or close accepted; the next attempt's result has its own event. |
+| G-2462 | Task:G-2462:1 decision `e1cc81ab6` admits `apps/web/features/realm/realm-page.tsx` for the smallest production-loader/frame injection. G-2232's locked landing holds its claim: no reclaim, loan, edit, resume or partial acceptance while landing. After its result is decided and the claim released, read the landed injection, reuse it, reclaim exactly and decide one continuation. Preserve membership mapping, cached/conditional inputs, anonymous/persona split, exact problems and all six cells. Missing reached requests remain this surface's recording work; complete mapping, whole replay, stories, phone/desktop and full gate within its existing budget. No worker or landing started by that event. |
 | G-2325 | Task:G-2325:3 decision `ff9e04479` drops redundant out-of-claim `work-frame.tsx` changes, keeps main's equivalent relationship-client injection and complete frame, and rebased the branch with scope clean. Its single landing refused because the task remained in conflict (mail:3b6dd0f7), without gate/review. Decision `12c23b04a` supersedes only that command: claims reclaimed and one background recovery `merge` started with all default gates/acceptance requirements. Await its result mail; no duplicate land/merge, worker attempt or closure. Preserve all 133 fresh identities, actual WorkFrame, ratings/follow and both progress controls, exact client split/requests/problems/assertions, scaling/continuation, `1 ½`, As written inapplicability and API-only owner preview. Recorded definition 404 remains lawful and the panel renders without it. Phone/desktop/full gate remain required. |
 | G-2329 | Mail:7c2d45c2 decision `d856300ae` authorizes one bounded production-control continuation from G-2411 `4cdc53de3f` (175 samples); mail:25697081 confirms Program's already-running attempt 3. Mail:945b006c answers the decision-delivery question: judge the committed brief at handoff, without stopping or resuming this worker again. Derive identities/labels from the whole main fixture; show both reachable mark/clear conflict chains for all five signed-in personas with barrier order, distinct sessions of the same Person, preceding reads, first write, stale real-control click, refusal, recovery and refresh. Visitor gains no panel/requests. Preserve `markPosition`: clear omits position only in the control argument; the adapter retains current position in the recorded body. Original race labels/winners remain API-only. Replay the full Work/frame and exact follow-state query without `kind`; no missing-sample relationship fallback. Drop the unnecessary shared-story hunk, preserving original `episode:41`; retain claims/facets boundary and separate G-2399/G-2328 inputs. Phone/desktop/full gate and every body/version/grant/key/problem/assertion remain required. Another partial needs cut/split/design; no handoff/landing accepted. |
 | G-2325–G-2333 | Nine briefs admitted/queued under mail:2105a9cc with `depends: []` and replay/row-file `needs:`: Recipe read (G-2325/G-2295 record), Anime hub (G-2326/G-2296), relations (G-2327/G-2297), tracking (G-2328/G-2298), two-device (G-2329/G-2299), Manga tracking (G-2330/G-2300), two-device (G-2331/G-2301), Zone publication (G-2332/G-2302), independent Zone (G-2333/G-2303). Six-persona matrices were read before admission. Automatic starts need no later dispatch; G-2333's automatic start is confirmed by mail:916e2a17. Stories consume unchanged production page/frame requests through the shared reader/mapping and typed replay; no substitute reader/frame or unsupported state. Individual handoff decisions above remain authoritative; no new handoff accepted here. |
@@ -134,6 +144,35 @@ and ledger measurements do not decide later handoffs or landing results.
 | G-2457 | Task:G-2457:1 failed before work with Codex workspace routing discovery exhausted after retries: clean worktree, zero commits and no handoff. The deciding turn issued one fresh-session resume from the unchanged brief; it waited on concurrency, and the concurrent ledger now shows attempt 2 started. Classify the failed start as transport tooling, retain all recording/persona/assertion/gate requirements and issue no duplicate resume. Its next handoff has its own event. |
 
 ## Retained boundaries and prerequisites
+
+### Wave build decisions
+
+The handled wave corrections apply to G-2483/G-2484/G-2486–G-2496 and the
+separate G-2498 membership second cut. The thirteen former briefs were
+individually committed as `kind: tooling` under mail:95d67abb; rows remain
+named in `rows:` and Outcome. G-2237/G-2333/G-2457 retain their admitted kinds.
+Mail:2b5aa0b5 found every current wave brief already had `cases: []`,
+`paths: []` and `tests: []`; no edit or repeat dispatch was needed.
+Build briefs retain `engine: sol`, `effort: high`, no automatic landing,
+a `## Wave` section, feature-directory cuts and one-to-two-hour scope.
+
+Mail:73b78faa's repair rule was separately committed in all fourteen briefs:
+repair from code, change any file the outcome needs including native modules,
+and do not wait for failing-before runs, growth series or live stack logs.
+When two causes remain, repair the more likely, test both and name the choice.
+A tests-only handoff is unfinished and gets a repair continuation under that
+rule without a Program referral. Build on `wave/1`, run only checks needing no
+stack, rebase and push to the shared wave branch; full outcome tests,
+recording and stack evidence belong to prove. The original surface records
+and gate holds below remain acceptance requirements, not prerequisites for
+these replacement build assignments. These corrections prove no row.
+
+Existing workers and queue remained active. Reclaim/queue could not refresh
+running surface-kind metadata; the deciding turn mailed Program the exact
+brief paths and live-check question in mail:a58fe164. Its answer has its own
+event; start no duplicate worker or metadata recovery here. G-2498 was
+committed and queued under mail:bcd19516 with the first-cut file as `needs:`;
+its automatic admission is not a new acceptance of G-2232's result mail.
 
 Mail:e21e1082 supersedes the landing-mail hold for the fourteen briefs
 from mail:80788fb8. G-2454–G-2460 were each amended, committed and queued
@@ -312,9 +351,10 @@ G-2267; keep the owner's correct record unchanged.
 ## Acknowledgements
 
 The five supplied mail deliveries were durably acknowledged on 2026-10-14 UTC:
-69c6395f at 05:22:27, 44158680 at 05:22:40, 54a8fc2c at 05:33:34,
-e21e1082 at 05:36:13 and 6692d184 at 05:38:17. Task:G-2457:1 and this
-checkpoint supply no new mail delivery; no duplicate acknowledgement is needed.
+5762bd12 at 06:16:05, bcd19516 at 06:23:54, 2b5aa0b5 at 06:21:58,
+95d67abb at 06:30:29 and 73b78faa at 06:30:41. Task:G-2462:1,
+task:G-2333:3 and this checkpoint supply no new mail delivery;
+no duplicate acknowledgement is needed.
 Earlier acknowledgements remain durable in mail history.
 This checkpoint edits no brief, starts no worker or landing, waits for no
 result and arms no watcher. Later mail is left for its own event.
