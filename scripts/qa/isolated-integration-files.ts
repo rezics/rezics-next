@@ -212,6 +212,8 @@ export const isolatedIntegrationFileList = [
   'tests/qa/integration/person-ended-name-search.test.ts',
   // Deployment-designation revocation must not end later files' publication assignment.
   'tests/qa/integration/review/source-publication-authority.test.ts',
+  // Restores a bootstrapped Access baseline between destructive designation controls.
+  'tests/qa/integration/review/governance-designation-revocation.test.ts',
 ] as const;
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
