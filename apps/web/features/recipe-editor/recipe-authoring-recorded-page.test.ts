@@ -112,7 +112,7 @@ function editorOf(view: RecipeAuthoringMapped) {
 }
 
 test('an owner opens the recorded draft at its head', async () => {
-  const { main } = replay(authoring, 'owner', authorReads);
+  const { main, fetcher } = replay(authoring, 'owner', [...signedInFrame, ...authorReads]);
   const actor = actingSubject(authoring, 'owner', 'editor-work-header');
   const id = workId(authoring, 'owner');
   const draft = sample(authoring, 'owner', 'editor-recipe-draft');
@@ -132,10 +132,23 @@ test('an owner opens the recorded draft at its head', async () => {
       };
     }[];
   };
+  expect(await readRecipeVisitFrame(main, fetcher, {
+    actingSubject: actor, locale: 'en', origin,
+  })).toMatchObject({ ok: true });
+  const view = editorOf(await loadRecipeAuthoring(main, {
+    id, actingSubject: actor, signedIn: true,
+  }));
+  expect(view.work).toBe(`https://rezics.com/id/${id}`);
+  expect(view.actingSubject).toBe(actor);
+  expect(view.initial.recipe.structure).toBe(answer.structure);
+  expect(view.initial.recipe.head).toBe(answer.revision);
+  expect(view.initial.next).toBe(answer.next ?? null);
+  expect(view.initial.notes).toEqual({ text: null, head: null, body: '', publicationHead: null });
   const loaded = await readRecipe(main, id, actor);
   expect(loaded.ok).toBe(true);
   if (!loaded.ok) return;
   const title = (summary.answer as { name: { value: string } }).name.value;
+  expect(view.initial.details.values.entries.some(entry => entry.title === title)).toBe(true);
   const named = await main.v1.resources({ resource: id }).get({ query: { actingSubject: actor } });
   expect(named.error).toBeNull();
   expect((named.data as { name?: { value?: string } } | null)?.name?.value).toBe(title);
@@ -149,15 +162,18 @@ test('an owner opens the recorded draft at its head', async () => {
     stepValues,
   );
   expect(stepValues).toHaveLength(2);
+  expect(steps(view.initial.recipe).map(node => node.qualifier.instructionText.value)).toEqual(stepValues);
   const amounts = answer.occurrences
     .filter((item) => item.role === 'ingredient' && item.state === 'active')
     .map((item) => item.qualifier?.amount ?? null);
   expect(ingredients(loaded.data).map((node) => node.qualifier.amount ?? null)).toEqual(amounts);
+  expect(ingredients(view.initial.recipe).map(node => node.qualifier.amount ?? null)).toEqual(amounts);
   const lines = answer.occurrences
     .filter((item) => item.role === 'ingredient' && item.state === 'active' && item.qualifier)
     .map((item) => readingLine(item.qualifier as never));
   expect(ingredients(loaded.data).map((node) => readingLine(node.qualifier))).toEqual(lines);
   expect(lines).toEqual(['1 ½ cup flour', '¼ cup flour']);
+  expect(ingredients(view.initial.recipe).map(node => readingLine(node.qualifier))).toEqual(lines);
   const notes = await main.v1.me.contributions.get({ query: { actingSubject: actor, limit: 20 } });
   expect(notes.error).toBeNull();
   expect(notes.data?.items).toEqual([]);
@@ -479,4 +495,22 @@ test('the empty and imported recipe answers share one path', () => {
   const empty = sample(exchange, 'owner', 'recipe-empty');
   expect(sample(exchange, 'owner', 'imported-recipe').path).toBe(empty.path);
   expect((empty.answer as { occurrences: unknown[] }).occurrences).toEqual([]);
+});
+
+test('every authoring persona opens its own recorded frame before the editor boundary', async () => {
+  for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
+    const selected = authoring.personas[persona]
+      .filter(item => item.label.startsWith('frame-') || item.label.startsWith('editor-'))
+      .map(item => ({ label: item.label, state: 'populated' as const }));
+    const person = replay(authoring, persona, selected);
+    const actor = persona === 'visitor' ? null : actingSubject(authoring, persona, 'editor-authority');
+    expect(await readRecipeVisitFrame(person.main, person.fetcher, {
+      actingSubject: actor, locale: 'en', origin,
+    })).toMatchObject({ ok: true });
+    const view = await loadRecipeAuthoring(person.main, {
+      id: workId(authoring, persona), actingSubject: actor, signedIn: persona !== 'visitor',
+    });
+    if (persona === 'owner') expect(view.kind).toBe('editor');
+    else expect(view).toEqual({ kind: 'no-authority', signedIn: persona !== 'visitor' });
+  }
 });
