@@ -236,7 +236,7 @@ test.failing('Sourced publication / operator: a mandate for another Work cannot 
   try { await answer(sessions.operator.main('POST', '/v1/work-publications', publication('operator')), 403); }
   finally { await revoke(grant.grant); }
 });
-test.failing('Sourced publication setup / operator: provisions an exact Work publication mandate', async () => {
+test('Sourced publication setup / operator: provisions an exact Work publication mandate', async () => {
   const grant = await mandate('platform:resource:work.publish', `work:publish:${imported.work}`);
   await revoke(grant.grant);
 });
