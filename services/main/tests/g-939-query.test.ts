@@ -11,7 +11,7 @@ import {
   WorkReadInvalid,
   WorkReadMoved,
 } from '../src/modules/work/read-session.ts';
-import { knownBrowsePrefix, realmBrowseOrder } from '../src/modules/query/resources.ts';
+import { knownBrowsePrefix, realmBrowseOrder, resourceDisclosureTarget } from '../src/modules/query/resources.ts';
 
 const base: ResourceListQuery = {
   profile: 'resource-list-v1',
@@ -20,6 +20,16 @@ const base: ResourceListQuery = {
   sort: 'newest',
 };
 const realm = 'https://rezics.com/id/00000000-0000-4000-8000-000000000001';
+
+test('resource delivery reuses its admitted name owner while retaining Work and Realm disclosure', () => {
+  expect(resourceDisclosureTarget({ id: realm, kind: 'realm' })).toMatchObject({
+    component: 'record', nameOwnerResolved: true,
+  });
+  expect(resourceDisclosureTarget({ id: realm, kind: 'work', head: realm })).toMatchObject({
+    work: realm, workRevision: realm, revision: realm, nameOwnerResolved: true,
+  });
+  expect(resourceDisclosureTarget({ id: realm, kind: 'agent' })).toMatchObject({ nameOwner: realm });
+});
 
 test('G939: one Query admits every resource owner and descriptive type through the type Facet', () => {
   for (const type of [

@@ -5,10 +5,13 @@ import { DiscoveryProjection } from '../../../services/main/src/modules/discover
 import { MANAGE_SCOPE, MANAGE_ACTION } from '../../../services/main/src/modules/recommendation/derived-generation.ts';
 import { backfillPublicNameProjections } from '../../../services/main/src/modules/search/backfill.ts';
 import { fusekiReadBudget } from '../../../services/main/src/infrastructure/fuseki.ts';
-import { startQueryHome, advanceQueryPopulation } from '../../../services/main/tests/g-1053-query-fixture.ts';
+import { activateMetadataWork, metadataWorkRequestDigest } from '../../../services/main/src/modules/work/activate.ts';
+import { selectMainDefault, mainSelectionDigest } from '../../../services/main/src/modules/work/select-main.ts';
+import { advanceQueryPopulation } from '../../../services/main/tests/g-1053-query-fixture.ts';
+import { startHomeStack } from './feed-read-support.ts';
 
 test('resource Query re-pins a moving read basis and ignores unrelated population writes during selection', async () => {
-  const home = await startQueryHome('resource-query-read-basis');
+  const home = await startHomeStack('resource-query-read-basis', { projectionStart: 'current', profileCredits: true });
   const { stack, author } = home;
   const projection = new DiscoveryProjection(stack.accessPool);
   const app = createMainApp(stack.fuseki, { ...home.deps, discovery: projection });
@@ -20,7 +23,17 @@ test('resource Query re-pins a moving read basis and ignores unrelated populatio
   const original = stack.fuseki.query.bind(stack.fuseki);
   try {
     const phrase = `Readbasis${randomUUID().replaceAll('-', '')}`;
-    const work = await stack.publicWork(author.actor, ['en'], `${phrase} original`);
+    const intent = { title: `${phrase} original`, language: 'en',
+      semanticTypes: ['https://schema.org/Book'], authorAgent: author.actor };
+    const work = await activateMetadataWork(stack.env, { ...intent,
+      admission: stack.admission(author.actor, 'work:create:root', 'work.create',
+        metadataWorkRequestDigest(intent.title, intent.semanticTypes, intent.language, intent)) });
+    const contribution = await stack.contribution(work.work, author.actor, 'en', 'An independently published original');
+    const selection = { context: { kind: 'main-version-default' as const, id: work.mainVersion },
+      work: work.work, contribution: contribution.contribution, publicationDecision: contribution.decision,
+      expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: author.actor };
+    expect((await selectMainDefault(stack.env, stack.admission(author.actor,
+      `publication:select:${work.mainVersion}`, 'publication.select', mainSelectionDigest(selection)), selection)).outcome).toBe('succeeded');
     await author.grant('space:create:root', 'space.create');
     const space = await command<{ realm: string }>('/v1/spaces', { profile: 'space-realm-v1',
       name: `${phrase} community`, capabilities: ['realm'], actingSubject: author.actor,

@@ -131,6 +131,9 @@ export const resourceDisclosureTarget = (row: Pick<Candidate, 'id' | 'kind' | 'h
   owner: 'graph' as const,
   resource: row.id,
   component: row.kind === 'realm' ? 'record' as const : 'name' as const,
+  // The admitted owner branch already settles whether this identity is an
+  // Agent. Repeating the name-owner graph probe would spend the delivery fence.
+  ...(row.kind === 'agent' ? { nameOwner: row.id } : { nameOwnerResolved: true as const }),
   ...(row.kind === 'work' && row.head
     ? { work: row.id, workRevision: row.head, revision: row.head }
     : {}),
