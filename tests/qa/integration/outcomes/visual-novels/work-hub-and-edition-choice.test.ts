@@ -1,7 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { readAnimeReaderState, readLinkedStatements, readResourcePage, readWorkParts, readWorkRealizations } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { PREVIEW_COUNTS } from '../../../../../apps/web/features/work-levels/previews.tsx';
+import { discoveryApi } from '../../../../../apps/web/features/discover/api.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
 import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
 import hub from '../../../../../scripts/qa/cases/outcomes/visual-novels/work-hub-and-edition-choice.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -9,7 +14,8 @@ import { personaSessions, type PersonaName, type PersonaSession, type PersonaSes
 
 setDefaultTimeout(185_000);
 const proofDeadlineMs = 60_000; // The original persona proof owns these 60 seconds.
-const readDeadlineMs = 120_000;
+const visitDeadlineMs = 120_000;
+let fileWall: ReturnType<typeof setTimeout>;
 async function withinDeadline(part: string, milliseconds: number, run: () => Promise<void>) {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -34,6 +40,7 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 
 beforeAll(async () => {
+  fileWall = setTimeout(() => { throw new Error('Work hub file exceeded 480000 ms'); }, 480_000);
   sessions = await personaSessions('public');
   await recording.prepare();
   for (const name of Object.keys(sessions) as PersonaName[]) {
@@ -90,32 +97,19 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 type Preference = { work: string; language: string; edition: { kind: string; resource: string; revision: string }; version: number; changedAt: string; replayed?: boolean };
 
-// Stable route labels keep repeated reads and saves distinct without recording fixture setup.
-const sampleCounts = new Map<string, number>();
-function proofSession(name: PersonaName, session = sessions[name], device = 'primary'): PersonaSession {
-  const sample = recording.session(name, session);
-  return { ...session, main: (method, path, ...args) => {
-    const route = path.split('?')[0]!.split('/').slice(2)
-      .filter(part => !/^[0-9a-f]{8}-[0-9a-f-]{27}$/.test(part)).join('-');
-    const label = `${device}-${method.toLowerCase()}-${route}`;
-    const key = `${name}:${label}`;
-    const index = sampleCounts.get(key) ?? 0;
-    sampleCounts.set(key, index + 1);
-    const [body, commandKey, options] = args;
-    const stableKey = commandKey ?? (method === 'GET' ? undefined : `${hub.rowId}:${key}:${index}`);
-    return sample(`${label}-${index}`, method, path, body, stableKey, options);
-  } };
-}
+// Proof requests remain independent of the production visit record.
+const unrecordedSample = (person: PersonaSession) => (_label: string, ...args: Parameters<PersonaSession['main']>) => person.main(...args);
+function proofSession(name: PersonaName): PersonaSession { return sessions[name]; }
 
 // Work overview, frame and availability reads from work-page and work-levels.
 async function pageReads(name: PersonaName) {
   const person = sessions[name];
-  const sample = recording.session(name, person);
+  const sample = unrecordedSample(person);
   const id = short(work.work);
   const viewer = (path: string) => person.actingSubject
     ? `${path}${path.includes('?') ? '&' : '?'}${query(person)}` : path;
@@ -180,7 +174,7 @@ async function pageReads(name: PersonaName) {
 // The member's initial page proof already supplies its inventory and start reads.
 async function chooserReads(name: PersonaName) {
   const person = sessions[name];
-  const sample = recording.session(name, person);
+  const sample = unrecordedSample(person);
   const id = short(work.work);
   const viewer = (path: string) => person.actingSubject
     ? `${path}${path.includes('?') ? '&' : '?'}${query(person)}` : path;
@@ -214,62 +208,133 @@ async function chooserReads(name: PersonaName) {
   }
 }
 
-// The transport records exactly the path and query Eden sends, with this persona's own bearer.
-function productionReads(name: PersonaName) {
+// A lexical label follows concurrent client calls through their asynchronous transport.
+function productionClient(name: PersonaName, record = true) {
   const person = sessions[name];
-  const sample = recording.session(name, person);
-  let label = '';
+  const sample = record ? recording.session(name, { main: async (...args) => {
+    const response = await person.main(...args);
+    if (response.status >= 500) console.error(`[production-final] ${name} ${args[0]} ${args[1]} ${response.status}: ${await response.clone().text()}`);
+    return response;
+  } }) : unrecordedSample(person);
+  const labels = new AsyncLocalStorage<string | Record<string, string>>();
   const main = browserMainApi('https://recorded.invalid', { anonymous: !person.actingSubject,
     fetcher: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
-      const response = await sample(label, (init?.method ?? 'GET') as 'GET' | 'POST', path,
-        init?.body ? JSON.parse(String(init.body)) : undefined);
-      return response;
+      const context = labels.getStore();
+      const label = typeof context === 'string' ? context : context?.[url.pathname.split('/').at(-1)!];
+      if (!label) throw new Error(`Production request has no lexical label: ${path}`);
+      const headers = new Headers(init?.headers);
+      return sample(label, init?.method ?? 'GET', path,
+        init?.body ? JSON.parse(String(init.body)) : undefined, headers.get('idempotency-key') ?? undefined);
     }) as typeof fetch,
   });
-  return { main, read: async (nextLabel: string, call: () => Promise<unknown>) => {
-    label = nextLabel;
-    await call();
-  } };
+  return { main, read: <T,>(label: string | Record<string, string>, call: () => Promise<T>): Promise<T> => labels.run(label, call) };
 }
 
-async function savedPageReads(name: PersonaName) {
-  if (name !== 'member') await pageReads(name);
-  const person = sessions[name];
-  const { main, read } = productionReads(name);
+async function productionVisit(name: PersonaName) {
+  const transport = productionClient(name);
+  const { main, read } = transport;
+  const actingSubject = sessions[name].actingSubject ?? undefined;
   const id = short(work.work);
-  const actingSubject = person.actingSubject ?? undefined;
-  // Review grain choices read a different relation bound than the hub preview.
-  await read('hub-review-relations', () => main.v1.resources({ resource: id }).relations.get({
-    query: { actingSubject, limit: 32 } }));
-  // Parts/wholes and the empty related-work list still ask Main for an empty name batch.
-  await read('hub-names-empty', () => main.v1.resources.summaries.post({
-    profile: 'resource-summary-batch-v1', resources: [], ...(actingSubject ? { actingSubject } : {}) }));
+  const books = booksEditionReads({ main, actingSubject });
+  const render = async (phase: string) => {
+    const read = <T,>(label: string, call: () => Promise<T>) => transport.read(`${phase}-${label}`, call);
+    // All empty namesOf calls share the request-cached readNames('') answer.
+    let names: Promise<unknown> | undefined;
+    const emptyNames = () => names ??= read('empty-names', () => main.v1.resources.summaries.post({
+      profile: 'resource-summary-batch-v1', resources: [], actingSubject }));
+  const header = await read('work-header', () => books.readWorkHeader(id));
+  if (!header.ok) return;
+  // /w/[ref]/(work)/layout and overview stream their regions together. The
+  // request-cached header, projection and inventory are shared by those regions.
+  const [projection, credits, contexts] = await Promise.all([
+    read('projection', () => readResourcePage(main, actingSubject, id)),
+    read('agent-credits', () => books.readAgentCredits(id)),
+    read('rating-contexts', () => main.v1.resources({ resource: id })['rating-contexts'].get({ query: { actingSubject, scope: 'global' } })),
+    read('work-credits', () => books.readCredits(id)),
+    read('reader-state', () => readAnimeReaderState(main, actingSubject, id)),
+    read('showcase', () => main.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [work.work] })),
+    read('adoptions', () => books.readAdoptions(id)),
+    read('classifications', () => books.readClassifications(id, { kind: 'global' })),
+    read('facets', () => books.readFacets()),
+    read('rating-populations', () => discoveryApi(main, 'en', actingSubject).populations(work.work, { limit: 20 })),
+    read('also-enjoyed', () => books.readAlsoEnjoyed(id)),
+    read('releases', () => books.readReleases(id)),
+    read('realizations', () => readWorkRealizations(main, actingSubject, id)),
+    read('availability-parts', () => readWorkParts(main, actingSubject, id, { limit: 1 })),
+    read('preview-parts', () => readWorkParts(main, actingSubject, id, { limit: PREVIEW_COUNTS.parts + 1 })).then(() =>
+      emptyNames()),
+    read('preview-wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { actingSubject, limit: PREVIEW_COUNTS.wholes } })).then(() =>
+      emptyNames()),
+    read('preview-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 20 } })),
+    actingSubject ? read('platform-access', () => main.v1.me['platform-access'].get()) : Promise.resolve(null),
+    actingSubject ? read('follow-state', () => main.v1.me['follow-state'].get({ query: { actingSubject, target: work.work, kind: 'work' } })) : Promise.resolve(null),
+  ]);
+  const context = contexts.data?.items[0]?.context;
+  await Promise.all([
+    read('ratings', () => main.v1.resources({ resource: id }).ratings.get({ query: { actingSubject, scope: 'global', context } })),
+    read('reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } })),
+    ...(credits.ok ? [...new Set(credits.data.items.filter(item => item.role === 'author').map(item => item.agent))].map(agent =>
+      Promise.all([
+        read('author-works', () => main.v1.agents({ id: short(agent) }).works.get({ query: { actingSubject, limit: 12 } })),
+      ])) : []),
+    ...(projection.ok ? projection.data.sections.filter(section => ['statements', 'discussion'].includes(section.id)).map(section =>
+      section.id === 'statements'
+        ? Promise.all([read('facts-statements', () => readLinkedStatements(main, actingSubject, section.href)),
+          read('wiki-statements', () => readLinkedStatements(main, actingSubject, section.href))])
+        : read('discussion', () => followHref(main, section.href, { actingSubject })())) : []),
+    ...(context ? [read('review-releases', () => books.readReleases(id)),
+      read('review-realizations', () => readWorkRealizations(main, actingSubject, id)),
+      read('reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, actingSubject } })),
+      read('review-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 32 } })).then(() =>
+        emptyNames())] : []),
+  ]);
+  };
+  await render('visit');
+  // YourEdition and SeriesProgressPanel use the signed-in reader's own client.
+  // There is no foreign-preference form, and signed-out controls link to sign-in.
   if (!actingSubject) return;
   const api = mainTrackingApi(actingSubject, () => main);
-  await read('hub-correspondence-definition', () => api.definition('correspondence-equivalent'));
+  const [preference] = await Promise.all([
+    read('visit-chooser-preference', () => api.preference(work.work)),
+    read({ realizations: 'visit-chooser-realizations', releases: 'visit-chooser-releases' }, () => api.editions(work.work)),
+    read('visit-series-preference', () => api.preference(work.work)),
+    read({ realizations: 'visit-series-realizations', releases: 'visit-series-releases' }, () => api.editions(work.work)),
+    read('visit-series-relations', () => api.relations(work.work)),
+    read('visit-correspondence-definition', () => api.definition('correspondence-equivalent')),
+  ]);
+  if (!preference.ok) return;
+  await Promise.all([
+    read('visit-series-progress', () => api.series(work.work, preference.data?.language ?? 'en')),
+    preference.data?.edition ? read('visit-selected-detail', () => api.edition(work.work, preference.data!.edition!)) : Promise.resolve(null),
+  ]);
+  // The stranger's proof ends at foreign authority, which no production page exposes.
   if (name === 'stranger') return;
-  const books = booksEditionReads({ main, actingSubject });
-  await read('saved-release-detail', () => books.readEditionRelease(id, releases[0]!.resource));
-  await read('saved-realization-detail', () => api.edition(work.work, { kind: 'realization', ...realization }));
-  // A release link leaves the editor for its own page; its owner and coverage are Main's.
-  await read('saved-release-work', () => main.v1.resources({ resource: short(releases[0]!.resource) }).get({
-    query: { actingSubject } }));
-  await read('saved-release-realization', () => main.v1.works({ id }).realizations({ realization: short(realization.resource) })
-    .get({ query: { actingSubject } }));
-  await read('saved-release-names', () => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-    resources: [work.work, work.mainVersion].sort(), actingSubject }));
-  // Both editors refresh EditionsEditPage, whose inventory names its coverage Works.
-  await read('saved-editions-names', () => main.v1.resources.summaries.post({ profile: 'resource-summary-batch-v1',
-    resources: [work.work], actingSubject }));
+  const release = { kind: 'release' as const, resource: releases[0]!.resource, revision: releases[0]!.revision };
+  const saved = await read('visit-save-release', () => api.setPreference(work.work, preference.data?.version ?? 0, { language: 'en', edition: release }));
+  if (!saved.ok) return;
+  await Promise.all([
+    read('visit-release-detail', () => api.edition(work.work, release)),
+    read('visit-release-progress', () => api.series(work.work, 'en')),
+  ]);
+  // The chooser refreshes the server frame while its mounted controls keep the committed choice.
+  await render('release-refresh');
+  const chosen = { kind: 'realization' as const, ...realization };
+  const changed = await read('visit-save-realization', () => api.setPreference(work.work, saved.data?.version ?? 0, { language: 'en', edition: chosen }));
+  if (!changed.ok) return;
+  await Promise.all([
+    read('visit-realization-detail', () => api.edition(work.work, chosen)),
+    read('visit-realization-progress', () => api.series(work.work, 'en')),
+    render('realization-refresh'),
+  ]);
 }
 
 async function choice(name: PersonaName) {
   if (name === 'member') {
     await pageReads(name);
     // This sample must precede the proof's preference writes to keep the empty choice exact.
-    const { main, read } = productionReads(name);
+    const { main, read } = productionClient(name, false);
     const reads = booksEditionReads({ main, actingSubject: sessions[name].actingSubject! });
     await read('hub-progress-empty-zh-Hans', () => reads.readProgressSummary(short(work.work), 'zh-Hans'));
   }
@@ -311,7 +376,7 @@ async function choice(name: PersonaName) {
   expect(saved).toMatchObject({ work: work.work, edition: pin, language: 'en', version: 1, replayed: false });
   const { replayed: _replayed, ...persisted } = saved;
   expect(await answer(person.main('GET', `${path}?${query(person)}`))).toEqual(persisted);
-  expect(await answer(recording.session(name, sessions[name])('chooser-progress-release', 'GET',
+  expect(await answer(unrecordedSample(sessions[name])('chooser-progress-release', 'GET',
     `/v1/me/progress-summaries/${short(work.work)}?language=en&${query(person)}`)))
     .toMatchObject({ preference: { edition: pin, version: 1 } });
   expect(await answer(person.main('PUT', path, body, key))).toEqual({ ...saved, replayed: true });
@@ -324,8 +389,16 @@ async function choice(name: PersonaName) {
 }
 
 async function recordedChoice(name: PersonaName) {
-  await withinDeadline(`${name} proof`, proofDeadlineMs, () => choice(name));
-  await withinDeadline(`${name} page reads`, readDeadlineMs, () => savedPageReads(name));
+  const started = performance.now();
+  let proved: number | undefined;
+  try {
+    await withinDeadline(`${name} proof`, proofDeadlineMs, () => choice(name));
+    proved = performance.now();
+    await withinDeadline(`${name} production visit`, visitDeadlineMs, () => productionVisit(name));
+  } finally {
+    const ended = performance.now();
+    console.info(`[work-hub] ${name} proof ${Math.round((proved ?? ended) - started)} ms; visit ${Math.round(proved === undefined ? 0 : ended - proved)} ms`);
+  }
 }
 
 outcomeTest(hub, 'visitor', () => recordedChoice('visitor'), recording);
