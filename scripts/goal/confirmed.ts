@@ -62,7 +62,7 @@ export function latestConfirmation(stateDir: string): ConfirmationRecord | undef
 }
 
 /** Initial batch evidence judges the pinned scope; diagnosis probes cannot turn it green. */
-export function recordConfirmation(stateDir: string, directory: string, manifest: Manifest,
+export function confirmationRecord(manifest: Manifest,
   declarations: readonly RowOutcomes[], recordedAt = new Date().toISOString()): ConfirmationRecord {
   const outcomes: ConfirmedOutcome[] = [];
   for (const declaration of declarations) for (const persona of personas) {
@@ -89,7 +89,24 @@ export function recordConfirmation(stateDir: string, directory: string, manifest
   }
   const record: ConfirmationRecord = { version: 1, runId: manifest.runId, atCommit: manifest.atCommit,
     startedAt: manifest.startedAt, recordedAt, outcomes };
+  return record;
+}
+
+export function confirmationSummary(record?: ConfirmationRecord): string[] {
+  const counts = confirmationCounts(record);
+  return [...cellReadings.map(reading => `${reading}: ${counts[reading]}`),
+    ...(record?.outcomes ?? []).flatMap(cell => {
+      const reading = cellReading(cell);
+      return reading === 'failed' || reading === 'not run'
+        ? [`${cell.rowId} / ${cell.persona}: ${reading} (${cell.file})`] : [];
+    })];
+}
+
+export function recordConfirmation(stateDir: string, directory: string, manifest: Manifest,
+  declarations: readonly RowOutcomes[], recordedAt = new Date().toISOString(), publish = true): ConfirmationRecord {
+  const record = confirmationRecord(manifest, declarations, recordedAt);
   writeRecord(join(directory, 'confirmed.json'), record);
+  if (!publish) return record;
   mkdirSync(stateDir, { recursive: true });
   // Regression and bounded confirmation may finish concurrently; compare and publish under one lease.
   const lock = join(stateDir, 'confirmed.lock');

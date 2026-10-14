@@ -5,7 +5,7 @@ import { expect, test } from 'bun:test';
 import { loadOutcomes } from '../qa/cases/outcomes.ts';
 import { parseJUnit } from '../qa/acceptance.ts';
 import { releaseDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
-import { confirmationRunning, confirmationStatus, runConfirmation } from './confirm.ts';
+import { confirmationRunning, confirmationStatus, parseConfirmationArgs, runConfirmation, scheduleConfirmation } from './confirm.ts';
 import { cellReading, cellReadings, latestConfirmation } from './confirmed.ts';
 import type { ConfirmationOptions } from './confirm.ts';
 import type { Execution } from './regress.ts';
@@ -144,4 +144,90 @@ test('a dead confirmation lease is reclaimed, a live lease refuses a second run,
     expect(latestConfirmation(f.stateDir)!.outcomes.every(cell => cellReading(cell) === 'not run')).toBe(true);
     expect(confirmationRunning(f.stateDir)).toBe(false);
   } finally { releaseDirectoryLease(lock, 'dead'); f.cleanup(); }
+});
+
+function fakeOutcomeRunner(): NonNullable<ConfirmationOptions['runner']> {
+  return async (_checkout, batch, directory) => {
+    const file = batch.files[0]!;
+    const state = file.split('/').at(-1)!.replace('.test.ts', '');
+    const detail = state === 'fail' ? '<failure message="assertion failed"/>'
+      : state === 'now' ? '<failure message="test marked with .failing() did not throw"/>'
+        : state === 'skip' ? '<skipped/>' : '';
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, 'integration.xml'), `<testsuite><testcase file="${file}" name="books/${state} / visitor: gets the outcome">${detail}</testcase></testsuite>`);
+    return { code: detail.includes('failure') ? 1 : 0, outcomes: { [file]: detail.includes('failure') ? 'failed' : 'passed' },
+      artifactPaths: [directory], queueMs: 0, testMs: 0, totalMs: 0 };
+  };
+}
+
+test('an explicit revision pins its declarations, isolates the judge, and reports its cells during and after execution', async () => {
+  const f = fixture();
+  try {
+    await runConfirmation({ ...f.options, runId: 'main', runner: fakeOutcomeRunner() });
+    const judge = readFileSync(join(f.stateDir, 'confirmed.json'), 'utf8');
+    f.git('checkout', '-qb', 'wave/1');
+    f.write('scripts/qa/cases/outcomes/pass.ts', `import { rowOutcomes, notApplicable } from ${JSON.stringify(join(import.meta.dir, '../qa/cases/outcome-cells.ts'))};
+      export default rowOutcomes('books/pass', { visitor: notApplicable('No action in this revision') });`);
+    f.git('commit', '-qam', 'Wave declarations');
+    const wave = f.git('rev-parse', 'HEAD');
+    f.git('checkout', '-qb', 'worker');
+    f.write('scripts/qa/cases/outcomes/pass.ts', 'throw new Error("Worker is not the wave");');
+    f.git('commit', '-qam', 'Worker declarations');
+    const used: string[] = [];
+    const manifest = await runConfirmation({ ...f.options, at: 'wave/1', runId: 'wave', runner: async (...args) => {
+      const [checkout, batch] = args;
+      expect(spawnSync('git', ['rev-parse', 'HEAD'], { cwd: checkout, encoding: 'utf8' }).stdout.trim()).toBe(wave);
+      expect(confirmationRunning(f.stateDir)).toBe(true);
+      expect(scheduleConfirmation({ repo: f.directory, stateDir: f.stateDir, now: Date.now() + 10_000_000,
+        spawn: () => { throw new Error('Scheduled confirmation must not start during the wave'); } })).toBe(false);
+      expect(confirmationStatus(f.stateDir, Date.now(), 'wave')).toContain('Running: yes');
+      expect(confirmationStatus(f.stateDir, Date.now(), 'wave')).toContain(wave);
+      expect(confirmationStatus(f.stateDir, Date.now(), 'wave')).toContain('books/skip / visitor: not run (tests/qa/integration/outcomes/books/skip.test.ts)');
+      used.push(batch.files[0]!);
+      return fakeOutcomeRunner()(...args);
+    } });
+    expect(manifest.atCommit).toBe(wave);
+    expect(used).toHaveLength(4);
+    expect(used.every(file => !file.includes('/pass.'))).toBe(true);
+    expect(readFileSync(join(f.stateDir, 'confirmed.json'), 'utf8')).toBe(judge);
+    expect(latestConfirmation(join(f.stateDir, 'confirm/wave'))?.atCommit).toBe(wave);
+    const summary = confirmationStatus(f.stateDir, Date.now(), 'wave');
+    expect(summary).toContain('Running: no');
+    expect(summary).toContain('passed: 0\nfailed: 1\npending and still failing: 1\npending and now passing: 1\nnot run: 1');
+    expect(summary).toContain('books/fail / visitor: failed (tests/qa/integration/outcomes/books/fail.test.ts)');
+    expect(summary).toContain('books/skip / visitor: not run (tests/qa/integration/outcomes/books/skip.test.ts)');
+    expect(confirmationStatus(f.stateDir)).toContain(f.commit);
+    expect(confirmationRunning(f.stateDir)).toBe(false);
+  } finally { f.cleanup(); }
+});
+
+test('explicit lanes use the requested host width and reject widths outside the slot count', async () => {
+  const f = fixture();
+  try {
+    for (const lanes of [0, 4, 1.5, Number.NaN]) {
+      await expect(runConfirmation({ ...f.options, lanes, slots: 3, runId: 'invalid',
+        prepare: async () => { throw new Error('Invalid width must not prepare'); } })).rejects.toThrow('QA slot count (3)');
+      expect(confirmationRunning(f.stateDir)).toBe(false);
+    }
+    let active = 0;
+    let peak = 0;
+    const manifest = await runConfirmation({ ...f.options, lanes: 3, slots: 3, runId: 'lanes', runner: async (...args) => {
+      peak = Math.max(peak, ++active);
+      try { await Bun.sleep(20); return await fakeOutcomeRunner()(...args); }
+      finally { active--; }
+    } });
+    expect(manifest.laneCount).toBe(3);
+    expect(peak).toBe(3);
+    expect(latestConfirmation(f.stateDir)?.runId).toBe('lanes');
+  } finally { f.cleanup(); }
+});
+
+test('confirmation command accepts revision, lanes and run status without changing its defaults', () => {
+  expect(parseConfirmationArgs([])).toEqual({});
+  expect(parseConfirmationArgs(['--at', 'wave/1', '--lanes', '3'])).toEqual({ at: 'wave/1', lanes: 3 });
+  expect(parseConfirmationArgs(['--status', '--run', 'wave'])).toEqual({ status: true, run: 'wave' });
+  expect(parseConfirmationArgs(['--status'])).toEqual({ status: true });
+  for (const args of [['--lanes', '0'], ['--lanes', '1.5'], ['--lanes'], ['--at'], ['--run', 'wave'],
+    ['--status', '--at', 'main'], ['--status', '--lanes', '2'], ['--status', '--run', '../main'], ['--unknown']])
+    expect(() => parseConfirmationArgs(args)).toThrow();
 });
