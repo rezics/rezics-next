@@ -110,7 +110,7 @@ test('public Realm catalogue accounts for native readiness and query work inside
     expect(page.next).not.toBeNull();
   } finally {
     capture = false;
-    server?.stop(true);
+    await server?.stop(true);
     writeFileSync(resolve(directory, 'preparation.json'), JSON.stringify({ source, preparation }, null, 2));
     await fixture.close();
   }
