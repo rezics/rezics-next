@@ -4,6 +4,7 @@ import books from '../../../../tests/qa/fixtures/outcomes/books/read-non-ui-lang
 import { mainApiWithToken } from '../api/main.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from './books-edition-page.read.ts';
+import type { AgentCreditPage, WorkHeader } from './types.ts';
 import {
   booksLanguageReading,
   booksLanguageReads,
@@ -142,4 +143,51 @@ test('a refused private header keeps its problem and the owner missing text keep
     failure: 'missing',
     problem,
   });
+});
+
+test('the production page retains published Swedish text and original credit for every persona', async () => {
+  const owner = new URL(sample('owner', 'reading-page-header').path, 'https://recorded.invalid')
+    .searchParams.get('actingSubject');
+  for (const persona of personas) {
+    const header = sample(persona, 'reading-page-header');
+    const actingSubject = queryOf(header.path).get('actingSubject') ?? undefined;
+    const main = client(persona, [
+      { label: 'reading-page-header', state: 'populated' },
+      { label: 'reading-page-selection', state: 'populated' },
+      { label: 'reading-page-agent-credits', state: 'populated' },
+      { label: 'reading-page-credits', state: 'populated' },
+    ]);
+    const page = await booksLanguageReads({ main, actingSubject }).readPage(recordedId(header.path));
+    expect(page.kind).toBe('shown');
+    if (page.kind !== 'shown') continue;
+    expect(page.actingSubject).toBe(actingSubject ?? null);
+    expect(page.reading.kind).toBe('reading');
+    if (page.reading.kind !== 'reading') continue;
+    same(page.reading.text, sample(persona, 'reading-page-selection').answer);
+    same(page.reading.header, header.answer);
+    expect(page.reading.language).toBe('sv');
+    same(page.reading.agentCredits, { ok: true, data: sample(persona, 'reading-page-agent-credits').answer });
+    const credits = sample(persona, 'reading-page-agent-credits').answer as AgentCreditPage;
+    expect(credits.items).toContainEqual(expect.objectContaining({ role: 'author', agent: owner }));
+    expect(page.reading.credits.ok).toBe(true);
+  }
+});
+
+test('production route reuses a cached header and only requests credits after successful selected text', async () => {
+  for (const persona of personas) {
+    const header = sample(persona, 'private-reading-page-header');
+    const actingSubject = queryOf(header.path).get('actingSubject') ?? undefined;
+    const main = client(persona, persona === 'owner' ? [
+      { label: 'private-reading-page-selection', state: 'error' },
+    ] : [{ label: 'private-reading-page-header', state: 'error' }]);
+    const page = await booksLanguageReads({ main, actingSubject }).readPage(recordedId(header.path),
+      persona === 'owner' ? { header: header.answer as WorkHeader } : {});
+    if (persona !== 'owner') {
+      expect(page).toEqual({ kind: 'work-missing' });
+      continue;
+    }
+    expect(page).toEqual({ kind: 'shown', actingSubject: actingSubject ?? null,
+      reading: { kind: 'refused', failure: 'missing',
+        problem: problemOf(sample('owner', 'private-reading-page-selection').answer) } });
+  }
 });

@@ -396,6 +396,10 @@ export const readText = cache(async (mainVersion: string, language: string | und
   return booksLanguageReads(await reader()).readText(mainVersion, language);
 });
 
+/** The standalone reader reuses the resolved header and request-cached selected text. */
+export const readBooksLanguagePage = cache(async (id: string, header: WorkHeader, language: string | null | undefined) =>
+  booksLanguageReads(await reader()).readPage(id, { header, language, readText }));
+
 /** One chapter's exact body with its neighbours, in the Work's selected language unless one is named. */
 export const readChapter = cache(async (chapter: string, language: string | undefined):
   Promise<Loaded<ChapterRead>> => {

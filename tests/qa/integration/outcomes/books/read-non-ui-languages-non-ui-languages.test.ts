@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
-import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { readContentRatings } from '../../../../../apps/web/features/api/content-rating.ts';
 import { booksLanguageReads } from '../../../../../apps/web/features/work-page/books-language-recorded-page.ts';
 import { randomUUID } from 'node:crypto';
 import reading from '../../../../../scripts/qa/cases/outcomes/books/read-non-ui-languages-non-ui-languages.ts';
@@ -249,30 +249,31 @@ async function visit(name: PersonaName) {
   const labels = new AsyncLocalStorage<string>();
   const sample = recording.session(name, person);
   const fetcher: typeof fetch = async (input, init) => {
-    const url = new URL(input instanceof Request ? input.url : String(input));
-    const label = labels.getStore();
-    if (!label) throw new Error('Unlabelled language reading request');
+    const url = new URL(input instanceof Request ? input.url : String(input), 'http://record.invalid');
+    const visit = labels.getStore();
+    if (!visit) throw new Error('Unlabelled language reading request');
+    const label = visit === 'reader-settings' ? visit
+      : `${visit}-${url.pathname.endsWith('/selection') ? 'selection'
+        : url.pathname.endsWith('/agent-credits') ? 'agent-credits'
+        : url.pathname.endsWith('/suitability/reads') ? 'suitability'
+        : url.pathname.endsWith('/query') ? 'credits' : 'header'}`;
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     return sample(label, init?.method ?? 'GET', url.pathname.slice(BFF_PREFIX.length) + url.search,
       body, new Headers(init?.headers).get('idempotency-key') ?? undefined);
   };
-  const main = browserMainApi('http://record.invalid', { fetcher });
   const actingSubject = person.actingSubject ?? undefined;
-  const reads = booksEditionReads({ main, actingSubject });
-  const texts = booksLanguageReads({ main });
+  const main = browserMainApi('http://record.invalid', { fetcher, anonymous: !actingSubject });
+  const reads = booksLanguageReads({ main, actingSubject });
   const call = <T,>(label: string, run: () => Promise<T>) => labels.run(label, run);
   // /[locale]/w/[ref]/read: UUID refs resolve locally; metadata shares these cached reads.
-  const header = await call('reading-page-header', () => reads.readWorkHeader(short(published.work)));
-  if (header.ok) {
-    const text = await call('reading-page-selection', () => texts.readText(header.data.mainVersion,
-      header.data.selectedLanguage ?? undefined));
+  const page = await call('reading-page', () => reads.readPage(short(published.work)));
+  if (page.kind === 'shown') {
     // ReaderSurface mounts only after the selected text succeeds. It reads account settings,
     // while a signed-out reader keeps device settings. Reading this one text makes no write.
-    if (text.ok && actingSubject)
+    if (page.reading.kind === 'reading' && actingSubject)
       await call('reader-settings', () => main.v1.reader.settings.get({ query: { actingSubject } }));
+    if (page.reading.kind === 'reading')
+      await call('reading-page', () => readContentRatings([page.reading.workId], actingSubject, fetcher));
   }
-  const privateHeader = await call('private-reading-page-header', () => reads.readWorkHeader(short(privateWork.work)));
-  if (!privateHeader.ok) return;
-  await call('private-reading-page-selection', () => texts.readText(privateHeader.data.mainVersion,
-    privateHeader.data.selectedLanguage ?? undefined));
+  await call('private-reading-page', () => reads.readPage(short(privateWork.work)));
 }

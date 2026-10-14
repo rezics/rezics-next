@@ -2,11 +2,10 @@ import { FileQuestionIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
-import { languageName, paragraphs } from './format.ts';
+import { languageName } from './format.ts';
+import { WorkCredits } from './credits.tsx';
 import type { WorkPageMessages } from './messages.ts';
 import {
-  bodyAfterTitle,
-  ReaderText,
   TextNotFound,
   TextReader,
   TextUnavailable,
@@ -42,7 +41,11 @@ function identityFor(
   messages: WorkPageMessages,
 ): ReactNode {
   return (
-    <BooksLanguageIdentity language={reading.language} locale={locale} messages={messages} />
+    <>
+      <BooksLanguageIdentity language={reading.language} locale={locale} messages={messages} />
+      <WorkCredits agentCredits={reading.agentCredits} credits={reading.credits}
+        locale={locale} messages={messages} />
+    </>
   );
 }
 
@@ -94,42 +97,18 @@ export function BooksLanguageRecordedView({
   if (reading.kind === 'unavailable')
     return <TextUnavailable workRef={workRef} messages={messages} />;
   const identity = identityFor(reading, locale, messages);
-  if (reading.header) {
-    return (
-      <TextReader
-        workRef={workRef}
-        work={reading.header}
-        text={reading.text}
-        language={linkLanguage}
-        settings={settings}
-        actingSubject={actingSubject}
-        locale={locale}
-        messages={messages}
-        identity={identity}
-        fetcher={fetcher}
-      />
-    );
-  }
   return (
-    <div className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 lg:py-10">
-      <article lang={reading.language} dir="auto" className="mx-auto grid w-full max-w-3xl gap-6">
-        <header className="grid gap-2 border-border/60 border-b pb-4">
-          <h1
-            lang={reading.title.language}
-            dir={reading.title.direction ?? 'auto'}
-            className="text-balance break-words font-semibold font-work-title text-2xl/tight sm:text-3xl/tight"
-          >
-            {reading.title.value}
-          </h1>
-          {identity}
-        </header>
-        <ReaderText
-          lines={bodyAfterTitle(paragraphs(reading.body), reading.title.value)}
-          document={reading.text.document}
-          formatNote={messages.textFormat}
-          locale={locale}
-        />
-      </article>
-    </div>
+    <TextReader
+      workRef={workRef}
+      work={reading.header}
+      text={reading.text}
+      language={linkLanguage}
+      settings={settings}
+      actingSubject={actingSubject}
+      locale={locale}
+      messages={messages}
+      identity={identity}
+      fetcher={fetcher}
+    />
   );
 }

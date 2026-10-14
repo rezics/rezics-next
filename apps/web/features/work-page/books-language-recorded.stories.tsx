@@ -3,16 +3,19 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/read-non-ui-languages-non-ui-languages.json';
+import type { UiLocale } from '../../i18n/define.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import type { MainClient } from '../discover/types.ts';
+import { readContentRatings, type ContentRatingRead } from '../api/content-rating.ts';
+import { anonymousMediaViewer } from '../api/media-viewer.ts';
+import { authorHref } from '../author/route.ts';
+import { WebRatedContentProvider } from '../document-editor/rated-content.tsx';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { BooksLanguageRecordedView } from './books-language-recorded-page.tsx';
-import { booksEditionReads } from './books-edition-page.read.ts';
 import {
-  booksLanguageReading,
   booksLanguageReads,
-  type BooksLanguageReading,
+  type BooksLanguagePage,
 } from './books-language-recorded-page.ts';
+import type { AgentCreditPage } from './types.ts';
 import { languageName } from './format.ts';
 import { messages } from './messages.ts';
 import { defaultReaderSettings } from './reader-settings.ts';
@@ -21,7 +24,7 @@ import { WorkNotFound } from './work-states.tsx';
 
 const record = books as AnswerRecord;
 type Persona = AnswerPersona;
-type Locale = 'en' | 'zh-Hant';
+type Locale = UiLocale;
 type ReadingRequest = { persona: Persona; locale: Locale; kind: 'published' | 'private'; hold?: boolean };
 
 function sample(persona: Persona, label: string): AnswerSample {
@@ -81,32 +84,17 @@ function selectionsFor(request: ReadingRequest): RecordedSelection[] {
   const selections: RecordedSelection[] = [
     { label: 'reading-page-header', state: 'populated' },
     { label: 'reading-page-selection', state: 'populated' },
+    { label: 'reading-page-agent-credits', state: 'populated' },
+    { label: 'reading-page-credits', state: 'populated' },
+    { label: 'reading-page-suitability', state: 'populated' },
   ];
   if (request.persona !== 'visitor') selections.push({ label: 'reader-settings', state: 'populated' });
   return selections;
 }
 
-type LoadedReading =
-  | { kind: 'work-missing' }
-  | { kind: 'shown'; reading: BooksLanguageReading; actingSubject: string | null };
-
-async function loadReading(main: MainClient, request: ReadingRequest): Promise<LoadedReading> {
-  const headerLabel = request.kind === 'private' ? 'private-reading-page-header' : 'reading-page-header';
-  const header = sample(request.persona, headerLabel);
-  const actingSubject = actingSubjectOf(header.path);
-  const host = { main, ...(actingSubject ? { actingSubject } : {}) };
-  const work = await booksEditionReads(host).readWorkHeader(recordedId(header.path));
-  if (!work.ok) return { kind: 'work-missing' };
-  const text = await booksLanguageReads(host).readText(work.data.mainVersion, work.data.selectedLanguage ?? undefined);
-  return {
-    kind: 'shown',
-    reading: booksLanguageReading({ text, header: work.data }),
-    actingSubject,
-  };
-}
-
 function RecordedBooksLanguage({ request }: { request: ReadingRequest }) {
-  const [reading, setReading] = useState<LoadedReading | { kind: 'loading' }>({ kind: 'loading' });
+  const [reading, setReading] = useState<BooksLanguagePage | { kind: 'loading' }>({ kind: 'loading' });
+  const [suitability, setSuitability] = useState<ContentRatingRead | null>(null);
   const [fetcher, setFetcher] = useState<typeof fetch | null>(null);
   const key = JSON.stringify(request);
   useEffect(() => {
@@ -119,9 +107,13 @@ function RecordedBooksLanguage({ request }: { request: ReadingRequest }) {
       fetcher: replay.fetcher,
     });
     let mounted = true;
-    void loadReading(main, current)
-      .then((next) => {
+    void booksLanguageReads({ main, actingSubject: actingSubject ?? undefined })
+      .readPage(recordedId(sample(current.persona, headerLabel).path))
+      .then(async (next) => {
+        const rating = next.kind === 'shown' && next.reading.kind === 'reading'
+          ? await readContentRatings([next.reading.workId], next.actingSubject, replay.fetcher) : null;
         if (!mounted) return;
+        setSuitability(rating);
         setFetcher(() => replay.fetcher);
         setReading(next);
       })
@@ -141,15 +133,20 @@ function RecordedBooksLanguage({ request }: { request: ReadingRequest }) {
   ).path);
   if (reading.kind === 'work-missing') return <WorkNotFound messages={messagesFor} />;
   return (
-    <BooksLanguageRecordedView
-      reading={reading.kind === 'shown' ? reading.reading : { kind: 'loading' }}
-      workRef={workRef}
-      settings={defaultReaderSettings}
+    <WebRatedContentProvider locale={request.locale}
       actingSubject={reading.kind === 'shown' ? reading.actingSubject : null}
-      locale={request.locale}
-      messages={messagesFor}
-      fetcher={fetcher ?? undefined}
-    />
+      viewer={suitability?.viewer ?? { ...anonymousMediaViewer, ready: false }}
+      resolve={async () => suitability?.ratings ?? {}}>
+      <BooksLanguageRecordedView
+        reading={reading.kind === 'shown' ? reading.reading : { kind: 'loading' }}
+        workRef={workRef}
+        settings={defaultReaderSettings}
+        actingSubject={reading.kind === 'shown' ? reading.actingSubject : null}
+        locale={request.locale}
+        messages={messagesFor}
+        fetcher={fetcher ?? undefined}
+      />
+    </WebRatedContentProvider>
   );
 }
 
@@ -176,11 +173,20 @@ async function expectPublished(canvasElement: HTMLElement, persona: Persona, loc
     name: headerTitle(sample(persona, 'reading-page-header').answer),
   })).resolves.toBeVisible();
   await expect(canvas.getByRole('article')).toHaveAttribute('lang', text.language);
-  await expect(canvas.getByText(text.body)).toBeVisible();
+  await expect(canvas.getByRole('article')).toHaveAttribute('dir', 'auto');
+  await expect(canvas.findByText(text.body)).resolves.toBeVisible();
   await expect(canvas.getByText(text.language)).toBeVisible();
   await expect(canvas.getByText(copy.language)).toBeVisible();
   const name = languageName(text.language, locale);
   if (name !== text.language) await expect(canvas.getByText(name)).toBeVisible();
+  const credits = sample(persona, 'reading-page-agent-credits').answer as AgentCreditPage;
+  const authors = credits.items.filter(credit => credit.role === 'author');
+  await expect(authors.length).toBeGreaterThan(0);
+  for (const author of authors) {
+    await expect(canvas.getByRole('link', { name: author.displayName })).toHaveAttribute('href',
+      `/${locale}${authorHref({ kind: 'agent', handle: author.handle, agent: author.agent })}`);
+  }
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   if (persona === 'visitor') {
     await expect(canvasElement.querySelector('[data-reader-settings="device"]')).toBeTruthy();
     return;
@@ -211,6 +217,12 @@ export const StrangerEnglishDesktop: Story = published('stranger', 'en', 'deskto
 export const OwnerEnglishDesktop: Story = published('owner', 'en', 'desktop');
 export const ModeratorEnglishDesktop: Story = published('moderator', 'en', 'desktop');
 export const OperatorEnglishDesktop: Story = published('operator', 'en', 'desktop');
+export const VisitorSimplifiedChineseDesktop: Story = published('visitor', 'zh-Hans', 'desktop');
+export const VisitorJapaneseDesktop: Story = published('visitor', 'ja', 'desktop');
+export const VisitorKoreanDesktop: Story = published('visitor', 'ko', 'desktop');
+export const VisitorGermanDesktop: Story = published('visitor', 'de', 'desktop');
+export const VisitorFrenchDesktop: Story = published('visitor', 'fr', 'desktop');
+export const VisitorSpanishDesktop: Story = published('visitor', 'es', 'desktop');
 
 export const MemberLoading: Story = {
   args: { request: { persona: 'member', locale: 'en', kind: 'published', hold: true } },
@@ -224,6 +236,7 @@ export const MemberLoading: Story = {
     })).toBeNull();
   },
 };
+export const MemberLoadingPhone: Story = { ...MemberLoading, globals: { viewport: { value: 'phone' } } };
 
 const privateRef = recordedId(sample('owner', 'private-reading-page-header').path);
 

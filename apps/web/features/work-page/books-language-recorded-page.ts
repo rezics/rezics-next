@@ -1,7 +1,8 @@
 import type { MainClient } from '../discover/types.ts';
 import { failureOf } from './failure.ts';
+import { booksEditionReads } from './books-edition-page.read.ts';
 import { idOf } from './route.ts';
-import type { ReadFailure, WorkHeader, WorkText } from './types.ts';
+import type { AgentCreditPage, CreditPage, Loaded, ReadFailure, WorkHeader, WorkText } from './types.ts';
 
 // The text's recorded language is the language the reader sees. The UI locale
 // names that language; it never replaces the text.
@@ -27,7 +28,9 @@ export type BooksLanguageReading =
       language: string;
       body: string;
       text: WorkText;
-      header: WorkHeader | null;
+      header: WorkHeader;
+      agentCredits: Loaded<AgentCreditPage>;
+      credits: Loaded<CreditPage>;
     }
   | { kind: 'refused'; failure: ReadFailure; problem: RecordedProblem }
   | { kind: 'missing' }
@@ -96,11 +99,13 @@ function failed(answer: Answered<unknown>): BooksLanguageReading {
 export function booksLanguageReading(input: {
   text?: Answered<WorkText> | null;
   header?: WorkHeader | null;
+  agentCredits?: Loaded<AgentCreditPage>;
+  credits?: Loaded<CreditPage>;
 }): BooksLanguageReading {
   const text = input.text ?? null;
   if (text?.ok && text.data.body.length > 0) {
     const title = readingTitle(input.header);
-    if (!title) return { kind: 'unavailable', failure: 'unavailable' };
+    if (!title || !input.header) return { kind: 'unavailable', failure: 'unavailable' };
     return {
       kind: 'reading',
       workId: text.data.work,
@@ -108,7 +113,9 @@ export function booksLanguageReading(input: {
       language: text.data.language,
       body: text.data.body,
       text: text.data,
-      header: input.header ?? null,
+      header: input.header,
+      agentCredits: input.agentCredits ?? { ok: false, failure: 'unavailable' },
+      credits: input.credits ?? { ok: false, failure: 'unavailable' },
     };
   }
   if (text && !text.ok) return failed(text);
@@ -123,13 +130,37 @@ export function booksLanguageReading(input: {
  */
 export function booksLanguageReads(host: { main: MainClient; actingSubject?: string }) {
   const { main } = host;
+  const shared = booksEditionReads(host);
+  const readText = (mainVersion: string, language: string | undefined): Promise<Answered<WorkText>> => {
+    const id = idOf(mainVersion);
+    if (!id) return Promise.resolve({ ok: false, failure: 'missing' });
+    return settleCall(() =>
+      main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }),
+    );
+  };
   return {
-    readText(mainVersion: string, language: string | undefined): Promise<Answered<WorkText>> {
-      const id = idOf(mainVersion);
-      if (!id) return Promise.resolve({ ok: false, failure: 'missing' });
-      return settleCall(() =>
-        main.v1['main-versions']({ mainVersion: id }).selection.get({ query: { language } }),
-      );
+    readText,
+    /** The production reader boundary. A resolved route supplies its cached header/text read. */
+    async readPage(id: string, options: {
+      header?: WorkHeader;
+      language?: string | null;
+      readText?: typeof readText;
+    } = {}): Promise<BooksLanguagePage> {
+      const header = options.header ? { ok: true as const, data: options.header } : await shared.readWorkHeader(id);
+      if (!header.ok) return header.failure === 'missing' ? { kind: 'work-missing' }
+        : { kind: 'shown', reading: { kind: 'unavailable', failure: header.failure }, actingSubject: host.actingSubject ?? null };
+      const text = options.language === null ? { ok: false as const, failure: 'missing' as const }
+        : await (options.readText ?? readText)(header.data.mainVersion,
+          options.language ?? header.data.selectedLanguage ?? undefined);
+      // Refused text never mounts the reader or requests its credits/settings.
+      const [agentCredits, credits] = text.ok
+        ? await Promise.all([shared.readAgentCredits(id), shared.readCredits(id)]) : [];
+      return { kind: 'shown', actingSubject: host.actingSubject ?? null,
+        reading: booksLanguageReading({ text, header: header.data, agentCredits, credits }) };
     },
   };
 }
+
+export type BooksLanguagePage =
+  | { kind: 'work-missing' }
+  | { kind: 'shown'; reading: BooksLanguageReading; actingSubject: string | null };
