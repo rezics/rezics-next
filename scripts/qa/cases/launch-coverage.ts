@@ -402,7 +402,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-notifications.test.ts',
       'realm/closure-notifications / member: rechecks closure despite membership and retains unrelated eligible notices',
       'Checks recipient-specific notification delivery after Realm closure suppresses closed content despite membership while unrelated eligible notices remain available.'),
-    browser: missing('gap', 'No notification Realm closure browser journey is cited.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure.e2e.ts',
+      'apps/web/tests/journeys/realm-closure.ts',
+      'realm-closure-notifications: a recipient reloads a concealed reply notice and keeps the independent notice (en)',
+      'A signed-in recipient watches two real threads, reloads after platform closure to see the closed reply concealed and the independent reply retained, then follows the independent notice by keyboard; runs in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -410,7 +413,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-media.test.ts',
       'realm/closure-media / visitor: hides closed media metadata, exact and bare bytes and validators while independent public uses remain available',
       'Checks closed Realm media metadata, exact and bare representation bytes and conditional validators are unavailable, while independent public Uses of the shared representation remain readable.'),
-    browser: missing('gap', 'No media Realm closure browser journey is cited.'),
+    browser: missing('gap', 'realm-closure.e2e.ts (journeys/realm-closure.ts): before closure, POST /v1/media/metadata for a cleared public reply-backed representation and Use returns HTTP 200 with items[0].status unavailable, preventing the real reader from rendering it. Exact request and answer: QA 20261014t200800-9bf7b2 logs/e2e-playwright.log.'),
   },
   {
     kind: 'realm',
@@ -418,7 +421,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-roster.test.ts',
       'realm/closure-roster / member: conceals closed roster, featured members and retained pagination like a real absent Realm',
       'Compares the closed roster, featured members and retained pagination with an absent Realm through an ordinary member session.'),
-    browser: missing('gap', 'No roster Realm closure browser journey is cited.'),
+    browser: missing('gap', 'realm-closure.e2e.ts (journeys/realm-closure.ts): the public roster conceals after completed platform closure, but GET /v1/realms/{closedRealm}/members?actingSubject={founder} still returns HTTP 200 with joined member identities, so Manage continues rendering them after reload. Exact request and answer: QA 20261014t194648-5672da logs/e2e-playwright.log.'),
   },
   {
     kind: 'realm',
