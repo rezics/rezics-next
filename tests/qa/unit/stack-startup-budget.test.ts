@@ -19,6 +19,9 @@ const idleHost = { readLoad: () => 0, processors: 1 };
 // shells out to Git on every poll and reads the live orchestration policy.
 const startupEnvironment = (dir: string): NodeJS.ProcessEnv => ({
   REZICS_STACK_PROFILE: 'qa', GOAL_QA_SLOT_DIRECTORY: join(dir, 'slots'),
+  // These cases exercise memory budgets and arrival order with injected load.
+  // Pressure admission and its processor hold have their own owner tests.
+  REZICS_QA_CPU_PRESSURE_FILE: join(dir, 'missing-cpu-pressure'),
 });
 
 for (const [name, start, readinessMs] of [
