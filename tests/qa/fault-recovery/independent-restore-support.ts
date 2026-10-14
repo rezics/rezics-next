@@ -1,4 +1,6 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
+import assert from 'node:assert/strict';
+import { randomBytes, randomUUID } from 'node:crypto';
 import {
   existsSync,
   lstatSync,
@@ -7,14 +9,153 @@ import {
   realpathSync,
   readdirSync,
   rmSync,
+  appendFileSync,
+  cpSync,
+  writeFileSync,
+  openSync,
+  closeSync,
 } from 'node:fs';
-import { isAbsolute, join, relative, resolve, win32 } from 'node:path';
+import { dirname, isAbsolute, join, relative, resolve, win32 } from 'node:path';
 import { Pool } from 'pg';
 import { artifactNames, RecoveryRefusal } from '../../../scripts/ops/recovery-set.ts';
 import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
-import { startPostgresCluster } from '../support/postgres-cluster.ts';
+import { startPostgresCluster, startPreparedPostgresCluster } from '../support/postgres-cluster.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { AccessAdmissionRegistry, engageAccessRecoveryFence } from '../../../services/main/src/modules/access/admission.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
+import { OwnerOperations, readNativeAccessAttachment } from '../../../services/main/src/modules/owner/operations.ts';
+import { createMainApp } from '../../../services/main/src/app.ts';
+import { AccountAssertionDenied } from '../../../services/main/src/modules/account/verify-assertion.ts';
+import { DATASET, GRAPHS, RV, initializeFreshGraph } from '../../../services/main/src/modules/work/activate.ts';
+import { ensureModelGeneration } from '../../../services/main/src/modules/semantic/command.ts';
+import type { AccessErasureRecoverySummary } from '../../../services/main/src/modules/access/erasure-recovery.ts';
+import { captureGraphRecoveryCoverage, type RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
+import { retainRecoveryCoverageHead } from '../../../services/main/src/modules/outbox/recovery-coverage-head.ts';
+import { retainErasureCoverage } from '../../../services/main/src/modules/erasure/reconcile.ts';
+import { heldErasureMaintenanceClient, readGraphErasureProof } from '../../../services/main/src/modules/erasure/graph.ts';
+import { ErasureService } from '../../../services/main/src/modules/erasure/request.ts';
+import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
+import { migrateFixtureOwners } from '../../../scripts/fixture/migrate.ts';
+import { backupRecoverySet, objectStore } from '../../../scripts/ops/backup.ts';
+import { administratorUrl, assertRegularTree, assertSafeTar, encryptRecoveryAttachment, fileDigest, openIndex, RecoveryBudget, seal, stackContext, type EncryptedRecoveryAttachment } from '../../../scripts/ops/recovery-set.ts';
+import { restoreRecoverySet, type RestoredContext, type RestoreChecks } from '../../../scripts/ops/restore.ts';
+import { openRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { commandAsync } from '../../../scripts/qa/core.ts';
+import { runQaStartupChildAsync } from '../../../scripts/qa/stack-startup.ts';
+import { seedRecoveryContent } from './search-content-fixture.ts';
+import { createRecipeApiRequest, readMembershipCompletionProof, seedRecipeBeforeCut, type RecipeSeed } from './operator-restore-recipe-support.ts';
+import { provisionFixtureAuthor } from '../fixtures/authored-work.ts';
+import { ReceiptCustody, PostgresReceiptCustodyStore } from '../../../services/main/src/modules/outbox/receipt-custody.ts';
+import { proofRetirementSender } from '../../../services/main/src/modules/graph/slim-command.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
+import { normalizeStoredMembership } from '../../../services/main/src/modules/structure/membership-normalize.ts';
+import { readManifest } from '../../../scripts/fixture/build.ts';
+import { compatibleFixture, type FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts';
+
+import { RetainedSources, RetainedSourceRefusal, sourceKey, sourceFileDigests,
+  type RetainedSourceAdapter, type SourceContext } from '../../../scripts/qa/retained-source.ts';
+import { migrationInventory, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
+import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
+import { fixtureModel } from '../../../scripts/fixture/model.ts';
+import { currentEngines, dockerEnvironment } from '../../../scripts/fixture/stack.ts';
+import { producerModules } from './owner-restore-erasure-fixture.ts';
+import { runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 
 const repositoryRoot = resolve(import.meta.dir, '../../..');
+
+/** Cleanup must not replace the failure that made the restore fail. */
+export async function preserveRestoreCleanup<T>(
+  operation: () => Promise<T>,
+  cleanup: () => void | Promise<void>,
+): Promise<T> {
+  let primary: { error: unknown } | undefined;
+  try {
+    return await operation();
+  } catch (error) {
+    primary = { error };
+    throw error;
+  } finally {
+    try { await cleanup(); }
+    catch (error) {
+      if (primary) throw new AggregateError([primary.error, error],
+        'Restore failed and cleanup also failed', { cause: primary.error });
+      throw error;
+    }
+  }
+}
+
+export function findRecoveryRefusal(error: unknown): RecoveryRefusal | undefined {
+  const seen = new Set<object>();
+  while (error !== null && typeof error === 'object' && !seen.has(error)) {
+    seen.add(error);
+    if (error instanceof RecoveryRefusal) return error;
+    error = (error as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
+interface RestoreFailureRecord {
+  name: string;
+  message: string;
+  code?: string;
+  status?: number;
+  cause?: RestoreFailureRecord;
+  errors?: RestoreFailureRecord[];
+}
+
+function restoreFailureRecord(error: unknown, seen = new Set<object>()): RestoreFailureRecord {
+  if (error === null || typeof error !== 'object') return { name: 'Error', message: String(error) };
+  if (seen.has(error)) return { name: 'Error', message: 'Circular failure reference' };
+  seen.add(error);
+  const failure = error as { name?: unknown; message?: unknown; code?: unknown; status?: unknown; cause?: unknown };
+  return {
+    name: typeof failure.name === 'string' ? failure.name : 'Error',
+    message: typeof failure.message === 'string' ? failure.message : String(error),
+    ...(typeof failure.code === 'string' ? { code: failure.code } : {}),
+    ...(typeof failure.status === 'number' ? { status: failure.status } : {}),
+    ...(failure.cause === undefined ? {} : { cause: restoreFailureRecord(failure.cause, new Set(seen)) }),
+    ...(error instanceof AggregateError ? { errors: error.errors.map(item => restoreFailureRecord(item, new Set(seen))) } : {}),
+  };
+}
+
+function rebuildRestoreFailure(record: RestoreFailureRecord): Error {
+  const options = record.cause ? { cause: rebuildRestoreFailure(record.cause) } : undefined;
+  const error = record.errors
+    ? new AggregateError(record.errors.map(rebuildRestoreFailure), record.message, options)
+    : record.name === 'RecoveryRefusal' && record.code !== undefined
+      ? new RecoveryRefusal(record.code as RecoveryRefusal['code'], record.message, options)
+      : new Error(record.message, options);
+  error.name = record.name;
+  if (record.code !== undefined) Object.assign(error, { code: record.code });
+  if (record.status !== undefined) Object.assign(error, { status: record.status });
+  return error;
+}
+
+/** The child records every thrown path, including input and cleanup failures. */
+export async function recordIndependentRestoreChildFailure(
+  failureFile: string,
+  operation: () => Promise<void>,
+): Promise<void> {
+  try { await operation(); }
+  catch (error) {
+    await preserveRestoreCleanup(async () => { throw error; }, () => {
+      writeDrillJson(failureFile, restoreFailureRecord(error));
+    });
+  }
+}
+
+export function readIndependentRestoreChildFailure(failureFile: string): Error {
+  return rebuildRestoreFailure(JSON.parse(readFileSync(failureFile, 'utf8')) as RestoreFailureRecord);
+}
+
+function failedCommand(message: string, result: { timedOut: boolean; output: string }): Error {
+  const cause = result.timedOut
+    ? Object.assign(new Error('Command deadline exceeded'), { code: 'ETIMEDOUT' })
+    : new Error(result.output);
+  return new Error(message, { cause });
+}
 const sharedPostgresBootstrapPath = realpathSync(join(repositoryRoot, 'infra/dev/postgres/00-owners.sh'));
 
 function resolvesToSharedPostgresBootstrap(path: string): boolean {
@@ -137,6 +278,8 @@ export type IndependentRestoreTransfer = Readonly<{
   inputs: Readonly<{
     recoverySet: string;
     currentFrontier: string;
+    currentAuthorityCoverage: string;
+    nativeAccessAttachment: string;
     currentRelayDump: string;
     recipientPrivateKeyCustody: string;
     recoveryHmacKey: string;
@@ -149,6 +292,8 @@ export type ResolvedIndependentRestoreInputs = Readonly<{
   root: string;
   recoverySet: string;
   currentFrontier: string;
+  currentAuthorityCoverage: string;
+  nativeAccessAttachment: string;
   currentRelayDump: string;
   recipientPrivateKeyCustody: string;
   recoveryHmacKey: string;
@@ -915,6 +1060,8 @@ export function assertIndependentRestoreTransfer(value: unknown): IndependentRes
     [
       'recoverySet',
       'currentFrontier',
+      'currentAuthorityCoverage',
+      'nativeAccessAttachment',
       'currentRelayDump',
       'recipientPrivateKeyCustody',
       'recoveryHmacKey',
@@ -962,6 +1109,24 @@ export function resolveIndependentRestoreInputs(value: unknown): ResolvedIndepen
   }
   for (const name of recoveryFiles) requireFile(recoverySet, name, `Recovery artifact ${name}`);
   const currentFrontier = requireFile(root, transfer.inputs.currentFrontier, 'Current frontier');
+  // C1 and D are separately retained inputs; the immutable physical set stays C0.
+  const currentAuthorityCoverage = requireFile(
+    root,
+    transfer.inputs.currentAuthorityCoverage,
+    'Current authority coverage',
+  );
+  const nativeAccessAttachment = requireFile(
+    root,
+    transfer.inputs.nativeAccessAttachment,
+    'Native Access attachment',
+  );
+  for (const [label, path] of [
+    ['Current authority coverage', currentAuthorityCoverage],
+    ['Native Access attachment', nativeAccessAttachment],
+  ] as const) {
+    if (pathContains(recoverySet, path)) throw new Error(`${label} must be outside the recovery set`);
+    if (lstatSync(path).size === 0) throw new Error(`${label} is empty`);
+  }
   const currentRelayDump = requireFile(root, transfer.inputs.currentRelayDump, 'Current relay dump');
   const recipientPrivateKeyCustody = requireDirectory(
     root,
@@ -991,6 +1156,8 @@ export function resolveIndependentRestoreInputs(value: unknown): ResolvedIndepen
     root,
     recoverySet,
     currentFrontier,
+    currentAuthorityCoverage,
+    nativeAccessAttachment,
     currentRelayDump,
     recipientPrivateKeyCustody,
     recoveryHmacKey,
@@ -1025,6 +1192,15 @@ export function createIndependentRestoreChildEnvironment(
     const value = environment[name];
     if (value === undefined) continue;
     if (value.includes('\0') || value.length > 256) throw new Error(`Child environment ${name} is invalid`);
+    child[name] = value;
+  }
+  // Orchestration identity crosses the process seam; source credentials never do.
+  for (const name of ['GOAL_QA_SLOT_DIRECTORY', 'GOAL_IN_SLOT', 'REZICS_QA_STARTUP_SLOT_GATE',
+    'REZICS_QA_MEMORY_DEADLINE', 'REZICS_QA_MEMORY_EVENTS', 'REZICS_QA_RUN_REMAINING_MS',
+    'REZICS_QA_STACK_REGISTRY']) {
+    const value = environment[name];
+    if (value === undefined) continue;
+    if (value.includes('\0') || value.length > 4096) throw new Error(`Child orchestration ${name} is invalid`);
     child[name] = value;
   }
   return child;
@@ -1062,12 +1238,776 @@ export async function importCurrentRelay(value: unknown): Promise<ImportedCurren
         clusterDirectory: cluster.directory,
       },
       close: async () => {
-        await relayPool.end();
-        cluster.remove();
+        await preserveRestoreCleanup(() => relayPool.end(), () => cluster.remove());
       },
     };
   } catch (error) {
-    cluster.remove();
-    throw error;
+    return preserveRestoreCleanup(async () => { throw error; }, () => cluster.remove());
   }
+}
+
+interface PhysicalRestoreSamples {
+  source: IndependentRestoreSourceInventory;
+  project: string;
+  work: string;
+  revisionId: string;
+  actingSubject: string;
+  operator: { issuer: string; subject: string };
+  erasureId: string;
+  erasureEpoch: string;
+  admissionId: string;
+  original: { receipt: string; dataEpoch: string; sequence: string };
+  recipe?: RecipeSeed;
+}
+
+function writeDrillJson(path: string, value: unknown): void {
+  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
+}
+
+/** Only IDs, expected values and original receipts cross this seam. */
+function physicalRestoreSamples(path: string): PhysicalRestoreSamples {
+  const expectations = parseExpectations(JSON.parse(readFileSync(path, 'utf8')));
+  const encoded = expectations.values.map((item, index) => {
+    assert.equal(item.name, `sample${index}`);
+    return item.value;
+  }).join('');
+  const samples = JSON.parse(encoded) as PhysicalRestoreSamples;
+  assert.deepEqual(expectations.originalReceiptTuples,
+    [[samples.original.receipt, samples.original.dataEpoch, samples.original.sequence]]);
+  assert.deepEqual(expectations.samples, [{ name: 'erasedRevision', id: samples.revisionId }]);
+  return samples;
+}
+
+/** Observe production workers, without initializing or repairing their cursors.
+ * Restore itself must leave a deployable checkpoint and complete custody. */
+async function verifyRunningRestoredWorkers(context: RestoredContext, artifactDirectory: string): Promise<void> {
+  const children: { name: string; child: ChildProcess; log: string; error?: Error }[] = [];
+  const environment = { ...process.env, ...context.apps, NODE_ENV: 'production',
+    MAIN_RELAY_INTERVAL_MS: '100', CONTENT_PROJECTION_INTERVAL_MS: '100' };
+  const started = Date.now();
+  await preserveRestoreCleanup(async () => {
+    for (const [name, entry] of [['main', 'index.ts'], ['main-relay', 'relay.ts']] as const) {
+      const log = join(artifactDirectory, `${name}-production.log`);
+      const descriptor = openSync(log, 'w', 0o600);
+      await preserveRestoreCleanup(async () => {
+        const child = spawn('bun', [join(repositoryRoot, 'services/main/src', entry)], {
+          cwd: repositoryRoot, env: environment, stdio: ['ignore', descriptor, descriptor],
+        });
+        const worker: typeof children[number] = { name, child, log };
+        child.on('error', error => { worker.error = error; });
+        children.push(worker);
+      }, () => closeSync(descriptor));
+    }
+    const deadline = Math.min(started + 60_000, started + context.budget.remaining());
+    let stable = 0;
+    let observed: Record<string, unknown> = {};
+    let readinessFailure: unknown;
+    while (Date.now() < deadline) {
+      for (const worker of children) {
+        if (worker.error) throw worker.error;
+        const output = readFileSync(worker.log, 'utf8');
+        assert.equal(worker.child.exitCode, null, `${worker.name} exited: ${output.slice(-3000)}`);
+        assert.equal(worker.child.signalCode, null, `${worker.name} was signalled`);
+        // The relay retries checkpoint conflicts; being alive alone proves nothing.
+        assert.doesNotMatch(output, /RelayCheckpointConflict|main_relay_(retry|failed|blocked)|custodi[^\n]*(missing|unavailable)|outbox batch header missing/iu);
+        assert.doesNotMatch(output, /"event":"(?:worker_run_failed|worker_fault)"[^\n]*main\.content\.projection/u);
+      }
+      const relay = (await context.pools.relay.query(
+        'SELECT data_epoch, sequence::text FROM relay.checkpoint WHERE consumer=$1',
+        [context.apps.MAIN_RELAY_CONSUMER])).rows[0];
+      const graph = await context.fuseki.query(`PREFIX rv: <${RV}>
+        SELECT ?epoch ?sequence WHERE { GRAPH <${GRAPHS.control}> {
+          <${MAIN_RELAY_STREAM_SCOPE}> rv:dataEpoch ?epoch ; rv:streamSequence ?sequence } }`);
+      const stream = graph.results?.bindings[0];
+      const projection = (await context.pools.content.query(`SELECT c.data_epoch,
+        c.sequence::text, c.scan_sequence::text, c.pending_count::text,
+        o.data_epoch AS owner_epoch, o.sequence::text AS owner_sequence
+        FROM content.projection_checkpoint c CROSS JOIN content.owner_control o
+        WHERE c.consumer=$1 AND o.singleton`,
+      [context.apps.CONTENT_PROJECTION_CONSUMER ?? 'main-content-public-search-v1'])).rows[0];
+      let ready = 0;
+      try {
+        ready = (await fetch(`http://127.0.0.1:${context.apps.MAIN_PORT}/health/ready`,
+          { signal: AbortSignal.timeout(2000) })).status;
+        readinessFailure = undefined;
+      } catch (error) { readinessFailure = error; }
+      observed = { relay, graph: stream, projection, ready };
+      const converged = relay?.data_epoch === context.apps.MAIN_DATA_EPOCH
+        && stream?.epoch?.value === relay.data_epoch && stream?.sequence?.value === relay.sequence
+        && projection?.data_epoch === projection?.owner_epoch
+        && projection?.sequence === projection?.owner_sequence
+        && projection?.scan_sequence === projection?.owner_sequence
+        && projection?.pending_count === '0' && ready === 200
+        && children.every(worker => readFileSync(worker.log, 'utf8').includes(
+          worker.name === 'main' ? '"event":"main_listening"' : '"event":"main_relay_started"'));
+      stable = converged ? stable + 1 : 0;
+      if (stable >= 3) {
+        writeDrillJson(join(artifactDirectory, 'running-workers-convergence.json'), {
+          ...observed, elapsedMs: Date.now() - started, stableObservations: stable,
+          workers: children.map(({ name, child }) => ({ name, pid: child.pid, running: child.exitCode === null })),
+          relayCheckpointConflict: false, missingCustodyBatch: false,
+        });
+        return;
+      }
+      await Bun.sleep(1000);
+    }
+    throw new Error(`Restored production workers did not converge: ${JSON.stringify(observed)}`,
+      { cause: readinessFailure });
+  }, async () => {
+    const stopped = await Promise.allSettled(children.map(({ child }) => new Promise<void>((resolveExit, reject) => {
+      if (child.exitCode !== null || child.signalCode !== null) { resolveExit(); return; }
+      const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new Error('Production worker shutdown exceeded 15 seconds')); }, 15_000);
+      child.once('exit', () => { clearTimeout(timer); resolveExit(); });
+      child.kill('SIGTERM');
+    })));
+    const failures = stopped.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length) throw new AggregateError(failures, 'Production worker shutdown failed', { cause: failures[0] });
+  });
+}
+
+/** Runs in a fresh process with only the validated, separately retained inputs. */
+export async function runIndependentRestoreChild(
+  transferFile: string,
+  artifactDirectory: string,
+  missingCustody: boolean,
+): Promise<void> {
+  const transfer = assertIndependentRestoreTransfer(JSON.parse(readFileSync(transferFile, 'utf8')));
+  const inputs = resolveIndependentRestoreInputs(transfer);
+  const samples = physicalRestoreSamples(inputs.expectations);
+  const inspector = createIsolationInspector();
+  assertIndependentRestoreSourceAbsent(samples.source, inspector);
+  const key = readFileSync(inputs.recoveryHmacKey, 'utf8').trim();
+  const signingKey = readFileSync(inputs.retainedNativeSigningMaterial, 'utf8').trim();
+  const currentEnvelope = readFileSync(inputs.currentAuthorityCoverage, 'utf8').trim();
+  const current = openRecoveryPayload<RecoveryCoverage>(currentEnvelope, key, 'graph-recovery-coverage');
+  assert(current.nativeAccessErasure);
+  assert.equal(resolve(inputs.nativeAccessAttachment),
+    join(dirname(inputs.nativeAccessAttachment), `${current.nativeAccessErasure.ciphertextDigest}.gpg`));
+  const retained = await importCurrentRelay(currentRelayTransferForDump(inputs.currentRelayDump));
+  await preserveRestoreCleanup(async () => {
+  const project = missingCustody ? `${samples.project}-held` : samples.project;
+  const label = missingCustody ? 'missing-custody' : 'restore';
+  const phases = join(artifactDirectory, `${label}-phases.jsonl`);
+  const phase = (name: string, facts: Record<string, unknown> = {}) =>
+    appendFileSync(phases, `${JSON.stringify({ name, at: new Date().toISOString(), ...facts })}\n`, { mode: 0o600 });
+  let reconciledTarget: RestoredContext | undefined;
+  const authenticate = {
+    verify: async (request: Request) => {
+      if (request.headers.get('authorization') !== 'Bearer qa-owner')
+        throw new AccountAssertionDenied('denied');
+      return samples.operator;
+    },
+  };
+  phase('source-absent-before-target', { source: samples.source.project, childPid: process.pid });
+  writeDrillJson(join(artifactDirectory, `${label}-relay-identity.json`), retained.identity);
+  assert(!retained.identity.clusterDirectory.startsWith(samples.source.stackDirectory));
+  assert(!samples.source.publishedPorts.some(port => port.hostPort === String(retained.identity.port)));
+  const retainedBefore = (await retained.relayPool.query(
+    'SELECT id, admission_id FROM relay.erasure WHERE id=$1', [samples.erasureId])).rows;
+  assert.deepEqual(retainedBefore, [{ id: samples.erasureId, admission_id: samples.admissionId }]);
+  const checks: RestoreChecks = {
+    verify: async context => {
+      assertIndependentRestoreSourceAbsent(samples.source, inspector);
+      inspectIndependentRestoreTarget(project, samples.source, inspector);
+      assert.notEqual(context.apps.MAIN_DATA_EPOCH, samples.original.dataEpoch);
+      assert.notEqual(new URL(context.apps.MAIN_RELAY_DATABASE_URL!).port, String(retained.identity.port));
+      assert.equal((await context.pools.relay.query('SELECT id FROM relay.erasure WHERE id=$1',
+        [samples.erasureId])).rowCount, 0);
+      assert.equal((await context.pools.access.query('SELECT id FROM access.admission WHERE id=$1',
+        [samples.admissionId])).rowCount, 0);
+      const exact = await new ContentCore(context.pools.content)
+        .readExactBatch([samples.revisionId], async ids => new Set(ids));
+      assert.equal(exact[0]?.status, 'available');
+      assert.equal((await context.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
+        ASK { GRAPH <${GRAPHS.control}> { <${DATASET}> rv:restoreHold true } }`)).boolean, true);
+      phase('immutable-base-verified', { laterErasureAbsent: true });
+    },
+    reconcile: async (context, body, idempotencyKey) => {
+      body = { ...body, retainedAuthorityCoverage: currentEnvelope };
+      assert.equal(body.sealedCoverage, context.manifest.sealedCoverage);
+      assert.equal(body.retainedAuthorityCoverage, currentEnvelope);
+      assert.notEqual(body.sealedCoverage, body.retainedAuthorityCoverage);
+      const objects = objectStore(context.apps, context.budget, context.pools.content);
+      const environment = {
+        fuseki: context.fuseki,
+        lineage: { dataEpoch: context.apps.MAIN_DATA_EPOCH!, routingEpoch: context.apps.MAIN_ROUTING_EPOCH! },
+        objectDirectory: context.apps.MAIN_OBJECT_DIRECTORY!,
+        workObjects: objects.workObjects,
+        titleAdmissionKey: signingKey,
+        receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(context.pools.access),
+          objects.workObjects, context.fuseki, signingKey,
+          proofRetirementSender(context.apps.FUSEKI_URL!, context.apps.FUSEKI_COMMAND_TOKEN!)),
+      };
+      const operations = new OwnerOperations(retained.relayPool, environment, {
+        accountPool: context.pools.account, accessPool: context.pools.access,
+        contentPool: context.pools.content, restoredRelayPool: context.pools.relay,
+        hmacKey: key, objectStore: objects,
+        ...(missingCustody ? {} : { nativeAccessAttachment: reference =>
+          readNativeAccessAttachment(reference, dirname(inputs.nativeAccessAttachment), process.env) }),
+        erasures: { authority: { sealedCoverage: currentEnvelope, hmacKey: key }, signingKey,
+          maintenance: heldErasureMaintenanceClient(context.apps.FUSEKI_URL!, context.apps.FUSEKI_MAINTENANCE_TOKEN!),
+          originalSource: 'retained-native-event' },
+      });
+      const app = createMainApp(context.fuseki, {
+        environment, account: authenticate, access: new AccessAdmissionRegistry(context.pools.access),
+        content: new ContentCore(context.pools.content), ownerOperations: operations,
+      });
+      assert.equal((await app.handle(new Request('http://main.local/health/ready'))).status, 503);
+      const request = (authorization: string) => new Request('http://main.local/v1/owners/reconciliations', {
+        method: 'POST', headers: { authorization, 'content-type': 'application/json', 'idempotency-key': idempotencyKey },
+        body: JSON.stringify(body),
+      });
+      assert.equal((await app.handle(request('Bearer denied'))).status, 401);
+      const response = await app.handle(request('Bearer qa-owner'));
+      const result = await response.clone().json();
+      const operation = (await retained.relayPool.query(
+        'SELECT state, disposition, hold_reason FROM relay.owner_reconciliation WHERE operation_id=$1',
+        [`owner:reconcile:${idempotencyKey}`])).rows[0];
+      writeDrillJson(join(artifactDirectory, `${label}-reconciliation.json`),
+        { status: response.status, result, operation });
+      if (missingCustody) {
+        assert.equal(result.state, 'held');
+        assert.equal(result.disposition, 'conflict');
+        assert.match(operation.hold_reason, /native Access.*(custody|attachment).*unavailable/i);
+        assert.deepEqual((await context.pools.access.query(
+          'SELECT open, generation::text FROM access.recovery_fence WHERE id=true')).rows,
+        [{ open: false, generation: context.manifest.fenceGeneration }]);
+        assert.equal((await context.pools.account.query(
+          "SELECT rolname FROM pg_roles WHERE rolname IN ('account','access','content','relay') AND rolcanlogin")).rowCount, 0);
+        assert.equal((await app.handle(new Request('http://main.local/health/ready'))).status, 503);
+        phase('missing-custody-held', { operation });
+      } else {
+        assert.equal(response.status, 201);
+        assert.equal(result.state, 'reconciled', `Owner remained held: ${operation?.hold_reason}`);
+        assert.equal(result.disposition, 'matched');
+        reconciledTarget = context;
+        phase('authenticated-owner-release');
+      }
+      return response;
+    },
+    verifyServing: async context => {
+      assert.equal(context, reconciledTarget);
+      assertIndependentRestoreSourceAbsent(samples.source, inspector);
+      inspectIndependentRestoreTarget(project, samples.source, inspector);
+      assert.deepEqual((await context.pools.access.query(
+        'SELECT open, generation::text FROM access.recovery_fence WHERE id=true')).rows,
+      [{ open: true, generation: (BigInt(context.manifest.fenceGeneration) + 1n).toString() }]);
+      // The independently retained journal survives release; the original base
+      // relay must not be rewritten to conceal the later erasure.
+      assert.equal((await context.pools.relay.query('SELECT id FROM relay.erasure WHERE id=$1',
+        [samples.erasureId])).rowCount, 0);
+      assert.deepEqual((await retained.relayPool.query(
+        'SELECT id, admission_id FROM relay.erasure WHERE id=$1', [samples.erasureId])).rows, retainedBefore);
+      const objects = objectStore(context.apps, context.budget, context.pools.content);
+      const app = createMainApp(context.fuseki, {
+        environment: { fuseki: context.fuseki,
+          lineage: { dataEpoch: context.apps.MAIN_DATA_EPOCH!, routingEpoch: context.apps.MAIN_ROUTING_EPOCH! },
+          objectDirectory: context.apps.MAIN_OBJECT_DIRECTORY!, workObjects: objects.workObjects,
+          structureGroupRoots: objects.structureGroupRoots, structureQualifierRoots: objects.structureQualifierRoots,
+          titleAdmissionKey: signingKey,
+          receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(context.pools.access),
+            objects.workObjects, context.fuseki, signingKey,
+            proofRetirementSender(context.apps.FUSEKI_URL!, context.apps.FUSEKI_COMMAND_TOKEN!)) },
+        account: authenticate, access: new AccessAdmissionRegistry(context.pools.access),
+        content: new ContentCore(context.pools.content),
+      });
+      assert.equal((await app.handle(new Request('http://main.local/health/ready'))).status, 200);
+      const workId = /^https:\/\/rezics\.com\/id\/([0-9a-f-]{36})$/.exec(samples.work)?.[1];
+      assert(workId);
+      const workUrl = `http://main.local/v1/works/${workId}?actingSubject=${encodeURIComponent(samples.actingSubject)}`;
+      assert.equal((await app.handle(new Request(workUrl, { headers: { authorization: 'Bearer denied' } }))).status, 401);
+      const authorized = await app.handle(new Request(workUrl, { headers: { authorization: 'Bearer qa-owner' } }));
+      assert.equal(authorized.status, 200);
+      assert.equal((await authorized.json()).id, samples.work);
+      phase('restored-authorized-and-denied-reads', { authorized: 200, denied: 401 });
+      if (samples.recipe) {
+        assert.deepEqual(await context.fuseki.membershipPreparationStatus(), { needsPreparation: false });
+        assert.deepEqual(await readMembershipCompletionProof(context.fuseki), {
+          dataEpoch: context.apps.MAIN_DATA_EPOCH!, revision: 'ordered-membership-v1',
+        });
+        await verifyRunningRestoredWorkers(context, artifactDirectory);
+        phase('production-workers-converged', { status: 200, relayCheckpointConflict: false, missingCustodyBatch: false });
+      }
+      phase('target-ready', { status: 200, generation: (BigInt(context.manifest.fenceGeneration) + 1n).toString() });
+    },
+  };
+  const started = Date.now();
+  try {
+    const evidence = await restoreRecoverySet({ set: inputs.recoverySet, frontier: inputs.currentFrontier,
+      key, project, checks, environment: process.env });
+    assert.equal(missingCustody, false, 'Missing custody unexpectedly released');
+    assert.equal(evidence.state, 'verified');
+    assert.equal(evidence.servingVerified, true);
+    assert(evidence.elapsedMs <= 600_000);
+    writeDrillJson(join(artifactDirectory, 'restore-timing.json'), evidence);
+    for (const [name, elapsedMs] of Object.entries(evidence.phases)) phase(name, { elapsedMs });
+  } catch (error) {
+    const refusal = findRecoveryRefusal(error);
+    await preserveRestoreCleanup(async () => {
+      if (!missingCustody || refusal?.code !== 'owner-reconciliation-refused') throw error;
+    }, () => phase('failure', { message: error instanceof Error ? error.message : String(error), elapsedMs: Date.now() - started }));
+    assert(refusal);
+    writeDrillJson(join(artifactDirectory, 'missing-custody-refusal.json'), { code: refusal.code, elapsedMs: Date.now() - started });
+  }
+  }, () => retained.close());
+}
+
+/** Build the physical cut once, retain later native evidence, then cross the
+ * transfer boundary after every source connection and storage owner is gone. */
+async function produceIndependentRestoreSource(withRecipe: boolean, context: SourceContext) {
+  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.REZICS_QA_ARTIFACT_DIR)
+    throw new Error('Run through the isolated fault/recovery QA tier');
+  const artifactDirectory = join(Bun.env.REZICS_QA_ARTIFACT_DIR, withRecipe ? 'independent-restore' : 'independent-authority');
+  mkdirSync(artifactDirectory, { recursive: true, mode: 0o700 });
+  const nonce = randomUUID().replaceAll('-', '').slice(0, 10);
+  const sourceRunId = withRecipe ? `fixture-ind-${nonce}` : `ind-source-${nonce}`;
+  assert(withRecipe ? /^fixture-[a-z0-9-]{1,27}$/.test(sourceRunId) : /^ind-source-[a-f0-9]{10}$/.test(sourceRunId));
+  const source = { profile: 'qa' as const, runId: sourceRunId, persistent: true };
+  const project = `rezics-qa-ind-${nonce}`;
+  const build = join(repositoryRoot, '.temp', 'ops', `ind-build-${nonce}`);
+  const transferRoot = context.backup;
+  mkdirSync(build, { recursive: true, mode: 0o700 });
+  mkdirSync(transferRoot, { recursive: true, mode: 0o700 });
+  const phases = join(artifactDirectory, 'source-phases.jsonl');
+  const phaseCosts: Record<string, number> = {};
+  const timed = async <T>(name: string, work: () => Promise<T>): Promise<T> => {
+    const at = Date.now();
+    const before = context.budget.timing();
+    appendFileSync(phases, `${JSON.stringify({ name, event: 'start', at })}\n`, { mode: 0o600 });
+    return preserveRestoreCleanup(work, () => {
+      const after = context.budget.timing();
+      phaseCosts[name] = after.elapsedMs - before.elapsedMs;
+      appendFileSync(phases, `${JSON.stringify({ name, event: 'end', elapsedMs: phaseCosts[name],
+        admissionWaitMs: after.admissionWaitMs - before.admissionWaitMs, wallMs: Date.now() - at })}\n`);
+    });
+  };
+  const { recoveryTestCustody, closeRecoveryTestCustody, retainedRecoveryAuthority, exportCurrentRelay } =
+    await import('./g-727-recovery-checks.ts');
+  const custody = recoveryTestCustody(build, nonce);
+  const key = randomBytes(32).toString('hex');
+  const pools: Pool[] = [];
+  let baseCluster: Awaited<ReturnType<typeof startPostgresCluster>> | undefined;
+  let sourceDisposed = false;
+  let custodyClosed = false;
+  const sourceDirectory = stackDirectory(repositoryRoot, source);
+  return preserveRestoreCleanup(async () => {
+    await timed('source-startup', async () => {
+      if (withRecipe) {
+        {
+          const fixture = compatibleFixture('small');
+          assert(fixture, 'A retained compatible small fixture is required; the fixture owner must prepare it before this drill');
+          const result = await commandAsync(repositoryRoot, 'task',
+            ['fixture:restore', '--', '--fixture', fixture.id, '--run-id', source.runId], 180_000);
+          context.budget.excludeAdmissionWait(result.admissionWaitMs);
+          if (!result.ok) throw failedCommand(`Writable small-fixture restore failed: ${result.output.slice(-2000)}`, result);
+        }
+        const evidence = JSON.parse(readFileSync(
+          join(repositoryRoot, '.artifacts', 'fixture-restore', source.runId, 'run.json'), 'utf8')) as FixtureRestoreEvidence;
+        const manifest = readManifest(evidence.fixture);
+        assert(manifest && manifest.profile === 'small');
+        assert.equal(evidence.target, source.runId);
+        assert.equal(evidence.profile, 'small');
+        assert.equal(evidence.works, manifest.entities.works);
+        assert.equal(evidence.failure, undefined);
+        assert(evidence.completedAt && evidence.elapsedMs !== undefined && evidence.elapsedMs <= 600_000);
+        writeDrillJson(join(artifactDirectory, 'source-fixture-inventory.json'), evidence);
+      } else {
+        const result = await runQaStartupChildAsync(repositoryRoot,
+          ['stack:up', '--profile', 'qa', '--run-id', source.runId, '--persistent'], 180_000);
+        context.budget.excludeAdmissionWait(result.admissionWaitMs);
+        if (!result.ok) throw new Error(`Source startup failed: ${result.output.slice(-2000)}`, { cause: result.error });
+      }
+    });
+    const apps = readEnv(join(sourceDirectory, 'apps.env'));
+    const saved = readEnv(join(sourceDirectory, 'compose.env'));
+    await migrateFixtureOwners(apps);
+    const owner = (name: string) => {
+      const pool = new Pool({ connectionString: administratorUrl(saved, name), max: 4 });
+      pool.on('error', () => {});
+      pools.push(pool);
+      return pool;
+    };
+    const owners = { account: owner('account'), access: owner('access'), content: owner('content'), relay: owner('relay') };
+    const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN, apps.FUSEKI_COMMAND_TOKEN);
+    const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! };
+    if (!withRecipe) await initializeFreshGraph(fuseki, lineage);
+    const objects = objectStore(apps, undefined, owners.content);
+    await objects.workObjects.initialize();
+    await objects.structureObjects.initialize();
+    const environment = { fuseki, lineage, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
+      workObjects: objects.workObjects, structureGroupRoots: objects.structureGroupRoots,
+      structureQualifierRoots: objects.structureQualifierRoots, titleAdmissionKey: apps.FUSEKI_TITLE_ADMISSION_KEY!,
+      receiptCustody: new ReceiptCustody(new PostgresReceiptCustodyStore(owners.access), objects.workObjects,
+        fuseki, apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!)) };
+    await ensureModelGeneration(environment);
+    const sample = await seedRecoveryContent(environment, owners.content, owners.access);
+    const registry = new AccessAdmissionRegistry(owners.access, apps.FUSEKI_TITLE_ADMISSION_KEY);
+    const principalId = await registry.activePrincipalId(sample.content.principal);
+    assert(principalId);
+    const actor = sample.content.actingSubject;
+    const grant = async (scope: string, action: string) => {
+      await grantFixtureAuthority(owners.access, { scope, requireDispatch: false,
+        representations: [{ principalId, actor, action, lifetime: '8 hours' }],
+        grant: { actor, action, lifetime: '8 hours' } });
+    };
+    await grant(`erasure:${sample.works[0]!}`, 'erasure.request');
+    await grant(`work:read:${sample.works[0]!}`, 'work.read');
+    let recipe: RecipeSeed | undefined;
+    if (withRecipe) {
+      await provisionFixtureAuthor(environment, actor);
+      await grant('work:create:root', 'work.create');
+      const request = createRecipeApiRequest(fuseki, { environment,
+        structureObjects: objects.structureObjects, account: { verify: async () => sample.content.principal },
+        access: registry, content: new ContentCore(owners.content) }, async () => 'qa-source');
+      recipe = await seedRecipeBeforeCut({ request, actor, grant });
+      writeDrillJson(join(artifactDirectory, 'recipe-seed.json'), recipe);
+      const prepared = await timed('source-membership', () =>
+        normalizeStoredMembership(environment, 256, Date.now() + 180_000));
+      assert.equal(prepared.complete, true);
+      assert.deepEqual(await readMembershipCompletionProof(fuseki), {
+        dataEpoch: lineage.dataEpoch, revision: 'ordered-membership-v1',
+      });
+    }
+    await initializeRelayCheckpoint(owners.relay, apps.MAIN_RELAY_CONSUMER!, lineage.dataEpoch);
+    const drain = async () => {
+      while (await relayMainOutboxOnce(fuseki, owners.relay, apps.MAIN_RELAY_CONSUMER!,
+        { ownerOutbox: environment.receiptCustody })) { /* ordered native custody */ }
+    };
+    await drain();
+    const set = join(build, 'set');
+    const frontier = join(build, 'current-frontier.json');
+    const backup = await timed('backup', () => backupRecoverySet({ out: set, frontier, source,
+      key, recipient: custody.recipient, environment: custody.publicOnly }));
+    context.budget.excludeAdmissionWait(backup.phases.memoryAdmission ?? 0);
+    writeDrillJson(join(artifactDirectory, 'backup-timing.json'), backup);
+    const baseAuthority = await retainedRecoveryAuthority(set, key, custody.offhost);
+    const base = openRecoveryPayload<RecoveryCoverage>(baseAuthority.sealedCoverage, key, 'graph-recovery-coverage');
+    const setDigests = Object.fromEntries(await Promise.all([...artifactNames, 'set.json'].map(async name =>
+      [name, await Bun.file(join(set, name)).bytes().then(bytes => new Bun.CryptoHasher('sha256').update(bytes).digest('hex'))])));
+    const sourceBudget = new RecoveryBudget();
+    const sourceContext = stackContext(source, sourceBudget);
+    await sourceContext.startup(() => sourceContext.compose(['up', '-d', '--wait', 'postgres', 'fuseki', 'rustfs']),
+      { services: ['postgres', 'fuseki', 'rustfs'] });
+    context.budget.excludeAdmissionWait(sourceBudget.timing().admissionWaitMs);
+    // Backup has already reopened the source fence. Read C0 from its immutable
+    // physical artifact, never from the subsequently reopened source or by
+    // rewriting a snapshot fence to resemble the signed cut.
+    const baseDirectory = join(build, 'base-postgres');
+    const baseArchive = join(build, 'base-postgres.tar');
+    const index = openIndex(readFileSync(join(set, 'set.json'), 'utf8'), key);
+    const postgresArtifact = index.artifacts.find(item => item.file === 'postgres.tar.gpg');
+    assert(postgresArtifact);
+    assert.equal(await fileDigest(join(set, postgresArtifact.file)), postgresArtifact.sha256);
+    execFileSync('gpg', ['--batch', '--no-tty', '--output', baseArchive,
+      '--decrypt', join(set, postgresArtifact.file)], { env: custody.offhost, timeout: 180_000 });
+    await assertSafeTar(baseArchive, new RecoveryBudget());
+    mkdirSync(baseDirectory, { mode: 0o700 });
+    execFileSync('tar', ['-xf', baseArchive, '-C', baseDirectory], { timeout: 180_000 });
+    assertRegularTree(baseDirectory);
+    execFileSync('pg_verifybackup', [baseDirectory], { timeout: 180_000 });
+    appendFileSync(join(baseDirectory, 'postgresql.auto.conf'), "\narchive_mode = off\nrestore_command = 'false'\n");
+    writeFileSync(join(baseDirectory, 'recovery.signal'), '', { mode: 0o600 });
+    baseCluster = await startPreparedPostgresCluster(baseDirectory, { role: 'postgres' });
+    const basePools: Record<string, Pool> = {};
+    for (const name of ['access', 'relay']) {
+      const url = administratorUrl({ ...saved, POSTGRES_PORT: String(baseCluster.port) }, name);
+      basePools[name] = new Pool({ connectionString: url, max: 2 });
+      pools.push(basePools[name]!);
+    }
+    assert(base.accessFenceGeneration);
+    assert.deepEqual((await basePools.access!.query(
+      'SELECT open, generation::text FROM access.recovery_fence WHERE id=true')).rows,
+    [{ open: false, generation: base.accessFenceGeneration }]);
+    assert.deepEqual((await owners.access.query(
+      'SELECT open, generation::text FROM access.recovery_fence WHERE id=true')).rows,
+    [{ open: true, generation: (BigInt(base.accessFenceGeneration) + 1n).toString() }]);
+    const app = createMainApp(fuseki, { environment, account: { verify: async () => sample.content.principal },
+      access: registry, content: new ContentCore(owners.content),
+      erasures: new ErasureService(owners.relay, owners.content, owners.access) });
+    const response = await app.handle(new Request('http://main.local/v1/erasures', {
+      method: 'POST', headers: { authorization: 'Bearer qa-source', 'content-type': 'application/json', 'idempotency-key': randomUUID() },
+      body: JSON.stringify({ profile: 'content-revision-erasure-v1', resourceId: sample.works[0],
+        actingSubject: actor, revisionIds: [sample.content.revisionId] }),
+    }));
+    const erasure = await response.json() as { erasureId: string; erasureEpoch: string; replayed: boolean };
+    assert.equal(response.status, 200, `Later public erasure failed: ${JSON.stringify(erasure)}`);
+    assert.equal(erasure.replayed, false);
+    await drain();
+    const currentGeneration = await engageAccessRecoveryFence(owners.access);
+    const baseGeneration = (await basePools.access!.query('SELECT generation::text FROM access.recovery_fence WHERE id=true')).rows[0].generation;
+    assert.equal(currentGeneration, (BigInt(baseGeneration) + 2n).toString());
+    let attachment: EncryptedRecoveryAttachment<AccessErasureRecoverySummary> | undefined;
+    const captureClient = await owners.relay.connect();
+    const current = await preserveRestoreCleanup(async () => {
+    try {
+      await captureClient.query('BEGIN ISOLATION LEVEL READ COMMITTED');
+      await captureClient.query("SELECT pg_advisory_xact_lock(hashtextextended('rezics-relay-erasure-epoch', 0))");
+      const captured = await timed('current-capture', () => captureGraphRecoveryCoverage(fuseki,
+        owners.account, owners.access, owners.relay, apps.MAIN_RELAY_CONSUMER!, owners.content, objects,
+        { fuseki, relayClient: captureClient }, { baseCoverage: base,
+          baseCoverageEnvelope: baseAuthority.sealedCoverage, baseCoverageHmacKey: key,
+          baseAccessPool: basePools.access!, baseRelayPool: basePools.relay!,
+          encryptAttachment: async produce => {
+            attachment = await encryptRecoveryAttachment(custody.recipient, join(build, 'attachments'), produce, custody.publicOnly);
+            return attachment;
+          } }));
+      await captureClient.query('COMMIT');
+      return captured;
+    } catch (error) {
+      return preserveRestoreCleanup(async () => { throw error; }, async () => { await captureClient.query('ROLLBACK'); });
+    }
+    }, () => captureClient.release());
+    assert(current.nativeAccessErasure && attachment);
+    const currentEnvelope = seal(current, key, 'graph-recovery-coverage');
+    await retainRecoveryCoverageHead(owners.relay, currentEnvelope, key, { attachmentDirectory: join(build, 'attachments') });
+    assert.equal(await retainErasureCoverage(owners.relay, apps.MAIN_RELAY_CONSUMER!), erasure.erasureEpoch);
+    const admissionId = (await owners.relay.query('SELECT admission_id FROM relay.erasure WHERE id=$1', [erasure.erasureId])).rows[0].admission_id as string;
+    assert.equal((await basePools.relay!.query('SELECT id FROM relay.erasure WHERE id=$1', [erasure.erasureId])).rowCount, 0);
+    assert.equal((await basePools.access!.query('SELECT id FROM access.admission WHERE id=$1', [admissionId])).rowCount, 0);
+    const original = await readGraphErasureProof(fuseki, lineage, erasure.erasureId, erasure.erasureEpoch, [sample.content.revisionId]);
+    const inspector = createIsolationInspector();
+    const rdfCut = await fuseki.query('SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g ?s ?p ?o');
+    writeFileSync(join(transferRoot, 'rdf-current.json'), stable(rdfCut), { mode: 0o600 });
+    const inventory = recordIndependentRestoreSourceInventory(sourceContext.project, sourceDirectory, apps.MAIN_OBJECT_DIRECTORY!, inspector);
+    writeDrillJson(join(artifactDirectory, 'source-inventory.json'), inventory);
+    sourceContext.compose(['stop', 'fuseki', 'rustfs', 'postgres']);
+    const relay = await exportCurrentRelay(source, join(build, 'retained-relay'));
+    const relayDump = resolve(repositoryRoot, relay.relayDump);
+    for (const [name, digest] of Object.entries(setDigests)) {
+      assert.equal(new Bun.CryptoHasher('sha256').update(await Bun.file(join(set, name)).bytes()).digest('hex'), digest);
+    }
+    closeRecoveryTestCustody(custody);
+    custodyClosed = true;
+    mkdirSync(join(transferRoot, 'set'), { mode: 0o700 });
+    for (const name of [...artifactNames, 'set.json']) cpSync(join(set, name), join(transferRoot, 'set', name));
+    cpSync(frontier, join(transferRoot, 'current-frontier.json'));
+    mkdirSync(join(transferRoot, 'current-relay'), { mode: 0o700 });
+    cpSync(relayDump, join(transferRoot, 'current-relay', 'relay.dump'));
+    cpSync(custody.offhost.GNUPGHOME!, join(transferRoot, 'recipient-keys'), { recursive: true });
+    mkdirSync(join(transferRoot, 'attachments'), { mode: 0o700 });
+    const attachmentName = `${current.nativeAccessErasure.ciphertextDigest}.gpg`;
+    cpSync(attachment.path, join(transferRoot, 'attachments', attachmentName));
+    writeFileSync(join(transferRoot, 'current-authority.json'), currentEnvelope, { mode: 0o600 });
+    writeFileSync(join(transferRoot, 'recovery-hmac.key'), key, { mode: 0o600 });
+    writeFileSync(join(transferRoot, 'native-signing.key'), apps.FUSEKI_TITLE_ADMISSION_KEY!, { mode: 0o600 });
+    const samples: PhysicalRestoreSamples = { source: inventory, project, work: sample.works[0]!,
+      revisionId: sample.content.revisionId, actingSubject: actor, operator: sample.content.principal,
+      erasureId: erasure.erasureId, erasureEpoch: erasure.erasureEpoch, admissionId, original,
+      ...(recipe ? { recipe } : {}) };
+    const encoded = JSON.stringify(samples);
+    writeDrillJson(join(transferRoot, 'expectations.json'), {
+      format: 'rezics-independent-restore-expectations-v1',
+      samples: [{ name: 'erasedRevision', id: samples.revisionId }],
+      values: Array.from({ length: Math.ceil(encoded.length / 4000) }, (_, index) =>
+        ({ name: `sample${index}`, value: encoded.slice(index * 4000, (index + 1) * 4000) })),
+      originalReceiptTuples: [[original.receipt, original.dataEpoch, original.sequence]],
+    });
+    const transfer: IndependentRestoreTransfer = {
+      format: 'rezics-independent-restore-inputs-v1', root: relative(repositoryRoot, transferRoot),
+      inputs: { recoverySet: 'set', currentFrontier: 'current-frontier.json',
+        currentAuthorityCoverage: 'current-authority.json', nativeAccessAttachment: `attachments/${attachmentName}`,
+        currentRelayDump: 'current-relay/relay.dump', recipientPrivateKeyCustody: 'recipient-keys',
+        recoveryHmacKey: 'recovery-hmac.key', retainedNativeSigningMaterial: 'native-signing.key' },
+      expectations: 'expectations.json',
+    };
+    const transferFile = join(transferRoot, 'transfer.json');
+    writeFileSync(transferFile, serializeIndependentRestoreTransfer(transfer), { mode: 0o600 });
+    resolveIndependentRestoreInputs(transfer);
+    writeDrillJson(join(artifactDirectory, 'operator-input-inventory.json'), {
+      transfer, baseArtifactDigests: setDigests, currentCaptureDigest: new Bun.CryptoHasher('sha256').update(currentEnvelope).digest('hex'),
+      attachmentDigest: current.nativeAccessErasure.ciphertextDigest,
+      sourceInventory: inventory, credentials: 'encrypted configuration plus independently retained keys',
+    });
+    await Promise.all(pools.map(pool => pool.end()));
+    pools.length = 0;
+    baseCluster.remove();
+    baseCluster = undefined;
+    disposeIndependentRestoreSource(inventory, sourceContext, inspector);
+    sourceDisposed = true;
+    rmSync(build, { recursive: true, force: true });
+    assertIndependentRestoreSourceAbsent(inventory, inspector);
+    context.budget.remaining();
+    return {
+      metadata: { contract: 'independent-restore-source-v1', withRecipe,
+        transfer, samples, setDigests, currentEnvelope,
+        attachmentDigest: current.nativeAccessErasure.ciphertextDigest },
+      rdfDigest: sha256(stable(rdfCut)),
+      ownerState: { baseArtifactDigests: setDigests, original, admissionId,
+        currentCaptureDigest: sha256(currentEnvelope),
+        attachmentDigest: current.nativeAccessErasure.ciphertextDigest },
+      producerRevision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repositoryRoot, encoding: 'utf8' }).trim(),
+      qaIdentity: Bun.env.REZICS_QA_RUN_ID!, phases: phaseCosts,
+    };
+  }, async () => {
+    const cleanup = await Promise.allSettled([
+      ...pools.map(pool => pool.end()),
+      Promise.resolve().then(() => baseCluster?.remove()),
+      Promise.resolve().then(() => { if (!custodyClosed) closeRecoveryTestCustody(custody); }),
+    ]);
+    for (const runId of [source.runId]) {
+      if (sourceDisposed && runId === source.runId) continue;
+      try {
+        const result = await runQaAdmissionChildAsync(repositoryRoot, 'task', ['stack:reset', '--', '--profile', 'qa', '--run-id', runId, '--persistent'], 180_000);
+        context.budget.excludeAdmissionWait(result.admissionWaitMs);
+        if (!result.ok) await preserveRestoreCleanup(async () => { throw failedCommand(`Stack cleanup failed: ${runId}`, result); }, () => {
+          writeFileSync(join(artifactDirectory, `cleanup-${runId}.log`), result.output, { mode: 0o600 });
+        });
+      } catch (error) { cleanup.push({ status: 'rejected', reason: error }); }
+    }
+    for (const directory of [build]) {
+      try { rmSync(directory, { recursive: true, force: true }); }
+      catch (error) { cleanup.push({ status: 'rejected', reason: error }); }
+    }
+    const failures = cleanup.flatMap(result => result.status === 'rejected' ? [result.reason] : []);
+    if (failures.length) throw new AggregateError(failures, 'Independent restore cleanup failed', { cause: failures[0] });
+  });
+}
+
+type IndependentCandidate = { directory: string; transferFile: string; transfer: IndependentRestoreTransfer };
+
+/** The producer owns cut/capture; consumers only verify custody and copy bytes. */
+export function independentRestoreSourceAdapter(withRecipe: boolean,
+  compatibility: RetainedOwnerState = JSON.parse(JSON.stringify({ engines: currentEngines(dockerEnvironment()),
+    modelGeneration: fixtureModel(repositoryRoot).generation,
+    postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+): RetainedSourceAdapter<RetainedOwnerState, IndependentCandidate> {
+  const modules = producerModules(repositoryRoot, [
+    'tests/qa/fault-recovery/independent-restore-support.ts',
+    'tests/qa/fault-recovery/g-727-recovery-checks.ts',
+    'scripts/dev/cli.ts', 'scripts/fixture/cli.ts',
+    'infra/dev/compose.yaml', 'infra/dev/postgres/00-owners.sh',
+    'yarn.lock', 'package.json',
+  ]);
+  return {
+    specification: {
+      producer: withRecipe ? 'independent-recipe-source' : 'independent-authority-source', version: '1',
+      files: { ...sourceFileDigests(repositoryRoot, modules), ...migrationInventory(repositoryRoot) },
+      inputs: { withRecipe },
+      compatibility,
+    },
+    build: async context => {
+      const result = await produceIndependentRestoreSource(withRecipe, context);
+      return { ...result, metadata: JSON.parse(JSON.stringify(result.metadata)) as RetainedOwnerState,
+        ownerState: JSON.parse(JSON.stringify(result.ownerState)) as RetainedOwnerState };
+    },
+    verify: async (context, manifest) => {
+      const evidence: string[] = [];
+      const metadata = manifest.metadata;
+      if (metadata.contract !== 'independent-restore-source-v1' || metadata.withRecipe !== withRecipe)
+        evidence.push('independent source contract differs');
+      const transfer = assertIndependentRestoreTransfer(JSON.parse(readFileSync(join(context.backup, 'transfer.json'), 'utf8')));
+      if (stable(transfer) !== stable(metadata.transfer)) evidence.push('transfer descriptor differs');
+      // Validate physical bytes at their retained location, never the producer's old root.
+      const inputs = resolveIndependentRestoreInputs({ ...transfer, root: relative(repositoryRoot, context.backup) });
+      const samples = physicalRestoreSamples(inputs.expectations);
+      if (stable(samples) !== stable(metadata.samples)) evidence.push('expected source samples differ');
+      assertIndependentRestoreSourceAbsent(samples.source, createIsolationInspector());
+      if (await fileDigest(join(context.backup, 'rdf-current.json')) !== manifest.integrity.rdfDigest)
+        evidence.push('retained RDF digest differs');
+      const digests = metadata.setDigests as Record<string, string>;
+      if (stable(digests) !== stable(manifest.integrity.ownerState.baseArtifactDigests))
+        evidence.push('base artifact custody differs');
+      for (const name of [...artifactNames, 'set.json'])
+        if (await fileDigest(join(inputs.recoverySet, name)) !== digests[name]) evidence.push(`base artifact differs: ${name}`);
+      if (sha256(readFileSync(inputs.currentAuthorityCoverage, 'utf8')) !== manifest.integrity.ownerState.currentCaptureDigest)
+        evidence.push('current authority custody differs');
+      if (await fileDigest(inputs.nativeAccessAttachment) !== manifest.integrity.ownerState.attachmentDigest)
+        evidence.push('native Access attachment custody differs');
+      return evidence;
+    },
+    restore: async (context, manifest) => {
+      const directory = join(repositoryRoot, '.temp', 'ops', `ind-copy-${randomUUID()}`);
+      try {
+        cpSync(context.backup, directory, { recursive: true, errorOnExist: true, force: false });
+        const transfer = { ...(manifest.metadata.transfer as unknown as IndependentRestoreTransfer),
+          root: relative(repositoryRoot, directory) };
+        // A writable copy gets its own target identity; original receipts stay exact.
+        const samples = physicalRestoreSamples(join(directory, transfer.expectations));
+        samples.project = `rezics-qa-ind-${randomUUID().replaceAll('-', '').slice(0, 10)}`;
+        writePhysicalRestoreSamples(join(directory, transfer.expectations), samples);
+        const transferFile = join(directory, 'transfer.json');
+        writeFileSync(transferFile, serializeIndependentRestoreTransfer(transfer), { mode: 0o600 });
+        resolveIndependentRestoreInputs(transfer);
+        context.budget.remaining();
+        return { directory, transferFile, transfer };
+      } catch (error) {
+        return preserveRestoreCleanup(async () => { throw error; }, () => rmSync(directory, { recursive: true, force: true }));
+      }
+    },
+    dispose: async candidate => {
+      const samples = physicalRestoreSamples(join(candidate.directory, candidate.transfer.expectations));
+      for (const project of [samples.project, `${samples.project}-held`]) {
+        const result = await runQaAdmissionChildAsync(repositoryRoot, 'task',
+          ['stack:reset', '--', '--profile', 'qa', '--run-id', project.slice('rezics-qa-'.length), '--persistent'], 180_000);
+        if (!result.ok) throw failedCommand(`Stack cleanup failed: ${project}`, result);
+      }
+      rmSync(candidate.directory, { recursive: true, force: true });
+    },
+    // All custody is in backup files; the lifecycle removes staging itself.
+    remove: async () => {},
+  };
+}
+
+function writePhysicalRestoreSamples(path: string, samples: PhysicalRestoreSamples): void {
+  const encoded = JSON.stringify(samples);
+  writeDrillJson(path, {
+    format: 'rezics-independent-restore-expectations-v1',
+    samples: [{ name: 'erasedRevision', id: samples.revisionId }],
+    values: Array.from({ length: Math.ceil(encoded.length / 4000) }, (_, index) =>
+      ({ name: `sample${index}`, value: encoded.slice(index * 4000, (index + 1) * 4000) })),
+    originalReceiptTuples: [[samples.original.receipt, samples.original.dataEpoch, samples.original.sequence]],
+  });
+}
+
+/** Restore never prepares, supplements or reseals retained custody. */
+export async function runIndependentRestoreDrill(withRecipe: boolean, refusalsOnly = false): Promise<void> {
+  if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.REZICS_QA_ARTIFACT_DIR)
+    throw new Error('Run through the isolated fault/recovery QA tier');
+  const artifactDirectory = join(Bun.env.REZICS_QA_ARTIFACT_DIR,
+    refusalsOnly ? 'independent-refusals' : withRecipe ? 'independent-restore' : 'independent-authority');
+  mkdirSync(artifactDirectory, { recursive: true, mode: 0o700 });
+  const adapter = independentRestoreSourceAdapter(withRecipe);
+  const selectedKey = process.env.INDEPENDENT_RESTORE_SOURCE_KEY;
+  if (selectedKey !== undefined && selectedKey !== sourceKey(adapter.specification))
+    throw new RetainedSourceRefusal(selectedKey, ['harness selected incompatible independent source']);
+  const restored = await new RetainedSources().restore(adapter);
+  writeDrillJson(join(artifactDirectory, 'retained-source.json'), {
+    key: restored.manifest.key, digest: restored.manifest.digest,
+    elapsedMs: restored.elapsedMs, admissionWaitMs: restored.admissionWaitMs,
+  });
+  await preserveRestoreCleanup(async () => {
+    const { directory, transferFile, transfer } = restored.candidate;
+    const inputs = resolveIndependentRestoreInputs(transfer);
+    const inventory = physicalRestoreSamples(inputs.expectations).source;
+    const inspector = createIsolationInspector();
+    const childEnvironment = preserveReapEnvironment(createIndependentRestoreChildEnvironment(process.env, inputs));
+    const childScript = join(directory, 'restore-child.ts');
+    writeFileSync(childScript, `import { runIndependentRestoreChild, recordIndependentRestoreChildFailure } from ${JSON.stringify(import.meta.path)};\nawait recordIndependentRestoreChildFailure(process.argv[5]!, () => runIndependentRestoreChild(process.argv[2]!, process.argv[3]!, process.argv[4] === 'missing'));\n`, { mode: 0o600 });
+    const phases = join(artifactDirectory, 'source-phases.jsonl');
+    for (const mode of refusalsOnly ? ['missing'] : withRecipe ? ['positive'] : ['missing', 'positive']) {
+      assertIndependentRestoreSourceAbsent(inventory, inspector);
+      const at = Date.now();
+      const failureFile = join(artifactDirectory, `child-${mode}-failure.json`);
+      const result = await runQaAdmissionChildAsync(repositoryRoot, 'bun',
+        [childScript, transferFile, artifactDirectory, mode, failureFile], 180_000, childEnvironment);
+      appendFileSync(phases, `${JSON.stringify({ name: `child-${mode}`, elapsedMs: result.activeElapsedMs,
+        admissionWaitMs: result.admissionWaitMs, wallMs: Date.now() - at })}\n`, { mode: 0o600 });
+      writeFileSync(join(artifactDirectory, `child-${mode}.log`), result.output, { mode: 0o600 });
+      if (!result.ok) throw new Error(`Independent restore child ${mode} failed: ${result.output.slice(-5000)}`,
+        { cause: existsSync(failureFile) ? readIndependentRestoreChildFailure(failureFile)
+          : failedCommand('Restore child terminated before recording its failure', result) });
+    }
+  }, () => restored.dispose());
+}
+
+if (import.meta.main) {
+  const evidenceIndex = process.argv.indexOf('--evidence');
+  if (!process.argv.includes('--prepare-retained-source') || evidenceIndex < 0 || !process.argv[evidenceIndex + 1])
+    throw new Error('select --prepare-retained-source --evidence <path>');
+  const adapter = independentRestoreSourceAdapter(process.argv.includes('--recipe'));
+  const sources = new RetainedSources();
+  const selected = process.argv.includes('--retained-only');
+  const report = selected ? { manifest: await sources.select(adapter), built: false }
+    : await sources.prepare(adapter);
+  writeDrillJson(process.argv[evidenceIndex + 1]!, report);
 }

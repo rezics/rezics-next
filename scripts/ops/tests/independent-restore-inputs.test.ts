@@ -5,18 +5,24 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   unlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { artifactNames } from '../recovery-set.ts';
+import { artifactNames, RecoveryRefusal } from '../recovery-set.ts';
+import { isOwnerTransientFailure } from '../../../services/main/src/infrastructure/owner-failure.ts';
 import {
   assertCurrentRelayTransfer,
   assertIndependentRestoreTransfer,
   createIndependentRestoreChildEnvironment,
   currentRelayTransferForDump,
   importCurrentRelay,
+  preserveRestoreCleanup,
+  findRecoveryRefusal,
+  recordIndependentRestoreChildFailure,
+  readIndependentRestoreChildFailure,
   resolveIndependentRestoreInputs,
   serializeIndependentRestoreTransfer,
   type IndependentRestoreTransfer,
@@ -28,6 +34,66 @@ const opsTemp = join(repositoryRoot, '.temp', 'ops');
 
 mkdirSync(opsTemp, { recursive: true, mode: 0o700 });
 
+test('restore verification stays primary when worker shutdown also fails', async () => {
+  const transport = Object.assign(new Error('connection lost'), { code: 'ECONNRESET' });
+  const primary = new Error('verification failed', { cause: transport });
+  const shutdown = new Error('Production worker shutdown exceeded 15 seconds');
+  let failure: unknown;
+  try {
+    await preserveRestoreCleanup(async () => { throw primary; }, () => { throw shutdown; });
+  } catch (error) { failure = error; }
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as AggregateError).cause).toBe(primary);
+  expect((failure as AggregateError).errors).toEqual([primary, shutdown]);
+  expect(isOwnerTransientFailure(failure)).toBe(true);
+  await expect(preserveRestoreCleanup(async () => {}, () => { throw shutdown; })).rejects.toBe(shutdown);
+  await expect(preserveRestoreCleanup(async () => { throw primary; }, () => {})).rejects.toBe(primary);
+});
+
+test('missing-custody refusal is found through wrappers and cleanup without treating plain messages as refusals', () => {
+  const refusal = new RecoveryRefusal('owner-reconciliation-refused', 'custody unavailable');
+  const wrapped = new Error('Full restore finish failed', { cause: refusal });
+  expect(findRecoveryRefusal(new AggregateError([wrapped, new Error('shutdown')], 'cleanup', { cause: wrapped }))).toBe(refusal);
+  expect(findRecoveryRefusal(new Error('owner-reconciliation-refused'))).toBeUndefined();
+  const cycle = new Error('cycle');
+  cycle.cause = cycle;
+  expect(findRecoveryRefusal(cycle)).toBeUndefined();
+});
+
+test.each(['ECONNRESET', 'ECONNREFUSED'])('restore child transfers %s through a structured failure cause chain', async code => {
+  const directory = mkdtempSync(join(opsTemp, 'restore-failure-'));
+  try {
+    const failureFile = join(directory, 'failure.json');
+    const childScript = join(directory, 'failure-child.ts');
+    const support = resolve(repositoryRoot, 'tests/qa/fault-recovery/independent-restore-support.ts');
+    writeFileSync(childScript, `import { recordIndependentRestoreChildFailure } from ${JSON.stringify(support)};\nawait recordIndependentRestoreChildFailure(process.argv[2]!, async () => { throw new Error('restore verification failed', { cause: Object.assign(new Error('transport failed'), { code: process.argv[3] }) }); });\n`);
+    expect(() => execFileSync('bun', [childScript, failureFile, code], { timeout: 30_000, stdio: 'pipe' })).toThrow();
+    const record = JSON.parse(readFileSync(failureFile, 'utf8'));
+    expect(record).toMatchObject({ name: 'Error', message: 'restore verification failed',
+      cause: { name: 'Error', message: 'transport failed', code } });
+    const rebuilt = readIndependentRestoreChildFailure(failureFile);
+    expect(isOwnerTransientFailure(new Error('child failed', { cause: rebuilt }))).toBe(true);
+    expect(rebuilt.cause).toMatchObject({ code });
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
+test('child records input and cleanup failures and retains deterministic failures', async () => {
+  const directory = mkdtempSync(join(opsTemp, 'restore-failure-'));
+  try {
+    const failureFile = join(directory, 'failure.json');
+    const primary = new RecoveryRefusal('owner-reconciliation-refused', 'custody missing');
+    await expect(recordIndependentRestoreChildFailure(failureFile, () =>
+      preserveRestoreCleanup(async () => { throw primary; }, () => { throw new Error('cleanup failed'); }),
+    )).rejects.toBeInstanceOf(AggregateError);
+    const failure = readIndependentRestoreChildFailure(failureFile) as AggregateError;
+    expect(failure.cause).toMatchObject({ name: 'RecoveryRefusal', code: primary.code });
+    expect(findRecoveryRefusal(failure)).toBeInstanceOf(RecoveryRefusal);
+    expect(failure.errors).toHaveLength(2);
+    expect(failure.errors[0]).toBeInstanceOf(RecoveryRefusal);
+    expect(isOwnerTransientFailure(failure)).toBe(false);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
+
 function preparedInputs() {
   const directory = mkdtempSync(join(opsTemp, 'independent-inputs-'));
   const recoverySet = join(directory, 'set');
@@ -37,6 +103,11 @@ function preparedInputs() {
   writeFileSync(join(keyCustody, 'private-key-custody'), 'opaque transferred key material', { mode: 0o600 });
   for (const name of [...artifactNames, 'set.json']) writeFileSync(join(recoverySet, name), 'artifact');
   writeFileSync(join(directory, 'frontier.json'), 'frontier');
+  writeFileSync(join(directory, 'current-authority.json'), 'signed current capture');
+  mkdirSync(join(directory, 'native-access-custody'), { mode: 0o700 });
+  writeFileSync(join(directory, 'native-access-custody', 'attachment.gpg'), 'encrypted native additions', {
+    mode: 0o600,
+  });
   writeFileSync(join(directory, 'relay.dump'), 'dump');
   writeFileSync(join(directory, 'recovery-hmac.key'), 'hmac', { mode: 0o600 });
   writeFileSync(join(directory, 'native-signing.key'), 'signing', { mode: 0o600 });
@@ -56,6 +127,8 @@ function preparedInputs() {
     inputs: {
       recoverySet: 'set',
       currentFrontier: 'frontier.json',
+      currentAuthorityCoverage: 'current-authority.json',
+      nativeAccessAttachment: 'native-access-custody/attachment.gpg',
       currentRelayDump: 'relay.dump',
       recipientPrivateKeyCustody: 'recipient-key-custody',
       recoveryHmacKey: 'recovery-hmac.key',
@@ -72,6 +145,8 @@ test('independent restore transfer fails closed when a required retained input i
     expect(() => resolveIndependentRestoreInputs(fixture.transfer)).not.toThrow();
     const requiredFiles = [
       join(fixture.directory, 'frontier.json'),
+      join(fixture.directory, 'current-authority.json'),
+      join(fixture.directory, 'native-access-custody', 'attachment.gpg'),
       join(fixture.directory, 'relay.dump'),
       join(fixture.directory, 'recipient-key-custody', 'private-key-custody'),
       join(fixture.directory, 'recovery-hmac.key'),
@@ -87,6 +162,121 @@ test('independent restore transfer fails closed when a required retained input i
     }
   } finally {
     rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('current authority and native Access custody round-trip separately from the immutable base', () => {
+  const fixture = preparedInputs();
+  try {
+    const baseBytes = new Map(
+      [...artifactNames, 'set.json'].map((name) => [
+        name,
+        readFileSync(join(fixture.directory, 'set', name)),
+      ]),
+    );
+    const transfer = assertIndependentRestoreTransfer(
+      JSON.parse(serializeIndependentRestoreTransfer(fixture.transfer)) as unknown,
+    );
+    const resolved = resolveIndependentRestoreInputs(transfer);
+    expect(resolved.currentAuthorityCoverage).toBe(join(fixture.directory, 'current-authority.json'));
+    expect(resolved.nativeAccessAttachment).toBe(
+      join(fixture.directory, 'native-access-custody', 'attachment.gpg'),
+    );
+    expect(readFileSync(resolved.currentAuthorityCoverage, 'utf8')).toBe('signed current capture');
+    expect(readFileSync(resolved.nativeAccessAttachment, 'utf8')).toBe('encrypted native additions');
+    for (const [name, bytes] of baseBytes) {
+      expect(readFileSync(join(resolved.recoverySet, name))).toEqual(bytes);
+    }
+  } finally {
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('current transfer inputs are required, strictly allowlisted data paths', () => {
+  const fixture = preparedInputs();
+  try {
+    for (const name of ['currentAuthorityCoverage', 'nativeAccessAttachment'] as const) {
+      const inputs: Record<string, unknown> = { ...fixture.transfer.inputs };
+      delete inputs[name];
+      expect(() => assertIndependentRestoreTransfer({ ...fixture.transfer, inputs })).toThrow(
+        'not allowlisted',
+      );
+      for (const path of [
+        null,
+        {},
+        () => 'source',
+        '',
+        '/source/current',
+        'C:\\source\\current',
+        '../current',
+        'custody/../../current',
+        './current',
+        'custody//current',
+        'custody\\current',
+        'current\0',
+        ' current',
+      ]) {
+        expect(() =>
+          serializeIndependentRestoreTransfer({
+            ...fixture.transfer,
+            inputs: { ...fixture.transfer.inputs, [name]: path },
+          }),
+        ).toThrow('relative path');
+      }
+    }
+    for (const name of [
+      'sourcePool',
+      'sourceEnvironment',
+      'sourceKeyring',
+      'decryptAttachment',
+      'authorityOverride',
+    ]) {
+      expect(() =>
+        serializeIndependentRestoreTransfer({
+          ...fixture.transfer,
+          inputs: { ...fixture.transfer.inputs, [name]: '/source/custody' },
+        }),
+      ).toThrow('not allowlisted');
+    }
+  } finally {
+    rmSync(fixture.directory, { recursive: true, force: true });
+  }
+});
+
+test('current capture and attachment refuse empty, non-file, linked or escaped custody', () => {
+  const fixture = preparedInputs();
+  const outside = mkdtempSync(join(opsTemp, 'outside-inputs-'));
+  try {
+    const outsideFile = join(outside, 'current');
+    writeFileSync(outsideFile, 'outside custody');
+    mkdirSync(join(fixture.directory, 'not-a-file'));
+    symlinkSync(outsideFile, join(fixture.directory, 'file-link'));
+    symlinkSync(outside, join(fixture.directory, 'directory-link'));
+    symlinkSync(
+      join(fixture.directory, 'current-authority.json'),
+      join(fixture.directory, 'internal-link'),
+    );
+    writeFileSync(join(fixture.directory, 'empty'), '');
+    for (const name of ['currentAuthorityCoverage', 'nativeAccessAttachment'] as const) {
+      for (const [path, error] of [
+        ['empty', 'is empty'],
+        ['not-a-file', 'regular file'],
+        ['file-link', 'symbolic link'],
+        ['internal-link', 'symbolic link'],
+        ['directory-link/current', 'outside the recovery root'],
+        ['set/postgres.tar.gpg', 'outside the recovery set'],
+      ]) {
+        expect(() =>
+          resolveIndependentRestoreInputs({
+            ...fixture.transfer,
+            inputs: { ...fixture.transfer.inputs, [name]: path },
+          }),
+        ).toThrow(error);
+      }
+    }
+  } finally {
+    rmSync(fixture.directory, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });
 

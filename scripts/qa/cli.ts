@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { ownerErasurePreparationOptions } from './retained-source.ts';
+import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
 import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-source.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -720,6 +720,32 @@ async function runShardWork(
   // Verify retained custody before the operation-file clock, without running its producer.
   // Each shard selects the same keyed source and restores only an isolated consumer.
   if (tier === 'fault/recovery') {
+    for (const file of files) {
+      const selected = independentRestorePreparationOptions(file);
+      if (!selected) continue;
+      const evidence = join(directory, `independent-source-${label}.json`);
+      const prepared = await commandAsync(root, 'bun', [
+        'tests/qa/fault-recovery/independent-restore-support.ts', '--prepare-retained-source', '--retained-only', '--evidence', evidence,
+        ...(selected.withRecipe ? ['--recipe'] : []),
+      ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
+        REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
+      writeFileSync(join(logs, `${label}-independent-source.log`), prepared.output);
+      writeFileSync(join(directory, `independent-selection-${label}.json`), JSON.stringify({
+        deadlineMs: 600_000, activeElapsedMs: prepared.activeElapsedMs,
+        admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
+      }));
+      if (!prepared.ok) {
+        errors.push(`independent source selection failed before operation clock (${label})`);
+        return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
+          xml: xmlForCommand(tier, false, prepared.activeElapsedMs, prepared.output) });
+      }
+      const report = JSON.parse(readFileSync(evidence, 'utf8')) as { manifest: { key: string } };
+      if (environment.INDEPENDENT_RESTORE_SOURCE_KEY !== undefined
+        && environment.INDEPENDENT_RESTORE_SOURCE_KEY !== report.manifest.key)
+        throw new Error('supplied independent source key is incompatible');
+      environment.INDEPENDENT_RESTORE_SOURCE_KEY = report.manifest.key;
+      environment.REZICS_FIXTURE_ROOT ??= join(root, '.temp', 'fixture');
+    }
     const preparations = new Map(files.flatMap(file => {
       const selected = ownerErasurePreparationOptions(file);
       return selected ? [[String(selected.laterApiAdmission), selected] as const] : [];
@@ -1045,6 +1071,9 @@ async function runStackTier(tier: StackTier): Promise<void> {
           'tests/qa/fault-recovery/erasure-restore.test.ts',
           'tests/qa/fault-recovery/erasure-restore-corruption.test.ts',
           'tests/qa/fault-recovery/erasure-restore-release.test.ts',
+          'tests/qa/fault-recovery/independent-restore.test.ts',
+          'tests/qa/fault-recovery/independent-restore-authority.test.ts',
+          'tests/qa/fault-recovery/independent-restore-refusals.test.ts',
         ].includes(files[0]!) ? 600_000 : exclusivePreparationWallMs(files) ?? budget;
     // Integration and fault/recovery queue more projects than slots; each keeps its own deadline.
     // The campaign project's wall is the sum of its two measured phases.

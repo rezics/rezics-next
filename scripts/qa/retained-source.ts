@@ -14,6 +14,14 @@ export const SOURCE_RESTORE_MS = 600_000;
  * Only this namespace is managed: historical corpus/Content/crash backups are never pruned. */
 export const SOURCES_PER_PRODUCER = 2;
 
+/** Physical artifact-only consumers select the matching prepared source. */
+export function independentRestorePreparationOptions(file: string): { withRecipe: boolean } | undefined {
+  if (file === 'tests/qa/fault-recovery/independent-restore.test.ts') return { withRecipe: true };
+  if (file === 'tests/qa/fault-recovery/independent-restore-authority.test.ts'
+    || file === 'tests/qa/fault-recovery/independent-restore-refusals.test.ts') return { withRecipe: false };
+  return undefined;
+}
+
 /** Harness selection is explicit: callbacks have their own declared preparation adapter. */
 export function ownerErasurePreparationOptions(file: string): { laterApiAdmission: boolean } | undefined {
   const defaultNames = ['production', 'completion', 'closure', 'authority', 'interruption', 'transition', 'source-closure'];

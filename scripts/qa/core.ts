@@ -1030,6 +1030,9 @@ export const serialRestoreDrillFiles = [
   'tests/qa/fault-recovery/owner-restore-erasure-later-admission-interruption.test.ts',
   'tests/qa/fault-recovery/owner-restore-erasure-later-admission-denials.test.ts',
   'tests/qa/fault-recovery/second-host-format-upgrade.test.ts',
+  'tests/qa/fault-recovery/independent-restore.test.ts',
+  'tests/qa/fault-recovery/independent-restore-authority.test.ts',
+  'tests/qa/fault-recovery/independent-restore-refusals.test.ts',
 ] as const;
 
 export const isolatedFaultFiles = new Set([
@@ -1054,6 +1057,10 @@ export const isolatedFaultFiles = new Set([
 // bootstrapped project held open by the shard harness.
 // Native resources have no admission event; protocol workers defer their lease to startup.
 export const selfManagedFaultAdmission = new Map<string, 'host' | 'startup'>([
+  // Their independently retained relay imports into native PostgreSQL before Docker startup.
+  ['tests/qa/fault-recovery/independent-restore.test.ts', 'host'],
+  ['tests/qa/fault-recovery/independent-restore-authority.test.ts', 'host'],
+  ['tests/qa/fault-recovery/independent-restore-refusals.test.ts', 'host'],
   ['tests/qa/fault-recovery/crash-fence-contract.test.ts', 'startup'],
   ['services/account/tests/account-pitr.integration.test.ts', 'host'],
   ['services/account/tests/account-access-recovery.integration.test.ts', 'host'],

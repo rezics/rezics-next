@@ -1,9 +1,9 @@
 import { expect, test } from 'bun:test';
 import { existsSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { planShards, planStackProjects, serialRestoreDrillFiles, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
+import { planShards, planStackProjects, selfManagedFaultAdmission, serialRestoreDrillFiles, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
 import { restoreDrillSchedule } from '../../../scripts/qa/preparation-selection.ts';
-import { ownerErasurePreparationOptions } from '../../../scripts/qa/retained-source.ts';
+import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from '../../../scripts/qa/retained-source.ts';
 import {
   integrationBudgetSummary,
   integrationOverBudgetFiles,
@@ -24,7 +24,8 @@ test('restore registration names executable files and selects singleton consumer
   for (const file of serialRestoreDrillFiles) expect(existsSync(resolve(root, file))).toBe(true);
   for (const name of readdirSync(resolve(root, 'tests/qa/fault-recovery'))) {
     const file = `tests/qa/fault-recovery/${name}`;
-    if (ownerErasurePreparationOptions(file)) expect(serialRestoreDrillFiles as readonly string[]).toContain(file);
+    if (ownerErasurePreparationOptions(file) || independentRestorePreparationOptions(file))
+      expect(serialRestoreDrillFiles as readonly string[]).toContain(file);
   }
   const ordinary = ['tests/qa/fault-recovery/ordinary-a.test.ts', 'tests/qa/fault-recovery/ordinary-b.test.ts'];
   // Reverse duration order so the plan cannot accidentally rely on longest-first packing.
@@ -39,6 +40,21 @@ test('restore registration names executable files and selects singleton consumer
   expect(restoreDrillSchedule([partial], serialRestoreDrillFiles)).toEqual({
     parallel: [], serial: [[serialRestoreDrillFiles[0]], [serialRestoreDrillFiles[3]]],
   });
+});
+
+test('all three independent artifact-only targets are serial self-managed host-admitted consumers', () => {
+  const targets = ['independent-restore', 'independent-restore-authority', 'independent-restore-refusals']
+    .map(name => `tests/qa/fault-recovery/${name}.test.ts`);
+  expect(targets.map(independentRestorePreparationOptions)).toEqual([
+    { withRecipe: true }, { withRecipe: false }, { withRecipe: false },
+  ]);
+  expect(independentRestorePreparationOptions('tests/qa/fault-recovery/independent-restore-support.ts')).toBeUndefined();
+  for (const file of targets) {
+    expect(serialRestoreDrillFiles as readonly string[]).toContain(file);
+    expect(selfManagedFaultAdmission.get(file)).toBe('host');
+  }
+  expect(restoreDrillSchedule(planStackProjects(new Map(targets.map(file => [file, 1])), 3, 'fault/recovery'),
+    serialRestoreDrillFiles)).toEqual({ parallel: [], serial: targets.map(file => [file]) });
 });
 
 test('existing queue consumes scheduled restores one at a time with a fresh unchanged command budget', async () => {
