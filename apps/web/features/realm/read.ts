@@ -1,14 +1,13 @@
 import { cache } from 'react';
-import { recordedReplayGap, settleFrame, zonePresentationReads, type RealmFrameRead } from './zone-presentation-read.ts';
-export type { RealmFrameRead } from './zone-presentation-read.ts';
+import { recordedReplayGap, realmFrameReads, type RealmFrameRead, type RealmResolution, type SiteResolution } from './zone-presentation-read.ts';
+export type { RealmFrameRead, RealmResolution, SiteResolution } from './zone-presentation-read.ts';
+export { realmFrameReads } from './zone-presentation-read.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken, readPlatformAccess } from '../api/main.ts';
 import { operationOpen } from '../api/platform-access.ts';
-import { idOf } from './route.ts';
 import { SPACE_MISSING_HEADER } from './missing.ts';
 import { resolveAddress } from '../address/server.ts';
-import { addressKey } from '../address/path.ts';
-import { resolvedAddress, type AddressRead, type ResolvedAddress } from '../address/client.ts';
+import type { ResolvedAddress } from '../address/client.ts';
 import type { MainClient } from '../discover/types.ts';
 import { isOfflineError } from '../feed/types.ts';
 import { cookies, headers } from 'next/headers';
@@ -16,7 +15,6 @@ import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { sessionAgentState, sessionReadSubject } from '../auth/session.ts';
 import { displayLanguages } from '../../i18n/display-languages.ts';
 import { readSpacePage } from '../address/space-read.ts';
-import type { JoinPage } from '../manage/settings-api.ts';
 import { readBrowseAnswer, settleRealmRead as settle } from './browse-page-read.ts';
 import {
   type AgentRead,
@@ -56,159 +54,9 @@ const readerMain = cache(async () => {
   return { main: mainApiWithToken(actingSubject ? token : undefined), actingSubject };
 });
 
-export type RealmResolution =
-  | {
-      kind: 'realm';
-      ref: string;
-      realm: string;
-      header: RealmHeader;
-      zone: { id: string; segment: string | null } | null;
-      /** The attached Zone may occupy a different Space from this Realm. */
-      siteRef?: string;
-    }
-  | { kind: 'missing' }
-  | { kind: 'join'; page: JoinPage }
-  | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
-
 /** Public header adapter retained for rules readers and their recorded surfaces. */
 export function readPublishedRealmHeader(client: MainClient, realm: string, keepProblem = false): Promise<RealmFrameRead<RealmHeader>> {
   return realmFrameReads({ main: client, keepProblem }).readRealmHeader(realm);
-}
-
-export type SiteResolution =
-  | { kind: 'site'; address: ResolvedAddress; zone: string; realm: string | null }
-  | { kind: 'join'; page: JoinPage }
-  | { kind: 'missing' }
-  | { kind: 'unavailable'; failure?: ReadFailure; reference?: string };
-
-/**
- * The shared frame reader. Public reads use main; member-readable presentation,
- * and routes use personal with the eligible acting subject.
- * Host address admission and private landing adapters retain their request caches,
- * language headers and conditional requests at the production boundary.
- */
-export function realmFrameReads({ main, personal = main, actingSubject, resolution, keepProblem = true }: {
-  main: MainClient;
-  personal?: MainClient;
-  actingSubject?: string;
-  /** Production keeps its existing Loaded contract; recorded frames retain the HTTP problem. */
-  keepProblem?: boolean;
-  resolution?: {
-    resolveAddress?: typeof resolveAddress;
-    readPrivateRealm?: typeof readPrivateRealm;
-    readRealmHeader?: typeof readRealmHeader;
-    readCompletePresentation?: typeof readCompletePresentation;
-  };
-}) {
-  const presentation = zonePresentationReads(personal, actingSubject, keepProblem);
-  const readRealmHeader = (realm: string): Promise<RealmFrameRead<RealmHeader>> =>
-    settleFrame(() => main.v1.realms({ realm }).get({ query: {} }), undefined, keepProblem);
-  const readHeader = resolution?.readRealmHeader ?? ((realm: string, _locale: UiLocale) => readRealmHeader(realm));
-  const readPublication = resolution?.readCompletePresentation
-    ?? presentation.readCompletePresentation;
-  const resolve = resolution?.resolveAddress ?? (async (_scope: 'space', key: string, _locale: UiLocale, _fresh = false): Promise<AddressRead> => {
-    try {
-      const answer = await main.v1.addresses.resolve.get({ query: { scope: 'space', key } });
-      if (answer.error) {
-        if (!answer.response && answer.error.value instanceof Error) throw answer.error.value;
-        const status = Number(answer.error.status);
-        if ([400, 404, 422].includes(status)) return { kind: 'missing' };
-        if (status === 410) return { kind: 'retired' };
-        if (status === 429) {
-          const seconds = Number(answer.response.headers.get('retry-after'));
-          return { kind: 'unavailable', status: 429,
-            retryAfter: String(Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : 60) };
-        }
-        return { kind: 'unavailable' };
-      }
-      const data = resolvedAddress(answer.data);
-      return data?.scope === 'space' ? { kind: 'resolved', data } : { kind: 'unavailable' };
-    } catch (error) {
-      if (recordedReplayGap(error)) throw error;
-      return isOfflineError(error) ? { kind: 'unavailable', failure: 'offline' } : { kind: 'unavailable' };
-    }
-  });
-  // Private landing belongs to the existing address reader. Replay must supply
-  // its supporting read explicitly rather than enter the host's session boundary.
-  const privateRealm = resolution?.readPrivateRealm ?? (async (ref: string) => {
-    throw new Error(`Missing supporting Realm frame private-resolution reader: ${ref}`);
-  });
-  return {
-    readRealmHeader,
-    readRealmZone: (realm: string): Promise<RealmFrameRead<RealmZoneRead>> =>
-      settleFrame(() => personal.v1.realms({ realm }).zone.get({ query: { actingSubject } }), undefined, keepProblem),
-    readFacets: (): Promise<RealmFrameRead<FacetList>> => settleFrame(() => main.v1.facets.get(), undefined, keepProblem),
-    readAddress: (ref: string, locale: UiLocale, fresh = false) => resolve('space', ref, locale, fresh),
-    ...presentation,
-    readZoneRoute: (zone: string, path: string, cursor?: string): Promise<RealmFrameRead<ZoneRouteRead>> =>
-      settleFrame(() => personal.v1.zones({ id: zone }).routes.get({ query: { actingSubject, path, cursor } }), cursor),
-    resolveRealm: async (ref: string, locale: UiLocale, surface: 'community' | 'site' = 'community'): Promise<RealmResolution> => {
-      const resolved = await resolve('space', ref, locale);
-      if (resolved.kind !== 'resolved') {
-        if (resolved.kind !== 'missing')
-          return resolved.kind === 'unavailable'
-            ? { kind: 'unavailable', ...(resolved.failure ? { failure: resolved.failure } : {}) }
-            : { kind: 'missing' };
-        const fallback = await privateRealm(ref, locale);
-        if (fallback.kind !== 'realm') return fallback;
-        // Keep an admitted legacy identity when no public landing address exists;
-        // never guess a Zone or Space name from a private header.
-        return {
-          kind: 'realm',
-          ref,
-          realm: idOf(fallback.header.id)!,
-          header: fallback.header,
-          zone: null,
-        };
-      }
-      const zoneId = idOf(resolved.data.capabilities?.zone ?? '');
-      let realm = idOf(resolved.data.capabilities?.realm ?? '');
-      const attached = zoneId && (surface === 'site' || !realm);
-      if (attached) {
-        const publication = await readPublication(zoneId);
-        if (!publication.ok) return publication.failure === 'missing' ? { kind: 'missing' }
-          : { kind: 'unavailable', failure: publication.failure, ...(publication.reference ? { reference: publication.reference } : {}) };
-        realm = idOf(publication.data.realm ?? '');
-      }
-      if (!realm) return { kind: 'missing' };
-      const header = await readHeader(realm, locale);
-      const page = header.ok
-        ? { kind: 'realm' as const, header: header.data }
-        : header.failure === 'missing'
-          ? await privateRealm(attached ? realm : ref, locale, attached ? undefined : resolved.data)
-          : { kind: 'unavailable' as const, failure: header.failure, ...(header.reference ? { reference: header.reference } : {}) };
-      if (page.kind !== 'realm') return page;
-      return {
-        kind: 'realm',
-        ref: attached ? idOf(page.header.space)! : addressKey(resolved.data.canonical),
-        ...(surface === 'site' ? { siteRef: addressKey(resolved.data.canonical) } : {}),
-        realm,
-        header: page.header,
-        zone: zoneId ? { id: zoneId, segment: null } : null,
-      };
-    },
-    resolveSite: async (ref: string, locale: UiLocale, fresh = false): Promise<SiteResolution> => {
-      const resolved = await resolve('space', ref, locale, fresh);
-      if (resolved.kind !== 'resolved') {
-        if (resolved.kind !== 'missing')
-          return resolved.kind === 'unavailable'
-            ? { kind: 'unavailable', ...(resolved.failure ? { failure: resolved.failure } : {}) }
-            : { kind: 'missing' };
-        const fallback = await privateRealm(ref, locale);
-        return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
-      }
-      const zone = idOf(resolved.data.capabilities?.zone ?? '');
-      if (!zone) {
-        const fallback = await privateRealm(ref, locale, resolved.data);
-        return fallback.kind === 'realm' ? { kind: 'missing' } : fallback;
-      }
-      const publication = await readPublication(zone);
-      if (!publication.ok) return publication.failure === 'missing' ? { kind: 'missing' }
-        : { kind: 'unavailable', failure: publication.failure, ...(publication.reference ? { reference: publication.reference } : {}) };
-      return { kind: 'site', address: resolved.data, zone,
-        realm: idOf(publication.data.realm ?? '') };
-    },
-  };
 }
 
 export const readRealmHeader = cache(
