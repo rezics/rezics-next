@@ -8,6 +8,7 @@ import { readResult, taskOf, changedFiles } from './launch.ts';
 import { type LandScope } from './land.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, type AcquiredDirectoryLease, tryAcquireDirectoryLease } from '../qa/process/lease.ts';
+import { worktreeBase } from './tree-currency.ts';
 
 /** A peer may briefly hold the shared index. Retry only that conflict; the lock belongs to Git, never us. */
 export function retryGitIndexLock<T extends { status: number | null; stderr: string | null }>(run: () => T,
@@ -199,21 +200,23 @@ function unionMerged(files: readonly string[]): Set<string> {
   return union;
 }
 
-/** Commits on `main..branch` whose every change to a path is a regeneration commit. */
-function regeneratedOnBranch(branch: string): string[] {
-  const log = git(root, ['log', '--name-only', '--pretty=format:%H%x09%s', `main..${branch}`], true);
+/** Commits above the task's base whose every change to a path is a regeneration commit. */
+function regeneratedOnBranch(branch: string, base: string): string[] {
+  const log = git(root, ['log', '--name-only', '--pretty=format:%H%x09%s', `${base}..${branch}`], true);
   return log ? filesOnlyRegenerated(log) : [];
 }
 
 /** Files this branch committed outside the claim that land would still refuse if another task claimed them.
  * A solo task may edit union-merge files and regeneration output; a shared branch may not. */
 function unlandedOutOfClaim(task: Task, sharers: readonly Task[]): string[] {
-  const committed = git(root, ['diff', '--name-only', `main...${task.branch}`], true).split('\n').filter(Boolean);
+  // Inherited wave work belongs to the wave merge, not to this task's claim.
+  const base = existsSync(task.worktree) ? worktreeBase(task.worktree) : 'main';
+  const committed = git(root, ['diff', '--name-only', `${base}...${task.branch}`], true).split('\n').filter(Boolean);
   if (!committed.length) return [];
   const sharedTree = sharers.some(sharer => sharer.worktreeName) || sharers.length > 1;
   const union = sharedTree ? new Set<string>() : unionMerged(committed);
   const watched = committed.filter(file => !union.has(file));
-  return outOfClaimFiles(watched, [...sharers], regeneratedOnBranch(task.branch));
+  return outOfClaimFiles(watched, [...sharers], regeneratedOnBranch(task.branch, base));
 }
 
 export interface UnlandedChanges { worktree: string; branch: string; files: string[] }
