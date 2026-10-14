@@ -17,7 +17,6 @@ const record = collectionRecord as unknown as AnswerRecord;
 type Persona = 'visitor' | 'stranger' | 'member' | 'owner' | 'moderator' | 'operator';
 type Mode = 'tracking' | 'watched' | 'loading';
 interface Args { persona: Persona; mode: Mode }
-const signedIn = ['stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 
 function sample(persona: AnswerPersona, label: string) {
   const found = record.personas[persona].find(item => item.label === label);
