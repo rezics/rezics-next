@@ -5,6 +5,7 @@ import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-c
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import { displayLanguageHeaders } from '../../../../../apps/web/i18n/display-languages.ts';
 
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
@@ -128,7 +129,9 @@ const write = (name: PersonaName, person: PersonaSession, label: string, complet
 async function publicOpening(name: PersonaName, person: PersonaSession) {
   const query = person.actingSubject ? `&${acting(person)}` : '';
   const opening = await answer<{ items: { occurrence: string; target: string }[]; nextCursor: string | null }>(
-    sample(name, person, 'public-episode-opening', 'GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=1${query}`));
+    sample(name, person, 'public-episode-opening', 'GET', `/v1/reading-positions/${short(show.work)}?position=start&limit=1${query}`,
+      undefined, undefined, { headers: displayLanguageHeaders({ signedIn: Boolean(person.actingSubject),
+        pageUrl: `https://rezics.com/en/w/${short(show.work)}` }) }));
   expect(opening.items).toMatchObject([{ occurrence: occurrences[0], target: targets[0] }]);
   expect(opening.nextCursor).not.toBeNull();
 }
@@ -201,16 +204,22 @@ async function secondDevice(person: PersonaSession): Promise<PersonaSession> {
 // The episode panel's initial browser reads also supply the two-device story's render answers.
 async function workPageReads(name: PersonaName, person: PersonaSession) {
   const id = short(show.work);
+  // The opening has no saved content-language choice or browser language override.
+  // Use the same header builder as mainApiWithToken for this /en/ page.
+  const pageSample = (reader: PersonaSession, label: string, method: string, path: string, body?: unknown) =>
+    sample(name, reader, label, method, path, body, undefined, { headers: displayLanguageHeaders({
+      signedIn: Boolean(reader.actingSubject), pageUrl: `https://rezics.com/en/w/${id}`,
+    }) });
   const viewer = (path: string) => person.actingSubject
     ? `${path}${path.includes('?') ? '&' : '?'}${acting(person)}` : path;
   const get = async <T,>(label: string, path: string): Promise<T> => {
-    const response = await sample(name, person, label, 'GET', viewer(path));
+    const response = await pageSample(person, label, 'GET', viewer(path));
     return await response.json() as T;
   };
   await sample(name, person, 'platform-access', 'GET', '/v1/me/platform-access');
   await Promise.all([
-    sample(name, sessions.visitor, 'metadata-public-preview', 'GET', `/v1/public-previews/${id}`),
-    sample(name, sessions.visitor, 'metadata-work-header', 'GET', `/v1/works/${id}`),
+    pageSample(sessions.visitor, 'metadata-public-preview', 'GET', `/v1/public-previews/${id}`),
+    pageSample(sessions.visitor, 'metadata-work-header', 'GET', `/v1/works/${id}`),
   ]);
   if (person.actingSubject) {
     // reader() and the Eden header builder each cache their own session-agent read.
@@ -231,14 +240,26 @@ async function workPageReads(name: PersonaName, person: PersonaSession) {
     get('realizations-empty', `/v1/works/${id}/realizations?limit=20`),
     get('releases-empty', `/v1/works/${id}/releases?limit=20`),
     get('availability-parts', `/v1/resources/${id}/parts?limit=1`),
-    sample(name, person, 'work-credits-template', 'POST', '/v1/query', {
+    pageSample(person, 'work-credits-template', 'POST', '/v1/query', {
       profile: 'template-query-v1', query: 'https://rezics.com/query/work-credits', revision: 1,
       parameters: { roots: [show.work] },
       presentation: { ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) },
     }),
     // The server's showcase reader always uses the anonymous client.
-    sample(name, sessions.visitor, 'work-showcase', 'POST', '/v1/resources/showcase', {
+    pageSample(sessions.visitor, 'work-showcase', 'POST', '/v1/resources/showcase', {
       profile: 'work-showcase-batch-v1', targets: [show.work],
+    }),
+  ]);
+  // Classification, community names and discovery are rendered by OverviewLayout's
+  // About, Discussion and Lists slots, including for a signed-out reader.
+  await Promise.all([
+    get('classifications-empty', `/v1/works/${id}/classifications?scope=global`),
+    pageSample(sessions.visitor, 'classification-facets', 'GET', '/v1/facets'),
+    get('also-enjoyed-empty', `/v1/works/${id}/also-enjoyed?limit=12`),
+    pageSample(person, 'work-adoptions-template', 'POST', '/v1/query', {
+      profile: 'template-query-v1', query: 'https://rezics.com/query/work-adoptions', revision: 1,
+      parameters: { roots: [show.work] },
+      presentation: { ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) },
     }),
   ]);
   await Promise.all(([['statements', 'wiki-shortcut-statements'], ['discussion', 'discussion-empty']] as const).map(async ([section, label]) => {
@@ -251,7 +272,7 @@ async function workPageReads(name: PersonaName, person: PersonaSession) {
     get('reader-stats', `/v1/works/${id}/reader-stats${context ? `?${new URLSearchParams({ context })}` : ''}`),
   ]);
   const resources = [...new Set(parts.parts?.flatMap(part => part.work ?? []) ?? [])].sort();
-  if (resources.length) await sample(name, person, 'part-names', 'POST', '/v1/resources/summaries', {
+  if (resources.length) await pageSample(person, 'part-names', 'POST', '/v1/resources/summaries', {
     profile: 'resource-summary-batch-v1', resources,
     ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
   });
