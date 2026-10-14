@@ -2,11 +2,12 @@ import { afterEach, expect, test } from 'bun:test';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import team from '../../../../tests/qa/fixtures/outcomes/realm/roles-and-team.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { recordedManagementAgent } from '../realm/realm-membership-recorded-page.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { changeRole } from './commands.ts';
-import { readMembers, readRealmHeader } from './read.ts';
+import { readMembers, readRealmHeader, readRoles } from './read.ts';
 import {
-  mapRealmMembers, mapRealmRoles, problemOf, readManagementActor, readRealmMembersPage, readRealmRolesPage,
+  mapRealmMembers, mapRealmRoles, problemOf, readRealmMembersPage, readRealmRolesPage,
   readRealmTeamFrame, recordedRoleCommand, recordedRoleCommandKey, saveRecordedRole, type RealmTeamProblem,
 } from './realm-team-recorded-page.ts';
 import type { InvitationPage, MemberPage, RealmHeader, RoleImpact, RoleList, RoleReceipt } from './types.ts';
@@ -65,7 +66,7 @@ function realmFor(persona: AnswerPersona): string {
 }
 
 function actorFor(persona: AnswerPersona): string {
-  return persona === 'visitor' ? subjectOf(persona, 'roles-denied') : sessionSubject(persona);
+  return sessionSubject(persona);
 }
 
 interface Logged {
@@ -102,7 +103,7 @@ function open(persona: AnswerPersona, selections: readonly RecordedSelection[]) 
   }) as typeof fetch;
   const main = () => browserMainApi(origin, { fetcher });
   const anonymous = () => browserMainApi(origin, { anonymous: true, fetcher });
-  return { main, anonymous, requested };
+  return { main, anonymous, requested, fetcher };
 }
 
 function actorSelections(persona: AnswerPersona): RecordedSelection[] {
@@ -111,7 +112,6 @@ function actorSelections(persona: AnswerPersona): RecordedSelection[] {
 
 function frameSelections(persona: AnswerPersona): RecordedSelection[] {
   if (persona === 'owner') return [selection(persona, 'management-realm-header'), selection(persona, 'management-site')];
-  if (persona === 'visitor') return [selection(persona, 'frame-realm')];
   return [selection(persona, 'frame-realm'), selection(persona, 'frame-site')];
 }
 
@@ -121,40 +121,27 @@ function expectPageReads(requested: readonly Logged[]) {
   for (const piece of notOnThisPage) expect(requested.some(item => item.path.includes(piece))).toBe(false);
 }
 
-function problemEnding(requested: readonly Logged[], suffix: string): RealmTeamProblem | null {
-  return requested.find(item => item.path.split('?')[0]?.endsWith(suffix) && item.problem)?.problem ?? null;
-}
-
 async function load(persona: AnswerPersona, selections: readonly RecordedSelection[], surface: 'roles' | 'members') {
   const opened = open(persona, selections);
   const realm = realmFor(persona);
-  const actingSubject = actorFor(persona);
-  const signedIn = persona !== 'visitor';
-  const agent = signedIn ? await readManagementActor(opened.main(), locale) : {
-    iri: actingSubject, label: null, handle: null, kind: null, path: null,
-  };
+  const session = await recordedManagementAgent(opened.fetcher, locale);
+  const agent = { iri: session.actingSubject, label: session.agent.label };
+  if (agent.iri !== actorFor(persona)) throw new Error(`Session agent ${agent.iri} is not the route actor`);
   const clients = { main: opened.main(), anonymous: opened.anonymous() };
-  const frameRead = signedIn
-    ? readRealmTeamFrame(opened.main(), realm, agent.iri, locale)
-    : readRealmHeader(opened.main(), realm, locale, agent.iri).then(header => ({
-      header: header.ok ? header.data : null, siteHref: null as string | null,
-    }));
   if (surface === 'roles') {
     const [frame, roles] = await Promise.all([
-      frameRead, readRealmRolesPage(clients, { realm, actingSubject: agent.iri }),
+      readRealmTeamFrame(opened.main(), realm, agent.iri, locale),
+      readRealmRolesPage(clients, { realm, actingSubject: agent.iri }),
     ]);
-    return {
-      opened, realm, agent, frame, agents: roles.agents,
-      mapped: mapRealmRoles(roles.roles, problemEnding(opened.requested, '/roles')),
-    };
+    return { opened, realm, agent, frame, agents: roles.agents, mapped: mapRealmRoles(roles.roles) };
   }
   const [frame, members] = await Promise.all([
-    frameRead, readRealmMembersPage(clients, { realm, actingSubject: agent.iri }),
+    readRealmTeamFrame(opened.main(), realm, agent.iri, locale),
+    readRealmMembersPage(clients, { realm, actingSubject: agent.iri }),
   ]);
   return {
     opened, realm, agent, frame, agents: members.agents,
-    mapped: mapRealmMembers(members.page, members.roles, members.invitations, null,
-      problemEnding(opened.requested, '/members')),
+    mapped: mapRealmMembers(members.page, members.roles, members.invitations, null),
   };
 }
 
@@ -317,14 +304,53 @@ test('owner role command refusals keep the recorded problem', async () => {
   ]);
 });
 
-const refused = ['visitor', 'stranger', 'member', 'moderator', 'operator'] as const;
+const refused = ['stranger', 'member', 'moderator', 'operator'] as const;
 
 function refusalSelections(persona: AnswerPersona, surface: 'roles' | 'members'): RecordedSelection[] {
   const page = surface === 'roles'
     ? [selection(persona, 'roles-denied')]
     : [selection(persona, 'members-denied'), selection(persona, 'roles-denied'), selection(persona, 'members-invitations')];
-  return [...persona === 'visitor' ? [] : actorSelections(persona), ...frameSelections(persona), ...page];
+  return [...actorSelections(persona), ...frameSelections(persona), ...page];
 }
+
+test('visitor roles refusal keeps the recorded problem and does not open the management frame', async () => {
+  const denied = sample('visitor', 'roles-denied');
+  const body = problem('visitor', 'roles-denied');
+  const opened = open('visitor', [selection('visitor', 'roles-denied')]);
+  const realm = realmId('visitor', 'roles-denied');
+  const roles = await readRoles(opened.main(), realm, subjectOf('visitor', 'roles-denied'));
+  expect(mapRealmRoles(roles)).toEqual({
+    kind: 'refusal', failure: denied.status === 401 ? 'sign-in' : 'denied', problem: body,
+  });
+  expect(opened.requested).toHaveLength(1);
+  expect(opened.requested[0]?.path.includes('/roles')).toBe(true);
+  expect(opened.requested.some(item => item.path.includes('/zone'))).toBe(false);
+  expectPageReads(opened.requested);
+});
+
+test('visitor members refusal keeps the recorded problem on the roster, roles and invitations', async () => {
+  const denied = sample('visitor', 'members-denied');
+  const body = problem('visitor', 'members-denied');
+  const opened = open('visitor', [
+    selection('visitor', 'members-denied'),
+    selection('visitor', 'roles-denied'),
+    selection('visitor', 'members-invitations'),
+  ]);
+  const realm = realmId('visitor', 'members-denied');
+  const loaded = await readRealmMembersPage({ main: opened.main(), anonymous: opened.anonymous() },
+    { realm, actingSubject: subjectOf('visitor', 'members-denied') });
+  expect(mapRealmMembers(loaded.page, loaded.roles, loaded.invitations, null)).toEqual({
+    kind: 'refusal', failure: denied.status === 401 ? 'sign-in' : 'denied', problem: body,
+  });
+  expect(loaded.roles.ok).toBe(false);
+  expect(loaded.invitations.ok).toBe(false);
+  if (!loaded.roles.ok) expect(loaded.roles.problem).toEqual(problem('visitor', 'roles-denied'));
+  if (!loaded.invitations.ok) expect(loaded.invitations.problem).toEqual(problem('visitor', 'members-invitations'));
+  expect(opened.requested.some(item => item.path.includes('/invitations'))).toBe(true);
+  expect(opened.requested.some(item => item.path.includes('/roles'))).toBe(true);
+  expect(opened.requested.some(item => item.path.includes('/zone'))).toBe(false);
+  expectPageReads(opened.requested);
+});
 
 for (const persona of refused) {
   test(`${persona} sees the recorded roles refusal and no role list`, async () => {
@@ -337,12 +363,11 @@ for (const persona of refused) {
       problem: body,
     });
     expect(loaded.frame.siteHref).toBeNull();
-    if (persona === 'visitor') expect(loaded.agent.label).toBeNull();
-    else expect(loaded.agent.label).toBe((sample(persona, 'acting-agent-profile').answer as { displayName: string }).displayName);
+    expect(loaded.agent.label).toBe((sample(persona, 'acting-agent-profile').answer as { displayName: string }).displayName);
     const header = sample(persona, 'frame-realm');
     if (header.status === 200) expect(loaded.frame.header?.name.value).toBe((header.answer as RealmHeader).name.value);
     else expect(loaded.frame.header).toBeNull();
-    expect(loaded.opened.requested.some(item => item.path.includes('/zone'))).toBe(persona !== 'visitor');
+    expect(loaded.opened.requested.some(item => item.path.includes('/zone') && item.path.includes('actingSubject='))).toBe(true);
     expectPageReads(loaded.opened.requested);
   });
 
@@ -362,7 +387,7 @@ for (const persona of refused) {
 }
 
 test('readRealmHeader sends language and matches the recorded frame read', async () => {
-  for (const persona of refused) {
+  for (const persona of ['visitor', ...refused] as const) {
     const header = sample(persona, 'frame-realm');
     const url = new URL(header.path, origin);
     expect(url.searchParams.get('language')).toBe('en');
@@ -381,14 +406,4 @@ test('readRealmHeader sends language and matches the recorded frame read', async
     expect(opened.requested[0]?.path).toContain('actingSubject=');
     expect(sample(persona, 'realm-header').path.includes('language=')).toBe(false);
   }
-});
-
-test('visitor layout zone read sends actingSubject, which the recorded zone read omits', async () => {
-  const subject = subjectOf('visitor', 'roles-denied');
-  const realm = realmId('visitor', 'frame-realm');
-  const opened = open('visitor', [selection('visitor', 'frame-realm'), selection('visitor', 'frame-site')]);
-  await expect(readRealmTeamFrame(opened.main(), realm, subject, locale)).rejects.toThrow(/Unmatched recorded request/);
-  const zone = opened.requested.find(item => item.path.includes('/zone'));
-  expect(zone?.path).toContain('actingSubject=');
-  expect(sample('visitor', 'frame-site').path.includes('actingSubject=')).toBe(false);
 });
