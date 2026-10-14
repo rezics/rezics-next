@@ -28,18 +28,17 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     MAIN_ORIGIN: `http://127.0.0.1:${process.env.MAIN_PORT}`,
     ACCOUNT_ORIGIN: `http://127.0.0.1:${process.env.ACCOUNT_PORT}` });
   const { Client } = await import('pg');
-  const { FusekiClient, fusekiReadBudget } = await import('../../../../../services/main/src/infrastructure/fuseki.ts');
-  type CommandEnvelope = Parameters<typeof FusekiClient.prototype.command>[0];
-  type SparqlResult = Awaited<ReturnType<typeof FusekiClient.prototype.query>>;
+  type SparqlResult = { results?: { bindings: unknown[] }; boolean?: boolean };
   interface Statement {
     text: string; started: number; originSpanId: string; elapsedMs?: number;
     results?: Array<{ command: string; rowsReturned: number; rowsAffected: number | null }>;
     error?: string;
   }
   interface GraphStatement {
-    method: 'query' | 'command'; input: string | CommandEnvelope; started: number;
+    method: 'query' | 'command'; input: unknown; started: number;
     originSpanId: string;
-    budget: { callsLeft: number; bytesLeft: number } | null;
+    // Driver-local budget state is not exposed at the HTTP observation boundary.
+    status?: number; rawBody?: string;
     elapsedMs?: number; rowsReturned?: number; result?: unknown; error?: string;
   }
   let currentTrace = '', statements: Statement[] = [], graph: GraphStatement[] = [];
@@ -68,33 +67,38 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     return pending.then(result => { complete(null, result); return result; },
       (error: unknown) => { complete(error); throw error; });
   } as typeof originalQuery;
-  const originalGraphQuery = FusekiClient.prototype.query;
-  const originalCommand = FusekiClient.prototype.command;
-  for (const method of ['query', 'command'] as const) {
-    const original = FusekiClient.prototype[method];
-    const observed = async function (this: InstanceType<typeof FusekiClient>, ...args: unknown[]) {
-      if (!selected()) return Reflect.apply(original, this, args);
-      const budget = fusekiReadBudget.getStore();
-      const record: GraphStatement = { method, input: args[0] as string | CommandEnvelope,
-        originSpanId: trace.getSpan(context.active())!.spanContext().spanId,
-        budget: budget ? { callsLeft: budget.callsLeft, bytesLeft: budget.bytesLeft } : null, started: performance.now() };
-      graph.push(record);
-      try {
-        const result: unknown = await Reflect.apply(original, this, args);
-        const wire = result as SparqlResult;
-        Object.assign(record, { elapsedMs: performance.now() - record.started, result,
-          ...(wire.results?.bindings ? { rowsReturned: wire.results.bindings.length }
-            : typeof wire.boolean === 'boolean' ? { rowsReturned: 0 } : {}) });
-        return result;
-      } catch (error) {
-        Object.assign(record, { elapsedMs: performance.now() - record.started,
-          error: error instanceof Error ? error.stack : String(error) });
-        throw error;
-      }
-    };
-    if (method === 'query') FusekiClient.prototype.query = observed as typeof originalGraphQuery;
-    else FusekiClient.prototype.command = observed as typeof originalCommand;
-  }
+  const originalFetch = globalThis.fetch;
+  const fusekiBase = new URL(process.env.FUSEKI_URL!);
+  const queryUrl = new URL('query', fusekiBase).href;
+  const commandUrl = new URL('command', fusekiBase).href;
+  // Observe the actual wire exchange without importing a product client or
+  // replacing its result, response-byte enforcement or error handling.
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+    if (!selected() || (url !== queryUrl && url !== commandUrl)) return originalFetch(input, init);
+    const body = init?.body ?? (input instanceof Request ? await input.clone().text() : undefined);
+    if (typeof body !== 'string') throw new Error('Observed Fuseki request body must be exact text');
+    const record: GraphStatement = { method: url === queryUrl ? 'query' : 'command',
+      input: url === queryUrl ? body : JSON.parse(body), started: performance.now(),
+      originSpanId: trace.getSpan(context.active())!.spanContext().spanId };
+    graph.push(record);
+    try {
+      const response = await originalFetch(input, init);
+      const rawBody = await response.clone().text();
+      Object.assign(record, { elapsedMs: performance.now() - record.started,
+        status: response.status, rawBody });
+      if (!response.ok) record.error = `HTTP ${response.status}: ${rawBody}`;
+      const result = JSON.parse(rawBody) as SparqlResult;
+      Object.assign(record, { result,
+        ...(result.results?.bindings ? { rowsReturned: result.results.bindings.length }
+          : typeof result.boolean === 'boolean' ? { rowsReturned: 0 } : {}) });
+      return response;
+    } catch (error) {
+      Object.assign(record, { elapsedMs: performance.now() - record.started,
+        error: error instanceof Error ? error.stack : String(error) });
+      throw error;
+    }
+  }, originalFetch) as typeof fetch;
   const { personaSessions } = await import('../../../support/personas.ts');
   let sessions: Awaited<ReturnType<typeof personaSessions>> | undefined;
   let httpBoundaryQualified = false;
@@ -102,8 +106,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     try { await sessions?.close(); }
     finally {
       Client.prototype.query = originalQuery;
-      FusekiClient.prototype.query = originalGraphQuery;
-      FusekiClient.prototype.command = originalCommand;
+      globalThis.fetch = originalFetch;
       try { await shutdownTelemetry(); } finally { await sink.stop(); }
       await Bun.write(process.env.REZICS_WORK_PROFILE_RESULT!, JSON.stringify({
         source, runId: process.env.REZICS_QA_RUN_ID, phase, pid: process.pid,
@@ -131,7 +134,11 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
           const result = await client.query('SELECT * FROM (VALUES (1), (2)) AS calibration(value)');
           expect(result.rows).toHaveLength(2);
           await client.query('ROLLBACK');
-          const rows = await new FusekiClient(process.env.FUSEKI_URL!).query('SELECT ?value WHERE { VALUES ?value { 1 2 } }');
+          const response = await fetch(queryUrl, { method: 'POST', headers: {
+            'content-type': 'application/sparql-query', accept: 'application/sparql-results+json' },
+            body: 'SELECT ?value WHERE { VALUES ?value { 1 2 } }' });
+          expect(response.status).toBe(200);
+          const rows = await response.json() as SparqlResult;
           expect(rows.results?.bindings).toHaveLength(2);
         } finally { currentTrace = ''; span.end(); }
       });
@@ -201,6 +208,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
       expect(profile.postgresStatements).toBe(ownedStatements.length);
       expect(ownedStatements.length).toBeGreaterThan(0);
       expect(ownedGraph.length).toBeGreaterThan(0);
+      expect(profile.fusekiCalls).toHaveLength(ownedGraph.length);
       expect(ownedStatements.every(statement => statement.elapsedMs !== undefined)).toBe(true);
       expect(profile.spans.every(span => span.traceId === traceId)).toBe(true);
       return { status, rawBody, elapsedMs, profile, statements: ownedStatements, graph: ownedGraph, excludedStatements };
