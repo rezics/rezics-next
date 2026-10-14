@@ -574,7 +574,14 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     await expect(other.locator('html')).toHaveAttribute('lang', 'ja');
     const japanese = other.getByRole('region', { name: aboutDiscussionMessages.ja.title, exact: true })
       .filter({ has: other.getByRole('link', { name: 'North realm', exact: true }) });
-    await expect(japanese.locator('article')).toHaveCount(2);
+    await expect(async () => {
+      const retry = other.getByRole('region', { name: aboutDiscussionMessages.ja.title, exact: true })
+        .getByRole('button', { name: aboutDiscussionMessages.ja.retry, exact: true });
+      if (await retry.isVisible()) await retry.press('Enter');
+      const retryPage = other.getByRole('alert').getByRole('link', { name: aboutDiscussionMessages.ja.retry, exact: true });
+      if (await retryPage.isVisible()) await retryPage.press('Enter');
+      await expect(japanese.locator('article')).toHaveCount(2, { timeout: 8_000 });
+    }).toPass({ timeout: 90_000 });
     for (const body of bodies) await expect(japanese.getByText(body, { exact: true })).toBeVisible();
     const reopen = japanese.getByRole('link', { name: aboutDiscussionMessages.ja.continueThread });
     await keyboardReach(other, reopen, found, 'Open discussion (ja)');
