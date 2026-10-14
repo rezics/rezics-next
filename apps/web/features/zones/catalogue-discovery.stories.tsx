@@ -132,6 +132,7 @@ export const VisualNovelsSearchPhone: Story = { args: { slug: 'visual-novels', l
   globals: { viewport: { value: 'phone' } } };
 export const VisualNovelsEmpty: Story = { args: { slug: 'visual-novels', persona: 'member', label: catalogueLabels['visual-novels'].empty } };
 export const VisualNovelsError: Story = { args: { slug: 'visual-novels', label: catalogueLabels['visual-novels'].error } };
+export const VisualNovelsLoading: Story = { args: { slug: 'visual-novels', loading: true } };
 export const MangaVisitor: Story = { args: { slug: 'manga' } };
 export const MangaStranger: Story = { args: { slug: 'manga', persona: 'stranger' } };
 export const MangaMember: Story = { args: { slug: 'manga', persona: 'member' } };
@@ -142,10 +143,16 @@ export const MangaConditions: Story = { args: { slug: 'manga', label: 'combined-
 export const MangaYearRangePhone: Story = { args: { slug: 'manga', label: 'publication-year-range-and-format' },
   globals: { viewport: { value: 'phone' } } };
 export const MangaEmpty: Story = { args: { slug: 'manga', label: catalogueLabels.manga.empty } };
+export const MangaError: Story = { args: { slug: 'manga', label: catalogueLabels.manga.error } };
 export const MangaLoading: Story = { args: { slug: 'manga', loading: true } };
 export const AnimeContract: Story = { args: { slug: 'anime' }, parameters: { docs: { description: {
   story: 'Contract fixture; no recorded Anime answer. Exact requests/states are exported as missingCatalogueStates.' } } } };
 export const AnimeEmptyContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'empty' } };
+export const AnimeStrangerContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'stranger' } };
+export const AnimeMemberContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'member' } };
+export const AnimeOwnerContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'owner' } };
+export const AnimeModeratorContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'moderator' } };
+export const AnimeOperatorContract: Story = { ...AnimeContract, args: { slug: 'anime', persona: 'operator' } };
 export const AnimeLaggingContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'lagging' } };
 export const AnimeErrorContract: Story = { ...AnimeContract, args: { slug: 'anime', contract: 'error' } };
 export const AnimeLoadingContract: Story = { ...AnimeContract, args: { slug: 'anime', loading: true } };
@@ -153,8 +160,14 @@ export const AnimePhoneContract: Story = { ...AnimeContract, globals: { viewport
 export const GamesContract: Story = { ...AnimeContract, args: { slug: 'games' }, parameters: { docs: { description: {
   story: 'Contract fixture; no recorded Games answer. Exact requests/states are exported as missingCatalogueStates.' } } } };
 export const GamesEmptyContract: Story = { ...GamesContract, args: { slug: 'games', contract: 'empty' } };
+export const GamesStrangerContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'stranger' } };
+export const GamesMemberContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'member' } };
+export const GamesOwnerContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'owner' } };
+export const GamesModeratorContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'moderator' } };
+export const GamesOperatorContract: Story = { ...GamesContract, args: { slug: 'games', persona: 'operator' } };
 export const GamesLaggingContract: Story = { ...GamesContract, args: { slug: 'games', contract: 'lagging' } };
 export const GamesErrorContract: Story = { ...GamesContract, args: { slug: 'games', contract: 'error' } };
+export const GamesLoadingContract: Story = { ...GamesContract, args: { slug: 'games', loading: true } };
 export const GamesMovedContract: Story = { ...GamesContract, args: { slug: 'games', contract: 'moved' } };
 export const GamesPhoneContract: Story = { ...GamesContract, globals: { viewport: { value: 'phone' } } };
 export const MangaTraditionalChinese: Story = { args: { slug: 'manga', locale: 'zh-Hant' } };
