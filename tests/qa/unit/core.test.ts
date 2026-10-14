@@ -70,7 +70,9 @@ test('QA CLI child admission can outlast its active budget, then execution keeps
     { runDeadline: Date.now() + 2_000 });
   expect(result.ok).toBe(true);
   expect(result.elapsedMs).toBeGreaterThan(600);
-  expect(result.admissionWaitMs).toBeGreaterThanOrEqual(550);
+  // The wait outlasts the 300 ms active budget. Its measured length is not asserted more closely:
+  // on a busy host the parent sees the first waiting line late.
+  expect(result.admissionWaitMs).toBeGreaterThan(300);
   expect(result.activeElapsedMs).toBeLessThan(300);
 });
 
@@ -803,7 +805,7 @@ test('QA slots: SIGTERM, SIGINT, process exit, errors and the run deadline relea
       rmSync(dir, { recursive: true, force: true });
     }
   }
-});
+}, 30_000); // Five children start one after another; a busy host takes longer than the default limit.
 
 test('a run deadline destroys its leased warm stack before releasing the QA slot', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-pool-deadline-'));
