@@ -1475,6 +1475,50 @@ mod tests {
         assert!(RawValue::from_string(ast).is_ok());
     }
     #[test]
+    fn static_template_imports_and_requires_resolve_cooked_specifiers_without_expanding_the_domain()
+    {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .parent()
+            .unwrap()
+            .to_path_buf();
+        let text = r#"import(`./scripts/lib/repo-ind\u0065x.ts`);
+require(`./scripts/lib/repo-ind\x65x.ts`);
+require(`./scripts/lib/repo-\
+index.ts`);
+import(`./scripts/lib/${name}.ts`);
+require(`./scripts/lib/${name}.ts`);
+import((`./scripts/lib/repo-index.ts`));
+require((`./scripts/lib/repo-index.ts`));
+(require)(`./scripts/lib/repo-index.ts`);
+import(('./scripts/lib/repo-index.ts'));
+require(('./scripts/lib/repo-index.ts'));
+"#;
+        for file in ["specifier.ts", "specifier.js"] {
+            let facts = indexed(
+                Source {
+                    file: file.into(),
+                    text: text.into(),
+                },
+                &root,
+                &resolver(&root),
+                false,
+            )
+            .unwrap();
+            assert!(facts.parse_errors.is_empty());
+            assert_eq!(facts.imports.len(), 3);
+            for import in &facts.imports {
+                assert_eq!(import.source, "./scripts/lib/repo-index.ts");
+                assert_eq!(
+                    import.resolved.as_deref(),
+                    Some("scripts/lib/repo-index.ts")
+                );
+                assert!(!import.type_only);
+            }
+        }
+    }
+    #[test]
     fn template_holes_use_delimiter_spans_including_comment_braces() {
         let root = env::current_dir().unwrap();
         let text = "const sql = `SELECT * FROM owner.records WHERE id = ${ value /* } -- */ } AND EXISTS (SELECT 1 FROM owner.other)`;";
@@ -3209,8 +3253,8 @@ impl<'a> Visit<'a> for Facts<'_> {
         walk::walk_export_all_declaration(self, node);
     }
     fn visit_import_expression(&mut self, node: &ImportExpression<'a>) {
-        if let Expression::StringLiteral(source) = &node.source {
-            self.import(&source.value, false);
+        if let Some(source) = static_specifier(&node.source) {
+            self.import(source, false);
         }
         walk::walk_import_expression(self, node);
     }
@@ -3325,8 +3369,13 @@ impl<'a> Visit<'a> for Facts<'_> {
             };
         }
         if matches!(&node.callee,Expression::Identifier(name) if name.name == "require") {
-            if let Some(Argument::StringLiteral(source)) = node.arguments.first() {
-                self.import(&source.value, false);
+            if let Some(source) = node
+                .arguments
+                .first()
+                .and_then(Argument::as_expression)
+                .and_then(static_specifier)
+            {
+                self.import(source, false);
             }
         }
         walk::walk_call_expression(self, node);
@@ -3401,6 +3450,24 @@ impl<'a> Visit<'a> for Facts<'_> {
         if interpolated {
             self.templates.pop();
         }
+    }
+}
+// The repository's typed dependency extractor accepts bare string literals and
+// no-substitution templates. Parenthesized arguments/callees and expressions
+// with substitutions are not static specifiers in that extractor.
+fn static_specifier<'n>(expression: &'n Expression<'_>) -> Option<&'n str> {
+    match expression {
+        Expression::StringLiteral(source) => Some(source.value.as_str()),
+        Expression::TemplateLiteral(source)
+            if source.expressions.is_empty() && source.quasis.len() == 1 =>
+        {
+            source.quasis[0]
+                .value
+                .cooked
+                .as_ref()
+                .map(|value| value.as_str())
+        }
+        _ => None,
     }
 }
 
