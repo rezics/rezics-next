@@ -264,13 +264,13 @@ test('the Accounts app is the public Account origin only where task dev serves i
     .ACCOUNTS_PORT).toBe('14114');
 });
 
-
 test('persistent fixture Compose keeps backup volumes and enforces each admitted cap', () => {
   const checkout = resolve(import.meta.dir, '../..');
   const directory = mkdtempSync('.temp/fixture-memory-caps-'); roots.push(directory);
   const envFile = join(directory, 'compose.env');
   writeFileSync(envFile, '');
-  for (const overrides of [{}, { REZICS_POSTGRES_MEMORY_LIMIT: '1536m', REZICS_FUSEKI_MEMORY_LIMIT: '12g' }]) {
+  for (const overrides of [{}, { REZICS_FUSEKI_MEMORY_LIMIT: undefined },
+    { REZICS_POSTGRES_MEMORY_LIMIT: '1536m', REZICS_FUSEKI_MEMORY_LIMIT: '12g' }]) {
     const env = composeProcessEnvironment(process.env, ensureSecrets(directory,
       { profile: 'qa', runId: 'caps', persistent: true }));
     Object.assign(env, overrides);
