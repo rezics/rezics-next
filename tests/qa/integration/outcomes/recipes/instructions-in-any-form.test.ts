@@ -91,9 +91,10 @@ async function prepareSlice(): Promise<Slice> {
     expectedGeneration: '0', actingSubject: actor,
   }), 201);
   const tomatoMention: ResourceReference = { target: tomato.concept, selector: { grain: 'resource' } };
-  const stockReference: ResourceReference = { target: intermediate.work,
-    selector: { grain: 'occurrence', structure: intermediate.structure, revision: intermediate.revision,
-      occurrence: intermediate.occurrenceIds[0]! } };
+  // The intermediate is the whole Recipe Structure at an exact revision,
+  // rather than a section occurrence or the Work's moving default selection.
+  const stockReference: ResourceReference = { target: intermediate.structure,
+    selector: { grain: 'revision', revision: intermediate.revision } };
   const quantityOccurrence = recipe.occurrenceIds[1]!;
   const quantityReference: ResourceReference = { target: recipe.work,
     selector: { grain: 'occurrence', structure: recipe.structure, revision: recipe.revision, occurrence: quantityOccurrence } };
@@ -245,9 +246,10 @@ async function readInstructions(name: PersonaName) {
   const delivered = await person.main('GET', `${mediaPath}/bytes${mediaQuery}`);
   expect(delivered.status).toBe(200);
   expect(new Uint8Array(await delivered.arrayBuffer())).toEqual(new Uint8Array(originalBytes));
-  const stock = await answer<{ revision: string }>(person.main('GET',
+  const stock = await answer<{ structure: string; revision: string }>(person.main('GET',
     `/v1/recipes/works/${short(intermediate.work)}${query(person, { revision: intermediate.revision })}`));
   expect(stock.revision).toBe(intermediate.revision);
+  expect(stock.structure).toBe(intermediate.structure);
   expect(JSON.stringify(stock)).not.toContain('PRIVATE DRAFT parsley');
   const provenance = await answer<{ items: ContentDerivationRecord[]; nextCursor: string | null }>(person.main('GET',
     `/v1/content-revisions/${slice.procedure.revisionId}/derivations${query(person, { limit: '20' })}`));
