@@ -128,7 +128,10 @@ export function IndependentZoneRecordedPage({ record, persona, selections, local
         anonymous: visit.actingSubject === undefined,
         fetcher: replay.fetcher,
       });
-      void readIndependentZonePublished(main, { space: visit.space, locale, actingSubject: visit.actingSubject })
+      void readIndependentZonePublished(main, {
+        space: visit.space, locale, actingSubject: visit.actingSubject,
+        origin: window.location.origin, fetcher: replay.fetcher,
+      })
         .then(result => { if (mounted) setLoad(result); })
         .catch((error: unknown) => {
           if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;

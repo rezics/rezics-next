@@ -61,7 +61,7 @@ async function replay(persona: AnswerPersona, selected: readonly RecordedSelecti
     return transport.fetcher(input, init);
   }) as typeof fetch;
   const main = browserMainApi('https://recorded.invalid', { anonymous: visit.actingSubject === undefined, fetcher });
-  return { visit, requests, main };
+  return { visit, requests, main, fetcher };
 }
 
 function published(read: IndependentZoneRead) {
@@ -83,8 +83,11 @@ for (const persona of answerPersonas) {
     if (!admitted) throw new Error(`${persona} address is not admitted`);
     expect(admitted.capabilities?.realm).toBeUndefined();
     expect(idOf(admitted.capabilities?.zone ?? '')).toBe(admitted.key);
-    const { visit, requests, main } = await replay(persona, selected);
-    const read = published(await readIndependentZonePublished(main, { space: visit.space, locale: 'en', actingSubject: visit.actingSubject }));
+    const { visit, requests, main, fetcher } = await replay(persona, selected);
+    const read = published(await readIndependentZonePublished(main, {
+      space: visit.space, locale: 'en', actingSubject: visit.actingSubject,
+      origin: 'https://recorded.invalid', fetcher,
+    }));
     expect(read.zone.realm).toBeNull();
     expect(read.presentation.realm).toBeNull();
     expect(read.zoneId).toBe(admitted.key);

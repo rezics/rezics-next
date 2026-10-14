@@ -3,7 +3,7 @@ import type { ZoneContext } from '@rezics/zone-sdk';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { addressKey } from '../address/path.ts';
-import type { browserMainApi } from '../api/browser.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { isOfflineError } from '../feed/types.ts';
 import { zoneContentText } from '../language/untagged.ts';
 import { failureOf as managementFailure, type ReadFailure as ManagementFailure } from '../manage/types.ts';
@@ -194,15 +194,19 @@ export type IndependentZoneRead =
 /**
  * The standalone home visit: anonymous address, complete presentation, home route,
  * and the editor link only when an acting person is already selected.
- * The caller supplies the client (the host's in production, a replay in a story).
+ * The caller supplies the acting client and the replay transport. The address
+ * read stays anonymous, matching the visit's public resolution.
  */
 export async function readIndependentZonePublished(client: MainClient, input: {
   space: string;
   locale: UiLocale;
   actingSubject?: string;
+  origin: string;
+  fetcher: typeof fetch;
 }): Promise<IndependentZoneRead> {
   const actingSubject = input.actingSubject;
-  const address = await readPublic(() => client.v1.addresses.resolve.get({ query: { scope: 'space', key: input.space } }));
+  const addressClient = browserMainApi(input.origin, { anonymous: true, fetcher: input.fetcher });
+  const address = await readPublic(() => addressClient.v1.addresses.resolve.get({ query: { scope: 'space', key: input.space } }));
   if (!address.loaded.ok) return { kind: 'unavailable', failure: address.loaded.failure };
   const identity = zoneIdentity(address.loaded.data);
   if ('detail' in identity) return { kind: 'discrepancy', detail: identity.detail };
