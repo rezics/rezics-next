@@ -37,7 +37,7 @@ export const realmMessagesFor = (locale: UiLocale): RealmMessages => ({ ...engli
 export function RealmPageStory({ zone, modules = [], pkg = null, execution = { mode: 'fallback', reason: 'none-approved' },
   look = true, reader = 'light', members = null, navigation = [], membership = null,
   membershipActions = { kind: 'signed-out', signInHref: '/auth/start' }, browse, position, locale, children, site = false,
-  platformAccess = NO_PLATFORM_ACCESS }: {
+  platformAccess = NO_PLATFORM_ACCESS, realmRef }: {
   zone: ZoneContext; modules?: readonly PlacedModule[]; pkg?: ZonePackage | null; execution?: Execution;
   look?: boolean; reader?: ReaderTheme; members?: string | null;
   navigation?: readonly { label: string; href: string }[];
@@ -48,13 +48,15 @@ export function RealmPageStory({ zone, modules = [], pkg = null, execution = { m
   /** The position control of a Zone that reads at the reader's place in a story. */
   position?: ReactNode;
   locale: UiLocale; children?: ReactNode; site?: boolean;
+  /** The address resolved by a page story's reader, when it differs from the package slug. */
+  realmRef?: string;
   /** The host's resolved access read; browser stories cannot execute request-backed server cards. */
   platformAccess?: PlatformAccess | null;
 }) {
   const zoneMessages = zoneMessagesFor(locale);
   const messages = realmMessagesFor(locale);
   const theme = zoneTheme(zone.tokens, { reader, enabled: look });
-  const ref = zone.slug ?? 'classics';
+  const ref = realmRef ?? zone.slug ?? 'classics';
   const actions = <>
     {zone.realm ? <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={membership}
       signedIn={membershipActions.kind !== 'signed-out'} signInHref="/auth/start" rulesHref={zone.links.about}

@@ -22,6 +22,7 @@ import { realmDiscussionReads, type BoardPage } from './discussion-read.ts';
 import { RealmNotFound } from './states.tsx';
 import { RealmPageStory, realmMessagesFor } from './story-page.tsx';
 import { RealmThreadContent, ThreadSkeleton } from './thread-content.tsx';
+import { realmHref } from './route.ts';
 
 type State = 'populated' | 'empty' | 'error' | 'gone' | 'loading' | 'thread' | 'thread-empty' | 'thread-loading' | 'thread-error' | 'thread-gone' | 'siblings';
 const concept = 'https://rezics.com/id/00000001-aaaa-4000-a000-000000000001';
@@ -80,7 +81,12 @@ function DiscussionPage({ state, locale, signedIn }: { state: State; locale: UiL
   const query = { sort: 'best' as const, window: 'week' as const, concept };
   if (loaded?.state === state && !loaded.page.ok && loaded.page.failure === 'missing') return <RealmNotFound messages={messages} />;
   if (thread?.state === state && !thread.read.ok && thread.read.failure === 'missing') return <RealmNotFound messages={messages} />;
-  return <RealmPageStory zone={communityZone(locale)} locale={locale}>
+  const zone = { ...communityZone(locale), realm: storyRealm.id,
+    name: { value: storyRealm.name, lang: 'en', dir: 'ltr' as const },
+    links: { home: realmHref(locale, realm), browse: '', works: '',
+      discussions: realmHref(locale, realm, 'discussions'), decisions: realmHref(locale, realm, 'decisions'),
+      about: realmHref(locale, realm, 'about') } };
+  return <RealmPageStory zone={zone} realmRef={realm} locale={locale}>
     <FeedProvider locale={locale} messages={feed} now={THREAD_NOW} signedIn={signedIn} actingSubject={actor ?? null}
       signInHref="/auth/start" avatarQuery="" tab="all" followedRealms={null} api={memoryFeed()}>
       {isThread ? thread?.state === state ? <RealmThreadContent read={thread.read} sort="best" here={here} feed={feed}

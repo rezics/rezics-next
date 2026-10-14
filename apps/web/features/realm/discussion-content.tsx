@@ -2,6 +2,7 @@
 
 import { buttonVariants } from '@rezics/ui/button';
 import { Skeleton, SkeletonText } from '@rezics/ui/skeleton';
+import { cn } from '@rezics/ui/utils';
 import { CalendarRangeIcon, MessagesSquareIcon, RotateCwIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -45,7 +46,8 @@ export function DiscussionBoards({ read, path, query, messages }: {
       {read.data.items.map(item => <li key={item.id} className="min-w-0 max-w-full">
         <LocalizedLink href={discussionListHref(path, { ...first, concept: item.id, cursor: undefined })}
           aria-current={query.concept === item.id ? 'page' : undefined}
-          className={`${buttonVariants({ variant: query.concept === item.id ? 'secondary' : 'outline', size: 'sm' })} max-w-full whitespace-normal [overflow-wrap:anywhere]`}>
+          className={cn(buttonVariants({ variant: query.concept === item.id ? 'secondary' : 'outline', size: 'sm' }),
+            'h-auto min-h-8 max-w-full whitespace-normal py-1.5 [overflow-wrap:anywhere]')}>
           {item.label}</LocalizedLink></li>)}
     </ul> : <p role="status" className="text-muted-foreground text-sm">{messages.boardsFailed}</p>}
     <div className="flex flex-wrap gap-3 text-sm">
