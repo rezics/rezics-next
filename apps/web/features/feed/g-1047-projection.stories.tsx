@@ -272,6 +272,7 @@ function newerStory(locale: Args['locale']): Story {
       );
       await expect(canvas.getAllByRole('article')).toHaveLength(2);
       await expect(canvas.queryByRole('article', { name: 'Work 99' })).toBeNull();
+      await expect(canvas.queryByText(arriving(locale))).toBeNull();
       await expect(
         canvas.getByRole('button', { name: locale === 'en' ? messages.refresh : zhHans.refresh }),
       ).toBeVisible();
