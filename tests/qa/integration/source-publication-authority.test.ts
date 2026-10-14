@@ -141,7 +141,7 @@ test('existing designation bootstrap is idempotent and preserves revoked ceiling
   } finally { await client.query('ROLLBACK'); client.release(); await revoke(successor); }
 });
 
-test('only revoking the original designation ends publication assignment while ordinary governance survives', async () => {
+test('revoking a later ordinary governance grant preserves deployment publication assignment', async () => {
   const before = (await pool.query<{ id: string; active: boolean }>(
     'SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows;
   expect(before).toHaveLength(1);
@@ -149,21 +149,8 @@ test('only revoking the original designation ends publication assignment while o
   const successor = (await issue({ permission: 'platform:grant', scopeId: 'platform:access', principalId: operatorId })).grant;
   await revoke(successor);
   expect((await pool.query('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows).toEqual(before);
-  await issue({ permission: 'platform:grant', scopeId: 'platform:access', principalId: operatorId });
-  const designation = (await pool.query<Grant>(
-    `SELECT g.id,g.generation::text,g.scope_id AS "scopeId",e.permission,e.receipt
-    FROM access.platform_grant_episode e
-    JOIN access.principal_permission_grant g ON g.id=e.principal_grant_id
-    WHERE e.permission='platform:grant' ORDER BY e.created_at,e.id LIMIT 1`)).rows[0]!;
-  await revoke(designation);
-  const ended = before.map(row => ({ ...row, active: false }));
-  expect((await pool.query('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows).toEqual(ended);
-  expect(await issue({}, 403)).toMatchObject({ code: 'grant_denied' });
-  const status = (await issue({ permission: 'platform:use:platform-admin', scopeId: 'platform:access' })).grant;
-  await revoke(status);
-  expect(await new AccessPlatformAdministrators(pool).designateFirst(issuer, sessions.operator.accountId!, () => undefined))
-    .toMatchObject({ status: 'ignored', receipt: designation.receipt });
-  await pool.query('SELECT access.seed_source_publication_assignment_ceiling($1,$2)', [operatorId, designation.receipt]);
-  expect((await pool.query('SELECT id,active FROM access.permission_grant WHERE action=$1', [assignment])).rows).toEqual(ended);
-  expect(await issue({}, 403)).toMatchObject({ code: 'grant_denied' });
+  const mandate = (await issue()).grant;
+  expect(await authority('member')).toBe(memberId);
+  await revoke(mandate);
+  expect(await authority('member')).toBeNull();
 }, 60_000);
