@@ -9,16 +9,21 @@ import { QueryRejected } from '../modules/query/compile.ts';
 import { problem } from './problems.ts';
 import { zoneBrowsePage, zoneBrowseQuery, zoneChapterPage, zoneDecisionPage, zoneEditorLists, zoneGenrePage,
   zoneReplyPage, zoneWorkPage } from '../modules/zone-modules/contract.ts';
-import { pageQuery, readLanguage, readUuid } from '../modules/work/read-contract.ts';
+import { pageQuery, readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { publicWorkRead } from '../modules/work/read-session.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 
 const params = t.Object({ realm: readUuid });
 const query = t.Object({ limit: pageQuery.limit, cursor: pageQuery.cursor,
-  language: t.Optional(readLanguage) }, { additionalProperties: false });
+  language: t.Optional(readLanguage), actingSubject: t.Optional(readId) }, { additionalProperties: false });
 const id = (uuid: string) => `https://rezics.com/id/${uuid}`;
 const headers = { 'cache-control': 'no-store' };
+// Readers can send their usual identity query; publication reads select only
+// public options, so an Agent or bearer never supplies Realm member authority.
+function publicOptions(options: { limit?: number; cursor?: string; language?: string }) {
+  return { limit: options.limit, cursor: options.cursor, language: options.language };
+}
 export const openApiOperations = {
   '/v1/realms/{realm}/modules/new-adoptions': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
   '/v1/realms/{realm}/modules/recently-completed': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } },
@@ -37,42 +42,42 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
     .get('/v1/realms/:realm/modules/new-adoptions', { params, query,
       response: { 200: zoneWorkPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneWorks(session, id(path.realm), 'new-adoptions')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/recently-completed', { params, query,
       response: { 200: zoneWorkPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneWorks(session, id(path.realm), 'recently-completed')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/recent-decisions', { params, query,
       response: { 200: zoneDecisionPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneDecisions(session, id(path.realm))), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/latest-chapters', { params, query,
       response: { 200: zoneChapterPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneChapters(session, id(path.realm))), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/discussions', { params, query,
       response: { 200: zoneReplyPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneReplies(session, id(path.realm), 'discussions')), { headers }); }
       catch (error) { return workReadError(error); }
     })
     .get('/v1/realms/:realm/modules/reader-quotes', { params, query,
       response: { 200: zoneReplyPage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneReplies(session, id(path.realm), 'reader-quotes')), { headers }); }
       catch (error) { return workReadError(error); }
     })
@@ -80,15 +85,16 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
       params: t.Object({ realm: readUuid, context: readUuid }), query,
       response: { 200: zoneGenrePage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneGenres(session, id(path.realm), id(path.context))), { headers }); }
       catch (error) { return discoveryError(error); }
     })
     .get('/v1/realms/:realm/modules/editor-lists', {
-      params, query: t.Object({ language: t.Optional(readLanguage) }, { additionalProperties: false }),
+      params, query: t.Object({ language: t.Optional(readLanguage), actingSubject: t.Optional(readId) },
+        { additionalProperties: false }),
       response: { 200: zoneEditorLists, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
-      try { return Response.json(await publicWorkRead(work, request, options,
+      try { return Response.json(await publicWorkRead(work, request, publicOptions(options),
         session => readZoneEditorLists(session, id(path.realm))), { headers }); }
       catch (error) { return workReadError(error); }
     })
@@ -96,10 +102,10 @@ export function zoneModuleRoutes(work: MainWorkDependencies) {
       response: { 200: zoneBrowsePage, ...workReadProblems },
     }, async ({ request, params: path, query: options }) => {
       try {
-        compileZoneBrowse(id(path.realm), options);
-        return Response.json(await publicWorkRead(work, request, { language: options.language,
-          limit: options.limit, cursor: options.cursor },
-        session => readZoneBrowse(session, id(path.realm), options)), { headers });
+        const { actingSubject: _actingSubject, ...browse } = options;
+        compileZoneBrowse(id(path.realm), browse);
+        return Response.json(await publicWorkRead(work, request, publicOptions(browse),
+        session => readZoneBrowse(session, id(path.realm), browse)), { headers });
       } catch (error) {
         if (error instanceof QueryRejected) return problem(400, error.refusal, error.message);
         return discoveryError(error);

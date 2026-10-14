@@ -38,17 +38,22 @@ test('every built-in Realm module source is unavailable without a live public Re
   const config = checkZoneConfiguration(Buffer.from(JSON.stringify({
     ...JSON.parse(configuration(presentation).toString()), defaultRealm: three,
   })));
-  for (const visibility of ['public', 'restricted', 'private', 'closed'] as const) {
+  for (const visibility of ['public', 'restricted', 'private', 'closed', 'absent'] as const) {
     const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: '1' }, fuseki: {
       query: async (query: string) => {
         expect(query).toContain(`rv:realmState rv:Active`);
         expect(query).toContain(`<${three}>`);
-        return { results: { bindings: visibility === 'closed' ? [] : [{
+        return { results: { bindings: visibility === 'absent' ? [] : [{
           space: { value: two }, visibility: { value: visibility },
           disclosure: { value: `${RV}${visibility === 'private' ? 'Private' : 'Public'}` },
         }] } };
       },
     } } as unknown as WorkActivationEnvironment;
+    configureFixtureDisclosureAncestry(environment, () => undefined);
+    configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target => {
+      expect(target).toMatchObject({ owner: 'graph', resource: three, component: 'record' });
+      return visibility === 'closed' ? 'hidden' : 'visible';
+    })));
     const data = await readZoneModuleData(environment, config);
     expect(data.flatMap(module => module.sources.map(source => source.state))).toEqual(
       ZONE_PUBLIC_READ_SOURCES.map(() => ['public', 'restricted'].includes(visibility) ? 'public-read' : 'unavailable'));
@@ -62,6 +67,35 @@ test('every built-in Realm module source is unavailable without a live public Re
   await expect(readZoneModuleData({ fuseki: { query: async () => { throw new Error('Realm source fault'); } },
     lineage: { dataEpoch: 'epoch', routingEpoch: '1' } } as unknown as WorkActivationEnvironment, fault))
     .rejects.toThrow('Realm source fault');
+});
+
+test('Realm module sources recheck closure after hydration and recover after restoration', async () => {
+  const presentation = { ...DEFAULT_ZONE_PRESENTATION, modules: [{
+    id: 'latest', type: 'shelf' as const, title: 'Latest',
+    source: { kind: 'query-block' as const, block: 'new-adoptions' },
+    tabs: [{ id: 'reference', label: 'Reference', source: { kind: 'context' as const, context: one } }],
+  }] };
+  const config = checkZoneConfiguration(Buffer.from(JSON.stringify({
+    ...JSON.parse(configuration(presentation).toString()), defaultRealm: three,
+  })));
+  const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: '1' }, fuseki: {
+    query: async () => ({ results: { bindings: [{ space: { value: two },
+      visibility: { value: 'public' }, disclosure: { value: `${RV}Public` } }] } }),
+  } } as unknown as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(environment, () => undefined);
+  let reads = 0;
+  let closing = true;
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => {
+    reads++;
+    return targets.map(() => closing && reads > 1 ? 'hidden' : 'visible');
+  }));
+  expect((await readZoneModuleData(environment, config))[0]?.sources.map(source => source.state))
+    .toEqual(['unavailable', 'reference']);
+  closing = false;
+  expect((await readZoneModuleData(environment, config))[0]?.sources.map(source => source.state))
+    .toEqual(['public-read', 'reference']);
+  configureDisclosure(environment, null);
+  await expect(readZoneModuleData(environment, config)).rejects.toThrow('Realm module disclosure is unavailable');
 });
 
 describe('zone-presentation-v2', () => {

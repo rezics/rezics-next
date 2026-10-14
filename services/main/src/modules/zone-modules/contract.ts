@@ -68,6 +68,7 @@ const many = { minItems: 1, maxItems: ZONE_BROWSE_COST.filterValues, uniqueItems
 const sortValue = t.Union([t.Literal('relevance'), t.Literal('newest'), t.Literal('updated')]);
 /** Conditions as query parameters: values within a Facet match any, Facets match all. */
 export const zoneBrowseQuery = t.Object({ language: pageQuery.language, limit: pageQuery.limit,
+  actingSubject: t.Optional(readId),
   cursor: pageQuery.cursor, q: t.Optional(t.String({ minLength: 1, maxLength: ZONE_BROWSE_COST.textCharacters })),
   sort: t.Optional(sortValue),
   /** An accepted first-publication calendar year, or an inclusive bounded range. */

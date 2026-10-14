@@ -25,7 +25,7 @@ import { ZonePageDocument, resolveZonePageDocument, zoneDocumentShowcase } from 
 import { readerLanguages, selectDisplayName } from '../display-language/select.ts';
 import { discloseContent } from '../disclosure/assembly.ts';
 import { currentDisclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
-import { discloseInventory } from '../disclosure/read.ts';
+import { discloseInventory, hasDisclosure } from '../disclosure/read.ts';
 import { ZonePublicationUnavailable } from './configuration.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 
@@ -306,7 +306,13 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
       && (ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(source.block)));
   const realmPolicy = publicRealmSources && config.defaultRealm
     ? await readRealmPolicy(bounded, config.defaultRealm) : null;
-  const publicRealm = realmPolicy !== null && realmPolicy.visibility !== 'private';
+  if (realmPolicy && realmPolicy.visibility !== 'private' && !hasDisclosure(bounded)) {
+    throw new ZonePublicationUnavailable('Realm module disclosure is unavailable');
+  }
+  const realmVisible = async () => realmPolicy !== null && realmPolicy.visibility !== 'private'
+    && (await discloseInventory(bounded, [{ owner: 'graph', resource: config.defaultRealm!,
+      component: 'record' }], currentDisclosureViewer(), 'read'))[0] === 'visible';
+  const openingRealm = await realmVisible();
   const used = new Set(presentation.modules.flatMap(module => [module.source,
     ...(module.tabs ?? []).map(tab => tab.source)]).filter(source => source.kind === 'query-block')
     .map(source => source.kind === 'query-block' ? source.block : '')
@@ -352,6 +358,9 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
       members: page.occurrences.filter(item => item.role === 'member' && !!item.target)
         .map(item => ({ work: item.target!, ...(item.selection ? { selection: item.selection } : {}) })) });
   }
+  // Closure lives in Access, independently of the retained active/public graph
+  // policy. Close that check after all other module source hydration too.
+  const publicRealm = openingRealm && await realmVisible();
   return presentation.modules.map(module => ({ id: module.id,
     sources: [module.source, ...(module.tabs ?? []).map(tab => tab.source)].map(source =>
       source.kind === 'query-block'
