@@ -63,6 +63,30 @@ test('serialized recipe intake preserves ingredient lines, quantities, units, fl
   expect(sourceObservations).toEqual([id(99)]);
 });
 
+test('content adoption falsifier: unparsed wording has a residual and unsupported instruction forms report their pointer', () => {
+  const records = [line(2, 'salt to taste', 'en', { parseStatus: 'unparsed' }),
+    line(3, '⅓ cup tomato', 'en', { parseStatus: 'partial', amount: { numerator: 1, denominator: 3 } })];
+  const exported = exportRecipe(records, structure);
+  expect(exported.residuals).toEqual(records.map(record => ({
+    sourceKey: record.sourceKey!, text: record.qualifier.originalText.value,
+    parseStatus: record.qualifier.parseStatus, residual: null,
+  })));
+  expect(exported.sourceObservations).toEqual([id(99)]);
+  const imported = parseRecipeFile(Buffer.from(JSON.stringify(exported.recipe)), 'application/ld+json');
+  expect(imported.preview.ingredients.map(item => item.qualifier)).toEqual(records.map(record => record.qualifier));
+  for (const unsupported of [{ '@type': 'VideoObject', name: 'Recording' },
+    { '@type': 'CreativeWork', name: 'Referenced preparation' }, { unexpected: 'instruction' }]) {
+    let refused: unknown;
+    try {
+      importRecipe({ recipeInstructions: ['Before.', { '@type': 'HowToSection', name: 'Method',
+        itemListElement: ['Supported.', unsupported] }, 'After.'] }, 'source');
+    } catch (error) { refused = error; }
+    expect(refused).toBeInstanceOf(RecipeInstructionNotSupported);
+    expect(refused).toMatchObject({ code: 'recipe_instruction_not_supported',
+      sourcePointer: '/recipeInstructions/1/itemListElement/1' });
+  }
+});
+
 test('normalized sections retain parents and one order with interleaved multilingual root steps', () => {
   const records = [step(2, structure, '予熱する。'), group(3, structure, '生地'),
     step(4, id(3), '混ぜる。'), group(5, id(3), '仕上げ'), step(6, id(5), '折り込む。'),

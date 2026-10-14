@@ -59,3 +59,38 @@ test('RECIPE05: absent evidence stays unknown and unlike units remain separate',
   expect(result.nutrients).toHaveLength(2);
   expect(result.nutrients.map(item => item.unit)).toEqual(['kcal', 'kJ']);
 });
+
+test('content adoption falsifier: one third and both range endpoints scale exactly by three', () => {
+  const [scaled] = scaleIngredients([line({ name: 'tomato', amount: { numerator: 1, denominator: 3 },
+    amountUpper: { numerator: 2, denominator: 3 }, amountLexical: '⅓–⅔' })], { numerator: 3n, denominator: 1n });
+  expect(scaled).toMatchObject({ amount: { numerator: 1n, denominator: 1n },
+    amountUpper: { numerator: 2n, denominator: 1n }, sourceLexical: '⅓–⅔', scaled: true });
+});
+
+test('content adoption falsifier: scaling leaves step temperature and duration untouched', () => {
+  const step: OccurrenceRecord = { ...line(), role: 'step', qualifier: { type: 'recipe-step',
+    instructionText: { value: 'Bake at 180 C for 20 minutes.', language: 'en' },
+    usesIngredient: [], media: [], scaling: 'linear' } };
+  const records = [line(), step], original = structuredClone(records);
+  expect(scaleIngredients(records, { numerator: 3n, denominator: 1n })).toHaveLength(1);
+  expect(records).toEqual(original);
+});
+
+test('content adoption falsifier: exact nutrition sums, unit separation and coverage precedence', () => {
+  const input = (coverage: 'complete' | 'partial' | 'unknown', numerator: bigint, denominator: bigint, unit = 'g') => ({
+    coverage, values: [{ nutrient: 'protein', unit, amount: { numerator, denominator } }],
+  });
+  const complete = [input('complete', 1n, 3n), input('complete', 2n, 3n), input('complete', 7n, 1n, 'mg')];
+  for (const basis of ['per-serving', 'whole-recipe'] as const) {
+    expect(calculateNutrition(complete, basis)).toEqual({ basis, coverage: 'complete', nutrients: [
+      { nutrient: 'protein', unit: 'g', amount: { numerator: 1n, denominator: 1n } },
+      { nutrient: 'protein', unit: 'mg', amount: { numerator: 7n, denominator: 1n } },
+    ] });
+    expect(calculateNutrition([...complete, input('partial', 0n, 1n)], basis).coverage).toBe('partial');
+    for (const extra of [[input('unknown', 0n, 1n), input('partial', 0n, 1n)],
+      [input('partial', 0n, 1n), input('unknown', 0n, 1n)]]) {
+      expect(calculateNutrition([...complete, ...extra], basis).coverage).toBe('unknown');
+    }
+    expect(calculateNutrition([], basis)).toEqual({ basis, coverage: 'unknown', nutrients: [] });
+  }
+});

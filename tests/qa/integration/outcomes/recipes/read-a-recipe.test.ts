@@ -22,7 +22,7 @@ type Page = { revision: string; structure: string; next?: string;
     labels: Array<{ value: string; language: string }>;
     qualifier?: { originalText?: { value: string; language: string }; instructionText?: { value: string; language: string } } }>;
   ingredients: Array<{ originalText: string; amount: { numerator: number; denominator: number } }>;
-  measures: Array<{ kind: string }>; cost: { occurrences: number } };
+  measures: Array<{ kind: string }>; cost: { occurrences: number; pages: number } };
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request, raw = await response.text();
   expect(response.status, `${response.status}: ${raw}`).toBe(status);
@@ -63,6 +63,14 @@ async function read(name: PersonaName) {
     pages.push(await answer<Page>(sample(`recipe-scaled-page-${pages.length + 1}`, 'GET', `${path}?${query}`)));
   }
   expect(pages).toHaveLength(2);
+  // Content adoption must preserve the public facade's bounded traversal.
+  for (const page of pages) {
+    expect(page.occurrences.length).toBeLessThanOrEqual(100);
+    expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(1_048_576);
+    expect(page.cost.occurrences).toBe(page.occurrences.length);
+    expect(page.cost.pages).toBeLessThanOrEqual(34);
+    expect(page.measures.map(item => item.kind)).toContain('servings');
+  }
   const occurrences = pages.flatMap(page => page.occurrences);
   expect(occurrences.map(item => item.occurrence)).toEqual(recipe.occurrenceIds);
   expect(new Set(occurrences.map(item => item.occurrence)).size).toBe(recipe.occurrenceIds.length);

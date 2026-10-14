@@ -260,9 +260,11 @@ test('Recipe atomic reference edits overlay each removed ingredient without chan
     }), 201);
     const inserted = await f.json<Change>(await change(created, ['A', 'B'].map(sourceKey => ({
       op: 'insert', parent: created.structure, position: 'last', role: 'ingredient',
-      qualifier: ingredient(`Ingredient ${sourceKey}`), sourceKey,
+      // Identical food text is deliberately not the identity of either use.
+      qualifier: ingredient('tomato'), sourceKey,
     }))), 200);
     const [a, b] = inserted.occurrences as [string, string];
+    expect(a).not.toBe(b);
     const current = await f.json<Change>(await change(inserted, [{ op: 'insert',
       parent: created.structure, position: 'last', role,
       qualifier: role === 'step' ? step('Use A and B.', [a, b]) : ingredient('Substitute for A.', [a]),
@@ -292,6 +294,23 @@ test('Recipe atomic reference edits overlay each removed ingredient without chan
     return response;
   };
   try {
+    // A garnish replacement cannot retarget the sauce mention, even though
+    // both occurrences have exactly the same tomato wording.
+    const tomatoes = await seed('step');
+    const sauce = await f.json<Change>(await change(tomatoes.current, [
+      update(tomatoes.referrer, step('Stir the sauce tomato.', [tomatoes.a])),
+      { op: 'insert', parent: tomatoes.current.structure, position: 'last', role: 'ingredient',
+        qualifier: ingredient('Garnish replacement', [tomatoes.b]) },
+    ]), 200);
+    const tomatoPage = await read(sauce);
+    expect(tomatoPage.occurrences.filter(record => record.occurrence === tomatoes.a || record.occurrence === tomatoes.b)
+      .map(record => record.qualifier)).toEqual([ingredient('tomato'), ingredient('tomato')]);
+    expect(tomatoPage.occurrences.find(record => record.occurrence === tomatoes.referrer)?.qualifier)
+      .toEqual(step('Stir the sauce tomato.', [tomatoes.a]));
+    expect(tomatoPage.occurrences.find(record => record.occurrence === sauce.occurrences[0])?.qualifier)
+      .toEqual(ingredient('Garnish replacement', [tomatoes.b]));
+    expect((await change(sauce, [remove(tomatoes.b)])).status).toBe(409);
+    expect(await read(sauce)).toEqual(tomatoPage);
     for (const role of ['step', 'ingredient'] as const) {
       for (const removeFirst of [false, true]) {
         const { current, a, b, referrer } = await seed(role);

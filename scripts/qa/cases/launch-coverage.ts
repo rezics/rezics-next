@@ -150,6 +150,13 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Imports a French Schema.org Recipe, edits a step, downloads its JSON and reimports that file into another Recipe, preserving duplicate ingredients, sections, steps and language.'),
   },
   {
+    kind: 'recipes',
+    capability: 'Instructions in any form',
+    api: missing('content-adoption',
+      'recipes/instructions-in-any-form: six pending persona outcomes require Post, exact recording, Content procedure, ordered adoption and qualified derivation before public opening.'),
+    browser: missing('content-adoption', 'API acceptance precedes instruction surfaces.'),
+  },
+  {
     kind: 'visual-novels',
     capability: 'Work hub and edition choice',
     api: missing('L21'),

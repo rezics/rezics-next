@@ -182,6 +182,7 @@ async function walk(records: readonly OccurrenceRecord[], options?: { servings?:
     pages += 1;
     expect(page.occurrences.length).toBeGreaterThan(0);
     expect(page.occurrences.length).toBeLessThanOrEqual(RECIPE_WORK_PAGE_OCCURRENCES);
+    expect(Buffer.byteLength(JSON.stringify(page))).toBeLessThanOrEqual(RECIPE_WORK_PAGE_BYTES);
     expect(page.cost.occurrences).toBe(page.occurrences.length);
     expect(measureReads).toBe(1);
     expect(page.measures).toEqual(options?.measures ?? []);
@@ -269,6 +270,21 @@ test('ten thousand nested occurrences are complete, ordered and bounded on every
   const paged = await walk(flat);
   expect(paged.seen).toEqual(flat.map(item => item.occurrence));
   expect(paged.pages).toBe(3);
+});
+
+test('content adoption falsifier: 1,001 occurrences at depth 16 visit each use once within every page budget', async () => {
+  const records: OccurrenceRecord[] = [];
+  let parent = structure;
+  for (let depth = 0; depth < STRUCTURE_LIMITS.maxDepth - 1; depth++) {
+    const group = node(parent, 0, 'group', undefined, `section ${depth}`);
+    records.push(group);
+    parent = group.occurrence;
+  }
+  for (let order = 0; order < 1001 - (STRUCTURE_LIMITS.maxDepth - 1); order++) records.push(ingredient(parent, order, '1 cup tomato'));
+  const walked = await walk(records, { servings: 8, measures: [servingsMeasure(4), nutrientMeasure] });
+  expect(walked.seen).toEqual(depthFirst(records, structure).map(item => item.occurrence));
+  expect(new Set(walked.seen).size).toBe(1001);
+  expect(walked.sizes.reduce((sum, size) => sum + size, 0)).toBe(1001);
 });
 
 test('a single page over 1 MiB is refused and more than 64 measures are refused', async () => {

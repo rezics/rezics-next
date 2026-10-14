@@ -1,5 +1,44 @@
 # Recipe file exchange
 
+## Decided Content adoption boundary
+
+The [Recipe profile](recipes.md) and [Content contract](content-adoption.md)
+extend instructions to Post, exact recording representation, procedure, or an
+ordered combination. This is the unimplemented target; the sections below
+describe today's Schema.org adapter and its preservation bounds.
+
+Native export of one exact authorized Structure revision retains occurrence
+IDs/order/parents, exact Resource selectors, Content documents and selected
+procedure blocks, Media representation identities, derivation records and
+independent source support. It returns `{ format: "native", structure, revision,
+occurrences, contents, derivations, losses: [] }`. It does not expand referenced
+Recipes recursively or replace exact bytes with a delivery URL. Missing or
+concealed dependencies have explicit unavailable entries; concealed payloads
+and identifiers cannot leak through an export sidecar. This result describes
+fidelity of the selected accessible cut, not a promise to recover erased bytes.
+
+Schema.org projection uses HowToSection/HowToStep from the single procedure
+document. Prose can be exported as text only with a reported flattening loss;
+recordings, occurrence-grain references and PROV derivation cannot disappear
+silently. In addition to today's result, the API returns
+`losses: [{ occurrence, code, pointer }]`, where `code` is
+`instruction-form-unsupported`, `reference-not-representable`,
+`derivation-not-representable` or `measurement-not-representable`.
+An unsupported target form may instead produce 422 with its typed reason.
+Unknown nutrition/media/reference fields stay retained Source evidence or are
+explicitly refused; they never become accepted facts. Importability remains
+separate from fidelity: an importable file may have reported losses.
+
+`GET /v1/recipes/{structure}/export?revision=<exact>&format=native|schema-org`
+returns the selected response above, subject to current read authority, the
+4,096-occurrence/1 MiB export bounds and each owner's disclosure. Omitted
+`format` keeps today's Schema.org result. Import remains bounded and refuses
+unsupported forms, rather than claiming that the larger export capacity
+establishes synchronous reimport. New-form native import is a later operation;
+this slice proves export retention and truthful loss only.
+
+## Current adapter
+
 Recipe exchange carries ingredient lines and ordered instructions between native
 Structures and a single UTF-8 JSON Recipe. The module contract is implemented by
 [export](../../services/main/src/modules/recipe/export.ts),
