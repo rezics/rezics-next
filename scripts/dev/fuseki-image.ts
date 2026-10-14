@@ -9,6 +9,16 @@ import { join, posix } from 'node:path';
 export const fusekiDockerfile = 'infra/jena/Dockerfile';
 export const composeFile = 'infra/dev/compose.yaml';
 
+/** Focused native proofs use the full suite's Maven policy, rather than the
+ * runtime stage's test-free packaging invocation. Refuse drift in the fixture cache. */
+export function nativeModuleTestInvocation(dockerfile: string): string {
+  const stage = dockerfile.split('\nFROM module AS module-test\n', 2)[1]?.split(/\nFROM /, 1)[0];
+  const invocation = /^RUN --mount=type=cache,id=rezics-native-test-files,target=\/build\/tmp,sharing=locked mvn (.+) package$/m.exec(stage ?? '')?.[1];
+  if (!invocation || !invocation.split(' ').every(argument => /^-[^\s"'`]+$/u.test(argument)))
+    throw new Error('unsupported native module-test Maven invocation');
+  return invocation;
+}
+
 export function dockerfileCopySources(dockerfile: string): string[] {
   const sources: string[] = [];
   for (const line of dockerfile.split(/\r?\n/)) {

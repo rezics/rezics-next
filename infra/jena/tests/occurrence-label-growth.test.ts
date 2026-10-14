@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { nativeModuleTestInvocation } from '../../../scripts/dev/fuseki-image.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const focused = Bun.env.REZICS_NATIVE_TEST_CLASSES
@@ -18,9 +19,7 @@ test(focused ? `the image Maven invocation verifies ${focused}`
   const image = /^FROM (\S+) AS module$/m.exec(dockerfile)?.[1];
   if (!image) throw new Error('missing pinned native builder');
   const stage = dockerfile.split(/\nFROM /, 1)[0]!;
-  const invocation = /^RUN --mount=\S+ mvn (.+) package$/m.exec(stage)?.[1];
-  if (!invocation || !invocation.split(' ').every(argument => /^-[^\s"'`]+$/u.test(argument)))
-    throw new Error('unsupported native image Maven invocation');
+  const invocation = nativeModuleTestInvocation(dockerfile);
   for (const flag of ['-DargLine=-Xmx384m', '-DforkCount=1', '-DreuseForks=false'])
     expect(invocation.split(' ')).toContain(flag);
   const environment = ['MAVEN_OPTS', 'JAVA_TOOL_OPTIONS'].map(name => {

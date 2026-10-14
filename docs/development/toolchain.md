@@ -428,11 +428,12 @@ Exact direct pins from root and workspace manifests; `yarn.lock` resolves transi
 | Source | Image and digest |
 | --- | --- |
 | Compose | postgres:18.6-trixie@sha256:5a5a84b19854a9ffaa54082c166ff4ec27473a361e496e5ea167f298f2da9722 |
-| Compose | rezics/fuseki:6.2.0-cmd0.5.40-1cb9f6b9050b |
+| Compose | rezics/fuseki:6.2.0-cmd0.5.40-87006b3921ad |
 | Compose | rustfs/rustfs:1.0.0@sha256:8cc9801755448b71a786705ce76692c77e14936cccd87cf2fc31842e58f4d1ff |
 | Compose | ghcr.io/shopify/toxiproxy:2.12.0@sha256:9378ed52a28bc50edc1350f936f518f31fa95f0d15917d6eb40b8e376d1a214e |
 | Compose | axllent/mailpit:v1.31.2@sha256:74d609a42ec279aa63c6b4622a6fa9b5408d1ad5b1d76a1c4be40a265ce0863d |
 | Fuseki build | maven:3.9.16-eclipse-temurin-21@sha256:c2a2c58516d160f43b50f12baa427ca86989e0bc942609e04aff61da5d9a7d74 |
+| Fuseki build | module |
 | Fuseki build | eclipse-temurin:21.0.12_8-jre-noble@sha256:7739f0ffce786528961eea6bf46d9610ee968ac6127c9b2e93494757bdecce9f |
 | Observability | oven/bun:1.4.3@sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598 |
 | Observability | greptime/greptimedb:v1.2.1@sha256:9982e36cf3ddb6f2bc813f93ec164509dce59e8c0667c6c38b826f293ec09477 |
@@ -543,6 +544,8 @@ Pass command arguments after `--`; run `task --list` for the live command menu.
 | `task gen:check` | Fail if generated artifacts are stale. |
 | `task operation` | Find Main API operation declarations, handlers and calling tests. |
 | `task jena:check` | Validate Turtle and assemblers, parse one reviewed query, and record scratch TDB2 statistics with the pinned Jena CLI. |
+| `task jena:image` | Obtain the input-pinned Fuseki image, building once per tag under a host-wide lock. |
+| `task jena:test` | Run the full native Maven suite in the module-test Docker target. |
 | `task toolchain:inventory` | Regenerate the toolchain inventory from manifests and root commands. |
 | `task dataset:fetch` | Explicitly capture complete real-world series into the external local dataset store. |
 | `task dataset:verify` | Verify an external dataset snapshot and all referenced local bytes without network access. |

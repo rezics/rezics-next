@@ -6,11 +6,21 @@ import { planAffected } from './affected.ts';
 import { ownerFilesFromPlan } from '../goal/unit-gate.ts';
 import { regressionBatchCommand, regressionRegistry } from '../goal/regress.ts';
 import { runNativeModuleSuite } from './native-module-suite.ts';
+import { nativeModuleTestInvocation } from '../dev/fuseki-image.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const dockerfile = readFileSync(join(root, 'infra/jena/Dockerfile'), 'utf8');
 const plan = (path: string) => planAffected({ base: 'main', changed: [path], graph: [], sources: new Map(),
   exists: file => inputSelectedNativeTests.includes(file), nativeModuleDockerfile: dockerfile });
+
+test('focused proofs retain the original native suite Maven flags and fixture cache', () => {
+  expect(nativeModuleTestInvocation(dockerfile).split(' ')).toEqual([
+    '-B', '-ntp', '-DexcludedGroups=com.rezics.jena.ExternalFixture', '-DargLine=-Xmx384m',
+    '-DforkCount=1', '-DreuseForks=false',
+  ]);
+  expect(() => nativeModuleTestInvocation(dockerfile.replace('sharing=locked', 'sharing=shared')))
+    .toThrow('unsupported native module-test Maven invocation');
+});
 
 test('every Jena edit and generated module input selects the full native suite in the merge gate', () => {
   for (const file of ['infra/jena/Dockerfile', 'infra/jena/patches/ThriftConvert.java',
