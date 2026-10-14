@@ -48,6 +48,7 @@ try {
     ],
   });
   const head = await answer<{ revision: string }>('GET', `/v1/works/${short(work.work)}/scalar-value?actingSubject=${encodeURIComponent(f.actor)}`);
+  await f.grant(`work:publish:${work.work}`, 'work.publish');
   await answer('POST', '/v1/work-publications', {
     profile: 'work-structure-publication-v1', operation: 'publish', work: work.work,
     actingSubject: f.actor, expectedWorkHead: head.revision, expectedMainVersion: work.mainVersion,

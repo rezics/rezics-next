@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { seedServedTypes } from '../features/catalogue/type-fixtures.ts';
-import { showsBookControls, workExperience } from '../features/entity-page/experience.ts';
+import { showsBookControls, showsEditionStatus, workExperience } from '../features/entity-page/experience.ts';
 import { projectionFor } from '../features/entity-page/fixtures.ts';
 import { guideSections } from '../features/work-page/types/guide.tsx';
 
@@ -40,6 +40,19 @@ describe('Work page selection from the served registry and the projection’s se
       ['https://schema.org/CreativeWork']]) {
       expect(showsBookControls(experienceOf(types, false)), types.join()).toBe(false);
     }
+  });
+
+  test('saved edition status survives a game or media type whose primary action visits an external site', () => {
+    for (const type of ['https://schema.org/VideoGame', 'https://schema.org/Movie', 'https://schema.org/TVSeries']) {
+      for (const listed of [true, false]) {
+        const experience = experienceOf([type], listed);
+        expect(showsEditionStatus(experience), `${type}, projection ${listed}`).toBe(true);
+      }
+    }
+    expect(showsEditionStatus(experienceOf(['https://schema.org/VideoGame']))).toBe(true);
+    expect(experienceOf(['https://schema.org/VideoGame']).primaryAction).toBe('visit');
+    expect(showsEditionStatus(experienceOf(['https://schema.org/Book']))).toBe(true);
+    expect(showsEditionStatus(experienceOf(['https://schema.org/Recipe']))).toBe(false);
   });
 });
 

@@ -52,7 +52,7 @@ import { AboutFacts, Availability, DiscussionHub, Parts, PrimaryAction, Status }
 import { type HubSection, hubLabels, hubPlan } from './hub.ts';
 import { WikiSection, WikiShortcut } from './wiki-server.tsx';
 import { readEntityProjection } from '../entity-page/read.ts';
-import { type WorkExperience, workExperience } from '../entity-page/experience.ts';
+import { showsEditionStatus, type WorkExperience, workExperience } from '../entity-page/experience.ts';
 import { shelfWords } from './shelf-words.ts';
 import { WorkKindActions } from './types/actions.tsx';
 import { RecipeResourceBody } from '../recipe-editor/resource-page.tsx';
@@ -197,7 +197,7 @@ export async function WorkFrameView({ workRef, id, work, locale, messages, lead,
       ? <ReadButton workRef={workRef} start={{ kind: 'contents' }} messages={messages} /> : null}>
       <ReadSlot workRef={workRef} id={id} work={work} experience={experience} locale={locale} messages={messages} />
     </Suspense>}
-    status={experience.kind === 'book' || experience.primaryAction === 'watch' || experience.primaryAction === 'play' ? <Suspense fallback={null}>
+    status={showsEditionStatus(experience) ? <Suspense fallback={null}>
       <Status id={id} locale={locale} messages={messages} /></Suspense> : undefined}
     shortcuts={<>
       <ProvisionalNotice verification={work.verification} provenance={work.fieldProvenance} locale={locale} />

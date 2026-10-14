@@ -17,21 +17,23 @@ import { OverviewLayout, WorkFrame } from './work-frame.tsx';
 import { WorkAbout } from './work-header.tsx';
 import { YourEdition } from './your-edition.tsx';
 import { chooseOption } from '../stories/choose-option.ts';
+import { showsEditionStatus, workExperience } from '../entity-page/experience.ts';
 
 const noOverflow = () => expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 
-interface FrameArgs { locale: UiLocale; action: NextAction | null }
+interface FrameArgs { locale: UiLocale; action: NextAction | null; types?: string[]; editionName?: string }
 
 /** Identity and the next action around a short overview, with the phone's "On this page" menu. */
-function Frame({ locale, action }: FrameArgs) {
+function Frame({ locale, action, types = fixture.work.types, editionName = 'Sword Art Online 1: Aincrad' }: FrameArgs) {
   const t = messages[locale];
   const progress = { ok: true as const, data: tracking.indexSummary };
-  return <WorkFrame workRef={fixture.workRef} work={fixture.work} locale={locale} messages={t}
+  const experience = workExperience(null, types);
+  return <WorkFrame workRef={fixture.workRef} work={{ ...fixture.work, types }} experience={experience} locale={locale} messages={t}
     sections={hubLabels(t, hubSections)}
     credits={<WorkCredits agentCredits={fixture.agentCredits} credits={fixture.credits} locale={locale} messages={t} />}
     readAction={action ? <NextActionView action={action} workRef={fixture.workRef} locale={locale} messages={t} /> : undefined}
-    status={<IdentityStatus progress={progress} preference={{ ok: true, data: tracking.indexSummary.preference }}
-      editionName="Sword Art Online 1: Aincrad" locale={locale} messages={t} />}>
+    status={showsEditionStatus(experience) ? <IdentityStatus progress={progress} preference={{ ok: true, data: tracking.indexSummary.preference }}
+      editionName={editionName} locale={locale} messages={t} /> : undefined}>
     <OverviewLayout messages={t} plan={hubSections} scopeBar={null} ratings={null}
       about={<WorkAbout work={fixture.work} messages={t} />} record={null}
       availability={<p>Availability</p>} parts={<p>Parts</p>} wiki={<p>Wiki</p>} discussion={<p>Discussion</p>}
@@ -47,6 +49,16 @@ const meta = {
 } satisfies Meta<FrameArgs>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const GameEditionOnReturn: Story = {
+  args: { types: ['https://schema.org/VideoGame'], editionName: 'Paper Cranes Windows', action: null },
+  globals: { viewport: { value: 'phone' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).getByRole('list', { name: 'Your edition' }))
+      .toHaveTextContent('Your edition: Paper Cranes Windows');
+    await noOverflow();
+  },
+};
 
 /** Within the first phone screen: the Work's identity, the reader's edition and progress, and the one action. */
 export const PhoneFirstScreen: Story = {

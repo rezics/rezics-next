@@ -36,3 +36,7 @@ export function workExperience(page: EntityProjection | null, types: readonly st
 
 /** Book controls (the reader's Read button and its cover layout) belong to the registry's book presentation only. */
 export const showsBookControls = (experience: Pick<WorkExperience, 'kind'>) => experience.kind === 'book';
+
+/** Editions describe books, games and media even when their primary action opens an external site. */
+export const showsEditionStatus = (experience: Pick<WorkExperience, 'kind' | 'presentation'>) =>
+  experience.kind === 'book' || experience.presentation === 'game' || experience.presentation === 'media';
