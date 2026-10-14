@@ -6,7 +6,11 @@ import { profileRegistry } from '../../../packages/model/src/generated/profiles.
 import { CommandOutcomeUnknown, FusekiClient, type CommandEnvelope,
   type CommandHealth, type CommandResult, type SparqlResult } from '../src/infrastructure/fuseki.ts';
 import { COMMAND_MODULE_VERSION } from '../src/infrastructure/profile.ts';
-import { GLOBAL_CLASSIFICATION_CONTEXT } from '../src/modules/classification/context.ts';
+import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE,
+  CLASSIFICATION_INHERIT_POLICY, classificationContextDigest,
+  createClassificationContext, readRealmClassificationContext,
+  type CreateClassificationContextInput } from '../src/modules/classification/context.ts';
+import type { RegisteredAdmission } from '../src/modules/access/admission.ts';
 import { CLASSIFICATION_DIRECT_DECISION_PROFILE, classificationDecisionDigest,
   classificationDecisionReceiptIri, classificationDecisionSlotIri } from '../src/modules/classification/decision.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE } from '../src/modules/classification/proposition.ts';
@@ -17,7 +21,7 @@ import { CLASSIFIED_AS, STATEMENT_DECISION_PROFILE, STATEMENT_PROFILE } from '..
 import { DATASET, GRAPHS, RV, hash, prepareComponent,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { readComponentState } from '../src/modules/work/history.ts';
-import { reconcileRetainedClassificationDecision, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
+import { reconcileRetainedClassificationContext, reconcileRetainedClassificationDecision, RetainedEffectConflict } from '../src/modules/work/reconcile-restored.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${n.toString(16).padStart(12, '0')}`;
 const epoch = 'restored-epoch', routingEpoch = 'restored-routing', retainedEpoch = 'retained-epoch';
@@ -400,4 +404,217 @@ test('offline restore modules cannot bypass the native command endpoint with raw
     const source = readFileSync(new URL(`../src/modules/${path}`, import.meta.url), 'utf8');
     expect(source).not.toMatch(/\bfuseki\s*\.\s*update\s*\(/);
   }
+});
+
+/** External owner boundaries for the unit test: committed Context facts and
+ * receipts survive responses, while stale guarded commands have no effects. */
+class ContextRestoreFuseki extends RestoreFuseki {
+  current: { context: string; revision: string; scheme: string | null; profile: string } | null = null;
+  receipts = new Map<string, Record<string, string>>();
+  schemes = new Map([[id(600), id(601)], [id(610), id(611)]]);
+  nextSequence = 41;
+  sequenceStride = 1;
+  paired = false;
+  mainCursor = '10';
+  dropScheme = false;
+  override async commandWithReceipt(envelope: CommandEnvelope): Promise<CommandResult> {
+    this.commands.push(envelope);
+    const restoring = envelope.update.includes('rv:restoreCutover');
+    const insert = envelope.update.split('INSERT {')[1]!.split('WHERE {')[0]!;
+    const predecessor = insert.match(/rv:expectedHead <([^>]+)>/)?.[1] ?? null;
+    const scheme = insert.match(/rv:classificationScheme <([^>]+)>/)?.[1] ?? null;
+    const schemeGuard = envelope.update.match(/rv:schemeRevisionHead <([^>]+)>/)?.[1];
+    if (restoring && !this.graphHeld || predecessor !== (this.current?.revision ?? null)
+      || scheme && this.schemes.get(scheme) !== schemeGuard) return { status: 'guard-unmatched' };
+    const sourceSequence = restoring ? insert.match(/rv:sequence (\d+)\s*\./)![1]! : String(this.nextSequence);
+    if (restoring && (this.paired ? BigInt(sourceSequence) <= BigInt(this.cursor)
+      : BigInt(sourceSequence) !== BigInt(this.cursor) + 1n)) return { status: 'guard-unmatched' };
+    const context = field(insert, 'classificationContext'), revision = field(insert, 'contextRevision');
+    this.current = { context, revision, scheme: this.dropScheme ? null : scheme, profile: field(insert, 'modelRevision') };
+    this.receipts.set(envelope.receipt, { outcome: `${RV}Succeeded`, digest: envelope.digest,
+      id: insert.match(/rv:admissionId "([^"]+)"/)![1]!, epoch: '3',
+      scope: `classification:context:${id(500)}`, dataEpoch: retainedEpoch, sequence: sourceSequence,
+      context, realm: id(500), revision, ...(scheme ? { scheme } : {}) });
+    if (restoring) {
+      this.cursor = sourceSequence;
+      if (this.paired) this.mainCursor = insert.match(/rv:reconciledPriorMainSequence (\d+)/)![1]!;
+    } else this.nextSequence += this.sequenceStride;
+    if (this.loseResponse) { this.loseResponse = false; throw new CommandOutcomeUnknown('lost Context restore response'); }
+    return { status: 'committed', position: { datasetId: DATASET, dataEpoch: epoch, sequence: '0' } };
+  }
+  override async query(sparql: string): Promise<SparqlResult> {
+    this.queries.push(sparql);
+    if (sparql.includes('?outcome ?digest ?id')) {
+      const receipt = sparql.match(/<([^>]+)> a rv:OperationReceipt/)![1]!;
+      const terminal = this.receipts.get(receipt);
+      return rows(terminal ? [terminal] : []);
+    }
+    if (sparql.includes('SELECT ?context ?head WHERE'))
+      return rows([this.current ? { context: this.current.context, head: this.current.revision } : {}]);
+    if (sparql.includes('SELECT ?head WHERE')) {
+      const scheme = [...this.schemes].find(([value]) => sparql.includes(`<${value}>`));
+      return rows(scheme ? [{ head: scheme[1] }] : []);
+    }
+    if (sparql.includes('SELECT ?saved ?savedMain WHERE')) return rows([{ saved: '0', ...(this.paired ? { savedMain: '10' } : {}) }]);
+    if (sparql.includes('SELECT ?cursor WHERE')) return rows([{ cursor: this.cursor }]);
+    if (sparql.includes('SELECT ?context ?revision ?scheme WHERE'))
+      return rows(this.current ? [{ context: this.current.context, revision: this.current.revision,
+        ...(this.current.scheme ? { scheme: this.current.scheme } : {}) }] : []);
+    if (sparql.includes('SELECT ?space ?realmRevision ?disclosure'))
+      return rows([{ space: id(501), realmRevision: id(502), disclosure: `${RV}Public` }]);
+    if (sparql.includes('ASK') && sparql.includes('rv:InvalidProfile')) return { boolean: false };
+    if (sparql.includes('ASK') && sparql.includes('?currentMain'))
+      return { boolean: BigInt(this.mainCursor) >= BigInt(sparql.match(/currentMain >= (\d+)/)![1]!) };
+    if (sparql.includes('ASK') && sparql.includes('GRAPH') && sparql.includes('rv:head <')) {
+      const scheme = sparql.match(/rv:classificationScheme <([^>]+)>/)?.[1] ?? null;
+      return { boolean: this.current?.revision === field(sparql, 'head') && this.current.scheme === scheme };
+    }
+    if (sparql.includes('ASK') && sparql.includes(`GRAPH <${GRAPHS.receipts}>`)) {
+      const receipt = sparql.match(/<urn:rezics:receipt:[a-f0-9]{64}>/)![0].slice(1, -1);
+      return { boolean: this.receipts.has(receipt) };
+    }
+    if (sparql.includes('ASK') && sparql.includes(GLOBAL_CLASSIFICATION_CONTEXT)) return { boolean: true };
+    if (sparql.includes('ASK') && sparql.includes(`GRAPH <${GRAPHS.control}>`)) return { boolean: !this.graphHeld };
+    throw new Error(`Unexpected Context query: ${sparql}`);
+  }
+}
+
+async function contextRestoreFixture(legacy = false, paired = false) {
+  mkdirSync('.temp', { recursive: true });
+  const directory = mkdtempSync(join('.temp', 'context-selection-restore-'));
+  const fuseki = new ContextRestoreFuseki(); fuseki.graphHeld = false;
+  fuseki.paired = paired; fuseki.sequenceStride = paired ? 2 : 1;
+  const env: WorkActivationEnvironment = { fuseki, objectDirectory: directory, lineage: { dataEpoch: epoch, routingEpoch } };
+  const liveEnv = { ...env, lineage: { dataEpoch: retainedEpoch, routingEpoch: 'retained-routing' } };
+  const events = new Map<string, relay.MainCloudEvent>();
+  const admissions = new Map<string, Record<string, unknown>>();
+  const sql: string[] = [];
+  const pool = { connect: async () => ({
+    query: async (text: string, args?: unknown[]) => {
+      sql.push(text);
+      if (text.includes('SELECT open')) return { rows: [{ open: false }] };
+      if (text.includes('FROM access.admission')) return { rows: [admissions.get(String(args![0]))] };
+      if (/^(BEGIN|COMMIT|ROLLBACK)/.test(text)) return { rows: [] };
+      throw new Error(`Unexpected Context Access query: ${text}`);
+    }, release: () => {},
+  }) } as unknown as Pool;
+  const relayPool = {} as Pool;
+  const retained = spyOn(relay, 'relayRetainedEventAt').mockImplementation(async (_pool, _coverage, sourceSequence) => {
+    const envelope = events.get(sourceSequence)!;
+    return { eventId: envelope.id, envelope, batch: { batchId: envelope.data.batchId,
+      routingEpoch: envelope.data.routingEpoch, eventCount: 1 } };
+  });
+  const emit = async (input: CreateClassificationContextInput) => {
+    const admissionId = id(events.size + 700).slice(-36);
+    const admission = { id: admissionId, action: 'classification.context.configure', scope: `classification:context:${id(500)}`,
+      actingSubject: id(503), requestDigest: classificationContextDigest(input), authorityEpoch: '3',
+      expiresAt: '2999-01-01T00:00:00Z' } as RegisteredAdmission;
+    const result = await createClassificationContext(liveEnv, admission, input);
+    const command = fuseki.commands.at(-1)!;
+    const receipt: relay.MainCloudEvent['data']['receipt'] = { id: result.receipt, admissionId,
+      requestDigest: result.requestDigest, authorityEpoch: '3', scope: admission.scope,
+      action: 'classification.context.configure', outcome: 'succeeded', realm: input.realm,
+      classificationContext: result.context!, contextRevision: result.revision!,
+      contextManifest: field(command.update, 'manifest'), operation: field(command.update, 'operation'),
+      ...(input.profile === 'classification-context-v2' && input.expectedHead ? { expectedHead: input.expectedHead } : {}) };
+    const deliverySequence = paired ? String(11 + events.size) : result.sequence;
+    const eventId = `urn:rezics:event:${hash(receipt.operation!)}`;
+    const envelope: relay.MainCloudEvent = { specversion: '1.0', id: eventId,
+      source: 'https://rezics.com/services/main', type: 'com.rezics.classification.context-created.v1',
+      datacontenttype: 'application/json', data: { batchId: `urn:rezics:outbox:${hash(receipt.id)}`,
+        sourcePosition: { datasetId: 'product', dataEpoch: retainedEpoch, sequence: result.sequence },
+        routingEpoch: 'retained-routing', ordinal: 0, receipt,
+        ...(paired ? { relayPosition: { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: retainedEpoch, sequence: deliverySequence } } : {}) } };
+    events.set(deliverySequence, envelope);
+    admissions.set(admissionId, { action: admission.action, state: 'sealed', scope_id: admission.scope,
+      request_digest: receipt.requestDigest, authority_epoch: '3', acting_subject: input.actingSubject,
+      graph_receipt: receipt.id, graph_outcome: 'succeeded', graph_data_epoch: retainedEpoch, graph_sequence: result.sequence });
+    return { result, receipt, sourceSequence: result.sequence, deliverySequence };
+  };
+  const initial = await emit(legacy ? { realm: id(500), actingSubject: id(503) } : {
+    profile: 'classification-context-v2', realm: id(500), actingSubject: id(503), expectedHead: null,
+    scheme: { id: id(600), expectedHead: id(601) },
+  });
+  const input = { profile: 'classification-context-v2' as const, realm: id(500), actingSubject: id(503),
+    expectedHead: initial.result.revision!, scheme: { id: id(610), expectedHead: id(611) } };
+  const replaced = await emit(input);
+  const cleared = await emit({ ...input, expectedHead: replaced.result.revision!, scheme: null });
+  fuseki.current = null; fuseki.receipts.clear(); fuseki.graphHeld = true; fuseki.commands = [];
+  const coverage: relay.RelayCoverage = { streamScope: MAIN_RELAY_STREAM_SCOPE, consumer: 'restore', dataEpoch: retainedEpoch,
+    sequence: cleared.deliverySequence, batchCount: paired ? '13' : '43', eventCount: paired ? '13' : '43', batchDigest: 'a'.repeat(64), eventDigest: 'b'.repeat(64) };
+  return { env, fuseki, initial, replaced, cleared, input, admissions, sql,
+    reconcile: (sourceSequence: string) => reconcileRetainedClassificationContext(env, pool, relayPool, coverage, sourceSequence),
+    read: async () => { fuseki.graphHeld = false;
+      try { return await readRealmClassificationContext(env, id(500)); } finally { fuseki.graphHeld = true; } },
+    stop: () => { retained.mockRestore(); rmSync(directory, { recursive: true, force: true }); } };
+}
+
+for (const [legacy, paired] of [[false, false], [true, false], [false, true]] as const) {
+  test(`Context restore reads back ${legacy ? 'v1 compatibility and its v2 upgrade' : 'v2 selection'} with ${paired ? 'scoped' : 'legacy'} relay positions and replays replacements exactly`, async () => {
+    const run = await contextRestoreFixture(legacy, paired);
+    try {
+      const payload = readComponentState(run.env.objectDirectory, run.initial.receipt.contextManifest!,
+        run.initial.result.context!, legacy ? CLASSIFICATION_CONTEXT_PROFILE : CLASSIFICATION_CONTEXT_V2_PROFILE);
+      if (!legacy) expect(payload.selectionIntent).toEqual({ expectedHead: null,
+        scheme: { id: id(600), expectedHead: id(601) } });
+      await run.reconcile(run.initial.deliverySequence);
+      expect(await run.read()).toMatchObject({ context: run.initial.result.context,
+        contextRevision: run.initial.result.revision, scheme: legacy ? null : id(600) });
+      await run.reconcile(run.replaced.deliverySequence);
+      expect(await run.read()).toMatchObject({ context: run.initial.result.context,
+        contextRevision: run.replaced.result.revision, scheme: id(610) });
+      const replacement = run.fuseki.commands[1]!;
+      expect(replacement.update).toContain(`rv:predecessor <${run.initial.result.revision}>`);
+      expect(replacement.validations.map(value => value.profile)).toEqual([
+        'classification-context-v1', 'classification-context-v1', 'classification-context-v1',
+        'classification-context-v2', 'classification-context-v2', 'classification-context-v2']);
+      await run.reconcile(run.cleared.deliverySequence);
+      expect(await run.read()).toMatchObject({ contextRevision: run.cleared.result.revision, scheme: null });
+      expect(await run.reconcile(run.initial.deliverySequence)).toMatchObject({ replayed: true });
+      expect(await run.reconcile(run.replaced.deliverySequence)).toMatchObject({ replayed: true });
+      expect(run.fuseki.commands).toHaveLength(3);
+      expect(await run.read()).toMatchObject({ contextRevision: run.cleared.result.revision, scheme: null });
+    } finally { run.stop(); }
+  });
+}
+
+for (const failure of ['stale-context', 'stale-scheme', 'unproved-admission', 'scheme-dropped', 'intent-missing', 'intent-tampered'] as const) {
+  test(`Context restore refuses ${failure} without silently selecting another scheme`, async () => {
+    const run = await contextRestoreFixture();
+    try {
+      await run.reconcile(run.initial.deliverySequence);
+      if (failure === 'stale-context') run.fuseki.current!.revision = id(999);
+      if (failure === 'stale-scheme') run.fuseki.schemes.set(id(610), id(999));
+      if (failure === 'unproved-admission') run.admissions.get(run.replaced.receipt.admissionId)!.request_digest = '0'.repeat(64);
+      if (failure === 'scheme-dropped') run.fuseki.dropScheme = true;
+      if (failure === 'intent-missing') run.replaced.receipt.contextManifest = `urn:rezics:sha256:${prepareComponent(
+        run.env.objectDirectory, run.replaced.result.context!, { realm: id(500), role: 'realm-classification', state: 'active',
+          fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT, inheritancePolicy: CLASSIFICATION_INHERIT_POLICY,
+          scheme: id(610) }, CLASSIFICATION_CONTEXT_V2_PROFILE)}`;
+      if (failure === 'intent-tampered') run.replaced.receipt.contextManifest = `urn:rezics:sha256:${prepareComponent(
+        run.env.objectDirectory, run.replaced.result.context!, { realm: id(500), role: 'realm-classification', state: 'active',
+          fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT, inheritancePolicy: CLASSIFICATION_INHERIT_POLICY,
+          scheme: id(610), selectionIntent: { expectedHead: run.initial.result.revision,
+            scheme: { id: id(610), expectedHead: id(999) } } }, CLASSIFICATION_CONTEXT_V2_PROFILE)}`;
+      await expect(run.reconcile(run.replaced.deliverySequence)).rejects.toBeInstanceOf(RetainedEffectConflict);
+      expect(run.sql.at(-1)).toBe(failure === 'intent-missing' ? 'COMMIT' : 'ROLLBACK');
+      if (failure !== 'scheme-dropped') {
+        expect(run.fuseki.cursor).toBe(run.initial.deliverySequence);
+        expect(run.fuseki.receipts.has(run.replaced.receipt.id)).toBe(false);
+      }
+    } finally { run.stop(); }
+  });
+}
+
+
+test('Context restore resolves a lost replacement response without changing its retained selection', async () => {
+  const run = await contextRestoreFixture();
+  try {
+    await run.reconcile(run.initial.deliverySequence);
+    run.fuseki.loseResponse = true;
+    expect(await run.reconcile(run.replaced.deliverySequence)).toMatchObject({ replayed: false });
+    expect(await run.read()).toMatchObject({ contextRevision: run.replaced.result.revision, scheme: id(610) });
+    expect(await run.reconcile(run.replaced.deliverySequence)).toMatchObject({ replayed: true });
+    expect(run.fuseki.commands).toHaveLength(2);
+  } finally { run.stop(); }
 });

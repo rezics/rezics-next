@@ -63,10 +63,10 @@ import { REALM_SELECTION_PROFILE, realmSelectionDigest, realmSelectionReceiptIri
   realmSelectionSlotIri, readRealmSelectionReceipt } from './select-realm.ts';
 import { REALM_REJECTION_PROFILE, realmRejectionDigest, realmRejectionReceiptIri,
   readRealmRejectionReceipt } from './reject-realm.ts';
-import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_INHERIT_POLICY,
+import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE, CLASSIFICATION_INHERIT_POLICY,
   CLASSIFICATION_ISOLATE_POLICY, GLOBAL_CLASSIFICATION_CONTEXT,
   classificationContextDigest, classificationContextReceiptIri,
-  readClassificationContextReceipt } from '../classification/context.ts';
+  readClassificationContextReceipt, type CreateClassificationContextInput } from '../classification/context.ts';
 import { CLASSIFICATION_PROPOSITION_PROFILE, classificationPropositionDigest,
   classificationPropositionReceiptIri, readClassificationPropositionReceipt,
   type PropositionDefinitions } from '../classification/proposition.ts';
@@ -716,7 +716,7 @@ export async function reconcileRetainedWorkCreate(
   }
 }
 
-/** Reapply one Space and distinct Realm capability with their original identities. */
+/** Reapply the exact classification Context selection, including its original predecessor. */
 export async function reconcileRetainedClassificationContext(
   env: WorkActivationEnvironment, accessPool: Pool, relayPool: Pool,
   coverage: RelayCoverage, sequence: string,
@@ -724,12 +724,16 @@ export async function reconcileRetainedClassificationContext(
   const { eventId, envelope } = await loadRetainedEvent(relayPool, coverage, sequence);
   const data = envelope?.data;
   const receipt = data?.receipt;
+  const delivery = data?.relayPosition ?? { streamScope: MAIN_RELAY_STREAM_SCOPE,
+    dataEpoch: data?.sourcePosition.dataEpoch, sequence: data?.sourcePosition.sequence };
   if (envelope.id !== eventId || envelope.specversion !== '1.0'
     || envelope.source !== 'https://rezics.com/services/main'
     || envelope.type !== 'com.rezics.classification.context-created.v1'
     || data.ordinal !== 0 || data.sourcePosition.datasetId !== 'product'
     || data.sourcePosition.dataEpoch !== coverage.dataEpoch
-    || data.sourcePosition.sequence !== sequence
+    || !/^[1-9][0-9]*$/.test(data.sourcePosition.sequence)
+    || delivery.streamScope !== (coverage.streamScope ?? MAIN_RELAY_STREAM_SCOPE)
+    || delivery.dataEpoch !== coverage.dataEpoch || delivery.sequence !== sequence
     || receipt.action !== 'classification.context.configure' || receipt.outcome !== 'succeeded'
     || !receipt.operation || !receipt.realm || !receipt.classificationContext
     || !receipt.contextRevision || !receipt.contextManifest
@@ -740,6 +744,7 @@ export async function reconcileRetainedClassificationContext(
     || data.batchId !== `urn:rezics:outbox:${hash(receipt.id)}`) {
     throw new RetainedEffectConflict('retained classification context envelope is incomplete');
   }
+  const diagnostic = data.sourcePosition.sequence;
   const realm = receipt.realm;
   const context = receipt.classificationContext;
   const revision = receipt.contextRevision;
@@ -749,8 +754,28 @@ export async function reconcileRetainedClassificationContext(
   if (realm === context || !/^urn:rezics:sha256:[0-9a-f]{64}$/.test(receipt.contextManifest)) {
     throw new RetainedEffectConflict('retained classification context references are invalid');
   }
-  const state = readComponentState(env.objectDirectory, receipt.contextManifest,
-    context, CLASSIFICATION_CONTEXT_PROFILE);
+  let state: Record<string, unknown>, profile: typeof CLASSIFICATION_CONTEXT_PROFILE | typeof CLASSIFICATION_CONTEXT_V2_PROFILE;
+  try {
+    state = readComponentState(env.objectDirectory, receipt.contextManifest, context, CLASSIFICATION_CONTEXT_V2_PROFILE);
+    profile = CLASSIFICATION_CONTEXT_V2_PROFILE;
+  } catch (error) {
+    if (!(error instanceof RevisionCorrupt)) throw error;
+    state = readComponentState(env.objectDirectory, receipt.contextManifest, context, CLASSIFICATION_CONTEXT_PROFILE);
+    profile = CLASSIFICATION_CONTEXT_PROFILE;
+  }
+  const selection = profile === CLASSIFICATION_CONTEXT_V2_PROFILE
+    ? state.selectionIntent as Pick<Extract<CreateClassificationContextInput, { profile: 'classification-context-v2' }>,
+      'expectedHead' | 'scheme'> | undefined
+    : undefined;
+  if (profile === CLASSIFICATION_CONTEXT_V2_PROFILE && (!selection || typeof selection !== 'object'
+      || Array.isArray(selection) || state.scheme !== (selection.scheme?.id ?? null))
+    || profile === CLASSIFICATION_CONTEXT_PROFILE && (state.selectionIntent !== undefined
+      || state.scheme !== undefined && state.scheme !== null)
+    || (receipt.expectedHead ?? null) !== (selection?.expectedHead ?? null)) {
+    throw new RetainedEffectConflict('retained classification Context selection intent is incomplete');
+  }
+  const expectedHead = selection?.expectedHead ?? null;
+  const scheme = selection?.scheme ?? null;
   if (state.realm !== realm || state.role !== 'realm-classification' || state.state !== 'active'
     || state.fallbackContext !== GLOBAL_CLASSIFICATION_CONTEXT
     || state.inheritancePolicy !== CLASSIFICATION_INHERIT_POLICY) {
@@ -767,21 +792,34 @@ export async function reconcileRetainedClassificationContext(
          graph_receipt, graph_outcome, graph_data_epoch, graph_sequence
        FROM access.admission WHERE id = $1`, [receipt.admissionId]);
     const admitted = access.rows[0];
+    let intentDigest: string;
+    try {
+      const actor = { realm, actingSubject: admitted?.acting_subject ?? '' };
+      intentDigest = classificationContextDigest(selection
+        ? { ...actor, profile: 'classification-context-v2', expectedHead: selection.expectedHead,
+          scheme: selection.scheme } : actor);
+    } catch {
+      throw new RetainedEffectConflict('retained classification Context selection intent is invalid');
+    }
     if (!admitted || admitted.action !== 'classification.context.configure'
       || admitted.state !== 'sealed' || admitted.scope_id !== receipt.scope
       || admitted.request_digest !== receipt.requestDigest
       || admitted.authority_epoch !== receipt.authorityEpoch
       || admitted.graph_receipt !== receipt.id || admitted.graph_outcome !== 'succeeded'
-      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== sequence
-      || classificationContextDigest({ realm, actingSubject: admitted.acting_subject })
-        !== receipt.requestDigest) {
+      || admitted.graph_data_epoch !== coverage.dataEpoch || admitted.graph_sequence !== diagnostic
+      || intentDigest !== receipt.requestDigest) {
       throw new RetainedEffectConflict('current Access admission does not prove retained context');
     }
     const marker = `urn:rezics:restore:${env.lineage.dataEpoch}`;
     const paired = await heldMainRecovery(env, marker, coverage.dataEpoch);
-    const recovery = recoveryCursor(marker, sequence, paired);
+    const recovery = recoveryCursor(marker, sequence, paired, diagnostic);
     const update = `PREFIX rv: <${RV}>
-      DELETE { GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} } }
+      DELETE {
+        GRAPH ${iri(GRAPHS.control)} { ${recovery.delete} }
+        ${expectedHead ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(context)} rv:head ${iri(expectedHead)} ; rv:classificationScheme ?oldScheme ; rv:definitionProfile ?oldProfile .
+        }` : ''}
+      }
       INSERT {
         GRAPH ${iri(GRAPHS.control)} { ${recovery.insert} }
         GRAPH ${iri(GRAPHS.current)} {
@@ -794,14 +832,17 @@ export async function reconcileRetainedClassificationContext(
             rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} ;
             rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ;
             rv:head ${iri(revision)} .
+          ${selection ? `${iri(context)} rv:definitionProfile ${iri(profile)} .` : ''}
+          ${scheme ? `${iri(context)} rv:classificationScheme ${iri(scheme.id)} .` : ''}
         }
         GRAPH ${iri(GRAPHS.revisions)} {
           ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(context)} ;
             rv:operation ${iri(operation)} ; rv:manifest ${iri(receipt.contextManifest)} ;
-            rv:modelRevision ${iri(CLASSIFICATION_CONTEXT_PROFILE)} ;
-            rv:shapeRevision ${iri(CLASSIFICATION_CONTEXT_PROFILE)} ;
+            rv:modelRevision ${iri(profile)} ;
+            rv:shapeRevision ${iri(profile)} ;
             rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} .
+            rv:sequence ${diagnostic} .
+          ${expectedHead ? `${iri(revision)} rv:predecessor ${iri(expectedHead)} .` : ''}
         }
         GRAPH ${iri(GRAPHS.receipts)} {
           ${iri(receipt.id)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
@@ -811,11 +852,16 @@ export async function reconcileRetainedClassificationContext(
             rv:admittedScope ${lit(receipt.scope)} ; rv:outcome rv:Succeeded ;
             rv:classificationContext ${iri(context)} ; rv:realm ${iri(realm)} ;
             rv:contextRevision ${iri(revision)} ; rv:datasetId ${iri(DATASET)} ;
-            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} .
+            rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} .
+          ${selection ? `${iri(receipt.id)} rv:commandFamily "classification-context-v2" ;
+            rv:action "classification.context.configure" .` : ''}
+          ${expectedHead ? `${iri(receipt.id)} rv:expectedHead ${iri(expectedHead)} .` : ''}
+          ${scheme ? `${iri(receipt.id)} rv:classificationScheme ${iri(scheme.id)} .` : ''}
         }
         GRAPH ${iri(GRAPHS.outbox)} {
           ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-            rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+            rv:sequence ${diagnostic} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          ${paired ? `${iri(data.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${sequence} .` : ''}
           ${iri(eventId)} a rv:ClassificationContextCreatedEvent ; rv:ordinal 0 ;
             rv:action "classification.context.configure" ; rv:receipt ${iri(receipt.id)} ;
             rv:operation ${iri(operation)} ; rv:realm ${iri(realm)} .
@@ -831,9 +877,20 @@ export async function reconcileRetainedClassificationContext(
 ${recovery.bind}
         }
         GRAPH ${iri(GRAPHS.current)} { ${iri(realm)} a rv:Realm ; rv:realmState rv:Active . }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+        ${expectedHead ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(realm)} rv:classificationContext ${iri(context)} .
+          ${iri(context)} a rv:ClassificationContext ; rv:realm ${iri(realm)} ;
+            rv:contextRole rv:RealmClassification ; rv:contextState rv:Active ; rv:head ${iri(expectedHead)} ;
+            rv:fallbackContext ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ; rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} .
+          OPTIONAL { ${iri(context)} rv:classificationScheme ?oldScheme }
+          OPTIONAL { ${iri(context)} rv:definitionProfile ?oldProfile }
+        }` : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ${iri(realm)} rv:classificationContext ?priorContext } }
-        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }
+        FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(context)} ?p ?o } }`}
+        ${scheme ? `GRAPH ${iri(GRAPHS.current)} {
+          ${iri(scheme.id)} a <http://www.w3.org/2004/02/skos/core#ConceptScheme> ;
+            rv:schemeState rv:Active ; rv:schemeRevisionHead ${iri(scheme.expectedHead)} . }
+          FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} { ${iri(scheme.id)} rv:schemeState rv:Retired } }` : ''}
         FILTER (!EXISTS { GRAPH ${iri(GRAPHS.current)} {
           ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} ?globalPredicate ?globalValue } }
           || EXISTS { GRAPH ${iri(GRAPHS.current)} {
@@ -847,17 +904,27 @@ ${recovery.bind}
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt.id)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} ?p ?o } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} {
-          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . } }
+          ?otherBatch rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} . } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.outbox)} { ${iri(eventId)} ?p ?o } }
       }`;
     const existing = await readClassificationContextReceipt(env, receipt.admissionId);
     let updateError: unknown;
     if (!existing) {
-      try { await retainedCommand(env, update, receipt, 'classification-context-v1', [
-        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/global-shape`, focus: GLOBAL_CLASSIFICATION_CONTEXT },
-        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/realm-shape`, focus: realm },
-        { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: context },
-      ], { realm, context }); }
+      try {
+        const focuses = (definition: string) => [
+          { shape: `${definition}/global-shape`, focus: [GLOBAL_CLASSIFICATION_CONTEXT], graphs: [GRAPHS.current, GRAPHS.revisions] },
+          { shape: `${definition}/realm-shape`, focus: [realm], graphs: [GRAPHS.current, GRAPHS.revisions] },
+          { shape: `${definition}/context-shape`, focus: [context], graphs: [GRAPHS.current, GRAPHS.revisions] },
+        ];
+        const validations = await profileValidations(env.fuseki, 'classification-context-v1',
+          focuses(CLASSIFICATION_CONTEXT_PROFILE), { realm, context });
+        if (selection) validations.push(...await profileValidations(env.fuseki, 'classification-context-v2',
+          focuses(profile), { realm, context }));
+        const result = await env.fuseki.commandWithReceipt({ receipt: receipt.id,
+          digest: receipt.requestDigest, update, validations, deadlineMs: 10_000 });
+        if (result.status === 'invalid' || result.status === 'unknown-profile')
+          throw new Error(`retained Context validation ${result.status}`);
+      }
       catch (error) { updateError = error; }
     }
     const terminal = await readClassificationContextReceipt(env, receipt.admissionId);
@@ -873,26 +940,45 @@ ${recovery.bind}
           rv:inheritancePolicy ${iri(CLASSIFICATION_INHERIT_POLICY)} . }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ;
         rv:component ${iri(context)} ; rv:manifest ${iri(receipt.contextManifest)} ;
-        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${sequence} . }
+        rv:modelRevision ${iri(profile)} ; rv:shapeRevision ${iri(profile)} ;
+        rv:dataEpoch ${lit(coverage.dataEpoch)} ; rv:sequence ${diagnostic} .
+        ${expectedHead ? `${iri(revision)} rv:predecessor ${iri(expectedHead)} .` : ''}
+      }
+      GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt.id)} rv:contextRevision ${iri(revision)} .
+        ${scheme ? `${iri(receipt.id)} rv:classificationScheme ${iri(scheme.id)} .` : ''}
+        ${expectedHead ? `${iri(receipt.id)} rv:expectedHead ${iri(expectedHead)} .` : ''}
+      }
+      ${scheme ? '' : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} {
+        ${iri(receipt.id)} rv:classificationScheme ?unexpectedScheme } }`}
       GRAPH ${iri(GRAPHS.outbox)} {
         ${iri(data.batchId)} a rv:OutboxBatch ; rv:dataEpoch ${lit(coverage.dataEpoch)} ;
-          rv:sequence ${sequence} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+          rv:sequence ${diagnostic} ; rv:eventCount 1 ; rv:event ${iri(eventId)} .
+        ${paired ? `${iri(data.batchId)} rv:streamScope ${lit(MAIN_RELAY_STREAM_SCOPE)} ; rv:streamSequence ${sequence} .` : ''}
         ${iri(eventId)} a rv:ClassificationContextCreatedEvent ; rv:receipt ${iri(receipt.id)} . }
       FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
         ${iri(GLOBAL_CLASSIFICATION_CONTEXT)} rv:fallbackContext ?fallback } }
     }`);
-    const headCheck = cursor === BigInt(sequence)
+    const headCheck = cursor === BigInt(diagnostic)
       ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK { GRAPH ${iri(GRAPHS.current)} {
-          ${iri(context)} rv:head ${iri(revision)} . } }`)
+          ${iri(context)} rv:head ${iri(revision)} .
+          ${scheme ? `${iri(context)} rv:classificationScheme ${iri(scheme.id)} .` : ''}
+          ${selection ? `${iri(context)} rv:definitionProfile ${iri(profile)} .` : ''}
+        } ${scheme ? '' : `FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.current)} {
+          ${iri(context)} rv:classificationScheme ?unexpectedScheme } }`} }`)
       : { boolean: true };
+    const mainCheck = paired ? await env.fuseki.query(`PREFIX rv: <${RV}> ASK {
+      GRAPH ${iri(GRAPHS.control)} { ${iri(marker)} rv:reconciledPriorMainSequence ?currentMain }
+      FILTER(?currentMain >= ${sequence}) }`) : { boolean: true };
     if (!terminal || terminal.outcome !== 'succeeded' || terminal.receipt !== receipt.id
       || terminal.requestDigest !== receipt.requestDigest
       || terminal.admissionId !== receipt.admissionId
       || terminal.authorityEpoch !== receipt.authorityEpoch || terminal.scope !== receipt.scope
       || terminal.context !== context || terminal.realm !== realm || terminal.revision !== revision
-      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== sequence
-      || cursor === null || cursor < BigInt(sequence)
-      || graphCheck.boolean !== true || headCheck.boolean !== true) {
+      || terminal.scheme !== (scheme?.id ?? null)
+      || terminal.dataEpoch !== coverage.dataEpoch || terminal.sequence !== diagnostic
+      || cursor === null || cursor < BigInt(diagnostic)
+      || graphCheck.boolean !== true || headCheck.boolean !== true || mainCheck.boolean !== true) {
       throw new RetainedEffectConflict(updateError
         ? 'retained classification context update outcome is unknown'
         : 'retained classification context did not reconcile');

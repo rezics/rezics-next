@@ -219,7 +219,8 @@ export async function createClassificationContext(env: WorkActivationEnvironment
     { realm: input.realm, role: 'realm-classification', state: 'active',
       fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
       inheritancePolicy: CLASSIFICATION_INHERIT_POLICY,
-      ...(selection ? { scheme: scheme?.id ?? null } : {}) }, profile);
+      ...(selection ? { scheme: scheme?.id ?? null, selectionIntent: { expectedHead,
+        scheme: scheme ? { id: scheme.id, expectedHead: scheme.expectedHead } : null } } : {}) }, profile);
   if (Date.parse(admission.expiresAt) <= Date.now()) {
     throw new PendingActivation('classification context admission expired');
   }
