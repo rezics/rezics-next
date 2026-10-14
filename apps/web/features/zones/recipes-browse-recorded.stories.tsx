@@ -20,7 +20,7 @@ import { ZoneSiteRoute } from './site-route.tsx';
 
 const locale = 'en';
 const messages = zoneMessagesFor(locale);
-const relationshipCopy = materializeData(relationshipMessages, { locale });
+const relationshipCopy = relationshipMessages[locale];
 const browseRecord = browseFixture as AnswerRecord;
 const paginationRecord = paginationFixture as AnswerRecord;
 const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
