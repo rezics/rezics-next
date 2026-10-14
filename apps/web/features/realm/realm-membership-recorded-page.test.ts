@@ -385,14 +385,16 @@ test('the withdrawal control confirms its retained intent, receipt and subsequen
       const events: string[] = [];
       const result = await confirmWithdrawal(api, intent, receipt => {
         events.push('receipt');
-        expect(receipt).toEqual(recordedSample(record, persona, 'withdraw-confirm').answer);
+        expect(receipt).toEqual(answerOf<JoinDecisionReceipt>(persona, 'withdraw-confirm'));
       }, async () => {
         events.push('refresh');
         const after = await readCurrentRequest(api);
         expect(after.ok).toBe(true);
         if (!after.ok) return;
         const recorded = answerOf<import('../manage/settings-api.ts').OwnRequestPage>(persona, 'withdraw-confirm-own-request-after');
-        expect(after.data.entry).toEqual(recorded.items.find(item => item.id === intent.request));
+        const recordedEntry = recorded.items.find(item => item.id === intent.request);
+        if (!recordedEntry) throw new Error('Recorded withdrawal refresh has no matching request');
+        expect(after.data.entry).toEqual(recordedEntry);
         expect(after.data.state).toBe('withdrawn');
       });
       expect(result.ok).toBe(true);
@@ -428,7 +430,7 @@ test('the decision control keeps the receipt, reads the restored selection, then
       const events: string[] = [];
       const result = await confirmAdmissionDecision(api, intent, '', receipt => {
         events.push('receipt');
-        expect(receipt).toEqual(recordedSample(record, 'owner', `decision-confirm-${state}`).answer);
+        expect(receipt).toEqual(answerOf<JoinDecisionReceipt>('owner', `decision-confirm-${state}`));
         expect(receipt.requestId).toBe(selected.id);
       }, restored => {
         events.push('refresh');
@@ -475,7 +477,7 @@ test('the reached members route invites with HTTP 200 and refreshes the producti
     expect(sent.ok).toBe(true);
     if (!sent.ok) return;
     expect(recordedSample(record, 'owner', 'invitation-confirm').status).toBe(200);
-    expect(sent.data).toEqual(recordedSample(record, 'owner', 'invitation-confirm').answer);
+    expect(sent.data).toEqual(answerOf<import('../manage/types.ts').InvitationResult>('owner', 'invitation-confirm'));
     expect(sent.data.invitation.state).toBe('pending');
     const refreshed = await recordedMembersRoute(main, fetcher, identity.realm, 'en') as Frame;
     expect(refreshed.props.children.props.first).toEqual(answerOf('owner', 'members-after-invitation'));
