@@ -302,7 +302,10 @@ async function savedMembersPlay({ canvasElement }: { canvasElement: HTMLElement 
   const { roleName, memberName: person, reason, defaultRole } = dialogSave();
   const gain = t.impactGain({ count: 1, permission: messages.permModerate });
   await expect(canvas.findByRole('heading', { level: 1, name: ownerRealm() })).resolves.toBeVisible();
-  await expect(canvas.getByText(person)).toBeVisible();
+  // The joined member is on the roster and in the accepted invitations.
+  const memberLines = canvas.getAllByText(person);
+  await expect(memberLines).toHaveLength(2);
+  for (const line of memberLines) await expect(line).toBeVisible();
   const clock = holdPreviewDelay();
   try {
     await userEvent.click(canvas.getByRole('button', { name: t.memberActions({ name: person }) }));
@@ -327,7 +330,9 @@ async function savedMembersPlay({ canvasElement }: { canvasElement: HTMLElement 
   }
   await expect(canvas.findByText(t.roleGiven({ name: person, role: roleName }))).resolves.toBeVisible();
   await expect(canvas.getByText(roleName)).toBeVisible();
-  await expect(canvas.getByText(moderatorName())).toBeVisible();
+  const moderatorLines = canvas.getAllByText(moderatorName());
+  await expect(moderatorLines).toHaveLength(2);
+  for (const line of moderatorLines) await expect(line).toBeVisible();
   await expect(canvas.queryByRole('link', { name: messages.editSite })).toBeNull();
   await expect(body().queryByRole('dialog')).toBeNull();
 }
