@@ -267,7 +267,7 @@ export async function readContents(session: WorkReadSession, work: string,
     const language = options.language ? contentLanguage(options.language, null)
       : basis.selectedLanguage?.toLowerCase() ?? null;
     const parent = options.parent ?? header.structure;
-    const binding = ['contents', work, header.component, parent, language,
+    const binding = ['contents', work, header.component, parent, language, session.cursorIdentity,
       session.options.actingSubject ?? null];
     const cursor = decodeReadCursor(session.options.cursor, binding, cursorPosition);
     if (cursor && cursor.order !== header.head) throw new WorkReadMoved('Composition changed');

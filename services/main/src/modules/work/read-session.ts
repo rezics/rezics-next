@@ -8,7 +8,7 @@ import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 // `deps.media` is declared by module augmentation in the media routes; import it
 // so programs that reach this file without the route module still see it.
 import type {} from '../../routes/media.ts';
-import { AccountAssertionDenied, verifyRequestAccount } from '../account/verify-assertion.ts';
+import { AccountAssertionDenied, verifyRequestAccount, type VerifiedAccountAssertion } from '../account/verify-assertion.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { MAX_SUMMARY_BATCH, readResourceSummaries, type ResourceSummary, type SummaryInput, type SummaryReader,
   type SummaryMedia } from '../media/summary.ts';
@@ -208,6 +208,13 @@ export class WorkReadSession {
       .filter(Boolean).join(',') || null, this.request.headers.get('accept-language'));
   }
   principal: VerifiedPrincipal | null = null;
+  /** Renewal changes budget expiry, while identity, consent and disclosure still
+   * bind continuation. Every request separately verifies its current assertion. */
+  get cursorIdentity() {
+    if (!this.principal) return null;
+    const { accountExpiresAt: _expiry, currentAssertion: _verify, ...identity } = this.principal as VerifiedAccountAssertion;
+    return identity;
+  }
   /** Work heads already read by summary batches in this session. */
   private readonly workRevisions = new Map<string, string>();
   workRevision(work: string) { return this.workRevisions.get(work); }

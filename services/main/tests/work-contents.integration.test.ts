@@ -1284,6 +1284,15 @@ test('Engine Work composition: Anime and Manga acknowledged headers disclose ord
       expect(last).toMatchObject({ nextCursor: null, count: { value: 1, total: null },
         items: [{ occurrence: changed.occurrences[2], role: 'part', target: target.work, inclusion: 'optional' }] });
       expect((await stranger.read(`${path}&cursor=${encodeURIComponent(first.nextCursor!)}`)).status).toBe(400);
+      // Omitting actingSubject still binds the verified account. Two devices
+      // of that account can continue; another account or anonymous request cannot.
+      const signedFirst = await json<WorkPartContentsPage>(await stack.call('GET', path, { token: owner.token }));
+      expect(signedFirst.nextCursor).toBeString();
+      const signedNext = `${path}&cursor=${encodeURIComponent(signedFirst.nextCursor!)}`;
+      expect((await stack.call('GET', signedNext, { token: stranger.token })).status).toBe(400);
+      expect((await stack.call('GET', signedNext)).status).toBe(400);
+      const sameReader = await json<WorkPartContentsPage>(await stack.call('GET', signedNext, { token: owner.token }));
+      expect(sameReader.items.map(item => item.occurrence)).toEqual([changed.occurrences[2]]);
       const own = await json<WorkPartContentsPage>(await owner.read(`${prepared.path}?parent=${encodeURIComponent(group.occurrences[0]!)}&limit=20`));
       expect(own.items.map(item => item.occurrence)).toEqual(changed.occurrences);
       expect(own.items.every(item => item.availability === 'available' && item.selectedRevision === null)).toBe(true);
