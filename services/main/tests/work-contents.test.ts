@@ -198,6 +198,36 @@ test('Work parts retain all thousand occurrence identities with bounded I/O at l
   }
 });
 
+test('Work part continuation withholds hidden and absent targets without losing repeated readable uses', async () => {
+  const root = chapterTestId(1);
+  const readable = chapterTestId(20);
+  const hidden = chapterTestId(21);
+  const absent = chapterTestId(22);
+  const records: OccurrenceRecord[] = [readable, hidden, absent, readable].map((target, index) => ({
+    occurrence: chapterTestId(100 + index), state: 'active', parent: root, role: 'part', target,
+    segmentKey: 'a', orderKey: (index + 1).toString(36).padStart(8, '0'),
+    labels: [{ value: `Use ${index + 1}`, language: 'en' }], introducedBy: chapterTestId(4),
+    qualifier: { type: 'work-part', displayLabel: `Use ${index + 1}`, inclusion: 'optional' },
+  }));
+  const f = await chapterTreeFixture(records, true, 'work-composition');
+  const snapshot = await f.snapshot();
+  const read = (after?: string) => readCompositionPage(f.env, { structure: root, header: f.header,
+    snapshot, parent: root, limit: 1, outline: true, ...(after ? { after } : {}),
+    canReadTarget: async target => target === readable,
+    canReadTargets: async targets => new Set(targets.filter(target => target === readable)),
+  });
+  const first = await read();
+  expect(first.occurrences.map(record => record.occurrence)).toEqual([records[0]!.occurrence]);
+  expect(first.next).not.toBeNull();
+  const second = await read(first.next!);
+  expect(second.occurrences.map(record => record.occurrence)).toEqual([records[3]!.occurrence]);
+  expect(second.occurrences[0]).toMatchObject({ role: 'part', target: readable,
+    qualifier: { type: 'work-part', displayLabel: 'Use 4', inclusion: 'optional' } });
+  expect(second.next).toBeNull();
+  expect(first.placementCount).toBe(0);
+  expect(second.placementCount).toBe(0);
+});
+
 test('Catalog and concealed native chapters retain bounded ordered inventory positions', async () => {
   const root = chapterTestId(1);
   const catalogTargets = structureProfileFor('book-composition').catalogTargetTypes!;
