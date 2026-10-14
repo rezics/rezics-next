@@ -375,7 +375,10 @@ async function sharedMemoryReading(db: Database, needsVm: boolean, options: Memo
   const startTime = options.startTime ?? processStartTime;
   const identity = startTime(process.pid);
   if (!identity) throw new Error('Cannot read QA measurement process start time');
-  const scope = needsVm ? 'docker' : 'host';
+  const env = options.env ?? process.env;
+  // During an engine migration both contexts may answer. A reading from the
+  // Desktop VM cannot authorize work against the native host pool.
+  const scope = needsVm ? `docker:${JSON.stringify([env.DOCKER_CONTEXT, env.DOCKER_HOST, env.DOCKER_CONFIG])}` : 'host';
   const owner = randomUUID();
   for (;;) {
     if (now() >= options.deadline) throw new Error('Memory measurement deadline reached');

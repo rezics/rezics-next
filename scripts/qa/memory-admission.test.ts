@@ -98,6 +98,19 @@ test('native messages validate all numeric measurements and apply the larger res
   expect(() => measuredAdmissionMessage(need, { ...native, containers: { bad: NaN } })).toThrow('Invalid memory reading');
 });
 
+test('a native context never reuses a cached Docker Desktop reading', async () => {
+  const state = new Database(':memory:');
+  let reads = 0;
+  const options = { root, state, deadline: 100, now: () => 0, readingMaxAgeMs: 3000, announce: () => {} };
+  try {
+    await waitForMemory(need, { ...options, env: { REZICS_STACK_PROFILE: 'qa', DOCKER_CONTEXT: 'desktop-linux' },
+      read: async () => { reads++; return { vmTotal: 24 * GiB, vmUsed: 17 * GiB, hostAvailable: 9 * GiB }; } });
+    await waitForMemory(need, { ...options, env: { REZICS_STACK_PROFILE: 'qa', DOCKER_CONTEXT: 'default' },
+      read: async () => { reads++; return native; } });
+    expect(reads).toBe(2);
+  } finally { state.close(true); }
+});
+
 test('Docker startup advice names the selected engine, including a stopped Desktop context', () => {
   expect(dockerUnavailableMessage({ DOCKER_CONTEXT: 'default' })).toContain('sudo systemctl start docker');
   expect(dockerUnavailableMessage({ DOCKER_CONTEXT: 'desktop-linux' })).toContain('systemctl --user start docker-desktop');
