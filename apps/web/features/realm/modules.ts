@@ -355,10 +355,13 @@ export async function loadRankingsModule(
       ? [
           {
             interval,
-            items: page.data.items.map((item, rank) => ({
-              rank: rank + 1,
-              work: withRealmCard(zoneWork(item, context, null), cards.get(item.id)),
-            })),
+            items: page.data.items.map((item, rank) => {
+              const known = cards.get(item.id);
+              const work = withRealmCard(zoneWork(item, context, null), known);
+              // The thin ranking card has no canonical address or in-Zone decision.
+              // Keep the destination of the independently read Work card with its credit.
+              return { rank: rank + 1, work: { ...work, href: known?.href ?? work.href } };
+            }),
           },
         ]
       : [];
