@@ -1,4 +1,8 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { booksLanguageReads } from '../../../../../apps/web/features/work-page/books-language-recorded-page.ts';
 import { randomUUID } from 'node:crypto';
 import reading from '../../../../../scripts/qa/cases/outcomes/books/read-non-ui-languages-non-ui-languages.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -10,7 +14,8 @@ import {
 } from '../../../support/personas.ts';
 
 type Work = { work: string; mainVersion: string };
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+const fileWall = setTimeout(() => { throw new Error('Language reading file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
 let published: Work;
 let privateWork: Work;
@@ -114,12 +119,12 @@ beforeAll(async () => {
   );
 }, 180_000);
 afterAll(async () => {
-  try { await recording.publish(); } finally { await sessions?.close(); }
+  try { await recording.publish(); } finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 async function read(name: PersonaName) {
   const person = sessions[name];
-  const sample = recording.session(name, person);
+  const sample = (_label: string, ...args: Parameters<PersonaSession['main']>) => person.main(...args);
   for (const language of ['en', 'sv']) {
     const metadata = await answer<{ localized: { language: string; title: string }[] }>(
       sample(`metadata-${language}`, 'GET', `/v1/works/${short(published.work)}/metadata?${query(person, language)}`),
@@ -163,7 +168,7 @@ async function read(name: PersonaName) {
     await answer(sample('text-suitability', 'POST', '/v1/suitability/reads', {
       targets: [published.work], actingSubject: person.actingSubject,
     }));
-    const publicSample = recording.session(name, sessions.visitor);
+    const publicSample = (_label: string, ...args: Parameters<PersonaSession['main']>) => sessions.visitor.main(...args);
     await answer(publicSample('public-preview', 'GET', `/v1/public-previews/${short(published.work)}`));
     await answer(publicSample('public-work-header', 'GET', `/v1/works/${short(published.work)}`));
   }
@@ -209,9 +214,65 @@ async function read(name: PersonaName) {
     await answer(sample('reader-settings', 'GET', `/v1/reader/settings${caller}`));
 }
 
-outcomeTest(reading, 'visitor', () => read('visitor'), recording);
-outcomeTest(reading, 'stranger', () => read('stranger'), recording);
-outcomeTest(reading, 'member', () => read('member'), recording);
-outcomeTest(reading, 'owner', () => read('owner'), recording);
-outcomeTest(reading, 'moderator', () => read('moderator'), recording);
-outcomeTest(reading, 'operator', () => read('operator'), recording);
+outcomeTest(reading, 'visitor', () => proveAndVisit('visitor'), recording);
+outcomeTest(reading, 'stranger', () => proveAndVisit('stranger'), recording);
+outcomeTest(reading, 'member', () => proveAndVisit('member'), recording);
+outcomeTest(reading, 'owner', () => proveAndVisit('owner'), recording);
+outcomeTest(reading, 'moderator', () => proveAndVisit('moderator'), recording);
+outcomeTest(reading, 'operator', () => proveAndVisit('operator'), recording);
+
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function proveAndVisit(name: PersonaName) {
+  const started = performance.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The API proof retains its original 60 s; recording has its own 120 s visit budget.
+    await within(60_000, 'API proof', () => read(name));
+    proofMs = performance.now() - started;
+    visitStarted = performance.now();
+    await within(120_000, 'production visit', () => visit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${Math.round(proofMs || performance.now() - started)} visitMs=${Math.round(visitStarted ? performance.now() - visitStarted : 0)}`);
+  }
+}
+
+async function visit(name: PersonaName) {
+  const person = sessions[name];
+  const labels = new AsyncLocalStorage<string>();
+  const sample = recording.session(name, person);
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const label = labels.getStore();
+    if (!label) throw new Error('Unlabelled language reading request');
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    return sample(label, init?.method ?? 'GET', url.pathname.slice(BFF_PREFIX.length) + url.search,
+      body, new Headers(init?.headers).get('idempotency-key') ?? undefined);
+  };
+  const main = browserMainApi('http://record.invalid', { fetcher });
+  const actingSubject = person.actingSubject ?? undefined;
+  const reads = booksEditionReads({ main, actingSubject });
+  const texts = booksLanguageReads({ main });
+  const call = <T,>(label: string, run: () => Promise<T>) => labels.run(label, run);
+  // /[locale]/w/[ref]/read: UUID refs resolve locally; metadata shares these cached reads.
+  const header = await call('reading-page-header', () => reads.readWorkHeader(short(published.work)));
+  if (header.ok) {
+    const text = await call('reading-page-selection', () => texts.readText(header.data.mainVersion,
+      header.data.selectedLanguage ?? undefined));
+    // ReaderSurface mounts only after the selected text succeeds. It reads account settings,
+    // while a signed-out reader keeps device settings. Reading this one text makes no write.
+    if (text.ok && actingSubject)
+      await call('reader-settings', () => main.v1.reader.settings.get({ query: { actingSubject } }));
+  }
+  const privateHeader = await call('private-reading-page-header', () => reads.readWorkHeader(short(privateWork.work)));
+  if (!privateHeader.ok) return;
+  await call('private-reading-page-selection', () => texts.readText(privateHeader.data.mainVersion,
+    privateHeader.data.selectedLanguage ?? undefined));
+}
