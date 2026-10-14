@@ -1,3 +1,4 @@
+import { observeSearchPhase } from './operation-evidence.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { namedDiscoveryCredits } from '../discovery/credits.ts';
 import { DISCOVERY_COST, namedAuthorCredit, type DiscoveryCredit, type ProjectedCredit } from '../discovery/contract.ts';
@@ -186,15 +187,16 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     }
     const unavailableCredits = new Set<string>();
     const [summaries, serial, authors, ratings] = await Promise.all([
-      session.summaries(ids, true), optionalPreview(session, () => searchPageSerial(session, ids, true)),
-      optionalPreview(session, () => searchPageAuthors(session, ids, true, unavailableCredits)),
-      optionalPreview(session, async () => {
+      observeSearchPhase('card-summaries', () => session.summaries(ids, true)),
+      observeSearchPhase('card-serial', () => optionalPreview(session, () => searchPageSerial(session, ids, true))),
+      observeSearchPhase('card-authors', () => optionalPreview(session, () => searchPageAuthors(session, ids, true, unavailableCredits))),
+      observeSearchPhase('card-ratings', () => optionalPreview(session, async () => {
         try { return await searchPageRatings(session, matches, page.context); }
         catch (error) {
           if (error instanceof RatingAggregateBudgetExceeded) throw new WorkReadLimit('Search rating budget exceeded');
           throw error;
         }
-      }),
+      })),
     ]);
     const publicCard = (summary: ResourceSummary) => summary.status === 'available'
       && summary.type === 'work' && summary.disclosure === 'public';
@@ -205,7 +207,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
     }
     const fenced: ResourceSummary[] = [];
     for (let i = 0; i < ids.length; i += MAX_SUMMARY_BATCH) {
-      fenced.push(...await session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH), true));
+      fenced.push(...await observeSearchPhase('card-summary-disclosure-fence', () => session.summaries(ids.slice(i, i + MAX_SUMMARY_BATCH), true)));
     }
     if (summaries.some((summary, index) => JSON.stringify({ ...summary, avatar: undefined })
       !== JSON.stringify({ ...fenced[index], avatar: undefined }))) {

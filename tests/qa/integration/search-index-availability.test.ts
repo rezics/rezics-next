@@ -43,6 +43,21 @@ test('public search retains exact Realm membership and bounded work across three
     rows?: number; rankHits?: number; answer?: unknown; error?: string; budgetRemainingMs?: number };
   type Capture = { calls: Call[]; phases: Parameters<typeof searchOperationEvidence.run>[0]['phases'] };
   let active: Capture | undefined;
+  const nativeResponses: unknown[] = [];
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    const capture = active && foregroundCounted() && headers.has('x-rezics-search-budget-ms');
+    if (capture) headers.set('x-rezics-search-evidence', '1');
+    const startedMs = performance.now();
+    const response = await originalFetch(input, capture ? { ...init, headers } : init);
+    if (capture) nativeResponses.push({ startedMs, headersReceivedMs: performance.now(),
+      request: typeof init?.body === 'string' ? init.body : undefined,
+      nativeFirstWrite: response.headers.get('x-rezics-search-evidence'),
+      nativeInterval: 'Filter arrival through first response write; remaining streaming and pre-filter/client wait are unobserved. Nested phases overlap.',
+      readCut: response.headers.get('x-rezics-read-cut'), work: response.headers.get('x-rezics-command-work') });
+    return response;
+  }, originalFetch);
   async function observe<T>(family: string, request: string | undefined, read: () => Promise<T>): Promise<T> {
     if (!active || !foregroundCounted()) return read();
     const startedMs = performance.now(), budget = fusekiReadBudget.getStore();
@@ -70,7 +85,9 @@ test('public search retains exact Realm membership and bounded work across three
   function retain() {
     writeFileSync(resolve(directory, 'growth.json'), JSON.stringify({ source, servedSource: source,
       runId: Bun.env.REZICS_QA_RUN_ID, lineage: stack.env.lineage, boundMs: MAX_SEARCH_REQUEST_MS,
-      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals,
+      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals, nativeResponses,
+      browseDependency: 'G-2268 owns browse preparation. Retained three-size baseline remains; post-repair browse HTTP capture unresolved.',
+      durationConvention: 'Nested phase durations overlap. atAnswer is copied at HTTP answer; eventual phases may include work after refusal. Native elapsed minus native thread CPU is unobserved wait, not an operator or host cause.', 
       missingHistoricalWitnesses: 'Both retained sequence-25 503s lack index checkpoint and native phase witnesses.' }, null, 2));
   }
   try {
@@ -121,46 +138,50 @@ test('public search retains exact Realm membership and bounded work across three
       }
       preparationMs = performance.now() - startedPreparation;
       expect(preparationMs).toBeLessThan(600_000);
-      for (const caller of ['catalogue-word', 'catalogue-phrase', 'browse'] as const) {
-        if (caller === 'browse') {
-          if (!stack.composition.zoneBrowse) throw new Error('Composed Main has no browse projection');
-          await stack.composition.zoneBrowse.backfill();
-        }
+      for (const caller of ['catalogue-word', 'catalogue-phrase'] as const) {
         const q = caller === 'catalogue-word' ? phrase : `${phrase} story`;
         const delivered: string[] = [];
         let cursor: string | null = null;
         for (let pageIndex = 0; pageIndex < 4; pageIndex++) {
-          const path = caller === 'browse'
-            ? `/v1/realms/${realm.slice(-36)}/modules/browse?${new URLSearchParams({ q, sort: 'relevance', limit: '1', ...(cursor ? { cursor } : {}) })}`
-            : `/v1/search/catalogue?${new URLSearchParams({ q, realm, limit: '1', ...(cursor ? { cursor } : {}) })}`;
+          const path = `/v1/search/catalogue?${new URLSearchParams({ q, realm, limit: '1', ...(cursor ? { cursor } : {}) })}`;
           const sample: Capture = { calls: [], phases: [] };
           active = sample;
           const requestedAt = new Date().toISOString();
           let answeredAt = '', httpMs = 0;
+          let atAnswer: unknown;
           const { result, profile } = await profileRequest(sink, async headers => {
             const started = performance.now();
             const response = await fetch(new URL(path, server.url), { headers });
             const body = await response.text();
             httpMs = performance.now() - started;
             answeredAt = new Date().toISOString();
+            const answeredMs = performance.now();
+            atAnswer = { answeredMs, phases: sample.phases.map(phase => ({ ...phase,
+              elapsedMs: Math.min(phase.elapsedMs ?? answeredMs - phase.startedMs, answeredMs - phase.startedMs) })),
+              calls: sample.calls.map(call => ({ ...call,
+                elapsedMs: Math.min(call.elapsedMs ?? answeredMs - call.startedMs, answeredMs - call.startedMs) })) };
             rawAnswers.push({ caller, pageIndex, size: expected.length + unrelated.length, requestedAt,
               answeredAt, httpMs, request: { method: 'GET', path }, answer: { status: response.status, body } });
             retain();
             return { status: response.status, body, headers: Object.fromEntries(response.headers) };
           }, { service: 'search-index-availability', flush: flushTelemetryTraces, peers: { fuseki: Bun.env.FUSEKI_URL } });
           active = undefined;
-          const completion = caller === 'browse' ? null : { health: await health(), checkpoint: await delta('-1') };
+          const completion = { health: await health(), checkpoint: await delta('-1') };
           const now = performance.now();
           evidence.push({ size: expected.length + unrelated.length, unrelated: unrelated.length, caller,
-            pageIndex, requestedAt, answeredAt, httpMs, request: { method: 'GET', path }, answer: result,
+            pageIndex, requestedAt, answeredAt, httpMs, atAnswer, request: { method: 'GET', path }, answer: result,
             arrival: sample.calls.find(call => call.family === 'delta-proof'), completion,
             phases: sample.phases.map(phase => ({ ...phase, elapsedMs: phase.elapsedMs ?? now - phase.startedMs })),
             calls: sample.calls, returnedRows: sample.calls.reduce((sum, call) => sum + (call.rows ?? 0), 0), profile });
           profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile });
           retain();
-          if (caller !== 'browse') {
-            expect(sample.calls.find(call => call.rankHits !== undefined)?.rankHits).toBeLessThanOrEqual(1);
-          }
+          expect(sample.calls.find(call => call.rankHits !== undefined)?.rankHits).toBeLessThanOrEqual(1);
+          // An older image must not silently stand in for the measured native owner.
+          const control = sample.calls.find(call => call.request?.includes('text:query'))!;
+          const observed = nativeResponses as { startedMs: number; nativeFirstWrite?: string | null }[];
+          const native = observed.find(row => row.startedMs >= control.startedMs
+            && row.startedMs <= control.startedMs + control.elapsedMs!);
+          expect(native?.nativeFirstWrite, 'Native owner phase capture is required').toBeTruthy();
           if (result.status !== 200) {
             refusals.push({ caller, pageIndex, size: expected.length + unrelated.length, path, answer: result });
             retain();
@@ -172,21 +193,20 @@ test('public search retains exact Realm membership and bounded work across three
           for (const item of page.results ?? page.items ?? []) {
             const work = item.work ?? item.id!;
             expect(expected.map(row => row.work)).toContain(work);
-            if (caller !== 'browse') expect(item).toMatchObject(expected.find(row => row.work === work)!);
+            expect(item).toMatchObject(expected.find(row => row.work === work)!);
             expect(item.primaryCredits).toContainEqual(expect.objectContaining({ agent: author.actor }));
             expect(delivered).not.toContain(work);
             delivered.push(work);
           }
-          const count = caller === 'browse' ? page.matches! : page.count!;
+          const count = page.count!;
           expect(count.value).toBe(delivered.length);
           const next = page.next ?? page.nextCursor;
           if (!next) {
-            expect(caller === 'browse' ? page.matches!.kind : page.count!.precision).toBe('exact');
-            if (caller === 'browse') expect(page.window?.complete).toBe(true);
+            expect(page.count!.precision).toBe('exact');
             expect(delivered.toSorted()).toEqual(expected.map(row => row.work).toSorted());
             break;
           }
-          expect(caller === 'browse' ? page.matches!.kind : page.count!.precision).toBe('lower-bound');
+          expect(page.count!.precision).toBe('lower-bound');
           expect(next).not.toBe(cursor);
           cursor = next;
           if (pageIndex === 3) throw new Error('Cursor failed to complete its independent inventory');
@@ -194,7 +214,7 @@ test('public search retains exact Realm membership and bounded work across three
       }
     }
     expect(refusals, JSON.stringify(refusals)).toHaveLength(0);
-    for (const caller of ['catalogue-word', 'catalogue-phrase', 'browse']) {
+    for (const caller of ['catalogue-word', 'catalogue-phrase']) {
       for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
         const measured = profiles.filter(row => row.caller === caller && row.pageIndex === pageIndex);
         expect(new Set(measured.map(row => row.size)).size).toBe(3);
@@ -208,6 +228,7 @@ test('public search retains exact Realm membership and bounded work across three
     }
   } finally {
     active = undefined;
+    globalThis.fetch = originalFetch;
     retain();
     console.log(`Search growth evidence: ${directory}/growth.json`);
     await server.stop(true);

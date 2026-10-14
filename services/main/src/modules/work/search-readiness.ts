@@ -7,6 +7,7 @@ import { DATASET, GRAPHS, RV, iri, lit, PUBLIC_SEARCH_ANCHOR,
 import { setTimeout as delay } from 'node:timers/promises';
 import { PUBLIC_SEARCH_GRAPH } from './select-main.ts';
 import { knownSearchPosition } from '../search/snapshot-state.ts';
+import { observeSearchPhase } from '../search/operation-evidence.ts';
 import { FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded, fusekiReadBudget,
   clearFusekiReadDiagnostics, createFusekiReadDiagnostics, snapshotFusekiReadDiagnostics,
   type FusekiClient, type FusekiReadDiagnosticSnapshot, type FusekiReadPhase,
@@ -255,10 +256,10 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   lineage: GraphLineage): Promise<PublicTextPosition> {
   const known = knownSearchPosition(fuseki, lineage);
   if (known) return known;
-  const state = await serverState(fuseki);
+  const state = await observeSearchPhase('readiness-arrival-health', () => serverState(fuseki));
   if (state.publicSearchWriteActive) throw new SearchSnapshotMoved('public index write is in progress');
   let control: SparqlResult;
-  try { control = await fuseki.query(`PREFIX rv: <${RV}>
+  try { control = await observeSearchPhase('readiness-control-and-analyzer-probes', () => fuseki.query(`PREFIX rv: <${RV}>
     PREFIX text: <http://jena.apache.org/text#>
     SELECT ?epoch ?sequence ?generation${state.publicSearchDeltaAvailable ? '' : ' ?population'} WHERE {
       GRAPH ${iri(GRAPHS.control)} {
@@ -273,7 +274,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
       }
       ${textIndexProbePattern()}
       ${state.publicSearchDeltaAvailable ? '' : 'BIND(rv:publicTextInventory() AS ?population)'}
-    }`, MAX_PROOF_RESPONSE_BYTES); }
+    }`, MAX_PROOF_RESPONSE_BYTES)); }
   catch (error) {
     if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
     throw new SearchIndexUnavailable('public text control or inventory is unavailable', { cause: error });
@@ -307,7 +308,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
   // The native writer maintains a startup/rebuild-qualified generation. This
   // bounded envelope replaces Main's per-mutation whole-catalogue inventory.
   let proof: SearchDeltaProof;
-  try { proof = await fuseki.searchDeltaSince('-1'); }
+  try { proof = await observeSearchPhase('readiness-qualified-checkpoint', () => fuseki.searchDeltaSince('-1')); }
   catch (error) {
     if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge) throw error;
     throw new SearchIndexUnavailable('qualified public text generation is unavailable', { cause: error });
@@ -318,7 +319,7 @@ export async function assertPublicTextReady(fuseki: FusekiClient,
     throw new SearchIndexUnavailable('public text generation has no native qualification');
   }
   position.population = count(proof.qualifiedPopulation);
-  await assertSameTextInstance(fuseki, position);
+  await observeSearchPhase('readiness-completion-health', () => assertSameTextInstance(fuseki, position));
   return position;
 }
 

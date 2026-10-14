@@ -1,3 +1,4 @@
+import { observeSearchPhase } from '../search/operation-evidence.ts';
 /**
  * Owner-established disclosure contract (internal; never HTTP input).
  * GraphParentKind = 'work' | 'realm'. OwnerEstablishedGraphParents is a readonly
@@ -365,7 +366,7 @@ export class DisclosureStore implements DisclosureReader {
         nameOwnerQueries++;
         // Resolve only the exact named resources. Never walk credits, Works or
         // dependent Concepts to discover whether an Agent's name is private.
-        const rows = (await this.environment.fuseki.query(`PREFIX rv: <${RV}>
+        const rows = (await observeSearchPhase('disclosure-exact-resource-name-ownership', () => this.environment!.fuseki.query(`PREFIX rv: <${RV}>
           SELECT ?work ?head ?nameOwner WHERE {
             VALUES ?work { ${resources.map(iri).join(' ')} }
             OPTIONAL { GRAPH ${iri(GRAPHS.current)} {
@@ -375,7 +376,7 @@ export class DisclosureStore implements DisclosureReader {
             OPTIONAL { VALUES ?work { ${resources.map(iri).join(' ')} }
               GRAPH ${iri(GRAPHS.current)} { ?work a rv:Agent }
               BIND(?work AS ?nameOwner) }
-          } LIMIT ${resources.length + 1}`, 131_072)).results?.bindings ?? [];
+          } LIMIT ${resources.length + 1}`, 131_072))).results?.bindings ?? [];
         if (rows.length !== resources.length || new Set(rows.map(row => row.work?.value)).size !== resources.length
           || rows.some(row => !row.work || !resources.includes(row.work.value)
             || row.nameOwner && row.nameOwner.value !== row.work.value)) {
