@@ -62,6 +62,7 @@ export default {
   bannerCrop: 'Ein breites Bild eignet sich am besten; auf dem Handy können die Ränder beschnitten werden.',
   submitCreate: 'Community erstellen',
   creating: 'Deine Community wird erstellt…',
+  creationPending: 'Die Erstellung läuft noch. Sende erneut, um dieselbe Anfrage zu prüfen.',
   createFailed: 'Diese Community konnte nicht erstellt werden. Prüfe die Angaben und versuch es noch einmal.',
   handleTaken: 'Dieser Kurzname ist schon vergeben. Wähl einen anderen.',
   // Machine-drafted; needs native review.

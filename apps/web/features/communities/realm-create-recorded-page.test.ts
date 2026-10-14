@@ -3,7 +3,7 @@ import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scri
 import creation from '../../../../tests/qa/fixtures/outcomes/realm/create-a-realm.json';
 import { BFF_PREFIX } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { readRealmCreationRecorded, type RealmCreationIdentity, type RealmCreationMapped } from './realm-create-recorded-page.ts';
+import { mapRealmCreation, readRealmCreationRecorded, type RealmCreationIdentity, type RealmCreationMapped } from './realm-create-recorded-page.ts';
 
 const record = creation as AnswerRecord;
 const founders = ['stranger', 'member', 'owner', 'moderator', 'operator'] as const satisfies readonly AnswerPersona[];
@@ -64,6 +64,31 @@ function expectIdentity(identity: RealmCreationIdentity, receipt: AnswerSample, 
   expect(named.revision).toBe(answer.realmRevision);
   expect(named.name.value).toBe(body.name);
 }
+
+test('Only an HTTP 202 maps to pending, retaining its operation identity', () => {
+  const receipt = sample('stranger', 'creation-receipt');
+  const body = receipt.body as CreationBody;
+  const data = { operationId: 'initialization', status: 'reconciling' };
+  const map = (status: number) => mapRealmCreation({ response: {
+    data, error: null, response: new Response(null, { status }),
+  }, name: body.name, handle: body.handle, actingSubject: body.actingSubject, visibility: 'private', step: { step: 'keep' } });
+  expect(map(202)).toEqual({ kind: 'pending', operationId: 'initialization' });
+  expect(map(200).kind).toBe('discrepancy');
+  expect(map(503).kind).toBe('discrepancy');
+});
+
+test('A partial receipt or a different owner cannot authorize the production form to continue', () => {
+  const receipt = sample('stranger', 'creation-receipt');
+  const body = receipt.body as CreationBody;
+  const answer = receipt.answer as Receipt;
+  const otherOwner = (sample('member', 'creation-receipt').body as CreationBody).actingSubject;
+  for (const data of [{ realm: answer.realm }, { ...answer, owner: otherOwner }]) {
+    const mapped = mapRealmCreation({ response: { data, error: null },
+      name: body.name, handle: body.handle, actingSubject: body.actingSubject, visibility: 'private',
+      step: { step: 'write', realm: answer.realm } });
+    expect(mapped.kind).toBe('discrepancy');
+  }
+});
 
 test('stranger creation receipt keeps the recorded realm identity', async () => {
   const receipt = sample('stranger', 'creation-receipt');

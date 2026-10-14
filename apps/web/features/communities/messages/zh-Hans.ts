@@ -62,6 +62,7 @@ export default {
   bannerCrop: '建议使用宽幅图片；在手机上边缘可能会被裁切。',
   submitCreate: '创建社区',
   creating: '正在创建社区…',
+  creationPending: '创建仍在处理中。再次提交可查看同一请求的结果。',
   createFailed: '无法创建社区。请检查填写的内容并重试。',
   handleTaken: '这个短名已被使用，请换一个。',
   // Machine-drafted; needs native review.

@@ -30,6 +30,7 @@ export default {
   imageChoose: '또는 기기에서 선택', iconCrop: '정사각형 이미지가 가장 좋습니다. 가운데 부분이 원형으로 표시됩니다.',
   bannerCrop: '가로로 긴 이미지가 가장 좋습니다. 휴대전화에서는 가장자리가 잘릴 수 있습니다.',
   submitCreate: '커뮤니티 만들기', creating: '커뮤니티 만드는 중…',
+  creationPending: '아직 생성 중입니다. 다시 제출하면 같은 요청의 결과를 확인할 수 있습니다.',
   createFailed: '커뮤니티를 만들지 못했습니다. 입력 내용을 확인하고 다시 시도하세요.',
   handleTaken: '이미 사용 중인 핸들입니다. 다른 핸들을 선택하세요.',
   // Machine-drafted; needs native review.

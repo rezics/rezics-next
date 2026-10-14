@@ -68,6 +68,7 @@ const en = {
   bannerCrop: 'A wide image works best; edges may be cropped on phones.',
   submitCreate: 'Create community',
   creating: 'Creating your community…',
+  creationPending: 'Creation is still processing. Submit again to check the same request.',
   createFailed: 'Could not create this community. Check the details and try again.',
   handleTaken: 'This handle is already taken. Choose another.',
   alreadyYours: 'You already have a community at this handle.',

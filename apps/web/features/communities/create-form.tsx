@@ -20,7 +20,7 @@ import { communityNames, type NameTranslation } from './name-fields.ts';
 import { ruleFromText } from '../manage/rules.ts';
 import { communityText as words } from './messages.ts';
 import { TopicPicker, type TopicChoice } from './topics.tsx';
-import { mapRealmCreation, type RealmCreationProblem } from './realm-create-recorded-page.ts';
+import { mapRealmCreation, realmCreationProblem, type RealmCreationProblem } from './realm-create-recorded-page.ts';
 import { CommunityUploadField, type UploadOutcome } from './upload-field.tsx';
 
 type Rule = { key: string; title: string; body: string };
@@ -48,7 +48,7 @@ export async function createCommunityWithReadback(input: CommunityCreationIntent
       { headers: { 'idempotency-key': operationKey } })) {
   try {
     const result = await send(input, key);
-    if (result.error?.status !== 503 && !(result.data && 'operationId' in result.data)) return result;
+    if (result.error?.status !== 503 && result.response?.status !== 202) return result;
   } catch { /* An uncertain response is reconciled by the same creation key. */ }
   return send(input, key);
 }
@@ -155,8 +155,8 @@ function OwnedCommunityNotice({ locale, realm }: { locale: UiLocale; realm: stri
 
 /** A private Realm has no public profile to publish, and a profile that
  * already has a head is already saved. Either answer still opens the Realm. */
-export function profilePublicationOpensRealm(code: string | null): boolean {
-  return code === 'stale_realm_profile' || code === 'realm_unavailable';
+export function profilePublicationOpensRealm(code: string | null, visibility: Visibility = 'private'): boolean {
+  return code === 'stale_realm_profile' || (code === 'realm_unavailable' && visibility === 'private');
 }
 
 function problemCode(error: { value?: unknown } | null | undefined): string | null {
@@ -190,6 +190,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<'create' | 'handle' | 'configure' | null>(null);
   const [problem, setProblem] = useState<RealmCreationProblem | null>(null);
+  const [pending, setPending] = useState(false);
   const [translationError, setTranslationError] = useState(false);
   // What screening said about each image, or that its upload budget is spent.
   const [outcomes, setOutcomes] = useState<Record<'icon' | 'banner', UploadOutcome>>({ icon: null, banner: null });
@@ -205,6 +206,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
     setBusy(true);
     setFailure(null);
     setProblem(null);
+    setPending(false);
     setOwnedRealm(null);
     key.current ??= crypto.randomUUID();
     const operation = key.current;
@@ -229,6 +231,10 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           response, name: intent.name, handle: intent.handle,
           visibility: intent.initialSettings?.visibility ?? visibility, actingSubject, step,
         });
+        if (mapped.kind === 'pending') {
+          setPending(true);
+          return;
+        }
         // A Realm this founder owns is only linked. The form cannot tell a lost
         // submission from an older Realm, so it never writes over either one.
         if (step.step === 'owned') {
@@ -240,6 +246,8 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           // command; uncertain outcomes retain their original intent.
           creationIntent.current = null;
           key.current = null;
+          const refusal = response.error && realmCreationProblem(response.error.status, response.error.value);
+          setProblem(refusal && !('detail' in refusal) ? refusal : null);
           setFailure('handle');
           return;
         }
@@ -248,7 +256,13 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           setFailure('create');
           return;
         }
-        realm = step.realm;
+        // A partial receipt or a receipt for another represented author cannot
+        // authorize profile writes or navigation to that Realm.
+        if (mapped.kind !== 'created') {
+          setFailure('create');
+          return;
+        }
+        realm = mapped.identity.realm;
         setCreatedRealm(realm);
       }
       const id = realm.slice(-36);
@@ -273,7 +287,11 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
       const saved = await main.v1.realms({ realm: id }).profile.put({ profile: 'realm-public-profile-v2',
         expectedHead: null, actingSubject, publication },
       { headers: { 'idempotency-key': `${operation}:profile` } });
-      if (!saved.data && !profilePublicationOpensRealm(problemCode(saved.error))) throw new Error('profile-write-failed');
+      if (!saved.data && !profilePublicationOpensRealm(problemCode(saved.error), visibility)) {
+        const refusal = saved.error && realmCreationProblem(saved.error.status, saved.error.value);
+        setProblem(refusal && !('detail' in refusal) ? refusal : null);
+        throw new Error('profile-write-failed');
+      }
       try { localStorage.setItem(`rezics:community-setup:${actingSubject}:${realm}`,
         JSON.stringify({ topics: topics.length > 0, invite: false })); } catch { /* optional local checklist */ }
       router.push(realmHref(locale, id));
@@ -387,6 +405,7 @@ export function CreateCommunityForm({ actingSubject, locale }: { actingSubject: 
           className="font-medium underline">{words.manage[locale]}</Link></> : null}</AlertDescription>
     </Alert> : null}
     {ownedRealm ? <OwnedCommunityNotice locale={locale} realm={ownedRealm} /> : null}
+    {pending ? <p role="status">{words.creationPending[locale]}</p> : null}
     <Button type="submit" isLoading={busy} className="justify-self-start">
       {busy ? words.creating[locale] : words.submitCreate[locale]}</Button>
     {createdRealm ? <Link href={`/manage/r/${createdRealm.slice(-36)}`}

@@ -1,105 +1,151 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
-import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
-import creation from '../../../../tests/qa/fixtures/outcomes/realm/create-a-realm.json';
+import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import type { UiLocale } from '../../i18n/define.ts';
-import { localizedPath } from '../../i18n/locale.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
+import { forgetReadingLanguages } from '../content-language/use-reading-languages.ts';
 import { realmHref } from '../realm/route.ts';
-import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { recordedFetch } from '../stories/recorded-fetch.ts';
+import { CreateCommunityPage } from './create-page.tsx';
+import { creationStoryInputs, type CreationStoryState, type foundingPersonas } from './creation-story-inputs.ts';
 import { communityText as words } from './messages.ts';
-import { RealmCreateRecordedPage } from './realm-create-recorded-page.tsx';
 
-const record = creation as AnswerRecord;
-
-function recorded(persona: AnswerPersona, label: string) {
-  const sample = record.personas[persona].find(item => item.label === label);
-  if (!sample || !sample.answer || typeof sample.answer !== 'object') throw new Error(`Missing ${persona} sample ${label}`);
-  return sample;
-}
-
-type Receipt = { realm: string; owner: string; realmRevision: string; spaceRevision: string };
-type Header = { name: { value: string }; visibility: string; listing: string; admission: string };
-type Problem = { title: string; code: string };
-type CreationBody = { handle: string };
-
-const strangerReceipt = recorded('stranger', 'creation-receipt');
-const strangerHeader = recorded('stranger', 'created-realm-header');
-const strangerAnswer = strangerReceipt.answer as Receipt;
-const strangerNamed = strangerHeader.answer as Header;
-const strangerHandle = (strangerReceipt.body as CreationBody).handle;
-const visitorRefusal = recorded('visitor', 'creation-sign-in-required');
-const visitorProblem = visitorRefusal.answer as Problem;
-
-const populated = [
-  { label: 'creation-receipt', state: 'populated' },
-  { label: 'created-realm-header', state: 'populated' },
-] as const satisfies readonly RecordedSelection[];
-const loading = [{ label: 'creation-receipt', state: 'loading' }] as const satisfies readonly RecordedSelection[];
-const refusal = [{ label: 'creation-sign-in-required', state: 'error' }] as const satisfies readonly RecordedSelection[];
-
+const navigation = fn();
+const requests: { method: string; path: string; key: string | null; body: unknown }[] = [];
 const meta = {
-  title: 'Communities/Recorded realm creation',
-  component: RealmCreateRecordedPage,
-  args: { record, persona: 'stranger' as const, selections: populated, locale: 'en' as const },
-  parameters: { route: { pathname: '/en/r/new' } },
-  render: (args, { globals }) => (
-    <RealmCreateRecordedPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
-  ),
-} satisfies Meta<typeof RealmCreateRecordedPage>;
+  title: 'Communities/Realm creation', component: CreateCommunityPage,
+  args: { locale: 'en', signedIn: true, actingSubject: creationStoryInputs('stranger').body.actingSubject },
+  parameters: { route: { pathname: '/en/r/new', onPush: navigation } },
+  globals: { viewport: { value: 'desktop' } },
+  render: (args, { globals }) => <CreateCommunityPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />,
+} satisfies Meta<typeof CreateCommunityPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function populatedPlay({ canvasElement }: { canvasElement: HTMLElement }) {
-  const canvas = within(canvasElement);
-  const id = strangerAnswer.realm.slice(-36);
-  await expect(canvas.findByRole('heading', { level: 1, name: words.createTitle.en })).resolves.toBeVisible();
-  await expect(canvas.findByRole('heading', { level: 2, name: strangerNamed.name.value })).resolves.toBeVisible();
-  await expect(canvas.getByRole('link', { name: strangerNamed.name.value })).toHaveAttribute('href', realmHref('en', id));
-  await expect(canvas.getByText(strangerHandle)).toBeVisible();
-  await expect(canvas.getByText(strangerAnswer.realm)).toBeVisible();
-  await expect(canvas.getByText(strangerNamed.visibility)).toBeVisible();
-  await expect(canvas.getByText(strangerNamed.listing)).toBeVisible();
-  await expect(canvas.getByText(strangerNamed.admission)).toBeVisible();
-  await expect(canvas.getByText(strangerAnswer.owner)).toBeVisible();
-  await expect(canvas.getByText(strangerAnswer.realmRevision)).toBeVisible();
-  await expect(canvas.getByText(strangerAnswer.spaceRevision)).toBeVisible();
-  await expect(canvas.getByRole('link', { name: words.manage.en })).toHaveAttribute('href', localizedPath(`/manage/r/${id}`, 'en'));
-  await expect(canvas.queryByRole('alert')).toBeNull();
+function formStory(persona: typeof foundingPersonas[number], state: CreationStoryState = 'created'): Story {
+  const inputs = creationStoryInputs(persona, state);
+  return {
+    args: { actingSubject: inputs.body.actingSubject },
+    parameters: { constructedFromContract: true, missingRecordedStates: inputs.missingRecordedStates },
+    beforeEach() {
+      navigation.mockClear(); requests.length = 0; forgetReadingLanguages();
+      const transport = recordedFetch(inputs.record, persona, inputs.record.personas[persona].map(sample => ({
+        label: sample.label, state: sample.label === 'form-creation' && state === 'loading' ? 'loading'
+          : sample.status === 202 ? 'pending' : sample.status >= 400 ? 'error' : 'populated',
+      })), { pathPrefix: BFF_PREFIX });
+      const original = window.fetch;
+      const storageKey = `rezics:community-setup:${inputs.body.actingSubject}:${inputs.answer.realm}`;
+      const stored = localStorage.getItem(storageKey);
+      window.fetch = (async (input, init) => {
+        const request = new Request(new URL(input instanceof Request ? input.url : String(input), window.location.origin), init);
+        if (!new URL(request.url).pathname.startsWith(`${BFF_PREFIX}/`)) return original(input, init);
+        const body = await request.clone().text();
+        requests.push({ method: request.method, path: new URL(request.url).pathname,
+          key: request.headers.get('idempotency-key'), body: body ? JSON.parse(body) : undefined });
+        return transport.fetcher(request);
+      }) as typeof fetch;
+      return () => {
+        window.fetch = original; transport.dispose(); forgetReadingLanguages();
+        if (stored === null) localStorage.removeItem(storageKey); else localStorage.setItem(storageKey, stored);
+      };
+    },
+    async play({ canvasElement, globals }) {
+      const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+      const canvas = within(canvasElement);
+      await expect(canvas.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+      await userEvent.type(canvas.getByRole('textbox', { name: words.name[locale] }), inputs.body.name);
+      await userEvent.type(canvas.getByRole('textbox', { name: words.handle[locale] }), inputs.body.handle!);
+      await userEvent.type(canvas.getByRole('textbox', { name: words.description[locale] }), 'Original description by the founding fixture Person.');
+      await userEvent.click(canvas.getByRole('button', { name: new RegExp(`^${words.nameLanguage[locale]}`) }));
+      const dialog = within(await within(document.body).findByRole('dialog'));
+      await userEvent.type(dialog.getByRole('searchbox'), 'en');
+      await userEvent.click(dialog.getByRole('button', { name: /English.*\ben$/ }));
+      await userEvent.click(canvas.getByRole('radio', { name: new RegExp(`^${words.private[locale]}`) }));
+      await userEvent.click(canvas.getByRole('button', { name: words.submitCreate[locale] }));
+      await waitFor(() => expect(requests.filter(request => request.path === `${BFF_PREFIX}/v1/spaces`).length).toBeGreaterThan(0));
+      if (state === 'loading') {
+        await expect(canvas.getByRole('button', { name: words.creating[locale] })).toBeVisible();
+      } else if (state === 'pending') {
+        await expect(canvas.findByText(words.creationPending[locale])).resolves.toBeVisible();
+        await expect(canvas.queryByRole('alert')).toBeNull();
+        await userEvent.click(canvas.getByRole('button', { name: words.submitCreate[locale] }));
+        await waitFor(() => expect(requests.filter(request => request.path === `${BFF_PREFIX}/v1/spaces`)).toHaveLength(4));
+      } else if (['quota', 'conflict', 'expired'].includes(state)) {
+        await expect(canvas.findByRole('alert')).resolves.toHaveTextContent((inputs.command.answer as { title: string }).title);
+      } else if (state === 'owned') {
+        await expect(canvas.findByRole('link', { name: words.openYours[locale] })).resolves.toHaveAttribute('href', realmHref(locale, inputs.answer.realm.slice(-36)));
+        await expect(canvas.getByRole('alert')).toHaveTextContent(words.alreadyYours[locale]);
+      } else if (state === 'taken') {
+        await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(words.handleTaken[locale]);
+        await expect(canvas.getByRole('alert')).toHaveTextContent((inputs.command.answer as { title: string }).title);
+        await expect(canvas.queryByRole('link', { name: words.openYours[locale] })).toBeNull();
+        await expect(canvasElement.textContent).not.toContain(inputs.answer.realm);
+      } else {
+        await waitFor(() => expect(navigation).toHaveBeenCalledWith(realmHref(locale, inputs.answer.realm.slice(-36))));
+        await expect(inputs.answer.owner).toBe(inputs.body.actingSubject);
+      }
+      const writes = requests.filter(request => request.method !== 'GET');
+      const creates = writes.filter(request => request.path === `${BFF_PREFIX}/v1/spaces`);
+      for (const request of creates) await expect(request.body).toEqual(inputs.body);
+      await expect(new Set(creates.map(request => request.key)).size).toBe(1);
+      await expect(creates[0]?.key).toBeTruthy();
+      await expect(writes.every(request => request.path === `${BFF_PREFIX}/v1/spaces`
+        || (['created', 'replayed'].includes(state) && request.path === `${BFF_PREFIX}/v1/realms/${inputs.answer.realm.slice(-36)}/profile`))).toBe(true);
+      if (!['created', 'replayed'].includes(state)) await expect(navigation).not.toHaveBeenCalled();
+      await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    },
+  };
 }
 
-async function refusalPlay({ canvasElement }: { canvasElement: HTMLElement }) {
-  const canvas = within(canvasElement);
-  const alert = await canvas.findByRole('alert');
-  await expect(alert).toHaveTextContent(visitorProblem.title);
-  await expect(alert).toHaveTextContent(words.createFailed.en);
-  await expect(canvas.getByRole('heading', { level: 1, name: words.createTitle.en })).toBeVisible();
-  await expect(canvas.queryByRole('heading', { level: 2, name: strangerNamed.name.value })).toBeNull();
-  await expect(canvas.queryByText(strangerAnswer.realm)).toBeNull();
-}
-
-async function loadingPlay({ canvasElement }: { canvasElement: HTMLElement }) {
-  const canvas = within(canvasElement);
-  await expect(canvas.findByRole('status')).resolves.toHaveTextContent(words.creating.en);
-  await expect(canvas.getByRole('heading', { level: 1, name: words.createTitle.en })).toBeVisible();
-  await expect(canvas.queryByText(strangerNamed.name.value)).toBeNull();
-  await expect(canvas.queryByText(strangerAnswer.realm)).toBeNull();
-  await expect(canvas.queryByRole('alert')).toBeNull();
-}
-
-const populatedStranger = { play: populatedPlay } satisfies Story;
-const refusalVisitor = {
-  args: { persona: 'visitor' as const, selections: refusal },
-  play: refusalPlay,
-} satisfies Story;
-const loadingStranger = { args: { selections: loading }, play: loadingPlay } satisfies Story;
-
-function at(story: Story, viewport: 'phone' | 'desktop'): Story {
-  return { ...story, globals: { viewport: { value: viewport } } };
-}
-
-export const PopulatedStrangerPhone: Story = at(populatedStranger, 'phone');
-export const PopulatedStrangerDesktop: Story = at(populatedStranger, 'desktop');
-export const RefusalVisitorPhone: Story = at(refusalVisitor, 'phone');
-export const RefusalVisitorDesktop: Story = at(refusalVisitor, 'desktop');
-export const LoadingStrangerPhone: Story = at(loadingStranger, 'phone');
-export const LoadingStrangerDesktop: Story = at(loadingStranger, 'desktop');
+export const Stranger: Story = formStory('stranger');
+export const Member: Story = formStory('member');
+export const Owner: Story = formStory('owner');
+export const Moderator: Story = formStory('moderator');
+export const Operator: Story = formStory('operator');
+export const ReplayedReceipt: Story = formStory('stranger', 'replayed');
+export const Loading: Story = formStory('stranger', 'loading');
+export const Pending202: Story = formStory('stranger', 'pending');
+export const QuotaRefusal: Story = formStory('owner', 'quota');
+export const IntentConflict: Story = formStory('stranger', 'conflict');
+export const ExpiredSession: Story = formStory('stranger', 'expired');
+export const RecoveredOwnRealm: Story = formStory('stranger', 'owned');
+export const ModeratedHandleIsTaken: Story = formStory('stranger', 'taken');
+export const NamesAndRules: Story = { ...Stranger,
+  async play({ canvasElement, globals }) {
+    const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+    const canvas = within(canvasElement);
+    await userEvent.click(canvas.getByRole('button', { name: words.addTranslation[locale] }));
+    await userEvent.type(canvas.getByRole('textbox', { name: words.translationLanguage[locale] }), 'zh-Hans');
+    await userEvent.type(canvas.getByRole('textbox', { name: words.translationName[locale] }), '读书圈');
+    await userEvent.click(canvas.getByRole('button', { name: words.addRule[locale] }));
+    await userEvent.type(canvas.getByRole('textbox', { name: words.ruleTitle[locale] }), 'Respect every reader');
+    await userEvent.type(canvas.getByRole('textbox', { name: words.ruleBody[locale] }), 'Discuss the work and respect its original authors.');
+    await expect(canvas.getByRole('textbox', { name: words.translationName[locale] })).toHaveValue('读书圈');
+    await expect(canvas.getByRole('textbox', { name: words.ruleTitle[locale] })).toHaveValue('Respect every reader');
+    await userEvent.click(canvas.getByRole('button', { name: words.removeRule[locale] }));
+    await expect(canvas.queryByRole('textbox', { name: words.ruleTitle[locale] })).toBeNull();
+    await expect(navigation).not.toHaveBeenCalled();
+  } };
+export const Phone: Story = { ...Stranger, globals: { viewport: { value: 'phone' } } };
+export const PhoneLoading: Story = { ...Loading, globals: { viewport: { value: 'phone' } } };
+export const PhonePending: Story = { ...Pending202, globals: { viewport: { value: 'phone' } } };
+export const PhoneRefusal: Story = { ...QuotaRefusal, globals: { viewport: { value: 'phone' } } };
+export const Visitor: Story = { args: { signedIn: false, actingSubject: null },
+  async play({ canvasElement, globals }) {
+    const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+    const canvas = within(canvasElement);
+    await expect(canvas.getByRole('link', { name: words.signIn[locale] })).toHaveAttribute('href', expect.stringContaining('next='));
+    await expect(canvas.queryByRole('textbox')).toBeNull();
+  } };
+export const NoEligibleAuthor: Story = { args: { actingSubject: null },
+  async play({ canvasElement, globals }) {
+    const locale = (globals.locale as UiLocale | undefined) ?? 'en';
+    await expect(within(canvasElement).getByRole('status')).toHaveTextContent(words.agentNeeded[locale]);
+    await expect(within(canvasElement).queryByRole('textbox')).toBeNull();
+  } };
+export const Chinese: Story = { ...Stranger, globals: { locale: 'zh-Hans' } };
+export const TraditionalChinese: Story = { ...Stranger, globals: { locale: 'zh-Hant' } };
+export const Japanese: Story = { ...Stranger, globals: { locale: 'ja' } };
+export const Korean: Story = { ...Stranger, globals: { locale: 'ko' } };
+export const German: Story = { ...Stranger, globals: { locale: 'de' } };
+export const French: Story = { ...Stranger, globals: { locale: 'fr' } };
+export const Spanish: Story = { ...Stranger, globals: { locale: 'es' } };

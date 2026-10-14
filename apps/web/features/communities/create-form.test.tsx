@@ -38,7 +38,7 @@ test('A lost creation response reads back the exact same intent and key without 
 
 test('Pending creation and unavailable initialization are read back once; definitive refusals are returned', async () => {
   for (const pending of [
-    { data: { operationId: 'admission', status: 'reconciling' }, error: null },
+    { data: { operationId: 'admission', status: 'reconciling' }, error: null, response: new Response(null, { status: 202 }) },
     { data: null, error: { status: 503 } },
   ]) {
     let calls = 0;
@@ -55,6 +55,13 @@ test('Pending creation and unavailable initialization are read back once; defini
     expect(await createCommunityWithReadback(input, 'creation-key', async () => { calls++; return refused; })).toBe(refused);
     expect(calls).toBe(1);
   }
+});
+
+test('An operation-shaped 200 is not pending and is not retried as an accepted creation', async () => {
+  const response = { data: { operationId: 'unexpected' }, error: null, response: new Response(null, { status: 200 }) } as CreationResponse;
+  let calls = 0;
+  expect(await createCommunityWithReadback(input, 'creation-key', async () => { calls++; return response; })).toBe(response);
+  expect(calls).toBe(1);
 });
 
 test('Repeated lost responses surface recovery failure after one readback attempt', async () => {
@@ -174,6 +181,8 @@ test('Managed-Realm pages stop after the same bound Manage uses', async () => {
 
 test('A private Realm and an already published profile still open', () => {
   expect(profilePublicationOpensRealm('realm_unavailable')).toBe(true);
+  expect(profilePublicationOpensRealm('realm_unavailable', 'public')).toBe(false);
+  expect(profilePublicationOpensRealm('realm_unavailable', 'restricted')).toBe(false);
   expect(profilePublicationOpensRealm('stale_realm_profile')).toBe(true);
   expect(profilePublicationOpensRealm('invalid_realm_profile')).toBe(false);
   expect(profilePublicationOpensRealm(null)).toBe(false);

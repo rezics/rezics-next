@@ -31,6 +31,7 @@ export default {
   imageChoose: 'または端末から選択', iconCrop: '正方形の画像がおすすめです。中央部分が円形で表示されます。',
   bannerCrop: '横長の画像がおすすめです。スマートフォンでは端が切れる場合があります。',
   submitCreate: 'コミュニティを作成', creating: 'コミュニティを作成中…',
+  creationPending: '作成処理はまだ進行中です。もう一度送信すると、同じリクエストの結果を確認できます。',
   createFailed: 'コミュニティを作成できませんでした。入力内容を確認して、もう一度お試しください。',
   handleTaken: 'このハンドルはすでに使われています。別のものを選んでください。',
   // Machine-drafted; needs native review.

@@ -62,6 +62,7 @@ export default {
   bannerCrop: 'Una imagen ancha funciona mejor; en el teléfono pueden recortarse los bordes.',
   submitCreate: 'Crear comunidad',
   creating: 'Creando tu comunidad…',
+  creationPending: 'La creación sigue en curso. Envía de nuevo para comprobar la misma solicitud.',
   createFailed: 'No se pudo crear esta comunidad. Revisa los datos e inténtalo de nuevo.',
   handleTaken: 'Ese identificador ya está en uso. Elige otro.',
   // Machine-drafted; needs native review.

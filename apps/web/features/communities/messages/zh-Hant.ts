@@ -26,6 +26,7 @@ export default {
   iconCrop: '使用正方形圖片效果最好；圖片中央會裁成圓形。',
   bannerCrop: '使用寬幅圖片效果最好；手機上可能會裁掉圖片邊緣。',
   submitCreate: '建立社群', creating: '正在建立社群…',
+  creationPending: '建立仍在處理中。再次提交可查看同一請求的結果。',
   createFailed: '無法建立此社群。請檢查資料並再試一次。', handleTaken: '這個代稱已有人使用，請換一個。',
   // Machine-drafted; needs native review.
   alreadyYours: '你已經有一個使用這個代稱的社群。',

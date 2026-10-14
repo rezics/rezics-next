@@ -55,6 +55,7 @@ export type RealmCreationStep =
 
 export type RealmCreationMapped =
   | { kind: 'created'; identity: RealmCreationIdentity }
+  | { kind: 'pending'; operationId: string }
   | { kind: 'owned'; realm: string }
   | { kind: 'taken' }
   | { kind: 'refusal'; problem: RealmCreationProblem }
@@ -138,6 +139,12 @@ export function mapRealmCreation(input: {
   realm?: RealmHeaderFacts | null;
 }): RealmCreationMapped {
   const { response, step } = input;
+  if (response.response instanceof Response && response.response.status === 202) {
+    const data = response.data;
+    return data && typeof data === 'object' && 'operationId' in data && text(data.operationId)
+      ? { kind: 'pending', operationId: data.operationId }
+      : { kind: 'discrepancy', detail: 'pending creation has no operationId' };
+  }
   if (step.step === 'owned') return { kind: 'owned', realm: step.realm };
   if (step.step === 'taken') return { kind: 'taken' };
   if (step.step === 'keep') {
