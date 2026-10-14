@@ -21,10 +21,12 @@ test('database authentication and rate-limit proofs run in integration while rep
     expect(testArgs('integration', undefined, { files: [integration] })).toEqual([integration]);
     expect(readFileSync(resolve(root, guard), 'utf8')).not.toMatch(/\b(?:accountFixture|startPostgresCluster)\b|\bnew\s+Pool\s*\(/);
   }
-  const selection = 'services/account/tests/authentication-subject-selection.test.ts';
-  expect(ownerGateFiles(root)).toContain(selection);
-  expect(guards).not.toContain(selection);
-  expect(testArgs('integration')).not.toContain(selection);
+  for (const selection of ['services/account/tests/authentication-subject-selection.test.ts',
+    'services/main/tests/rate-limit-behavior.test.ts']) {
+    expect(ownerGateFiles(root)).toContain(selection);
+    expect(guards).not.toContain(selection);
+    expect(testArgs('integration')).not.toContain(selection);
+  }
 });
 
 test('migrated Main runtime fixtures stay registered in the integration tier and receive independent projects', () => {
