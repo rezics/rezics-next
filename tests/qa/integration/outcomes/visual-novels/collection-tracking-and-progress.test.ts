@@ -1,10 +1,110 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
 import { randomUUID } from 'node:crypto';
 import collection from '../../../../../scripts/qa/cases/outcomes/visual-novels/collection-tracking-and-progress.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(185_000);
+
+const fileWall = setTimeout(() => { throw new Error('Library recording file exceeded 480 s'); }, 480_000);
+const proofDeadlineMs = 60_000; // These 60 seconds belong to the existing proof, excluding production visits.
+const visitDeadlineMs = 120_000;
+const phases = new AsyncLocalStorage<{
+  proofMs: number; visitMs: number; started: number; pause: () => void; resume: () => void;
+}>();
+async function personaRun(name: PersonaName, proof: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectDeadline: (error: Error) => void = () => {};
+  const phase = {
+    proofMs: 0, visitMs: 0, started: performance.now(),
+    pause: () => { clearTimeout(timer); phase.proofMs += performance.now() - phase.started; },
+    resume: () => {
+      phase.started = performance.now();
+      timer = setTimeout(() => rejectDeadline(new Error('Persona proof exceeded 60 s')), proofDeadlineMs - phase.proofMs);
+    },
+  };
+  try {
+    await Promise.race([
+      phases.run(phase, async () => {
+        phase.resume();
+        await proof();
+        await productionVisit(name, () => libraryVisit(name, 'final'));
+      }),
+      new Promise<never>((_, reject) => { rejectDeadline = reject; }),
+    ]);
+  } finally {
+    phase.pause();
+    console.info(`[persona-timing] ${name} proofMs=${Math.round(phase.proofMs)} visitMs=${Math.round(phase.visitMs)}`);
+  }
+}
+async function productionVisit(name: PersonaName, visit: () => Promise<void>) {
+  const phase = phases.getStore()!;
+  phase.pause();
+  const started = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([visit(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${name} production visits exceeded 120 s`)), visitDeadlineMs - phase.visitMs);
+    })]);
+  } finally {
+    clearTimeout(timer);
+    phase.visitMs += performance.now() - started;
+    phase.resume();
+  }
+}
+
+/** The transport records Eden's exact path, query and body; the imported readers choose the requests. */
+function visitClient(name: PersonaName, region: string) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const pending = new Map<string, Promise<Response>>();
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const method = init?.method ?? 'GET';
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    const key = `${method}:${path}:${JSON.stringify(body)}`;
+    let response = pending.get(key);
+    if (!response) {
+      const route = url.pathname.slice(BFF_PREFIX.length);
+      const works = pairs.get(name)!;
+      const target = works.findIndex(work => route.includes(short(work)));
+      const suffix = target < 0 ? '' : target === 0 ? '-work' : '-other-work';
+      const labels: Record<string, string> = {
+        '/v1/me/shelves': 'overview', '/v1/rating-contexts': 'rating-context',
+        '/v1/me/reading-goal': 'reading-goal', '/v1/me/reading-stats': 'reading-stats',
+        '/v1/me/follows/authors': 'followed-authors', '/v1/me/work-states': 'work-states',
+        '/v1/me/import-reviews': 'import-reviews',
+      };
+      const label = labels[route]
+        ?? (route.endsWith('/library-visibility') ? 'visibility'
+          : route.startsWith('/v1/me/shelves/status/') ? `shelf-${route.split('/')[5]}`
+          : route.startsWith('/v1/me/continue/') ? `resume${suffix}`
+          : route.endsWith('/reviews') ? `reviews${suffix}`
+          : route.startsWith('/v1/works/') ? `header${suffix}` : undefined);
+      if (!label) throw new Error(`Unlabelled production library request: ${method} ${path}`);
+      response = sample(`${region}-${label}`, method, path, body);
+      pending.set(key, response);
+    }
+    return (await response).clone();
+  };
+  return browserMainApi('http://record.invalid', { fetcher });
+}
+async function libraryVisit(name: PersonaName, checkpoint: string, shelf?: string) {
+  const person = sessions[name];
+  // The route redirects signed-out visitors before any Main library read.
+  if (!person.actingSubject) return;
+  const region = `visit-library-${checkpoint}-${shelf ?? 'all'}`;
+  const main = visitClient(name, region);
+  const state = parseLibraryState(shelf ? { shelf } : {});
+  const reader = { main, anonymous: main, actingSubject: person.actingSubject };
+  await loadBooksLibrary(reader, { state, locale: 'en', year: new Date().getUTCFullYear(), first: !shelf });
+}
+
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 let sessions: PersonaSessions;
@@ -48,6 +148,7 @@ beforeAll(async () => {
   for (const name of ['stranger', 'moderator', 'operator'] as const) pairs.set(name, pairs.get('visitor')!);
 }, 180_000);
 afterAll(async () => {
+  clearTimeout(fileWall);
   try { await recording.publish(); }
   finally { await sessions?.close(); }
 });
@@ -172,7 +273,13 @@ async function track(name: PersonaName) {
   for (const value of ['want-to-read', 'reading', 'read', null]) {
     expect(await status(person, work, value, version++)).toMatchObject({ status: value, version });
     expect((await state(person, work)).status).toMatchObject({ status: value, version });
-    if (name === 'member' && (value === 'reading' || value === 'read')) await pageReads(name, value);
+    if (name === 'member' && (value === 'reading' || value === 'read')) {
+      await pageReads(name, value);
+      await productionVisit(name, async () => {
+        await libraryVisit(name, value);
+        await libraryVisit(name, value, value);
+      });
+    }
     if (value) {
       const shelves = await answer<{ statusShelves: Array<{ status: string; count: number }> }>(person.main('GET', `/v1/me/shelves?${query(person)}`));
       expect(shelves.statusShelves.find(item => item.status === value)!.count).toBeGreaterThanOrEqual(1);
@@ -193,9 +300,9 @@ async function track(name: PersonaName) {
   if (name === 'owner') await foreign(name);
 }
 
-outcomeTest(collection, 'visitor', () => track('visitor'), recording);
-outcomeTest(collection, 'stranger', () => track('stranger'), recording);
-outcomeTest(collection, 'member', () => track('member'), recording);
-outcomeTest(collection, 'owner', () => track('owner'), recording);
-outcomeTest(collection, 'moderator', () => track('moderator'), recording);
-outcomeTest(collection, 'operator', () => track('operator'), recording);
+outcomeTest(collection, 'visitor', () => personaRun('visitor', () => track('visitor')), recording);
+outcomeTest(collection, 'stranger', () => personaRun('stranger', () => track('stranger')), recording);
+outcomeTest(collection, 'member', () => personaRun('member', () => track('member')), recording);
+outcomeTest(collection, 'owner', () => personaRun('owner', () => track('owner')), recording);
+outcomeTest(collection, 'moderator', () => personaRun('moderator', () => track('moderator')), recording);
+outcomeTest(collection, 'operator', () => personaRun('operator', () => track('operator')), recording);

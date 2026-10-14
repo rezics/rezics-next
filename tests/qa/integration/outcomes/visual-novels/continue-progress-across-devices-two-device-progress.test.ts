@@ -1,4 +1,16 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
+import { booksEditionReads, settle } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { readAnimeReaderState, readResourcePage, readLinkedStatements, readWorkParts, readWorkRealizations }
+  from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { progressControl } from '../../../../../apps/web/features/tracking/medium-progress.tsx';
+import { typeEntry } from '../../../../../apps/web/features/catalogue/types.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -7,7 +19,103 @@ import { signIn } from '../../../../../scripts/lib/oauth-client.ts';
 import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(185_000);
+
+const fileWall = setTimeout(() => { throw new Error('Library recording file exceeded 480 s'); }, 480_000);
+const proofDeadlineMs = 60_000; // These 60 seconds belong to the existing proof, excluding production visits.
+const visitDeadlineMs = 120_000;
+const phases = new AsyncLocalStorage<{
+  proofMs: number; visitMs: number; started: number; pause: () => void; resume: () => void;
+}>();
+async function personaRun(name: PersonaName, proof: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let rejectDeadline: (error: Error) => void = () => {};
+  const phase = {
+    proofMs: 0, visitMs: 0, started: performance.now(),
+    pause: () => { clearTimeout(timer); phase.proofMs += performance.now() - phase.started; },
+    resume: () => {
+      phase.started = performance.now();
+      timer = setTimeout(() => rejectDeadline(new Error('Persona proof exceeded 60 s')), proofDeadlineMs - phase.proofMs);
+    },
+  };
+  try {
+    await Promise.race([
+      phases.run(phase, async () => {
+        phase.resume();
+        await proof();
+        await productionVisit(name, () => libraryVisit(name, 'final'));
+      }),
+      new Promise<never>((_, reject) => { rejectDeadline = reject; }),
+    ]);
+  } finally {
+    phase.pause();
+    console.info(`[persona-timing] ${name} proofMs=${Math.round(phase.proofMs)} visitMs=${Math.round(phase.visitMs)}`);
+  }
+}
+async function productionVisit(name: PersonaName, visit: () => Promise<void>) {
+  const phase = phases.getStore()!;
+  phase.pause();
+  const started = performance.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([visit(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${name} production visits exceeded 120 s`)), visitDeadlineMs - phase.visitMs);
+    })]);
+  } finally {
+    clearTimeout(timer);
+    phase.visitMs += performance.now() - started;
+    phase.resume();
+  }
+}
+
+/** The transport records Eden's exact path, query and body; the imported readers choose the requests. */
+function visitClient(name: PersonaName, region: string) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const pending = new Map<string, Promise<Response>>();
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const method = init?.method ?? 'GET';
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    const key = `${method}:${path}:${JSON.stringify(body)}`;
+    let response = pending.get(key);
+    if (!response) {
+      const route = url.pathname.slice(BFF_PREFIX.length);
+      const works = pairs.get(name)!;
+      const target = works.findIndex(work => route.includes(short(work)));
+      const suffix = target < 0 ? '' : target === 0 ? '-work' : '-other-work';
+      const labels: Record<string, string> = {
+        '/v1/me/shelves': 'overview', '/v1/rating-contexts': 'rating-context',
+        '/v1/me/reading-goal': 'reading-goal', '/v1/me/reading-stats': 'reading-stats',
+        '/v1/me/follows/authors': 'followed-authors', '/v1/me/work-states': 'work-states',
+        '/v1/me/import-reviews': 'import-reviews',
+      };
+      const label = labels[route]
+        ?? (route.endsWith('/library-visibility') ? 'visibility'
+          : route.startsWith('/v1/me/shelves/status/') ? `shelf-${route.split('/')[5]}`
+          : route.startsWith('/v1/me/continue/') ? `resume${suffix}`
+          : route.endsWith('/reviews') ? `reviews${suffix}`
+          : route.startsWith('/v1/works/') ? `header${suffix}` : undefined);
+      if (!label) throw new Error(`Unlabelled production library request: ${method} ${path}`);
+      response = sample(`${region}-${label}`, method, path, body);
+      pending.set(key, response);
+    }
+    return (await response).clone();
+  };
+  return browserMainApi('http://record.invalid', { fetcher });
+}
+async function libraryVisit(name: PersonaName, checkpoint: string, shelf?: string) {
+  const person = sessions[name];
+  // The route redirects signed-out visitors before any Main library read.
+  if (!person.actingSubject) return;
+  const region = `visit-library-${checkpoint}-${shelf ?? 'all'}`;
+  const main = visitClient(name, region);
+  const state = parseLibraryState(shelf ? { shelf } : {});
+  const reader = { main, anonymous: main, actingSubject: person.actingSubject };
+  await loadBooksLibrary(reader, { state, locale: 'en', year: new Date().getUTCFullYear(), first: !shelf });
+}
+
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 let sessions: PersonaSessions;
@@ -51,6 +159,7 @@ beforeAll(async () => {
   for (const name of ['stranger', 'moderator', 'operator'] as const) pairs.set(name, pairs.get('visitor')!);
 }, 180_000);
 afterAll(async () => {
+  clearTimeout(fileWall);
   try { await recording.publish(); }
   finally { await sessions?.close(); }
 });
@@ -207,6 +316,10 @@ async function continueReading(name: PersonaName) {
   expect(await progress(deviceB, work, 'completed', current.version, key)).toMatchObject({ ...saved, replayed: true });
   expect(await mark(person, work)).toMatchObject({ standing: 'completed', version: 2 });
   if (name === 'member') await pageReads(name, 'completed');
+  await productionVisit(name, async () => {
+    await libraryVisit(name, 'completed');
+    await workVisit(name);
+  });
   expect(await answer(person.main('GET', `/v1/me/progress-summaries/${short(work)}?${query(person)}`))).toMatchObject({ status: 'finished' });
   expect(await progress(deviceB, work, 'not-started', saved.version)).toMatchObject({ standing: 'not-started', version: 3 });
   expect(await mark(person, work)).toMatchObject({ standing: 'not-started', version: 3 });
@@ -214,9 +327,98 @@ async function continueReading(name: PersonaName) {
   if (name === 'owner') await foreign(name);
 }
 
-outcomeTest(continuity, 'visitor', () => continueReading('visitor'), recording);
-outcomeTest(continuity, 'stranger', () => continueReading('stranger'), recording);
-outcomeTest(continuity, 'member', () => continueReading('member'), recording);
-outcomeTest(continuity, 'owner', () => continueReading('owner'), recording);
-outcomeTest(continuity, 'moderator', () => continueReading('moderator'), recording);
-outcomeTest(continuity, 'operator', () => continueReading('operator'), recording);
+outcomeTest(continuity, 'visitor', () => personaRun('visitor', () => continueReading('visitor')), recording);
+outcomeTest(continuity, 'stranger', () => personaRun('stranger', () => continueReading('stranger')), recording);
+outcomeTest(continuity, 'member', () => personaRun('member', () => continueReading('member')), recording);
+outcomeTest(continuity, 'owner', () => personaRun('owner', () => continueReading('owner')), recording);
+outcomeTest(continuity, 'moderator', () => personaRun('moderator', () => continueReading('moderator')), recording);
+outcomeTest(continuity, 'operator', () => personaRun('operator', () => continueReading('operator')), recording);
+
+async function workVisit(name: PersonaName) {
+  const person = sessions[name];
+  const sample = recording.session(name, person);
+  const labels = new AsyncLocalStorage<string>();
+  const fetcher: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const label = labels.getStore();
+    if (!label) throw new Error('Unlabelled Work page request');
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    return sample(`visit-work-completed-${label}`, init?.method ?? 'GET',
+      url.pathname.slice(BFF_PREFIX.length) + url.search, body);
+  };
+  const main = browserMainApi('http://record.invalid', { fetcher });
+  const actingSubject = person.actingSubject!;
+  const work = pairs.get(name)![0]!;
+  const id = short(work);
+  const reads = booksEditionReads({ main, actingSubject });
+  const call = <T,>(label: string, run: () => Promise<T>) => labels.run(label, run);
+  const header = await call('header', () => reads.readWorkHeader(id));
+  if (!header.ok) return;
+  const [projection, seed, contexts, credits] = await Promise.all([
+    call('projection', () => readResourcePage(main, actingSubject, id)),
+    call('reader-state', () => readAnimeReaderState(main, actingSubject, id)),
+    call('rating-contexts', () => settle(() => main.v1.resources({ resource: id })['rating-contexts'].get({ query: {
+      actingSubject, scope: 'global' } }))),
+    call('agent-credits', () => reads.readAgentCredits(id)),
+    call('credits', () => reads.readCredits(id)),
+    call('showcase', () => main.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [work] })),
+    call('platform-access', () => main.v1.me['platform-access'].get()),
+  ]);
+  const plan = hubPlan(projection.ok ? projection.data : null);
+  const context = contexts.ok ? contexts.data.items[0]?.context : undefined;
+  const tasks: Promise<unknown>[] = [
+    call('ratings', () => settle(() => main.v1.resources({ resource: id }).ratings.get({ query: {
+      actingSubject, scope: 'global', context } }))),
+    call('reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } })),
+    call('rating-populations', () => main.v1['rating-populations'].get({ query: { actingSubject, target: work, limit: 20 } })),
+    call('adoptions', () => reads.readAdoptions(id)),
+    call('also-enjoyed', () => reads.readAlsoEnjoyed(id)),
+    call('follow', () => main.v1.follows({ id }).get({ query: { kind: 'work', actingSubject } })),
+  ];
+  if (plan.includes('availability')) tasks.push(
+    call('realizations', () => readWorkRealizations(main, actingSubject, id)),
+    call('releases', () => reads.readReleases(id)),
+    call('availability-parts', () => readWorkParts(main, actingSubject, id, { limit: 1 })),
+  );
+  if (plan.includes('parts')) tasks.push(
+    call('parts', () => readWorkParts(main, actingSubject, id, { limit: 7 })),
+    call('wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { actingSubject, limit: 3 } })),
+    call('relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 20 } })),
+  );
+  if (plan.includes('ratings')) {
+    tasks.push(call('classifications', () => reads.readClassifications(id, { kind: 'global' })),
+      call('facets', () => reads.readFacets()));
+    if (context) tasks.push(call('reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: {
+      context, sort: 'helpful', limit: 10, actingSubject } })));
+  }
+  if (projection.ok) {
+    const statements = projection.data.sections.find(section => section.id === 'statements');
+    if (statements) tasks.push(call('statements', () => readLinkedStatements(main, actingSubject, statements.href)));
+    const discussion = projection.data.sections.find(section => section.id === 'discussion');
+    if (plan.includes('discussion') && discussion) tasks.push(call('discussion', () => settle(followHref(main,
+      discussion.href, { actingSubject }))));
+  }
+  if (credits.ok) for (const author of credits.data.items.filter(item => item.role === 'author').slice(0, 1)) {
+    tasks.push(call('author-profile', () => main.v1.agents({ id: short(author.agent) }).get({ query: { actingSubject } })),
+      call('author-works', () => main.v1.agents({ id: short(author.agent) }).works.get({ query: { actingSubject, limit: 12 } })));
+  }
+  await Promise.all(tasks);
+  // Parts mounts these browser panels only when the frame supplied a reader seed.
+  if (!plan.includes('parts') || !seed) return;
+  const tracking = mainTrackingApi(actingSubject, () => main);
+  const media = tracking.media!;
+  const [types, preference] = await Promise.all([
+    call('medium-types', () => media.types(work)),
+    call('series-preference', () => tracking.preference(work)),
+    call('series-realizations', () => readWorkRealizations(main, actingSubject, id)),
+    call('series-releases', () => reads.readReleases(id)),
+    call('series-relations', () => tracking.relations(work)),
+    call('correspondence-definition', () => tracking.definition('correspondence-equivalent')),
+  ]);
+  const presentation = types.ok && types.data ? typeEntry(types.data)?.presentation ?? null : null;
+  const control = await call('medium-parts', () => progressControl(media, tracking.episodes!, work, presentation));
+  await Promise.all([
+    call('series-progress', () => tracking.series(work, preference.ok && preference.data ? preference.data.language : 'en')),
+    control.kind === 'work' ? call('winning-mark', () => media.workStanding(work)) : Promise.resolve(),
+  ]);
+}
