@@ -78,7 +78,7 @@ function sourceResources(directory: string, key: string) {
   const scope = sha256(`${resolve(directory)}\n${key}`).slice(0, 24);
   return { graph: `rezics-retained-content-${scope}-graph`,
     postgres: `rezics-retained-content-${scope}-postgres`,
-    rustfs: `rezics-retained-content-${scope}-rustfs`, producer: `rc-producer-${scope}` };
+    rustfs: `rezics-retained-content-${scope}-rustfs`, producer: `rcp-${scope}` };
 }
 
 /** Read-only external custody inventory, including file lengths and safe names. */
@@ -258,7 +258,7 @@ SELECT ?g ?s ?p ?o WHERE {
     },
     restore: async (context, manifest) => {
       const source = sourceResources(directory, context.key);
-      const stack = qaStack(`rc-copy-${randomUUID()}`);
+      const stack = qaStack(`rc-copy-${randomUUID().replaceAll('-', '').slice(0, 23)}`);
       let candidate: RetainedContentCandidate | undefined;
       try {
         mkdirSync(stack.directory, { recursive: true, mode: 0o700 });
