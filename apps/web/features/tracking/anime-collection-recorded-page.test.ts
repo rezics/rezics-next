@@ -3,11 +3,13 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/anime/collection-tracking-and-progress.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { createReaderStore, readReaderSeed } from '../catalogue/reader-store.ts';
-import { readCustomShelves } from '../library/read.ts';
+import { readCustomShelves, statusShelfItems } from '../library/read.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import { mainTrackingApi } from './api.ts';
-import { problemTitle, readAnimeEpisodeResume, type AnimeResumeFact } from './anime-collection-recorded-page.ts';
+import { readAnimeReaderState } from '../work-page/anime-hub-recorded-page.ts';
+import { problemTitle, readAnimeEpisodeResume, readCustomShelfPages, statusShelfRows, type AnimeResumeFact } from './anime-collection-recorded-page.ts';
 import { mainEpisodeApi } from './episode-api.ts';
+import { markPosition } from './episodes.ts';
 import { mainMediaApi } from './media-api.ts';
 
 const record = collectionRecord as unknown as AnswerRecord;
@@ -164,6 +166,106 @@ test('a missing equivalence definition keeps the recorded problem title', async 
   expect((chosen.answer as { code: string }).code).toBe('definition_unavailable');
 });
 
+test('a seeded shelf change sends the recorded want-to-read body without reading reader state again', async () => {
+  const chosen = sample('member', 'status-control-write');
+  const prior = sample('member', 'work-reader-state');
+  const seen: Seen[] = [];
+  const actingSubject = subjectOf('member');
+  const work = workOf('member');
+  const main = client('member', [
+    { label: 'work-reader-state', state: 'populated' },
+    { label: 'status-control-write', state: 'populated' },
+  ], seen);
+  const seed = await readAnimeReaderState(main, actingSubject, work.slice(-36));
+  const saved = await createReaderStore({ actingSubject, seed: seed ?? {}, main: () => main }).setStatus(work, 'want-to-read');
+  expect(saved).toBe(true);
+  expect(seen.map(item => ({ method: item.method, path: item.path, body: item.body }))).toEqual([
+    { method: 'GET', path: prior.path, body: undefined },
+    { method: 'PUT', path: chosen.path, body: chosen.body },
+  ]);
+  expect(chosen.answer).toMatchObject({ work, status: 'want-to-read', version: 2, replayed: false });
+});
+
+test('an empty shelf store reads reader state and then writes the recorded want-to-read body', async () => {
+  const chosen = sample('member', 'status-control-write');
+  const prior = sample('member', 'status-control-reader-state');
+  const seen: Seen[] = [];
+  const actingSubject = subjectOf('member');
+  const work = workOf('member');
+  const main = client('member', [
+    { label: 'status-control-reader-state', state: 'populated' },
+    { label: 'status-control-write', state: 'populated' },
+  ], seen);
+  const saved = await createReaderStore({ actingSubject, main: () => main }).setStatus(work, 'want-to-read');
+  expect(saved).toBe(true);
+  expect(seen.map(item => ({ method: item.method, path: item.path, body: item.body }))).toEqual([
+    { method: 'GET', path: prior.path, body: undefined },
+    { method: 'PUT', path: chosen.path, body: chosen.body },
+  ]);
+});
+
+test('marking the recorded episode sends its episode position after reading progress', async () => {
+  const before = sample('member', 'episode-watched-before-write');
+  const written = sample('member', 'episode-watched-write');
+  const position = (written.body as { position?: string }).position;
+  const number = position ? /^episode:(\d+)$/.exec(position)?.[1] : undefined;
+  if (!position || !number) throw new Error('recorded watch names no episode position');
+  const seen: Seen[] = [];
+  const actingSubject = subjectOf('member');
+  const url = new URL(before.path, 'https://recorded.invalid');
+  const match = /\/compositions\/([^/]+)\/occurrences\/([^/]+)\/progress$/.exec(url.pathname);
+  if (!match) throw new Error('recorded progress names no occurrence');
+  const episode = { structure: match[1]!, occurrence: match[2]!, number: Number(number), special: false };
+  expect(markPosition(episode)).toBe(position);
+  const main = client('member', [
+    { label: 'episode-watched-before-write', state: 'populated' },
+    { label: 'episode-watched-write', state: 'populated' },
+  ], seen);
+  const marked = await mainEpisodeApi(actingSubject, () => main).mark(episode, { completed: true, position: markPosition(episode) });
+  expect(seen.map(item => ({ method: item.method, path: item.path, body: item.body }))).toEqual([
+    { method: 'GET', path: before.path, body: undefined },
+    { method: 'PUT', path: written.path, body: written.body },
+  ]);
+  expect(marked.ok).toBe(true);
+  expect(written.answer).toMatchObject({ completed: true, position, version: 1, replayed: false });
+});
+
+test('the subsequent resume names the recorded watched episode', async () => {
+  const chosen = sample('member', 'watched-episode-resume');
+  const seen: Seen[] = [];
+  const main = client('member', [{ label: 'watched-episode-resume', state: 'populated' }], seen);
+  const fact = await readAnimeEpisodeResume(main, subjectOf('member'), workOf('member'));
+  const answer = chosen.answer as { work: string; items: { occurrence: string; displayLabel: string }[]; scope: string; complete: boolean };
+  expect(seen).toEqual([{ method: 'GET', path: chosen.path, body: undefined }]);
+  expect(fact).toEqual({
+    kind: 'place', work: answer.work, occurrence: answer.items[0]!.occurrence, label: answer.items[0]!.displayLabel,
+  } satisfies AnimeResumeFact);
+  expect(answer.scope).toBe('resume');
+  expect(answer.complete).toBe(true);
+});
+
+test('clearing a watched episode sends the recorded position after reading the completed progress', async () => {
+  const before = sample('member', 'episode-cleared-before-write');
+  const written = sample('member', 'episode-cleared-write');
+  const seen: Seen[] = [];
+  const actingSubject = subjectOf('member');
+  const url = new URL(before.path, 'https://recorded.invalid');
+  const match = /\/compositions\/([^/]+)\/occurrences\/([^/]+)\/progress$/.exec(url.pathname);
+  if (!match) throw new Error('recorded progress names no occurrence');
+  const episode = { structure: match[1]!, occurrence: match[2]! };
+  const main = client('member', [
+    { label: 'episode-cleared-before-write', state: 'populated' },
+    { label: 'episode-cleared-write', state: 'populated' },
+  ], seen);
+  const marked = await mainEpisodeApi(actingSubject, () => main).mark(episode, { completed: false });
+  expect(seen.map(item => ({ method: item.method, path: item.path, body: item.body }))).toEqual([
+    { method: 'GET', path: before.path, body: undefined },
+    { method: 'PUT', path: written.path, body: written.body },
+  ]);
+  expect(marked.ok).toBe(true);
+  expect(written.body).toMatchObject({ completed: false, position: (before.answer as { position: string }).position });
+});
+
 test('each signed-in reader loads the recorded shelf page of 20', async () => {
   for (const persona of signedIn) {
     const chosen = sample(persona, 'collection-custom-shelves');
@@ -173,5 +275,19 @@ test('each signed-in reader loads the recorded shelf page of 20', async () => {
     expect(seen).toEqual([{ method: 'GET', path: chosen.path, body: undefined }]);
     expect(shelves.ok && shelves.data.items).toEqual([]);
     expect(chosen.path).toContain('limit=20');
+  }
+});
+
+test('the page shelf read matches the session reader on the recorded library', async () => {
+  for (const persona of signedIn) {
+    const chosen = sample(persona, 'library-production-custom-shelves');
+    const seen: Seen[] = [];
+    const main = client(persona, [{ label: 'library-production-custom-shelves', state: 'populated' }], seen);
+    const shelves = await readCustomShelfPages(main, subjectOf(persona));
+    expect(seen).toEqual([{ method: 'GET', path: chosen.path, body: undefined }]);
+    expect(shelves.ok && shelves.data.statusShelves).toEqual(
+      (chosen.answer as { statusShelves: unknown }).statusShelves);
+    const items = (sample(persona, 'library-watching-shelf').answer as { items: Parameters<typeof statusShelfItems>[0] }).items;
+    expect(statusShelfRows(items)).toEqual(statusShelfItems(items));
   }
 });

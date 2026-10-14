@@ -1,7 +1,50 @@
+import type { CatalogueWork } from '../catalogue/work.ts';
 import type { ReadingStatus } from '../catalogue/reader-actions.tsx';
 import type { MainClient } from '../discover/types.ts';
-import { failedRead, failureOf, isOfflineError, uuidOf, type Loaded, type ReadFailure } from '../feed/types.ts';
+import { failedRead, failureOf, isOfflineError, settle, uuidOf, type Loaded, type ReadFailure } from '../feed/types.ts';
+import { dayText, momentText } from '../library/format.ts';
+import type { LibraryItem, StatusShelfItem } from '../library/types.ts';
+import { shelfCard } from '../profile/cards.ts';
+import { workHref } from '../work-page/route.ts';
 import { resumeName } from './media.ts';
+
+// Custom shelves and one status page. `readCustomShelves` and `statusShelfItems` live in the
+// session library module, which a browser cannot load. These are that read and that row mapping.
+const CUSTOM_SHELF_LIMIT = 20;
+const MAX_CUSTOM_PAGES = 5;
+
+function unnamedShelfWork(work: string): CatalogueWork {
+  return { id: work, href: workHref(work.slice(-36)), title: null, cover: null, kind: 'book', authors: [], rating: null };
+}
+
+/** One status page in Main's order, including a placeholder where the Work could not be named. */
+export function statusShelfRows(items: readonly StatusShelfItem[]): LibraryItem[] {
+  return items.map(item => {
+    const named = item.card ? shelfCard(item.card) : null;
+    return { work: named ?? unnamedShelfWork(item.work), types: item.card?.types ?? [], status: item.status,
+      version: item.version, shelvedAt: momentText(item.changedAt), startedOn: dayText(item.startedOn),
+      finishedOn: dayText(item.finishedOn), rating: null, lastReadAt: null, customShelves: [],
+      available: named !== null };
+  });
+}
+
+/** Every custom-shelf page, in Main's order, at the library reader's page size. */
+export async function readCustomShelfPages(main: MainClient, actingSubject: string) {
+  let first: Awaited<ReturnType<MainClient['v1']['me']['shelves']['get']>>['data'] = null;
+  const items: NonNullable<typeof first>['items'] = [];
+  let cursor: string | undefined;
+  let nextCursor: string | null = null;
+  for (let page = 0; page < MAX_CUSTOM_PAGES; page++) {
+    const read = await settle(() => main.v1.me.shelves.get({ query: { actingSubject, limit: CUSTOM_SHELF_LIMIT, cursor } }));
+    if (!read.ok) return read;
+    first ??= read.data;
+    items.push(...read.data.items);
+    nextCursor = read.data.nextCursor;
+    if (!nextCursor) break;
+    cursor = nextCursor;
+  }
+  return { ok: true as const, data: { ...first!, items, nextCursor } };
+}
 
 // The series resume read (`position=mine`, one item) and one occurrence's progress.
 // Opening a public catalogue uses a different positions query; this is the saved place.

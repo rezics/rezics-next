@@ -1,11 +1,11 @@
 import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import { materializeData } from 'native-i18n';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import collectionRecord from '../../../../tests/qa/fixtures/outcomes/anime/collection-tracking-and-progress.json';
-import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { messages as catalogueMessages } from '../catalogue/messages.ts';
 import type { MainClient } from '../discover/types.ts';
 import { messages as libraryMessages } from '../library/messages.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
@@ -15,8 +15,9 @@ import { copyOf } from './messages.ts';
 
 const record = collectionRecord as unknown as AnswerRecord;
 type Persona = 'visitor' | 'stranger' | 'member' | 'owner' | 'moderator' | 'operator';
-type Mode = 'tracking' | 'watched' | 'loading';
+type Mode = 'page' | 'watched' | 'clear' | 'library' | 'loading';
 interface Args { persona: Persona; mode: Mode }
+const signedIn = ['stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 
 function sample(persona: AnswerPersona, label: string) {
   const found = record.personas[persona].find(item => item.label === label);
@@ -36,28 +37,83 @@ function subjectOf(persona: Persona) {
     ?? undefined;
 }
 
-function selectionsFor(persona: Persona, mode: Mode): RecordedSelection[] {
-  if (mode === 'loading') return [{ label: 'episode-opening-page', state: 'loading' }];
-  if (persona === 'visitor') return [{ label: 'episode-opening-page', state: 'populated' }];
+function titleOf(persona: Persona) {
+  const title = (sample(persona, 'work-header').answer as { title?: { value?: string } }).title?.value;
+  if (!title) throw new Error(`recorded Work names no title for ${persona}`);
+  return title;
+}
+
+function creditOf(persona: Persona) {
+  const items = (sample(persona, 'work-agent-credits').answer as { items?: { role?: string; displayName?: string }[] }).items ?? [];
+  const name = items.find(item => item.role === 'author')?.displayName;
+  if (!name) throw new Error(`recorded credit names no author for ${persona}`);
+  return name;
+}
+
+function resumeLabel(persona: Persona, label: string) {
+  const place = (sample(persona, label).answer as { items?: { displayLabel?: string }[] }).items?.[0]?.displayLabel;
+  if (!place) throw new Error(`recorded resume names no episode for ${persona}/${label}`);
+  return place;
+}
+
+function episodeNumber(persona: Persona, label: string) {
+  const position = (sample(persona, label).body as { position?: string }).position;
+  const number = position ? /^episode:(\d+)$/.exec(position)?.[1] : undefined;
+  if (!number) throw new Error(`recorded progress names no episode for ${persona}/${label}`);
+  return number;
+}
+
+function shelfTitle(persona: Persona) {
+  const title = (sample(persona, 'library-watching-shelf').answer as { items?: { card?: { title?: { value?: string } } }[] })
+    .items?.[0]?.card?.title?.value;
+  if (!title) throw new Error(`recorded shelf names no Work for ${persona}`);
+  return title;
+}
+
+function workSelections(persona: Persona, mode: Mode): RecordedSelection[] {
+  const resume = mode === 'watched' ? 'watched-episode-resume'
+    : mode === 'clear' ? 'cleared-episode-resume' : 'work-episode-resume';
   const selections: RecordedSelection[] = [
-    { label: 'episode-opening-page', state: 'populated' },
-    { label: 'collection-reader-seed', state: 'populated' },
-    { label: 'collection-custom-shelves', state: 'populated' },
-    { label: 'collection-attempts', state: 'populated' },
-    { label: 'collection-realizations', state: 'populated' },
-    { label: 'collection-releases', state: 'populated' },
-    { label: 'collection-edition-preference', state: 'empty' },
-    { label: 'collection-relations', state: 'populated' },
-    { label: 'collection-equivalence-definition', state: 'error' },
-    { label: 'collection-series-progress', state: 'populated' },
-    { label: 'episode-structure', state: 'populated' },
-    { label: 'episode-structure-page', state: 'populated' },
-    { label: mode === 'watched' ? 'resume-watching' : 'episode-resume-before-watching', state: 'populated' },
-    { label: 'reader-state-before-watching', state: 'populated' },
-    { label: 'start-watching', state: 'populated' },
+    { label: 'work-header', state: 'populated' },
+    { label: 'work-reader-state', state: 'populated' },
+    { label: 'work-agent-credits', state: 'populated' },
+    { label: 'work-credits-query', state: 'populated' },
+    { label: 'work-episode-structure', state: 'populated' },
+    { label: 'work-episode-page', state: 'populated' },
+    { label: resume, state: 'populated' },
+    { label: 'panel-edition-preference', state: 'empty' },
+    { label: 'panel-realizations', state: 'populated' },
+    { label: 'panel-releases', state: 'populated' },
+    { label: 'panel-relations', state: 'populated' },
+    { label: 'panel-equivalence-definition', state: 'error' },
+    { label: 'panel-series-progress', state: 'populated' },
   ];
-  if (mode === 'tracking') selections.push({ label: 'episode-progress-before-completion', state: 'populated' });
+  if (mode === 'page') selections.push(
+    { label: 'status-control-write', state: 'populated' },
+    { label: 'episode-watched-before-write', state: 'populated' },
+    { label: 'episode-watched-write', state: 'populated' },
+  );
+  if (mode === 'clear') selections.push(
+    { label: 'episode-cleared-before-write', state: 'populated' },
+    { label: 'episode-cleared-write', state: 'populated' },
+  );
   return selections;
+}
+
+function selectionsFor(persona: Persona, mode: Mode): RecordedSelection[] {
+  if (mode === 'loading') return [{ label: persona === 'visitor' ? 'episode-opening-page' : 'work-header', state: 'loading' }];
+  if (persona === 'visitor') return [{ label: 'episode-opening-page', state: 'populated' }];
+  if (mode === 'library') return [
+    { label: 'library-production-custom-shelves', state: 'populated' },
+    { label: 'library-visibility', state: 'populated' },
+    { label: 'library-rating-context', state: 'populated' },
+    { label: 'library-yearly-goal', state: 'populated' },
+    { label: 'library-reading-year', state: 'populated' },
+    { label: 'library-watching-shelf', state: 'populated' },
+    { label: 'library-work-states', state: 'populated' },
+    { label: 'library-work-1-continue', state: 'populated' },
+  ];
+  return workSelections(persona, mode);
 }
 
 function RecordedAnimeCollection({ persona, mode }: Args) {
@@ -84,13 +140,14 @@ function RecordedAnimeCollection({ persona, mode }: Args) {
   }, [persona, mode]);
   if (fault) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</pre>;
   if (!client) return <p role="status" aria-busy="true" className="p-6">{materializeData(workMessages.en, { locale: 'en' }).loading}</p>;
-  return <AnimeCollectionRecordedPage persona={persona} locale="en" mode={mode} {...client} />;
+  const surface = mode === 'library' ? 'library' : mode === 'loading' ? 'loading' : 'page';
+  return <AnimeCollectionRecordedPage persona={persona} locale="en" mode={surface} {...client} />;
 }
 
 const meta = {
   title: 'Tracking/Anime collection recorded',
   component: RecordedAnimeCollection,
-  args: { persona: 'visitor' as const, mode: 'tracking' as const },
+  args: { persona: 'visitor' as const, mode: 'page' as const },
   parameters: { controls: { disable: true } },
 } satisfies Meta<typeof RecordedAnimeCollection>;
 export default meta;
@@ -102,39 +159,30 @@ const tracking = copyOf('en');
 const catalogue = materializeData(catalogueMessages.en, { locale: 'en' });
 const workPage = materializeData(workMessages.en, { locale: 'en' });
 
-function episodeLabel(persona: Persona) {
-  const answer = sample(persona, 'episode-structure-page').answer as {
-    occurrences: { role: string; qualifier?: { type?: string; displayLabel?: string } }[];
-  };
-  const label = answer.occurrences.find(item => item.role === 'part' && item.qualifier?.type === 'work-part')?.qualifier?.displayLabel;
-  if (!label) throw new Error(`recorded inventory names no episode for ${persona}`);
-  return label;
-}
-
 async function fits(canvasElement: HTMLElement) {
   await document.fonts.ready;
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
-  for (const value of canvasElement.querySelectorAll<HTMLElement>('.break-all')) {
-    await expect(value.scrollWidth).toBeLessThanOrEqual(value.clientWidth + 1);
-  }
 }
 
-async function expectIdentity(canvas: ReturnType<typeof within>, persona: Persona) {
-  await expect(canvas.findByText(`${persona} · ${subjectOf(persona) ?? 'none'}`)).resolves.toBeVisible();
-  await expect(canvas.findByText(workOf(persona))).resolves.toBeVisible();
+async function choose(name: string | RegExp) {
+  const item = await within(document.body).findByRole('menuitemradio', { name });
+  await waitFor(() => expect(item.closest('[data-part=content]')).toHaveFocus());
+  for (let step = 0; step < 8 && !item.hasAttribute('data-highlighted'); step++) await userEvent.keyboard('{ArrowDown}');
+  await expect(item).toHaveAttribute('data-highlighted');
+  await userEvent.keyboard('{Enter}');
 }
 
 async function expectTracking(canvasElement: HTMLElement, persona: Persona, mode: Mode) {
   const canvas = within(canvasElement);
-  await expectIdentity(canvas, persona);
+  await expect(canvas.findByText(`${persona} · ${subjectOf(persona) ?? 'none'}`)).resolves.toBeVisible();
   if (mode === 'loading') {
     await expect(canvas.findByRole('status')).resolves.toHaveTextContent(workPage.loading);
-    await expect(canvas.queryByRole('button', { name: new RegExp(catalogue.reading) })).toBeNull();
-    await expect(canvas.queryByRole('link', { name: libraryMessages.title })).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 1 })).toBeNull();
     await fits(canvasElement);
     return;
   }
   if (persona === 'visitor') {
+    await expect(canvas.findByText(workOf(persona))).resolves.toBeVisible();
     const link = await canvas.findByRole('link', { name: new RegExp(catalogue.wantToRead) });
     await expect(link).toHaveAttribute('href', workSignInHref(workOf(persona).slice(-36), 'en'));
     await expect(canvas.getByRole('link', { name: libraryMessages.title })).toHaveAttribute('href', librarySignInHref('en'));
@@ -142,29 +190,36 @@ async function expectTracking(canvasElement: HTMLElement, persona: Persona, mode
     await fits(canvasElement);
     return;
   }
-  await expect(canvas.findByRole('button', { name: new RegExp(catalogue.reading) })).resolves.toBeVisible();
-  if (mode === 'watched') {
-    const place = (sample(persona, 'resume-watching').answer as { items: { displayLabel?: string }[] }).items[0]?.displayLabel;
-    if (!place) throw new Error(`recorded resume names no episode for ${persona}`);
-    await expect(canvas.findByText(tracking.lastWatched({ place }))).resolves.toBeVisible();
-    await expect(canvas.queryByText(tracking.notWatched)).toBeNull();
-  } else {
-    // "Unknown" is also the inventory's pending line, before the jump field exists.
-    await expect(canvas.findByRole('textbox', { name: tracking.jumpTo })).resolves.toBeVisible();
-    await expect(canvas.getByText(tracking.unknown)).toBeVisible();
-    await userEvent.type(canvas.getByRole('textbox', { name: tracking.jumpTo }), '1');
-    await userEvent.click(canvas.getByRole('button', { name: tracking.jumpGo }));
-    const open = await canvas.findByText((_content, element) => element?.getAttribute('data-state') === 'open');
-    await expect(open).toHaveTextContent(tracking.notWatched);
-    await expect(open.closest('[data-selected]')).toHaveTextContent(episodeLabel(persona));
-    const progress = sample(persona, 'episode-progress-before-completion').answer as { completed: boolean; position: null };
-    await expect(progress.completed).toBe(false);
-    await expect(progress.position).toBeNull();
+  if (mode === 'library') {
+    await expect(canvas.findByRole('heading', { level: 1, name: libraryMessages.title })).resolves.toBeVisible();
+    await expect(canvas.findByRole('link', { name: shelfTitle(persona) })).resolves.toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await fits(canvasElement);
+    return;
   }
-  const status = sample(persona, 'start-watching').answer as { status: string; version: number; replayed: boolean };
-  await expect(status.status).toBe('reading');
-  await expect(status.version).toBe(1);
-  await expect(status.replayed).toBe(false);
+  await expect(canvas.findByRole('heading', { level: 1, name: titleOf(persona) })).resolves.toBeVisible();
+  await expect(canvas.findByText(creditOf(persona))).resolves.toBeVisible();
+  const resume = mode === 'watched' ? 'watched-episode-resume' : mode === 'clear' ? 'cleared-episode-resume' : 'work-episode-resume';
+  await expect(canvas.findByText(tracking.lastWatched({ place: resumeLabel(persona, resume) }))).resolves.toBeVisible();
+  if (mode === 'watched') {
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await fits(canvasElement);
+    return;
+  }
+  if (mode === 'page') {
+    await userEvent.click(await canvas.findByRole('button', { name: new RegExp(catalogue.reading) }));
+    await choose(catalogue.wantToRead);
+    await expect(canvas.findByRole('button', { name: new RegExp(catalogue.wantToRead) })).resolves.toBeVisible();
+  }
+  const number = episodeNumber(persona, mode === 'clear' ? 'episode-cleared-write' : 'episode-watched-write');
+  await userEvent.type(await canvas.findByRole('textbox', { name: tracking.jumpTo }), number);
+  await userEvent.click(canvas.getByRole('button', { name: tracking.jumpGo }));
+  const mark = mode === 'clear' ? tracking.markNotWatched : tracking.markWatched;
+  await userEvent.click(await canvas.findByRole('button', { name: mark }));
+  const saved = mode === 'clear' ? tracking.markWatched : tracking.markNotWatched;
+  await expect(canvas.findByRole('button', { name: saved })).resolves.toBeEnabled();
+  await expect(canvas.queryByRole('alert')).toBeNull();
+  await expect(canvas.queryByText(tracking.saveFailed)).toBeNull();
   await fits(canvasElement);
 }
 
@@ -176,42 +231,62 @@ function story(persona: Persona, mode: Mode, viewport: 'phone' | 'desktop'): Sto
   };
 }
 
-export const VisitorPhone: Story = story('visitor', 'tracking', 'phone');
-export const VisitorDesktop: Story = story('visitor', 'tracking', 'desktop');
+export const VisitorPhone: Story = story('visitor', 'page', 'phone');
+export const VisitorDesktop: Story = story('visitor', 'page', 'desktop');
 export const VisitorLoadingPhone: Story = story('visitor', 'loading', 'phone');
 export const VisitorLoadingDesktop: Story = story('visitor', 'loading', 'desktop');
 
-export const StrangerTrackedPhone: Story = story('stranger', 'tracking', 'phone');
-export const StrangerTrackedDesktop: Story = story('stranger', 'tracking', 'desktop');
+export const StrangerPagePhone: Story = story('stranger', 'page', 'phone');
+export const StrangerPageDesktop: Story = story('stranger', 'page', 'desktop');
 export const StrangerWatchedPhone: Story = story('stranger', 'watched', 'phone');
 export const StrangerWatchedDesktop: Story = story('stranger', 'watched', 'desktop');
+export const StrangerClearPhone: Story = story('stranger', 'clear', 'phone');
+export const StrangerClearDesktop: Story = story('stranger', 'clear', 'desktop');
+export const StrangerLibraryPhone: Story = story('stranger', 'library', 'phone');
+export const StrangerLibraryDesktop: Story = story('stranger', 'library', 'desktop');
 export const StrangerLoadingPhone: Story = story('stranger', 'loading', 'phone');
 export const StrangerLoadingDesktop: Story = story('stranger', 'loading', 'desktop');
 
-export const MemberTrackedPhone: Story = story('member', 'tracking', 'phone');
-export const MemberTrackedDesktop: Story = story('member', 'tracking', 'desktop');
+export const MemberPagePhone: Story = story('member', 'page', 'phone');
+export const MemberPageDesktop: Story = story('member', 'page', 'desktop');
 export const MemberWatchedPhone: Story = story('member', 'watched', 'phone');
 export const MemberWatchedDesktop: Story = story('member', 'watched', 'desktop');
+export const MemberClearPhone: Story = story('member', 'clear', 'phone');
+export const MemberClearDesktop: Story = story('member', 'clear', 'desktop');
+export const MemberLibraryPhone: Story = story('member', 'library', 'phone');
+export const MemberLibraryDesktop: Story = story('member', 'library', 'desktop');
 export const MemberLoadingPhone: Story = story('member', 'loading', 'phone');
 export const MemberLoadingDesktop: Story = story('member', 'loading', 'desktop');
 
-export const OwnerTrackedPhone: Story = story('owner', 'tracking', 'phone');
-export const OwnerTrackedDesktop: Story = story('owner', 'tracking', 'desktop');
+export const OwnerPagePhone: Story = story('owner', 'page', 'phone');
+export const OwnerPageDesktop: Story = story('owner', 'page', 'desktop');
 export const OwnerWatchedPhone: Story = story('owner', 'watched', 'phone');
 export const OwnerWatchedDesktop: Story = story('owner', 'watched', 'desktop');
+export const OwnerClearPhone: Story = story('owner', 'clear', 'phone');
+export const OwnerClearDesktop: Story = story('owner', 'clear', 'desktop');
+export const OwnerLibraryPhone: Story = story('owner', 'library', 'phone');
+export const OwnerLibraryDesktop: Story = story('owner', 'library', 'desktop');
 export const OwnerLoadingPhone: Story = story('owner', 'loading', 'phone');
 export const OwnerLoadingDesktop: Story = story('owner', 'loading', 'desktop');
 
-export const ModeratorTrackedPhone: Story = story('moderator', 'tracking', 'phone');
-export const ModeratorTrackedDesktop: Story = story('moderator', 'tracking', 'desktop');
+export const ModeratorPagePhone: Story = story('moderator', 'page', 'phone');
+export const ModeratorPageDesktop: Story = story('moderator', 'page', 'desktop');
 export const ModeratorWatchedPhone: Story = story('moderator', 'watched', 'phone');
 export const ModeratorWatchedDesktop: Story = story('moderator', 'watched', 'desktop');
+export const ModeratorClearPhone: Story = story('moderator', 'clear', 'phone');
+export const ModeratorClearDesktop: Story = story('moderator', 'clear', 'desktop');
+export const ModeratorLibraryPhone: Story = story('moderator', 'library', 'phone');
+export const ModeratorLibraryDesktop: Story = story('moderator', 'library', 'desktop');
 export const ModeratorLoadingPhone: Story = story('moderator', 'loading', 'phone');
 export const ModeratorLoadingDesktop: Story = story('moderator', 'loading', 'desktop');
 
-export const OperatorTrackedPhone: Story = story('operator', 'tracking', 'phone');
-export const OperatorTrackedDesktop: Story = story('operator', 'tracking', 'desktop');
+export const OperatorPagePhone: Story = story('operator', 'page', 'phone');
+export const OperatorPageDesktop: Story = story('operator', 'page', 'desktop');
 export const OperatorWatchedPhone: Story = story('operator', 'watched', 'phone');
 export const OperatorWatchedDesktop: Story = story('operator', 'watched', 'desktop');
+export const OperatorClearPhone: Story = story('operator', 'clear', 'phone');
+export const OperatorClearDesktop: Story = story('operator', 'clear', 'desktop');
+export const OperatorLibraryPhone: Story = story('operator', 'library', 'phone');
+export const OperatorLibraryDesktop: Story = story('operator', 'library', 'desktop');
 export const OperatorLoadingPhone: Story = story('operator', 'loading', 'phone');
 export const OperatorLoadingDesktop: Story = story('operator', 'loading', 'desktop');
