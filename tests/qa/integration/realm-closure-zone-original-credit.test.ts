@@ -72,7 +72,10 @@ test('Zone originals publish with their creation-supplied Person author credit',
         expect(await work.json()).toMatchObject({ disclosure: 'public', mainVersion: original.mainVersion });
         const credits = await sessions.visitor.main('GET', `${root}/agent-credits`);
         expect(credits.status).toBe(200);
-        expect(await credits.json()).toEqual(initial);
+        const inventory = await credits.json() as { items: Credit[]; nextCursor: string | null };
+        // Publication advances the source position; the native credit stays identical.
+        expect(inventory.items).toEqual(initial.items);
+        expect(inventory.nextCursor).toBeNull();
         expect(requests.filter(request => request.method === 'POST'
           && request.path === `${root}/agent-credits`)).toHaveLength(0);
         const publication = requests.find(request => request.path === '/v1/contribution-publications'
