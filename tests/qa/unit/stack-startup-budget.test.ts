@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test';
 import { startDevCompose } from '../../../scripts/dev/cli.ts';
 import { startSearchFuseki } from '../../../scripts/operations/search-startup.ts';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 
@@ -70,7 +70,11 @@ function deferred<T>() {
 
 function orderedStartups() {
   const dir = mkdtempSync(join(scratch, 'ordered-startups-'));
-  const lockFile = join(dir, 'startup.sqlite');
+  // Production's shared admission state uses /tmp (RAM on the QA host). Keep
+  // this fixture under .temp while avoiding durable Btrfs commits on every poll.
+  const stateDir = mkdtempSync('/tmp/rezics-startup-state-');
+  symlinkSync(stateDir, join(dir, 'state'));
+  const lockFile = join(dir, 'state', 'startup.sqlite');
   let now = 0, available = false;
   const order: number[] = [];
   const sleepers = new Map<number, ReturnType<typeof deferred<void>>>();
@@ -97,6 +101,10 @@ function orderedStartups() {
     return run;
   };
   return { dir, lockFile, order, start,
+    dispose: () => {
+      rmSync(dir, { recursive: true, force: true });
+      rmSync(stateDir, { recursive: true, force: true });
+    },
     paused: (id: number) => Promise.race([sleeping.get(id)!.promise,
       runs.get(id)!.then(() => { throw new Error(`Startup ${id} proceeded instead of waiting`); })]),
     nextPause: (id: number) => { const paused = deferred<void>(); sleeping.set(id, paused); return paused.promise; },
@@ -124,7 +132,7 @@ test('three startup waiters start in arrival order even when the newest polls fi
     queue.wake(3); await third;
     queue.wake(4); await fourth;
     expect(queue.order).toEqual([1, 2, 3, 4]);
-  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+  } finally { queue.dispose(); }
 });
 
 test('the oldest fitting startup passes a larger waiter and keeps its place before later arrivals', async () => {
@@ -140,7 +148,7 @@ test('the oldest fitting startup passes a larger waiter and keeps its place befo
     expect(queue.order).toEqual([2, 3]);
     queue.expire(); queue.wake(1);
     await expect(tooLarge).rejects.toThrow('Memory admission deadline');
-  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+  } finally { queue.dispose(); }
 });
 
 test('dead and reused startup waiters release their ordered place', async () => {
@@ -158,7 +166,7 @@ test('dead and reused startup waiters release their ordered place', async () => 
     expect(queue.order).toEqual([1]);
     expect(db.query('SELECT * FROM startup_waiters').all()).toEqual([]);
     db.close();
-  } finally { rmSync(queue.dir, { recursive: true, force: true }); }
+  } finally { queue.dispose(); }
 });
 
 test('a provisional ordinary slot is returned when memory no longer fits before startup', async () => {
