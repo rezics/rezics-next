@@ -1,6 +1,7 @@
 'use client';
 
 import { spaceHref } from '../../address/path.ts';
+import { signInPath } from '../../auth/paths.ts';
 import { globalWorkHref } from '../../work-page/route.ts';
 import { Button, buttonVariants } from '@rezics/ui/button';
 import { Checkbox } from '@rezics/ui/checkbox';
@@ -14,12 +15,13 @@ import Link from 'next/link';
 import { materializeData } from 'native-i18n';
 import { messages as newWorkMessages } from './messages.ts';
 import { sanctionSentence } from './sanction.ts';
+import { NotificationDeliveries } from './delivery.tsx';
 import type { UiLocale } from '../../../i18n/define.ts';
 import { useEffect, useRef, useState } from 'react';
 import { localizedPath } from '../../../i18n/locale.ts';
 import { browserMainApi } from '../../api/browser.ts';
 import { relativeTime } from '../../feed/time.ts';
-import { failureText, type MainClient, type ReadFailure, settle } from '../../feed/types.ts';
+import { failureText, type Loaded, type MainClient, type ReadFailure, settle } from '../../feed/types.ts';
 import { CommunityIcon } from '../community-icon.tsx';
 import { EmptyState, failureDetail } from '../empty-state.tsx';
 import LocalizedLink from '../localized-link.tsx';
@@ -27,7 +29,7 @@ import { PageContainer, PageHeader } from '../page.tsx';
 import { useShell } from '../shell-provider.tsx';
 import { beginNotificationRequest, isNotificationRequestCurrent, setUnread, setUnreadGeneration } from '../unread.ts';
 import { inboxReasons, inboxViews, mergeNotificationTriage, type NotificationSelection, type NotificationWindow, notificationsHref,
-  readWindow, type StreamItem } from './window.ts';
+  readNotificationCount, readWindow, type NotificationCount, type StreamItem } from './window.ts';
 
 type T = ReturnType<typeof useShell>['t'];
 type Kind = NonNullable<StreamItem['display']>['kind'];
@@ -152,15 +154,15 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
   const attempt = useRef<{ action: 'accept' | 'decline'; listed: boolean; key: string } | null>(null);
-  const display = item.display;
+  const display = item.state === 'active' ? item.display : null;
   // A sanction never shows the person who recorded it.
   const actor = display?.membershipAction ? null : display?.actor;
   const Icon = display?.membershipAction ? ShieldIcon : display ? icons[display.kind]
-    : item.proposal ? FilePenLineIcon : BellIcon;
+    : item.state === 'active' && item.proposal ? FilePenLineIcon : BellIcon;
   const href = destination(item);
   const text = sentence(item, t, locale);
   const where = place(item, t);
-  const because = item.reason ? t[reasonLabel[item.reason]] : null;
+  const because = item.state === 'active' && item.reason ? t[reasonLabel[item.reason]] : null;
   const excerpt = display?.kind === 'reply' || display?.kind === 'review' ? display.target.excerpt : null;
   const invitation = item.state === 'active' && display?.kind === 'realm_invitation' && actingSubject && item.subject?.ref
     && uuid(display.realm) ? { realm: uuid(display.realm)!, id: item.subject.ref } : null;
@@ -225,6 +227,7 @@ function NotificationRow({ item, grouped, now, avatarQuery, onRead, onTriage, tr
           onClick={() => onTriage(item, { done: !item.done })}>
           {item.done ? t.undoDone : t.markDone}</Button>
       </div>
+      <NotificationDeliveries item={item} main={main} isCurrent={isCurrent} />
       <p className="text-muted-foreground text-xs">
         {because ? <><span>{because}</span><span aria-hidden="true"> · </span></> : null}
         {where ? <><span>{where}</span><span aria-hidden="true"> · </span></> : null}
@@ -284,6 +287,9 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const [busy, setBusy] = useState<string | null>(null);
   const [triageNote, setTriageNote] = useState<string | null>(null);
   const [triageError, setTriageError] = useState<string | null>(null);
+  const [countRead, setCountRead] = useState<Loaded<NotificationCount> | undefined>(initial.unreadCount);
+  const [olderFailure, setOlderFailure] = useState<Extract<Loaded<NotificationWindow>, { ok: false }> | null>(null);
+  const initialCount = useRef(initial.unreadCount);
   // Identity fences completions even when a restart retains the same generation.
   const traversal = useRef<Traversal>({ generation: initial.generation, head: initial.head, revision: 0 });
   const mounted = useRef(true);
@@ -294,6 +300,8 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   useEffect(() => {
     mounted.current = true;
     setUnreadGeneration(traversal.current.generation);
+    if (initialCount.current?.ok && initialCount.current.data.generation === traversal.current.generation)
+      setUnread(initialCount.current.data, beginNotificationRequest());
     return () => {
       mounted.current = false;
       setUnreadGeneration(null);
@@ -303,13 +311,16 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
   const lastWindow = windows.at(-1)!;
   const isRead = (item: StreamItem) => item.read || readHere.has(item.id)
     || BigInt(item.sequence) <= BigInt(readThrough);
-  const unread = windows.some(window => window.items.some(item => !isRead(item)));
+  const unread = windows.some(window => window.items.some(item => item.state === 'active'
+    && (item.display || item.proposal) && !isRead(item)));
 
   async function refreshCount(request: Traversal) {
     const fence = beginNotificationRequest();
-    const count = await settle(() => client().v1.me.notifications['unread-count'].get());
-    if (!isCurrent(request) || !count.ok
-      || count.data.generation !== request.generation) return;
+    const count = await readNotificationCount(client());
+    if (!isCurrent(request) || !isNotificationRequestCurrent(fence)) return;
+    if (!count.ok) { setCountRead(count); return; }
+    if (count.data.generation !== request.generation) return;
+    setCountRead(count);
     setUnread({ count: count.data.count, overflow: count.data.overflow, generation: count.data.generation }, fence);
   }
 
@@ -354,6 +365,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     let request = displayed;
     if (!isCurrent(request) || loadingMore.current || (!restartRequired.current && lastWindow.next === null)) return;
     loadingMore.current = request;
+    setOlderFailure(null);
     setState('loading');
     let restarting = restartRequired.current;
     let fence = beginNotificationRequest('page');
@@ -382,7 +394,7 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
     }
     loadingMore.current = null;
     if (!isNotificationRequestCurrent(fence)) { setState('idle'); return; }
-    if (!next.ok) { setState('older-failed'); return; }
+    if (!next.ok) { setOlderFailure(next); setState('older-failed'); return; }
     if (BigInt(next.data.generation) < BigInt(request.generation)
       || (next.data.generation !== request.generation && !next.data.reset && !restarting)) {
       setState('older-failed'); return;
@@ -455,6 +467,10 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
       : null}
     {triageNote ? <p role="status" className="sr-only">{triageNote}</p> : null}
     {triageError ? <p role="alert" className="text-destructive-foreground text-sm">{triageError}</p> : null}
+    {countRead && !countRead.ok && countRead.failure !== 'closed' ? <div className="grid justify-items-start gap-2">
+      <NotificationReadFailure read={countRead} kind="count" />
+      <Button size="sm" variant="outline" onClick={() => void refreshCount(displayed)}>{t.retry}</Button>
+    </div> : null}
     {invitations}
     {rows.length ? <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60
       bg-card shadow-(--aura-shadow-card)">
@@ -463,10 +479,41 @@ export function NotificationsView({ initial, now, avatarQuery, invitations, main
         triageBusy={busy === item.id} actingSubject={actingSubject} main={client} isCurrent={() => isCurrent(displayed)} />)}
     </ul> : <EmptyState icon={BellIcon} title={empty.title} description={empty.description} />}
     {lastWindow.next !== null ? <div className="flex flex-col items-center gap-2">
-      {state === 'older-failed' ? <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}
+      {state === 'older-failed' ? olderFailure ? <NotificationReadFailure read={olderFailure} kind="older" />
+        : <p role="alert" className="text-muted-foreground text-sm">{t.olderFailed}</p> : null}
       <Button variant="outline" isLoading={state === 'loading'} onClick={() => void older()}>
         {state === 'older-failed' ? <RotateCwIcon aria-hidden="true" /> : null}{t.olderNotifications}</Button>
     </div> : null}
+  </PageContainer>;
+}
+
+function NotificationReadFailure({ read, kind }: {
+  read: { failure: ReadFailure; reference?: string }; kind: 'count' | 'older';
+}) {
+  const { t, locale } = useShell();
+  const copy = materializeData(newWorkMessages[locale], { locale });
+  const text = failureText(read.failure, { failedTitle: kind === 'count' ? copy.countUnavailable : t.olderFailed,
+    offline: t.notificationsFailedBody,
+    server: t.notificationsServerBody,
+    missingTitle: kind === 'count' ? copy.countUnavailable : t.notificationsMissing,
+    missingBody: kind === 'count' ? '' : t.notificationsMissingBody,
+    deniedTitle: t.signInForNotifications, deniedBody: t.signInForNotificationsBody,
+    movedTitle: t.notificationsMoved, movedBody: t.notificationsMovedBody, budget: t.notificationsBudgetBody });
+  if (text.kind === 'absent') return null;
+  return <div className="grid gap-2">
+    <p role="alert" className="text-muted-foreground text-sm">{text.title} {failureDetail(text.description,
+      read.reference, t.errorReference, text.reference)}</p>
+    {text.action === 'sign-in' ? <a className="underline" href={signInPath(localizedPath('/notifications', locale))}>
+      {t.signIn}</a> : null}
+  </div>;
+}
+
+/** A request still loading is separate from a completed API result. */
+export function NotificationsLoading() {
+  const { t } = useShell();
+  return <PageContainer className="grid max-w-3xl gap-6">
+    <PageHeader title={t.notifications} />
+    <p role="status" aria-busy="true">{t.loading}</p>
   </PageContainer>;
 }
 

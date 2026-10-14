@@ -6,6 +6,8 @@ import { settle, type Loaded } from '../../feed/types.ts';
 
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type StreamPage = Ok<MainClient['v1']['me']['notifications']['get']>;
+export type NotificationCount = Ok<MainClient['v1']['me']['notifications']['unread-count']['get']>;
+export type NotificationDelivery = Ok<ReturnType<MainClient['v1']['deliveries']>['get']>;
 export type StreamItem = StreamPage['items'][number];
 type StreamGroup = StreamPage['groups'][number];
 
@@ -49,6 +51,8 @@ export interface NotificationWindow {
   groups: StreamGroup[];
   /** Main's older-page continuation, or null after the oldest matching item. */
   next: string | null;
+  /** Main's count, never inferred from this filtered or partial window. */
+  unreadCount?: Loaded<NotificationCount>;
 }
 
 /** The triage owner revision wins independently of page and count completion order. */
@@ -76,5 +80,21 @@ export async function readWindow(main: MainClient, before: string | null,
 /** Start the selected list; the page response carries the current head too. */
 export async function readLatest(main: MainClient,
   selection: NotificationSelection = { view: 'inbox', reason: null }): Promise<Loaded<NotificationWindow>> {
-  return readWindow(main, null, selection);
+  const [page, unreadCount] = await Promise.all([readWindow(main, null, selection), readNotificationCount(main)]);
+  if (!page.ok) return page;
+  if (!unreadCount.ok && unreadCount.failure === 'sign-in') return unreadCount;
+  return { ok: true, data: { ...page.data, unreadCount } };
+}
+
+export function readNotificationCount(main: MainClient): Promise<Loaded<NotificationCount>> {
+  return settle(() => main.v1.me.notifications['unread-count'].get());
+}
+
+/** Delivery authority belongs to Main's recipient read, independently of item/process authority. */
+export async function readNotificationDelivery(main: MainClient, delivery: string,
+  item?: string): Promise<Loaded<NotificationDelivery>> {
+  const result = await settle(() => main.v1.deliveries({ delivery }).get());
+  if (result.ok && (result.data.id !== delivery || (item !== undefined && result.data.itemId !== item)))
+    return { ok: false, failure: 'unavailable' };
+  return result;
 }
