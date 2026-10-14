@@ -1,11 +1,14 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { discoverActingContexts, discoverAgents, readMainSessionAgent } from '../../../../../apps/web/features/auth/session.ts';
+import { readAgentProfile } from '../../../../../apps/web/features/auth/agent-profile.ts';
 import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
 import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
 import { booksEditionReads, settle } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
 import { readAnimeReaderState, readResourcePage, readLinkedStatements, readWorkParts, readWorkRealizations }
   from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
 import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
 import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
@@ -43,7 +46,10 @@ async function personaRun(name: PersonaName, proof: () => Promise<void>) {
       phases.run(phase, async () => {
         phase.resume();
         await proof();
-        await productionVisit(name, () => libraryVisit(name, 'final'));
+        await productionVisit(name, async () => {
+          await libraryVisit(name, 'final');
+          for (const shelf of ['reading', 'want-to-read', 'read']) await libraryVisit(name, 'final', shelf);
+        });
       }),
       new Promise<never>((_, reject) => { rejectDeadline = reject; }),
     ]);
@@ -75,24 +81,28 @@ function visitClient(name: PersonaName, region: string) {
   const pending = new Map<string, Promise<Response>>();
   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(input instanceof Request ? input.url : String(input));
-    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const route = url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) : url.pathname;
+    const path = route + url.search;
     const method = init?.method ?? 'GET';
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     const key = `${method}:${path}:${JSON.stringify(body)}`;
     let response = pending.get(key);
     if (!response) {
-      const route = url.pathname.slice(BFF_PREFIX.length);
-      const works = pairs.get(name)!;
-      const target = works.findIndex(work => route.includes(short(work)));
-      const suffix = target < 0 ? '' : target === 0 ? '-work' : '-other-work';
+      const own = pairs.get(name)!;
+      const known = [...pairs.entries()].find(([, works]) => works.some(work => route.includes(short(work))));
+      const target = known?.[1].findIndex(work => route.includes(short(work))) ?? -1;
+      const suffix = target < 0 ? '' : `${known?.[1] === own ? '' : `-${known![0]}`}${target === 0 ? '-work' : '-other-work'}`;
       const labels: Record<string, string> = {
         '/v1/me/shelves': 'overview', '/v1/rating-contexts': 'rating-context',
         '/v1/me/reading-goal': 'reading-goal', '/v1/me/reading-stats': 'reading-stats',
         '/v1/me/follows/authors': 'followed-authors', '/v1/me/work-states': 'work-states',
         '/v1/me/import-reviews': 'import-reviews',
+        '/v1/me/acting-contexts': 'acting-contexts', '/v1/me/agents': 'agents',
+        '/v1/me/session-agent': 'session-agent', '/v1/me/person-preferences': 'person-preferences',
       };
       const label = labels[route]
-        ?? (route.endsWith('/library-visibility') ? 'visibility'
+        ?? (route === `/v1/agents/${short(person.actingSubject!)}` ? 'agent-profile'
+          : route.endsWith('/library-visibility') ? 'visibility'
           : route.startsWith('/v1/me/shelves/status/') ? `shelf-${route.split('/')[5]}`
           : route.startsWith('/v1/me/continue/') ? `resume${suffix}`
           : route.endsWith('/reviews') ? `reviews${suffix}`
@@ -103,14 +113,26 @@ function visitClient(name: PersonaName, region: string) {
     }
     return (await response).clone();
   };
-  return browserMainApi('http://record.invalid', { fetcher });
+  return { main: browserMainApi('http://record.invalid', { fetcher }), fetcher };
 }
 async function libraryVisit(name: PersonaName, checkpoint: string, shelf?: string) {
   const person = sessions[name];
   // The route redirects signed-out visitors before any Main library read.
   if (!person.actingSubject) return;
   const region = `visit-library-${checkpoint}-${shelf ?? 'all'}`;
-  const main = visitClient(name, region);
+  const { main, fetcher } = visitClient(name, region);
+  // The supplied transport owns the real persona bearer and session key. These
+  // placeholders only let the production readers enter their explicit-client path.
+  const [discovery, agents, selected] = await Promise.all([
+    discoverActingContexts('persona-transport', fetcher),
+    discoverAgents('persona-transport', 'en', fetcher),
+    readMainSessionAgent('persona-transport', randomUUID(), fetcher),
+  ]);
+  if (!discovery || !agents || !selected?.sessionAgent.eligible) return;
+  await Promise.all([
+    readAgentProfile(person.actingSubject, 'persona-transport', fetcher),
+    main.v1.me['person-preferences'].get({ query: { actingSubject: person.actingSubject } }),
+  ]);
   const state = parseLibraryState(shelf ? { shelf } : {});
   const reader = { main, anonymous: main, actingSubject: person.actingSubject };
   await loadBooksLibrary(reader, { state, locale: 'en', year: new Date().getUTCFullYear(), first: !shelf });
@@ -318,6 +340,7 @@ async function continueReading(name: PersonaName) {
   if (name === 'member') await pageReads(name, 'completed');
   await productionVisit(name, async () => {
     await libraryVisit(name, 'completed');
+    for (const shelf of ['reading', 'want-to-read', 'read']) await libraryVisit(name, 'completed', shelf);
     await workVisit(name);
   });
   expect(await answer(person.main('GET', `/v1/me/progress-summaries/${short(work)}?${query(person)}`))).toMatchObject({ status: 'finished' });
@@ -344,7 +367,7 @@ async function workVisit(name: PersonaName) {
     if (!label) throw new Error('Unlabelled Work page request');
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     return sample(`visit-work-completed-${label}`, init?.method ?? 'GET',
-      url.pathname.slice(BFF_PREFIX.length) + url.search, body);
+      (url.pathname.startsWith(BFF_PREFIX) ? url.pathname.slice(BFF_PREFIX.length) : url.pathname) + url.search, body);
   };
   const main = browserMainApi('http://record.invalid', { fetcher });
   const actingSubject = person.actingSubject!;
@@ -352,6 +375,9 @@ async function workVisit(name: PersonaName) {
   const id = short(work);
   const reads = booksEditionReads({ main, actingSubject });
   const call = <T,>(label: string, run: () => Promise<T>) => labels.run(label, run);
+  const selected = await call('session-agent', () => readMainSessionAgent('persona-transport', randomUUID(), fetcher));
+  if (!selected?.sessionAgent.eligible) return;
+  await call('person-preferences', () => main.v1.me['person-preferences'].get({ query: { actingSubject } }));
   const header = await call('header', () => reads.readWorkHeader(id));
   if (!header.ok) return;
   const [projection, seed, contexts, credits] = await Promise.all([
@@ -368,12 +394,14 @@ async function workVisit(name: PersonaName) {
   const context = contexts.ok ? contexts.data.items[0]?.context : undefined;
   const tasks: Promise<unknown>[] = [
     call('ratings', () => settle(() => main.v1.resources({ resource: id }).ratings.get({ query: {
-      actingSubject, scope: 'global', context } }))),
-    call('reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } })),
+      actingSubject, scope: 'global', context } }))).then(ratings => call('reader-stats', () =>
+        main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context: ratings.ok ? context : undefined } }))),
     call('rating-populations', () => main.v1['rating-populations'].get({ query: { actingSubject, target: work, limit: 20 } })),
     call('adoptions', () => reads.readAdoptions(id)),
     call('also-enjoyed', () => reads.readAlsoEnjoyed(id)),
-    call('follow', () => main.v1.follows({ id }).get({ query: { kind: 'work', actingSubject } })),
+    call('follow-state', () => mainRelationships(actingSubject, {
+      origin: `http://record.invalid${BFF_PREFIX}`, fetch: fetcher,
+    }).state(work)),
   ];
   if (plan.includes('availability')) tasks.push(
     call('realizations', () => readWorkRealizations(main, actingSubject, id)),
@@ -385,9 +413,10 @@ async function workVisit(name: PersonaName) {
     call('wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { actingSubject, limit: 3 } })),
     call('relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 20 } })),
   );
+  if (plan.includes('about')) tasks.push(
+    call('classifications', () => reads.readClassifications(id, { kind: 'global' })),
+    call('facets', () => reads.readFacets()));
   if (plan.includes('ratings')) {
-    tasks.push(call('classifications', () => reads.readClassifications(id, { kind: 'global' })),
-      call('facets', () => reads.readFacets()));
     if (context) tasks.push(call('reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: {
       context, sort: 'helpful', limit: 10, actingSubject } })));
   }
@@ -398,7 +427,7 @@ async function workVisit(name: PersonaName) {
     if (plan.includes('discussion') && discussion) tasks.push(call('discussion', () => settle(followHref(main,
       discussion.href, { actingSubject }))));
   }
-  if (credits.ok) for (const author of credits.data.items.filter(item => item.role === 'author').slice(0, 1)) {
+  if (plan.includes('lists') && credits.ok) for (const author of credits.data.items.filter(item => item.role === 'author').slice(0, 1)) {
     tasks.push(call('author-profile', () => main.v1.agents({ id: short(author.agent) }).get({ query: { actingSubject } })),
       call('author-works', () => main.v1.agents({ id: short(author.agent) }).works.get({ query: { actingSubject, limit: 12 } })));
   }
