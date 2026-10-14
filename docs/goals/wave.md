@@ -36,7 +36,10 @@ The brief names the work and an area. It has no `tests:` and no `land: auto`.
 4. Commit. Then `git rebase wave/<n>`, run the types check again, and
    `git push . HEAD:refs/heads/wave/<n>`. If the push is refused because
    another task moved the branch, rebase and push again. Resolve conflicts
-   yourself; you know your change.
+   yourself; you know your change. If your change touches the model, an API
+   schema or a native module, run `task gen` after the rebase and commit what
+   it regenerates. Settle a conflict in generated files by running `task gen`
+   again, never by hand.
 5. Hand off with `RESULT: done`, the commit now on `wave/<n>`, and the test
    files the prove phase must run for your work. Push as often as a piece is
    whole. A task that ends early pushes what compiles and lists what is
