@@ -104,6 +104,15 @@ function inspectModuleMocks(text: string, options: { legacy?: boolean; path?: st
     ts.forEachChild(node, collectBindings);
   }
   collectBindings(source);
+  function collectDestructured(node: ts.Node) {
+    if (ts.isVariableDeclaration(node) && node.initializer && ts.isObjectBindingPattern(node.name) && isMock(node.initializer)) {
+      for (const binding of node.name.elements) {
+        if ((binding.propertyName?.getText(source) ?? binding.name.getText(source)) === 'module'
+          && ts.isIdentifier(binding.name)) moduleAliases.add(binding.name.text);
+      }
+    }
+    ts.forEachChild(node, collectDestructured);
+  }
   // Alias chains can hide either the module operation or the cleanup hook.
   for (let pass = 0; pass <= bindings.size; pass++) {
     const size = mocks.size + moduleAliases.size + cleanupHooks.size + helpers.size;
@@ -114,18 +123,9 @@ function inspectModuleMocks(text: string, options: { legacy?: boolean; path?: st
       if (isHook(initial)) cleanupHooks.add(name);
       if (isHelperFunction(initial)) helpers.add(name);
     }
+    collectDestructured(source);
     if (size === mocks.size + moduleAliases.size + cleanupHooks.size + helpers.size) break;
   }
-  function collectDestructured(node: ts.Node) {
-    if (ts.isVariableDeclaration(node) && node.initializer && ts.isObjectBindingPattern(node.name) && isMock(node.initializer)) {
-      for (const binding of node.name.elements) {
-        if ((binding.propertyName?.getText(source) ?? binding.name.getText(source)) === 'module'
-          && ts.isIdentifier(binding.name)) moduleAliases.add(binding.name.text);
-      }
-    }
-    ts.forEachChild(node, collectDestructured);
-  }
-  collectDestructured(source);
   const allCalls: ts.CallExpression[] = [];
   function collectCalls(node: ts.Node) {
     if (ts.isCallExpression(node)) allCalls.push(node);
@@ -268,6 +268,7 @@ test('the guard rejects bare replacements, including cleanup through functions a
     `import { mock, afterAll } from 'bun:test'; ${realSnapshot} const replace = mock.module; afterAll(() => replace('next/navigation', () => real));`,
     `import { mock, afterAll } from 'bun:test'; ${realSnapshot} const replacement = mock; afterAll(() => replacement.module('next/navigation', () => real));`,
     `import { mock, afterEach } from 'bun:test'; ${realSnapshot} const { module: replace } = mock; afterEach(() => replace('next/navigation', () => real));`,
+    `import { mock, afterEach } from 'bun:test'; ${realSnapshot} const { module: replace } = mock; const alias = replace; const restore = () => alias('next/navigation', () => real); afterEach(restore);`,
     `import { mock, afterAll } from 'bun:test'; ${realSnapshot} function restore() { mock.module('next/navigation', () => real); } afterAll(restore);`,
     `import { mock, afterEach } from 'bun:test'; ${realSnapshot} const restore = () => mock.module('next/navigation', () => real); function cleanup() { restore(); } afterEach(() => cleanup());`,
     `import { mock, afterAll as finish } from 'bun:test'; ${realSnapshot} const restore = () => mock.module('next/navigation', () => real); const alias = restore; const hook = finish; hook(alias);`,
