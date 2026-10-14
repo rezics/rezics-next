@@ -142,12 +142,16 @@ test files that call it. The query is part of an operationId or of a path;
 
 Run any command expected to take over a minute through
 `task goal -- job -- <command…>`, including checks, QA-stack tests and queued
-type checks. The command runs inline for up to 90 seconds. If it finishes,
-read its result; otherwise it prints `PARKED job:<id>; end your turn with
+type checks. The command runs inline for up to 20 seconds. Set the tool call's
+`yield_time_ms` to exactly `30000` (30 seconds), including an orchestration
+wrapper's yield when using one: one call returns the result or `PARKED`, with
+no polling. If it finishes, read its result; otherwise it prints `PARKED job:<id>; end your turn with
 RESULT: parked`. End that turn immediately with `RESULT: parked`, without a
-handoff, polling, reading logs or starting more work. The coordinator keeps
-the same command running or queued under its existing admission and resumes
-your same session with its exit status, bounded failure lines and log path.
+handoff, polling, reading logs or starting more work. The detached executor keeps
+the same command running or queued under its existing admission and, when it
+ends, resumes your same session with its exit status, bounded failure lines
+and log path. The coordinator pass retries a missed wake or queued admission;
+both use the same durable continuation claim, so they cannot wake twice.
 Continue from that result; a wake consumes no fix round. A refused wake or a
 wait over 45 minutes goes to your Goal's manager.
 

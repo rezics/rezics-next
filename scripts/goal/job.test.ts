@@ -1,8 +1,8 @@
 import { afterEach, expect, test } from 'bun:test';
-import { spawn } from 'node:child_process';
-import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { JobStore, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
+import { JobStore, JOB_INLINE_MS, JOB_WAIT_MS, jobDirectory, runJob, wakeJobs, type JobPassOptions } from './job.ts';
 import { coordinateWorkerJobs, stopTurnProcesses } from './coordinator.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
 import { settlementOwed } from './settle.ts';
@@ -18,6 +18,8 @@ function fixture() {
   const parent = join(import.meta.dir, '../../.temp/job-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'run-')); directories.push(cwd);
+  // Detached completion now reads the ledger too; isolate it from the host's live worker ledger.
+  expect(spawnSync('git', ['init', '-q', '-b', 'main'], { cwd }).status).toBe(0);
   const output = join(cwd, 'attempt.json');
   const lastMessage = join(cwd, 'attempt.last.md');
   writeFileSync(output, JSON.stringify({ type: 'thread.started', thread_id: 'native-worker-session' }));
@@ -36,6 +38,121 @@ function fixture() {
     }, report: (_job, reason) => reports.push(reason) };
   return { cwd, task, ledger, options, prompts, reports };
 }
+
+function processFixture() {
+  const f = fixture();
+  const state = join(f.cwd, '.temp/goal-orchestration');
+  const bin = join(f.cwd, '.temp/bin');
+  const wakes = join(f.cwd, '.temp/wakes.jsonl');
+  mkdirSync(state, { recursive: true }); mkdirSync(bin);
+  writeFileSync(join(state, 'ledger.json'), JSON.stringify(f.ledger));
+  writeFileSync(join(bin, 'codex'), `#!/usr/bin/env bun
+    import { appendFileSync, writeFileSync } from 'node:fs';
+    const args = process.argv.slice(2);
+    appendFileSync(${JSON.stringify(wakes)}, JSON.stringify({ at: Date.now(), args }) + '\\n');
+    writeFileSync(args[args.indexOf('-o') + 1], 'RESULT: parked');
+  `);
+  chmodSync(join(bin, 'codex'), 0o755);
+  const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, GOAL_TASK_ID: f.task.id,
+    GOAL_MEMORY_FLOOR_GIB: '0', GOAL_MAX_WORKERS: '25', GOAL_USAGE_FILE: join(f.cwd, '.temp/usage.json'),
+    GOAL_CODEX_HOME: join(f.cwd, '.temp/codex'), GOAL_CODEX_1_HOME: join(f.cwd, '.temp/codex-1') };
+  const execute = async (source: string) => {
+    const child = Bun.spawn([process.execPath, '-e', source], { cwd: f.cwd, env, stdout: 'pipe', stderr: 'pipe' });
+    const [code, stdout, stderr] = await Promise.all([child.exited, new Response(child.stdout).text(), new Response(child.stderr).text()]);
+    expect(code, stderr).toBe(0);
+    return stdout;
+  };
+  const start = (command: string[], inlineMs = 1) => execute(`
+    import { runJob } from ${JSON.stringify(join(import.meta.dir, 'job.ts'))};
+    process.exitCode = await runJob(${JSON.stringify(command)}, { inlineMs: ${inlineMs} });
+  `);
+  const pass = () => execute(`
+    import { coordinateWorkerJobs } from ${JSON.stringify(join(import.meta.dir, 'coordinator.ts'))};
+    await coordinateWorkerJobs();
+  `);
+  const ledger = () => JSON.parse(readFileSync(join(state, 'ledger.json'), 'utf8')) as Ledger;
+  return { ...f, wakes, execute, start, pass, ledger };
+}
+
+test('the default inline bound parks a running command in one 30-second tool call', async () => {
+  const f = fixture(); const lines: string[] = [];
+  expect(JOB_INLINE_MS).toBe(20_000);
+  const started = Date.now();
+  await runJob([process.execPath, '-e', 'await Bun.sleep(22000)'], {
+    cwd: f.cwd, task: f.task, print: line => lines.push(line),
+  });
+  const elapsed = Date.now() - started;
+  expect(elapsed).toBeGreaterThanOrEqual(20_000); expect(elapsed).toBeLessThan(25_000);
+  expect(lines).toHaveLength(1); expect(lines[0]).toStartWith('PARKED job:');
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    expect(store.all()[0]!.phase).toBe('parked'); expect(store.all()[0]!.code).toBeUndefined();
+    await until(() => store.all()[0]!.code !== undefined);
+    await until(() => !processAlive(store.all()[0]!.owner!));
+  } finally { store.close(); }
+}, 30_000);
+
+test('the executor wakes its worker immediately without a coordinator pass; later passes never wake twice', async () => {
+  const f = processFixture();
+  expect(await f.start([process.execPath, '-e', 'await Bun.sleep(200); console.log("completed")'])).toStartWith('PARKED job:');
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => store.all()[0]!.phase === 'woken');
+    await until(() => existsSync(f.wakes));
+    const wake = JSON.parse(readFileSync(f.wakes, 'utf8').trim()) as { at: number; args: string[] };
+    const job = store.all()[0]!;
+    expect(wake.at - job.ended!).toBeGreaterThanOrEqual(0); expect(wake.at - job.ended!).toBeLessThan(1000);
+    expect(wake.args.slice(0, 3)).toEqual(['exec', 'resume', 'native-worker-session']);
+    expect(f.ledger().tasks.worker!.attempts[1]!.continuedFor).toBe('job');
+    await f.pass(); await f.pass();
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+    expect(f.ledger().tasks.worker!.attempts).toHaveLength(2);
+  } finally { store.close(); }
+});
+
+test('executor completion and a concurrent coordinator pass publish only one continuation', async () => {
+  const f = processFixture();
+  await f.start([process.execPath, '-e', 'await Bun.sleep(300)']);
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    // Independent processes contend for the real ledger lease while completion becomes visible.
+    await Promise.all([0, 1].map(() => f.execute(`
+      import { coordinateWorkerJobs } from ${JSON.stringify(join(import.meta.dir, 'coordinator.ts'))};
+      for (let n = 0; n < 40; n++) { await coordinateWorkerJobs(); await Bun.sleep(10); }
+    `)));
+    await until(() => store.all()[0]!.phase === 'woken' && existsSync(f.wakes));
+    expect(f.ledger().tasks.worker!.attempts).toHaveLength(2);
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+  } finally { store.close(); }
+});
+
+test('a coordinator pass wakes the same worker when the executor dies before its completion wake', async () => {
+  const f = processFixture();
+  const worker = spawn(process.execPath, ['-e', 'await Bun.sleep(30000)', 'codex'], { stdio: 'ignore' });
+  const closed = new Promise(resolveExit => worker.once('close', resolveExit));
+  const ledgerPath = join(f.cwd, '.temp/goal-orchestration/ledger.json');
+  const ledger = f.ledger();
+  ledger.tasks.worker!.state = 'running'; ledger.tasks.worker!.attempts[0]!.pid = worker.pid!;
+  writeFileSync(ledgerPath, JSON.stringify(ledger));
+  await f.start([process.execPath, '-e', 'await Bun.sleep(30000)']);
+  const store = new JobStore(jobDirectory(f.cwd));
+  try {
+    await until(() => store.all()[0]!.executor !== undefined);
+    const job = store.all()[0]!;
+    process.kill(job.executor!.pid, 'SIGKILL');
+    await until(() => store.get(job.id)!.code !== undefined && !processAlive(job.owner!));
+    expect(store.get(job.id)!.code).toBe(137);
+    expect(store.get(job.id)!.reason).toBe('executor exited with signal SIGKILL');
+    // The owner recorded the exit, but could not resume a still-live caller. The pass recovers it.
+    expect(existsSync(f.wakes)).toBe(false);
+    worker.kill('SIGKILL'); await closed;
+    await f.pass(); await f.pass();
+    await until(() => existsSync(f.wakes));
+    expect(store.get(job.id)!.phase).toBe('woken');
+    expect(readFileSync(f.wakes, 'utf8').trim().split('\n')).toHaveLength(1);
+    expect(f.ledger().tasks.worker!.attempts).toHaveLength(2);
+  } finally { worker.kill('SIGKILL'); store.close(); }
+});
 
 test('inline completion preserves output, exit status and log without a wake', async () => {
   const f = fixture(); const lines: string[] = [];

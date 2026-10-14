@@ -13,7 +13,7 @@ import { processAlive, processIdentity, type ProcessIdentity } from '../qa/proce
 import { gateRefusal } from './queue.ts';
 import { GoalMailStore } from './mail.ts';
 
-export const JOB_INLINE_MS = 90_000;
+export const JOB_INLINE_MS = 20_000;
 export const JOB_WAIT_MS = 45 * 60_000;
 export const parkedResult = (text: string): boolean => /^RESULT:[ \t]*parked[ \t]*$/m.test(text);
 export const jobDirectory = (cwd: string): string => join(cwd, '.temp/goal/jobs');
@@ -107,7 +107,17 @@ async function jobProcess(directory: string, id: string, role: 'owner' | 'execut
         current.code = 1; current.ended = Date.now(); current.reason = reason;
       });
     }
-  } finally { if (log !== undefined) closeSync(log); store?.close(); }
+  } finally {
+    if (log !== undefined) closeSync(log);
+    if (store) {
+      try {
+        // Completion owns the first wake; the coordinator retries if this process dies or admission waits.
+        if (store.get(id)?.code !== undefined) await wakeJobs(store, {}, id);
+      } catch (error) {
+        appendFileSync(path, `error: job wake: ${error instanceof Error ? error.message : String(error)}\n`);
+      } finally { store.close(); }
+    }
+  }
 }
 
 export const executeJob = (directory: string, id: string): Promise<void> => jobProcess(directory, id, 'executor');
@@ -145,7 +155,7 @@ export async function runJob(command: string[], options: {
       appendFileSync(store.log(job.id), `${reason}\n`);
       store.update(job.id, current => { current.code = 1; current.ended = Date.now(); current.reason = reason; });
     } finally { closeSync(log); }
-    const deadline = Date.now() + (options.inlineMs ?? JOB_INLINE_MS);
+    const deadline = job.created + (options.inlineMs ?? JOB_INLINE_MS);
     while (store.get(job.id)!.code === undefined && Date.now() < deadline) await Bun.sleep(Math.min(100, Math.max(1, deadline - Date.now())));
     const result = store.update(job.id, current => { current.phase = current.code === undefined ? 'parked' : 'inline'; });
     if (result.phase === 'inline') {
@@ -184,8 +194,9 @@ function reportJob(job: Job, reason: string, ledger: Ledger): void {
 
 /** The ledger lock serializes wake intent and attempt publication with settlement and manager resumes.
  * An interrupted intent is reconciled from the published continuation, never blindly sent again. */
-export async function wakeJobs(store: JobStore, options: JobPassOptions = {}): Promise<void> {
-  for (const candidate of store.all().filter(job => ['parked', 'waking'].includes(job.phase))) {
+export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id?: string): Promise<void> {
+  const candidates = id === undefined ? store.all() : [store.get(id)].filter((job): job is Job => job !== undefined);
+  for (const candidate of candidates.filter(job => ['parked', 'waking'].includes(job.phase))) {
     let woke: number | undefined;
     await (options.mutate ?? withLedger)(ledger => {
       const job = store.get(candidate.id)!;
