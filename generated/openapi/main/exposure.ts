@@ -274,6 +274,7 @@ export const operationExposures = {
   "getV1RealmsByRealmWorks": "public",
   "getV1RealmsByRealmZone": "public",
   "getV1RealmsByRealmZone-attachments": "public",
+  "getV1RecipesByIdExport": "public",
   "getV1RecipesByIdExportsSchema-org": "public",
   "getV1RecipesByIdMeasures": "public",
   "getV1RecipesWorksById": "public",
