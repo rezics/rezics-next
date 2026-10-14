@@ -105,7 +105,10 @@ export async function branchCheck(ref: string, options: BranchCheckOptions = {})
           ? ['types', ['node', 'astro-check.cjs'], project.root] as [CheckResult['name'], string[], string]
           : ['types', project.task ? ['task', project.task]
             : ['task', 'goal:type-files', '--', '--project', project.project]] as [CheckResult['name'], string[]]),
-      ['lint', ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost']],
+      // These fixtures prove that lint rejects violations; the branch scan checks their surrounding tests.
+      ['lint', ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost',
+        '--ignore-pattern', 'tests/fixtures/static-boundaries/lint-failing/**',
+        '--ignore-pattern', 'tests/fixtures/static-boundaries/promise-failing/**']],
       ['ast', ['task', 'ast-grep', '--', 'scan']],
       ['guards', ['task', 'guards']],
     ];

@@ -34,7 +34,9 @@ test('branch validation checks an immutable tip with full types, type-aware lint
   expect(first.code).toBe(0); expect(first.commit).toBe(f.git('rev-parse', 'wave/1'));
   expect(f.commands).toEqual([
     ['task', 'gen'], ['task', 'main:typecheck'], ['task', 'web:typecheck'],
-    ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost'],
+    ['node_modules/.bin/oxlint', '--type-aware', 'apps', 'packages', 'services', 'scripts', 'tests', 'apphost',
+      '--ignore-pattern', 'tests/fixtures/static-boundaries/lint-failing/**',
+      '--ignore-pattern', 'tests/fixtures/static-boundaries/promise-failing/**'],
     ['task', 'ast-grep', '--', 'scan'], ['task', 'guards'],
   ]);
   expect(f.trees.every(tree => !existsSync(tree))).toBe(true);
