@@ -66,18 +66,28 @@ export async function prepareBook(page: Page, locale: UiLocale) {
   await grantBookAuthority('work:create:root', 'work.create');
   const book = await bookCommand<{ work: string; mainVersion: string }>(page, 'POST', '/v1/works', {
     profile: 'metadata-only-v1', authoring: 'own-work', semanticTypes: ['https://schema.org/Book'],
-    title: bookTitle, language: 'sv', description: { value: bookSynopsis, language: 'sv' },
+    title: bookTitle, language: 'sv',
     actingSubject: reader.actingSubject,
   });
   await grantBookAuthority(`work:read:${book.work}`, 'work.read');
+  await grantBookAuthority(`work:edit:${book.work}`, 'work.edit');
+  // The launch language capability reads the corrected metadata synopsis,
+  // which is a separate component from the Work's initial creation facts.
+  await bookCommand(page, 'PUT', `/v1/works/${book.work.slice(-36)}/metadata`, {
+    profile: 'work-metadata-details-v1', expectedHead: null, actingSubject: reader.actingSubject,
+    state: { kind: 'header', originalTitle: { value: bookTitle, language: 'sv' },
+      localized: [{ language: 'sv', title: null, description: bookSynopsis, mainVersionLabel: null }] },
+  });
   // A stable read basis keeps the first export's snapshot from racing the catalogue's outbox.
   let last = '';
   let still = 0;
   await expect(async () => {
     const response = await page.request.get(`/api/main/v1/works/${book.work.slice(-36)}?actingSubject=${encodeURIComponent(reader.actingSubject)}`);
     expect(response.ok(), await response.text()).toBe(true);
-    const header = await response.json() as { sourcePosition: unknown; types: string[] };
+    const header = await response.json() as { sourcePosition: unknown; types: string[];
+      description: { value: string; language: string } | null };
     expect(header.types).toContain('https://schema.org/Book');
+    expect(header.description).toMatchObject({ value: bookSynopsis, language: 'sv' });
     const position = JSON.stringify(header.sourcePosition);
     still = position === last ? still + 1 : 0;
     last = position;
@@ -88,7 +98,6 @@ export async function prepareBook(page: Page, locale: UiLocale) {
 }
 
 export async function prepareBookCopies(page: Page, book: Awaited<ReturnType<typeof prepareBook>>) {
-  await grantBookAuthority(`work:edit:${book.work}`, 'work.edit');
   const release = `https://rezics.com/id/${crypto.randomUUID()}`;
   await bookCommand(page, 'PUT', `/v1/works/${book.work.slice(-36)}/releases/${release.slice(-36)}`, {
     profile: 'release-v1', expectedHead: null, actingSubject: book.actingSubject, id: release,
