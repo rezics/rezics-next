@@ -94,6 +94,13 @@ says" is.
    missing one is first proved by the outcome test. Its gate is types, unit
    tests and stories. One browser journey per vertical runs in the program's
    nightly regression, not one per row.
+   A request the page sends that the row's record lacks is recorded by the
+   surface task itself. The surface task claims the row's outcome test and
+   record, imports the production client, changes no assertion and no cell,
+   and runs the answer-records guard. A separate record task is briefed only
+   for a row that no surface task holds. (2026-10-14: passing each gap
+   through program to a record task and back took a third of all attempts,
+   and each hop waited for a manager turn.)
 
 A row is proved when its outcome tests pass on the shared stack. The surface
 follows a proved row and never leads it.
