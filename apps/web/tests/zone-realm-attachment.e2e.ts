@@ -538,7 +538,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     expect(await discussion(other).getByRole('link', { name: aboutDiscussionMessages.en.continueThread }).getAttribute('href')).toBe(threadUrl);
     await pressByKeyboard(page, link, found, 'Open the full discussion');
     await page.reload();
-    for (const body of bodies) await expect(page.locator('article p').filter({ hasText: body })).toBeVisible({ timeout: 30_000 });
+    for (const body of bodies) await expect(page.locator('p').filter({ hasText: body })).toBeVisible({ timeout: 30_000 });
 
     // Interface locale changes preserve the attached Realm and canonical discussion.
     await visitJourney(other, localizedPath(new URL(other.url()).pathname, 'ja'));
