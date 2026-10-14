@@ -5,17 +5,33 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
+  realpathSync,
   readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { homedir } from 'node:os';
+import { isBuiltin } from 'node:module';
 import { releaseManifest, type ReleaseManifest } from '../dev/release-manifest.ts';
 
 const root = resolve(import.meta.dir, '../..');
 export const runtimeRoles = ['main', 'relay', 'relay-init', 'account', 'migrate'] as const;
+// The launcher chooses these imports dynamically, including telemetry preloads.
+export const runtimeEntries = [
+  'infra/release/entrypoint.ts',
+  'services/main/src/index.ts',
+  'services/main/src/relay.ts',
+  'services/main/src/relay-init.ts',
+  'services/account/src/index.ts',
+  'scripts/ops/migrate.ts',
+  'services/main/src/telemetry.ts',
+  'services/main/src/relay-telemetry.ts',
+  'services/account/src/telemetry.ts',
+];
 
 function run(args: string[], timeout = 120_000) {
   const result = spawnSync('docker', args, {
@@ -37,7 +53,7 @@ function run(args: string[], timeout = 120_000) {
   return result.stdout.trim();
 }
 
-// These roots also cover cross-workspace relative imports, which Yarn cannot see.
+// Keep owner trees for runtime data and glob-loaded declarations as well as imports.
 const runtimeWorkspaceRoots = [
   'services/main',
   'services/account',
@@ -232,11 +248,105 @@ export async function prepareImageContext(
     if (!workspace) throw new Error(`Missing runtime workspace root: ${directory}`);
     include(workspace.manifest.name);
   }
+  // Resolve like the artifact payload (Bun's runtime scanner and resolver), but
+  // exclusively against the selected Git objects. Empty file placeholders let
+  // Bun resolve extensions, package exports and directory entries without an
+  // installation, checkout reads or execution of authored modules.
+  mkdirSync(join(root, '.temp'), { recursive: true });
+  const snapshot = mkdtempSync(join(root, '.temp/release-imports-'));
+  const importedFiles = new Set<string>();
+  try {
+    const resolverFiles = files.filter((file) => productionPath(file.path));
+    const codeBlobs = sourceBlobs(repository, resolverFiles.filter((file) =>
+      /\.[cm]?[jt]sx?$/.test(file.path) || file.path.endsWith('/package.json') ||
+      file.path === 'package.json',
+    ));
+    for (const file of resolverFiles) {
+      const target = join(snapshot, file.path);
+      mkdirSync(dirname(target), { recursive: true });
+      writeFileSync(target, file.path.endsWith('package.json')
+        ? codeBlobs.get(file.path)! : '');
+    }
+    for (const [name, workspace] of workspaces) {
+      const target = join(snapshot, 'node_modules', name);
+      mkdirSync(dirname(target), { recursive: true });
+      symlinkSync(join(snapshot, workspace.directory), target, 'dir');
+    }
+    const scanners = {
+      ts: new Bun.Transpiler({ loader: 'ts', target: 'bun' }),
+      tsx: new Bun.Transpiler({ loader: 'tsx', target: 'bun' }),
+    };
+    const pending = [...runtimeEntries, ...runtimeArtifacts];
+    const externalImports: Array<{ path: string; name: string }> = [];
+    while (pending.length) {
+      const path = pending.pop()!;
+      if (importedFiles.has(path)) continue;
+      const file = required(path);
+      if (!productionPath(path)) throw new Error(`Excluded release runtime import: ${path}`);
+      if (!['100644', '100755'].includes(file.mode))
+        throw new Error(`Release payload must be a regular Git file: ${path}`);
+      importedFiles.add(path);
+      for (const workspace of workspaces.values()) {
+        if (path.startsWith(`${workspace.directory}/`)) include(workspace.manifest.name);
+      }
+      if (!/\.[cm]?[jt]sx?$/.test(path)) continue;
+      const scanner = path.endsWith('x') ? scanners.tsx : scanners.ts;
+      for (const imported of scanner.scanImports(codeBlobs.get(path)!)) {
+        if (isBuiltin(imported.path) || imported.path === 'bun' || imported.path.startsWith('bun:'))
+          continue;
+        const name = imported.path.startsWith('@')
+          ? imported.path.split('/').slice(0, 2).join('/') : imported.path.split('/')[0]!;
+        if (!imported.path.startsWith('.') && !imported.path.startsWith('/') && !workspaces.has(name)) {
+          externalImports.push({ path, name });
+          continue;
+        }
+        try {
+          const resolved = relative(snapshot, realpathSync(Bun.resolveSync(
+            imported.path, dirname(join(snapshot, path)),
+          )));
+          if (!byPath.has(resolved) || !productionPath(resolved)) throw new Error('outside pinned production source');
+          pending.push(resolved);
+        } catch (error) {
+          throw new Error(`Unresolved release runtime import: ${path} -> ${imported.path}`, { cause: error });
+        }
+      }
+    }
+    const externalDependencies = new Set<string>();
+    const dependencyEdges = [...production].flatMap((name) => {
+      const manifest = workspaces.get(name)!.manifest;
+      return Object.entries({ ...manifest.dependencies, ...manifest.optionalDependencies, ...manifest.peerDependencies });
+    });
+    // Hoisted imports may use a transitive production package. Consult the
+    // pinned lock graph, never this checkout's development node_modules.
+    const lock = Bun.YAML.parse(git(repository, ['show', `${sourceCommit}:yarn.lock`]).toString()) as
+      Record<string, { dependencies?: Record<string, string> }>;
+    const descriptors = new Map(Object.entries(lock ?? {}).flatMap(([key, value]) =>
+      key.split(', ').map((descriptor) => [descriptor, value] as const),
+    ));
+    const visited = new Set<string>();
+    while (dependencyEdges.length) {
+      const [name, range] = dependencyEdges.pop()!;
+      if (workspaces.has(name)) continue;
+      const descriptor = `${name}@${range.includes(':') ? range : `npm:${range}`}`;
+      if (visited.has(descriptor)) continue;
+      visited.add(descriptor);
+      const entry = descriptors.get(descriptor);
+      if (!entry) continue; // Yarn's immutable install refuses missing lock edges.
+      externalDependencies.add(name);
+      dependencyEdges.push(...Object.entries(entry.dependencies ?? {}));
+    }
+    for (const imported of externalImports) {
+      if (!externalDependencies.has(imported.name))
+        throw new Error(`Unresolved production runtime dependency: ${imported.path} -> ${imported.name}`);
+    }
+  } finally {
+    rmSync(snapshot, { recursive: true, force: true });
+  }
   const directories = [...production]
     .map((name) => workspaces.get(name)!.directory)
     .concat(['generated/model', 'infra/release']);
   const selected = new Map<string, GitFile>();
-  for (const file of ['package.json', 'yarn.lock', '.yarnrc.yml', ...runtimeArtifacts])
+  for (const file of ['package.json', 'yarn.lock', '.yarnrc.yml', ...importedFiles])
     selected.set(file, required(file));
   // Immutable resolution needs every manifest, including development workspaces;
   // only the production closure gets source payloads and installed dependencies.

@@ -127,11 +127,12 @@ test('Main entry import closure is present in the release and covered by the run
     const copies = [...dockerfile.matchAll(/^COPY --from=dependencies .*?\/app\/(\S+) /gm)].map(
       (match) => match[1]!,
     );
+    const copiesContext = /^COPY --from=dependencies .*?\/app\/ \.\/$/m.test(dockerfile);
     for (const path of files) {
       expect(existsSync(join(directory, path)), `release omits ${path}`).toBe(true);
       expect(readFileSync(join(directory, path))).toEqual(readFileSync(join(root, path)));
       expect(
-        copies.some((copy) => path === copy || path.startsWith(`${copy}/`)),
+        copiesContext || copies.some((copy) => path === copy || path.startsWith(`${copy}/`)),
         `runtime Dockerfile omits ${path}`,
       ).toBe(true);
     }

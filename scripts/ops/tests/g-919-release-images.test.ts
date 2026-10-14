@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
-import { prepareImageContext, runtimeArtifacts } from '../release-images.ts';
+import { prepareImageContext, runtimeArtifacts, runtimeEntries } from '../release-images.ts';
 import { productionExample } from './g-722-fixture.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -115,6 +115,9 @@ function fixture() {
     runtimes: { yarn: 'test-pin' }, applicationBase: 'test-base', images: { fuseki: 'test-fuseki' }
   }; export const releaseDigest = () => 'test-release';`,
   );
+  for (const entry of runtimeEntries) {
+    if (!existsSync(join(repository, entry))) write(repository, entry, 'export {};');
+  }
   const corepackHome = join(repository, '.temp/corepack');
   write(corepackHome, 'v1/yarn/test-pin/yarn.js', 'pinned test CLI');
   for (const path of [

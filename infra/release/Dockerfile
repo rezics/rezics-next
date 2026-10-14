@@ -11,14 +11,8 @@ ARG ROLE=main
 ARG SOURCE_DATE_EPOCH=0
 WORKDIR /app
 ENV NODE_ENV=production REZICS_ROLE=${ROLE}
-COPY --from=dependencies --chown=bun:bun /app/node_modules ./node_modules
-COPY --from=dependencies --chown=bun:bun /app/services ./services
-COPY --from=dependencies --chown=bun:bun /app/packages ./packages
-COPY --from=dependencies --chown=bun:bun /app/generated ./generated
-COPY --from=dependencies --chown=bun:bun /app/model/compiler ./model/compiler
-COPY --from=dependencies --chown=bun:bun /app/scripts ./scripts
-COPY --from=dependencies --chown=bun:bun /app/apps ./apps
-COPY --from=dependencies --chown=bun:bun /app/infra/release ./infra/release
-COPY --from=dependencies --chown=bun:bun /app/release.json ./release.json
+# The context already excludes private and development payloads. Carry its full
+# import closure, including future runtime roots outside services and packages.
+COPY --from=dependencies --chown=bun:bun /app/ ./
 USER bun
 ENTRYPOINT ["bun", "infra/release/entrypoint.ts"]
