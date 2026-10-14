@@ -13,6 +13,7 @@ import { directoryLeaseHeld } from '../qa/process/lease.ts';
 import { classifyLandingRefusal } from './refusal.ts';
 import { pumpQueue, type QueueLedger } from './queue.ts';
 import { scheduleConfirmation, type ScheduleConfirmationOptions } from './confirm.ts';
+import { parkedResult } from './job.ts';
 
 type Settlement = NonNullable<Task['settlement']>;
 type SpawnSettlement = (task: Task, token: string) => Settlement['owner'];
@@ -96,6 +97,7 @@ export function settlementOwed(task: Task): boolean {
   if (!task.attempts.length || task.waitingResume || ['verified', 'cancelled'].includes(task.state)) return false;
   const attempt = lastAttempt(task);
   if (pidAlive(attempt.pid, programOf(engineOf(attempt)))) return false;
+  if (parkedResult(readResult(attempt).text)) return false;
   const previous = task.settlement;
   return !(previous?.attempt === attempt.n && (previous.settledAt || processAlive(previous.owner)));
 }

@@ -79,7 +79,7 @@ manager with the reason. Other tests go with the code they cover, at the lowest
 tier that proves it. Prove your own work, nothing wider:
 
 ```sh
-task goal -- check                         # before a handoff: types, type-aware lint, ast-grep, the brief's `tests:` files in one QA slot and the guards, in one blocking call
+task goal -- job -- task goal -- check     # before a handoff: types, type-aware lint, ast-grep, the brief's tests and guards
 task goal -- check --only types,lint       # a subset while you work: types, lint, tests, guards
 task goal -- test <your test files>        # one file or a few while you work; one QA slot, also for files of several tiers; never --heavy for your own files
 task goal -- test --affected --list | tail -n 40   # what else your change reaches; do not run it
@@ -89,10 +89,10 @@ task goal -- test --affected --list | tail -n 40   # what else your change reach
 failing cases and the first lines of each error; the whole output is in the file
 it names under `.temp/goal/check/`. It checks what the merge gate checks, from
 the gate's own functions. A brief names its test files in the frontmatter list
-`tests:`; without it `check` runs no test file and says so. Wait on it with one
-long call rather than polling.
+`tests:`; without it `check` runs no test file and says so. Run it through
+`job` and read the summary when it finishes inline or wakes your session.
 
-Run `task goal -- check` once before you hand off `done`; it includes the
+Run `task goal -- job -- task goal -- check` once before you hand off `done`; it includes the
 repository-wide rules of `task guards` (about two minutes). On 2026-10-11 two
 thirds of the landings that a gate stopped failed one of these rules, after a
 review had already been spent on them.
@@ -135,15 +135,16 @@ it takes a bearer and an idempotency key, the route's file and line, and the
 test files that call it. The query is part of an operationId or of a path;
 `--json` prints the same as data.
 
-A test run or a check takes minutes. Start it with the call's own
-`yield_time_ms: 300000`. If the call still returns before the command has
-ended, receive it with one wait of 300000 ms (`wait`, or an empty `write_stdin`,
-whichever your harness gives you) and never a shorter one: a wait returns the
-moment the command ends, so a long one costs no time. While it runs, read no
-log and list no process, and do not sleep; read the failure once, when it has
-ended. Every shorter wait resends your whole context: on 2026-10-13 the six
-dearest sessions spent a third of their input on 232 such polls of one second
-or one minute, about 150,000 tokens each.
+Run any command expected to take over a minute through
+`task goal -- job -- <command…>`, including checks, QA-stack tests and queued
+type checks. The command runs inline for up to 90 seconds. If it finishes,
+read its result; otherwise it prints `PARKED job:<id>; end your turn with
+RESULT: parked`. End that turn immediately with `RESULT: parked`, without a
+handoff, polling, reading logs or starting more work. The coordinator keeps
+the same command running or queued under its existing admission and resumes
+your same session with its exit status, bounded failure lines and log path.
+Continue from that result; a wake consumes no fix round. A refused wake or a
+wait over 45 minutes goes to your Goal's manager.
 
 ## After a review
 
@@ -159,8 +160,9 @@ close it.
 
 Commit each step as soon as it stands, because a session can end without
 warning and the next session only sees what is in the tree. Leave the worktree
-clean, and end with this message (a headless worker exits when its turn ends,
-so never end a turn to wait):
+clean, and end with this message. A headless worker exits when its turn ends;
+the one waiting exception is a recorded job, whose turn ends with only
+`RESULT: parked` and has no handoff:
 
 ```text
 RESULT: done | partial | blocked

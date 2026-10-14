@@ -4,8 +4,9 @@ import { type Ledger, effortsOf, modelOf, engineEnv } from './types.ts';
 import { existsSync, mkdirSync, readFileSync, realpathSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { GoalMailStore } from './mail.ts';
-import { type WakeEvent, type LaunchDescriptor, processIdentity, claudeConfigHome, WAKE_PROMPT, WAKE_LAST_MESSAGE, tmuxServer, GoalCoordinator, TmuxLauncher, claudeNativeSession, claudeWakeArgs, nativeSession } from './coordinator.ts';
-import { lastAttempt, running, launchCommand, managerWakeGates } from './launch.ts';
+import { type WakeEvent, type LaunchDescriptor, processIdentity, claudeConfigHome, WAKE_PROMPT, WAKE_LAST_MESSAGE, tmuxServer, GoalCoordinator, TmuxLauncher, claudeNativeSession, claudeWakeArgs, nativeSession, coordinateWorkerJobs } from './coordinator.ts';
+import { parkedResult } from './job.ts';
+import { lastAttempt, running, launchCommand, managerWakeGates, readResult } from './launch.ts';
 import { validGoalSlug } from './briefs.ts';
 import { randomUUID } from 'node:crypto';
 import { constants, homedir } from 'node:os';
@@ -77,6 +78,7 @@ export function managerEvents(directory: string, goal: string, mail: GoalMailSto
   for (const task of Object.values(ledger.tasks)) {
     if (task.goal !== goal || ['verified', 'cancelled'].includes(task.state) || !task.attempts.length) continue;
     const attempt = lastAttempt(task);
+    if (parkedResult(readResult(attempt).text)) continue;
     if (task.state === 'running' && running(task)) continue;
     if (task.settlement?.attempt !== attempt.n || !task.settlement.settledAt) continue;
     events.push({key:`task:${task.id}:${attempt.n}`,body:task.settlement.reason ?? `${task.id}: attempt ${attempt.n} settled`});
@@ -334,7 +336,10 @@ export async function freshCoordinatorPass(directory: string, module = import.me
 export async function coordinatorPass(directory: string): Promise<void> {
   const coordinator = eventCoordinator(directory);
   try {
-    if (directory === stateDir) await (await import('./settle.ts')).settlePass();
+    if (directory === stateDir) {
+      await coordinateWorkerJobs();
+      await (await import('./settle.ts')).settlePass();
+    }
     const mail = new GoalMailStore({stateDir:directory,goals:Object.keys(eventLedger(directory).goals ?? {})});
     try { mail.notifyOverdue(); } finally { mail.close(); }
     coordinator.step();

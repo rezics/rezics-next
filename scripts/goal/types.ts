@@ -28,7 +28,7 @@ export interface Attempt {
   /** A partial handoff advances a landed or clean read-only step; only fixes consume the two rounds. */
   round?: 'initial' | 'step' | 'fix' | 'continuation';
   /** Why settlement continued an ended worker attempt without a manager resume. */
-  continuedFor?: 'transport' | 'capacity' | 'handoff';
+  continuedFor?: 'transport' | 'capacity' | 'handoff' | 'job';
 }
 export interface Task extends Omit<Brief, 'worktree'> {
   brief: string; worktree: string; branch: string; base: string; state: State; attempts: Attempt[];
