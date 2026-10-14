@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { browserMainApi } from '../api/browser.ts';
+import { resourceHref } from '../address/path.ts';
 import { loadRankingsModule } from './modules.ts';
 import { rankingRealm } from './ranking-contract-states.ts';
 import { rankingIntervals, rankingModule, rankingModuleContractCards, rankingModuleContractFetch } from './ranking-module-contract-states.ts';
@@ -21,7 +22,7 @@ test('typed chart pages feed the existing ranking module without transferring or
   for (const tab of state.data.tabs) {
     expect(tab.items[0]!.rank).toBe(1);
     expect(tab.items[0]!.work.author?.value).toBe('Ranking garden author');
-    expect(tab.items[0]!.work.href).toContain('/w/');
+    expect(tab.items[0]!.work.href).toBe(resourceHref('/w/', tab.items[0]!.work.id));
     expect(tab.items[0]!.work.decision).toBeNull();
     expect(tab.items[0]!.work.authorHref).toBe(rankingModuleContractCards().values().next().value!.authorHref);
   }

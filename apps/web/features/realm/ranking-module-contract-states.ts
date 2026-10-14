@@ -1,4 +1,5 @@
 import type { ZoneWork } from '@rezics/zone-sdk';
+import { direction } from '@rezics/main/language';
 import { zoneWork } from './adapt.ts';
 import { rankingAuthor, rankingPosition, rankingRealm, rankingStateSource } from './ranking-contract-states.ts';
 import type { RankingPage } from './types.ts';
@@ -13,7 +14,7 @@ export type RankingModuleState = 'populated' | 'empty' | 'error' | 'missing' | '
 export function rankingModuleContractPage(interval: RankingPage['interval'], state: RankingModuleState): RankingPage {
   const id = 'https://rezics.com/id/00000100-1234-4123-8123-123456789abc';
   const work: RankingPage['items'][number] = { id, revision: id, mainVersion: id,
-    title: { value: 'Original ranking garden', language: 'en', direction: 'ltr', basis: 'requested' },
+    title: { value: 'Original ranking garden', language: 'en', direction: direction('en', 'Original ranking garden'), basis: 'requested' },
     cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'ranking-garden', resourceType: 'work' },
     types: [], tagline: null, completionStatus: null, chapterCount: null, wordCount: null, lastUpdatedAt: null,
     score: 42, growth: 3 };

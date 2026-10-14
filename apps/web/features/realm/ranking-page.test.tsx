@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AppRouterContext } from 'next/dist/shared/lib/app-router-context.shared-runtime';
 import { catalogs } from '../../i18n/catalogs.ts';
 import { uiLocales } from '../../i18n/define.ts';
+import { spaceHref } from '../address/path.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { messages } from '../feed/messages.ts';
 import type { Loaded } from '../feed/types.ts';
@@ -10,8 +11,8 @@ import type { ThreadsPage } from '../feed/thread.ts';
 import { rankingContractState, rankingNow } from './ranking-contract-states.ts';
 import { rankingHref, RealmRankingPage } from './ranking-page.tsx';
 
-const path = '/r/ranking-garden';
-const router = { back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {} };
+const path = spaceHref('ranking-garden', 'community');
+const router = { bfcacheId: 'ranking-test', back() {}, forward() {}, refresh() {}, hmrRefresh() {}, push() {}, replace() {}, prefetch() {} };
 
 test('continuations retain an opaque cursor, sort and period; changing coordinates starts at page one', () => {
   const cursor = 'opaque+/= &:reader';

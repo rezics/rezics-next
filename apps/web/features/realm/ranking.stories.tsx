@@ -5,6 +5,7 @@ import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
 import { catalogs } from '../../i18n/catalogs.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { spaceHref } from '../address/path.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { FeedProvider } from '../feed/feed-context.tsx';
 import { memoryFeed } from '../feed/fixtures.ts';
@@ -18,7 +19,7 @@ import { readRankingAnswer } from './ranking-read.ts';
 import { RealmPageStory } from './story-page.tsx';
 import { DiscussionColumns } from './thread-rail.tsx';
 
-const path = '/r/ranking-garden';
+const path = spaceHref('ranking-garden', 'community');
 interface Args {
   persona: AnswerPersona; state: RankingState; privateRealm: boolean;
   sort: 'best' | 'top'; window: 'week' | 'month' | 'all'; locale: UiLocale;
@@ -55,7 +56,7 @@ const meta = {
   title: 'Realm/Ranking contract states', component: RankingStory,
   args: { persona: 'visitor', state: 'populated', privateRealm: false, sort: 'best', window: 'all', locale: 'en' },
   globals: { viewport: { value: 'desktop' } },
-  parameters: { route: { pathname: '/en/r/ranking-garden/discussions' },
+  parameters: { route: { pathname: localizedPath(`${path}/discussions`, 'en') },
     docs: { description: { component: rankingStateSource + '. Exact requests and expected states are in ranking-contract-states.ts. Neither ranking read declares HTTP 202.' } } },
   render: (args, { globals }) => {
     const locale = (globals.locale as UiLocale | undefined) ?? args.locale;

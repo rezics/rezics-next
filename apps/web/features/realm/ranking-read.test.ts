@@ -14,6 +14,7 @@ for (const persona of rankingPersonas) {
           const result = await readRankingAnswer(main, sample.request);
           if (sample.status === 404) expect(result).toEqual({ ok: false, failure: 'missing' });
           else {
+            if (!('items' in sample.answer)) throw new Error('Expected an admitted contract answer');
             expect(result).toEqual({ ok: true, data: sample.answer });
             if (!result.ok) throw new Error('Expected the admitted ranking answer');
             expect(result.data.items.every(item => item.author?.id === rankingAuthor)).toBe(true);
@@ -31,7 +32,10 @@ for (const persona of rankingPersonas) {
       const transport = rankingContractFetch(sample);
       const result = await readRankingAnswer(browserMainApi('https://contract.invalid', { fetcher: transport.fetcher }), sample.request);
       if (state === 'missing') expect(result).toEqual({ ok: false, failure: 'missing' });
-      else expect(result).toEqual({ ok: true, data: sample.answer });
+      else {
+        if (!('items' in sample.answer)) throw new Error('Expected a continuation contract answer');
+        expect(result).toEqual({ ok: true, data: sample.answer });
+      }
       transport.dispose();
     }
   });

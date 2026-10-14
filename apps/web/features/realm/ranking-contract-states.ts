@@ -1,4 +1,5 @@
 import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
+import { direction } from '@rezics/main/language';
 import type { ThreadsPage, ThreadSummary } from '../feed/thread.ts';
 import type { RankingRequest } from './ranking-read.ts';
 
@@ -18,7 +19,7 @@ export function rankingReader(persona: AnswerPersona): string | null {
 
 function item(index: number, history: 'public' | 'retained' | 'current'): ThreadSummary {
   return { reply: id(1000 + index), placement: id(2000 + index),
-    work: { id: id(100), title: { value: 'Original ranking garden', language: 'en', direction: 'ltr', basis: 'requested' },
+    work: { id: id(100), title: { value: 'Original ranking garden', language: 'en', direction: direction('en', 'Original ranking garden'), basis: 'requested' },
       cover: { kind: 'fallback', policy: 'avatar-fallback-v1', key: 'ranking-garden', resourceType: 'work' } },
     author: { id: rankingAuthor, name: 'Ranking garden author', handle: null },
     time: new Date(rankingNow - index * 60_000).toISOString(), language: 'en',
