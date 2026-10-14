@@ -2076,7 +2076,10 @@ if (import.meta.main) {
   const evidenceIndex = process.argv.indexOf('--evidence');
   if (!process.argv.includes('--prepare-retained-source') || evidenceIndex < 0 || !process.argv[evidenceIndex + 1])
     throw new Error('select --prepare-retained-source --evidence <path>');
-  const report = await prepareOwnerErasureSource({ laterApiAdmission: process.argv.includes('--later-api-admission') });
+  const options = { laterApiAdmission: process.argv.includes('--later-api-admission') };
+  const report = process.argv.includes('--retained-only')
+    ? await new RetainedSources().select(ownerErasureSourceAdapter(options))
+    : await prepareOwnerErasureSource(options);
   writeFileSync(process.argv[evidenceIndex + 1]!, `${stable(report)}\n`, { mode: 0o600 });
 }
 

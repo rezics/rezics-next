@@ -23,9 +23,12 @@ export async function prepareFixture(
     build: buildFixture,
     now: Date.now,
   },
+  options: { retainedOnly?: boolean } = {},
 ): Promise<FixturePreparation> {
   const budget = new FixtureWorkBudget(RESTORE_DEADLINE_MS, dependencies.now);
   const retained = dependencies.retained(profile, seed);
+  if (!retained && options.retainedOnly)
+    throw new Error(`No compatible retained ${profile} fixture; prepare it separately before the drill`);
   const remaining = budget.remaining();
   const manifest: FixtureManifest =
     retained ?? (await dependencies.build(profile, seed, remaining,

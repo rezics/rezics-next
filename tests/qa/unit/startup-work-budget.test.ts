@@ -33,6 +33,38 @@ async function clocked<T>(work: (clock: {
 }
 const qa = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '2000000' };
 
+test('retained-only preparation refuses missing custody without invoking the producer', async () => {
+  let builds = 0, at = 0;
+  const dependencies = {
+    now: () => at,
+    retained: () => undefined as FixtureManifest | undefined,
+    build: async () => { builds++; throw new Error('producer must not run'); },
+  };
+  await expect(prepareFixture('small', undefined, dependencies, { retainedOnly: true }))
+    .rejects.toThrow('prepare it separately before the drill');
+  expect(builds).toBe(0);
+  const manifest = { id: 'fx-small-retained' } as FixtureManifest;
+  expect(await prepareFixture('small', undefined, { ...dependencies,
+    retained: () => { at += 40; return manifest; },
+  }, { retainedOnly: true })).toMatchObject({ fixture: manifest.id, built: false, elapsedMs: 40, admissionWaitMs: 0 });
+  expect(builds).toBe(0);
+});
+
+test('scheduled source selection and measured restores retain separate active and admission clocks', async () => {
+  await clocked(async ({ now, advance, admission }) => {
+    const preparation = new FixtureWorkBudget(600_000, now);
+    await preparation.startup(root, qa, () => advance(590_000), admission);
+    expect(preparation.timing()).toMatchObject({ elapsedMs: 590_000, admissionWaitMs: 800_000 });
+    for (const phase of ['backup', 'restore']) {
+      const restore = new RecoveryBudget(now);
+      await restore.phase(phase, () => advance(599_999));
+      expect(restore.timing()).toEqual({ elapsedMs: 599_999, admissionWaitMs: 0, budgetMs: 600_000 });
+      expect(restore.remaining()).toBe(1);
+    }
+    expect(preparation.admissionWaitMs()).toBe(800_000);
+  });
+});
+
 test('fixture build startup can wait longer than preparation while preserving active Compose budget', async () => {
   await clocked(async ({ now, advance, admission }) => {
     const budget = new FixtureWorkBudget(600_000, now);

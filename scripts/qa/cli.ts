@@ -35,6 +35,7 @@ import {
   recordedFileDurations,
   selfManagedFaultFiles,
   selfManagedFaultAdmission,
+  serialRestoreDrillFiles,
   shardCount,
   stackPlanBudgetWarning,
   shardResolved,
@@ -85,9 +86,9 @@ import { exclusiveWorkScopeAssembler, integrationStackAdmitsWorkScope, qaStackEn
 
 import { ownerTierBudgetMs } from './owner-tier-budget.ts';
 import { assertQaResourceAllocation, integrationResourceClass, qaResourceClasses, queuedProjectsBudget } from './resource-classes.ts';
-import { exclusivePreparationWallMs, preparationTestFiles, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
+import { exclusivePreparationWallMs, preparationTestFiles, restoreDrillSchedule, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE } from './preparation-selection.ts';
 import {
-  CAMPAIGN_QUALIFICATION_FILE, campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
+  campaignCommandAccepted, campaignPhaseDeadline, campaignQualificationShard, campaignShardActiveMs,
   childStackCleanupCommand, currentSuppliedRunIds, openCampaignEvidence,
   type CampaignEvidenceRead, type CommandPhaseSample,
 } from './campaign-envelope.ts';
@@ -715,8 +716,8 @@ async function runShardWork(
         xml: xmlForCommand(tier, false, Date.now() - preparationStartedAt, message) });
     }
   }
-  // Source API population/backup owns preparation, before the operation-file clock.
-  // Each shard selects the same keyed custody; a second shard verifies/reuses it.
+  // Verify retained custody before the operation-file clock, without running its producer.
+  // Each shard selects the same keyed source and restores only an isolated consumer.
   if (tier === 'fault/recovery') {
     const preparations = new Map(files.flatMap(file => {
       const selected = ownerErasurePreparationOptions(file);
@@ -725,11 +726,15 @@ async function runShardWork(
     for (const [variant, selected] of preparations) {
       const evidence = join(directory, `owner-erasure-source-${label}-${variant}.json`);
       const prepared = await commandAsync(root, 'bun', [
-        'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts', '--prepare-retained-source', '--evidence', evidence,
+        'tests/qa/fault-recovery/owner-restore-erasure-fixture.ts', '--prepare-retained-source', '--retained-only', '--evidence', evidence,
         ...(selected.laterApiAdmission ? ['--later-api-admission'] : []),
       ], 600_000, { ...environment, ...apps, REZICS_FIXTURE_ROOT: environment.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
         REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
       writeFileSync(join(logs, `${label}-owner-erasure-source-${variant}.log`), prepared.output);
+      writeFileSync(join(directory, `owner-erasure-selection-${label}-${variant}.json`), JSON.stringify({
+        deadlineMs: 600_000, activeElapsedMs: prepared.activeElapsedMs,
+        admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
+      }));
       if (!prepared.ok) {
         errors.push(`owner-erasure source preparation failed before operation clock (${label}, later admission ${variant})`);
         return finish({ ok: false, timedOut: prepared.timedOut, noMatch: false,
@@ -950,27 +955,21 @@ async function runStackTier(tier: StackTier): Promise<void> {
     ? recordedFileDurations([join(root, '.artifacts', 'qa')], tier, 60, 1) : new Map<string, number>();
   const estimates = estimatedDurations(selectedFiles,
     tier === 'fault/recovery' ? new Map([...recorded, ...faultRecoveryBaselineDurations, ...local]) : recorded);
-  // Prepare the small retained fixture once before any fault/recovery shards.
-  // Launch and erasure decide independently whether they need the default
-  // small profile, then share this preparation when both do.
-  const launchNeedsSmallFixture = estimates.has('tests/qa/fault-recovery/g-727-launch-drill.test.ts')
-    && !process.env.G727_LAUNCH_SOURCE_RUN_ID
-    && !process.env.G727_LAUNCH_FIXTURE
-    && (process.env.G727_LAUNCH_PROFILE ?? 'small') === 'small';
-  const erasureNeedsSmallFixture = estimates.has(CAMPAIGN_QUALIFICATION_FILE)
-    && (process.env.ERASURE_CAMPAIGN_PROFILE ?? 'small') === 'small'
-    && process.env.ERASURE_CAMPAIGN_FIXTURE === undefined
-    && process.env.ERASURE_CAMPAIGN_SOURCES === undefined
-    && process.env.ERASURE_CAMPAIGN_COPY === undefined;
-  if (tier === 'fault/recovery' && (launchNeedsSmallFixture || erasureNeedsSmallFixture)) {
+  // Select retained custody once before shards. Missing custody refuses, never builds.
+  const fixtureConsumers = smallRecoveryFixtureConsumers(selectedFiles, process.env);
+  if (tier === 'fault/recovery' && Object.values(fixtureConsumers).some(Boolean)) {
     const fixtureRoot = process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture');
     const preparationFile = join(directory, 'fault-recovery-fixture-preparation.json');
     const prepared = await withWorkSlot(reserveWork => admit('other', () => withStartupSlot(
       { ...qaStackEnvironment(process.env), REZICS_FIXTURE_ROOT: fixtureRoot },
       (environment, onLine) => commandAsync(root, 'bun',
-        ['scripts/fixture/cli.ts', 'build', '--prepare', '--profile', 'small', '--evidence', preparationFile],
+        ['scripts/fixture/cli.ts', 'build', '--prepare', '--retained-only', '--profile', 'small', '--evidence', preparationFile],
         LOAD_PREPARATION_BUDGET_MS, environment, onLine, { runDeadline }), reserveWork), qaStackEnvironment(process.env)));
     writeFileSync(join(logs, 'fault-recovery-fixture-preparation.log'), prepared.output);
+    writeFileSync(join(directory, 'fault-recovery-fixture-selection.json'), JSON.stringify({
+      deadlineMs: LOAD_PREPARATION_BUDGET_MS, activeElapsedMs: prepared.activeElapsedMs,
+      admissionWaitMs: prepared.admissionWaitMs, ok: prepared.ok,
+    }));
     if (!prepared.ok) {
       errors.push(
         'fault/recovery small-fixture preparation failed or exceeded 600s (see logs/fault-recovery-fixture-preparation.log)',
@@ -989,11 +988,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
       elapsedMs: number;
     };
     faultFixtureEnvironment.REZICS_FIXTURE_ROOT = fixtureRoot;
-    if (launchNeedsSmallFixture) {
+    if (fixtureConsumers.launch) {
       faultFixtureEnvironment.G727_LAUNCH_FIXTURE = report.fixture;
       faultFixtureEnvironment.G727_LAUNCH_PREPARATION_MS = String(prepared.activeElapsedMs);
     }
-    if (erasureNeedsSmallFixture) faultFixtureEnvironment.ERASURE_CAMPAIGN_FIXTURE = report.fixture;
+    if (fixtureConsumers.erasure) faultFixtureEnvironment.ERASURE_CAMPAIGN_FIXTURE = report.fixture;
   }
   const maximum = maximumShards(process.env, tier);
   const wanted =
@@ -1017,6 +1016,11 @@ async function runStackTier(tier: StackTier): Promise<void> {
       const rest = group.filter(file => !campaignQualificationShard([file]));
       return [...(rest.length ? [rest] : []), [group.find(file => campaignQualificationShard([file]))!]];
     });
+    const schedule = restoreDrillSchedule(projects, tier === 'fault/recovery' ? serialRestoreDrillFiles : []);
+    if (tier === 'fault/recovery') writeFileSync(join(directory, `${artifact}-schedule.json`), JSON.stringify({
+      parallel: schedule.parallel, serial: schedule.serial, serialConsumers: 1,
+      sourceSelection: 'retained-only',
+    }, null, 2));
     // Hang detectors, not quiet-host gates: held/corruption/release measured 178/237/221 s
     // unloaded and 272/304/325 s, then 321/358/338 s busy; quiet-host regressions still matter.
     const projectBudget = (files: readonly string[]) =>
@@ -1025,23 +1029,30 @@ async function runStackTier(tier: StackTier): Promise<void> {
           'tests/qa/fault-recovery/erasure-restore.test.ts',
           'tests/qa/fault-recovery/erasure-restore-corruption.test.ts',
           'tests/qa/fault-recovery/erasure-restore-release.test.ts',
-        ].includes(files[0]!) ? 600_000 : budget;
+        ].includes(files[0]!) ? 600_000 : exclusivePreparationWallMs(files) ?? budget;
     // Integration and fault/recovery queue more projects than slots; each keeps its own deadline.
     // The campaign project's wall is the sum of its two measured phases.
     if (integration) integrationBudgetNotes.push(...integrationBudgetSummary(integrationOverBudgetFiles(estimates)));
     const tierBudget = integration
       ? integrationTierWallMs(integration.map(shard => shard.resourceClass), capacity, integration.length)
-      : tier === 'fault/recovery' && !exclusiveRecovery ? queuedProjectsBudget(projects.map(projectBudget), capacity) : budget;
+      : tier === 'fault/recovery' && !exclusiveRecovery
+        ? queuedProjectsBudget(schedule.parallel.map(projectBudget), capacity)
+          + schedule.serial.reduce((total, files) => total + projectBudget(files), 0) : budget;
     const warning = stackPlanBudgetWarning(estimates, tierBudget, capacity, maximum, tier,
       tier === 'integration' ? count => planIntegrationShards(estimates, count).map(shard => shard.files) : undefined);
     if (warning) console.warn(warning);
     // Local workers bound the plan; each project takes its global lease only after admission.
     const startupAdmission = { runDeadline, onAdmissionWait: (span: { start: number; end: number }) => admissionIntervals.push(span) };
     const startInitialStack = concurrencyGate(tier === 'integration' ? capacity : Math.min(capacity, 3), startupAdmission);
-    const runs = await runQueuedProjects(projects, capacity, budget, (index, files) => runShard(
+    const runProject = (index: number, files: string[]) => runShard(
       tier, `${runId}-${prefix}${index + 1}`, files, flags, projectBudget(files), false, startInitialStack,
       integration?.[index]?.batches,
-    ));
+    );
+    const parallelRuns = await runQueuedProjects(schedule.parallel, capacity, budget, runProject);
+    // Reuse the admitted queue with one consumer; no second scheduler or lease owner.
+    const serialRuns = await runQueuedProjects(schedule.serial, 1, budget,
+      (index, files) => runProject(schedule.parallel.length + index, files));
+    const runs = [...parallelRuns, ...serialRuns];
     const candidates = runs.filter(run => !run.ok && !run.timedOut && run.record.stage === 'test'
       && run.record.files.length > 1)
       .flatMap(run => isolationCandidates(run.xml ?? '', tier)
@@ -1071,7 +1082,10 @@ async function runStackTier(tier: StackTier): Promise<void> {
       .filter(suite => !suite.file || !replaced.has(suite.file)).map(suite => suite.xml));
     for (const rerun of replaced.values()) suites.push(...junitSuites(rerun.xml ?? '').map(suite => suite.xml));
     const completed = reruns.filter((run): run is ShardRun => run !== undefined);
-    const elapsedMs = testWall(runs) + testWall(completed);
+    // Serial source selection and stack preparation occur between test commands.
+    // Their gaps must not spend the measured restore/operation wall.
+    const elapsedMs = testWall(parallelRuns) + serialRuns.reduce((total, run) => total + testWall([run]), 0)
+      + testWall(completed);
     const resetBlocked = new Set(runs.flatMap((run) => run.resetBlockedFiles ?? []));
     const finalResults = completeFileResults(
       mergeJUnit(suites, elapsedMs),

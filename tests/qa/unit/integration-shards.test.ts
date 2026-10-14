@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { planShards, planStackProjects, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
+import { existsSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { planShards, planStackProjects, serialRestoreDrillFiles, stackPlanBudgetWarning } from '../../../scripts/qa/core.ts';
+import { restoreDrillSchedule } from '../../../scripts/qa/preparation-selection.ts';
+import { ownerErasurePreparationOptions } from '../../../scripts/qa/retained-source.ts';
 import {
   integrationBudgetSummary,
   integrationOverBudgetFiles,
@@ -13,6 +17,46 @@ import { qaResourceClasses, queuedProjectsBudget } from '../../../scripts/qa/res
 
 const ordinaryBudgetMs = qaResourceClasses.ordinary.budgetMs;
 const planLimitMs = integrationPlanLimitMs(ordinaryBudgetMs);
+
+test('restore registration names executable files and selects singleton consumers in declared order', () => {
+  const root = resolve(import.meta.dir, '../../..');
+  expect(new Set(serialRestoreDrillFiles).size).toBe(serialRestoreDrillFiles.length);
+  for (const file of serialRestoreDrillFiles) expect(existsSync(resolve(root, file))).toBe(true);
+  for (const name of readdirSync(resolve(root, 'tests/qa/fault-recovery'))) {
+    const file = `tests/qa/fault-recovery/${name}`;
+    if (ownerErasurePreparationOptions(file)) expect(serialRestoreDrillFiles as readonly string[]).toContain(file);
+  }
+  const ordinary = ['tests/qa/fault-recovery/ordinary-a.test.ts', 'tests/qa/fault-recovery/ordinary-b.test.ts'];
+  // Reverse duration order so the plan cannot accidentally rely on longest-first packing.
+  const estimates = new Map([...serialRestoreDrillFiles, ...ordinary].map((file, index) => [file, index + 1]));
+  for (const slots of [1, 3, 6]) {
+    const schedule = restoreDrillSchedule(planStackProjects(estimates, slots, 'fault/recovery'), serialRestoreDrillFiles);
+    expect(schedule.serial).toEqual(serialRestoreDrillFiles.map(file => [file]));
+    expect(schedule.parallel.flat().sort()).toEqual([...ordinary].sort());
+    expect([...schedule.parallel, ...schedule.serial].flat().sort()).toEqual([...estimates.keys()].sort());
+  }
+  const partial = [serialRestoreDrillFiles[3], serialRestoreDrillFiles[0]];
+  expect(restoreDrillSchedule([partial], serialRestoreDrillFiles)).toEqual({
+    parallel: [], serial: [[serialRestoreDrillFiles[0]], [serialRestoreDrillFiles[3]]],
+  });
+});
+
+test('existing queue consumes scheduled restores one at a time with a fresh unchanged command budget', async () => {
+  const schedule = restoreDrillSchedule([[...serialRestoreDrillFiles].reverse()], serialRestoreDrillFiles);
+  const starts: string[] = [];
+  let active = 0;
+  const results = await runQueuedProjects(schedule.serial, 1, 360_000, async (index, files, budget) => {
+    expect(active++).toBe(0);
+    starts.push(files[0]!);
+    expect(index).toBe(starts.length - 1);
+    expect(budget).toBe(360_000);
+    await Promise.resolve();
+    active--;
+    return files[0];
+  });
+  expect(starts).toEqual([...serialRestoreDrillFiles]);
+  expect(results).toEqual(starts);
+});
 
 test('only shared ordinary integration stacks enter the warm pool', () => {
   const files = ['tests/qa/integration/shared-stack.test.ts'];

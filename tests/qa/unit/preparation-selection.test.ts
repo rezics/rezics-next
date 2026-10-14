@@ -1,8 +1,29 @@
 import { expect, test } from 'bun:test';
-import { exclusivePreparationWallMs, preparationTestFiles, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
+import { exclusivePreparationWallMs, preparationTestFiles, smallRecoveryFixtureConsumers, WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS } from '../../../scripts/qa/preparation-selection.ts';
 
 const restore = 'tests/qa/integration/work-profile-seed-checkpoints.test.ts';
 const ordinary = 'tests/qa/fault-recovery/access-restore.test.ts';
+const launch = 'tests/qa/fault-recovery/g-727-launch-drill.test.ts';
+const campaign = 'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts';
+
+test('retained fixture selection is independent for each consumer and never replaces supplied custody', () => {
+  expect(smallRecoveryFixtureConsumers([launch, campaign], {})).toEqual({ launch: true, erasure: true });
+  expect(smallRecoveryFixtureConsumers([launch], {})).toEqual({ launch: true, erasure: false });
+  expect(smallRecoveryFixtureConsumers([campaign], {})).toEqual({ launch: false, erasure: true });
+  expect(smallRecoveryFixtureConsumers([ordinary], {})).toEqual({ launch: false, erasure: false });
+  for (const name of ['G727_LAUNCH_FIXTURE', 'G727_LAUNCH_SOURCE_RUN_ID', 'G727_LAUNCH_PROFILE']) {
+    for (const value of ['', 'medium']) {
+      expect(smallRecoveryFixtureConsumers([launch, campaign], { [name]: value }))
+        .toEqual({ launch: false, erasure: true });
+    }
+  }
+  for (const name of ['ERASURE_CAMPAIGN_FIXTURE', 'ERASURE_CAMPAIGN_SOURCES', 'ERASURE_CAMPAIGN_COPY', 'ERASURE_CAMPAIGN_PROFILE']) {
+    for (const value of ['', 'medium']) {
+      expect(smallRecoveryFixtureConsumers([launch, campaign], { [name]: value }))
+        .toEqual({ launch: true, erasure: false });
+    }
+  }
+});
 
 test('retained seed preparation stays out of routine, directory and diagnostic selections', () => {
   expect(preparationTestFiles([ordinary, WORK_PROFILE_SEED_BUILD_FILE])).toEqual([ordinary]);

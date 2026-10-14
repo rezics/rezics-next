@@ -9,7 +9,7 @@ import { prepareFixture } from './prepare.ts';
 
 const usage = `Usage:
   task fixture:build -- --profile small|medium [--seed <seed>]
-  task fixture:build -- --prepare --profile small|medium [--seed <seed>] [--evidence <path>]
+  task fixture:build -- --prepare [--retained-only] --profile small|medium [--seed <seed>] [--evidence <path>]
   task fixture:restore -- --fixture <fixture-id> --run-id <fixture-target-id>
   task fixture:restore -- --from <load-source-id> --run-id <fixture-target-id>
   task fixture:prune [-- --apply]`;
@@ -32,12 +32,13 @@ const [command, ...args] = process.argv.slice(2);
 try {
   if (command === 'build') {
     const prepare = args[0] === '--prepare';
-    const values = options(prepare ? args.slice(1) : args, { profile: /^(small|medium)$/,
+    const retainedOnly = prepare && args[1] === '--retained-only';
+    const values = options(prepare ? args.slice(retainedOnly ? 2 : 1) : args, { profile: /^(small|medium)$/,
       seed: /^[a-z0-9][a-z0-9-]{0,39}$/, ...(prepare ? { evidence: /^[^\r\n]+$/ } : {}) });
     if (!values.profile || !Object.hasOwn(PROFILES, values.profile)) throw new Error(usage);
     if (prepare) {
       const evidence = await prepareFixture(values.profile as FixtureProfile,
-        checkedSeed(values.seed ?? DEFAULT_SEED));
+        checkedSeed(values.seed ?? DEFAULT_SEED), undefined, { retainedOnly });
       if (values.evidence) writeFileSync(values.evidence, `${JSON.stringify(evidence)}\n`, { mode: 0o600 });
       console.log(JSON.stringify(evidence));
     }

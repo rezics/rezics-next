@@ -1009,6 +1009,29 @@ export function planShards(estimates: ReadonlyMap<string, number>, count: number
 // writes. Run each against its own bootstrapped QA project.
 export const isolatedIntegrationFiles: ReadonlySet<string> = new Set(isolatedIntegrationFileList);
 
+/** Physical consumers share retained custody, but each owns an isolated copy.
+ * This order is independent of duration estimates and leaves admission unchanged. */
+export const serialRestoreDrillFiles = [
+  'tests/qa/fault-recovery/g-727-launch-drill.test.ts',
+  'tests/qa/fault-recovery/erasure-restore.test.ts',
+  'tests/qa/fault-recovery/erasure-restore-corruption.test.ts',
+  'tests/qa/fault-recovery/erasure-restore-release.test.ts',
+  'tests/qa/fault-recovery/erasure-campaign-qualification.test.ts',
+  'tests/qa/fault-recovery/erasure-campaign.test.ts',
+  'tests/qa/fault-recovery/comment-source-erasure.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-authority.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-closure.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-source-closure.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-transition.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-interruption.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-completion.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-production.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-later-admission.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-later-admission-interruption.test.ts',
+  'tests/qa/fault-recovery/owner-restore-erasure-later-admission-denials.test.ts',
+  'tests/qa/fault-recovery/second-host-format-upgrade.test.ts',
+] as const;
+
 export const isolatedFaultFiles = new Set([
   'tests/qa/fault-recovery/erasure-restore.test.ts',
   'tests/qa/fault-recovery/erasure-restore-release.test.ts',
