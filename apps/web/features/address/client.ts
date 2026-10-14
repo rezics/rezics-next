@@ -140,6 +140,8 @@ export async function readAddress(
   incoming?: Headers,
   viewer?: { token: string; actingSubject: string },
   fresh = false,
+  /** Story replay. Production omits this and keeps the request-cached server read. */
+  send?: typeof fetch,
 ): Promise<AddressRead> {
   let cacheKey: string | undefined;
   try {
@@ -176,7 +178,7 @@ export async function readAddress(
         cache: 'no-store',
         redirect: 'manual',
       },
-      { timeoutMs: SERVER_READ_LIMITS.metadata, deadlineAt: await serverDeadline(incoming) },
+      { timeoutMs: SERVER_READ_LIMITS.metadata, deadlineAt: await serverDeadline(incoming), fetch: send },
     );
     // Any fresh non-hit invalidates the old hit, including a permission change
     // or outage. Expired data may supply a validator but is never a fallback.

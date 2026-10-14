@@ -35,12 +35,12 @@ export interface Session {
 
 /** Main's discovery for the session (or an explicit token), or null when it
  * cannot answer; the session stays signed in either way. */
-export async function discoverActingContexts(accessToken?: string):
+export async function discoverActingContexts(accessToken?: string, fetcher?: typeof fetch):
   Promise<ActingContextDiscovery | null> {
   try {
     const token = accessToken ?? (await cookies()).get(ACCESS_COOKIE)?.value;
     if (!token) return null;
-    const main = mainApiWithToken(token);
+    const main = mainApiWithToken(token, { fetcher });
     const response = await main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } });
     return response.error ? null : response.data;
   } catch { return null; }
@@ -51,12 +51,12 @@ export const sessionDiscovery = cache(() => discoverActingContexts());
 
 /** Every Agent the person may act as, in the language of the page, or null
  * when Main cannot answer. Needs no publishing eligibility. */
-export async function discoverAgents(accessToken?: string, languages?: string):
+export async function discoverAgents(accessToken?: string, languages?: string, fetcher?: typeof fetch):
   Promise<AgentDiscovery | null> {
   try {
     const token = accessToken ?? (await cookies()).get(ACCESS_COOKIE)?.value;
     if (!token) return null;
-    const response = await mainApiWithToken(token).v1.me.agents.get({
+    const response = await mainApiWithToken(token, { fetcher }).v1.me.agents.get({
       query: languages ? { languages } : {} });
     return response.error ? null : response.data;
   } catch { return null; }
@@ -66,11 +66,11 @@ export async function discoverAgents(accessToken?: string, languages?: string):
 export const sessionAgents = cache(async () => discoverAgents(undefined, await requestLocale()));
 
 /** Main owns the selected Agent for this opaque web session. */
-export async function readMainSessionAgent(accessToken: string, sessionKey: string):
+export async function readMainSessionAgent(accessToken: string, sessionKey: string, fetcher?: typeof fetch):
   Promise<MainSessionAgentState | null> {
   if (!isSessionKey(sessionKey)) return null;
   try {
-    const response = await mainApiWithToken(accessToken).v1.me['session-agent'].get({
+    const response = await mainApiWithToken(accessToken, { fetcher }).v1.me['session-agent'].get({
       headers: { 'x-session-key': sessionKey } });
     return response.error ? null : response.data;
   } catch { return null; }

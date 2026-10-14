@@ -9,11 +9,14 @@ import { installedDigest, loadPackage } from '../../zones/official/index.ts';
 import { resolvePackage } from '../zones/package-source.ts';
 import { readingSelection, type ZoneData } from '../wiki/selection.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { browserMainApi } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
+import { operationOpen, parsePlatformAccess } from '../api/platform-access.ts';
+import { readAddress } from '../address/client.ts';
 import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import { signInPath } from '../auth/paths.ts';
 import LocalizedLink from '../shell/localized-link.tsx';
-import { sessionAgentState } from '../auth/session.ts';
+import { sessionAgentState, sessionReadSubject, type MainSessionAgentState } from '../auth/session.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
 import { ZONE_NONCE_HEADER } from '../zones/csp.ts';
@@ -36,23 +39,23 @@ import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from '../z
 import { mainExecution, zoneImage, zoneText } from './adapt.ts';
 import { RealmBanPanel } from '../realm-appeal/panel.tsx';
 import { readOwnRealmBan } from '../realm-appeal/read.ts';
-import type { BanReading } from '../realm-appeal/reading.ts';
+import { readingFromBanResponse, type BanReading } from '../realm-appeal/reading.ts';
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
 import { readCompletePresentation, readRealmZone, type RealmResolution, resolveRealm } from './read.ts';
 import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
-import { type RealmTab, realmHref } from './route.ts';
-import { siteHref } from './route.ts';
+import { idOf, type RealmTab, realmHref, siteHref } from './route.ts';
 import { surfaceText } from '../address/messages.ts';
 import type { RealmHeader } from './types.ts';
 import { addressKey, spaceHref } from '../address/path.ts';
 import { PrivateSpaceJoinPage } from '../space-access/join-page.tsx';
 import { UnlistedSpaceNotice } from '../space-access/unlisted-notice.tsx';
-import { privateDiscovery, realmDiscovery } from '../address/space-read.ts';
+import { privateDiscovery, readSpacePage, realmDiscovery } from '../address/space-read.ts';
 import type { PublishedHomeContext } from '../zone-editor/home-modules.ts';
-import type { JoinPage } from '../manage/settings-api.ts';
+import type { JoinPage, SpaceAccessApi } from '../manage/settings-api.ts';
+import type { MainClient } from '../discover/types.ts';
 
 type Search = Record<string, string | string[] | undefined>;
 type Resolved = Extract<RealmResolution, { kind: 'realm' }>;
@@ -116,17 +119,105 @@ const realmReader = cache(async () => {
   };
 });
 
-export async function privateJoinPage(page: JoinPage, locale: UiLocale, here: string) {
-  const reader = await realmReader();
+export async function privateJoinPage(page: JoinPage, locale: UiLocale, here: string, transport?: {
+  /** Story replay. Production omits this and reads the request-cached session. */
+  actingSubject?: string | null;
+  api?: SpaceAccessApi;
+}) {
+  const actingSubject = transport ? transport.actingSubject ?? null : (await realmReader()).actingSubject ?? null;
   return (
     <PrivateSpaceJoinPage
       page={{ ...page, discovery: privateDiscovery(page.discovery) }}
       discoveryMetadata={false}
       locale={locale}
-      actingSubject={reader.actingSubject ?? null}
+      actingSubject={actingSubject}
       signInHref={signInPath(localizedPath(here, locale))}
+      {...transport ? { api: transport.api, persist: false } : {}}
     />
   );
+}
+
+/**
+ * Story replay for `loadRealmView`. Production omits it and keeps `resolveRealm`
+ * plus the request-cached reader. `resolveRealm` does not accept a reader, so
+ * this host follows that reader's order: the address, the anonymous header,
+ * the session Person, then `readSpacePage`.
+ */
+export interface RealmReplay {
+  fetch: typeof fetch;
+  read: (path: string, personal?: boolean) => Promise<Response>;
+  personal: MainClient;
+  origin: string;
+  /** False for the signed-out landing, which has no session read. */
+  signedIn: boolean;
+  token?: string;
+  languages?: string;
+}
+
+type RealmReader = Awaited<ReturnType<typeof realmReader>>;
+
+async function replaySubject(replay: RealmReplay): Promise<string | null> {
+  const response = await replay.read('/v1/me/session-agent', true);
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new Error(`Recorded session agent failed: ${response.status}`);
+  }
+  return sessionReadSubject(await response.json() as MainSessionAgentState);
+}
+
+async function replayBan(realm: string, actingSubject: string, read: RealmReplay['read']): Promise<BanReading | null> {
+  const access = await read('/v1/me/platform-access', true);
+  const held = access.ok ? parsePlatformAccess(await access.json()) : null;
+  if (!access.ok) await access.body?.cancel();
+  if (!operationOpen('getV1RealmsByRealmMember-ban', held)) return null;
+  const response = await read(
+    `/v1/realms/${realm}/member-ban?actingSubject=${encodeURIComponent(actingSubject)}`, true);
+  if (response.status !== 200) {
+    await response.body?.cancel();
+    return null;
+  }
+  return readingFromBanResponse(response.status, await response.json());
+}
+
+/** The page's resolution, using the same readers production calls. */
+async function replayRealm(ref: string, locale: UiLocale, replay: RealmReplay): Promise<RealmResolution> {
+  const languages = replay.languages ?? locale;
+  if (!replay.signedIn) {
+    const page = await readSpacePage(ref, languages, { read: replay.read, origin: replay.origin });
+    if (page.kind !== 'realm') return page;
+    return { kind: 'realm', ref, realm: idOf(page.header.id) ?? ref, header: page.header, zone: null };
+  }
+  const address = await readAddress({ scope: 'space', key: ref }, languages, replay.origin, undefined, undefined, true, replay.fetch);
+  if (address.kind !== 'resolved' && address.kind !== 'missing') {
+    return address.kind === 'unavailable'
+      ? { kind: 'unavailable', ...(address.failure ? { failure: address.failure } : {}) }
+      : { kind: 'missing' };
+  }
+  const realm = address.kind === 'resolved' ? idOf(address.data.capabilities?.realm ?? '') : idOf(`https://rezics.com/id/${ref}`);
+  if (!realm) return { kind: 'missing' };
+  if (address.kind === 'resolved') {
+    const anonymous = browserMainApi(replay.origin, { anonymous: true, fetcher: replay.fetch });
+    const header = await anonymous.v1.realms({ realm }).get({ query: {} });
+    if (header.data?.profile === 'realm-read-v1' && header.data.id === `https://rezics.com/id/${realm}`) {
+      const zoneId = idOf(address.data.capabilities?.zone ?? '');
+      return { kind: 'realm', ref: addressKey(address.data.canonical), realm, header: header.data,
+        zone: zoneId ? { id: zoneId, segment: null } : null };
+    }
+    const status = header.error?.status ?? header.status ?? 0;
+    if (![401, 403, 404].includes(status)) return { kind: 'unavailable' };
+  }
+  const actingSubject = await replaySubject(replay) ?? undefined;
+  const page = await readSpacePage(ref, languages, {
+    read: replay.read, origin: replay.origin, token: replay.token, actingSubject,
+    ...(address.kind === 'resolved' ? { address: address.data } : {}),
+  });
+  if (page.kind !== 'realm') return page;
+  const zoneId = address.kind === 'resolved' ? idOf(address.data.capabilities?.zone ?? '') : null;
+  return {
+    kind: 'realm', ref: address.kind === 'resolved' ? addressKey(address.data.canonical) : ref,
+    realm: idOf(page.header.id) ?? realm, header: page.header,
+    zone: zoneId ? { id: zoneId, segment: null } : null,
+  };
 }
 
 /**
@@ -140,18 +231,32 @@ export async function loadRealmView(
   locale: UiLocale,
   search: Search,
   surface: 'community' | 'site' = 'community',
+  replay?: RealmReplay,
 ): Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
+  const played = replay ? await replayRealm(ref, locale, replay) : null;
+  if (played && played.kind !== 'realm') return played;
+  const actingSubject = replay?.signedIn ? await replaySubject(replay) : null;
+  if (replay?.signedIn && actingSubject) {
+    const preferences = await replay.read(`/v1/me/person-preferences?actingSubject=${encodeURIComponent(actingSubject)}`, true);
+    await preferences.body?.cancel();
+  }
   const [resolved, messages, zoneMessages, jar, reader] = await Promise.all([
-    resolveRealm(ref, locale, surface),
+    played ?? resolveRealm(ref, locale, surface),
     getMessages('realm', locale),
     getMessages('zones', locale),
-    cookies(),
-    realmReader(),
+    replay ? null : cookies(),
+    replay ? {
+      signedIn: replay.signedIn,
+      actingSubject: actingSubject ?? undefined,
+      personal: replay.personal,
+      avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
+    } satisfies RealmReader : realmReader(),
   ]);
   if (resolved.kind !== 'realm') return resolved;
   let realm = resolved;
   // A Realm entry can lack Zone capability; its attachment supplies the site address.
-  if (surface === 'community' || !realm.zone) {
+  // Story replay already resolved the Realm from its recorded reads, so this host read stays on the production path.
+  if (!replay && (surface === 'community' || !realm.zone)) {
     const attached = await readRealmZone(realm.realm);
     if (attached.ok) {
       const zoneId = attached.data.zone.slice(-36);
@@ -168,10 +273,14 @@ export async function loadRealmView(
   }
   const [read, membership, ban] = await Promise.all([
     surface === 'site' && realm.zone ? readCompletePresentation(realm.zone.id) : null,
-    reader.actingSubject
-      ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
-      : null,
-    reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
+    replay
+      ? reader.actingSubject ? readMembership(replay.personal, realm.header.id, reader.actingSubject) : null
+      : reader.actingSubject
+        ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
+        : null,
+    replay
+      ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay.read) : null
+      : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {
     if (read && !read.ok && read.failure === 'missing') return { kind: 'missing' };
@@ -197,7 +306,7 @@ export async function loadRealmView(
       }
     : defaultPresentation(zoneMessages);
   const slideMedia = read?.ok ? read.data.slideMedia : [];
-  const lookEnabled = zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value);
+  const lookEnabled = jar ? zoneLookEnabled(jar.get(ZONE_LOOK_COOKIE)?.value) : false;
   const main = read?.ok ? mainExecution(read.data) : null;
   const slug = read?.ok ? read.data.official : null;
   const approval = {
