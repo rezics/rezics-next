@@ -196,28 +196,38 @@ test('G828: title queries use adoption order, describe the fallback, and travers
   expect((await readZoneBrowse(data.make(), realm, { q: 'S' })).items).toHaveLength(20);
 });
 
-test('an incomplete projection cannot admit a traversal of all 65 eligible Works', async () => {
+test('an incomplete projection reports a lower bound without admitting a traversal of all 65 eligible Works', async () => {
   const data = fixture(65), session = data.make();
   session.deps.zoneBrowse!.current = () => false;
-  await expect(readZoneBrowse(session, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+  // A first read declares lag as a lower bound, rather than a 503 or an exact empty inventory.
+  const page = await readZoneBrowse(session, realm, {});
+  expect(page).toMatchObject({ items: [], nextCursor: null, matches: { value: 0, kind: 'lower-bound' },
+    window: { scanned: 0, complete: false }, sourcePosition: { dataEpoch: 'epoch', sequence: '10000' } });
 });
 
 test('projection coverage lost during hydration cannot publish a continuation', async () => {
   const data = fixture(65), session = data.make();
   let probes = 0;
   session.deps.zoneBrowse!.current = () => ++probes === 1;
-  await expect(readZoneBrowse(session, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+  // Coverage lost after hydration preserves disclosed items as a lower bound, without a cursor that could skip a missing prefix.
+  const page = await readZoneBrowse(session, realm, {});
+  expect(page.items.map(item => item.id)).toEqual(data.entries.slice(0, 20).map(entry => entry.work));
+  expect(page).toMatchObject({ nextCursor: null, matches: { value: 20, kind: 'lower-bound' },
+    window: { complete: false } });
   expect(probes).toBe(2);
 });
 
-test('G828: projection lag refuses reads until a complete traversal can resume', async () => {
+test('projection lag gives a lower bound and requires a continuation restart until traversal can resume', async () => {
   const data = fixture(30), first = data.make();
   first.deps.zoneBrowse!.current = () => false;
-  await expect(readZoneBrowse(first, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+  // Lagging first readers can inspect an incomplete lower bound without claiming an exact total.
+  expect(await readZoneBrowse(first, realm, {})).toMatchObject({ items: [], nextCursor: null,
+    matches: { value: 0, kind: 'lower-bound' }, window: { complete: false } });
   const fresh = await readZoneBrowse(data.make(), realm, {});
   const lagged = data.make(fresh.nextCursor!);
   lagged.deps.zoneBrowse!.current = () => false;
-  await expect(readZoneBrowse(lagged, realm, {})).rejects.toBeInstanceOf(WorkReadUnavailable);
+  // A continuation must restart at the current prefix; dependency lag is a moved basis, not a service outage.
+  await expect(readZoneBrowse(lagged, realm, {})).rejects.toBeInstanceOf(WorkReadExpired);
   const end = await readZoneBrowse(data.make(fresh.nextCursor!), realm, {});
   expect(end.items).toHaveLength(10);
   expect(end.matches.kind).toBe('exact');
