@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { personaSessions } from '../support/personas.ts';
 import { createRestoreFixtureTiming } from '../support/restore-fixture-timing.ts';
 import { publishClosureOriginals, type ClosureOriginal } from './outcomes/realm/closure-original-credit-setup.ts';
+import { prepareClosureZoneHome } from './outcomes/realm/closure-zone-home-setup.ts';
 
 type Credit = { id: string; agent: string; role: string };
 type RequestEvidence = {
@@ -14,7 +15,7 @@ type RequestEvidence = {
   answer: { status: number; body: string; etag: string | null };
 };
 
-test('Zone originals publish with their creation-supplied Person author credit', async () => {
+test('Zone originals retain native author credit and publish the prepared home identity', async () => {
   const started = performance.now();
   const directory = process.env.REZICS_QA_ARTIFACT_DIR ?? '.temp/closure-zone-original-credit';
   mkdirSync(directory, { recursive: true });
@@ -97,6 +98,48 @@ test('Zone originals publish with their creation-supplied Person author credit',
           expectedSelectionHead: null, selectionBasis: 'realm-manager-review', actingSubject: sessions.owner.actingSubject });
         expect(JSON.parse(selections[1]!.answer.body)).toMatchObject({ selection: original.selection });
       }
+    });
+    await timing.phase('independent-zone-home-publication', async () => {
+      const home = await prepareClosureZoneHome(sessions, originals[0]!);
+      const root = `/v1/zones/${sessions.zone.slice(-36)}`;
+      const configuration = requests.find(request => request.method === 'PUT'
+        && request.path === `${root}/configuration`)!;
+      const configurationReads = requests.filter(request => request.method === 'GET'
+        && request.path.startsWith(`${root}/configuration?`));
+      expect(configuration.body).toMatchObject({ prepareHomeDocument: true,
+        expectedHead: JSON.parse(configurationReads[0]!.answer.body).revision,
+        defaultRealm: sessions.realm, actingSubject: sessions.owner.actingSubject });
+      expect(JSON.parse(configurationReads[1]!.answer.body).configuration.homeDocument).toBe(home.homeDocument);
+      const saved = requests.find(request => request.method === 'POST' && request.path === '/v1/content-drafts')!;
+      expect(saved.body).toMatchObject({ resourceId: home.homeDocument,
+        variantId: home.variantId, expectedHead: null, actingSubject: sessions.owner.actingSubject });
+      const publication = requests.find(request => request.method === 'POST'
+        && request.path === `${root}/site-publications`)!;
+      expect(publication.answer.status).toBe(201);
+      expect(publication.body).toMatchObject({ routesRevision: home.mount.revision,
+        expectedHead: JSON.parse(configurationReads.at(-1)!.answer.body).revision,
+        navigationRevision: home.mount.revision, actingSubject: sessions.owner.actingSubject,
+        pages: [{ page: home.homeDocument, variantId: home.variantId,
+          revisionId: home.draft.revisionId, byteDigest: home.draft.byteDigest,
+          contentEpoch: home.draft.sourcePosition.dataEpoch }] });
+      expect(home.published).toMatchObject({ homeDocument: home.homeDocument,
+        routesRevision: home.mount.revision,
+        navigationRevision: home.mount.revision,
+        pages: [{ page: home.homeDocument, variantId: home.variantId, revisionId: home.draft.revisionId }] });
+      // The Zone home manifest has its own head; its selected page retains the Content revision.
+      expect(home.published.homeRevision).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+      const route = await sessions.visitor.main('GET', `${root}/routes?path=/`);
+      expect(route.status).toBe(200);
+      expect(await route.json()).toMatchObject({ realm: sessions.realm, page: {
+        reference: { resourceId: home.homeDocument, revisionId: home.draft.revisionId,
+          provenance: { author: sessions.owner.actingSubject, rightsBasis: 'original-contribution' } },
+      } });
+      const revision = await sessions.visitor.main('GET', `/v1/content-revisions/${home.draft.revisionId}`);
+      expect(revision.status).toBe(200);
+      expect(JSON.stringify(await revision.json())).toContain('Independent original Zone home document');
+      const mounted = await sessions.visitor.main('GET', `${root}/routes?path=/original`);
+      expect(mounted.status).toBe(200);
+      expect(await mounted.json()).toMatchObject({ resource: { id: originals[0]!.work } });
     });
   } finally {
     record({ kind: 'path-timing', preparationSeconds: sessions.elapsedSeconds,

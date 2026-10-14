@@ -1,8 +1,8 @@
 import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
-import { fromPlainText } from '@rezics/document';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-zone-discussion-entry-and-modules.ts';
 import { publishClosureOriginals } from './closure-original-credit-setup.ts';
+import { prepareClosureZoneHome } from './closure-zone-home-setup.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
@@ -77,48 +77,9 @@ afterAll(async () => { await sessions?.close(); });
 
 let homeRevision: string;
 async function prepareSurface() {
-  const owner = sessions.owner;
+  const home = await prepareClosureZoneHome(sessions, publications[0]!);
+  homeRevision = home.draft.revisionId;
   const root = `/v1/zones/${short(sessions.zone)}`;
-  const config = await answer<{ revision: string }>(owner.main('GET', `${root}/configuration?${acting(owner)}`));
-  await answer(owner.main('PUT', `${root}/configuration`, {
-    actingSubject: owner.actingSubject, expectedHead: config.revision, defaultRealm: sessions.realm,
-    presentation: {
-      profile: 'zone-presentation-v2', preset: 'clean',
-      tokens: {
-        colorScheme: 'system', accent: '#2563eb', density: 'comfortable',
-        cardRadius: 'md', headingFontScale: 'md', surfaceTint: 'none',
-        fontPairing: 'sans', pageSurface: 'flat', coverStyle: 'portrait', titleEffect: 'plain',
-      },
-      navigation: [], slides: [], modules: [{
-      id: 'latest', type: 'shelf', title: 'Original Realm adoptions',
-      source: { kind: 'query-block', block: 'new-adoptions' },
-      }],
-    },
-  }));
-  const navigation = await answer<{ revision: string }>(owner.main('GET', `${root}?${acting(owner)}`));
-  const mount = await answer<{ revision: string }>(owner.main('POST', `${root}/mounts`, {
-    expectedHead: navigation.revision, target: publications[0]!.work, routeSegment: 'original',
-    disclosure: 'public', actingSubject: owner.actingSubject,
-  }));
-  const variantId = `urn:rezics:variant:${randomUUID()}`;
-  const draft = await answer<{ revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }>(
-    owner.main('POST', '/v1/content-drafts', {
-      profile: 'content-text-v1', resourceId: sessions.zone, variantId, expectedHead: null,
-      document: fromPlainText('Independent original Zone home document', 'blocks'),
-      language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr',
-      actingSubject: owner.actingSubject,
-    }), 201,
-  );
-  homeRevision = draft.revisionId;
-  const current = await answer<{ revision: string }>(owner.main('GET', `${root}/configuration?${acting(owner)}`));
-  // Zone site publication has no rights-basis input; this fixture authors its
-  // own home document and does not infer an imported license.
-  await answer(owner.main('POST', `${root}/site-publications`, {
-    routesRevision: mount.revision, navigationRevision: mount.revision,
-    expectedHead: current.revision, actingSubject: owner.actingSubject,
-    pages: [{ page: sessions.zone, variantId, revisionId: draft.revisionId,
-      byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }],
-  }), 201);
   const baseline = await answer<{ realm: string | null; moduleData: { sources: { state: string }[] }[] }>(
     sessions.visitor.main('GET', `${root}/presentation`),
   );
