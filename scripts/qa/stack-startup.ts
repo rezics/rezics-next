@@ -1,7 +1,11 @@
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { qaMemoryDeadline } from './memory-admission.ts';
-import { commandAsync } from './core.ts';
+import { commandAsync, goalSlotDirectory } from './core.ts';
 import { preserveReapEnvironment } from './container-reaper.ts';
+import { readdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { processAncestors } from './process/identity.ts';
+import { directoryLeaseHeld, readDirectoryLease } from './process/lease.ts';
 
 const PREPARE_BUDGET_MS = 60_000;
 
@@ -51,18 +55,42 @@ export function qaStartupTestTimeout(activeMs: number, env: NodeJS.ProcessEnv = 
 export async function runQaAdmissionChildAsync(root: string, program: string, args: string[],
   workTimeout: number, env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
   now: () => number = Date.now) {
-  const context = startupChildContext(env, workTimeout, now());
+  const context = startupChildContext(root, env, workTimeout, now());
   const result = await commandAsync(root, program, args, workTimeout, context.env,
     onOutputLine, { runDeadline: context.deadline, now });
   return { ...result, status: result.ok ? 0 : 1,
     error: result.timedOut ? new Error('QA admission child timed out') : undefined };
 }
 
-function startupChildContext(env: NodeJS.ProcessEnv, workTimeout: number, started: number) {
+/** A runner snapshots its environment before obtaining its lifetime lease. A
+ * later child may therefore inherit GOAL_IN_SLOT=0 despite its parent's lease.
+ * Consult the existing lease owner, as acquireQaSlots does, before requesting
+ * another acknowledgement through the provisional startup mailbox. */
+export function startupChildEnvironment(env: NodeJS.ProcessEnv, pid = process.pid): NodeJS.ProcessEnv {
+  const directory = env.GOAL_QA_SLOT_DIRECTORY;
+  if (!directory) return env;
+  let slots: string[];
+  try { slots = readdirSync(directory).filter(name => /^\d+$/.test(name)); }
+  catch { return env; }
+  const lineage = new Set(processAncestors(pid));
+  const inherited = slots.some(name => {
+    const path = join(directory, name);
+    const lease = readDirectoryLease(path);
+    return lease && !lease.invalid && lineage.has(lease.pid) && directoryLeaseHeld(path);
+  });
+  if (!inherited) return env;
+  const selected: NodeJS.ProcessEnv = { ...env, GOAL_IN_SLOT: '1' };
+  delete selected.REZICS_QA_STARTUP_SLOT_GATE;
+  return selected;
+}
+
+function startupChildContext(root: string, env: NodeJS.ProcessEnv, workTimeout: number, started: number) {
   if (env.REZICS_STACK_PROFILE !== undefined && env.REZICS_STACK_PROFILE !== 'qa')
     return { env, timeout: workTimeout, deadline: undefined };
   const deadline = qaMemoryDeadline(env);
-  return { env: { ...env, REZICS_QA_MEMORY_DEADLINE: String(deadline), REZICS_QA_MEMORY_EVENTS: '1' },
+  const inherited = startupChildEnvironment({ ...env,
+    GOAL_QA_SLOT_DIRECTORY: env.GOAL_QA_SLOT_DIRECTORY ?? goalSlotDirectory(root) });
+  return { env: { ...inherited, REZICS_QA_MEMORY_DEADLINE: String(deadline), REZICS_QA_MEMORY_EVENTS: '1' },
     timeout: Math.max(1, deadline - started) + workTimeout, deadline };
 }
 
@@ -70,7 +98,7 @@ function startupChildContext(env: NodeJS.ProcessEnv, workTimeout: number, starte
 export async function runQaStartupChildAsync(root: string, args: string[], workTimeout: number,
   env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
   now: () => number = Date.now) {
-  const context = startupChildContext(env, workTimeout, now());
+  const context = startupChildContext(root, env, workTimeout, now());
   // Clone's work budget also covers copying. Pause it for admission rather than
   // enlarging it to the run deadline; stack:up bounds readiness in its child.
   const cloneDeadline = args[0] === 'stack:clone' ? context.deadline : undefined;

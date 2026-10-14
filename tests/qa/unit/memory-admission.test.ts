@@ -10,6 +10,9 @@ import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
 import { processStartTime } from '../../../scripts/qa/process/identity.ts';
+import { tryAcquireDirectoryLease } from '../../../scripts/qa/process/lease.ts';
+import { startupChildEnvironment } from '../../../scripts/qa/stack-startup.ts';
+import { qaWaitStatusLines } from '../../../scripts/goal/qa-slots.ts';
 import { admissionCpuPressure, GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup as withMemoryStartupImpl, withQaStackStartup,
   type MemoryReading, type MemoryWaitOptions, type StartupMemoryOptions } from '../../../scripts/qa/memory-admission.ts';
@@ -52,9 +55,16 @@ writeFileSync(loadFixture, '0.00 0.00 0.00 1/1 1\n');
 afterAll(() => rmSync(loadFixture, { force: true }));
 
 const readingDirectories: string[] = [];
+const readingStates: Database[] = [];
 afterEach(() => {
+  for (const state of readingStates.splice(0)) state.close(true);
   for (const dir of readingDirectories.splice(0)) rmSync(dir, { recursive: true, force: true });
 });
+function fixtureMemoryState(): Database {
+  const state = new Database(':memory:');
+  readingStates.push(state);
+  return state;
+}
 function waitForMemory(need: Parameters<typeof waitForMemoryImpl>[0], options: MemoryWaitOptions) {
   const dir = mkdtempSync(join(scratch, 'qa-reading-'));
   readingDirectories.push(dir);
@@ -282,14 +292,16 @@ for (const fails of [false, true]) {
     const dir = mkdtempSync(join(scratch, 'qa-reading-sharing-'));
     const script = join(dir, 'wait.ts');
     const defaultStateFile = join(dir, 'host.sqlite');
+    const clockFile = join(dir, 'clock');
+    writeFileSync(clockFile, '1000');
     writeFileSync(defaultStateFile, 'Host state sentinel');
     writeFileSync(script, `
       import { waitForMemory } from ${JSON.stringify(join(root, 'scripts/qa/memory-admission.ts'))};
-      import { appendFileSync } from 'node:fs';
+      import { appendFileSync, readFileSync } from 'node:fs';
       await waitForMemory(${JSON.stringify(need)}, {
         env: ${JSON.stringify(qaEnv)}, lockFile: ${JSON.stringify(join(dir, 'state.sqlite'))},
         defaultStateFile: ${JSON.stringify(defaultStateFile)},
-        deadline: 5000, now: () => 1000, readingMaxAgeMs: 3000,
+        deadline: 5000, now: () => Number(readFileSync(${JSON.stringify(clockFile)}, 'utf8')), readingMaxAgeMs: 3000,
         read: async () => {
           appendFileSync(${JSON.stringify(join(dir, 'readings'))}, 'reading\\n');
           await Bun.sleep(100);
@@ -314,9 +326,8 @@ for (const fails of [false, true]) {
     try {
       await wave(10);
       expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(1);
-      const db = new Database(join(dir, 'state.sqlite'));
-      try { db.query('UPDATE memory_readings SET finished_at = ?').run(1000 - 3000); }
-      finally { db.close(true); }
+      // Scheduling never expires the cache; the next wave observes its exact boundary.
+      writeFileSync(clockFile, '4000');
       await wave(2);
       expect(readFileSync(join(dir, 'readings'), 'utf8').trim().split('\n')).toHaveLength(2);
       expect(readFileSync(defaultStateFile, 'utf8')).toBe('Host state sentinel');
@@ -325,6 +336,45 @@ for (const fails of [false, true]) {
       rmSync(dir, { recursive: true, force: true });
     }
   }, 10_000);
+}
+
+for (const fails of [false, true]) {
+test(`a rolled-back measurement claim waits for SQLite readers before a ${fails ? 'failed' : 'successful'} measurement`, async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-reading-commit-'));
+  readingDirectories.push(directory);
+  const lockFile = join(directory, 'state.sqlite');
+  let now = 0, reads = 0, locked = false, readWhileLocked = false;
+  const options = { env: qaEnv, lockFile, deadline: 1000, readingMaxAgeMs: 0,
+    now: () => now, announce: () => {} };
+  await waitForMemoryImpl(need, { ...options, read: async () => plenty });
+  const competitor = new Database(lockFile);
+  try {
+    competitor.exec('BEGIN');
+    competitor.query('SELECT * FROM memory_readings').all();
+    locked = true;
+    const lines: string[] = [];
+    await expect(waitForMemoryImpl(need, { ...options,
+      read: async () => {
+        reads++;
+        readWhileLocked ||= locked;
+        if (fails) throw new Error('Docker measurement unavailable');
+        return { ...plenty, vmUsed: plenty.vmTotal };
+      },
+      sleep: async ms => {
+        if (locked) { competitor.exec('ROLLBACK'); locked = false; }
+        now += ms;
+      },
+      announce: message => { lines.push(message); throw new Error('observed'); },
+    })).rejects.toThrow('observed');
+    expect(readWhileLocked).toBe(false);
+    expect(reads).toBe(1);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain(fails ? 'measurement failed: Docker measurement unavailable' : 'free 0.00 GiB');
+  } finally {
+    if (locked) competitor.exec('ROLLBACK');
+    competitor.close(true);
+  }
+});
 }
 
 test('a dead measuring process leaves its turn to the next waiter', async () => {
@@ -766,6 +816,50 @@ for (const outcome of ['retry', 'failed', 'late'] as const) {
   });
 }
 
+test('sixteen lifetime-slot holders advance past an older startup awaiting its slot', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-slot-order-'));
+  readingDirectories.push(directory);
+  const gate = join(directory, 'gate.json');
+  writeFileSync(gate, JSON.stringify({ token: 'waiting-for-lifetime-slot', status: 'pending' }));
+  const blocked = deferred<void>(), releaseHead = deferred<void>();
+  let now = 0, stop = false;
+  const options = { env: { ...qaEnv, GOAL_QA_SLOT_DIRECTORY: join(directory, 'qa-slots') },
+    state: fixtureMemoryState(), deadline: 100, now: () => now, read: async () => plenty, announce: () => {} };
+  const head = withMemoryStartupImpl(need, { ...options,
+    env: { ...options.env, GOAL_IN_SLOT: '0', REZICS_QA_STARTUP_SLOT_GATE: gate },
+    sleep: async () => { blocked.resolve(); await releaseHead.promise; },
+  }, () => { throw new Error('the pending slot must not start'); });
+  const headResult = head.catch(error => error as Error);
+  await blocked.promise;
+  const sleeps: ReturnType<typeof deferred<void>>[] = [];
+  const starts: number[] = [];
+  const holders = Array.from({ length: 16 }, (_, id) => withMemoryStartupImpl(need, { ...options,
+    env: { ...options.env, GOAL_IN_SLOT: '1' },
+    sleep: async () => {
+      if (stop) throw new Error('test cleanup');
+      const wake = deferred<void>(); sleeps.push(wake); await wake.promise;
+      if (stop) throw new Error('test cleanup');
+    },
+  }, () => { starts.push(id); }).catch(error => error as Error));
+  try {
+    // Advance only the cooperative waiters; elapsed host time cannot grant the head a slot.
+    for (let round = 0; round < 200 && starts.length < 16; round++) {
+      if (sleeps.length === 16 && starts.length === 0) break;
+      for (const wake of sleeps.splice(0)) wake.resolve();
+      await Promise.resolve();
+    }
+    expect(starts).toHaveLength(16);
+    expect(new Set(starts).size).toBe(16);
+    expect(JSON.parse(readFileSync(gate, 'utf8')).status).toBe('pending');
+  } finally {
+    stop = true;
+    for (const wake of sleeps.splice(0)) wake.resolve();
+    now = 100; releaseHead.resolve();
+    await Promise.all(holders);
+    expect((await headResult).message).toContain('deadline reached');
+  }
+});
+
 test('a startup ignores another process grant with the same sequence', async () => {
   const directory = mkdtempSync(join(scratch, 'qa-startup-foreign-grant-'));
   const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
@@ -796,6 +890,51 @@ test('a startup ignores another process grant with the same sequence', async () 
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('a younger startup requests no lifetime lease while an older ready head waits for processor pressure', async () => {
+  const scenario = pressureScenario();
+  const gate = join(scenario.directory, 'gate.json');
+  writeFileSync(gate, JSON.stringify({ token: 'younger-lifetime-slot', status: 'pending' }));
+  const olderWaiting = deferred<void>(), releaseOlder = deferred<void>();
+  const youngerWaiting = deferred<void>(), releaseYounger = deferred<void>();
+  let requests = 0, olderStarted = false, requestedBeforeOlder = false, firstSleep = true;
+  const older = withMemoryStartupImpl(need, { ...scenario.options,
+    sleep: async ms => { olderWaiting.resolve(); await releaseOlder.promise; scenario.advance(ms); },
+  }, () => { olderStarted = true; });
+  const olderResult = older.catch(error => error as Error);
+  await olderWaiting.promise;
+  const younger = withMemoryStartupImpl(need, { ...scenario.options,
+    env: { ...scenario.options.env, GOAL_IN_SLOT: '0', REZICS_QA_STARTUP_SLOT_GATE: gate },
+    announce: message => {
+      const match = /^QA_STARTUP_SLOT_READY (\S+) (\S+) (\d+)$/.exec(message);
+      if (!match) return;
+      requests++;
+      requestedBeforeOlder ||= !olderStarted;
+      writeFileSync(gate, JSON.stringify({ token: match[1], requester: match[2],
+        sequence: Number(match[3]), status: 'granted' }));
+    },
+    sleep: async ms => {
+      if (firstSleep) { firstSleep = false; youngerWaiting.resolve(); await releaseYounger.promise; }
+      scenario.advance(ms);
+    },
+  }, () => {});
+  const youngerResult = younger.catch(error => error as Error);
+  try {
+    await youngerWaiting.promise;
+    expect(requests).toBe(0);
+    expect(JSON.parse(readFileSync(gate, 'utf8')).status).toBe('pending');
+    scenario.setPressure(0); releaseOlder.resolve();
+    expect(await olderResult).toBeUndefined();
+    releaseYounger.resolve();
+    expect(await youngerResult).toBeUndefined();
+    expect(requests).toBe(1);
+    expect(requestedBeforeOlder).toBe(false);
+  } finally {
+    scenario.setPressure(0);
+    releaseOlder.resolve(); releaseYounger.resolve();
+    await Promise.all([olderResult, youngerResult]);
+  }
+});
+
 test('a startup requests a new acknowledgement when a sibling overwrites its slot reply', async () => {
   const directory = mkdtempSync(join(scratch, 'qa-startup-overwritten-grant-'));
   const path = join(directory, 'gate.json'), lockFile = join(directory, 'mutex.sqlite');
@@ -822,6 +961,33 @@ test('a startup requests a new acknowledgement when a sibling overwrites its slo
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
 
+test('startup children inherit an actual parent lifetime lease despite a stale slot flag', async () => {
+  const directory = mkdtempSync(join(scratch, 'qa-startup-inherited-slot-'));
+  readingDirectories.push(directory);
+  const slots = join(directory, 'qa-slots');
+  mkdirSync(slots);
+  const env = { ...qaEnv, GOAL_QA_SLOT_DIRECTORY: slots, GOAL_IN_SLOT: '0',
+    REZICS_QA_STARTUP_SLOT_GATE: join(directory, 'provisional-gate.json') };
+  const child = Bun.spawn(['bun', '-e', 'setInterval(() => {}, 1000)'], { stdout: 'ignore', stderr: 'ignore' });
+  const parentLease = tryAcquireDirectoryLease(join(slots, '0'));
+  if (parentLease === 'held') throw new Error('private parent slot was already held');
+  try {
+    const inherited = startupChildEnvironment(env, child.pid);
+    expect(inherited.GOAL_IN_SLOT).toBe('1');
+    expect(inherited.REZICS_QA_STARTUP_SLOT_GATE).toBeUndefined();
+    expect(env.GOAL_IN_SLOT).toBe('0');
+    expect(env.REZICS_QA_STARTUP_SLOT_GATE).toBeDefined();
+    parentLease.release();
+    expect(startupChildEnvironment(env, child.pid)).toEqual(env);
+    const unrelatedLease = tryAcquireDirectoryLease(join(slots, '1'), { pid: child.pid });
+    if (unrelatedLease === 'held') throw new Error('private unrelated slot was already held');
+    try { expect(startupChildEnvironment(env)).toEqual(env); }
+    finally { unrelatedLease.release(); }
+  } finally {
+    parentLease.release(); child.kill(); await child.exited;
+  }
+});
+
 function loadScenario() {
   const directory = mkdtempSync(join(scratch, 'qa-load-admission-'));
   readingDirectories.push(directory);
@@ -833,7 +999,7 @@ function loadScenario() {
   const options: StartupMemoryOptions = {
     env: { ...qaEnv, GOAL_QA_SLOT_DIRECTORY: join(directory, 'qa-slots'), GOAL_QA_WAIT_DIR: waiters,
       GOAL_QA_COMMAND: 'integration run', REZICS_QA_LOADAVG_FILE: loadFile },
-    lockFile: join(directory, 'state.sqlite'), processors: 64, deadline: 100_000,
+    state: fixtureMemoryState(), processors: 64, deadline: 100_000,
     now: () => clock, pollMs: 1000, readingMaxAgeMs: 1,
     startTime: pid => String(pid),
     read: async () => plenty, announce: message => { lines.push(message); },
@@ -842,6 +1008,41 @@ function loadScenario() {
   return { directory, loadFile, waiters, lines, options, now: () => clock,
     advance: (ms: number) => { clock += ms; } };
 }
+
+test('an unchanged startup head is named at ten minutes despite a failed reading and dead status is removed', async () => {
+  const scenario = pressureScenario();
+  const slots = join(scenario.directory, 'qa-slots');
+  let sleeps = 0, failed = false;
+  await withMemoryStartupImpl(need, { ...scenario.options,
+    deadline: 700_000, pollMs: 599_999,
+    env: { ...scenario.options.env, GOAL_ID: 'head-goal' },
+    read: async () => {
+      if (scenario.now() === 599_999 && !failed) { failed = true; throw new Error('transient Docker read'); }
+      return plenty;
+    },
+    sleep: async ms => {
+      const files = readdirSync(scenario.waiters);
+      expect(files).toHaveLength(1);
+      const status = JSON.parse(readFileSync(join(scenario.waiters, files[0]!), 'utf8'));
+      expect(status.headSince).toBe(new Date(0).toISOString());
+      if (++sleeps === 1) {
+        const before = qaWaitStatusLines(slots, pid => pid === process.pid, () => 599_999);
+        expect(before).toHaveLength(1);
+        expect(before[0]).toContain(`QA waiting for load: Goal head-goal (pid ${process.pid}): integration run`);
+        expect(before[0]).not.toContain('startup queue head has not advanced');
+        scenario.advance(ms);
+      } else {
+        expect(status.message).toContain('measurement failed: transient Docker read');
+        const after = qaWaitStatusLines(slots, pid => pid === process.pid, () => 600_000);
+        expect(after[0]).toContain('startup queue head has not advanced for 10 minutes');
+        expect(qaWaitStatusLines(slots, () => false, () => 600_000)).toEqual([]);
+        expect(readdirSync(scenario.waiters)).toEqual([]);
+        scenario.advance(1); scenario.setPressure(0);
+      }
+    },
+  }, () => { expect(scenario.now()).toBe(600_000); });
+  expect(sleeps).toBe(2);
+});
 
 test('a stack waits above the processor load limit, publishes its command and admits below it', async () => {
   const scenario = loadScenario();
@@ -1000,11 +1201,12 @@ test('missing CPU pressure falls back to the existing load limit and explains th
 
 test('pressure waiting keeps load deadline admission and its final memory recheck', async () => {
   const scenario = pressureScenario();
-  await withMemoryStartupImpl(need, { ...scenario.options, deadline: 2500 },
+  const options = scenario.options;
+  await withMemoryStartupImpl(need, { ...options, deadline: 2500 },
     () => { expect(scenario.now()).toBe(2500); });
   expect(scenario.lines.at(-1)).toContain('load deadline reached, starting');
   let started = false;
-  await expect(withMemoryStartupImpl(need, { ...scenario.options, deadline: 5000,
+  await expect(withMemoryStartupImpl(need, { ...options, deadline: 5000,
     read: async () => scenario.now() < 5000 ? plenty : { ...plenty, hostAvailable: 0 },
   }, () => { started = true; })).rejects.toThrow('Memory admission deadline reached');
   expect(started).toBe(false);

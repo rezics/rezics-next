@@ -11,7 +11,7 @@ import { redactCommandOutput } from '../../../scripts/fixture/command-output.ts'
 import { failedSelection, nativeProofBatchDeadline, nativeProofDeclaration, nativeProofDeclarations, testArgs } from '../../../scripts/qa/acceptance.ts';
 import { NativeProofImageUnavailable, runPreparedNativeProofBatch } from '../../../scripts/qa/native-proof-execution.ts';
 import { fusekiBuildInputs } from '../../../scripts/dev/fuseki-image.ts';
-import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
+import { classify, erasureCampaignNativeTest, formatPlan, heldReplayNativeTest, inputSelectedNativeTests, nativeIntegerPreservationTest, nativeModuleCopies, nativeModuleCopyInputs, nativeUnionTest, needsGraph, planAffected, routeTest, typecheckWorkspaces, workNameScopeBasisTest, type GraphModule } from '../../../scripts/qa/affected.ts';
 import { mergeUnitFiles, ownerFilesFromPlan, unitFilesFromPlan } from '../../../scripts/goal/goalctl.ts';
 import { regressionBatchCommand, regressionRegistry } from '../../../scripts/goal/regress.ts';
 import { WORK_PROFILE_SEED_BUILD_FILE } from '../../../scripts/qa/preparation-selection.ts';
@@ -46,7 +46,9 @@ const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, 
   'services/main/tests/read-snapshot-native.test.ts',
 ].sort();
 const plan = (changed: string[], extra: Partial<Parameters<typeof planAffected>[0]> = {}) =>
-  planAffected({ base: 'abc', changed, graph, sources, exists: path => files.has(path), ...extra });
+  planAffected({ base: 'abc', changed, graph, sources, exists: path => files.has(path),
+    // This synthetic import graph has its own project; repository membership is proved below.
+    typecheckRoot: '.temp/affected-empty-root', ...extra });
 
 test('a changed module selects every test that reaches it and routes each to its tier', () => {
   const result = plan(['services/main/src/access.ts']);
@@ -823,6 +825,78 @@ test('affected selection defers retained seed preparation even when its own file
   expect(Object.values(result.tests).flat()).not.toContain(WORK_PROFILE_SEED_BUILD_FILE);
   expect(result.deferred).toContainEqual({ file: WORK_PROFILE_SEED_BUILD_FILE, reason });
 });
+
+for (const size of [128, 256]) {
+  test(`affected references traverse ${size} source files once for ${size} changed inputs`, () => {
+    let visits = 0;
+    class CountedSources extends Map<string, string> {
+      override *[Symbol.iterator](): MapIterator<[string, string]> {
+        for (const entry of super[Symbol.iterator]()) { visits++; yield entry; }
+      }
+    }
+    const changed = Array.from({ length: size }, (_, index) => `scripts/input-${index}.ts`);
+    const sourceFiles = changed.map((path, index) => [`tests/qa/unit/reference-${index}.test.ts`,
+      `Bun.spawn(['bun', '${path}']);`] as const);
+    const result = plan(changed, { graph: [], sources: new CountedSources(sourceFiles), exists: () => true });
+    expect(result.tests.unit).toEqual(sourceFiles.map(([file]) => file).sort());
+    expect(result.widened).toEqual([]);
+    expect(visits).toBe(size);
+  });
+}
+
+test('affected references retain overlapping directory, full-path and basename matches', () => {
+  const changed = ['tests/qa/fixtures/retained-input.json', 'scripts/input.ts'];
+  const result = plan(changed, { graph: [], exists: () => true,
+    sources: new Map([
+      ['tests/qa/unit/directory.test.ts', "readFileSync('tests/qa/fixtures/', name)"],
+      ['tests/qa/unit/path.test.ts', "readFileSync('tests/qa/fixtures/retained-input.json')"],
+      ['tests/qa/unit/name.test.ts', "readFileSync(join(root, 'retained-input.json'))"],
+      ['tests/qa/unit/process.test.ts', "Bun.spawn(['bun', 'scripts/input.ts'])"],
+      ['tests/qa/unit/unrelated.test.ts', "readFileSync('other.json')"],
+    ]) });
+  expect(result.tests.unit).toEqual(['directory', 'name', 'path', 'process']
+    .map(name => `tests/qa/unit/${name}.test.ts`));
+  expect(result.widened).toEqual([]);
+});
+
+for (const size of [64, 128]) {
+  test(`script membership follows ${size} transitive imports without loading library ASTs`, () => {
+    const directory = mkdtempSync(resolve('.temp/affected-membership-'));
+    try {
+      mkdirSync(join(directory, 'scripts'));
+      mkdirSync(join(directory, 'tests'));
+      const config = { compilerOptions: { moduleResolution: 'Bundler', module: 'ESNext',
+        noLib: true, types: [], baseUrl: '.', paths: { '@proof/*': ['tests/*'] } }, include: ['*.ts'] };
+      writeFileSync(join(directory, 'scripts/tsconfig.json'), JSON.stringify({ ...config,
+        compilerOptions: { ...config.compilerOptions, baseUrl: '..' } }));
+      writeFileSync(join(directory, 'scripts/entry.ts'),
+        'import type { Proof } from "@proof/proof-0.js"; export type Entry = Proof;');
+      for (let index = 0; index < size; index++) writeFileSync(join(directory, `tests/proof-${index}.ts`),
+        index + 1 < size ? `export type { Proof } from './proof-${index + 1}.js';` : 'export type Proof = string;');
+      writeFileSync(join(directory, 'tests/unrelated.ts'), 'export type Unrelated = string;');
+      const loaded = ts.readConfigFile(join(directory, 'scripts/tsconfig.json'), ts.sys.readFile);
+      const project = ts.parseJsonConfigFileContent(loaded.config, ts.sys, join(directory, 'scripts'));
+      const oracle = new Set(ts.createProgram(project.fileNames, project.options).getSourceFiles()
+        .map(source => resolve(source.fileName)));
+      const importGraph: GraphModule[] = [
+        { source: 'scripts/entry.ts', dependencies: [edge('tests/proof-0.ts')] },
+        ...Array.from({ length: size }, (_, index) => ({ source: `tests/proof-${index}.ts`,
+          dependencies: index + 1 < size ? [edge(`tests/proof-${index + 1}.ts`)] : [] })),
+      ];
+      const candidates = [`tests/proof-${size - 1}.ts`, 'tests/unrelated.ts'];
+      for (const file of candidates) {
+        const included = oracle.has(resolve(directory, file));
+        expect(typecheckWorkspaces([file], directory).includes('scripts')).toBe(included);
+        const result = plan([file], { graph: importGraph, sources: new Map(), exists: () => true,
+          typecheckRoot: directory });
+        expect(result.tasks.some(item => item.task === 'scripts:typecheck')).toBe(included);
+        const incomplete = plan([file], { graph: [], sources: new Map(), exists: () => true,
+          typecheckRoot: directory });
+        expect(incomplete.tasks.some(item => item.task === 'scripts:typecheck')).toBe(included);
+      }
+    } finally { rmSync(directory, { recursive: true, force: true }); }
+  });
+}
 
 test('affected selection defers the explicitly excluded live browser fixture', () => {
   expect(routeTest('apps/web/tests/g-944-shared-browser.test.ts')).toEqual({

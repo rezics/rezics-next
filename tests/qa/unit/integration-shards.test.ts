@@ -44,6 +44,9 @@ const measured = new Map([
   ['tests/qa/integration/g-836-old-address.test.ts', 2_898],
 ]);
 
+// This first plan also discovers raw-SPARQL assemblers across the fixed repository
+// inventory. Its cold crawl measured 18.75s with every processor loaded; allow
+// 60s for that one-time bounded preparation, independently of planner size.
 test('measured integration files plan into projects within 60% of the budget', () => {
   expect([...measured.values()].reduce((sum, ms) => sum + ms, 0)).toBeGreaterThan(planLimitMs);
   for (const slots of [1, 3]) {
@@ -56,7 +59,7 @@ test('measured integration files plan into projects within 60% of the budget', (
     }
   }
   expect(planIntegrationShards(measured, 1).length).toBeGreaterThan(1);
-});
+}, 60_000);
 
 test('integration files that need more projects than three slots stay within 60% of the budget', () => {
   const slots = 3;
@@ -72,6 +75,23 @@ test('integration files that need more projects than three slots stay within 60%
     .toBe(queuedProjectsBudget(classes.map((name) => qaResourceClasses[name].budgetMs), slots));
   expect(integrationTierWallMs(['large-tmpfs'], 1, 1)).toBe(qaResourceClasses['large-tmpfs'].budgetMs);
 });
+
+for (const size of [256, 512]) {
+  test(`integration planning visits estimates linearly for ${size} files that each need a project`, () => {
+    let reads = 0;
+    class CountedEstimates extends Map<string, number> {
+      override get(file: string): number | undefined { reads++; return super.get(file); }
+    }
+    const estimates = new CountedEstimates(Array.from({ length: size },
+      (_, index) => [`shared-${index}.test.ts`, 200_000] as const));
+    const plan = planIntegrationShards(estimates, 1);
+    expect(plan).toHaveLength(size);
+    expect(plan.flatMap(shard => shard.files).sort()).toEqual([...estimates.keys()].sort());
+    expect(plan.every(shard => shard.files.length === 1 && shard.resourceClass === 'ordinary')).toBe(true);
+    // Count work rather than CPU scheduling time: rebuilding each width is quadratic here.
+    expect(reads).toBeLessThanOrEqual(4 * size);
+  });
+}
 
 test('a file over 60% of the integration budget gets its own project and is named', () => {
   const file = 'tests/qa/integration/owner-cost.test.ts';

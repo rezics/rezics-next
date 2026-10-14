@@ -126,7 +126,9 @@ export function sharedLifecycleWaiters(lockDir = sharedLifecycleLock, alive: (pi
 }
 
 export interface QaWaitStatus {
-  pid: number; goal?: string; command: string; waitingFor: 'slot' | 'memory' | 'heavy'; message?: string; since: string;
+  pid: number; goal?: string; command: string; waitingFor: 'slot' | 'memory' | 'heavy' | 'load'; message?: string; since: string;
+  /** Set only while this waiter is the oldest fitting startup with a ready lease. */
+  headSince?: string;
 }
 
 function atomicJson(path: string, value: unknown): void {
@@ -135,7 +137,8 @@ function atomicJson(path: string, value: unknown): void {
   renameSync(temporary, path);
 }
 
-export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive: (pid: number) => boolean = pidAlive): string[] {
+export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive: (pid: number) => boolean = pidAlive,
+  now: () => number = Date.now): string[] {
   const directory = join(qaSlotsDir, 'waiters');
   let names: string[];
   try { names = readdirSync(directory); } catch { return []; }
@@ -146,7 +149,7 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
     try {
       const wait = JSON.parse(readFileSync(path, 'utf8')) as QaWaitStatus;
       if (!Number.isSafeInteger(wait.pid) || typeof wait.command !== 'string'
-        || !['slot', 'memory', 'heavy'].includes(wait.waitingFor) || !alive(wait.pid)) {
+        || !['slot', 'memory', 'heavy', 'load'].includes(wait.waitingFor) || !alive(wait.pid)) {
         rmSync(path, { force: true });
         continue;
       }
@@ -157,7 +160,9 @@ export function qaWaitStatusLines(qaSlotsDir = join(stateDir, 'qa-slots'), alive
   const waitingForSlot = new Set(waits.filter(entry => !entry.ticket && entry.wait.waitingFor === 'slot').map(entry => entry.wait.pid));
   return waits.filter(entry => !entry.ticket || !waitingForSlot.has(entry.wait.pid))
     .map(({ wait }) => `QA waiting for ${wait.waitingFor}: Goal ${wait.goal ?? '?'} (pid ${wait.pid}): ${wait.command}`
-      + `; since ${wait.since}` + (wait.message ? `; ${wait.message}` : '')).sort();
+      + `; since ${wait.since}` + (wait.message ? `; ${wait.message}` : '')
+      + (wait.headSince && now() - Date.parse(wait.headSince) >= 10 * 60_000
+        ? `; startup queue head has not advanced for ${Math.floor((now() - Date.parse(wait.headSince)) / 60_000)} minutes` : '')).sort();
 }
 
 /** Both dispatcher and harness use the existing waiter directory and share owner.

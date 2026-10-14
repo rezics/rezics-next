@@ -1,4 +1,4 @@
-import { isolatedIntegrationFiles, planShards } from './core.ts';
+import { isolatedIntegrationFiles } from './core.ts';
 import { commandOnlyIntegrationFiles, rawSparqlIntegrationFiles } from './isolated-integration-files.ts';
 import {
   integrationResourceClass,
@@ -74,23 +74,49 @@ function shardOf(files: string[], estimates: ReadonlyMap<string, number>): Integ
   };
 }
 
-/** Longest-processing-time assignment into `count` projects, widened until each
- * ordinary project is within 60% of its budget. A single file past that line
- * cannot be split, so it is returned alone. */
+/** Longest-processing-time assignment with a min-heap of project totals. Grow
+ * only when even the least loaded project cannot fit the next file. Sorting
+ * once and updating the heap avoids rebuilding every possible project width. */
 function packWithinLimit(
   estimates: ReadonlyMap<string, number>,
   count: number,
   limit: number,
 ): string[][] {
   if (!estimates.size) return [];
-  const sum = (files: readonly string[]) => files.reduce((total, file) => total + (estimates.get(file) ?? 0), 0);
-  let width = Math.max(1, Math.min(count, estimates.size));
-  let plan = planShards(estimates, width);
-  while (plan.some((files) => sum(files) > limit) && width < estimates.size) {
-    width += 1;
-    plan = planShards(estimates, width);
+  const projects = Array.from({ length: Math.max(1, Math.min(count, estimates.size)) },
+    (_, index) => ({ index, files: [] as string[], ms: 0 }));
+  type Project = typeof projects[number];
+  const heap = [...projects];
+  const before = (a: Project, b: Project) => a.ms < b.ms || (a.ms === b.ms && a.index < b.index);
+  const ordered = [...estimates].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  for (const [file, ms] of ordered) {
+    if (heap[0]!.ms + ms > limit) {
+      const project = { index: projects.length, files: [] as string[], ms: 0 };
+      projects.push(project);
+      heap.push(project);
+      let index = heap.length - 1;
+      while (index > 0) {
+        const parent = (index - 1) >> 1;
+        if (!before(heap[index]!, heap[parent]!)) break;
+        [heap[index], heap[parent]] = [heap[parent]!, heap[index]!];
+        index = parent;
+      }
+    }
+    const target = heap[0]!;
+    target.files.push(file);
+    target.ms += ms;
+    let index = 0;
+    for (;;) {
+      const left = 2 * index + 1;
+      if (left >= heap.length) break;
+      const right = left + 1;
+      const child = right < heap.length && before(heap[right]!, heap[left]!) ? right : left;
+      if (!before(heap[child]!, heap[index]!)) break;
+      [heap[index], heap[child]] = [heap[child]!, heap[index]!];
+      index = child;
+    }
   }
-  return plan;
+  return projects.filter(project => project.files.length).map(project => project.files.sort());
 }
 
 /** One stack/bootstrap per worker. Fresh-state files reset that stack between

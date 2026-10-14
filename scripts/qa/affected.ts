@@ -267,7 +267,7 @@ export function routeTest(path: string): { tier: AffectedTier } | { deferred: st
   return { tier: isQaOwnerPath(path) ? 'owner' : 'unit' };
 }
 
-function referencedBy(path: string, sources: Map<string, string>, data: boolean): string[] {
+function referenceNeedles(path: string, data: boolean): string[] {
   const needles = [path];
   if (data) {
     if (dirname(path) !== '.') needles.push(`${dirname(path)}/`);
@@ -275,9 +275,59 @@ function referencedBy(path: string, sources: Map<string, string>, data: boolean)
     // Short or generic names would match unrelated modules; those fall back to widening.
     if (name.length >= 12 && /[-_]/.test(name)) needles.push(name);
   }
-  return [...sources]
-    .filter(([source, text]) => source !== path && needles.some((needle) => text.includes(needle)))
-    .map(([source]) => source);
+  return needles;
+}
+
+/** Match every changed input in one source traversal. Repeated substring scans
+ * used to multiply the changed-file count by the whole source inventory. */
+function referenceIndex(paths: readonly string[], sources: Map<string, string>) {
+  interface Node { next: Map<string, Node>; failure?: Node; output?: Node; needle?: string }
+  const root: Node = { next: new Map() };
+  root.failure = root;
+  const matches = new Map<string, Set<string>>();
+  for (const path of paths) for (const needle of referenceNeedles(path, !codeFile.test(path))) {
+    if (matches.has(needle)) continue;
+    matches.set(needle, new Set());
+    let node = root;
+    for (const character of needle) {
+      let child = node.next.get(character);
+      if (!child) { child = { next: new Map() }; node.next.set(character, child); }
+      node = child;
+    }
+    node.needle = needle;
+  }
+  const queue = [...root.next.values()];
+  for (const node of queue) node.failure = root;
+  for (let index = 0; index < queue.length; index++) {
+    const node = queue[index]!;
+    for (const [character, child] of node.next) {
+      let fallback = node.failure!;
+      while (fallback !== root && !fallback.next.has(character)) fallback = fallback.failure!;
+      child.failure = fallback.next.get(character) ?? root;
+      child.output = child.failure.needle ? child.failure : child.failure.output;
+      queue.push(child);
+    }
+  }
+  if (matches.size) for (const [source, text] of sources) {
+    // Keep small selections on the runtime's native substring search. The
+    // fixed cap preserves linear source work without scanning every character
+    // in JavaScript for the usual handful of changed inputs.
+    if (matches.size <= 32) {
+      for (const [needle, files] of matches) if (text.includes(needle)) files.add(source);
+      continue;
+    }
+    let node = root;
+    const found = new Set<string>();
+    for (const character of text) {
+      while (node !== root && !node.next.has(character)) node = node.failure!;
+      node = node.next.get(character) ?? root;
+      for (let output: Node | undefined = node; output; output = output.output)
+        if (output.needle) found.add(output.needle);
+    }
+    for (const needle of found) matches.get(needle)!.add(source);
+  }
+  return (path: string, data: boolean): string[] => [...new Set(referenceNeedles(path, data)
+    .flatMap(needle => [...(matches.get(needle) ?? [])]))].filter(source => source !== path);
 }
 
 /** Workspaces with a `<workspace>:typecheck` task, by the directories whose sources they check. Each task checks one
@@ -301,7 +351,7 @@ export const TYPECHECK_WORKSPACES: ReadonlyArray<readonly [workspace: string, ro
 const TYPECHECK_SOURCE = /\.[cm]?tsx?$|(?:^|\/)(?:tsconfig[^/]*|package)\.json$/;
 
 /** Ask the TypeScript project which files its imports bring in, including transitive and type-only imports. */
-function scriptsProjectFiles(root: string): ReadonlySet<string> {
+function scriptsProjectFiles(root: string, graph?: readonly GraphModule[]): ReadonlySet<string> {
   const config = join(root, 'scripts/tsconfig.json');
   if (!existsSync(config)) return new Set();
   // Most selections need only directory ownership; load the compiler only for external test sources.
@@ -310,8 +360,48 @@ function scriptsProjectFiles(root: string): ReadonlySet<string> {
   if (loaded.error) throw new Error(ts.flattenDiagnosticMessageText(loaded.error.messageText, '\n'));
   const project = ts.parseJsonConfigFileContent(loaded.config, ts.sys, dirname(config));
   if (project.errors.length) throw new Error(project.errors.map(error => ts.flattenDiagnosticMessageText(error.messageText, '\n')).join('\n'));
-  const program = ts.createProgram(project.fileNames, project.options);
-  return new Set(program.getSourceFiles().map(source => resolve(source.fileName)));
+  if (graph) {
+    // Affected planning has already resolved the complete pre-compilation graph.
+    // Reuse its edges instead of reading and resolving the same sources again.
+    const modules = new Map(graph.map(module => [resolve(root, module.source), module]));
+    if (project.fileNames.every(file => modules.has(resolve(file)))) {
+      const imported = new Set<string>();
+      const pending = [...project.fileNames];
+      while (pending.length) {
+        const file = resolve(pending.pop()!);
+        if (imported.has(file)) continue;
+        imported.add(file);
+        if (project.options.noResolve) continue;
+        for (const dependency of modules.get(file)?.dependencies ?? [])
+          if (!dependency.coreModule && !dependency.couldNotResolve) pending.push(resolve(root, dependency.resolved));
+      }
+      return imported;
+    }
+  }
+  // Selection needs membership, not parsed ASTs, library declarations or type
+  // checking. Use the compiler's scanner and resolver to follow each local
+  // import once, including type-only imports and triple-slash references.
+  const imported = new Set<string>();
+  const pending = [...project.fileNames];
+  const cache = ts.createModuleResolutionCache(root, file => file, project.options);
+  while (pending.length) {
+    const file = resolve(pending.pop()!);
+    if (imported.has(file)) continue;
+    imported.add(file);
+    if (file.includes('/node_modules/')) continue;
+    const source = ts.sys.readFile(file);
+    if (source === undefined) continue;
+    const references = ts.preProcessFile(source, true, /\.[cm]?jsx?$/.test(file));
+    if (project.options.noResolve) continue;
+    for (const reference of references.referencedFiles) pending.push(resolve(dirname(file), reference.fileName));
+    for (const reference of references.importedFiles) {
+      const dependency = ts.resolveModuleName(reference.fileName, file, project.options, ts.sys, cache).resolvedModule;
+      if (!dependency) continue;
+      if (!project.options.allowJs && /\.[cm]?jsx?$/.test(dependency.resolvedFileName)) continue;
+      pending.push(dependency.resolvedFileName);
+    }
+  }
+  return imported;
 }
 
 /** Each workspace a changed TypeScript source or its config belongs to, once. */
@@ -321,11 +411,11 @@ export function typecheckWorkspaces(files: readonly string[], root = resolve(imp
     .map(([workspace]) => workspace);
 }
 
-function typecheckSelector(files: readonly string[], root: string) {
+function typecheckSelector(files: readonly string[], root: string, graph?: readonly GraphModule[]) {
   const owned = (file: string, root: string) => file.startsWith(root) && TYPECHECK_WORKSPACES.every(([, roots]) =>
     roots.every(other => other.length <= root.length || !file.startsWith(other)));
   const external = files.filter(file => file.startsWith('tests/') && TYPECHECK_SOURCE.test(file));
-  const imported = external.length ? scriptsProjectFiles(root) : new Set<string>();
+  const imported = external.length ? scriptsProjectFiles(root, graph) : new Set<string>();
   return (file: string, workspace: string, roots: readonly string[]) => TYPECHECK_SOURCE.test(file)
     && ((workspace === 'scripts' && file.startsWith('tests/') && imported.has(resolve(root, file)))
       || roots.some(root => owned(file, root)));
@@ -375,6 +465,7 @@ export function planAffected(input: {
     return checks;
   };
   const seeds = new Set<string>();
+  const referencedBy = referenceIndex(plan.changed, input.sources);
   // Proofs consume their declared module or complete-image COPY set.
   // Stack-tier widening for infra/jena stays in place. An unreadable COPY line
   // fails closed by selecting every registry file, so planning itself still finishes.
@@ -392,7 +483,7 @@ export function planAffected(input: {
     }
   }
   const matchedNative = new Set<string>();
-  const selectsTypecheck = typecheckSelector(plan.changed, input.typecheckRoot ?? resolve(import.meta.dir, '../..'));
+  const selectsTypecheck = typecheckSelector(plan.changed, input.typecheckRoot ?? resolve(import.meta.dir, '../..'), input.graph);
   for (const path of plan.changed) {
     if (nativeCopies) for (const file of nativeFilesTouchedBy(path, nativeCopies, runtimeSources)) matchedNative.add(file);
     if (jenaCheckInput.test(path) && !plan.tasks.some(check => check.task === 'jena:check'))
@@ -414,7 +505,7 @@ export function planAffected(input: {
       if (frontendWorkspace(path) === 'apps/about') continue;
       if (!codeFile.test(path)) {
         if (input.exists(path)) seeds.add(path);
-        for (const source of referencedBy(path, input.sources, true))
+        for (const source of referencedBy(path, true))
           if (frontendWorkspace(source)) seeds.add(source);
         continue;
       }
@@ -440,10 +531,10 @@ export function planAffected(input: {
           .flatMap(([, importers]) => [...importers]))
           seeds.add(importer);
       // Scripts started as subprocesses are referenced by path rather than imported.
-      for (const source of referencedBy(path, input.sources, false)) seeds.add(source);
+      for (const source of referencedBy(path, false)) seeds.add(source);
       continue;
     }
-    const references = referencedBy(path, input.sources, true);
+    const references = referencedBy(path, true);
     if (!references.length) {
       widen(affectedTiers, `${path}: unclassified input with no code reference`);
       continue;
