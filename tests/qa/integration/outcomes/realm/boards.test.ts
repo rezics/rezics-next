@@ -25,6 +25,14 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(raw) as T;
 }
 
+function placementHead(value: unknown, reply: Reply): string {
+  expect(value).toMatchObject({ profile: 'realm-reply-placement-v1', realm: sessions.realm,
+    reply: reply.reply, revisionId: reply.revisionId, placement: expect.any(String) });
+  const { placement } = value as { placement: string };
+  expect(placement).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
+  return placement;
+}
+
 async function publish(person: PersonaSession, target: Target, text: string): Promise<Reply> {
   async function command(path: string, input: unknown) {
     const key = randomUUID();
@@ -50,7 +58,7 @@ async function publish(person: PersonaSession, target: Target, text: string): Pr
     revisionId: draft.revisionId, revisionDigest: draft.revisionDigest,
     reviewDecisionId: null, expectedHead: null, actingSubject: person.actingSubject,
   }), 201);
-  return { ...draft, placement: placed.placement };
+  return { ...draft, placement: placementHead(placed, draft) };
 }
 
 beforeAll(async () => {
@@ -124,6 +132,7 @@ async function boardContract(name: PersonaName) {
     const observation = { request: `${method} ${path}${body === undefined ? '' : ` ${JSON.stringify(body)}`}`,
       status: response.status, answer: value, expected };
     if (!accepts(response.status, value)) gaps.push(observation);
+    return observation;
   }
   const ok = (status: number) => status === 200;
   const written = (status: number) => status === 200 || status === 201;
@@ -179,9 +188,16 @@ async function boardContract(name: PersonaName) {
   const managementAnswer = mayManage ? written : (status: number) => status === (name === 'visitor' ? 401 : 403);
   const managementExpected = mayManage ? '200/201: author where allowed, owner or Realm moderator changes only board placement'
     : `${name === 'visitor' ? 401 : 403}: no placement authority; operator status supplies no board mandate`;
+  async function place(reply: Reply, concepts: string[], primary: string | null, expected: string,
+    accepts: (status: number) => boolean) {
+    const result = await observe('POST', '/v1/realm-reply-placements', placement(reply, concepts, primary), expected, accepts);
+    // These replies are shared across persona callbacks. Only a validated
+    // successful command supplies the next placement CAS head.
+    if (written(result.status)) reply.placement = placementHead(result.answer, reply);
+  }
   for (const [concepts, primary] of [[[news.concept], null], [[news.concept, empty.concept], news.concept], [[], null]] as const)
-    await observe('POST', '/v1/realm-reply-placements', placement(memberReply, [...concepts], primary), managementExpected, managementAnswer);
-  if (name === 'member') await observe('POST', '/v1/realm-reply-placements', placement(ownerReply, [news.concept], null),
+    await place(memberReply, [...concepts], primary, managementExpected, managementAnswer);
+  if (name === 'member') await place(ownerReply, [news.concept], null,
     '403: membership alone cannot classify another author\'s conversation', status => status === 403);
 
   if (name === 'moderator' || name === 'operator') {

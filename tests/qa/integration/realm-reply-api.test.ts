@@ -231,6 +231,19 @@ test('SUB05/SUB06: exact reviewed revisions place independently in two Realms an
     expect((await placementEvent(replacement.body.placement)).data.receipt)
       .toMatchObject({ expectedHead: placedOne.body.placement });
     expect(await placementEvent(placedOne.body.placement)).toEqual(firstEvent);
+    expect(replacement.body.placement).not.toBe(placedOne.body.placement);
+    const current = await read(realmOne);
+    expect(current.status).toBe(200);
+    expect(current.body.placement).toBe(replacement.body.placement);
+    // A once-successful head is stale after replacement, even when the
+    // requested revision and review decision have not changed.
+    const staleReplacement = await post('/v1/realm-reply-placements', {
+      ...placementOne, expectedHead: placedOne.body.placement });
+    expect(staleReplacement.status, JSON.stringify(staleReplacement.body)).toBe(409);
+    expect(staleReplacement.body.code).toBe('realm_reply_stale');
+    const afterStale = await read(realmOne);
+    expect(afterStale.status).toBe(200);
+    expect(afterStale.body).toEqual(current.body);
     const revoked = await post('/v1/realm-reply-reviews', { ...reviewOne,
       expectedGeneration: '1', supersedes: approvedOne.body.decisionId,
       outcome: 'revoked', reasonReference: 'manager-revocation' });
