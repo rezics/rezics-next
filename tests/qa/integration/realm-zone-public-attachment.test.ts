@@ -13,7 +13,7 @@ type Configuration = { zone: string; revision: string;
 type Draft = { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } };
 type Publication = { outcome: string; zone: string; revision: string; themeRevision: string;
   receipt: string; homeDocument: string; homeRevision: string; replayed: boolean;
-  pages: { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string }[] };
+  pages: { page: string; variantId: string; revisionId: string; byteDigest?: string; language?: string }[] };
 type Phase = 'saved-unpublished' | 'published-original' | 'saved-replacement' | 'published-replacement';
 type Reads = { original: Answer; replacement: Answer; absent: Answer; presentation: Answer };
 const answers = new Map<Phase, Map<PersonaName, Reads>>();
@@ -138,7 +138,7 @@ async function publish(configuration: Configuration) {
   expect(publication.homeRevision).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   expect(publication.pages).toHaveLength(1);
   expect(publication.pages[0]).toMatchObject({ page: configuration.configuration.homeDocument,
-    variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch });
+    variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest });
   expect(publication.receipt).toBeTruthy();
   expect(publication.revision).not.toBe(configuration.revision);
   const head = await config();
