@@ -98,7 +98,10 @@ struct SqlCandidate {
     text: String,
     start: usize,
     end: usize,
-    sql_deflate: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sql_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    template_ast_deflate: Option<String>,
     #[serde(flatten)]
     metadata: Option<LiteralMetadata>,
 }
@@ -408,10 +411,13 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
                     let end = token.end as usize - delimiter_end;
                     let text = sql[start..end].to_string();
                     Some(SqlCandidate {
-                        sql_deflate: compressed_sql(&sql_facts_with_parse(&text, parse)).unwrap(),
+                        sql_deflate: Some(
+                            compressed_sql(&sql_facts_with_parse(&text, parse)).unwrap(),
+                        ),
                         text,
                         start,
                         end,
+                        template_ast_deflate: None,
                         metadata: None,
                     })
                 })
@@ -1108,7 +1114,9 @@ mod tests {
             .iter()
             .find(|candidate| candidate.text == "owner.records")
             .unwrap();
-        let bytes = STANDARD.decode(&candidate.sql_deflate).unwrap();
+        let bytes = STANDARD
+            .decode(candidate.sql_deflate.as_ref().unwrap())
+            .unwrap();
         let tree: Value =
             serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
         assert_eq!(tree["tokens"][0]["text"], "owner");
@@ -1141,7 +1149,7 @@ mod tests {
             )
             .unwrap();
             let bytes = STANDARD
-                .decode(&facts.sql_candidates[0].sql_deflate)
+                .decode(facts.sql_candidates[0].sql_deflate.as_ref().unwrap())
                 .unwrap();
             let sql: Value =
                 serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice()))
@@ -1319,6 +1327,71 @@ mod tests {
             }
         });
         assert_eq!(full_spans, runtime_spans);
+    }
+    #[test]
+    fn isolated_template_trees_preserve_cast_literals_nested_templates_and_byte_spans() {
+        let root = env::current_dir().unwrap();
+        let text = "const emoji = '😀'; db.query(`value=${key as 'SELECT * FROM owner.cast'} AND ${`${nested}`}`); const empty = `${other}`;";
+        let facts = indexed(
+            Source {
+                file: "template.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let outer_start = text.find("`value=").unwrap();
+        let outer = facts
+            .sql_candidates
+            .iter()
+            .find(|candidate| {
+                candidate.start == outer_start && candidate.template_ast_deflate.is_some()
+            })
+            .unwrap();
+        let bytes = STANDARD
+            .decode(outer.template_ast_deflate.as_ref().unwrap())
+            .unwrap();
+        let ast: Value =
+            serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
+        assert_eq!(ast["type"], "Program");
+        assert_eq!(ast["body"][0]["expression"]["type"], "TemplateLiteral");
+        assert_eq!(ast["body"][0]["expression"]["start"], outer_start);
+        let mut literals = Vec::new();
+        let mut templates = Vec::new();
+        visit(&ast, &mut |node| {
+            if node.get("type").and_then(Value::as_str) == Some("Literal") {
+                literals.push(
+                    node.get("value")
+                        .and_then(Value::as_str)
+                        .unwrap_or("")
+                        .to_string(),
+                );
+            }
+            if node.get("type").and_then(Value::as_str) == Some("TemplateLiteral") {
+                templates.push(node["start"].as_u64().unwrap());
+            }
+        });
+        assert!(literals.contains(&"SELECT * FROM owner.cast".to_string()));
+        assert_eq!(templates.len(), 2);
+        let empty = text.find("`${other").unwrap();
+        let records: Vec<_> = facts
+            .sql_candidates
+            .iter()
+            .filter(|candidate| candidate.start == empty)
+            .collect();
+        assert_eq!(records.len(), 1);
+        assert!(records[0].sql_deflate.is_none());
+        assert!(records[0].template_ast_deflate.is_some());
+        let nested_start = text.find("`${nested").unwrap();
+        assert!(
+            facts
+                .sql_candidates
+                .iter()
+                .filter(|candidate| candidate.start == nested_start)
+                .all(|candidate| candidate.template_ast_deflate.is_none())
+        );
     }
     #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
@@ -1828,13 +1901,27 @@ impl Facts<'_> {
         if let Some(index) = self.functions.last() {
             self.function_facts[*index].has_sql_operation_literals |= sql_operation;
         }
-        if interpolated || text.contains('.') || sql_operation || is_sql(&text) {
+        let parse = is_sql(&text);
+        let needs_sql = text.contains('.') || sql_operation || parse;
+        if interpolated
+            && !needs_sql
+            && self.candidates.last().is_some_and(|candidate| {
+                candidate.start == start as usize
+                    && candidate.end == end as usize
+                    && candidate.sql_deflate.is_none()
+            })
+        {
+            return;
+        }
+        if interpolated || needs_sql {
             let parent = self.parents.last();
             self.candidates.push(SqlCandidate {
-                sql_deflate: compressed_sql(&sql_facts_with_parse(&text, is_sql(&text))).unwrap(),
+                sql_deflate: needs_sql
+                    .then(|| compressed_sql(&sql_facts_with_parse(&text, parse)).unwrap()),
                 text,
                 start: start as usize,
                 end: end as usize,
+                template_ast_deflate: None,
                 metadata: Some(LiteralMetadata {
                     literal_kind,
                     interpolated,
@@ -2138,6 +2225,8 @@ impl<'a> Visit<'a> for Facts<'_> {
     }
     fn visit_template_literal(&mut self, node: &TemplateLiteral<'a>) {
         let interpolated = !node.expressions.is_empty();
+        let outermost = interpolated && self.templates.is_empty();
+        let candidate_start = self.candidates.len();
         self.syntax.has_interpolated_templates |= interpolated;
         if interpolated {
             self.templates.push(node.span.start);
@@ -2185,6 +2274,12 @@ impl<'a> Visit<'a> for Facts<'_> {
             }
             self.candidate(text, node.span.start, node.span.end, "template", true);
         }
+        if outermost {
+            // Keep literal types and nested templates for relation rules,
+            // without requiring those rules to decode the surrounding file.
+            self.candidates[candidate_start].template_ast_deflate =
+                Some(template_ast(node).unwrap());
+        }
         walk::walk_template_literal(self, node);
         if interpolated {
             self.templates.pop();
@@ -2192,6 +2287,29 @@ impl<'a> Visit<'a> for Facts<'_> {
     }
 }
 
+fn template_ast(node: &TemplateLiteral<'_>) -> Result<String> {
+    let allocator = &Allocator::default();
+    let builder = AstBuilder::new(allocator);
+    let expression = Expression::TemplateLiteral(oxc_allocator::Box::new_in(
+        node.clone_in(allocator),
+        &allocator,
+    ));
+    let mut body = oxc_allocator::Vec::new_in(&allocator);
+    body.push(Statement::new_expression_statement(
+        node.span, expression, &builder,
+    ));
+    let program = Program::new(
+        node.span,
+        SourceType::ts().with_module(true),
+        "",
+        oxc_allocator::Vec::new_in(&allocator),
+        None,
+        oxc_allocator::Vec::new_in(&allocator),
+        body,
+        &builder,
+    );
+    compressed_ast(&program.to_estree_json(true, false))
+}
 fn compressed_ast(ast: &str) -> Result<String> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(ast.as_bytes())?;
