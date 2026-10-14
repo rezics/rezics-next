@@ -429,7 +429,12 @@ async function recordedChoice(name: PersonaName) {
   try {
     await withinDeadline(`${name} proof`, proofDeadlineMs, () => choice(name));
     proved = performance.now();
-    await withinDeadline(`${name} production visit`, visitDeadlineMs, () => productionVisit(name));
+    await withinDeadline(`${name} production visit`, visitDeadlineMs, async () => {
+      // The member already ran these API controls before changing preferences.
+      // Keep the other personas' original controls beside the production recording.
+      if (name !== 'member') await pageReads(name);
+      await productionVisit(name);
+    });
   } finally {
     const ended = performance.now();
     console.info(`[work-hub] ${name} proof ${Math.round((proved ?? ended) - started)} ms; visit ${Math.round(proved === undefined ? 0 : ended - proved)} ms`);
