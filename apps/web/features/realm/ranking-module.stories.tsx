@@ -17,21 +17,21 @@ import { RankingSkeleton } from './ranking-page.tsx';
 import { readRankingModuleAnswer } from './ranking-read.ts';
 import { RealmPageStory } from './story-page.tsx';
 
-function ModuleStory({ state, locale }: { state: RankingModuleState | 'loading'; locale: UiLocale }) {
+function ModuleStory({ state, locale }: { state: RankingModuleState; locale: UiLocale }) {
   const [loaded, setLoaded] = useState<{ state: ModuleState<'ranking'>; messages: ZoneMessages;
     emptyTitle: string; emptyBody: string } | null>(null);
   useEffect(() => {
     let active = true;
     setLoaded(null);
-    if (state === 'loading') return;
-    const main = browserMainApi('https://contract.invalid', { fetcher: rankingModuleContractFetch(state), anonymous: true });
+    const transport = rankingModuleContractFetch(state);
+    const main = browserMainApi('https://contract.invalid', { fetcher: transport, anonymous: true });
     void Promise.all([loadRankingsModule(rankingModule, { realm: rankingRealm, ref: 'ranking-garden', locale }, {
       cards: async () => rankingModuleContractCards(),
       rankings: (realm, _locale, interval, metric) => readRankingModuleAnswer(main, realm, interval, metric),
     }), catalogs.zones[locale](), catalogs.realm[locale]()]).then(([state, messages, realm]) => {
       if (active) setLoaded({ state, messages, emptyTitle: realm.emptyHomeTitle, emptyBody: realm.emptyHomeBody });
     });
-    return () => { active = false; };
+    return () => { active = false; transport.dispose(); };
   }, [state, locale]);
   const zone = communityZone(locale);
   return <RealmPageStory zone={zone} locale={locale}>

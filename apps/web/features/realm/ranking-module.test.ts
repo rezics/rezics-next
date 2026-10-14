@@ -32,3 +32,23 @@ test('only a completed empty ranking becomes empty; missing, unavailable and und
   expect(await load('empty')).toEqual({ state: 'empty' });
   for (const state of ['missing', 'error', 'underfilled'] as const) expect(await load(state)).toEqual({ state: 'failed' });
 });
+
+test('loading chart reads stay unsettled until story teardown rather than inventing HTTP 202', async () => {
+  const transport = rankingModuleContractFetch('loading');
+  let started!: () => void;
+  const requestStarted = new Promise<void>(resolve => { started = resolve; });
+  const fetcher = Object.assign(async (input: RequestInfo | URL, init?: RequestInit) => {
+    started();
+    return transport(input, init);
+  }, { preconnect: fetch.preconnect });
+  const main = browserMainApi('https://contract.invalid', { fetcher, anonymous: true });
+  let settled = false;
+  const page = readRankingModuleAnswer(main, rankingRealm, 'week', 'reads').then(answer => {
+    settled = true;
+    return answer;
+  });
+  await requestStarted;
+  expect(settled).toBe(false);
+  transport.dispose();
+  expect(await page).toEqual({ ok: false, failure: 'unavailable' });
+});

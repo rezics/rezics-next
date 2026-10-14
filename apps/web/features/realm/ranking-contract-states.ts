@@ -79,7 +79,9 @@ export function rankingContractState({ persona, state, privateRealm = false, sor
 /** Transport only: an unmatched request fails rather than fabricating a domain answer. */
 export function rankingContractFetch(sample: RankingContractState): { fetcher: typeof fetch; dispose: () => void } {
   let release: (() => void) | undefined;
+  let disposed = false;
   const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (disposed) throw new DOMException('Ranking story ended', 'AbortError');
     const request = new Request(input, init);
     const url = new URL(request.url);
     const expected = new URL(sample.path, url.origin);
@@ -91,5 +93,5 @@ export function rankingContractFetch(sample: RankingContractState): { fetcher: t
     });
     return Response.json(sample.answer, { status: sample.status });
   }) as typeof fetch;
-  return { fetcher, dispose: () => release?.() };
+  return { fetcher, dispose: () => { disposed = true; release?.(); } };
 }

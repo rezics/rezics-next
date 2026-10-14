@@ -8,7 +8,7 @@ import type { PresentationModule } from '../zones/presentation.ts';
 export const rankingModule: PresentationModule = { id: 'ranking-garden-chart', type: 'ranking', title: 'Ranking garden',
   source: { kind: 'query-block', block: 'realm-ranking' }, options: { layout: 'rows', metric: 'reads' } };
 export const rankingIntervals = ['day', 'week', 'month'] as const;
-export type RankingModuleState = 'populated' | 'empty' | 'error' | 'missing' | 'underfilled';
+export type RankingModuleState = 'populated' | 'empty' | 'error' | 'missing' | 'underfilled' | 'loading';
 
 /** Contract states awaiting capture: GET /v1/realms/{realm}/rankings?interval={day|week|month}&metric=reads&limit=10. */
 export function rankingModuleContractPage(interval: RankingPage['interval'], state: RankingModuleState): RankingPage {
@@ -32,13 +32,19 @@ export function rankingModuleContractCards(): Map<string, ZoneWork> {
     handle: null, displayName: 'Ranking garden author', provider: null, key: null }] }, context, null)]]);
 }
 
-export function rankingModuleContractFetch(state: RankingModuleState): typeof fetch {
-  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+export function rankingModuleContractFetch(state: RankingModuleState): typeof fetch & { dispose: () => void } {
+  const held = new Set<() => void>();
+  let disposed = false;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (disposed) throw new DOMException('Ranking story ended', 'AbortError');
     const request = new Request(input, init), url = new URL(request.url);
     const interval = rankingIntervals.find(value => value === url.searchParams.get('interval'));
     if (request.method !== 'GET' || url.pathname !== `/api/main/v1/realms/${rankingRealm.slice(-36)}/rankings` ||
       !interval || url.searchParams.get('metric') !== 'reads' || url.searchParams.get('limit') !== '10' ||
       [...url.searchParams].length !== 3) throw new Error(`Unexpected ranking module request (${rankingStateSource})`);
+    if (state === 'loading') return new Promise<Response>((_resolve, reject) => {
+      held.add(() => reject(new DOMException('Ranking story ended', 'AbortError')));
+    });
     if (state === 'missing' || state === 'error') {
       const status = state === 'missing' ? 404 : 503, code = state === 'missing' ? 'work_unavailable' : 'rankings_unavailable';
       return Response.json({ type: `https://rezics.com/problems/${code}`, status, code,
@@ -46,4 +52,9 @@ export function rankingModuleContractFetch(state: RankingModuleState): typeof fe
     }
     return Response.json(rankingModuleContractPage(interval, state));
   }) as typeof fetch;
+  return Object.assign(fetcher, { dispose: () => {
+    disposed = true;
+    for (const release of held) release();
+    held.clear();
+  } });
 }
