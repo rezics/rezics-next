@@ -4,7 +4,11 @@ import authoring from '../../../../../scripts/qa/cases/outcomes/recipes/author-a
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+// The API outcome proof owns 60 seconds; the subsequent surface visit owns 120 seconds.
+const proofDeadlineMs = 60_000;
+const visitDeadlineMs = 120_000;
+const destinations = new Map<PersonaName, Recipe>();
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(authoring);
 type Recipe = { work: string; mainVersion: string; structure: string; revision: string; workHead: string; publicationDecision: string; groups: string[]; lines: string[] };
@@ -104,7 +108,6 @@ async function readPublished(person: PersonaSession, value: Recipe, author: Pers
 async function author(name: PersonaName) {
   const person = sessions[name];
   const sample = recording.session(name, person);
-  await editorReads(name, recipe.work);
   const path = `/v1/compositions/${short(recipe.structure)}`;
   if (name === 'owner') {
     await readPublished(person, recipe, sessions.owner, name, 'published');
@@ -132,6 +135,7 @@ async function author(name: PersonaName) {
   }), name === 'visitor' ? 401 : 403);
   if (name === 'stranger' || name === 'member') {
     const own = await authored(person, sample);
+    destinations.set(name, own);
     await readPublished(sessions.visitor, own, person, name, 'own-published');
     const scaled = await answer<{ ingredients: { amount: { numerator: number; denominator: number } }[] }>(sample('scaled-ingredients', 'POST', `/v1/recipes/${short(own.structure)}/scalings`, {
       actingSubject: person.actingSubject, factor: { numerator: 2, denominator: 3 },
@@ -148,18 +152,127 @@ async function author(name: PersonaName) {
 async function editorReads(name: PersonaName, work: string) {
   const person = sessions[name], sample = recording.session(name, person);
   const id = short(work);
-  await answer(sample('editor-authority', 'GET', `/v1/resources/${id}/page${query(person)}`));
-  await answer(sample('editor-work-header', 'GET', `/v1/works/${id}${query(person)}`));
+  await Promise.all([
+    person.actingSubject ? answer(sample('editor-authority', 'GET', `/v1/resources/${id}/page${query(person)}`)) : Promise.resolve(),
+    answer(sample('editor-work-header', 'GET', `/v1/works/${id}${query(person)}`)),
+  ]);
   if (name !== 'owner') return;
-  await answer(sample('editor-resource-summary', 'GET', `/v1/resources/${id}${query(person)}`));
-  await answer(sample('editor-metadata-empty', 'GET', `/v1/works/${id}/metadata${query(person)}`));
-  await answer(sample('editor-recipe-draft', 'GET', `/v1/recipes/works/${id}${query(person)}`));
-  await answer(sample('editor-notes-empty', 'GET', `/v1/me/contributions${query(person)}&limit=20`));
+  await Promise.all([
+    answer(sample('editor-resource-summary', 'GET', `/v1/resources/${id}${query(person)}`)),
+    answer(sample('editor-metadata-empty', 'GET', `/v1/works/${id}/metadata${query(person)}`)),
+  ]);
+  await Promise.all([
+    answer(sample('editor-recipe-draft', 'GET', `/v1/recipes/works/${id}${query(person)}`)),
+    answer(sample('editor-notes-empty', 'GET', `/v1/me/contributions${query(person)}&limit=20`)),
+  ]);
 }
 
-outcomeTest(authoring, 'visitor', () => author('visitor'), recording);
-outcomeTest(authoring, 'stranger', () => author('stranger'), recording);
-outcomeTest(authoring, 'member', () => author('member'), recording);
-outcomeTest(authoring, 'owner', () => author('owner'), recording);
-outcomeTest(authoring, 'moderator', () => author('moderator'), recording);
-outcomeTest(authoring, 'operator', () => author('operator'), recording);
+async function within<T>(milliseconds: number, phase: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_resolve, reject) => {
+      timer = setTimeout(() => reject(new Error(`${phase} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function visit(name: PersonaName) {
+  const person = sessions[name], sample = recording.session(name, person);
+  await Promise.all([sample('frame-types', 'GET', '/v1/types'), editorReads(name, recipe.work)]);
+  const destination = name === 'owner' ? recipe : destinations.get(name);
+  if (destination) await workReads(name, destination);
+}
+
+// WorkFrameView, WorkOverview and the mounted SeriesProgressPanel share cached reads,
+// but their uncached previews keep separate labels even when their paths are equal.
+async function workReads(name: PersonaName, value: Recipe) {
+  const person = sessions[name], sample = recording.session(name, person);
+  const publicSample = recording.session(name, sessions.visitor);
+  const id = short(value.work), resource = `/v1/resources/${id}`, work = `/v1/works/${id}`;
+  const parameters = (extra: Record<string, string> = {}) => `?${new URLSearchParams({
+    actingSubject: person.actingSubject!, ...extra,
+  })}`;
+  const read = async <T>(label: string, path: string): Promise<T> => (await sample(label, 'GET', path)).json() as Promise<T>;
+  const template = async (label: string, kind: string) => (await sample(label, 'POST', '/v1/query', {
+    profile: 'template-query-v1', query: `https://rezics.com/query/work-${kind}`, revision: 1,
+    parameters: { roots: [value.work] }, presentation: { actingSubject: person.actingSubject },
+  })).json();
+  const header = await read<{ selectedLanguage: string | null }>('destination-work-header', `${work}${parameters()}`);
+  await Promise.all([
+    // SEO and art deliberately use the anonymous client in production.
+    publicSample('destination-public-preview', 'GET', `/v1/public-previews/${id}`),
+    publicSample('destination-public-header', 'GET', work),
+    publicSample('destination-showcase', 'POST', '/v1/resources/showcase', {
+      profile: 'work-showcase-batch-v1', targets: [value.work],
+    }),
+    read('destination-reader-state', `${work}/reader-state${parameters()}`),
+    read('destination-projection', `${resource}/page${parameters()}`),
+    read('destination-agent-credits', `${work}/agent-credits${parameters()}`).then(async credits => {
+      const native = (credits as { items?: { role: string; agent: string }[] }).items?.find(item => item.role === 'author');
+      if (native) await read('destination-author-works', `/v1/agents/${short(native.agent)}/works${parameters({ limit: '12' })}`);
+    }),
+    template('destination-external-credits', 'credits'),
+    read<{ items?: { context: string }[] }>('destination-rating-contexts', `${resource}/rating-contexts${parameters({ scope: 'global' })}`).then(async contexts => {
+      const context = contexts.items?.[0]?.context;
+      await Promise.all([
+        read('destination-rating-summary', `${resource}/ratings${parameters({ scope: 'global', ...(context ? { context } : {}) })}`),
+        read('destination-reader-stats', `${work}/reader-stats${parameters(context ? { context } : {})}`),
+        ...(context ? [read('destination-reviews', `${resource}/reviews${parameters({ context, sort: 'helpful', limit: '10' })}`).then(async () => {
+          await Promise.all([
+            read('destination-review-releases', `${work}/releases${parameters({ limit: '20' })}`),
+            read('destination-review-realizations', `${work}/realizations${parameters({ limit: '20' })}`),
+            read('destination-review-relations', `${resource}/relations${parameters({ limit: '32' })}`),
+          ]);
+        })] : []),
+      ]);
+    }),
+    read('destination-recipe', `/v1/recipes/works/${id}${parameters()}`),
+    read('destination-text-selection', `/v1/main-versions/${short(value.mainVersion)}/selection${header.selectedLanguage
+      ? `?${new URLSearchParams({ language: header.selectedLanguage })}` : ''}`),
+    read('destination-editor-authority', `${resource}/page${parameters()}`),
+    read('destination-statements', `${resource}/statements${parameters()}`),
+    read('destination-wiki-statements', `${resource}/statements${parameters()}`),
+    read('destination-realizations', `${work}/realizations${parameters({ limit: '20' })}`),
+    read('destination-releases', `${work}/releases${parameters({ limit: '20' })}`),
+    read('destination-availability-parts', `${resource}/parts${parameters({ limit: '1' })}`),
+    read('destination-parts', `${resource}/parts${parameters({ limit: '7' })}`),
+    read('destination-wholes', `${resource}/wholes${parameters({ limit: '3' })}`),
+    read('destination-connections', `${resource}/relations${parameters({ limit: '20' })}`),
+    read('destination-rating-populations', `/v1/rating-populations?${new URLSearchParams({ target: value.work, limit: '20', actingSubject: person.actingSubject! })}`),
+    read('destination-classifications', `${work}/classifications${parameters({ scope: 'global' })}`),
+    publicSample('destination-facets', 'GET', '/v1/facets'),
+    read('destination-discussion', `${resource}/discussion${parameters()}`),
+    template('destination-adoptions', 'adoptions'),
+    read('destination-also-enjoyed', `${work}/also-enjoyed${parameters({ limit: '12' })}`),
+  ]);
+  // The client panel opens its own copies after hydration, then progress in the chosen language.
+  const [preference] = await Promise.all([
+      read<{ language?: string } | null>('destination-series-preference', `/v1/me/edition-preferences/${id}${parameters()}`),
+      read('destination-series-realizations', `${work}/realizations${parameters({ limit: '20' })}`),
+      read('destination-series-releases', `${work}/releases${parameters({ limit: '20' })}`),
+      read('destination-series-relations', `${resource}/relations${parameters({ limit: '20' })}`),
+      read('destination-series-correspondence', `/v1/lexicon/definitions/correspondence-equivalent${parameters()}`),
+  ]);
+  await read('destination-series-progress', `/v1/me/progress-summaries/${id}${parameters({ language: preference?.language ?? 'en' })}`);
+}
+
+async function proveAndVisit(name: PersonaName) {
+  const started = performance.now();
+  let proofMs = 0, visitMs = 0;
+  try {
+    await within(proofDeadlineMs, `${name} proof`, () => author(name));
+    proofMs = performance.now() - started;
+    const visitStarted = performance.now();
+    try { await within(visitDeadlineMs, `${name} visit`, () => visit(name)); }
+    finally { visitMs = performance.now() - visitStarted; }
+  } finally {
+    console.info(`[persona-timing] ${name} proof=${Math.round(proofMs || performance.now() - started)}ms visit=${Math.round(visitMs)}ms`);
+  }
+}
+
+outcomeTest(authoring, 'visitor', () => proveAndVisit('visitor'), recording);
+outcomeTest(authoring, 'stranger', () => proveAndVisit('stranger'), recording);
+outcomeTest(authoring, 'member', () => proveAndVisit('member'), recording);
+outcomeTest(authoring, 'owner', () => proveAndVisit('owner'), recording);
+outcomeTest(authoring, 'moderator', () => proveAndVisit('moderator'), recording);
+outcomeTest(authoring, 'operator', () => proveAndVisit('operator'), recording);
