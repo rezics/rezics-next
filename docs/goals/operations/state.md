@@ -1,10 +1,11 @@
 # State
 
 The checkpoint for [this Goal](GOAL.md), recording
-`mail:d4ed37ce-6d70-4f19-aa2c-808144a6b4eb` under
-`checkpoint:59cfda93-6309-4dd7-b99f-e506ecaad6de`, carrying forward
-`checkpoint:9522a772-eefd-43b0-a8e3-a30ba9bb57e7`'s decisions. The listed
-mail delivery was acknowledged at 2026-10-14 02:08:56 UTC. This records
+`mail:a642bf0d-3bbe-48fe-a946-a73ee2436b00` and
+`mail:da502f3e-f0d4-43e7-9cf3-1059322bb6c5` under
+`checkpoint:437955ba-eef0-4022-9174-e5d878e74c67`, carrying forward
+`checkpoint:59cfda93-6309-4dd7-b99f-e506ecaad6de`'s decisions. The listed
+mail deliveries were acknowledged at 2026-10-14 04:00:01 and 04:26:06 UTC. This records
 only those handled decisions, not later handoffs running beside this checkpoint.
 
 | Field | State |
@@ -12,7 +13,7 @@ only those handled decisions, not later handoffs running beside this checkpoint.
 | Manager | Enrolled with the coordinator on 2026-10-13 15:34 UTC |
 | Proved on physical fixtures | D108 restore consumption qualifies in two post-fix restores; no physical erasure row or OPS10 pass is proved |
 | Fixture | Current small `fx-small-180553eb933a` built once in 154.817 active seconds; post-fix restores qualify in 37.620 and 65.559 active seconds. Both it and superseded `fx-small-a3a906c1c1b7` remain retained; no pruning or repeat build is authorized |
-| Measures (`task goal -- status`) | Carried operations reading: first-attempt share 75% (6/8); attempts per landed task median 1, max 3 (G-2248); 42.7M input / 168.7k output tokens; tokens per proved row unavailable; no recorded refusals in that reading. This checkpoint's status command yielded without updated measures; no wait followed. These are historical figures, not a fresh efficiency verdict. G-2248's attempt-4 preparation refusal remains held; the handled mail adds G-2249's attempt-9 masked preparation failure. G-2417 addresses the shared lifecycle failure-reporting cause before any later qualification decision; no new physical row is proved |
+| Measures (`task goal -- status`) | Current sample: scope 50/67 rows, 319 proved and 83 pending cells; these events prove no new row. Operations first-attempt share 82% (today 100%, 2/2); attempts per landed task median 1, max 4 (G-2248); 61.6M input / 294.3k output tokens; tokens per proved row unavailable. Attempts: 9 first, 5 step, 2 fix, one fix inferred from unavailable handoffs; no recorded refusals in this reading. The retained G-2248/G-2249 preparation refusals remain evidence despite that counter. First attempts exceed half and median is within two; G-2248 exceeds the three-attempt cap, so its existing accepted-repair and separate-qualification holds remain. The shared failure-reporting and build-clock cuts address named causes without rerunning physical qualification or inferring weekly efficiency from lifetime totals |
 
 ## Work in progress
 
@@ -28,6 +29,8 @@ only those handled decisions, not later handoffs running beside this checkpoint.
 | G-2366, shared retained-source preparation | Partial mechanism support accepted and landed at `ef12a2d0c81ff796d2bffbf22207b699dc7468a1` (including `22053e9cd` and `6fe82f03e`); closed verified for support only, claims released. Sole mechanism remains `RetainedSources` / `RetainedSourceAdapter<M, C>` in `scripts/qa/retained-source.ts`, building on `scripts/fixture/`. Physical first-adapter proof and production/completion obligations transfer to G-2248. API received the accepted revision and contract in `mail:887249ba-4bae-47a8-b2bb-198cb250393f`; Program received the scope transfer and request for its accepted-commit notification in `mail:ced4ed6d-9dd5-4a2c-9561-b8ccdfa8fb57`. Complete handoff survives cleanup at `.temp/goal-orchestration/runs/G-2366/worktree-temp/goal/retained-source-handoff.md`. Passed mechanism gates prove no physical source, restore or erasure |
 | G-2367, history-reader cause preservation | API committed and invoked dispatch of the bounded repair for the guard failure at `services/main/src/modules/work/history.ts:134`. Preserve `RevisionReadBudgetExceeded`, message, budgets, abort precedence and refusal meaning; require exact-cause regression and unchanged restore-closure guard. Await API's accepted-main notification; no classifier change, gate waiver, expensive restore run or physical proof follows |
 | G-2417, retained-source primary failure and phase evidence | Operations accepted the shared RetainedSources failure-path diagnosis and bounded repair in the committed brief `docs/goals/operations/tasks/G-2417.md`; dispatch was initiated. Only `scripts/qa/retained-source.ts` and its owner tests are assigned. Begin with retained-packet diagnosis and failing build/verification-plus-cleanup regressions; preserve primary exception/cause/stack, refusal/budget identity, secondary cleanup evidence and available phase/active/admission timings. Audit masking in select/restore, disposal and lease release. API and Program were notified in `mail:d73c0285-271b-4ad8-af26-443012ac629f` and `mail:d2aadbcd-cd56-4da1-804a-1660c00d7fe2`. No fresh producer or qualification run is authorized; supply API the diagnosed cause or exact unavailable evidence and accepted main revision after actual landing |
+| G-2437, declared producer build clock | Operations accepted API's sole-owner referral for the existing RetainedSources lifecycle, asked Program in `mail:7f9ca394-adac-491a-bb2c-142822f0aafb`, and notified API in `mail:01e3df6f-57c6-45e8-96ac-50e59db097b7`. Program's dated ruling is recorded in the brief committed at `752cda1c4`; dispatch was initiated, with worker registration unconfirmed by the handled event. Only `scripts/qa/retained-source.ts` and its owner tests belong to this support cut. Review the clock, legacy behavior and cleanup proofs; after actual accepted landing, mail API the main revision. No source or API row is proved |
+| G-2427 / G-2365, retained Realm source prerequisites | G-2427 remains blocked until G-2437's shared contract lands on main; G-2365 remains held until G-2427's complete verified source lands. The referral packet `.temp/worktrees/g-2427/.temp/goal/realm-source-blocker.json` contains no complete source, verified backup, restored copy or executed boundary assertions. No unchanged failed qualification is released |
 | G-2249, retained Content and crash-fence qualification | API's isolated title-only crash qualification remains landed at `fe7e0002fd0a0cda0e15b029ae641036efa85d9e`: source-stable QA `20261013t215346-33fc0f`, 22 assertions, 121764 ms; no interrupted-body recovery or physical erasure. Attempt-8 preparation QA `20261014t010957-f0bcf8` refused on the same deleted input before producer startup, with zero assertions. API correction `2b58c7c1d` passes static checks but has no runtime qualification; preparation remains unaccepted. API asked Program to rule on one corrected-source qualification. G-2364 and the physical campaign remain unreleased. API owns G-2205's exact candidate refusal, with binding log SHA-256 `5a0b2f956c149e8c1196552cd42c7e87bd8041641ae4520b08311bdd40eb0ba9`; no semantic qualification follows |
 | Access recovery classification | API retains sole review and landing ownership in G-2214. G-2205's attempt-2 evidence records accepted Access revision `e2a24d6427c6237683a8c203f241c5467e0d51f3` present at capture `cd490077773a4c1bae92a34535f1bbfecef74e8f`; no independent physical restore is proved |
 | Erasure composition | API owns G-2223's fourth `mediaObjects` argument and real-composition Media regression. G-2205's same evidence records accepted composition revision `4aacb759395d48d9c7a80a08ba802cd68d1e4bf4` present at capture; no full physical erasure proof follows |
@@ -92,7 +95,17 @@ assertion moves. Do not repeat the successful G-2366 landing or closure.
 
 The accepted interface keys source-affecting digests and explicit inputs,
 never commits; one builder per key, with a coded two-source retention bound.
-Build once within 600 active seconds outside operation clocks. Verify all
+Program's 04:22 UTC ruling permits an adapter-declared producer build once per
+source key under its producer lease and its own declared, evidenced deadline.
+For that adapter, the 600-second preparation clock starts at the physical cut
+after the build and covers cut, seal and backup verification. Without a declared
+build, the existing 600-second clock still starts at `adapter.build`, proved by
+an unchanged test. Restore, startup and readiness retain their own 600-second
+bound. Active build time is neither admission wait nor test time; no budget is
+raised. A failed or overrun build seals nothing and cleans staging. G-2437 must
+preserve custody, keys, integrity, verification, admission accounting and
+primary failure/cleanup evidence; no second lifecycle or physical qualification
+belongs to this cut. Verify all
 immutable manifest-bound custody before consumption and after restore/disposal;
 restore an isolated copy through the existing volume-copy tools without
 producer or corpus-smoke reruns. Dispose through the lease handle, removing
@@ -132,6 +145,16 @@ verdict. Program reports preparation recovery is automatic from tool revision
 `d22063edd`; report "is being prepared" lasting over five minutes as a fault.
 This checkpoint changes only state, grants no new work or proof and requests no
 additional Program ruling.
+
+The same Program mail attributes G-2249's QA `20261014t032708-1acffe` refusal
+to the host startup queue without a slot, and QA `20261014t025357-ae0b81` to
+the host memory stall. It authorizes API's existing worker's next bounded step:
+the real stop regression, claimed repair and one preparation recheck, keeping
+600-second preparation and 360-second operation bounds. Landing, release of
+`core.ts` and G-2364 stay held until that handoff. This records Program's ruling,
+not a new Operations attempt or accepted preparation. G-2180's two API cuts and
+G-2268's Manga repair remain API work; Program holds G-2410's landing until the
+Manga repair lands, then resumes it once. None proves an Operations physical row.
 
 ## Carried work
 
