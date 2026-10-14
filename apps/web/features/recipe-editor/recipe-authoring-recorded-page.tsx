@@ -7,7 +7,6 @@ import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import { seedTypes, type TypeRegistry } from '../catalogue/types.ts';
 import { EmptyState } from '../shell/empty-state.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
@@ -18,12 +17,10 @@ import { RecipeEditor } from './editor.tsx';
 import type { RecipeExport } from './export-api.ts';
 import { mainRecipeImportApi, type RecipeImportApi } from './import-api.ts';
 import { copyOf, messages } from './messages.ts';
-import { RecipeExchange } from './recipe-exchange.tsx';
 import { recipeEditHref } from './route.ts';
 import {
   loadRecipeAuthoring,
   readRecipeVisitFrame,
-  recordedFileImportTarget,
   type RecipeAuthoringMapped,
 } from './recipe-authoring-recorded-page.ts';
 
@@ -118,16 +115,12 @@ type Shown =
       view: RecipeAuthoringMapped;
       main: () => ReturnType<typeof browserMainApi>;
       importApi: RecipeImportApi;
-    }
-  | {
-      kind: 'panel';
-      target: NonNullable<ReturnType<typeof recordedFileImportTarget>>;
-      importApi: RecipeImportApi;
     };
 
 /**
  * Authoring and exchange from recorded answers. The story file holds no reader:
  * this runs `loadRecipeAuthoring` and, when the visit recorded a frame, `readRecipeVisitFrame`.
+ * The type registry is that persona's own `GET /v1/types`. A missing sample is not filled from another row.
  */
 export function RecipeAuthoringRecordedPage({
   record,
@@ -135,18 +128,13 @@ export function RecipeAuthoringRecordedPage({
   selections,
   locale,
   frame = false,
-  registry = null,
-  mode = 'page',
 }: {
   record: AnswerRecord;
   persona: AnswerPersona;
   selections: readonly RecordedSelection[];
   locale: UiLocale;
-  /** Exchange visits recorded the layout frame. Authoring did not record `GET /v1/types`. */
+  /** Run the layout frame, including this persona's own `GET /v1/types`. */
   frame?: boolean;
-  /** Served type registry when the row has no `GET /v1/types` of its own. */
-  registry?: TypeRegistry | null;
-  mode?: 'page' | 'file-import';
 }) {
   const [shown, setShown] = useState<Shown>({ kind: 'loading' });
   const workId = workIdOf(record, persona);
@@ -162,18 +150,6 @@ export function RecipeAuthoringRecordedPage({
     });
     const importApi = mainRecipeImportApi({ fetch: replay.fetcher, origin });
     void (async () => {
-      if (mode === 'file-import') {
-        const sample =
-          selections.length === 1
-            ? record.personas[persona].find((item) => item.label === selections[0]?.label)
-            : undefined;
-        const target = sample ? recordedFileImportTarget(sample.path) : null;
-        if (!target)
-          throw new Error('Recorded file import is missing its structure, head or acting person');
-        if (mounted) setShown({ kind: 'panel', target, importApi });
-        return;
-      }
-      if (registry) seedTypes(registry);
       if (frame) {
         const framed = await readRecipeVisitFrame(main, replay.fetcher, {
           actingSubject: actingSubjectOf(record, persona),
@@ -213,7 +189,7 @@ export function RecipeAuthoringRecordedPage({
       mounted = false;
       replay.dispose();
     };
-  }, [frame, locale, mode, persona, record, registry, selections, workRef]);
+  }, [frame, locale, persona, record, selections, workRef]);
 
   if (shown.kind === 'loading')
     return (
@@ -221,21 +197,6 @@ export function RecipeAuthoringRecordedPage({
         {shellMessages.loading}
       </p>
     );
-  if (shown.kind === 'panel') {
-    return (
-      <RecipeExchange
-        structure={shown.target.structure}
-        revision={shown.target.expectedHead}
-        actingSubject={shown.target.actingSubject}
-        locale={locale}
-        messages={messages[locale]}
-        importApi={shown.importApi}
-        save={() => {
-          /* The recorded refusal is the import answer. */
-        }}
-      />
-    );
-  }
   return (
     <RecipeAuthoringBody
       view={shown.view}

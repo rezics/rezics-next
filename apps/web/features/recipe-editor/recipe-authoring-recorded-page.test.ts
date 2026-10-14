@@ -7,19 +7,18 @@ import type {
 import authoringFixture from '../../../../tests/qa/fixtures/outcomes/recipes/author-a-recipe.json';
 import exchangeFixture from '../../../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import { clearTypes, seedTypes, type TypeRegistry } from '../catalogue/types.ts';
+import { clearTypes } from '../catalogue/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { readRecipe, writePlan } from './api.ts';
 import type { Operation } from './intents.ts';
 import { mainRecipeExportApi } from './export-api.ts';
+import { readingLine } from './ingredient-line.ts';
 import { mainRecipeImportApi } from './import-api.ts';
 import { ingredients, steps } from './model.ts';
 import {
-  authoringTypeRegistryGap,
   loadRecipeAuthoring,
   readRecipeVisitFrame,
   recordedFileImportTarget,
-  signedInMediaViewerGap,
   type RecipeAuthoringMapped,
 } from './recipe-authoring-recorded-page.ts';
 
@@ -51,10 +50,6 @@ function replay(
     fetcher: transport.fetcher,
   });
   return { main, fetcher: transport.fetcher };
-}
-
-function seedServedRegistry() {
-  seedTypes(sample(exchange, 'visitor', 'frame-types').answer as TypeRegistry);
 }
 
 function actingSubject(record: AnswerRecord, persona: AnswerPersona, label: string): string {
@@ -117,51 +112,59 @@ function editorOf(view: RecipeAuthoringMapped) {
 }
 
 test('an owner opens the recorded draft at its head', async () => {
-  seedServedRegistry();
   const { main } = replay(authoring, 'owner', authorReads);
-  const view = editorOf(
-    await loadRecipeAuthoring(main, {
-      id: workId(authoring, 'owner'),
-      actingSubject: actingSubject(authoring, 'owner', 'editor-work-header'),
-      signedIn: true,
-    }),
-  );
+  const actor = actingSubject(authoring, 'owner', 'editor-work-header');
+  const id = workId(authoring, 'owner');
   const draft = sample(authoring, 'owner', 'editor-recipe-draft');
   const summary = sample(authoring, 'owner', 'editor-resource-summary');
   const answer = draft.answer as {
     structure: string;
     revision: string;
+    next?: string | null;
     occurrences: {
       role: string;
       state: string;
       qualifier?: {
         instructionText?: { value: string };
         amount?: { numerator: number; denominator: number };
+        originalText?: { value: string };
+        unitText?: string;
       };
     }[];
   };
+  const loaded = await readRecipe(main, id, actor);
+  expect(loaded.ok).toBe(true);
+  if (!loaded.ok) return;
   const title = (summary.answer as { name: { value: string } }).name.value;
-  expect(view.initial.details.values.entries.some((entry) => entry.title === title)).toBe(true);
-  expect(view.initial.recipe.structure).toBe(answer.structure);
-  expect(view.initial.recipe.head).toBe(answer.revision);
-  expect(view.initial.next).toBeNull();
+  const named = await main.v1.resources({ resource: id }).get({ query: { actingSubject: actor } });
+  expect(named.error).toBeNull();
+  expect((named.data as { name?: { value?: string } } | null)?.name?.value).toBe(title);
+  expect(loaded.data.structure).toBe(answer.structure);
+  expect(loaded.data.head).toBe(answer.revision);
+  expect(answer.next ?? null).toBeNull();
   const stepValues = answer.occurrences
     .filter((item) => item.role === 'step' && item.state === 'active')
     .map((item) => item.qualifier?.instructionText?.value ?? '');
-  expect(steps(view.initial.recipe).map((node) => node.qualifier.instructionText.value)).toEqual(
+  expect(steps(loaded.data).map((node) => node.qualifier.instructionText.value)).toEqual(
     stepValues,
   );
+  expect(stepValues).toContain('Private draft note.');
   const amounts = answer.occurrences
     .filter((item) => item.role === 'ingredient' && item.state === 'active')
     .map((item) => item.qualifier?.amount ?? null);
-  expect(ingredients(view.initial.recipe).map((node) => node.qualifier.amount ?? null)).toEqual(
-    amounts,
-  );
-  expect(view.initial.notes).toEqual({ text: null, head: null, body: '', publicationHead: null });
+  expect(ingredients(loaded.data).map((node) => node.qualifier.amount ?? null)).toEqual(amounts);
+  const lines = answer.occurrences
+    .filter((item) => item.role === 'ingredient' && item.state === 'active' && item.qualifier)
+    .map((item) => readingLine(item.qualifier as never));
+  expect(ingredients(loaded.data).map((node) => readingLine(node.qualifier))).toEqual(lines);
+  expect(lines).toEqual(['1 ½ cup flour', '¼ cup flour']);
+  const notes = await main.v1.me.contributions.get({ query: { actingSubject: actor, limit: 20 } });
+  expect(notes.error).toBeNull();
+  expect(notes.data?.items).toEqual([]);
+  expect(notes.data?.nextCursor ?? null).toBeNull();
 });
 
 test('a visitor is asked to sign in and the authority read is not sent', async () => {
-  seedServedRegistry();
   const { main } = replay(authoring, 'visitor', [
     { label: 'editor-work-header', state: 'populated' },
   ]);
@@ -174,7 +177,6 @@ test('a visitor is asked to sign in and the authority read is not sent', async (
 });
 
 test('a stranger without edit authority does not reach the draft', async () => {
-  seedServedRegistry();
   const { main } = replay(authoring, 'stranger', [
     { label: 'editor-authority', state: 'populated' },
     { label: 'editor-work-header', state: 'populated' },
@@ -424,6 +426,10 @@ test('the exchange visit frame opens the owner editor and refuses everyone else'
   };
   expect(view.initial.recipe.structure).toBe(recipe.structure);
   expect(view.initial.recipe.head).toBe(recipe.revision);
+  expect(view.initial.next).toBe(
+    (sample(exchange, 'owner', 'editor-recipe').answer as { next?: string | null }).next ?? null,
+  );
+  expect(view.initial.notes).toEqual({ text: null, head: null, body: '', publicationHead: null });
   const exchangeTitle = (
     sample(exchange, 'owner', 'editor-resource-summary').answer as { name: { value: string } }
   ).name.value;
@@ -469,48 +475,8 @@ test('the exchange visit frame opens the owner editor and refuses everyone else'
   }
 });
 
-test('record gaps stay unnamed as pages', () => {
-  for (const persona of [
-    'visitor',
-    'stranger',
-    'member',
-    'owner',
-    'moderator',
-    'operator',
-  ] as const) {
-    expect(
-      authoring.personas[persona].some(
-        (item) => item.path.split('?')[0] === authoringTypeRegistryGap.path,
-      ),
-    ).toBe(false);
-    expect(
-      exchange.personas[persona].some((item) => item.path.includes('content-preferences')),
-    ).toBe(false);
-    expect(
-      authoring.personas[persona].some((item) => item.path.includes('content-preferences')),
-    ).toBe(false);
-  }
-  expect(signedInMediaViewerGap).toMatchObject({
-    method: 'GET',
-    path: '/api/account/content-preferences/viewer',
-    body: null,
-  });
-
+test('the empty and imported recipe answers share one path', () => {
   const empty = sample(exchange, 'owner', 'recipe-empty');
-  const destination = new URL(empty.path, origin).pathname.split('/').pop()!;
-  const owner = exchange.personas.owner;
-  for (const path of [
-    `/v1/resources/${destination}/page`,
-    `/v1/works/${destination}`,
-    `/v1/resources/${destination}`,
-    `/v1/works/${destination}/metadata`,
-    `/v1/me/contributions`,
-  ]) {
-    const hit = owner.some((item) => item.path === path || item.path.startsWith(`${path}?`));
-    expect(hit).toBe(path === '/v1/me/contributions');
-  }
-  expect(owner.some((item) => item.path.startsWith(`/v1/recipes/works/${destination}`))).toBe(true);
-  expect(owner.some((item) => item.label === 'imported-recipe' && item.path === empty.path)).toBe(
-    true,
-  );
+  expect(sample(exchange, 'owner', 'imported-recipe').path).toBe(empty.path);
+  expect((empty.answer as { occurrences: unknown[] }).occurrences).toEqual([]);
 });

@@ -14,24 +14,6 @@ import type { RecipePageLike } from './model.ts';
 import { stateOf } from './model.ts';
 import type { NotesState } from './saves.ts';
 
-/** Account's signed-in media viewer. LocaleLayout reads it; no exchange or authoring sample records it. */
-export const signedInMediaViewerGap = {
-  method: 'GET' as const,
-  path: '/api/account/content-preferences/viewer',
-  query: null,
-  body: null,
-  personas: ['stranger', 'member', 'owner', 'moderator', 'operator'] as const,
-};
-
-/** The locale layout's type registry. The authoring row does not record this GET. */
-export const authoringTypeRegistryGap = {
-  method: 'GET' as const,
-  path: '/v1/types',
-  query: null,
-  body: null,
-  row: 'recipes/author-a-recipe' as const,
-};
-
 const emptyNotes = (): NotesState => ({ text: null, head: null, body: '', publicationHead: null });
 
 export type RecipeAuthoringMapped =
@@ -98,13 +80,8 @@ export async function loadRecipeAuthoring(
       ? allowedActions(main, input.id, actingSubject)
       : Promise.resolve([] as readonly string[]),
     input.readHeader?.() ??
-      settle(
-        () =>
-          main.v1
-            .works({ id: input.id })
-            .get({ query: { actingSubject: actingSubject ?? undefined } }),
-        undefined,
-        true,
+      settle(() =>
+        main.v1.works({ id: input.id }).get({ query: { actingSubject: actingSubject ?? undefined } }),
       ),
   ]);
   if (!mayEdit(allowed)) return { kind: 'no-authority', signedIn: input.signedIn };
@@ -182,7 +159,8 @@ export type RecipeVisitFrame = { ok: true; registry: TypeRegistry } | { ok: fals
  * Root and locale layout reads for an English visit, then the shell's community lists.
  * Official Zones are a public page. An empty page does not continue into Realm reads.
  * A later page is a record gap: this visit does not invent the next request.
- * The signed-in content-preferences read is not issued: nothing records it.
+ * Account's signed-in content preferences stay on LocaleLayout's `readMediaViewer`.
+ * This mapping does not issue that read and does not substitute a Main answer.
  */
 export async function readRecipeVisitFrame(
   main: MainClient,

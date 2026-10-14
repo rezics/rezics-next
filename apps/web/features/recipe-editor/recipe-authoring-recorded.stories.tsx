@@ -9,7 +9,6 @@ import authoringFixture from '../../../../tests/qa/fixtures/outcomes/recipes/aut
 import exchangeFixture from '../../../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import type { TypeRegistry } from '../catalogue/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { copyOf as editCopyOf } from '../work-levels-edit/messages.ts';
 import { globalWorkHref } from '../work-page/route.ts';
@@ -22,8 +21,6 @@ const authoring = authoringFixture as AnswerRecord;
 const exchange = exchangeFixture as AnswerRecord;
 const copy = copyOf('en');
 const editCopy = editCopyOf('en');
-const servedRegistry = exchange.personas.visitor.find((item) => item.label === 'frame-types')!
-  .answer as TypeRegistry;
 
 function recorded(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const sample = record.personas[persona].find((item) => item.label === label);
@@ -40,29 +37,15 @@ type RecipeAnswer = {
   }[];
 };
 type Named = { name: { value: string } };
-type Titled = { title: string };
 type Header = { id: string; title: { value: string } };
 
-const authorDraft = recorded(authoring, 'owner', 'editor-recipe-draft').answer as RecipeAnswer;
 const authorTitle = (recorded(authoring, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
-const authorHeader = recorded(authoring, 'owner', 'editor-work-header').answer as Header;
 const exchangeRecipe = recorded(exchange, 'owner', 'editor-recipe').answer as RecipeAnswer;
 const exchangeTitle = (recorded(exchange, 'owner', 'editor-resource-summary').answer as Named).name
   .value;
 const exchangeHeader = recorded(exchange, 'owner', 'editor-work-header').answer as Header;
 const exported = recorded(exchange, 'owner', 'schema-org-export');
-const stale = recorded(exchange, 'owner', 'file-import-stale');
-const staleTitle = (stale.answer as Titled).title;
-
-const authorReads = [
-  { label: 'editor-authority', state: 'populated' },
-  { label: 'editor-work-header', state: 'populated' },
-  { label: 'editor-resource-summary', state: 'populated' },
-  { label: 'editor-metadata-empty', state: 'populated' },
-  { label: 'editor-recipe-draft', state: 'populated' },
-  { label: 'editor-notes-empty', state: 'populated' },
-] as const satisfies readonly RecordedSelection[];
 
 const visitFrame = [
   { label: 'frame-platform-access', state: 'populated' },
@@ -132,13 +115,11 @@ const meta = {
   title: 'Recipe editor/Recorded authoring',
   component: RecipeAuthoringRecordedPage,
   args: {
-    record: authoring,
+    record: exchange,
     persona: 'owner' as const,
-    selections: authorReads,
+    selections: exchangeReads,
     locale: 'en' as const,
-    frame: false,
-    registry: servedRegistry,
-    mode: 'page' as const,
+    frame: true,
   },
   render: (args, { globals }) => (
     <RecipeAuthoringRecordedPage
@@ -149,15 +130,6 @@ const meta = {
 } satisfies Meta<typeof RecipeAuthoringRecordedPage>;
 export default meta;
 type Story = StoryObj<typeof meta>;
-
-async function populatedAuthor({ canvasElement }: { canvasElement: HTMLElement }) {
-  const canvas = within(canvasElement);
-  await expectRecipe(canvas, authorTitle, authorDraft, authorHeader.id);
-  await expect(canvas.getByRole('textbox', { name: copy.stepText({ number: '3' }) })).toHaveValue(
-    'Private draft note.',
-  );
-  await expect(canvas.queryByRole('alert')).toBeNull();
-}
 
 async function loadingAuthor({ canvasElement }: { canvasElement: HTMLElement }) {
   const canvas = within(canvasElement);
@@ -211,18 +183,10 @@ async function loadingVisitor({ canvasElement }: { canvasElement: HTMLElement })
   await expect(canvas.queryByRole('alert')).toBeNull();
 }
 
-async function staleImport({ canvasElement }: { canvasElement: HTMLElement }) {
-  const canvas = within(canvasElement);
-  const input = await canvas.findByLabelText(copy.importAction, { selector: 'input' });
-  await waitFor(() => expect(input).toBeEnabled());
-  const file = new File([JSON.stringify(stale.body)], 'recipe.json', { type: 'application/json' });
-  await userEvent.upload(input, file);
-  await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(staleTitle);
-}
-
-const populatedAuthorStory = { play: populatedAuthor } satisfies Story;
 const loadingAuthorStory = {
   args: {
+    record: authoring,
+    frame: false,
     selections: [
       { label: 'editor-authority', state: 'loading' },
       { label: 'editor-work-header', state: 'populated' },
@@ -230,26 +194,17 @@ const loadingAuthorStory = {
   },
   play: loadingAuthor,
 } satisfies Story;
-const populatedExchangeStory = {
-  args: { record: exchange, selections: exchangeReads, frame: true, registry: null },
-  play: populatedExchange,
-} satisfies Story;
+const populatedExchangeStory = { play: populatedExchange } satisfies Story;
 const signInVisitorStory = {
   args: {
-    record: exchange,
     persona: 'visitor' as const,
-    frame: true,
-    registry: null,
     selections: [...visitFrame, { label: 'editor-work-header', state: 'populated' }] as const,
   },
   play: signInVisitor,
 } satisfies Story;
 const noAuthorityStory = {
   args: {
-    record: exchange,
     persona: 'stranger' as const,
-    frame: true,
-    registry: null,
     selections: [
       ...signedInFrame,
       { label: 'editor-authority', state: 'populated' },
@@ -260,32 +215,16 @@ const noAuthorityStory = {
 } satisfies Story;
 const loadingVisitorStory = {
   args: {
-    record: exchange,
     persona: 'visitor' as const,
-    frame: true,
-    registry: null,
     selections: [{ label: 'frame-platform-access', state: 'loading' }] as const,
   },
   play: loadingVisitor,
-} satisfies Story;
-const staleStory = {
-  args: {
-    record: exchange,
-    persona: 'owner' as const,
-    frame: false,
-    registry: null,
-    mode: 'file-import' as const,
-    selections: [{ label: 'file-import-stale', state: 'error' }] as const,
-  },
-  play: staleImport,
 } satisfies Story;
 
 function at(story: Story, viewport: 'phone' | 'desktop'): Story {
   return { ...story, globals: { viewport: { value: viewport } } };
 }
 
-export const PopulatedOwnerPhone: Story = at(populatedAuthorStory, 'phone');
-export const PopulatedOwnerDesktop: Story = at(populatedAuthorStory, 'desktop');
 export const LoadingOwnerPhone: Story = at(loadingAuthorStory, 'phone');
 export const LoadingOwnerDesktop: Story = at(loadingAuthorStory, 'desktop');
 export const PopulatedExchangeOwnerPhone: Story = at(populatedExchangeStory, 'phone');
@@ -296,5 +235,3 @@ export const NoAuthorityStrangerPhone: Story = at(noAuthorityStory, 'phone');
 export const NoAuthorityStrangerDesktop: Story = at(noAuthorityStory, 'desktop');
 export const LoadingVisitorPhone: Story = at(loadingVisitorStory, 'phone');
 export const LoadingVisitorDesktop: Story = at(loadingVisitorStory, 'desktop');
-export const StaleImportOwnerPhone: Story = at(staleStory, 'phone');
-export const StaleImportOwnerDesktop: Story = at(staleStory, 'desktop');
