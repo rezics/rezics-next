@@ -5,6 +5,7 @@ import pagination from '../../../../../scripts/qa/cases/outcomes/recipes/catalog
 import { recipeCatalogue, short } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
+import { recordFrameReads } from '../../../support/frame-reads.ts';
 
 setDefaultTimeout(120_000);
 let sessions: PersonaSessions;
@@ -98,6 +99,42 @@ async function traverse(name: PersonaName) {
   }
   await answer(sample('search-no-match', 'GET', `${path}?${new URLSearchParams({ q: `${phrase}Missing`, language: 'en', type: 'https://schema.org/Recipe' })}`));
   if (name === 'owner') await supportingReads(sample);
+  await pageReads(name);
+}
+
+// These are the catalogue page's anonymous queries, without proof-only filters or limits.
+async function pageReads(name: PersonaName) {
+  const person = sessions[name];
+  await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
+    'space', short(sessions.space), 'browse');
+  if (name !== 'visitor') {
+    const personal = recording.session(name, person);
+    await answer(personal('page-realm-context', 'GET', `/v1/realms/${short(sessions.realm)}`));
+    await answer(personal('page-space-address', 'GET',
+      `/v1/addresses/resolve?scope=space&key=${short(sessions.space)}`));
+  }
+  const publicRead = recording.session(name, sessions.visitor);
+  const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
+  const shapes: Array<[string, Record<string, string>]> = [
+    ['default', {}],
+    ['newest', { sort: 'newest' }],
+    ['updated', { sort: 'updated' }],
+    ['search', { q: phrase }],
+    ['search-relevance', { q: phrase, sort: 'relevance' }],
+    ['search-newest', { q: phrase, sort: 'newest' }],
+    ['search-updated', { q: phrase, sort: 'updated' }],
+    ['no-match', { q: `${phrase}Missing` }],
+    ['no-match-relevance', { q: `${phrase}Missing`, sort: 'relevance' }],
+  ];
+  for (const [label, shape] of shapes) {
+    const query = new URLSearchParams(shape);
+    for (let page = 0; page < 5; page++) {
+      const suffix = query.size ? `?${query}` : '';
+      const result = await answer<Page>(publicRead(`page-${label}-${page}`, 'GET', `${path}${suffix}`));
+      if (!result.nextCursor) break;
+      query.set('cursor', result.nextCursor);
+    }
+  }
 }
 // The browse route reads its frame, facet labels and the state of its cards separately.
 async function supportingReads(sample: ReturnType<typeof recording.session>) {
