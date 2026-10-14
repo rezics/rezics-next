@@ -1,3 +1,4 @@
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { expect, test } from 'bun:test';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -133,7 +134,7 @@ test('G-266: an unknown kind stops its ordered position with event identity and 
 
 test('G-266: every statically emitted Main outbox kind has a relay reader', async () => {
   const emitted = new Set<string>();
-  for (const file of new Bun.Glob('services/main/src/modules/**/*.ts').scanSync('.')) {
+  for (const file of repositoryGlob(process.cwd(), 'services/main/src/modules/**/*.ts')) {
     if (file.endsWith('/outbox-event.ts') || file === 'services/main/src/modules/outbox/relay.ts') continue;
     const source = await readFile(file, 'utf8');
     if (!source.includes('GRAPHS.outbox') && !source.includes('OutboxBatch')) continue;

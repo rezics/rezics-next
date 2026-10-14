@@ -1,5 +1,6 @@
+import { repositoryGlob } from '../../../scripts/lib/repository-files.ts';
 import { expect, test } from 'bun:test';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { Value } from 'typebox/value';
 import { WikiExtractionSchema, WikiCandidatesSchema, WikiResourceSchema, wikiRightsBases, type WikiExtraction }
@@ -73,10 +74,8 @@ test('G-845: emitted extraction/candidate schemas bound all text and cannot admi
 
 test('G-845: Apache protocol imports stay within its package or TypeBox and model keeps the locator API', () => {
   const visit = (directory: string) => {
-    for (const file of readdirSync(directory, { withFileTypes: true })) {
-      const path = resolve(directory, file.name);
-      if (file.isDirectory()) { visit(path); continue; }
-      if (!file.name.endsWith('.ts')) continue;
+    for (const file of repositoryGlob(directory, '**/*.ts')) {
+      const path = resolve(directory, file);
       const source = readFileSync(path, 'utf8');
       expect(source).toStartWith('// SPDX-License-Identifier: Apache-2.0');
       expect(source).not.toMatch(/ContentCommentTarget|locatorFromComment|urn:rezics:content:revision/);

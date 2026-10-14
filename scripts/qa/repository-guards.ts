@@ -291,7 +291,8 @@ export function selectRepositoryGuards(
 ): RepositoryGuard[] {
   if (changed === undefined) return [...guards];
   if (!changed.length) return [];
-  if (changed.includes('scripts/qa/repository-guards.ts')) return [...guards];
+  if (changed.includes('scripts/qa/repository-guards.ts')
+    || changed.includes('scripts/lib/repository-files.ts')) return [...guards];
   return guards.filter(guard => !guard.reads || changed.some(file =>
     file === guard.file || guard.reads!.some(pattern => new Bun.Glob(pattern).match(file))));
 }
