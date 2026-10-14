@@ -166,6 +166,28 @@ async function replayBan(realm: string, actingSubject: string, replay: RealmRepl
   return read.ok ? read.reading : null;
 }
 
+/**
+ * The host learns the signed-in reader from the request cookie, then reads that
+ * person's language preferences. A supplied client has no cookie, so it carries
+ * the same two reads; the caller's acting person stays the one it already resolved.
+ */
+async function suppliedClientSession(client: RealmReadClient): Promise<void> {
+  const actingSubject = client.actingSubject;
+  if (!client.signedIn || !actingSubject) return;
+  const personal = client.personal ?? client.main;
+  await personal.v1.me['session-agent'].get();
+  await personal.v1.me['person-preferences'].get({ query: { actingSubject } });
+}
+
+/** Platform access and, only when that answer opens it, the reader's own ban. */
+async function suppliedClientBan(client: RealmReadClient, realm: string, actingSubject: string): Promise<BanReading | null> {
+  const personal = client.personal ?? client.main;
+  const access = await personal.v1.me['platform-access'].get();
+  const held = access.data ? parsePlatformAccess(access.data) : null;
+  const read = await readMemberBan(personal, realm, actingSubject, gateFor(held));
+  return read.ok ? read.reading : null;
+}
+
 /** The page's resolution, using the same readers production calls. */
 async function replayRealm(ref: string, locale: UiLocale, replay: RealmReplay): Promise<RealmResolution> {
   const languages = replay.languages ?? locale;
@@ -254,6 +276,7 @@ export async function loadRealmView(
       personal: client.personal ?? client.main,
       avatarQuery: client.actingSubject ? `?actingSubject=${encodeURIComponent(client.actingSubject)}` : '',
     } satisfies RealmReader : realmReader(),
+    client?.signedIn && client.actingSubject ? suppliedClientSession(client) : null,
   ]);
   const frameReads = replay ? realmFrameReads({
     main: browserMainApi(replay.origin, { anonymous: true, fetcher: replay.fetch }),
@@ -289,7 +312,9 @@ export async function loadRealmView(
         : null,
     replay
       ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay) : null
-      : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
+      : client && reader.actingSubject
+        ? suppliedClientBan(client, realm.header.id, reader.actingSubject)
+        : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {
     if (read && !read.ok && read.failure === 'missing') return { kind: 'missing' };
