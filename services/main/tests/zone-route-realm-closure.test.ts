@@ -45,8 +45,8 @@ function fixture(input: { realm: 'public' | 'private' | 'closed'; granted?: bool
   return { work, request, zone, realm, close: () => rmSync(directory, { recursive: true, force: true }) };
 }
 
-test('independent shell routes and presentation expose only the reader-admitted live Realm', async () => {
-  for (const realm of ['public', 'private', 'closed'] as const) for (const granted of [false, true]) {
+for (const realm of ['public', 'private', 'closed'] as const) for (const granted of [false, true]) {
+  test(`independent shell routes and presentation admit only a live ${realm} Realm (membership ${granted})`, async () => {
     const f = fixture({ realm, granted });
     try {
       for (const actingSubject of [undefined, `https://rezics.com/id/${randomUUID()}`]) {
@@ -59,8 +59,8 @@ test('independent shell routes and presentation expose only the reader-admitted 
       }
       expect((await readZonePublication(f.work.environment, f.zone)).realm).toBe(f.realm);
     } finally { f.close(); }
-  }
-});
+  });
+}
 
 test('a Realm closing during hydration rechecks the selected basis before returning the independent home', async () => {
   const f = fixture({ realm: 'public', changed: true });
