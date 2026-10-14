@@ -6,6 +6,26 @@ ALTER TABLE access.group_permission_grant ADD CONSTRAINT work_publication_exact_
   CHECK (action <> 'platform:resource:work.publish' OR
     scope_id ~ '^work:publish:https://rezics[.]com/id/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$');
 
+-- End the deployment-only ceiling with its original designation, even when
+-- another ordinary platform grant keeps governance available. Grant changes
+-- and bootstrap already serialize through the platform gate/recovery fence.
+CREATE FUNCTION access.revoke_source_publication_assignment_ceiling() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.id = (SELECT e.principal_grant_id FROM access.platform_grant_episode e
+    WHERE e.permission = 'platform:grant' AND e.principal_grant_id IS NOT NULL
+    ORDER BY e.created_at,e.id LIMIT 1) THEN
+    UPDATE access.permission_grant SET active = false
+    WHERE assigned_by_principal = NEW.principal_id
+      AND action = 'access.grant.assign.work.publish' AND active;
+  END IF;
+  RETURN NULL;
+END $$;
+CREATE TRIGGER source_publication_assignment_revocation
+  AFTER UPDATE OF active ON access.principal_permission_grant
+  FOR EACH ROW WHEN (OLD.action = 'platform:grant' AND OLD.active AND NOT NEW.active)
+  EXECUTE FUNCTION access.revoke_source_publication_assignment_ceiling();
+
 -- The immutable first designation alone receives assignment, never publication.
 CREATE FUNCTION access.seed_source_publication_assignment_ceiling(principal uuid, designation text)
 RETURNS void LANGUAGE plpgsql AS $$
