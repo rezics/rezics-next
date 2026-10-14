@@ -24,7 +24,8 @@ export interface TestResult {
 
 export const UNEXECUTED_FILE_TEST = 'QA file did not complete';
 export const NATIVE_PROOF_PREPARATION_ERROR = 'NativeProofPreparationError';
-export const unitHarnessFiles = ['tests/qa/g-955-harness.test.ts', 'tests/qa/support/outcome-test.test.ts'];
+export const unitHarnessFiles = ['tests/qa/g-955-harness.test.ts', 'tests/qa/support/outcome-test.test.ts',
+  'tests/qa/support/realm-discussion-source.test.ts'];
 
 export function caseInventory(_root?: string): Case[] {
   const found = new Set<string>();
