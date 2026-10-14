@@ -1,78 +1,66 @@
 'use client';
 
-import { Alert, AlertTitle } from '@rezics/ui/alert';
-import { materializeData } from 'native-i18n';
+import { useEffect, useState, type ReactNode } from 'react';
+import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
-import type { MainClient } from '../discover/types.ts';
-import { stateLabel } from '../manage/labels.ts';
-import { managementMessages } from '../manage/localized-messages.ts';
-import { RealmFrame } from '../manage/realm-frame.tsx';
-import { QueueView } from '../manage/queue-view.tsx';
-import { noNames } from '../manage/queue-api.ts';
-import type { ModerationItem } from '../manage/types.ts';
-import { RealmBanPanel } from './panel.tsx';
-import { realmAppealMessages } from './localized-messages.ts';
-import type { BanReading } from './reading.ts';
-import { recordedModerationQueueApi, type RealmModerationMapped } from './realm-moderation-recorded-page.ts';
+import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { parsePlatformAccess, type PlatformAccess } from '../api/platform-access.ts';
+import type { QueueView } from '../manage/routes.ts';
+import { messages as shellMessages } from '../shell/messages.ts';
+import { ShellProvider } from '../shell/shell-provider.tsx';
+import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
+import { recordedModerationRoute } from './realm-moderation-recorded-page.ts';
 
-function recordedNow(openedAt: string | undefined): number {
-  const parsed = openedAt ? Date.parse(openedAt) : Number.NaN;
-  return Number.isNaN(parsed) ? Date.parse('2026-10-13T00:00:00.000Z') : parsed;
+/**
+ * The production moderation queue. Loading is a recorded request left
+ * unanswered. The shell gate is the recorded platform-access grant; the story
+ * does not choose which requests the queue or its sanction panel make.
+ */
+export function RecordedModerationPage({ record, persona, selections, realm, view, platformAccess, locale = 'en' }: {
+  record: AnswerRecord;
+  persona: AnswerPersona;
+  selections: readonly RecordedSelection[];
+  realm: string;
+  view: QueueView;
+  platformAccess: PlatformAccess;
+  locale?: UiLocale;
+}) {
+  const [node, setNode] = useState<ReactNode>(null);
+  const [failure, setFailure] = useState<Error | null>(null);
+  const key = selections.map(item => `${item.label}:${item.state}`).join('|');
+  useEffect(() => {
+    let mounted = true;
+    setNode(null); setFailure(null);
+    let missed: string | null = null;
+    const playback = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      try { return await playback.fetcher(input, init); }
+      catch (error) {
+        if (mounted && !(error instanceof DOMException && error.name === 'AbortError')) {
+          missed = error instanceof Error ? error.message : String(error);
+          setFailure(new Error(missed));
+        }
+        throw error;
+      }
+    }) as typeof fetch;
+    const main = browserMainApi('https://recorded.invalid', { fetcher });
+    void recordedModerationRoute(main, fetcher, realm, locale, view).then(result => {
+      if (mounted && !missed) setNode(result);
+    }).catch((error: unknown) => {
+      if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;
+      setFailure(error instanceof Error ? error : new Error(String(error)));
+    });
+    return () => { mounted = false; playback.dispose(); };
+  }, [record, persona, key, realm, view, locale, selections]);
+  if (failure) throw failure;
+  if (!node) return <p role="status" aria-busy="true">{shellMessages.loading}</p>;
+  return <ShellProvider locale={locale} messages={shellMessages} initialTheme="light" initialCollapsed={false}
+    signedIn platformAccess={platformAccess}>{node}</ShellProvider>;
 }
 
-function CaseNote({ item, generation, appeal, locale }: {
-  item: ModerationItem; generation: string; appeal: BanReading | null; locale: UiLocale;
-}) {
-  const t = materializeData(managementMessages(locale), { locale });
-  const statement = appeal && appeal.appeal.state !== 'none' ? appeal.appeal.statement : null;
-  return <section aria-label={item.id} className="grid min-w-0 gap-3">
-    <h2 className="text-balance font-semibold text-lg">{t.decisionEntry({ outcome: stateLabel(item, t), generation })}</h2>
-    <p className="break-all font-mono text-sm">{item.id}</p>
-    {appeal ? <div className="grid gap-2 text-sm">
-      <h3 className="font-medium">{t.reasonLabel}</h3>
-      <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere]">{appeal.reason}</blockquote>
-      {statement ? <>
-        <h3 className="font-medium">{t.submittedText}</h3>
-        <blockquote className="whitespace-pre-wrap [overflow-wrap:anywhere]">{statement}</blockquote>
-      </> : null}
-    </div> : null}
-  </section>;
-}
-
-/** The queue or the ban panel. Stories and the mapping render this; a discrepancy is the record's own words. */
-export function RealmModerationRecordedPage({ mapped, client, locale }: {
-  mapped: RealmModerationMapped; client: MainClient; locale: UiLocale;
-}) {
-  const manageMessages = managementMessages(locale);
-  if (mapped.kind === 'discrepancy') return <p role="alert">{mapped.detail}</p>;
-  if (mapped.kind === 'refusal') {
-    return <div className="p-4">
-      <Alert role="alert" variant="destructive" className="max-w-3xl">
-        <AlertTitle><h1 className="text-balance font-semibold text-lg">{mapped.problem.title}</h1></AlertTitle>
-      </Alert>
-    </div>;
-  }
-  if (mapped.kind === 'appeal') {
-    return <RealmBanPanel reading={mapped.reading} realm={mapped.realm} locale={locale} messages={realmAppealMessages(locale)} />;
-  }
-  const opened = mapped.page.items[0]?.openedAt;
-  return <div className="min-w-0">
-    {/* No recorded settings or zone read, so the frame does not ask for either. */}
-    <RealmFrame realm={mapped.realm} header={mapped.header} agent={mapped.agent} locale={locale} messages={manageMessages}
-      settingsAllowed={false} siteHref={null}>
-      <div className="grid min-w-0 gap-8">
-        <QueueView principal={mapped.actingSubject} realm={mapped.realm} actingSubject={mapped.actingSubject}
-          view={mapped.view} initial={mapped.page} names={noNames} now={recordedNow(opened)} locale={locale}
-          messages={manageMessages} appealClient={client} appealAuthority={{ dismiss: true, restore: false }}
-          api={recordedModerationQueueApi(client, mapped.realm, mapped.actingSubject, locale)} />
-        {mapped.page.items.map(item => {
-          const basis = mapped.basis?.caseId === item.id ? mapped.basis : null;
-          const appeal = mapped.appeal && (mapped.appeal.receiptId === item.target.resource
-            || (mapped.appeal.appeal.state !== 'none' && mapped.appeal.appeal.caseId === item.id)) ? mapped.appeal : null;
-          return <CaseNote key={item.id} item={item} generation={basis?.generation ?? item.generation} appeal={appeal}
-            locale={locale} />;
-        })}
-      </div>
-    </RealmFrame>
-  </div>;
+export function recordedPlatformAccess(record: AnswerRecord, persona: AnswerPersona): PlatformAccess {
+  const sample = record.personas[persona].find(item => item.label === 'frame-platform-access');
+  const access = sample ? parsePlatformAccess(sample.answer) : null;
+  if (!access) throw new Error(`Recorded ${record.row}/${persona} has no platform-access grant`);
+  return access;
 }

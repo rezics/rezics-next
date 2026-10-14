@@ -13,9 +13,12 @@ import { showcaseEditorOpen } from '../../../../../features/zone-editor/edit-lin
 import { getMessages, requestLocale } from '../../../../../i18n/server.ts';
 
 /** The management frame after the manager has admitted the acting Person. */
-export async function realmManagementFrame({ main, realm, address, actingSubject, agent, locale, token, children }: {
+export async function realmManagementFrame({ main, realm, address, actingSubject, agent, locale, token, accessClient,
+  children }: {
   main: MainClient; realm: string; address: string; actingSubject: string; agent: AgentOption; locale: UiLocale;
-  token?: string; children: ReactNode;
+  token?: string;
+  /** The section tabs' client. Production omits it and the tabs use the browser host client. */
+  accessClient?: MainClient; children: ReactNode;
 }) {
   const [messages, header, siteHref] = await Promise.all([
     getMessages('manage', locale),
@@ -26,7 +29,7 @@ export async function realmManagementFrame({ main, realm, address, actingSubject
     }),
   ]);
   return <RealmFrame realm={realm} address={address} header={header.ok ? header.data : null} agent={agent}
-    locale={locale} messages={messages} siteHref={siteHref}>{children}</RealmFrame>;
+    locale={locale} messages={messages} siteHref={siteHref} accessClient={accessClient}>{children}</RealmFrame>;
 }
 
 export default async function RealmManagementLayout({ children, params }: {
