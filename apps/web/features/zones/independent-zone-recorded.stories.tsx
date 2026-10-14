@@ -1,18 +1,22 @@
-import { documentText } from '@rezics/document';
+import { documentText, type DocumentSnapshot } from '@rezics/document';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import independentZone from '../../../../tests/qa/fixtures/outcomes/zone/a-zone-without-a-realm.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { surfaceText } from '../address/messages.ts';
 import { addressKey } from '../address/path.ts';
+import { signInPath } from '../auth/paths.ts';
 import { messages as manageMessages } from '../manage/messages.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { messages as editorMessages } from '../zone-editor/messages.ts';
 import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
+import { IndependentZoneRecordedManagement, type IndependentZoneManagementPlace } from './independent-zone-recorded-page-manage.tsx';
 import { IndependentZoneRecordedPage } from './independent-zone-recorded-page.tsx';
 import { zoneSitePrefix } from './zone-site-recorded-page.ts';
 
@@ -139,3 +143,178 @@ export const LoadingModeratorPhone: Story = at('moderator', 'loading', 'phone');
 export const LoadingModeratorDesktop: Story = at('moderator', 'loading', 'desktop');
 export const LoadingOperatorPhone: Story = at('operator', 'loading', 'phone');
 export const LoadingOperatorDesktop: Story = at('operator', 'loading', 'desktop');
+
+const editorCopy = editorMessages.en;
+type ManagedPersona = 'stranger' | 'member' | 'owner' | 'moderator';
+
+function recordedSpace(persona: AnswerPersona): string {
+  const key = new URL(sample(persona, 'page-address').path, 'https://recorded.invalid').searchParams.get('key');
+  if (!key) throw new Error(`${persona} address has no space`);
+  return key;
+}
+
+function actingName(persona: ManagedPersona): string {
+  const label = (sample(persona, 'page-agent-profile').answer as { displayName?: unknown }).displayName;
+  if (typeof label !== 'string' || !label) throw new Error(`${persona} has no recorded acting name`);
+  return label;
+}
+
+function zoneTitle(label: 'management-zone' | 'saved-preview-zone'): string {
+  const name = (sample('owner', label).answer as { name?: unknown }).name;
+  if (typeof name !== 'string' || !name) throw new Error(`${label} has no name`);
+  return name;
+}
+
+function recordedDocument(label: string): string {
+  const item = sample('owner', label);
+  const answer = item.answer as { draft?: { document?: DocumentSnapshot } } | null;
+  const body = item.body as { document?: DocumentSnapshot } | null;
+  const document = answer?.draft?.document ?? body?.document;
+  if (!document) throw new Error(`${label} has no document`);
+  return documentText(document);
+}
+
+function managementStory(persona: AnswerPersona, place: IndependentZoneManagementPlace, viewport: 'phone' | 'desktop',
+  play: Story['play']): Story {
+  return {
+    render: () => <IndependentZoneRecordedManagement record={record} persona={persona} place={place} locale="en" />,
+    globals: { viewport: { value: viewport }, locale: 'en' },
+    play,
+  };
+}
+
+function redirectPlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const target = signInPath(localizedPath(zoneEditorPath(recordedSpace('visitor')), 'en'));
+    await expect(canvas.findByRole('status')).resolves.toHaveTextContent(target);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.queryByRole('region', { name: manageMessages.actingAs })).toBeNull();
+  };
+}
+
+function deniedPlay(persona: ManagedPersona): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('heading', { level: 1, name: recordedSpace(persona) })).resolves.toBeVisible();
+    await expect(canvas.findByRole('alert')).resolves.toBeVisible();
+    await expect(canvas.getByRole('heading', { level: 2, name: editorCopy.deniedTitle })).toBeVisible();
+    await expect(canvas.getByText(editorCopy.deniedBody)).toBeVisible();
+    const acting = within(canvas.getByRole('region', { name: manageMessages.actingAs }));
+    await expect(acting.getByText(actingName(persona))).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: editorCopy.save })).toBeNull();
+    await expect(canvas.queryByRole('heading', { name: editorCopy.previewTitle })).toBeNull();
+  };
+}
+
+function ownerManagePlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('heading', { level: 1, name: zoneTitle('management-zone') })).resolves.toBeVisible();
+    const acting = within(canvas.getByRole('region', { name: manageMessages.actingAs }));
+    await expect(acting.getByText(actingName('owner'))).toBeVisible();
+    await expect(canvas.findByText(recordedDocument('management-editor'))).resolves.toBeVisible();
+    await expect(canvas.getByRole('button', { name: editorCopy.save })).toBeVisible();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  };
+}
+
+function ownerPreviewPlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const title = zoneTitle('saved-preview-zone');
+    await expect(canvas.findAllByRole('heading', { level: 1, name: title })).resolves.toHaveLength(2);
+    await expect(canvas.getByRole('heading', { level: 2, name: editorCopy.previewTitle })).toBeVisible();
+    const acting = within(canvas.getByRole('region', { name: manageMessages.actingAs }));
+    await expect(acting.getByText(actingName('owner'))).toBeVisible();
+    await expect(canvas.getByText(recordedDocument('saved-preview-editor'))).toBeVisible();
+    await expect(canvas.queryByRole('link', { name: surfaceText.community.en })).toBeNull();
+    await expect(canvas.queryByRole('alert')).toBeNull();
+  };
+}
+
+function loadingManagementPlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('status')).resolves.toHaveTextContent(shellMessages.loading);
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.queryByRole('button', { name: editorCopy.save })).toBeNull();
+    await expect(canvas.queryByRole('heading', { level: 1 })).toBeNull();
+  };
+}
+
+function savePlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('heading', { level: 1, name: zoneTitle('management-zone') })).resolves.toBeVisible();
+    await expect(canvas.findByText(recordedDocument('editor-save'))).resolves.toBeVisible();
+    const save = canvas.getByRole('button', { name: editorCopy.save });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await expect(canvas.findByText(editorCopy.saved)).resolves.toBeVisible();
+    const publish = canvas.getByRole('button', { name: editorCopy.publish });
+    await waitFor(() => expect(publish).toBeEnabled());
+    await userEvent.click(publish);
+    await expect(canvas.findByText(editorCopy.published)).resolves.toBeVisible();
+  };
+}
+
+function stalePlay(): NonNullable<Story['play']> {
+  return async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    const saved = recordedDocument('editor-save');
+    const reopened = recordedDocument('editor-reopen-draft');
+    const save = await canvas.findByRole('button', { name: editorCopy.save });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(editorCopy.staleTitle);
+    await userEvent.click(canvas.getByRole('button', { name: editorCopy.loadTheirs }));
+    await expect(canvas.findByText(editorCopy.loaded)).resolves.toBeVisible();
+    await expect(canvas.getByText(reopened)).toBeVisible();
+    if (saved !== reopened) await expect(canvas.queryByText(saved)).toBeNull();
+  };
+}
+
+export const VisitorRedirectPhone: Story = managementStory('visitor', 'redirect', 'phone', redirectPlay());
+export const VisitorRedirectDesktop: Story = managementStory('visitor', 'redirect', 'desktop', redirectPlay());
+
+export const ManagementStrangerPhone: Story = managementStory('stranger', 'manage', 'phone', deniedPlay('stranger'));
+export const ManagementStrangerDesktop: Story = managementStory('stranger', 'manage', 'desktop', deniedPlay('stranger'));
+export const ManagementMemberPhone: Story = managementStory('member', 'manage', 'phone', deniedPlay('member'));
+export const ManagementMemberDesktop: Story = managementStory('member', 'manage', 'desktop', deniedPlay('member'));
+export const ManagementOwnerPhone: Story = managementStory('owner', 'manage', 'phone', ownerManagePlay());
+export const ManagementOwnerDesktop: Story = managementStory('owner', 'manage', 'desktop', ownerManagePlay());
+export const ManagementModeratorPhone: Story = managementStory('moderator', 'manage', 'phone', deniedPlay('moderator'));
+export const ManagementModeratorDesktop: Story = managementStory('moderator', 'manage', 'desktop', deniedPlay('moderator'));
+
+export const ManagementLoadingStrangerPhone: Story = managementStory('stranger', 'manage-loading', 'phone', loadingManagementPlay());
+export const ManagementLoadingStrangerDesktop: Story = managementStory('stranger', 'manage-loading', 'desktop', loadingManagementPlay());
+export const ManagementLoadingMemberPhone: Story = managementStory('member', 'manage-loading', 'phone', loadingManagementPlay());
+export const ManagementLoadingMemberDesktop: Story = managementStory('member', 'manage-loading', 'desktop', loadingManagementPlay());
+export const ManagementLoadingOwnerPhone: Story = managementStory('owner', 'manage-loading', 'phone', loadingManagementPlay());
+export const ManagementLoadingOwnerDesktop: Story = managementStory('owner', 'manage-loading', 'desktop', loadingManagementPlay());
+export const ManagementLoadingModeratorPhone: Story = managementStory('moderator', 'manage-loading', 'phone', loadingManagementPlay());
+export const ManagementLoadingModeratorDesktop: Story = managementStory('moderator', 'manage-loading', 'desktop', loadingManagementPlay());
+
+export const PreviewStrangerPhone: Story = managementStory('stranger', 'preview', 'phone', deniedPlay('stranger'));
+export const PreviewStrangerDesktop: Story = managementStory('stranger', 'preview', 'desktop', deniedPlay('stranger'));
+export const PreviewMemberPhone: Story = managementStory('member', 'preview', 'phone', deniedPlay('member'));
+export const PreviewMemberDesktop: Story = managementStory('member', 'preview', 'desktop', deniedPlay('member'));
+export const PreviewOwnerPhone: Story = managementStory('owner', 'preview', 'phone', ownerPreviewPlay());
+export const PreviewOwnerDesktop: Story = managementStory('owner', 'preview', 'desktop', ownerPreviewPlay());
+export const PreviewModeratorPhone: Story = managementStory('moderator', 'preview', 'phone', deniedPlay('moderator'));
+export const PreviewModeratorDesktop: Story = managementStory('moderator', 'preview', 'desktop', deniedPlay('moderator'));
+
+export const PreviewLoadingStrangerPhone: Story = managementStory('stranger', 'preview-loading', 'phone', loadingManagementPlay());
+export const PreviewLoadingStrangerDesktop: Story = managementStory('stranger', 'preview-loading', 'desktop', loadingManagementPlay());
+export const PreviewLoadingMemberPhone: Story = managementStory('member', 'preview-loading', 'phone', loadingManagementPlay());
+export const PreviewLoadingMemberDesktop: Story = managementStory('member', 'preview-loading', 'desktop', loadingManagementPlay());
+export const PreviewLoadingOwnerPhone: Story = managementStory('owner', 'preview-loading', 'phone', loadingManagementPlay());
+export const PreviewLoadingOwnerDesktop: Story = managementStory('owner', 'preview-loading', 'desktop', loadingManagementPlay());
+export const PreviewLoadingModeratorPhone: Story = managementStory('moderator', 'preview-loading', 'phone', loadingManagementPlay());
+export const PreviewLoadingModeratorDesktop: Story = managementStory('moderator', 'preview-loading', 'desktop', loadingManagementPlay());
+
+export const OwnerSavePublishPhone: Story = managementStory('owner', 'save', 'phone', savePlay());
+export const OwnerSavePublishDesktop: Story = managementStory('owner', 'save', 'desktop', savePlay());
+export const OwnerStaleReopenPhone: Story = managementStory('owner', 'stale', 'phone', stalePlay());
+export const OwnerStaleReopenDesktop: Story = managementStory('owner', 'stale', 'desktop', stalePlay());
