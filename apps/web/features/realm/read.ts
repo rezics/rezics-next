@@ -1,3 +1,4 @@
+import { readRankingModuleAnswer } from './ranking-read.ts';
 import { cache } from 'react';
 import { recordedReplayGap, realmFrameReads, type RealmFrameRead, type RealmResolution, type SiteResolution } from './zone-presentation-read.ts';
 export type { RealmFrameRead, RealmResolution, SiteResolution } from './zone-presentation-read.ts';
@@ -172,11 +173,7 @@ export const readRankings = cache(
     interval: 'day' | 'week' | 'month',
     metric: RankingMetric,
   ): Promise<Loaded<RankingPage>> =>
-    settle(() =>
-      main()
-        .v1.realms({ realm })
-        .rankings.get({ query: { metric, interval, limit: 10 } }),
-    ),
+    readRankingModuleAnswer(main(), realm, interval, metric),
 );
 
 /** Works gaining readers fastest against the previous interval. */
