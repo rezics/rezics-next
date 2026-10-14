@@ -239,14 +239,28 @@ async function startupConcurrency(options: StartupMemoryOptions): Promise<number
   } catch { return 1; }
 }
 
-async function loadLimit(options: StartupMemoryOptions): Promise<number> {
+async function loadLimit(options: StartupMemoryOptions, pressure: boolean): Promise<number> {
+  const fallback = pressure ? 12 : 1;
   const directory = await startupDirectory(options);
-  if (!directory) return 1;
+  if (!directory) return fallback;
   try {
-    const stored = readFileSync(join(dirname(directory), 'qa-load-limit'), 'utf8').trim();
+    const stored = readFileSync(join(dirname(directory), pressure ? 'qa-cpu-pressure-limit' : 'qa-load-limit'), 'utf8').trim();
     const value = Number(stored);
-    return stored && Number.isFinite(value) && value >= 0 ? value : 1;
-  } catch { return 1; }
+    return stored && Number.isFinite(value) && value >= 0 ? value : fallback;
+  } catch { return fallback; }
+}
+
+function hostCpuPressure(env: NodeJS.ProcessEnv): number | undefined {
+  let source: string;
+  try { source = readFileSync(env.REZICS_QA_CPU_PRESSURE_FILE ?? '/proc/pressure/cpu', 'utf8'); }
+  catch (error) {
+    if (['ENOENT', 'ENOTDIR'].includes((error as NodeJS.ErrnoException).code ?? '')) return undefined;
+    throw error;
+  }
+  const stored = /^some\s+.*?\bavg10=(\S+)/m.exec(source)?.[1];
+  const value = stored === undefined ? NaN : Number(stored);
+  if (!Number.isFinite(value) || value < 0 || value > 100) throw new Error('Cannot read host CPU pressure some avg10');
+  return value;
 }
 
 function hostLoad(env: NodeJS.ProcessEnv): number {
@@ -256,7 +270,10 @@ function hostLoad(env: NodeJS.ProcessEnv): number {
 }
 
 interface StartupWaiter extends StartupPromise { seq: number; vm_reserve: number; host_reserve: number; load_wait: number }
-interface StartupPromise { id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number }
+interface StartupPromise {
+  id: string; pid: number; start_time: string; vm: number; host: number; admitted_at: number;
+  completed: number; processor_until: number;
+}
 function sqliteBusy(error: unknown): boolean {
   return ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes((error as { code?: string }).code ?? '');
 }
@@ -382,6 +399,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   let held = false, promised = false, registered = false;
   let loadWaitStarted: number | undefined;
   let loadLeaseReady = false;
+  let fallbackReported = false;
   let message = `Waiting for another QA startup; ${admissionMessage(need)}`;
   try {
     mutex.exec('PRAGMA busy_timeout=0');
@@ -389,7 +407,6 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
       let readingFits = false;
       let retryReading = false;
       const concurrency = await startupConcurrency(options);
-      const limit = loadEnabled ? await loadLimit(options) : 1;
       const loadExpired = loadWaitStarted !== undefined && now() >= options.deadline;
       if (now() >= options.deadline && !loadExpired)
         throw new Error(`Memory admission deadline reached${message.startsWith('Waiting for another')
@@ -399,8 +416,14 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         held = true;
         mutex.exec(`CREATE TABLE IF NOT EXISTS startup_promises (
           id TEXT PRIMARY KEY, pid INTEGER NOT NULL, start_time TEXT NOT NULL,
-          vm REAL NOT NULL, host REAL NOT NULL, admitted_at REAL NOT NULL
+          vm REAL NOT NULL, host REAL NOT NULL, admitted_at REAL NOT NULL,
+          completed INTEGER NOT NULL DEFAULT 0, processor_until REAL NOT NULL DEFAULT 0
         )`);
+        const promiseColumns = mutex.query<{ name: string }, []>('PRAGMA table_info(startup_promises)').all();
+        if (!promiseColumns.some(column => column.name === 'completed'))
+          mutex.exec('ALTER TABLE startup_promises ADD COLUMN completed INTEGER NOT NULL DEFAULT 0');
+        if (!promiseColumns.some(column => column.name === 'processor_until'))
+          mutex.exec('ALTER TABLE startup_promises ADD COLUMN processor_until REAL NOT NULL DEFAULT 0');
         mutex.exec(`CREATE TABLE IF NOT EXISTS startup_waiters (
           seq INTEGER PRIMARY KEY AUTOINCREMENT, id TEXT UNIQUE NOT NULL, arrival_seq TEXT NOT NULL,
           pid INTEGER NOT NULL, start_time TEXT NOT NULL, vm REAL NOT NULL, host REAL NOT NULL,
@@ -409,7 +432,6 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         // Extend the existing admission queue rather than introduce another scheduler.
         if (!mutex.query<{ name: string }, []>('PRAGMA table_info(startup_waiters)').all().some(column => column.name === 'load_wait'))
           mutex.exec('ALTER TABLE startup_waiters ADD COLUMN load_wait INTEGER NOT NULL DEFAULT 0');
-        mutex.exec('CREATE TABLE IF NOT EXISTS startup_load (id INTEGER PRIMARY KEY, admitted_at REAL NOT NULL)');
         if (!registered) {
           mutex.query(`INSERT INTO startup_waiters
             (id, pid, start_time, vm, host, vm_reserve, host_reserve, admitted_at, arrival_seq) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
@@ -419,7 +441,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         mutex.exec('COMMIT');
         held = false;
         registered = true;
-        const beforeReading = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all();
+        const beforeReading = mutex.query<StartupPromise, []>('SELECT * FROM startup_promises WHERE completed = 0').all();
         let reading: MemoryReading | undefined;
         let readingGeneration = -1;
         let measured = admissionMessage(need);
@@ -437,15 +459,32 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           measured += `; measurement failed: ${error instanceof Error ? error.message : String(error)}`;
           reading = undefined;
         }
+        // CPU some avg10 bounds time runnable tasks wait for a processor. Operators
+        // change qa-cpu-pressure-limit beside the admission directory at runtime;
+        // the default is 12 percent. Load average counts threads blocked on disk,
+        // so use it (and the old qa-load-limit, default 1) only without kernel PSI.
+        // Keep starts in the existing promises for 30 seconds, even after readiness:
+        // their processor cost has not yet appeared in the signal. This prevents a
+        // low reading from admitting a burst through the existing arrival queue.
+        const pressure = loadEnabled ? hostCpuPressure(options.env ?? process.env) : undefined;
+        const limit = loadEnabled ? await loadLimit(options, pressure !== undefined) : 1;
         mutex.exec('BEGIN IMMEDIATE');
         held = true;
         const live: StartupPromise[] = [];
+        let recentStarts = 0;
         for (const promise of mutex.query<StartupPromise, []>('SELECT * FROM startup_promises').all()) {
-          if (now() - promise.admitted_at > 15 * 60_000 || startTime(promise.pid) !== promise.start_time) {
-            mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
-            mutex.exec('UPDATE memory_generation SET generation = generation + 1 WHERE id = 1');
+          if (promise.completed === 1 ? now() >= promise.processor_until
+            : now() - promise.admitted_at > 15 * 60_000 || startTime(promise.pid) !== promise.start_time) {
+            if (now() < promise.processor_until) {
+              // An exited owner releases memory, but its containers may still start.
+              mutex.query('UPDATE startup_promises SET completed = 1 WHERE id = ?').run(promise.id);
+              if (promise.vm > 0) recentStarts++;
+            } else mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promise.id);
+            if (promise.completed === 0) mutex.exec('UPDATE memory_generation SET generation = generation + 1 WHERE id = 1');
+          } else {
+            if (promise.completed === 0) live.push(promise);
+            if (promise.vm > 0 && now() < promise.processor_until) recentStarts++;
           }
-          else live.push(promise);
         }
         const activeStartups = live.length;
         if (readingGeneration !== memoryGeneration(mutex)) {
@@ -465,18 +504,19 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         }
         const vmFree = reading ? reading.vmTotal - reading.vmUsed - live.reduce((sum, p) => sum + p.vm, 0) : -1;
         const hostFree = reading ? reading.hostAvailable - live.reduce((sum, p) => sum + p.host, 0) : -1;
-        const load = loadEnabled ? readLoad() : 0;
+        const load = loadEnabled && pressure === undefined ? readLoad() : 0;
         const normalizedLoad = load / processors;
-        const lastLoadAdmission = mutex.query<{ admitted_at: number }, []>('SELECT admitted_at FROM startup_load WHERE id = 1').get();
         const loadQueue = waiters.filter(waiter => waiter.load_wait === 1);
-        const loadBlocked = loadEnabled && (normalizedLoad > limit
+        const loadBlocked = loadEnabled && ((pressure === undefined ? normalizedLoad > limit : pressure >= limit)
           || (loadQueue.length > 0 && loadQueue[0]?.id !== promiseId)
-          || (lastLoadAdmission !== null && now() - lastLoadAdmission.admitted_at < 20_000));
+          || recentStarts > 0);
         if (loadBlocked) {
           loadWaitStarted ??= now();
           mutex.query('UPDATE startup_waiters SET load_wait = 1 WHERE id = ?').run(promiseId);
         }
-        const loadMessage = `QA load: ${load.toFixed(2)} / ${processors} processors = ${normalizedLoad.toFixed(2)}, limit ${limit}`;
+        const loadMessage = pressure === undefined
+          ? `QA load: ${load.toFixed(2)} / ${processors} processors = ${normalizedLoad.toFixed(2)}, limit ${limit}, recent starts ${recentStarts}`
+          : `QA CPU pressure some avg10 ${pressure.toFixed(2)}%, limit ${limit}%, recent starts ${recentStarts}`;
         const first = waiters.find(waiter => vmFree >= waiter.vm + waiter.vm_reserve
           && hostFree >= waiter.host + waiter.host_reserve);
         readingFits = activeStartups < concurrency && first?.id === promiseId;
@@ -489,10 +529,15 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
           loadLeaseReady = true;
           if (loadBlocked && !loadExpired) {
             message = `Waiting for host load; ${loadMessage}`;
+            if (pressure === undefined && !fallbackReported) {
+              message += '; CPU pressure unavailable; using one-minute load average';
+              fallbackReported = true;
+            }
           } else {
-            if (loadWaitStarted !== undefined) mutex.query('INSERT OR REPLACE INTO startup_load (id, admitted_at) VALUES (1, ?)').run(now());
-            mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at) VALUES (?, ?, ?, ?, ?, ?)')
-              .run(promiseId, process.pid, identity, need.vm, need.host, now());
+            const processorUntil = !loadEnabled ? 0 : pressure !== undefined ? now() + 30_000
+              : loadWaitStarted !== undefined ? now() + 20_000 : 0;
+            mutex.query('INSERT INTO startup_promises (id, pid, start_time, vm, host, admitted_at, processor_until) VALUES (?, ?, ?, ?, ?, ?, ?)')
+              .run(promiseId, process.pid, identity, need.vm, need.host, now(), processorUntil);
             mutex.query('DELETE FROM startup_waiters WHERE id = ?').run(promiseId);
             mutex.exec('COMMIT');
             held = false;
@@ -536,7 +581,8 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
             if (promised) {
               mutex.exec('BEGIN IMMEDIATE');
               try {
-                mutex.query('DELETE FROM startup_promises WHERE id = ?').run(promiseId);
+                mutex.query('UPDATE startup_promises SET completed = 1 WHERE id = ?').run(promiseId);
+                mutex.query('DELETE FROM startup_promises WHERE id = ? AND processor_until <= ?').run(promiseId, now());
                 mutex.exec('UPDATE memory_generation SET generation = generation + 1 WHERE id = 1');
                 mutex.exec('COMMIT');
               } catch (error) { mutex.exec('ROLLBACK'); throw error; }

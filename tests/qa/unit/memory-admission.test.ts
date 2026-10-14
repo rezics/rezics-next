@@ -17,7 +17,8 @@ import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemor
 const root = resolve(import.meta.dir, '../../..');
 const need = qaMemoryNeed(root, 'other', 'ordinary', {});
 const loadFixture = join(root, '.temp', `qa-loadavg-${process.pid}`);
-const qaEnv = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_LOADAVG_FILE: loadFixture };
+const qaEnv = { REZICS_STACK_PROFILE: 'qa', REZICS_QA_LOADAVG_FILE: loadFixture,
+  REZICS_QA_CPU_PRESSURE_FILE: `${loadFixture}-missing-pressure` };
 const plenty: MemoryReading = { vmTotal: 24 * GiB, vmUsed: 5 * GiB, hostAvailable: 20 * GiB };
 
 test('memory admission budgets Compose caps, resource classes and overridden thresholds', () => {
@@ -834,6 +835,7 @@ function loadScenario() {
       GOAL_QA_COMMAND: 'integration run', REZICS_QA_LOADAVG_FILE: loadFile },
     lockFile: join(directory, 'state.sqlite'), processors: 64, deadline: 100_000,
     now: () => clock, pollMs: 1000, readingMaxAgeMs: 1,
+    startTime: pid => String(pid),
     read: async () => plenty, announce: message => { lines.push(message); },
     sleep: async ms => { clock += ms; },
   };
@@ -889,6 +891,130 @@ test('unit admission and a startup with no stack never inspect load', async () =
   const options = { ...scenario.options, readLoad: () => { throw new Error('unit inspected load'); } };
   await waitForMemoryImpl(hostNeed, options);
   await withMemoryStartupImpl(hostNeed, options, () => { expect(scenario.now()).toBe(0); });
+});
+
+function pressureScenario(pressure = 12) {
+  const scenario = loadScenario();
+  const pressureFile = join(scenario.directory, 'cpu-pressure');
+  const setPressure = (value: number) => writeFileSync(pressureFile,
+    `some avg10=${value.toFixed(2)} avg60=99.00 avg300=99.00 total=123456\n`);
+  setPressure(pressure);
+  return { ...scenario, pressureFile, setPressure, options: { ...scenario.options,
+    env: { ...scenario.options.env, REZICS_QA_CPU_PRESSURE_FILE: pressureFile } } };
+}
+
+test('a stack holds at the CPU pressure limit and releases below it regardless of load or avg60', async () => {
+  const scenario = pressureScenario();
+  writeFileSync(join(scenario.directory, 'qa-load-limit'), '1');
+  await withMemoryStartupImpl(need, { ...scenario.options, sleep: async ms => {
+    const files = readdirSync(scenario.waiters);
+    expect(files).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(scenario.waiters, files[0]!), 'utf8')).message)
+      .toContain('CPU pressure some avg10 12.00%, limit 12%, recent starts 0');
+    scenario.advance(ms);
+    scenario.setPressure(11.99);
+  } }, () => { expect(scenario.now()).toBe(1000); });
+  expect(scenario.lines.at(-1)).toContain('CPU pressure some avg10 11.99%, limit 12%');
+  expect(readdirSync(scenario.waiters)).toEqual([]);
+});
+
+test('an immediate pressure admission still counts after startup completes until its thirty-second window passes', async () => {
+  const scenario = pressureScenario(0);
+  const options = { ...scenario.options,
+    read: async () => ({ ...plenty, vmUsed: plenty.vmTotal - need.vm }) };
+  await withMemoryStartupImpl(need, options, () => { expect(scenario.now()).toBe(0); });
+  await withMemoryStartupImpl(need, { ...options, sleep: async ms => {
+    expect(scenario.lines.at(-1)).toContain('recent starts 1');
+    scenario.advance(ms);
+  } }, () => { expect(scenario.now()).toBe(30_000); });
+  expect(scenario.lines.at(-1)).toContain('recent starts 0');
+});
+
+test('completed pressure starts count even after their admitting process exits or its PID is reused', async () => {
+  const scenario = pressureScenario(0);
+  await withMemoryStartupImpl(need, scenario.options, () => {});
+  await withMemoryStartupImpl(need, { ...scenario.options, startTime: () => 'reused-process',
+    sleep: async ms => { scenario.advance(ms); },
+  }, () => { expect(scenario.now()).toBe(30_000); });
+});
+
+test('a lost startup owner releases its memory promise but its recent start still counts', async () => {
+  const scenario = pressureScenario(0);
+  const ready = deferred<void>(), finish = deferred<void>();
+  const first = withMemoryStartupImpl(need, scenario.options, async () => {
+    ready.resolve(); await finish.promise;
+  });
+  await ready.promise;
+  try {
+    await withMemoryStartupImpl(need, { ...scenario.options, startTime: () => 'replacement-process',
+      sleep: async ms => { scenario.advance(ms); },
+    }, () => { expect(scenario.now()).toBe(30_000); });
+  } finally { finish.resolve(); await first; }
+});
+
+test('an invalid CPU pressure reading fails instead of silently reverting to load', async () => {
+  const scenario = pressureScenario();
+  writeFileSync(scenario.pressureFile, 'some avg60=0.00 total=0\n');
+  await expect(withMemoryStartupImpl(need, scenario.options,
+    () => { throw new Error('must not start'); })).rejects.toThrow('Cannot read host CPU pressure some avg10');
+});
+
+test('a pressure dip admits waiters in arrival order without a burst at startup concurrency three', async () => {
+  const scenario = pressureScenario();
+  writeFileSync(join(scenario.directory, 'qa-startup-concurrency'), '3');
+  const starts: { id: number; at: number }[] = [];
+  await Promise.all([0, 1, 2].map(id => withMemoryStartupImpl(need, {
+    ...scenario.options, sleep: async ms => {
+      scenario.advance(ms);
+      if (scenario.now() >= 3000) scenario.setPressure(0);
+    },
+  }, () => { starts.push({ id, at: scenario.now() }); })));
+  expect(starts.map(start => start.id)).toEqual([0, 1, 2]);
+  expect(starts[1]!.at - starts[0]!.at).toBeGreaterThanOrEqual(30_000);
+  expect(starts[2]!.at - starts[1]!.at).toBeGreaterThanOrEqual(30_000);
+});
+
+test('the CPU pressure limit file is reread on the next poll', async () => {
+  const scenario = pressureScenario(15);
+  const limitFile = join(scenario.directory, 'qa-cpu-pressure-limit');
+  writeFileSync(limitFile, '15');
+  await withMemoryStartupImpl(need, { ...scenario.options, sleep: async ms => {
+    expect(scenario.lines.at(-1)).toContain('limit 15%');
+    scenario.advance(ms);
+    writeFileSync(limitFile, '16');
+  } }, () => { expect(scenario.now()).toBe(1000); });
+  expect(scenario.lines.at(-1)).toContain('limit 16%');
+});
+
+test('missing CPU pressure falls back to the existing load limit and explains that once while waiting', async () => {
+  const scenario = loadScenario();
+  writeFileSync(join(scenario.directory, 'qa-cpu-pressure-limit'), '100');
+  await withMemoryStartupImpl(need, { ...scenario.options, sleep: async ms => {
+    scenario.advance(ms);
+    if (scenario.now() === 2000) writeFileSync(scenario.loadFile, '64.0 0 0 1/1 1\n');
+  } }, () => { expect(scenario.now()).toBe(2000); });
+  expect(scenario.lines.filter(line => line.includes('CPU pressure unavailable; using one-minute load average')))
+    .toHaveLength(1);
+  expect(scenario.lines.at(-1)).toContain('limit 1');
+});
+
+test('pressure waiting keeps load deadline admission and its final memory recheck', async () => {
+  const scenario = pressureScenario();
+  await withMemoryStartupImpl(need, { ...scenario.options, deadline: 2500 },
+    () => { expect(scenario.now()).toBe(2500); });
+  expect(scenario.lines.at(-1)).toContain('load deadline reached, starting');
+  let started = false;
+  await expect(withMemoryStartupImpl(need, { ...scenario.options, deadline: 5000,
+    read: async () => scenario.now() < 5000 ? plenty : { ...plenty, hostAvailable: 0 },
+  }, () => { started = true; })).rejects.toThrow('Memory admission deadline reached');
+  expect(started).toBe(false);
+});
+
+test('a startup with no stack never reads CPU pressure', async () => {
+  const scenario = pressureScenario();
+  writeFileSync(scenario.pressureFile, 'invalid pressure');
+  await withMemoryStartupImpl({ ...need, vm: 0, vmReserve: 0 }, scenario.options,
+    () => { expect(scenario.now()).toBe(0); });
 });
 
 for (const limit of [undefined, '1.5', '0.5']) {
