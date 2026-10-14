@@ -5,6 +5,8 @@ import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts'
 import { type WriteRound } from '../../../../../apps/web/features/api/command.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { readMembership } from '../../../../../apps/web/features/realm/membership-state.ts';
+import { readMemberBan } from '../../../../../apps/web/features/realm-appeal/ban-read.ts';
+import { gateFor } from '../../../../../apps/web/features/api/platform-access.ts';
 import { settle } from '../../../../../apps/web/features/manage/read.ts';
 import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
 import { browserZoneAuthoring, commitCommand } from '../../../../../apps/web/features/zone-editor/api.ts';
@@ -29,6 +31,7 @@ type Receipt = { receipt: string; revision: string; homeDocument: string; homeRe
 setDefaultTimeout(180_000);
 const fileWall = setTimeout(() => { throw new Error('Zone home rendering file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
+let platformOpenGroups: string | undefined;
 const recording = new OutcomeRecorder(row);
 const short = (id: string) => id.slice(-36);
 const query = (person: PersonaSession) => person.actingSubject
@@ -41,12 +44,23 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   return JSON.parse(raw) as T;
 }
 beforeAll(async () => {
+  platformOpenGroups = process.env.REZICS_PLATFORM_OPEN_GROUPS;
   await recording.prepare();
+  // QA's wildcard grants every platform group to everyone. This row's personas
+  // have no appeal mandate, so use the deployment's closed-platform contract.
+  process.env.REZICS_PLATFORM_OPEN_GROUPS = '';
   sessions = await personaSessions('public');
 }, 180_000);
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { clearTimeout(fileWall); await sessions?.close(); }
+  finally {
+    clearTimeout(fileWall);
+    try { await sessions?.close(); }
+    finally {
+      if (platformOpenGroups === undefined) delete process.env.REZICS_PLATFORM_OPEN_GROUPS;
+      else process.env.REZICS_PLATFORM_OPEN_GROUPS = platformOpenGroups;
+    }
+  }
 });
 
 let fixture: Promise<Awaited<ReturnType<typeof prepareSite>>> | undefined;
@@ -365,9 +379,7 @@ async function productionVisit(name: PersonaName) {
       () => readMembership(main, realm.header.id, actingSubject)) : null,
       actingSubject ? (async () => {
         const access = await named(`frame-${prefix}-platform-access`, () => main.v1.me['platform-access'].get());
-        if (access.data && platformOperationOpen('getV1RealmsByRealmMember-ban', access.data)) {
-          await named(`frame-${prefix}-own-ban`, () => main.v1.realms({ realm: short(realm.header.id) })['member-ban'].get({ query: { actingSubject } }));
-        }
+        await named(`frame-${prefix}-own-ban`, () => readMemberBan(main, realm.header.id, actingSubject!, gateFor(access.data)));
       })() : null,
     ]);
     // Public home content is delivered by presentation, without an exact revision read.
