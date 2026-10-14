@@ -4,6 +4,7 @@ import visualNovels from '../../../../tests/qa/fixtures/outcomes/visual-novels/c
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
 import type { ZoneBrowsePage } from '../realm/types.ts';
 import { direction } from '@rezics/main/language';
+import { uuidToSid } from '@rezics/model/address';
 
 export type CatalogueSlug = 'books' | 'visual-novels' | 'anime' | 'manga' | 'games';
 export const cataloguePersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
@@ -42,7 +43,8 @@ export function catalogueContractSample(slug: 'anime' | 'games',
     chapterCount: null, wordCount: null, lastUpdatedAt: null,
     primaryCredits: [{ id: catalogueFixtureId(6), role: 'author', participantKind: 'agent',
       provider: null, key: null, ordinal: null, agent: catalogueFixtureId(7), displayName: 'Fixture author',
-      handle: null, identityStatus: 'active', address: { prefix: '/a/', key: 'fixture-author', suffixSource: '' } }],
+      handle: null, identityStatus: 'active', address: { prefix: '/a/',
+        key: uuidToSid(catalogueFixtureId(7).slice(-36)), suffixSource: '' } }],
     evidence: catalogueFixtureId(8), dataEpoch: 'contract-fixture', sequence: '12', hub: null, inZone: true,
   }] : [];
   const page: ZoneBrowsePage = {
