@@ -9,6 +9,7 @@ import { RealmFrame } from './realm-frame.tsx';
 import { ZoneAttachmentsPage, type ZoneAttachmentsRead } from './zone-attachments-page.tsx';
 import { attachmentActor, attachmentFixture, attachmentRealm, attachmentRequests, type AttachmentState } from './zone-attachments-fixtures.ts';
 import { recoveryIndexKey } from './safety-pending.ts';
+import { signInPath } from '../auth/paths.ts';
 const principal = 'storybook:realm-attachment-steward';
 
 function Inventory({ state, persona = 'owner', delegated = false }: { state: AttachmentState; persona?: AnswerPersona; delegated?: boolean }) {
@@ -20,9 +21,13 @@ function Inventory({ state, persona = 'owner', delegated = false }: { state: Att
   useEffect(() => {
     let active = true;
     setPage(null);
+    if (persona === 'visitor') { setPage({ ok: false, failure: 'sign-in' }); return; }
     void readZoneAttachments(fixture.client(), attachmentRealm, attachmentActor).then(read => { if (active) setPage(read); });
     return () => { active = false; };
-  }, [fixture]);
+  }, [fixture, persona]);
+  if (persona === 'visitor') return <ZoneAttachmentsPage principal={principal} page={page} realm={attachmentRealm}
+    actingSubject={attachmentActor} locale="en" messages={messages}
+    signInHref={signInPath(`/en/manage/r/${attachmentRealm}/zones`)} />;
   return <RealmFrame realm={attachmentRealm} header={null} agent={{ ...acting, iri: attachmentActor }} locale="en" messages={messages}>
     <ZoneAttachmentsPage principal={principal} page={page} realm={attachmentRealm} actingSubject={attachmentActor} locale="en" messages={messages}
       client={fixture.client} retryHref={`/en/manage/r/${attachmentRealm}/zones`} />
@@ -129,9 +134,14 @@ const concealed: Story = { async play({ canvasElement }) {
   await expect(canvas.queryByRole('button', { name: messages.loadMore })).toBeNull();
   await expect(canvas.queryByRole('button', { name: messages.zonesWithdraw })).toBeNull();
 } };
-export const Visitor = { ...at(concealed, 'phone'), args: { persona: 'visitor' as const } };
-export const Stranger = { ...Visitor, args: { persona: 'stranger' as const } };
-export const Member = { ...Visitor, args: { persona: 'member' as const } };
-export const ModeratorWithoutStewardship = { ...Visitor, args: { persona: 'moderator' as const } };
-export const OperatorWithoutMandate = { ...Visitor, args: { persona: 'operator' as const } };
+export const Visitor: Story = { globals: { viewport: { value: 'phone' } }, args: { persona: 'visitor' }, async play({ canvasElement }) {
+  const canvas = within(canvasElement);
+  await expect(canvas.findByRole('heading', { name: messages.signInTitle })).resolves.toBeVisible();
+  await expect(canvas.getByRole('link', { name: messages.signInTitle })).toHaveAttribute('href', signInPath(`/en/manage/r/${attachmentRealm}/zones`));
+  await expect(canvas.queryByText('Reading room 1', { exact: true })).toBeNull();
+} };
+export const Stranger = { ...at(concealed, 'phone'), args: { persona: 'stranger' as const } };
+export const Member = { ...at(concealed, 'phone'), args: { persona: 'member' as const } };
+export const ModeratorWithoutStewardship = { ...at(concealed, 'phone'), args: { persona: 'moderator' as const } };
+export const OperatorWithoutMandate = { ...at(concealed, 'phone'), args: { persona: 'operator' as const } };
 export const OperatorWithMandate = { ...at(populated, 'desktop'), args: { persona: 'operator' as const, delegated: true } };

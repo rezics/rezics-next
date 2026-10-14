@@ -1,4 +1,5 @@
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { direction } from '@rezics/main/language';
 import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
 import type { ZoneAttachmentsRead } from './zone-attachments-page.tsx';
 import { iriOf } from './types.ts';
@@ -19,11 +20,14 @@ export const attachmentRequests = {
 } as const;
 
 export function attachmentPage(offset = 0, empty = false): Page {
-  const items = empty ? [] : attachmentZones.slice(offset, offset + 24).map((zone, index) => ({
-    zone, name: `Reading room ${offset + index + 1}`, language: 'en', direction: 'ltr' as const,
+  const items = empty ? [] : attachmentZones.slice(offset, offset + 24).map((zone, index) => {
+    const name = `Reading room ${offset + index + 1}`;
+    const language = 'en';
+    return { zone, name, language, direction: direction(language, name),
     address: { prefix: '~', key: zone.slice(-36), suffixSource: 'id' }, attachedAt: '2026-10-01T12:00:00.000Z',
     withdraw: { method: 'POST' as const, path: `/v1/zones/${zone.slice(-36)}/realm-attachment-withdrawals` },
-  }));
+    };
+  });
   const nextCursor = !empty && offset + 24 < attachmentZones.length ? String(offset + 24) : null;
   return { realm: iriOf(attachmentRealm), items, nextCursor, complete: nextCursor === null,
     cost: { graphReads: 1, sqlReads: 1, rows: items.length } };
