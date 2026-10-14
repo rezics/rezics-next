@@ -76,9 +76,9 @@ async function spaceFixtureAuthority(email: string): Promise<() => Promise<void>
       }
     }
   } finally { await Promise.all([account.end(), access.end()]); }
-  const administrator = await platformAdministratorSession(env).finally(async () => {
-    if (privatePath) await rm(privatePath);
-  });
+  let administrator: Awaited<ReturnType<typeof platformAdministratorSession>>;
+  try { administrator = await platformAdministratorSession(env); }
+  finally { if (privatePath) await rm(privatePath); }
   const grants: { grantId: string; generation: string }[] = [];
   const revoke = async () => {
     const failures: unknown[] = [];
