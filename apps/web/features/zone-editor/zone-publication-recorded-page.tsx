@@ -6,7 +6,6 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import { localizedPath } from '../../i18n/locale.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { surfaceText } from '../address/messages.ts';
-import { spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
 import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
