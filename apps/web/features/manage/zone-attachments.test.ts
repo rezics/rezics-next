@@ -87,7 +87,7 @@ test('a reloaded withdrawal replays the retained actor, target and key instead o
 
 for (const wrong of [{ zone: attachmentZones[1]! }, { realm: attachmentZones[1]! }, { receipt: '' }]) {
   test(`a withdrawal receipt cannot confirm a different target or an absent receipt: ${Object.keys(wrong)[0]}`, async () => {
-    const main = browserMainApi('https://contract.invalid', { fetcher: (async () => Response.json({
+    const main = browserMainApi('https://contract.invalid', { fetcher: (async (_input: RequestInfo | URL, _init?: RequestInit) => Response.json({
       zone: attachmentZones[0], realm: `https://rezics.com/id/${attachmentRealm}`, receipt: 'confirmed', replayed: false,
       sourcePosition: { datasetId: 'product', dataEpoch: 'contract-fixture', sequence: '2' }, ...wrong,
     })) as typeof fetch });
