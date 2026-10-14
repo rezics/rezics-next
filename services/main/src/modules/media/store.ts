@@ -1,5 +1,6 @@
 import { withPreservationFence, type PreservationFence } from '../public-report/preservation.ts';
 import { createHash, randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { withReferenceFence } from '../erasure/reference-fence.ts';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
@@ -519,6 +520,7 @@ function projectionFromProvenance(assetRevisionId: string, assetId: string,
 }
 
 export class MediaStore {
+  private readonly summaryClients = new AsyncLocalStorage<{ client: PoolClient; active: boolean }>();
   readonly presentation: MediaPresentationStore;
   readonly renditions: MediaRenditionStore;
   readonly showcase: MediaShowcaseStore;
@@ -531,12 +533,24 @@ export class MediaStore {
     this.matching = new RequiredMediaMatchStore(pool);
   }
 
+  /** Avatar hydration and its disclosure probes share the caller's Content transaction. */
+  async withSummaryClient<T>(client: PoolClient, read: () => Promise<T>): Promise<T> {
+    const held = { client, active: true };
+    try { return await this.summaryClients.run(held, read); }
+    finally { held.active = false; }
+  }
+
+  private summaryConnection(): Pool | PoolClient {
+    const held = this.summaryClients.getStore();
+    return held?.active ? held.client : this.pool;
+  }
+
   /** Exact Uses carry only their own current attachment. Asset probes retain
    * the conservative inventory rule, bounded to 64 with an overflow sentinel. */
   async visibilityFacts(references: readonly string[]): Promise<Map<string, MediaVisibilityFact>> {
     if (references.length > 64) throw new MediaInvalid('invalid visibility page');
     const ids = references.map(reference => nativeId.test(reference) ? reference.slice(ID.length) : null);
-    const rows = (await this.pool.query(`WITH requested AS (
+    const rows = (await this.summaryConnection().query(`WITH requested AS (
       SELECT * FROM unnest($1::text[],$2::uuid[]) AS q(reference,id))
       SELECT q.reference,a.owner,s.disclosure,requested_use.id IS NOT NULL AS exact_use,
         EXISTS (SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id
@@ -1617,7 +1631,7 @@ export class MediaStore {
       throw new MediaInvalid('avatar hydration request is invalid');
     }
     const contexts = context === DEFAULT_MEDIA_CONTEXT ? [context] : [context, DEFAULT_MEDIA_CONTEXT];
-    const result = await this.pool.query(`WITH owner AS (
+    const result = await this.summaryConnection().query(`WITH owner AS (
         SELECT data_epoch, sequence::text AS sequence FROM content.owner_control WHERE singleton),
       wanted AS (SELECT t.target, c.context, c.rank FROM unnest($1::text[]) AS t(target)
         CROSS JOIN unnest($2::text[]) WITH ORDINALITY AS c(context, rank)),

@@ -1,4 +1,5 @@
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
+import type { PoolClient } from 'pg';
 import { canReadCompositionWork, compositionTargetReader } from '../composition/disclosure-read.ts';
 import { ReadingBoundary } from '../reading-position/boundary.ts';
 import { memberAnchoring } from '../reading-position/continuity.ts';
@@ -41,11 +42,13 @@ async function occurrencePlan(session: WorkReadSession, occurrence: string): Pro
 }
 
 export function graphCompletionPlanner(work: MainWorkDependencies): CompletionPlanner {
-  const read = <T>(operation: (session: WorkReadSession) => Promise<T>) =>
-    workRead(work, new Request('http://main.local/v1/internal/progress-completion'), {}, operation);
+  const read = <T>(operation: (session: WorkReadSession) => Promise<T>, client?: PoolClient) => {
+    const run = () => workRead(work, new Request('http://main.local/v1/internal/progress-completion'), {}, operation);
+    return client && work.media ? work.media.store.withSummaryClient(client, run) : run();
+  };
   return {
-    occurrence: occurrence => read(session => occurrencePlan(session, occurrence)),
-    lastOf: workId => read(async session => {
+    occurrence: (occurrence, client) => read(session => occurrencePlan(session, occurrence), client),
+    lastOf: (workId, client) => read(async session => {
       let occurrence: string | null;
       try { occurrence = await new ReadingBoundary(session, 'all').position(workId); }
       catch (error) {
@@ -53,7 +56,7 @@ export function graphCompletionPlanner(work: MainWorkDependencies): CompletionPl
         throw error;
       }
       return occurrence ? occurrencePlan(session, occurrence) : null;
-    }),
+    }, client),
   };
 }
 

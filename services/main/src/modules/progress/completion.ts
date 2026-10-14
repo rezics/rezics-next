@@ -19,9 +19,9 @@ export interface CompletionPlan {
  * cannot hold: missing, removed, unreadable or in no composition. The caller
  * cannot tell which, so nothing about the target is revealed. */
 export interface CompletionPlanner {
-  occurrence(occurrence: string): Promise<CompletionPlan | null>;
+  occurrence(occurrence: string, client?: PoolClient): Promise<CompletionPlan | null>;
   /** The last placement of a finished Work, one reverse seek per level. */
-  lastOf(work: string): Promise<CompletionPlan | null>;
+  lastOf(work: string, client?: PoolClient): Promise<CompletionPlan | null>;
 }
 
 /** What a source asks of the reader's record right now. */
@@ -65,14 +65,14 @@ export class ProgressCompletionProjector {
     }
   }
 
-  private async plan(demand: CompletionDemand) {
+  private async plan(demand: CompletionDemand, client: PoolClient) {
     const plans = new Map<string, CompletionPlan>();
     for (const occurrence of demand.occurrences) {
-      const plan = await this.planner.occurrence(occurrence);
+      const plan = await this.planner.occurrence(occurrence, client);
       if (plan) plans.set(targetKey(plan), plan);
     }
     for (const work of demand.lastOfWorks) {
-      const plan = await this.planner.lastOf(work);
+      const plan = await this.planner.lastOf(work, client);
       if (plan) plans.set(targetKey(plan), plan);
     }
     return plans;
@@ -87,7 +87,7 @@ export class ProgressCompletionProjector {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
         [JSON.stringify(['progress-completion-source', principal.issuer, principal.subject, sourceHash])]);
-      const plans = await this.plan(await input.demand(client));
+      const plans = await this.plan(await input.demand(client), client);
       const held = await this.heldBy(client, principal, sourceHash);
       // One order for every lock, so two sources over the same targets queue
       // instead of deadlocking.
@@ -101,7 +101,7 @@ export class ProgressCompletionProjector {
       for (const target of held) {
         if (plans.has(targetKey(target))) continue;
         const operation = await this.release(client, principal, sourceHash, target,
-          await this.planner.occurrence(target.occurrence));
+          await this.planner.occurrence(target.occurrence, client));
         if (operation) operations.push(operation);
       }
       for (const plan of [...plans.values()].sort((a, b) => targetKey(a) < targetKey(b) ? -1 : 1)) {
