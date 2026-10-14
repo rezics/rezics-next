@@ -50,8 +50,8 @@ if (existsSync(cache)) {
     try {
       await client.query('BEGIN');
       await grantFixtureAuthority(client, { scope, requireDispatch: true,
-        representations: [{ principalId: session.principalId, actor, action, lifetime: '1 hour' }],
-        grant: { actor, action, lifetime: '1 hour' } });
+        representations: [{ principalId: session.principalId, actor, action, lifetime: '8 hours' }],
+        grant: { actor, action, lifetime: '8 hours' } });
       await client.query('COMMIT');
     } catch (error) {
       await client.query('ROLLBACK');
