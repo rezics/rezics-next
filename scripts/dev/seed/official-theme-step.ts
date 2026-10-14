@@ -226,7 +226,7 @@ async function posted<T>(response: { status: number; body: unknown }, what: stri
  * The Zone's presentation already names `officialTheme`. The reviewer is a different account from the owner.
  */
 export async function approveOfficialPackage(input: {
-  slug: 'anime' | 'manga';
+  slug: Slug;
   zone: string;
   owner: string;
   reviewer: string;

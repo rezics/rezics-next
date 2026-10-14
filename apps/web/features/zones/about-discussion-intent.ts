@@ -20,9 +20,9 @@ export function retainedAboutPost(raw: string, actor: string, zone: string, path
   } catch { return null; }
 }
 
-/** Convert a site address to Main's live Zone route, without locale or reading coordinates. */
-export function aboutDiscussionAddress(href: string): { ref: string; path: string } | null {
+/** Convert a site address to Main's live Zone route. `spaceRef` is safe to spread into JSX; React reserves `ref`. */
+export function aboutDiscussionAddress(href: string): { spaceRef: string; path: string } | null {
   const segments = href.split(/[?#]/)[0]!.split('/').filter(Boolean);
   if (segments[0] !== 'z' || !segments[1]) return null;
-  return { ref: segments[1], path: `/${segments.slice(2).join('/')}` };
+  return { spaceRef: segments[1], path: `/${segments.slice(2).join('/')}` };
 }

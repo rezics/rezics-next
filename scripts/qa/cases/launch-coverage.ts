@@ -265,7 +265,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/games/work-hub-and-edition-choice.test.ts',
       'games/work-hub-and-edition-choice / member: pins an exact release revision on own Person without editorial or foreign preference authority',
       'Reads an original public VideoGame hub and release choices, saves an exact release revision on the reader’s Person and checks preference isolation and editorial refusal.'),
-    browser: missing('L12'),
+    browser: journeyBrowser('apps/web/tests/games.e2e.ts', 'apps/web/tests/journeys/games.ts',
+      'games-hub: en player chooses a named platform edition by keyboard and keeps it after reload',
+      'A signed-in player opens the Games Work hub, chooses a named PC or console release by keyboard, saves it and reloads the persisted edition and language in English and Japanese.'),
   },
   {
     kind: 'games',
@@ -273,7 +275,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/games/catalogue-browse-and-search-in-its-zone.test.ts',
       'games/catalogue-browse-and-search-in-its-zone / visitor: traverses and title-searches only adopted VideoGames in the Zone Realm with exact totals',
       'Traverses the published Games Zone catalogue and title search, checking exact adopted VideoGame membership, totals and continuations while excluding unadopted Works.'),
-    browser: missing('L12'),
+    browser: journeyBrowser('apps/web/tests/games.e2e.ts', 'apps/web/tests/journeys/games.ts',
+      'games-catalogue: en visitor browses and searches the Games Zone by keyboard and returns after reload',
+      'A visitor browses the Games Zone, searches by title with the keyboard, reloads the matching Games and opens and reloads a result in English and Japanese.'),
   },
   {
     kind: 'games',

@@ -27,6 +27,7 @@ const missingItems = new Set([
   'L21',
   'L26',
   'gap',
+  'content-adoption',
 ]);
 const requiredHardCaseRows = [
   { kind: 'books', hardCase: 'two-device-progress' },
@@ -720,10 +721,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 67, provedPairs: 42, missingRows: 25, missingProofs: 41 });
+    .toEqual({ rows: 68, provedPairs: 42, missingRows: 26, missingProofs: 41 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 13 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 13, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
@@ -741,11 +742,13 @@ test('hub structure browser coverage remains unproved pending a quiet rerun', ()
     .not.toContain(row);
 });
 
-test('literal loops and registered journeys retain all nine browser citations', () => {
+test('literal loops and registered journeys retain all eleven browser citations', () => {
   const restored = [
     ['visual-novels', 'Catalogue browse and search in its Zone'],
     ['anime', 'Catalogue browse and search in its Zone'],
     ['manga', 'Catalogue browse and search in its Zone'],
+    ['games', 'Work hub and edition choice'],
+    ['games', 'Catalogue browse and search in its Zone'],
     ['realm', 'Membership and admission'],
     ['zone', 'Home rendering'],
     ['books', 'Choose among ambiguous editions of one Work'],

@@ -9,15 +9,15 @@ import { readAboutDiscussion } from './about-discussion-api.ts';
 import { AboutDiscussion } from './about-discussion.tsx';
 
 /** Shared by Work, entity and mounted document frames; Main chooses the current attachment. */
-export async function ZoneAboutDiscussion({ zone, ref, path, href, locale }: {
-  zone?: string; ref?: string; path: string; href: string; locale: UiLocale;
+export async function ZoneAboutDiscussion({ zone, spaceRef, path, href, locale }: {
+  zone?: string; spaceRef?: string; path: string; href: string; locale: UiLocale;
 }) {
   let recoveryScope: {
     zone: string; path: string; actingSubject: string | null; signedIn: boolean; personal: boolean; postingOpen: boolean;
   } | undefined;
   try {
-    if (!zone && ref) {
-      const site = await resolveSite(ref, locale);
+    if (!zone && spaceRef) {
+      const site = await resolveSite(spaceRef, locale);
       if (site.kind === 'site') zone = site.zone;
     }
     if (!zone) return null;

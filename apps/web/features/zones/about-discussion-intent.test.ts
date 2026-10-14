@@ -83,10 +83,10 @@ test('site home, Work and entity addresses select live route paths without readi
     // ast-grep-ignore: web-links-use-address -- Raw address inputs are the route extraction oracle.
     ['/z/reading-house/characters/entity-key', '/characters/entity-key'],
   ]) {
-    expect(aboutDiscussionAddress(href!)).toEqual({ ref: 'reading-house', path: expectedPath });
+    expect(aboutDiscussionAddress(href!)).toEqual({ spaceRef: 'reading-house', path: expectedPath });
     expect(aboutDiscussionAddress(`${href}?position=old&main=retained&context=question&realm=other`))
-      .toEqual({ ref: 'reading-house', path: expectedPath });
-    expect(aboutDiscussionAddress(`${href}#discussion`)).toEqual({ ref: 'reading-house', path: expectedPath });
+      .toEqual({ spaceRef: 'reading-house', path: expectedPath });
+    expect(aboutDiscussionAddress(`${href}#discussion`)).toEqual({ spaceRef: 'reading-house', path: expectedPath });
   }
 });
 
