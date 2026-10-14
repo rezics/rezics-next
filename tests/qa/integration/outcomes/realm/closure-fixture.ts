@@ -68,8 +68,8 @@ export async function closureSetup(sessions: PersonaSessions, prepare: () => Pro
 }
 
 export async function closureCommand<T>(person: PersonaSession, method: string, path: string,
-  body?: unknown, status = 200, key?: string): Promise<T> {
-  const response = await person.main(method, path, body, key);
+  body?: unknown, status = 200, key?: string, options?: Parameters<PersonaSession['main']>[4]): Promise<T> {
+  const response = await person.main(method, path, body, key, options);
   const raw = await response.text();
   expect(response.status, `${method} ${path}: ${response.status} ${raw}`).toBe(status);
   return JSON.parse(raw) as T;
@@ -213,6 +213,12 @@ export async function publishClosureRule(sessions: PersonaSessions): Promise<Rul
 }
 
 export async function effectClosure(sessions: PersonaSessions, rule: Rule) {
+  await (await prepareClosure(sessions, rule))();
+}
+
+/** Intake and review precede the held search read. Only enforcement races with
+ * hydration, within the production search request's unchanged wall bound. */
+export async function prepareClosure(sessions: PersonaSessions, rule: Rule) {
   const proof = state(sessions);
   const operator = sessions.operator;
   const header = await closureCommand<{ revision: string }>(sessions.owner, 'GET',
@@ -253,29 +259,31 @@ export async function effectClosure(sessions: PersonaSessions, rule: Rule) {
       duration: 'Until a later staff decision.', automation: false,
       appealRoute: '/v1/public-reports/{caseId}/correspondence', contentLanguage: 'en' },
     idempotencyKey: key };
-  const deadline = performance.now() + 30_000;
-  let completed: { operation: { status: string; id?: string } } | undefined;
-  while (performance.now() < deadline) {
-    const response = await operator.main('POST', '/v1/moderation/decisions', input, key);
-    const raw = await response.text();
-    console.log('Realm closure decision', JSON.stringify({ request: input,
-      answer: { status: response.status, body: raw } }));
-    const result = JSON.parse(raw) as { operation: { status: string; id?: string } };
-    if (response.status === 200 && result.operation.status === 'completed') { completed = result; break; }
-    expect(response.status, raw).toBe(202);
-    await Bun.sleep(100);
-  }
-  expect(completed, 'An accepted decision must become completed').toBeDefined();
-  const replay = await closureCommand<{ operation: { status: string; id?: string } }>(operator,
-    'POST', '/v1/moderation/decisions', input, 200, key);
-  expect(replay.operation).toEqual(completed!.operation);
-  proof.effective = true;
-  // A completed receipt is followed by an actual public absence check.
-  const path = `/v1/realms/${short(sessions.realm)}`;
-  const response = await sessions.visitor.main('GET', path);
-  const absent = await sessions.visitor.main('GET', `/v1/realms/${randomUUID()}`);
-  expect(response.status, path).toBe(absent.status);
-  expect(await response.json(), path).toEqual(await absent.json());
+  return async () => {
+    const deadline = performance.now() + 30_000;
+    let completed: { operation: { status: string; id?: string } } | undefined;
+    while (performance.now() < deadline) {
+      const response = await operator.main('POST', '/v1/moderation/decisions', input, key, { settle: false });
+      const raw = await response.text();
+      console.log('Realm closure decision', JSON.stringify({ request: input,
+        answer: { status: response.status, body: raw } }));
+      const result = JSON.parse(raw) as { operation: { status: string; id?: string } };
+      if (response.status === 200 && result.operation.status === 'completed') { completed = result; break; }
+      expect(response.status, raw).toBe(202);
+      await Bun.sleep(100);
+    }
+    expect(completed, 'An accepted decision must become completed').toBeDefined();
+    const replay = await closureCommand<{ operation: { status: string; id?: string } }>(operator,
+      'POST', '/v1/moderation/decisions', input, 200, key, { settle: false });
+    expect(replay.operation).toEqual(completed!.operation);
+    proof.effective = true;
+    // A completed receipt is followed by an actual public absence check.
+    const path = `/v1/realms/${short(sessions.realm)}`;
+    const response = await sessions.visitor.main('GET', path);
+    const absent = await sessions.visitor.main('GET', `/v1/realms/${randomUUID()}`);
+    expect(response.status, path).toBe(absent.status);
+    expect(await response.json(), path).toEqual(await absent.json());
+  };
 }
 
 export async function closeRealm(sessions: PersonaSessions): Promise<string | null> {

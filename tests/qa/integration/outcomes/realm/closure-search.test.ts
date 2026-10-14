@@ -1,4 +1,4 @@
-import { closureSetup, closureCell, closureHydrationFence, effectClosure, publishClosureRule } from './closure-fixture.ts';
+import { closureSetup, closureCell, closureHydrationFence, prepareClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-search.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -157,6 +157,7 @@ beforeAll(async () => {
       expect(page.result.nextCursor, `${name}: pre-closure query continuation`).not.toBeNull();
       queryContinuations.set(name, page.result.nextCursor!);
     }
+    const enforce = await prepareClosure(sessions, rule);
     hydration.arm(publications.map(publication => publication.work), personaNames.length);
     const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
     const path = `/v1/search/catalogue?${params}`;
@@ -167,7 +168,7 @@ beforeAll(async () => {
     const finished = Promise.allSettled(pending);
     try {
       await hydration.blocked();
-      await effectClosure(sessions, rule);
+      await enforce();
     } finally {
       hydration.resume();
       const results = await finished;

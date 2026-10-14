@@ -1,14 +1,14 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'realm/closure-feed',
   {
-    visitor: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
-    stranger: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
-    member: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
-    owner: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
-    moderator: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
-    operator: pending('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    visitor: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    stranger: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    member: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    owner: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    moderator: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
+    operator: proved('omits closed Realm feed occurrences and head counts while credited independent originals remain traversable'),
   },
   {
     rights: {

@@ -73,7 +73,15 @@ async function inventory(person: PersonaSession, sort: string, q: string | undef
   throw new Error('Synthetic directory traversal exceeded 100 pages');
 }
 beforeAll(async () => {
-  closed = await personaSessions('public');
+  const refusals = new Set<string>();
+  closed = await personaSessions('public', { observeMain: async evidence => {
+    if (evidence.request.path !== '/v1/query' || evidence.response.status !== 503) return;
+    const refusal = JSON.stringify({ request: evidence.request.body, answer: evidence.response });
+    if (!refusals.has(refusal)) {
+      refusals.add(refusal);
+      console.log('Realm directory prerequisite refusal', refusal);
+    }
+  } });
   live = await personaSessions('public');
   await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
@@ -148,7 +156,7 @@ async function reads(name: PersonaName) {
           const ids = await inventory(person, sort, q, successor);
           if (ids.includes(closed.realm) || !ids.includes(live.realm))
             failures.push(`${successor ? 'POST /v1/query resource-list-v1 community type Facet' : 'GET /v1/realms'} sort=${sort} q=${q ?? ''}: delivered ${JSON.stringify(ids)}`);
-        } catch (error) { failures.push(String(error)); }
+        } catch (error) { failures.push(`${successor ? 'query' : 'directory'} sort=${sort} q=${q ?? ''}: ${String(error)}`); }
       }
   }
   reportFailures(failures);

@@ -1,14 +1,14 @@
-import { pending, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes(
   'realm/closure-rankings',
   {
-    visitor: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
-    stranger: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
-    member: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
-    owner: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
-    moderator: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
-    operator: pending('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    visitor: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    stranger: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    member: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    owner: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    moderator: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
+    operator: proved('gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive'),
   },
   {
     rights: {
