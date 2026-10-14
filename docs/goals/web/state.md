@@ -1,19 +1,17 @@
 # State
 
-Checkpoint d3d1ee16-686d-4790-be83-8ce671eda08a consolidates handled events
-mail:77ecf871-dd0a-4d93-901a-e961a9fe1a4f, task:G-2333:7,
-task:G-2239:6, mail:32e8d145-8a80-42ab-b5f9-dec8277df76d,
-task:G-2233:6, task:G-2237:10, task:G-2334:9,
-mail:87b91f97-3a04-4588-af14-f34fa8e9a8fb, task:G-2233:7 and
-mail:b47963e3-dd72-4eb9-a457-99a3b9089b80.
+Checkpoint 936af965-5ee4-4a97-85e9-e4d4960d2cb7 consolidates handled events
+task:G-2333:9, mail:53423171-f4ea-474e-909b-8bbf51f977ae and
+mail:21365ae4-f86b-414c-985a-fa1e4b63f759.
 No complete surface row, new landing or closure is accepted. These current
 dispositions supersede the affected historical holds below:
 
 | Task | Current decision and next action |
 | --- | --- |
 | G-2233 | Decision `b54789f83` admits four production settings paths for the smallest replay-client seam, preserving production access and browser defaults. Keep integration capture QA `20261014t230349-8f769a`, source `d790bb9f766bf3c813a0f5d39d30012887fd5f74`, passed in 55.9 seconds; promote it and use its settings authority samples without recapturing for a RESULT. Reclaim/resume found an existing worker, and task:G-2233:6 found attempt 7 already run. Mail:87b91f97 reports another setup import failure before tests; Program received recovery question mail:d166f7c1. Task:G-2233:7 then confirms Program's committed `2a05e0ac7` decision and already-resumed attempt 8: rebase onto the Storybook harness fix and rerun. This supersedes the startup hold for that continuation, without accepting the diagnostic fourteen-story pass as the full gate. Finish unchanged mapping/consumer checks, answer-records and final phone/desktop proof. |
-| G-2333 | Task:G-2333:7 confirms the check stopped downloading `serde_core/1.0.228` in `repo-index:build`, before surface checks. Program received recovery question mail:ec8401ea; attempt 8 was already continuing. Preserve the passed capture and full proof remainder; no duplicate resume or landing. Later task:G-2333:9 remains outside this checkpoint. |
-| G-2239 | Task:G-2239:6 remains unaccepted pending the complete gate. Attempt 7 and Program's Cargo recovery were already underway; the deciding turn acknowledged the recovery mail and started nothing twice. Retain the passed guard/stories and existing production-client, original-timeout, phone/desktop and complete-gate requirements. |
+| G-2333 | Task:G-2333:9 decision `c83adb32c` retains `e31456b5b`, `de14bdd60` and `1f319edd4` unaccepted on the branch: 74 passing stories and phone/desktop evidence use a shell still duplicated by production, and job `f442c75e` skipped the surface contract under an obsolete Wave section. Remove that section and wire the production layout to `zoneManagementShell` under the narrow G-2332 loan, preserving its reads, identity, lifecycle and provider behavior; do not edit its read.ts or authoring-reads.ts. Home/preview routes were reclaimed and attempt 10 resumed. Exercise the actual production layout in the boundary test, preserve six-persona capture `20261014t220002-43e889`, operator Zone/editor 200 answers, saving-Agent provenance and the headers loan. Finish affected final phone/desktop inspection and the complete surface gate. No integration or landing accepted. |
+| G-2224 | Mail:53423171 commits the harness recovery in `793e2b2db`/`e1a118639`; the corrected dated decision resumed attempt 10 with rebase and ancestry verification. Finish the existing zero-miss production replay, phone/desktop and complete affected gate, including Books consumers, preserving applicable captures. Mail:21365ae4 reports the replaced job `e1fbc98d`; its passed contract/type/lint/AST checks are incomplete gate evidence. Attempt 10 had already stopped that stale gate, rebased, verified the harness fix and started a replacement gate. No duplicate resume, new brief decision or acceptance follows. |
+| G-2239 | Task:G-2239:6 remains unaccepted pending the complete gate. Attempt 7 and Program's Cargo recovery were already underway. Mail:53423171 decision `ff85e42be` records the rebase/ancestry rule; the worker was running and already included the harness fix, so no duplicate continuation started. Retain the passed guard/stories and existing production-client, original-timeout, phone/desktop and complete-gate requirements. |
 | G-2334 | Decisions `54a64c277`/`51529c160` incorporate Program's loan of realm-page.tsx from G-2462, settling the shared-access hold. Record and replay the real follow-state refresh for every reached persona, including null-level follows, through the production client; preserve the holder's changes and make the false relationship-load error disappear. Finish the nullable assertion-typing correction without weakening assertions. Attempt 10 resumed; task:G-2334:9 confirms it was running and the handoff remains partial. Acceptance still needs the three production GETs, faithful phone/desktop inspection and complete affected gate. |
 | G-2237 | Task:G-2237:10 decision `ec611872d` rejects the green gate at `ae346afc8` and screenshots using recordedFollowRefresh: a prior membership answer cannot stand in for the missing production refresh. Attempt 11 resumed for independent work; Program received the shared-file question in mail:998c2ce1. Mail:b47963e3 decisions `e607741bc`/`24e95901f` settle access with narrow injection loans in realm/read.ts, realm-page.tsx and zones/site-route.tsx. Preserve every holder's changes; later landings rebase onto earlier ones. Remove the fallback, record exact reached follow-state reads and confirm the conditional graph for all six personas. The requested resume found an already-running worker. Both rows remain open for answer-records, faithful final phone/desktop inspection and the complete gate. |
 
@@ -21,6 +19,12 @@ Preserve applicable passed artifacts and repeat evidence only for relevant
 changes or a named gap. Assertions, persona cells and whole-record identities
 remain unchanged; no gate waiver is granted. Later results retain their own
 events. This checkpoint starts no worker or landing and changes only this file.
+Carry forward unaffected decisions from checkpoint d3d1ee16, including
+G-2233's settings capture/seam and already-running harness continuation,
+G-2334's production refresh and nullable assertion correction, and G-2237's
+shared-file loans and exact follow-state recording. Mail:53423171 decision
+`293554461` makes G-2233's rebase/ancestry check explicit without a duplicate
+resume. Later handoffs and landing results remain outside this checkpoint.
 Carry forward unaffected decisions from checkpoint 595008e1, including
 G-2235's already-running Program continuation and G-2237's preserved 74-story
 and owner evidence; no additional disposition of their later results is made.
@@ -71,13 +75,21 @@ the committed briefs, with no duplicate worker start or individual wave
 landing. Later handoffs, landing results and rulings retain their
 own events. This checkpoint edits only this file.
 
+**Standing authority, Program mail:53423171, 2026-10-14:** every surface
+continuation starts with `git rebase main` and verifies
+`git merge-base --is-ancestor 1e4adbc14 HEAD` before any Storybook run. Put both
+commands in resume messages. Setup-file import failures mean the worktree lacks
+this harness fix: bring it onto fixed main rather than mailing Program again.
+This recovery changes no assertion, persona cell, query, budget or gate and
+grants no new surface correction round.
+
 ## Scope and measures
 
 The method's measures, `task goal -- status` and
 `task goal -- efficiency --last --json` were read at this checkpoint.
 Scope and accounts are concurrent snapshots, not acceptance of later events.
 Status still reports 64/67 API rows and 384 proved/18 pending persona cells;
-accounts read codex 72% and codex-1 71% of their weekly windows. Other tool
+accounts read codex 72% and codex-1 72% of their weekly windows. Other tool
 classifications and token totals below are retained from checkpoint 5b17f324,
 not newly measured totals for this event set.
 Raw attempts below are retained from checkpoint 844479ae. Classified-tool,
@@ -99,7 +111,7 @@ It supplies no current tokens-per-proved-row reading.
 | Web recorded refusals | 0 outcome, 9 gate, 0 failing-test finding, 17 other in retained reports; Program owns the classified tool/main/host faults below |
 | Program measures | 41% first attempts, today 24% (111 of 454); landed-task median 1, maximum 15 (G-2576); 2015.9M input, 8.1M output, 80 unavailable sessions; tokens per proved row unavailable |
 | Program refusals | 0 outcome, 12 gate, 0 failing-test finding, 10 other in retained reports |
-| Accounts | Concurrent status: codex 72%, codex-1 71% of weekly windows |
+| Accounts | Concurrent status: codex 72%, codex-1 72% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
 The concurrent API reading is 64 of 67; this checkpoint closes no task
@@ -237,6 +249,16 @@ captures need no rerun for a job marker. The status and efficiency readings
 remain 64/67 API rows, 384 proved/18 pending cells and the retained 26% web/24%
 Program daily first shares. No current tokens-per-proved-row measure or accepted
 surface row demonstrates an efficiency gain.
+Checkpoint 936af965 classifies G-2333's repeated work as an unfinished shared
+production/replay layout plus obsolete brief metadata that skipped the surface
+contract. The committed loan, actual-layout boundary test and full-gate
+requirement address those causes. G-2224/G-2233/G-2239's setup imports are stale
+worktrees missing the shared harness fix; rebase plus ancestry verification
+replaces repeated unchanged startup attempts and referrals. G-2224's replaced
+job is lifecycle progress, not a new surface defect or completed gate. The
+already-running replacement needs no duplicate start. Scope remains 64/67 API
+rows and 384 proved/18 pending cells; retained daily first shares remain web
+26% and Program 24%, with no current tokens-per-proved-row evidence of gain.
 Unavailable tokens per proved row establish no efficiency improvement. Program's measures cover other Goals as well; concurrent status
 and ledger measurements do not decide later handoffs or landing results.
 
@@ -248,7 +270,7 @@ authorize no action in build. Replacement wave briefs own implementation;
 recording, qualification and full gates belong to prove. Current wave
 dispositions above for G-2232/G-2237/G-2333/G-2435/G-2457 and the accepted
 replacement builds supersede their earlier instructions.
-For this checkpoint's five affected tasks, the current dispositions at the top
+For this checkpoint's affected tasks, the current dispositions at the top
 supersede the historical entries below; later events are not incorporated.
 
 | Task | Decision and next action |
@@ -540,15 +562,10 @@ G-2267; keep the owner's correct record unchanged.
 ## Acknowledgements
 
 The supplied mails were already acknowledged on 2026-10-14 UTC:
-mail:77ecf871-dd0a-4d93-901a-e961a9fe1a4f at 23:08:56;
-mail:32e8d145-8a80-42ab-b5f9-dec8277df76d at 23:16:23;
-mail:87b91f97-3a04-4588-af14-f34fa8e9a8fb at 23:19:08;
-mail:b47963e3-dd72-4eb9-a457-99a3b9089b80 at 23:23:17.
-Task:G-2233:6 confirmed mail:77ecf871's acknowledgement;
-task:G-2334:9 confirmed mail:32e8d145's;
-task:G-2233:7 confirmed the setup-fault mail's acknowledgement and Program's
-existing harness continuation. G-2333:7 and G-2239:6 confirmed their related
-tooling mails were acknowledged. No mail accompanied task:G-2237:10.
+mail:53423171-f4ea-474e-909b-8bbf51f977ae at 23:26:39 and
+mail:21365ae4-f86b-414c-985a-fa1e4b63f759 at 23:30:24;
+both acknowledgements were confirmed at this checkpoint. Task:G-2333:9
+confirmed the related job mail:ee3d0805's acknowledgement at 23:07:01.
 Earlier acknowledgements remain in durable mail history. This checkpoint
 confirms acknowledgements and consolidates decisions only: no brief edit,
 worker start, landing, closure, watcher or wait. Later mail and task results
