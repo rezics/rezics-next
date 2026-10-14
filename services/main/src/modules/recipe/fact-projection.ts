@@ -98,10 +98,10 @@ export function canonicalRecipeQualifier(q: Qualifier): Qualifier {
 
 export async function hydrateRecipeFacts(env: WorkActivationEnvironment, state: PlacementState): Promise<Qualifier | undefined> {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?node ?p ?o WHERE {
-    GRAPH ${iri(GRAPHS.current)} { ${iri(state.placement)} rv:qualifier ?root .
-      { BIND(?root AS ?node) ?node ?p ?o }
-      UNION { ?root <${SCHEMA}requiredQuantity> ?node . ?node ?p ?o }
-      UNION { ?root <${PROV}wasDerivedFrom> ?node . ?node ?p ?o }
+    GRAPH ${iri(GRAPHS.current)} {
+      { ${iri(state.placement)} rv:qualifier ?node . ?node ?p ?o }
+      UNION { ${iri(state.placement)} rv:qualifier ?root . ?root <${SCHEMA}requiredQuantity> ?node . ?node ?p ?o }
+      UNION { ${iri(state.placement)} rv:qualifier ?root . ?root <${PROV}wasDerivedFrom> ?node . ?node ?p ?o }
     } }`, 128 * 1024)).results?.bindings ?? [];
   const id = recipeFactId(state.placement);
   const nodes = new Map<string, Map<string, { value: string; language?: string }[]>>();

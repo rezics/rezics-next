@@ -269,7 +269,7 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
       const denseResponse = await f.call('POST', `${path}/changes`, {
         profile: 'book-composition', expectedHead: denseHead, actingSubject: f.actor,
         operations: Array.from({ length: 16 }, () => ({ op: 'insert', parent: created.structure,
-          position: 'last', role: 'group' })),
+          position: 'first', role: 'group' })),
       });
       if (denseResponse.status !== 200) throw new Error(`dense batch ${batch}: ${denseResponse.status} ${await denseResponse.text()}`);
       const dense = await f.json<Changed>(denseResponse, 200);

@@ -1,5 +1,5 @@
 import { GRAPHS, iri, type WorkActivationEnvironment } from './activate.ts';
-import { DISCLOSURE_COST, discloseInventory } from '../disclosure/read.ts';
+import { DISCLOSURE_COST, discloseInventory, type DisclosureChannel } from '../disclosure/read.ts';
 import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
 
 /** Graph publication is a candidate predicate, not audience admission. Owners
@@ -7,7 +7,7 @@ import { ANONYMOUS_VIEWER, type Viewer } from '../suitability/policy.ts';
  * and its selected Structure revision before pagination or aggregation. */
 export async function admittedPublicWorks(environment: WorkActivationEnvironment | undefined,
   works: readonly string[], viewer: Viewer = ANONYMOUS_VIEWER,
-  sourcesAtCut?: ReadonlyMap<string, PublishedStructuredWorkSource>): Promise<ReadonlySet<string>> {
+  sourcesAtCut?: ReadonlyMap<string, PublishedStructuredWorkSource>, channel: DisclosureChannel = 'read'): Promise<ReadonlySet<string>> {
   const unique = [...new Set(works)];
   if (!environment) return new Set(unique); // Graph-only legacy owner fixtures.
   const visible = new Set<string>();
@@ -27,7 +27,7 @@ export async function admittedPublicWorks(environment: WorkActivationEnvironment
       ...parentWorks.map(work => ({ owner: 'graph' as const, resource: parents.get(work)!,
         component: 'publication' as const, work: parents.get(work)! })),
     ];
-    const decisions = await discloseInventory(environment, targets, viewer, 'read');
+    const decisions = await discloseInventory(environment, targets, viewer, channel);
     batch.forEach((work, index) => {
       const sourceIndex = sourceWorks.indexOf(work);
       const parentIndex = parentWorks.indexOf(work);

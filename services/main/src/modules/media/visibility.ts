@@ -59,7 +59,7 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
     const uses = [...facts].filter(([, fact]) => fact.exactUse && fact.structureInstruction)
       .map(([reference]) => reference.slice('https://rezics.com/id/'.length));
     const grantedUses = new Set(uses.length ? (await readPublicInstructionAdoptions(deps.environment,
-      { mediaUses: uses }, viewer, new Set([...facts.values()].flatMap(fact => fact.attachments.map(item => item.target)))))
+      { mediaUses: uses }, viewer, undefined, 'media'))
       .flatMap(item => item.mediaUse ? [`https://rezics.com/id/${item.mediaUse}`] : []) : []);
     const audience = audiences.get(viewer);
     const principal = audience?.principal,
@@ -124,6 +124,11 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       if (nativeOwner(reference, fact)) continue;
       // A truncated Asset inventory cannot prove readability. Do not probe it.
       if (fact.attachmentOverflow || exactUses.has(reference) && fact.attachments.length !== 1) continue;
+      // A current public instruction adoption already discloses its Work and
+      // exact Structure in this channel. Loading their names/covers again adds
+      // no audience evidence. Other Contexts retain their ordinary summary gate.
+      if (fact.structureInstruction && grantedUses.has(reference)
+        && fact.attachments.every(item => item.context === DEFAULT_MEDIA_CONTEXT)) continue;
       for (const attachment of fact.attachments) {
         const resources = byContext.get(attachment.context) ?? new Set<string>();
         resources.add(attachment.target);
@@ -188,7 +193,8 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       if ((fact.disclosure !== 'public' && !grantedUses.has(probe.reference) || fact.pending) && !(canManage && actor === fact.owner))
         return false;
       return fact.attachments.length === 0 || fact.attachments.some((attachment) =>
-        readable.has(`${attachment.context}\0${attachment.target}`));
+        readable.has(`${attachment.context}\0${attachment.target}`)
+        || fact.structureInstruction && grantedUses.has(probe.reference) && attachment.context === DEFAULT_MEDIA_CONTEXT);
     });
   };
 }

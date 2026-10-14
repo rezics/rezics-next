@@ -34,7 +34,7 @@ import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavail
   from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../modules/recipe/export.ts';
 import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/recipe/work-page.ts';
-import { workRead, type WorkReadSession } from '../modules/work/read-session.ts';
+import { workRead, WorkReadUnavailable, type WorkReadSession } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
@@ -619,6 +619,14 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           const contentRevisions = [...new Set(contents.flatMap(item => item.reference.selector.grain === 'content'
             ? [item.reference.selector.revision] : []))];
             for (const revision of contentRevisions) {
+              const store = work.contentAuthoring?.derivations;
+              if (!store) throw new WorkReadUnavailable('Content derivations are unavailable');
+              const inventory = () => store.page(revision, 20, null);
+              const records = await inventory();
+              session.observeDependency(`recipe-export-derivations:${revision}`, records, inventory);
+              // The instruction body was disclosed above. An empty credit
+              // inventory needs its own fence, without resolving that body again.
+              if (!records.length) continue;
               const page = await readContentDerivations(session, revision);
               if (page.nextCursor) throw new RecipeExportLimit('Recipe derivations exceed the export bound');
               derivations.push(...page.items);

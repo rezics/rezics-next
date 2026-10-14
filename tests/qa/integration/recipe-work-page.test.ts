@@ -130,11 +130,14 @@ test('a paged Recipe keeps depth-first order, the servings pin and a stale curso
     const change = async (operations: object[]) => {
       const written: string[] = [];
       for (let index = 0; index < operations.length; index += 16) {
-        const result = await f.json<{ revision: string; occurrences: string[] }>(await f.call('POST',
+        const result = await f.json<{ revision: string; occurrences: string[]; cost: { placementsWritten: number; rebalanced: number } }>(await f.call('POST',
           `/v1/compositions/${shortId(created.structure)}/changes`, { profile: 'recipe-composition',
             expectedHead: revision, actingSubject: f.actor, operations: operations.slice(index, index + 16) },
           `recipe-${randomUUID()}`), 200);
         revision = result.revision;
+        // Appending a full batch keeps its footprint independent of existing facts.
+        expect(result.cost.placementsWritten).toBeLessThanOrEqual(16);
+        expect(result.cost.rebalanced).toBe(0);
         written.push(...result.occurrences);
       }
       return written;

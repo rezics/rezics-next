@@ -1049,8 +1049,8 @@ async function rebalanceSegmentKeys(w: Working, segment: SegmentState): Promise<
   for (const occurrence of await w.membersOf(segment.segment)) (await w.get(occurrence))!.segmentKey = key;
 }
 
-/** Move the upper half of a full segment into a new neighbour; at most 32 uses change. */
-async function split(w: Working, segment: SegmentState): Promise<void> {
+/** Appends open a neighbour without moving existing uses. Interior splits move at most 16. */
+async function split(w: Working, segment: SegmentState, append: boolean): Promise<void> {
   const members = await w.membersOf(segment.segment);
   const next = await w.seekSegment(segment.parent, segment.key, false);
   let key: string | null;
@@ -1061,7 +1061,7 @@ async function split(w: Working, segment: SegmentState): Promise<void> {
     key = segmentKeyBetween(segment.key, next?.key ?? null);
   }
   const created = w.newSegment(segment.parent, key);
-  const upper = members.splice(Math.floor(members.length / 2));
+  const upper = append ? [] : members.splice(Math.floor(members.length / 2));
   for (const occurrence of upper) {
     const state = (await w.get(occurrence))!;
     state.segment = created.segment;
@@ -1092,7 +1092,7 @@ async function locate(w: Working, parent: string, position: Position): Promise<{
 async function place(w: Working, state: PlacementState, parent: string, position: Position): Promise<void> {
   let at = await locate(w, parent, position);
   if (at.segment.count >= STRUCTURE_LIMITS.segmentMembers) {
-    await split(w, at.segment);
+    await split(w, at.segment, position === 'last');
     at = await locate(w, parent, position);
   }
   const members = await w.membersOf(at.segment.segment);

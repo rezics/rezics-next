@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { acting, originalRecipe, short, type RecipeWork } from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
+import { originalRecipe, short, type RecipeWork } from '../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { personaSessions, type PersonaSessions } from '../support/personas.ts';
 import { comparableBody } from '../support/hidden-id-equality.ts';
 
@@ -17,7 +17,7 @@ test('native and Schema.org exports conceal hidden Structures and draft revision
   if (!published.draftRevision) throw new Error('fixture requires a private successor');
   for (const format of ['native', 'schema-org']) {
     const path = (structure: string, revision?: string) => `/v1/recipes/${structure}/export?${new URLSearchParams({
-      ...acting(sessions.stranger), format, ...(revision ? { revision } : {}),
+      actingSubject: sessions.stranger.actingSubject!, format, ...(revision ? { revision } : {}),
     })}`;
     const hidden = await sessions.stranger.main('GET', path(short(privateRecipe.structure)));
     const missing = await sessions.stranger.main('GET', path(randomUUID()));
@@ -28,7 +28,7 @@ test('native and Schema.org exports conceal hidden Structures and draft revision
     expect(draft.status).toBe(404); expect(absent.status).toBe(404);
     expect(comparableBody(await draft.text())).toBe(comparableBody(await absent.text()));
     const owner = await sessions.owner.main('GET', `/v1/recipes/${short(privateRecipe.structure)}/export?${new URLSearchParams({
-      ...acting(sessions.owner), format,
+      actingSubject: sessions.owner.actingSubject!, format,
     })}`);
     expect(owner.status).toBe(200);
     for (const id of [short(privateRecipe.structure), randomUUID()]) {
@@ -46,7 +46,7 @@ test('a zero serving denominator is refused before creating a measure revision',
   });
   expect(response.status).toBe(400);
   const current = await owner.main('GET', `/v1/recipes/${short(privateRecipe.structure)}/export?${new URLSearchParams({
-    ...acting(owner), format: 'native',
+    actingSubject: owner.actingSubject!, format: 'native',
   })}`);
   expect(current.status).toBe(200);
   expect((await current.json() as { revision: string }).revision).toBe(privateRecipe.revision);

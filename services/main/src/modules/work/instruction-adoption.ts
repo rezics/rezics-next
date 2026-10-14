@@ -9,6 +9,7 @@ import { PublicationUnavailable } from '../contribution/publish.ts';
 import { GRAPHS, hash, iri, lit, type WorkActivationEnvironment } from './activate.ts';
 import { admittedPublicWorks } from './public-patterns.ts';
 import type { Viewer } from '../suitability/policy.ts';
+import type { DisclosureChannel } from '../disclosure/read.ts';
 
 export interface InstructionAdoption {
   occurrence: string; target: string; selector: ExactInstructionSelector; mediaUse?: string;
@@ -30,12 +31,14 @@ export function instructionAdoptionTriples(source: string, adoptions: readonly I
   }).join('\n');
 }
 
-/** Only a current public Work adoption grants public delivery; history is not authority. */
-export async function readPublicInstructionAdoptions(env: WorkActivationEnvironment,
-  selection: { work?: string; revision?: string; contentRevision?: string; target?: string;
-    mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[] }, viewer?: Viewer,
-  admittedWorks?: ReadonlySet<string>):
-  Promise<InstructionAdoption[]> {
+interface InstructionAdoptionSelection {
+  work?: string; revision?: string; contentRevision?: string; target?: string;
+  mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[];
+}
+
+/** Manifest identity only. Callers must disclose the exact Use before returning any selection. */
+export async function readInstructionAdoptionCandidates(env: WorkActivationEnvironment,
+  selection: InstructionAdoptionSelection): Promise<(InstructionAdoption & { work: string })[]> {
   const rows = (await env.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?work ?occurrence ?target ?selector ?use WHERE {
       GRAPH ${iri(GRAPHS.current)} { ${selection.work ? iri(selection.work) : '?work'} rv:workStructurePublicationHead ?decision .
@@ -56,15 +59,23 @@ export async function readPublicInstructionAdoptions(env: WorkActivationEnvironm
       }
     } LIMIT 4097`, 2 * 1024 * 1024)).results?.bindings ?? [];
   if (rows.length > 4096) throw new PublicationUnavailable('Instruction adoption inventory exceeds its bound');
-  const works = [...new Set(rows.flatMap(row => row.work?.value ? [row.work.value] : []))];
-  const allowed = admittedWorks ?? await admittedPublicWorks(env, works, viewer);
   return rows.flatMap(row => {
-    if (!allowed.has(row.work?.value ?? '') || !row.occurrence || !row.target || !row.selector) return [];
+    if (!row.work || !row.occurrence || !row.target || !row.selector) return [];
     const selector = JSON.parse(row.selector.value) as ExactInstructionSelector;
     if (selection.contentRevision && (selector.grain !== 'content' || selector.revision !== selection.contentRevision)) return [];
-    return [{ occurrence: row.occurrence.value, target: row.target.value, selector,
+    return [{ work: row.work.value, occurrence: row.occurrence.value, target: row.target.value, selector,
       ...(row.use ? { mediaUse: row.use.value.slice('https://rezics.com/id/'.length) } : {}) }];
   });
+}
+
+/** Only a current public Work adoption grants public delivery; history is not authority. */
+export async function readPublicInstructionAdoptions(env: WorkActivationEnvironment,
+  selection: InstructionAdoptionSelection, viewer?: Viewer,
+  admittedWorks?: ReadonlySet<string>, channel: DisclosureChannel = 'read'): Promise<InstructionAdoption[]> {
+  const candidates = await readInstructionAdoptionCandidates(env, selection);
+  const allowed = admittedWorks ?? await admittedPublicWorks(env,
+    [...new Set(candidates.map(item => item.work))], viewer, undefined, channel);
+  return candidates.flatMap(({ work, ...adoption }) => allowed.has(work) ? [adoption] : []);
 }
 
 /** Runs after Work publish admission. Custody and original authorship are separate proofs. */
@@ -80,7 +91,7 @@ export async function prepareInstructionAdoptions(work: MainWorkDependencies,
   // ingredient inventory does not acquire the export operation's 4,096-use limit.
   const rows = (await work.environment.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
     SELECT ?occurrence ?target ?selector WHERE { GRAPH ${iri(GRAPHS.current)} {
-      VALUES ?role { ${profile.selectionSelectorRoles.map(role => iri(roleIri(role))).join(' ')} }
+      VALUES ?role { ${profile.selectionSelectorRoles.map(role => `<${roleIri(role)}>`).join(' ')} }
       ?placement rv:generation ${iri(header.generation)} ; rv:occurrenceRole ?role ;
         rv:occurrence ?occurrence ; <https://schema.org/item> ?target ; rv:selectionSelector ?selector .
       FILTER NOT EXISTS { ?placement rv:removedBy ?removal }
