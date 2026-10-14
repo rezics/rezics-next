@@ -427,6 +427,8 @@ tasks:
 
   repo-index:format:
     desc: Format the shared Rust repository-index package.
+    env:
+      CARGO_HOME: '{{.ROOT_DIR}}/.temp/repo-index-cargo'
     cmds:
       - cargo fmt --manifest-path tools/repo-index/Cargo.toml {{.CLI_ARGS}}
 

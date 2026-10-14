@@ -1,16 +1,7 @@
-import { spawnSync } from 'node:child_process';
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readdirSync,
-  readFileSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { extname, isAbsolute, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { indexedFiles, repositoryIndex } from '../lib/repo-index.ts';
 import { mechanisms, type Mechanism } from './mechanisms.ts';
 
 /**
@@ -308,52 +299,85 @@ export function cruiseDependencies(
 ): CruiseFindings {
   const cruiseCwd = cwd.replace(/\/$/, '');
   const repo = fileURLToPath(new URL('../../', import.meta.url));
-  const scratch = join(repo, '.temp');
-  mkdirSync(scratch, { recursive: true });
-  // mkdtemp requires the parent. The config is not a cruise root.
-  const directory = mkdtempSync(join(scratch, 'mechanism-dependencies-'));
-  const configPath = join(directory, 'config.json');
-  try {
-    writeFileSync(configPath, JSON.stringify(config));
-    const result = spawnSync(
-      join(repo, 'node_modules/.bin/depcruise'),
-      ['--config', configPath, '--output-type', 'baseline', ...targets],
-      { cwd: cruiseCwd, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 },
-    );
-    if (result.error) throw result.error;
-    if (result.status !== 0) {
-      throw new Error(
-        result.stderr || result.stdout || `dependency-cruiser exited ${result.status}`,
-      );
+  const files =
+    cruiseCwd === repo.replace(/\/$/, '')
+      ? repositoryIndex(cruiseCwd).files
+      : indexedFiles(cruiseCwd, targets);
+  type Selector = {
+    path?: string | string[];
+    pathNot?: string | string[];
+    dependencyTypesNot?: string[];
+  };
+  type Rule = { name: string; from?: Selector; to?: Selector };
+  const patterns = (value?: string | string[]) =>
+    (Array.isArray(value) ? value : value ? [value] : []).map((pattern) => new RegExp(pattern));
+  const selector = (value: Selector = {}) => {
+    const include = patterns(value.path),
+      exclude = patterns(value.pathNot);
+    return (path: string) =>
+      (!include.length || include.some((pattern) => pattern.test(path))) &&
+      !exclude.some((pattern) => pattern.test(path));
+  };
+  const rules = (config.forbidden ?? []).map((value) => {
+    const rule = value as Rule;
+    for (const field of Object.keys(rule.from ?? {}))
+      if (!['path', 'pathNot'].includes(field))
+        throw new Error(`Unsupported import rule selector: ${field}`);
+    for (const field of Object.keys(rule.to ?? {}))
+      if (!['path', 'pathNot', 'dependencyTypesNot'].includes(field))
+        throw new Error(`Unsupported import rule selector: ${field}`);
+    return { ...rule, importer: selector(rule.from), imported: selector(rule.to) };
+  });
+  const exclude = selector(config.options?.exclude as Selector);
+  const doNotFollow = selector(config.options?.doNotFollow as Selector);
+  const pending = Object.keys(files).filter((file) =>
+    targets.some(
+      (target) =>
+        target === '.' || file === target || file.startsWith(`${target.replace(/\/$/, '')}/`),
+    ),
+  );
+  const seen = new Set<string>();
+  const violations: { from: string; to: string; rule: { name: string } }[] = [];
+  while (pending.length) {
+    const importer = pending.pop()!;
+    if (seen.has(importer) || (config.options?.exclude && exclude(importer))) continue;
+    if (files[importer]?.parseErrors?.length)
+      throw new Error(`${importer}: ${files[importer].parseErrors!.join('\n')}`);
+    seen.add(importer);
+    for (const dependency of files[importer]?.imports ?? []) {
+      const imported = dependency.resolved ?? dependency.source;
+      if (config.options?.exclude && exclude(imported)) continue;
+      for (const rule of rules)
+        if (
+          rule.importer(importer) &&
+          rule.imported(imported) &&
+          !(dependency.typeOnly && rule.to?.dependencyTypesNot?.includes('type-only'))
+        )
+          violations.push({ from: importer, to: imported, rule: { name: rule.name } });
+      if (files[imported] && !(config.options?.doNotFollow && doNotFollow(imported)))
+        pending.push(imported);
     }
-    const violations = JSON.parse(result.stdout) as {
-      from: string;
-      to: string;
-      rule: { name: string };
-    }[];
-    const mechanism = new Map<string, MechanismDependency>();
-    const other = new Map<string, MechanismDependency & { rule: string }>();
-    for (const violation of violations) {
-      const pair = {
-        importer: relativeTo(cruiseCwd, violation.from),
-        imported: relativeTo(cruiseCwd, violation.to),
-      };
-      if (violation.rule.name.startsWith('mechanism-entry-')) mechanism.set(pairKey(pair), pair);
-      else
-        other.set(`${violation.rule.name}\0${pairKey(pair)}`, {
-          ...pair,
-          rule: violation.rule.name,
-        });
-    }
-    return {
-      mechanism: [...mechanism.values()].sort(byPair),
-      other: [...other.values()].sort(
-        (left, right) => left.rule.localeCompare(right.rule) || byPair(left, right),
-      ),
-    };
-  } finally {
-    rmSync(directory, { recursive: true, force: true });
   }
+  const mechanism = new Map<string, MechanismDependency>();
+  const other = new Map<string, MechanismDependency & { rule: string }>();
+  for (const violation of violations) {
+    const pair = {
+      importer: relativeTo(cruiseCwd, violation.from),
+      imported: relativeTo(cruiseCwd, violation.to),
+    };
+    if (violation.rule.name.startsWith('mechanism-entry-')) mechanism.set(pairKey(pair), pair);
+    else
+      other.set(`${violation.rule.name}\0${pairKey(pair)}`, {
+        ...pair,
+        rule: violation.rule.name,
+      });
+  }
+  return {
+    mechanism: [...mechanism.values()].sort(byPair),
+    other: [...other.values()].sort(
+      (left, right) => left.rule.localeCompare(right.rule) || byPair(left, right),
+    ),
+  };
 }
 
 export function cruiseMechanismDependencies(root: string): CruiseFindings & { errors: string[] } {
