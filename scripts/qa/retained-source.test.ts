@@ -56,6 +56,7 @@ test('a failed build remains primary when removal fails and cannot become select
   expect(error.stack).toBe(stack);
   expect(retainedSourceFailure(error)?.boundary).toBe('build');
   expect(retainedSourceFailure(error)?.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+  expect(readdirSync(join(f.directory, 'sources')).filter(name => !name.endsWith('.lock'))).toEqual([]);
   await expect(f.store.select(f.adapter)).rejects.toThrow('complete manifest');
 });
 
@@ -386,6 +387,198 @@ test('preparation exceeding 600 active seconds publishes no source', async () =>
   await expect(store.prepare(f.adapter)).rejects.toThrow('600 seconds');
   await expect(store.select(f.adapter)).rejects.toThrow('complete manifest');
   expect(readdirSync(join(f.directory, 'timed-failure')).filter(name => !name.endsWith('.lock'))).toEqual([]);
+});
+
+test('declared producer build has its own evidenced deadline before the unchanged physical-cut clock', async () => {
+  const f = setup();
+  let clock = 0, producers = 0;
+  const store = new RetainedSources(join(f.directory, 'declared'), () => clock);
+  const key = sourceKey(f.inputs), build = f.adapter.build;
+  f.adapter.producerBuild = {
+    deadlineMs: 900_000, evidence: 'Measured producer requires 800 s active work before the physical cut',
+    async run(context) {
+      producers++;
+      expect(context.key).toBe(key);
+      expect(context.budget.remaining()).toBe(900_000);
+      clock += 700_000;
+      context.budget.excludeAdmissionWait(700_000);
+      clock += 800_000;
+      expect(context.budget.remaining()).toBe(100_000);
+    },
+  };
+  f.adapter.build = async context => {
+    expect(producers).toBe(1);
+    expect(context.budget.remaining()).toBe(SOURCE_PREPARATION_MS);
+    clock += 1_000;
+    context.budget.excludeAdmissionWait(1_000);
+    clock += 599_900;
+    return build(context);
+  };
+  f.adapter.verify = async context => {
+    clock += 40;
+    expect(context.budget.remaining()).toBeGreaterThan(0);
+    return [];
+  };
+  const prepared = await store.prepare(f.adapter);
+  expect(prepared.manifest.key).toBe(key);
+  expect(prepared.elapsedMs).toBe(599_980);
+  expect(prepared.admissionWaitMs).toBe(701_000);
+  expect(prepared.producerBuild).toEqual({ deadlineMs: 900_000,
+    evidence: f.adapter.producerBuild.evidence, elapsedMs: 800_000, admissionWaitMs: 700_000 });
+  expect(prepared.manifest.provenance.producerBuild).toEqual(prepared.producerBuild);
+  expect(prepared.manifest.provenance.admissionWaitMs).toBe(701_000);
+  const reused = await store.prepare(f.adapter);
+  expect(reused.built).toBe(false);
+  expect(reused.manifest.digest).toBe(prepared.manifest.digest);
+  await store.select(f.adapter);
+  const restored = await store.restore(f.adapter);
+  await restored.dispose();
+  expect(producers).toBe(1);
+  expect(f.counts().builds).toBe(1);
+  expect(SOURCE_PREPARATION_MS).toBe(600_000);
+  expect(SOURCE_RESTORE_MS).toBe(600_000);
+});
+
+test('declared build deadlines reject the exact boundary and overruns before any cut or seal', async () => {
+  for (const duration of [900_000, 900_001]) {
+    const f = setup();
+    let clock = 0;
+    const root = join(f.directory, 'declared-overrun'), store = new RetainedSources(root, () => clock);
+    const cleanup = new Error('overrun producer resources held');
+    let removals = 0;
+    f.adapter.remove = async () => { if (++removals > 1) throw cleanup; };
+    f.adapter.producerBuild = { deadlineMs: 900_000, evidence: 'Measured producer bound',
+      async run(context) { writeFileSync(join(context.backup, 'unsealed'), 'producer bytes'); clock += duration; } };
+    const error = await store.prepare(f.adapter).catch(error => error);
+    expect(error.message).toContain('declared 900000 ms deadline');
+    const evidence = retainedSourceFailure(error)!;
+    expect(evidence.boundary).toBe('producer-build');
+    expect(evidence.producerBuild?.elapsedMs).toBe(duration);
+    expect(evidence.producerBuild?.deadlineMs).toBe(900_000);
+    expect(evidence.phases['producer-build']).toEqual({ elapsedMs: duration, admissionWaitMs: 0 });
+    expect(evidence.preparation).toBeUndefined();
+    expect(evidence.cleanup.map(entry => entry.error)).toEqual([cleanup]);
+    expect(f.counts()).toEqual({ builds: 0, verifies: 0, restores: 0 });
+    expect(readdirSync(root).filter(name => !name.endsWith('.lock'))).toEqual([]);
+    await expect(store.select(f.adapter)).rejects.toThrow('complete manifest');
+    // Cleanup released both leases; retrying the same key can publish normally.
+    f.adapter.producerBuild.run = async () => { clock += 1; };
+    f.adapter.remove = async () => {};
+    expect((await store.prepare(f.adapter)).built).toBe(true);
+  }
+});
+
+test('declared build failure preserves primary cause/stack and secondary removal/release evidence while cleaning unsealed staging', async () => {
+  const f = setup();
+  let clock = 0, removals = 0;
+  const root = join(f.directory, 'declared-failure'), store = new RetainedSources(root, () => clock);
+  const cause = new Error('producer cause'), primary = Object.freeze(new Error('producer failed', { cause }));
+  const stack = primary.stack, cleanup = new Error('external volume held'), lease = new Error('lease stream failed');
+  f.adapter.producerBuild = { deadlineMs: 900_000, evidence: 'Measured producer bound', async run(context) {
+    writeFileSync(join(context.backup, 'unsealed'), 'producer bytes');
+    clock += 750;
+    context.budget.excludeAdmissionWait(700);
+    throw primary;
+  } };
+  f.adapter.remove = async () => { if (++removals > 1) { clock += 20; throw cleanup; } };
+  const release = failLeaseRelease(lease);
+  try {
+    const error = await store.prepare(f.adapter).catch(error => error);
+    expect(error).toBe(primary);
+    expect(error.cause).toBe(cause);
+    expect(error.stack).toBe(stack);
+    const evidence = retainedSourceFailure(error)!;
+    expect(evidence.boundary).toBe('producer-build');
+    expect(evidence.producerBuild).toEqual({ deadlineMs: 900_000, evidence: 'Measured producer bound',
+      elapsedMs: 50, admissionWaitMs: 700 });
+    expect(evidence.elapsedMs).toBe(50);
+    expect(evidence.admissionWaitMs).toBe(700);
+    expect(evidence.cleanup.map(entry => entry.error)).toEqual([cleanup, lease, lease]);
+    expect(readdirSync(root).filter(name => !name.endsWith('.lock'))).toEqual([]);
+    expect(f.counts().builds).toBe(0);
+  } finally { release.mockRestore(); }
+  f.adapter.producerBuild.run = async () => { clock += 1; };
+  f.adapter.remove = async () => {};
+  expect((await store.prepare(f.adapter)).built).toBe(true);
+});
+
+test('declared builds do not extend the physical cut, seal or either backup verification deadline', async () => {
+  for (const phase of ['cut', 'seal', 'verify-staging', 'verify-published'] as const) {
+    const f = setup();
+    let clock = 0, verifies = 0;
+    const root = join(f.directory, `cut-${phase}`), store = new RetainedSources(root, () => clock);
+    f.adapter.producerBuild = { deadlineMs: 900_000, evidence: 'Measured producer bound', async run() { clock += 800_000; } };
+    const build = f.adapter.build;
+    f.adapter.build = async context => {
+      const result = await build(context);
+      if (phase === 'cut') clock += SOURCE_PREPARATION_MS;
+      if (phase === 'seal') Object.defineProperty(result, 'metadata', {
+        get() { clock += SOURCE_PREPARATION_MS; return { identity: 'seal timing' }; },
+      });
+      return result;
+    };
+    f.adapter.verify = async () => {
+      verifies++;
+      if ((phase === 'verify-staging' && verifies === 1) || (phase === 'verify-published' && verifies === 2))
+        clock += SOURCE_PREPARATION_MS;
+      return [];
+    };
+    const error = await store.prepare(f.adapter).catch(error => error);
+    expect(error.message).toContain('600 seconds');
+    const evidence = retainedSourceFailure(error)!;
+    expect(evidence.boundary).toBe(phase === 'cut' ? 'build' : phase === 'seal' ? 'verify-staging' : phase);
+    expect(evidence.producerBuild?.elapsedMs).toBe(800_000);
+    expect(evidence.preparation).toEqual({ elapsedMs: SOURCE_PREPARATION_MS, admissionWaitMs: 0 });
+    expect(evidence.elapsedMs).toBe(800_000 + SOURCE_PREPARATION_MS);
+    expect(readdirSync(root).filter(name => !name.endsWith('.lock'))).toEqual([]);
+    await expect(store.select(f.adapter)).rejects.toThrow('complete manifest');
+  }
+});
+
+test('invalid producer deadlines and missing evidence cannot invoke a producer or physical cut', async () => {
+  for (const declaration of [
+    { deadlineMs: 0, evidence: 'measured' }, { deadlineMs: -1, evidence: 'measured' },
+    { deadlineMs: Infinity, evidence: 'measured' }, { deadlineMs: NaN, evidence: 'measured' },
+    { deadlineMs: 1.5, evidence: 'measured' }, { deadlineMs: 900_000, evidence: ' ' },
+    { deadlineMs: 900_000, evidence: 'x'.repeat(2_001) },
+  ]) {
+    const f = setup();
+    let producers = 0;
+    f.adapter.producerBuild = { ...declaration, async run() { producers++; } };
+    await expect(f.store.prepare(f.adapter)).rejects.toThrow('positive deadlineMs and bounded nonempty evidence');
+    expect(producers).toBe(0);
+    expect(f.counts().builds).toBe(0);
+    expect(readdirSync(join(f.directory, 'sources')).filter(name => !name.endsWith('.lock'))).toEqual([]);
+  }
+});
+
+test('declared producers retain the existing single builder per key and two-source retention leases', async () => {
+  const f = setup();
+  let producers = 0;
+  const thirdProducer = Promise.withResolvers<void>();
+  f.adapter.producerBuild = { deadlineMs: 900_000, evidence: 'Measured producer bound', async run() {
+    if (++producers === 3) thirdProducer.resolve();
+  } };
+  const results = await Promise.all(Array.from({ length: 5 }, () => f.store.prepare(f.adapter)));
+  expect(producers).toBe(1);
+  expect(f.counts().builds).toBe(1);
+  expect(results.filter(result => result.built)).toHaveLength(1);
+  expect(new Set(results.map(result => result.manifest.digest)).size).toBe(1);
+  const consumer = await f.store.restore(f.adapter);
+  f.adapter = { ...f.adapter, specification: { ...f.inputs, version: '2' } };
+  await f.store.prepare(f.adapter);
+  f.adapter = { ...f.adapter, specification: { ...f.inputs, version: '3' } };
+  let published = false;
+  const third = f.store.prepare(f.adapter).then(result => { published = true; return result; });
+  await thirdProducer.promise;
+  // The candidate's actual lease remains held after the producer stage completes.
+  expect(published).toBe(false);
+  expect(existsSync(join(f.directory, 'sources', sourceKey(f.inputs)))).toBe(true);
+  await consumer.dispose();
+  await third;
+  expect(producers).toBe(3);
+  expect(existsSync(join(f.directory, 'sources', sourceKey(f.inputs)))).toBe(false);
+  expect(readdirSync(join(f.directory, 'sources')).filter(name => name.startsWith('rs-') && !name.endsWith('.lock'))).toHaveLength(SOURCES_PER_PRODUCER);
 });
 
 test('restores have fresh writable resources, independent disposal and immutable custody', async () => {

@@ -63,6 +63,7 @@ export interface RetainedSourceManifest<M extends RetainedJson = RetainedJson> {
     elapsedMs: number;
     admissionWaitMs: number;
     phases: Record<string, number>;
+    producerBuild?: RetainedProducerBuildEvidence;
     backupPath: string;
     manifestPath: string;
   };
@@ -76,11 +77,27 @@ export interface SourceContext {
   budget: FixtureWorkBudget;
 }
 
+export interface RetainedProducerBuildEvidence {
+  deadlineMs: number;
+  /** Adapter's justification for this deadline, retained with custody. */
+  evidence: string;
+  elapsedMs: number;
+  admissionWaitMs: number;
+}
+
 /** Producer-specific proof/cut belongs to the adapter. The lifecycle owns custody.
  * Metadata must reconstruct the consumer without former live pools or directories.
  * verify checks external physical resources too; restore never invokes build or smoke. */
 export interface RetainedSourceAdapter<M extends RetainedJson, C> {
   specification: SourceInputs;
+  /** Optional producer work before the physical cut, under the same producer/key
+   * leases. The lifecycle measures it; adapter.build then begins the 600 s cut,
+   * backup, seal and verification clock. Keep source-affecting inputs in specification. */
+  producerBuild?: {
+    deadlineMs: number;
+    evidence: string;
+    run(context: SourceContext): Promise<void>;
+  };
   build(context: SourceContext): Promise<{
     metadata: M;
     rdfDigest: string;
@@ -104,6 +121,7 @@ export class RetainedSourceRefusal extends Error {
 
 type Timing = { elapsedMs: number; admissionWaitMs: number };
 type Boundary = 'lease' | 'release' | 'verify-existing' | 'remove' | 'remove-orphan' | 'build' |
+  'producer-build' | 'remove-staging' |
   'seal' | 'verify-staging' | 'prune' | 'publish' | 'verify-published' | 'restore' |
   'verify-restored' | 'dispose' | 'verify-disposed';
 export interface RetainedSourceFailureEvidence extends Timing {
@@ -112,6 +130,9 @@ export interface RetainedSourceFailureEvidence extends Timing {
   phases: Partial<Record<Boundary, Timing>>;
   /** Available only after build returned; a thrown adapter's local timings are unknown. */
   adapterPhases?: Record<string, number>;
+  producerBuild?: RetainedProducerBuildEvidence;
+  /** Physical-cut timing for a declared build; total elapsedMs includes all phases. */
+  preparation?: Timing;
   cleanup: { boundary: Boundary; error: unknown; elapsedMs: number; admissionWaitMs: number }[];
 }
 
@@ -133,8 +154,22 @@ class Lifecycle {
   boundary: Boundary = 'lease';
   private readonly phases: Partial<Record<Boundary, Timing>> = {};
   adapterPhases?: Record<string, number>;
+  producerBuild?: RetainedProducerBuildEvidence;
+  preparationBudget?: FixtureWorkBudget;
+  private priorTiming: Timing = { elapsedMs: 0, admissionWaitMs: 0 };
   private failed?: { error: unknown; evidence: RetainedSourceFailureEvidence };
-  constructor(private readonly key: string, readonly budget: FixtureWorkBudget) {}
+  constructor(private readonly key: string, public budget: FixtureWorkBudget) {}
+
+  useBudget(budget: FixtureWorkBudget): void {
+    this.priorTiming = this.timing();
+    this.budget = budget;
+  }
+
+  timing(): Timing {
+    const current = this.budget.timing();
+    return { elapsedMs: this.priorTiming.elapsedMs + current.elapsedMs,
+      admissionWaitMs: this.priorTiming.admissionWaitMs + current.admissionWaitMs };
+  }
 
   async step<T>(boundary: Boundary, work: () => T | Promise<T>): Promise<T> {
     this.boundary = boundary;
@@ -150,7 +185,8 @@ class Lifecycle {
   failure(error: unknown): RetainedSourceFailureEvidence {
     if (this.failed && Object.is(this.failed.error, error)) return this.failed.evidence;
     const evidence: RetainedSourceFailureEvidence = { key: this.key, boundary: this.boundary,
-      ...this.budget.timing(), phases: { ...this.phases }, adapterPhases: this.adapterPhases, cleanup: [] };
+      ...this.timing(), phases: { ...this.phases }, adapterPhases: this.adapterPhases,
+      producerBuild: this.producerBuild, preparation: this.preparationBudget?.timing(), cleanup: [] };
     if (error !== null && (typeof error === 'object' || typeof error === 'function')) failures.set(error, evidence);
     this.failed = { error, evidence };
     this.report(evidence);
@@ -163,6 +199,9 @@ class Lifecycle {
     try { console.error(`RETAINED_SOURCE_FAILURE ${JSON.stringify({ key: evidence.key, boundary: evidence.boundary,
       elapsedMs: evidence.elapsedMs, admissionWaitMs: evidence.admissionWaitMs, phases: evidence.phases,
       adapterPhases: evidence.adapterPhases,
+      producerBuild: evidence.producerBuild && { deadlineMs: evidence.producerBuild.deadlineMs,
+        elapsedMs: evidence.producerBuild.elapsedMs, admissionWaitMs: evidence.producerBuild.admissionWaitMs },
+      preparation: evidence.preparation,
       cleanup: evidence.cleanup.map(({ boundary, error, elapsedMs, admissionWaitMs }) =>
         ({ boundary, message: cleanupMessage(error), elapsedMs, admissionWaitMs })) })}`); }
     catch { /* Diagnostic output must not replace the lifecycle exception. */ }
@@ -177,6 +216,15 @@ class Lifecycle {
         elapsedMs: after.elapsedMs - before.elapsedMs, admissionWaitMs: after.admissionWaitMs - before.admissionWaitMs });
       this.report(evidence);
     }
+  }
+}
+
+class ProducerBuildBudget extends FixtureWorkBudget {
+  constructor(private readonly deadlineMs: number, now: () => number) { super(deadlineMs, now); }
+  override remaining(): number {
+    const remaining = this.deadlineMs - this.elapsed();
+    if (remaining <= 0) throw new Error(`Retained source producer build exceeded declared ${this.deadlineMs} ms deadline`);
+    return remaining;
   }
 }
 
@@ -324,8 +372,9 @@ export class RetainedSources {
     }
   }
 
-  async prepare<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>): Promise<{ manifest: RetainedSourceManifest<M>; built: boolean; elapsedMs: number; admissionWaitMs: number }> {
-    const key = sourceKey(adapter.specification), budget = new FixtureWorkBudget(SOURCE_PREPARATION_MS, this.now);
+  async prepare<M extends RetainedJson, C>(adapter: RetainedSourceAdapter<M, C>): Promise<{ manifest: RetainedSourceManifest<M>; built: boolean; elapsedMs: number; admissionWaitMs: number; producerBuild?: RetainedProducerBuildEvidence }> {
+    const key = sourceKey(adapter.specification);
+    let budget = new FixtureWorkBudget(SOURCE_PREPARATION_MS, this.now);
     const lifecycle = new Lifecycle(key, budget);
     const context = this.context(key, budget);
     // Valid custody can be reused alongside existing consumers. Only rebuilding
@@ -372,8 +421,34 @@ export class RetainedSources {
         const candidate = this.context(key, budget, staging);
         mkdirSync(candidate.backup, { recursive: true, mode: 0o700 });
         const startedAt = new Date(this.now()).toISOString();
-        let published = false;
+        let published = false, sealed = false;
         try {
+          const declared = adapter.producerBuild;
+          if (declared) {
+            const { deadlineMs, evidence, run } = declared;
+            await lifecycle.step('producer-build', async () => {
+              if (!Number.isSafeInteger(deadlineMs) || deadlineMs <= 0 ||
+                typeof evidence !== 'string' || !evidence.trim() || evidence.length > 2_000)
+                throw new Error('Retained source producer build requires a positive deadlineMs and bounded nonempty evidence');
+            });
+            const producerBudget = new ProducerBuildBudget(deadlineMs, this.now);
+            lifecycle.useBudget(producerBudget);
+            await lifecycle.step('producer-build', async () => {
+              try {
+                await run.call(declared, this.context(key, producerBudget, staging));
+                producerBudget.remaining();
+              } finally {
+                lifecycle.producerBuild = { deadlineMs, evidence, ...producerBudget.timing() };
+              }
+            });
+            // The existing build callback starts with the physical cut, never a
+            // producer rerun. Both callbacks remain inside the same custody lease.
+            budget = new FixtureWorkBudget(SOURCE_PREPARATION_MS, this.now);
+            lifecycle.useBudget(budget);
+            lifecycle.preparationBudget = budget;
+            context.budget = budget;
+            candidate.budget = budget;
+          }
           const build = await lifecycle.step('build', async () => {
             const result = await adapter.build(candidate);
             // Bound adapter evidence without serializing its metadata or configuration.
@@ -390,11 +465,14 @@ export class RetainedSources {
               provenance: {
                 producerRevision: build.producerRevision, qaIdentity: build.qaIdentity,
                 startedAt, completedAt: new Date(this.now()).toISOString(), ...budget.timing(),
+                admissionWaitMs: lifecycle.timing().admissionWaitMs,
+                ...(lifecycle.producerBuild ? { producerBuild: lifecycle.producerBuild } : {}),
                 phases: build.phases, backupPath: context.backup,
                 manifestPath: join(context.directory, 'manifest.json'),
               },
             };
             writeFileSync(join(staging, 'manifest.json'), `${stable({ ...body, digest: digestManifest(body) })}\n`, { mode: 0o600 });
+            sealed = true;
           });
           await lifecycle.step('verify-staging', () => this.verified(adapter, candidate));
           await lifecycle.step('prune', () => this.prune(adapter, key, lifecycle));
@@ -404,7 +482,8 @@ export class RetainedSources {
             published = true;
           });
           const manifest = await lifecycle.step('verify-published', () => this.verified(adapter, context));
-          return { manifest, built: true, ...budget.timing() };
+          return { manifest, built: true, ...budget.timing(), admissionWaitMs: lifecycle.timing().admissionWaitMs,
+            ...(lifecycle.producerBuild ? { producerBuild: lifecycle.producerBuild } : {}) };
         } catch (error) {
           const evidence = lifecycle.failure(error);
           // Failed published verification must become unselectable even if external removal fails.
@@ -413,6 +492,9 @@ export class RetainedSources {
             await adapter.remove(key);
             rmSync(staging, { recursive: true, force: true });
           });
+          // No manifest exists yet: external cleanup failure must not strand
+          // unsealed producer bytes. Sealed quarantine retains its repair evidence.
+          if (!sealed) await lifecycle.cleanup(evidence, 'remove-staging', () => rmSync(staging, { recursive: true, force: true }));
           throw error;
         }
       })); } catch (error) { lifecycle.failure(error); throw error; }
