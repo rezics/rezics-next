@@ -57,7 +57,7 @@ async function fixture(run: (pool: Pool, media: MediaStore, state: {
 test('completion demand and release planning hydrate avatars and disclosure on the held Content client', async () => {
   await fixture(async (pool, media, state) => {
     const hydrated: string[] = [];
-    let demandClient: PoolClient | undefined;
+    let demandClient: PoolClient;
     const read = async (kind: string, client?: PoolClient) => {
       if (client) expect(client).toBe(demandClient);
       const hydrate = async () => {
