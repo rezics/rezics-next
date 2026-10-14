@@ -16,8 +16,10 @@ one branch replaces hundreds of per-task stack runs.
 
 The brief names the work and an area. It has no `tests:` and no `land: auto`.
 
-1. Before editing: `git merge --ff-only wave/<n>`. If your branch already has
-   commits, run `git rebase wave/<n>` instead.
+1. Before editing, if your branch has no commits of its own: `git reset --hard
+   wave/<n>` (your brief lives outside git and stays). If it has commits:
+   `git rebase wave/<n>`. Program merges `main` into `wave/<n>` from time to
+   time, so the pages and briefs you read there are current.
 2. Implement. Write the tests that prove it: outcome tests for API rows, unit
    tests, and stories for surfaces. Read the row's existing outcome test as its
    specification. A brief's `paths:` do not limit a build task. Change any file
