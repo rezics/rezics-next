@@ -203,7 +203,8 @@ export async function resourceCards(
         },
       }
     : undefined;
-  const readSummaries = () =>
+  const summarySnapshot = searchGraphSnapshot.getStore();
+  const hydrateSummaries = () =>
     readResourceSummaries(
       session.deps.environment,
       summaryMedia,
@@ -219,6 +220,11 @@ export async function resourceCards(
         settleNonAgentNameOwners: 'includingAbsent',
       },
     );
+  // The final dependency fence is outside readResourceList's callback. Its
+  // reread still belongs to this qualified request basis; admission is closed
+  // by WorkReadSession's fresh graph and authority fences.
+  const readSummaries = () => summarySnapshot
+    ? searchGraphSnapshot.run(summarySnapshot, hydrateSummaries) : hydrateSummaries();
   const summaries = refs.length ? await readSummaries() : null;
   if (summaries && session.fencesSelectedUnits) {
     const token = (batch: SummaryBatch) => [batch.generation.graph,
@@ -389,7 +395,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
   const index =
     kinds.length &&
     (plan.input.q?.trim() || kinds.some((kind) => !['work', 'realm'].includes(kind)))
-      ? await labelIndexReady(session)
+      ? await labelIndexReady(session, true)
       : null;
   // One native qualification per request. The uncached instance fence below
   // and WorkReadSession's final graph read own this scope; it cannot escape the
@@ -402,6 +408,7 @@ export async function readResourceList(session: WorkReadSession, plan: ResourceL
           clients: new Set([session.deps.environment.fuseki]),
           lineage: session.deps.environment.lineage,
           position: index,
+          graphBasis: 'selected-units',
         },
         read,
       )

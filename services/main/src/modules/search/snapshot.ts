@@ -1,6 +1,7 @@
 import { DATASET, GRAPHS, RV, iri, lit, type WorkActivationEnvironment } from '../work/activate.ts';
 import { assertPublicTextReady, assertSameTextInstance, assertSearchDeadline, SearchIndexUnavailable,
   SearchSnapshotMoved } from '../work/search-readiness.ts';
+import type { PublicTextPosition } from '../work/search-readiness.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { searchGraphSnapshot } from './snapshot-state.ts';
 import { observeSearchPhase } from './operation-evidence.ts';
@@ -26,29 +27,36 @@ export async function withSearchGraphSnapshot<T>(env: WorkActivationEnvironment,
   return searchGraphSnapshot.run({ clients: new Set([env.fuseki]), lineage: env.lineage, position, graphBasis }, async () => {
     assertSearchDeadline();
     const result = await read();
-    assertSearchDeadline();
-    const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?generation WHERE {
+    await fenceSearchGraphSnapshot(env, position, graphBasis);
+    return result;
+  });
+}
+
+/** Selected consumers prove their relation separately, so unrelated native
+ * writer commits do not invalidate their process, generation or recovery cut. */
+export async function fenceSearchGraphSnapshot(env: WorkActivationEnvironment, position: PublicTextPosition,
+  graphBasis: 'matching-cut' | 'selected-units') {
+  assertSearchDeadline();
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?epoch ?sequence ?generation WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence ;
         rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:textIndexGeneration ?generation .
         FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true } }
     } LIMIT 2`, 8192)).results?.bindings ?? [];
-    assertSearchDeadline();
-    if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
-      || (graphBasis === 'matching-cut' && rows[0]?.sequence?.value !== position.sequence)
-      || rows[0]?.generation?.value !== position.generation) {
-      throw new SearchSnapshotMoved('Search graph changed during matching or card hydration');
+  assertSearchDeadline();
+  if (rows.length !== 1 || rows[0]?.epoch?.value !== position.dataEpoch
+    || (graphBasis === 'matching-cut' && rows[0]?.sequence?.value !== position.sequence)
+    || rows[0]?.generation?.value !== position.generation) {
+    throw new SearchSnapshotMoved('Search graph changed during matching or card hydration');
+  }
+  if (graphBasis === 'matching-cut') await assertSameTextInstance(env.fuseki, position);
+  else {
+    // Selected consumers recheck their native relation as an owner dependency.
+    // The global writer epoch includes commits with no matching/index change.
+    const health = await env.fuseki.commandHealth();
+    if (health.instanceId !== position.serverInstanceId
+      || (health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
+      throw new SearchIndexUnavailable('Fuseki text owner changed during selected hydration');
     }
-    if (graphBasis === 'matching-cut') await assertSameTextInstance(env.fuseki, position);
-    else {
-      // Selected consumers recheck their native relation as an owner dependency.
-      // The global writer epoch includes commits with no matching/index change.
-      const health = await env.fuseki.commandHealth();
-      if (health.instanceId !== position.serverInstanceId
-        || (health as { textIndexUncertain?: boolean }).textIndexUncertain === true) {
-        throw new SearchIndexUnavailable('Fuseki text owner changed during selected hydration');
-      }
-    }
-    assertSearchDeadline();
-    return result;
-  });
+  }
+  assertSearchDeadline();
 }

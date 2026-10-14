@@ -3,13 +3,16 @@ import {
   WorkReadInvalid,
   WorkReadMoved,
   WorkReadUnavailable,
+  type ReadRow,
   type WorkReadSession,
 } from '../work/read-session.ts';
 import { assertPublicTextReady, assertSameTextInstance } from '../work/search-readiness.ts';
 import { knownSearchPosition } from './snapshot-state.ts';
+import { searchGraphSnapshot } from './snapshot-state.ts';
+import { fenceSearchGraphSnapshot } from './snapshot.ts';
 
 /** Use the search owner's uncertainty, restore, graph/index and process gates. */
-export async function labelIndexReady(session: WorkReadSession) {
+export async function labelIndexReady(session: WorkReadSession, repin = false) {
   const position = await assertPublicTextReady(
     session.deps.environment.fuseki,
     session.deps.environment.lineage,
@@ -18,14 +21,36 @@ export async function labelIndexReady(session: WorkReadSession) {
     position.dataEpoch !== session.position.dataEpoch ||
     position.sequence !== session.position.sequence
   ) {
-    throw new WorkReadMoved('Label index changed');
+    if (repin) session.repin(position);
+    else throw new WorkReadMoved('Label index changed');
   }
   return position;
 }
-export const fenceLabelIndex = (
+
+/** Native commit/doc numbers are seek metadata. The ordered identities and
+ * continuation presence prove this page's result when unrelated titles move. */
+function labelPageFenceRows(rows: readonly ReadRow[]): ReadRow[] {
+  return rows.map(row => {
+    try {
+      const page = JSON.parse(row.page?.value ?? '') as { hits: { id: string; key: string | null }[];
+        more: boolean; restart?: boolean };
+      return { page: { type: 'literal', value: JSON.stringify({
+        hits: page.hits.map(hit => [hit.id, hit.key]), more: page.more, restart: !!page.restart,
+      }) } };
+    } catch { return row; }
+  });
+}
+export const fenceLabelIndex = async (
   session: WorkReadSession,
   position: Awaited<ReturnType<typeof labelIndexReady>>,
-) => assertSameTextInstance(session.deps.environment.fuseki, position);
+) => {
+  if (searchGraphSnapshot.getStore()?.graphBasis === 'selected-units') {
+    session.observeDependency('label-index', true, async () => {
+      await fenceSearchGraphSnapshot(session.deps.environment, position, 'selected-units');
+      return true;
+    });
+  } else await assertSameTextInstance(session.deps.environment.fuseki, position);
+};
 
 export interface LabelAfter {
   id: string;
@@ -55,6 +80,7 @@ export async function publicNamePage(
       ${lit(JSON.stringify({ names: kind, directory: order }))}) AS ?page)
   } LIMIT 1`,
     1,
+    labelPageFenceRows,
   );
   let page: {
     hits: { id: string; key: string | null; score: string }[];
@@ -127,6 +153,7 @@ export async function indexedLabels(
     BIND(rv:rankedText(rv:publicTitle, ${lit(phrase)}, ${limit}, ${lit(after ? JSON.stringify(after) : '')}, ${lit(JSON.stringify({ names: kind, ...(resources ? { resources } : {}) }))}) AS ?page)
   } LIMIT 1`,
     1,
+    labelPageFenceRows,
   );
   let page: { hits: LabelHit[]; more: boolean; commit: string; restart?: boolean };
   try {

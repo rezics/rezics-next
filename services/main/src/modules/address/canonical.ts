@@ -4,6 +4,7 @@ import type { CanonicalAddress } from '@rezics/model/address';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { AliasUnavailable, NATIVE_ADDRESS_HOLDER } from './registry.ts';
 import { ALIAS_POLICIES } from './policy.ts';
+import { fusekiReadBudget, FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge } from '../../infrastructure/fuseki.ts';
 
 export function identityCanonical(
   type: string,
@@ -62,7 +63,12 @@ export async function canonicalAddresses(
       } } LIMIT ${summaries.length + 1}`,
             64 * 1024,
           )
-          .catch(() => ({ results: { bindings: [] } }))
+          .catch((error: unknown) => {
+            // Exhausting the read cannot change a capability's address holder.
+            if (error instanceof FusekiReadBudgetExceeded || error instanceof FusekiQueryResponseTooLarge
+              || fusekiReadBudget.getStore()?.signal.aborted) throw error;
+            return { results: { bindings: [] } };
+          })
       ).results?.bindings ?? [];
     const byResource = new Map<string, string[]>();
     for (const row of rows)

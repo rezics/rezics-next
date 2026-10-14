@@ -204,6 +204,19 @@ test('ordinary reads retain their opening position and a constant fence cost und
   expect(new Set(costs).size).toBe(1);
 });
 
+test('owner qualification can re-pin only an unconsumed first-page basis in the same data epoch', async () => {
+  const f = fixture();
+  const session = new WorkReadSession(f.deps, f.request, {}, { dataEpoch: 'epoch', sequence: '1' });
+  session.repin({ dataEpoch: 'epoch', sequence: '2' });
+  expect(session.position).toEqual({ dataEpoch: 'epoch', sequence: '2' });
+  expect(() => session.repin({ dataEpoch: 'restored', sequence: '0' })).toThrow(WorkReadMoved);
+  await session.query(selected, 1);
+  expect(() => session.repin({ dataEpoch: 'epoch', sequence: '3' })).toThrow(WorkReadMoved);
+  const continuation = new WorkReadSession(f.deps, f.request, { cursor: 'retained' },
+    { dataEpoch: 'epoch', sequence: '1' });
+  expect(() => continuation.repin({ dataEpoch: 'epoch', sequence: '2' })).toThrow(WorkReadMoved);
+});
+
 test('target query fences exclude their diagnostic dataset sequence but retain the selected row head', async () => {
   const f = fixture();
   f.graph.query = async () => result([{ epoch: term('epoch'), sequence: term(String(f.state.sequence)), head: term(f.state.head) }]);

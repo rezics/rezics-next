@@ -3,6 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import type { Pool } from 'pg';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { canonicalAddresses } from '../src/modules/address/canonical.ts';
+import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge } from '../src/infrastructure/fuseki.ts';
 import { uuidToSid } from '@rezics/model/address/sid';
 import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 
@@ -83,3 +84,14 @@ test('G937: summaries survive missing capability backlinks and an unavailable re
     suffixSource: 'Community',
   });
 });
+
+for (const Failure of [FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge]) {
+  test(`canonical capability addresses propagate ${Failure.name} instead of changing their holder`, async () => {
+    const failure = new Failure('Bound exhausted');
+    const env = { fuseki: { query: async () => { throw failure; } } } as unknown as WorkActivationEnvironment;
+    await expect(canonicalAddresses(env, [{
+      reference: 'https://rezics.com/id/00000000-0000-0000-0000-000000000001',
+      type: 'realm', name: { value: 'Community' },
+    }])).rejects.toBe(failure);
+  });
+}

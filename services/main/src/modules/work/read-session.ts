@@ -122,6 +122,16 @@ export class WorkReadSession {
   private readonly queryDependencies = new Map<string, { limit: number; maxBytes: number; token: string;
     fenceRows?: (rows: readonly ReadRow[]) => ReadRow[] }>();
   private readonly ownerDependencies = new Map<string, { token: string; read: () => Promise<unknown> }>();
+  /** A qualified owner may advance the opening basis before consuming inputs.
+   * Continuations and already selected dependencies must instead restart. */
+  repin(position: ReadPosition): void {
+    if (position.dataEpoch !== this.position.dataEpoch || this.options.cursor
+      || new URL(this.request.url).searchParams.has('cursor')
+      || this.queryDependencies.size || this.ownerDependencies.size || this.children.size) {
+      throw new WorkReadMoved('Read basis changed after selection');
+    }
+    this.position.sequence = position.sequence;
+  }
   async dependency(name: string, read: () => Promise<unknown>): Promise<string> {
     return this.observeDependency(name, await read(), read);
   }
