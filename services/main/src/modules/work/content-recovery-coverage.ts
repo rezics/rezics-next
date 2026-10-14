@@ -261,17 +261,6 @@ async function transactionIdentity(client: PoolClient, isolation: string): Promi
   return first;
 }
 
-/** Erasure clears bytes and graph receipts, but preserves the immutable owner
- * digest. Signed table coverage binds that digest; assertErasedRevision binds
- * this revision to the journal. Coverage retains hashes, not recoverable C0
- * pin tuples. Keep the signed graph tuple unchanged. */
-function linkedHistoricalPin(ref: GraphContentReference, byteDigest: string): GraphContentReference {
-  if (!SHA.test(byteDigest)) {
-    throw new ContentRecoveryConflict(`retained Content digest is unavailable: ${ref.object}`);
-  }
-  return { ...ref, byteDigest };
-}
-
 async function assertErasedRevision(client: PoolClient, ref: GraphContentReference,
   revisionId: string, proof: ContentRecoveryProofContext | undefined): Promise<void> {
   if (!proof?.relayClient) throw new ContentRecoveryConflict('erased Content pin requires retained erasure proof context');
@@ -390,20 +379,25 @@ export async function assertReplayedCommentSourcesTerminal(client: Pool | PoolCl
 
 async function assertRevisionPins(client: PoolClient, references: readonly GraphContentReference[],
   ownerEpoch: string, sequence: string, proof?: ContentRecoveryProofContext): Promise<void> {
-  for (const original of references) {
-    let ref = original;
+  for (const ref of references) {
     const revisionId = ref.object.slice(REVISION.length);
     const revision = await client.query<{ byte_digest: string; availability: string;
       serialized_bytes: Buffer | null; byte_length: number; body: unknown }>(
       'SELECT byte_digest, availability, serialized_bytes, byte_length, body FROM content.revision WHERE id = $1',
       [revisionId]);
     const row = revision.rows[0];
-    if (row?.availability === 'erased' && ref.byteDigest === null) ref = linkedHistoricalPin(ref, row.byte_digest);
+    // Publication receipts and decisions retain the digest written with their
+    // preparation. Native outbox events and unprepared projection/selection
+    // references can omit it. The native digest never repairs a lost graph pin.
+    if (row?.availability === 'erased' && ref.byteDigest === null
+      && ref.preparationId !== null && ref.graph !== GRAPHS.outbox) {
+      throw new ContentRecoveryConflict(`retained graph Content digest is unavailable: ${ref.object}`);
+    }
     if (revision.rowCount !== 1 || !row || !['available','erased'].includes(row.availability)
       || (row.availability === 'available' && (!row.serialized_bytes
         || digestBytes(row.serialized_bytes) !== row.byte_digest || row.serialized_bytes.length !== row.byte_length))
       || (row.availability === 'erased' && (row.serialized_bytes !== null || row.body !== null
-        || !SHA.test(row.byte_digest) || ref.byteDigest === null))
+        || !SHA.test(row.byte_digest)))
       || (ref.byteDigest !== null && ref.byteDigest !== row.byte_digest)) {
       throw new ContentRecoveryConflict(`exact Content revision is unavailable: ${revisionId}`);
     }

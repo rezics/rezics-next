@@ -132,18 +132,22 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
   const stack = recoveryStack;
   const root = resolve(import.meta.dir, '../../..');
   let accessPool: Pool | undefined, contentPool: Pool | undefined, relay: Pool | undefined;
+  let phase = 'Access migrations';
   try {
     const apps = stack.apps, fuseki = stack.fuseki;
     await migrateAccess(apps.ACCESS_DATABASE_URL!);
     accessPool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
     contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
     relay = new Pool({ connectionString: apps.MAIN_RELAY_DATABASE_URL });
+    phase = 'Content migrations';
     await migrateContent(contentPool);
+    phase = 'relay migrations';
     for (const file of schemaFiles(root, 'relay'))
       await relay.query(readFileSync(resolve(root, 'services/main/migrations/relay', file), 'utf8'));
     const objects = new S3ImmutableObjects({ endpoint: apps.MAIN_S3_ENDPOINT!, bucket: apps.MAIN_S3_BUCKET!,
       region: apps.MAIN_S3_REGION, accessKeyId: apps.MAIN_S3_ACCESS_KEY!, secretAccessKey: apps.MAIN_S3_SECRET_KEY!,
       prefix: 'semantic/work/' });
+    phase = 'object storage readiness';
     await objects.initialize();
     const access = new AccessAdmissionRegistry(accessPool, apps.FUSEKI_TITLE_ADMISSION_KEY);
     access.configureBaseline(fuseki);
@@ -151,7 +155,9 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       apps.FUSEKI_TITLE_ADMISSION_KEY!, proofRetirementSender(apps.FUSEKI_URL!, apps.FUSEKI_COMMAND_TOKEN!));
     const env = { fuseki, receiptCustody: custody, workObjects: objects, objectDirectory: apps.MAIN_OBJECT_DIRECTORY!,
       lineage: { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: apps.MAIN_ROUTING_EPOCH! } };
+    phase = 'fresh graph initialization';
     await initializeFreshGraph(fuseki, env.lineage);
+    phase = 'model generation';
     await ensureModelGeneration(env);
     const content = new ContentCore(contentPool);
     const actor = `https://rezics.com/id/${randomUUID()}`;
@@ -160,6 +166,7 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       scope: 'work:create:root', action: 'work.create', idempotencyKey: randomUUID(),
       requestDigest: metadataWorkRequestDigest(title), authorityEpoch: '0',
       expiresAt: new Date(Date.now() + 600_000).toISOString(), state: 'claimed', dispatchEligible: true, replayed: false };
+    phase = 'metadata Work activation';
     const work = await activateMetadataWork(env, { title, admission: createAdmission });
     const variant = { id: `urn:rezics:variant:${randomUUID()}`, resourceId: work.work!,
       language: { kind: 'tag' as const, tag: 'en', originalTag: 'en' }, direction: 'ltr' as const };
@@ -174,6 +181,7 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       resourceId: work.work!, variantId: variant.id, expectedPublicationHead: null };
     const admission: RegisteredAdmission = { ...createAdmission, id: randomUUID(), idempotencyKey: randomUUID(),
       scope: `content:publish:${variant.id}`, action: 'content.publish', requestDigest: contentPublicationDigest(input) };
+    phase = 'Content publication';
     const publication = await publishPinnedContent(env, content, admission, input);
     expect(publication.status).toBe('active');
     const second = await content.preparePublication(`recovery-second:${randomUUID()}`, revisionId, input.expectedDigest);
@@ -187,6 +195,7 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
     if (otherExact?.status !== 'available') throw new Error('Other revision bytes unavailable');
     const foreign = await content.preparePublication(`recovery-other-prepare:${randomUUID()}`,
       other.revisionId!, otherExact.reference.byteDigest);
+    phase = 'publication custody retention';
     const consumer = `recovery-erased:${randomUUID()}`;
     await initializeRelayCheckpoint(relay, consumer, env.lineage.dataEpoch);
     while (await relayMainOutboxOnce(fuseki, relay, consumer)) { /* retain native custody */ }
@@ -194,6 +203,7 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       requestDigest: hash(revisionId), kind: 'revision',
       principalId: admission.principalId, admissionId: randomUUID(), authorityEpoch: '0',
       targets: [{ kind: 'content_revision', ref: revisionId }] });
+    phase = 'graph and native Content erasure';
     await suppressGraphContentRevisions(fuseki, env.lineage, entry.erasureId, entry.erasureEpoch, [revisionId]);
     const originalProof = await readGraphErasureProof(fuseki, env.lineage, entry.erasureId, entry.erasureEpoch, [revisionId]);
     expect((await relayMainOutboxOnce(fuseki, relay, consumer))?.eventIds).toHaveLength(1);
@@ -205,6 +215,7 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       [revisionId])).rows).toEqual([{ availability: 'erased', serialized_bytes: null, body: null,
       byte_digest: input.expectedDigest }]);
     expect((performance.now() - started) / 1000).toBeLessThan(600);
+    phase = 'capture and restore qualification';
     const references = await graphContentReferences(fuseki);
     const pins = references.filter(pin => pin.predicate === `${RV}contentRevision`
       && pin.object === `urn:rezics:content:revision:${revisionId}`);
@@ -222,11 +233,25 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
       const captured = await captureContentRecoveryCoverage(contentPool, references, context);
       await expect(assertContentRecoveryCoverage(contentPool, fuseki, captured, context)).resolves.toBeUndefined();
       // Keep the exact independently owned stimulus: every retained pin loses its digest.
-      await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => ({ ...pin, byteDigest: null })), context))
-        .rejects.toBeInstanceOf(ContentRecoveryConflict);
-      for (const graph of [GRAPHS.receipts, GRAPHS.revisions]) {
-        await expect(captureContentRecoveryCoverage(contentPool, pins.map(pin => pin.graph === graph
-          ? { ...pin, byteDigest: null } : pin), context)).rejects.toBeInstanceOf(ContentRecoveryConflict);
+      const probes = [{ stimulus: 'all-null', references: pins.map(pin => ({ ...pin, byteDigest: null })) },
+        ...[GRAPHS.receipts, GRAPHS.revisions].map(graph => ({ stimulus: graph,
+          references: pins.map(pin => pin.graph === graph ? { ...pin, byteDigest: null } : pin) }))];
+      const outcomes: { stimulus: string; accepted: boolean; evidence: unknown }[] = [];
+      for (const probe of probes) {
+        try {
+          outcomes.push({ stimulus: probe.stimulus, accepted: true,
+            evidence: await captureContentRecoveryCoverage(contentPool, probe.references, context) });
+        } catch (evidence) { outcomes.push({ stimulus: probe.stimulus, accepted: false, evidence }); }
+      }
+      console.info('Erased Content missing digest evidence:', JSON.stringify({ pins, originalProof,
+        dataEpoch: captured.dataEpoch, sequence: captured.sequence,
+        graphReferencesCount: captured.graphReferencesCount, graphReferencesDigest: captured.graphReferencesDigest,
+        outcomes: outcomes.map(outcome => ({ stimulus: outcome.stimulus, accepted: outcome.accepted,
+          evidence: outcome.evidence instanceof Error
+            ? { type: outcome.evidence.constructor.name, message: outcome.evidence.message } : outcome.evidence })) }));
+      for (const outcome of outcomes) {
+        expect(outcome.accepted, outcome.stimulus).toBe(false);
+        expect(outcome.evidence, outcome.stimulus).toBeInstanceOf(ContentRecoveryConflict);
       }
       const historicalPin = { ...nativePin, preparationId: second.operationId,
         ownerEpoch: second.position.dataEpoch, ownerSequence: second.position.sequence };
@@ -240,12 +265,14 @@ test('OPS12: retained erased publication pins refuse all-null digests while nati
           .rejects.toBeInstanceOf(ContentRecoveryConflict);
       }
       expect(await captureContentRecoveryCoverage(contentPool, references, context)).toEqual(captured);
-      console.info('Erased Content recovery evidence:', JSON.stringify({ pins, originalProof, captured,
+      console.info('Erased Content recovery controls:', JSON.stringify({
         historicalPin, conflicts, preparationSeconds: (performance.now() - started) / 1000 }));
     } finally {
       await contentClient.query('ROLLBACK'); contentClient.release();
       await relayClient.query('ROLLBACK'); relayClient.release();
     }
+  } catch (error) {
+    throw new Error(`Erased Content recovery failed during ${phase}`, { cause: error });
   } finally {
     await Promise.allSettled([accessPool?.end(), contentPool?.end(), relay?.end()]);
   }

@@ -118,7 +118,7 @@ function retainedCut() {
     return openRecoveryPayload<ContentRecoveryCoverage>(
       JSON.stringify(sealRecoveryPayload(coverage, key, 'graph-recovery-coverage')), key, 'graph-recovery-coverage');
   };
-  const erase = () => { state.erased = true; reference.byteDigest = null; };
+  const erase = () => { state.erased = true; };
   return { state, reference, pool, fuseki, proof, capture, erase, graphQueries, homeSelections };
 }
 
@@ -141,21 +141,32 @@ test('Content erased publication pins refuse missing retained digests during cap
   }
 });
 
-test('Content capture after erasure uses the immutable owner digest without suppressed graph rows', async () => {
+test('Content capture after erasure preserves publication digests and accepts native outbox nulls', async () => {
   const cut = retainedCut();
   const c0 = await cut.capture();
   cut.erase();
   const c1 = await cut.capture();
   expect(c1.tables['content.revision']).not.toEqual(c0.tables['content.revision']);
-  expect(c1.graphReferencesDigest).not.toBe(c0.graphReferencesDigest);
-  expect(cut.reference.byteDigest).toBeNull();
+  expect(c1.graphReferencesDigest).toBe(c0.graphReferencesDigest);
+  expect(cut.reference.byteDigest).toBe(cut.state.byteDigest);
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, c1, cut.proof)).resolves.toBeUndefined();
   expect(cut.graphQueries.every(sql => !sql.includes('SELECT DISTINCT ?digest'))).toBe(true);
+  cut.reference.graph = GRAPHS.outbox;
+  cut.reference.byteDigest = null;
+  // A legitimate native outbox null remains accepted even with a retained
+  // preparation and owner position attached to qualify same-revision history.
+  const native = await cut.capture();
+  await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, native, cut.proof)).resolves.toBeUndefined();
   cut.reference.preparationId = null;
   cut.reference.ownerEpoch = null;
   cut.reference.ownerSequence = null;
   const sparse = await cut.capture();
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, sparse, cut.proof)).resolves.toBeUndefined();
+  // Projection and selection writers also retain unprepared references without
+  // a digest outside the native outbox graph.
+  cut.reference.graph = GRAPHS.revisions;
+  const selection = await cut.capture();
+  await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, selection, cut.proof)).resolves.toBeUndefined();
 });
 
 test('Content restore refuses forged graph pins and retained owner digests against signed cuts', async () => {
@@ -164,6 +175,8 @@ test('Content restore refuses forged graph pins and retained owner digests again
   cut.reference.byteDigest = 'a'.repeat(64);
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, c0, cut.proof)).rejects.toThrow('graph Content references differ');
   cut.erase();
+  cut.reference.graph = GRAPHS.outbox;
+  cut.reference.byteDigest = null;
   const c1 = await cut.capture();
   cut.state.byteDigest = 'b'.repeat(64);
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, c1, cut.proof)).rejects.toThrow('Content owner differs');
@@ -214,7 +227,7 @@ test('Content erased-pin source fails closed when missing, ambiguous, malformed 
   cut.erase();
   const c1 = await cut.capture();
   cut.state.byteDigest = '';
-  await expect(cut.capture()).rejects.toThrow('retained Content digest is unavailable');
+  await expect(cut.capture()).rejects.toThrow('exact Content revision is unavailable');
   cut.state.byteDigest = hash(Buffer.from('{"body":"retained before erasure"}'));
   cut.state.erased = false;
   await expect(assertContentRecoveryCoverage(cut.pool, cut.fuseki, c1, cut.proof)).rejects.toThrow('Content owner differs');
