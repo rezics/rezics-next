@@ -172,7 +172,8 @@ async function ownEdition(canvasElement: HTMLElement, persona: SignedIn, locale:
   const status = canvas.getByRole('list', { name: messages[locale].yourEdition });
   await expect(status).toHaveTextContent(name);
   await expect(status).not.toHaveTextContent(other);
-  await expect(canvas.getByRole('combobox', { name: copyOf(locale).edition })).toHaveTextContent(name);
+  // YourEdition loads the preference and the edition lists after the page read.
+  await expect(canvas.findByRole('combobox', { name: copyOf(locale).edition })).resolves.toHaveTextContent(name);
   await expect(canvas.queryByRole('link', { name: messages[locale].signInForEdition })).not.toBeInTheDocument();
 }
 
@@ -188,7 +189,7 @@ export const OwnerEmpty: Story = { args: { persona: 'owner', saved: false }, asy
   const t = copyOf('en');
   await expect(canvas.queryByRole('list', { name: messages.en.yourEdition })).not.toBeInTheDocument();
   await expect(canvas.queryByRole('link', { name: messages.en.signInForEdition })).not.toBeInTheDocument();
-  await expect(canvas.getByRole('combobox', { name: t.edition })).toHaveTextContent(t.anyEdition);
+  await expect(canvas.findByRole('combobox', { name: t.edition })).resolves.toHaveTextContent(t.anyEdition);
   await expect(canvas.getByRole('button', { name: t.savePreference })).toBeVisible();
 } };
 export const OwnerEmptyPhone: Story = { ...OwnerEmpty, globals: { viewport: { value: 'phone' } } };
@@ -201,7 +202,7 @@ export const MemberSave: Story = { args: { saved: false, save: true }, async pla
   const release = releases.items.find(item => item.id === saved.edition.resource)!;
   const other = releases.items.find(item => item.id !== saved.edition.resource)!.title.value;
   const name = releaseChoiceName(release as Release, 'en', t);
-  await userEvent.click(canvas.getByRole('combobox', { name: t.language }));
+  await userEvent.click(await canvas.findByRole('combobox', { name: t.language }));
   await chooseOption(canvas, languageName('ja', 'en'));
   await userEvent.click(canvas.getByRole('combobox', { name: t.edition }));
   await chooseOption(canvas, name);
