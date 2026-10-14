@@ -52,9 +52,13 @@ final class TitleControlPolicy {
         boolean protectedTitle = false;
         List<Quad> all = new ArrayList<>(modify.getInsertQuads()); all.addAll(modify.getDeleteQuads());
         for (Quad q : all) {
+            // Other fields advance the Work head under HeadCasPolicy and ProtectionPolicy.
+            // Only title/control writes consume a title-control successor. An unknown predicate
+            // can still write the title and must retain the same fence.
             if (CURRENT.equals(q.getGraph()) && (q.getPredicate().equals(rv("titleControlHead"))
-                || data.contains(CURRENT, q.getSubject(), rv("titleControlHead"), Node.ANY)
-                || data.contains(CURRENT, q.getSubject(), rv("protectionHead"), Node.ANY)))
+                || (q.getPredicate().equals(LABEL) || !q.getPredicate().isURI())
+                    && (data.contains(CURRENT, q.getSubject(), rv("titleControlHead"), Node.ANY)
+                        || data.contains(CURRENT, q.getSubject(), rv("protectionHead"), Node.ANY))))
                 protectedTitle = true;
             if (REVISIONS.equals(q.getGraph()) && q.getPredicate().equals(rv("controlField"))
                 && ("title".equals(text(q.getObject())) || "title:en".equals(text(q.getObject())))) protectedTitle = true;

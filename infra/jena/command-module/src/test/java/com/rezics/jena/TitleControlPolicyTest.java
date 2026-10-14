@@ -130,6 +130,122 @@ public class TitleControlPolicyTest {
         assertEquals("title value differs from intent", exercise("en", "zh-Hant", "en", false));
     }
 
+    private static final class ControlledWorkFixture implements AutoCloseable {
+        final DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        ControlledWorkFixture(String protectionMode) {
+            data.begin(ReadWrite.WRITE);
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
+                + "INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(WORK)
+                + " a <https://schema.org/CreativeWork>; rv:head " + iri(HEAD) + "; rv:titleControlHead " + iri(CONTROL)
+                + "; rdfs:label \"Saved title\"@en . "
+                + (protectionMode == null ? "" : iri(WORK) + " rv:protectionHead <urn:test:protection> . ")
+                + "} GRAPH " + iri(CommandPolicy.REVISIONS) + " { " + iri(HEAD)
+                + " a rv:RevisionAnchor; rv:component " + iri(WORK) + "; rv:manifest <urn:test:original-work-manifest> . "
+                + iri(CONTROL) + " a rv:RevisionAnchor, rv:EditorialControlRevision; rv:component " + iri(WORK)
+                + "; rv:workRevision " + iri(HEAD) + "; rv:controlEpoch 1; rv:controlMode rv:HumanControlled; "
+                + "rv:manifest <urn:test:original-title-manifest> . "
+                + (protectionMode == null ? "" : "<urn:test:protection> a rv:ProtectionRevision; rv:protectionMode rv:" + protectionMode + " . ")
+                + "} }", DatasetFactory.wrap(data));
+        }
+        String update(String currentInsert, String currentDelete, String revisionInsert, String scope) {
+            return "PREFIX rv: <" + RV + "> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> "
+                + "DELETE { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(WORK) + " rv:head " + iri(HEAD)
+                + " . " + currentDelete + " } } "
+                + "INSERT { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(WORK) + " rv:head " + iri(NEXT)
+                + " . " + iri(WORK) + " " + currentInsert + " . } GRAPH " + iri(CommandPolicy.REVISIONS) + " { "
+                + iri(NEXT) + " a rv:RevisionAnchor; rv:component " + iri(WORK) + "; rv:predecessor " + iri(HEAD)
+                + "; rv:manifest <urn:test:scalar-or-type-manifest> . " + revisionInsert + " } GRAPH "
+                + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT) + " rv:outcome rv:Succeeded; rv:work " + iri(WORK)
+                + "; rv:workRevision " + iri(NEXT) + "; rv:expectedHead " + iri(HEAD)
+                + "; rv:admissionId \"11111111-1111-4111-8111-111111111111\"; rv:authorityEpoch \"1\"; rv:admittedScope \""
+                + scope + "\" . } } WHERE { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(WORK)
+                + " rv:head " + iri(HEAD) + " . OPTIONAL { " + iri(WORK) + " ?property ?value } } }";
+        }
+        TitleControlPolicy.Snapshot capture(String update) {
+            return TitleControlPolicy.capture(data, CommandPolicy.parse(update, RECEIPT), RECEIPT, "digest", update, null, KEY, false);
+        }
+        Set<Quad> history() {
+            Set<Quad> result = new HashSet<>();
+            var rows = data.find(NodeFactory.createURI(CommandPolicy.REVISIONS), org.apache.jena.graph.Node.ANY,
+                org.apache.jena.graph.Node.ANY, org.apache.jena.graph.Node.ANY);
+            try {
+                while (rows.hasNext()) {
+                    Quad quad = rows.next();
+                    if (Set.of(NodeFactory.createURI(HEAD), NodeFactory.createURI(CONTROL)).contains(quad.getSubject())) result.add(quad);
+                }
+            } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
+            return result;
+        }
+        @Override public void close() { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void nonTitleWorkHeadsPreserveTitleControlAndHistory() {
+        for (String field : new String[] { "rv:scalarValue false", "a <https://schema.org/Book>" }) {
+            for (String protection : new String[] { null, "Open" }) try (var fixture = new ControlledWorkFixture(protection)) {
+                var history = fixture.history();
+                String update = fixture.update(field, "", "", "work:edit:" + WORK);
+                var plan = CommandPolicy.parse(update, RECEIPT);
+                var title = fixture.capture(update);
+                assertNull(title);
+                assertNull(ProtectionPolicy.capture(fixture.data, plan, RECEIPT, "digest", update, null, KEY));
+                var heads = HeadCasPolicy.capture(fixture.data, plan, RECEIPT);
+                UpdateAction.execute(plan.request(), DatasetFactory.wrap(fixture.data));
+                assertNull(HeadCasPolicy.check(fixture.data, RECEIPT, heads));
+                assertNull(TitleControlPolicy.check(fixture.data, RECEIPT, title));
+                assertTrue(fixture.data.contains(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
+                    NodeFactory.createURI(RV + "titleControlHead"), NodeFactory.createURI(CONTROL)));
+                assertTrue(fixture.data.contains(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK),
+                    NodeFactory.createURI("http://www.w3.org/2000/01/rdf-schema#label"), NodeFactory.createLiteralLang("Saved title", "en")));
+                assertEquals(history, fixture.history());
+            }
+        }
+    }
+
+    @Test public void genericTitleWritesStillRequireTitleControlIncludingEqualBytesAndUnknownPredicates() {
+        try (var fixture = new ControlledWorkFixture(null)) {
+            for (String field : new String[] { "rdfs:label \"Other title\"@en", "rdfs:label \"Saved title\"@en",
+                "rv:titleControlHead " + iri(NEXT) }) {
+                assertEquals("title control expectation and successor required",
+                    fixture.capture(fixture.update(field, "", "", "work:edit:" + WORK)).error());
+            }
+            assertEquals("title control expectation and successor required", fixture.capture(fixture.update(
+                "rv:scalarValue false", iri(WORK) + " ?property ?value .", "", "work:edit:" + WORK)).error());
+        }
+    }
+
+    @Test public void scalarAndTypeHeadsRetainProtectionAndExactHeadAdmissionGuards() {
+        for (String field : new String[] { "rv:scalarValue false", "a <https://schema.org/Book>" }) {
+            try (var fixture = new ControlledWorkFixture("ReviewRequired")) {
+                String update = fixture.update(field, "", "", "work:edit:" + WORK);
+                assertNull(fixture.capture(update));
+                assertEquals("protected Work mutation requires a reviewed protection action", ProtectionPolicy.capture(
+                    fixture.data, CommandPolicy.parse(update, RECEIPT), RECEIPT, "digest", update, null, KEY).error());
+            }
+            try (var fixture = new ControlledWorkFixture(null)) {
+                String update = fixture.update(field, "", "", "work:create:root");
+                var plan = CommandPolicy.parse(update, RECEIPT);
+                var heads = HeadCasPolicy.capture(fixture.data, plan, RECEIPT);
+                UpdateAction.execute(plan.request(), DatasetFactory.wrap(fixture.data));
+                assertEquals("head transition Access scope differs from target", HeadCasPolicy.check(fixture.data, RECEIPT, heads));
+            }
+            try (var fixture = new ControlledWorkFixture(null)) {
+                fixture.data.deleteAny(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK), NodeFactory.createURI(RV + "head"), org.apache.jena.graph.Node.ANY);
+                fixture.data.add(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(WORK), NodeFactory.createURI(RV + "head"), NodeFactory.createURI(NEXT));
+                String update = fixture.update(field, "", "", "work:edit:" + WORK);
+                assertEquals("head deletion differs from prestate", HeadCasPolicy.capture(fixture.data, CommandPolicy.parse(update, RECEIPT), RECEIPT).error());
+            }
+        }
+    }
+
+    @Test public void genericFieldEditsCannotMutateOldControlledWorkOrTitleAnchors() {
+        try (var fixture = new ControlledWorkFixture(null)) {
+            assertEquals("old controlled Work revision is immutable", fixture.capture(fixture.update("rv:scalarValue false", "",
+                iri(HEAD) + " rv:manifest <urn:test:forged-manifest> .", "work:edit:" + WORK)).error());
+            assertEquals("old title control revision is immutable", fixture.capture(fixture.update("rv:scalarValue false", "",
+                iri(CONTROL) + " rv:controlEpoch 2 .", "work:edit:" + WORK)).error());
+        }
+    }
+
     private static String hash(String value) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     }

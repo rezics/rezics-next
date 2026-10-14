@@ -350,16 +350,19 @@ async function editWorkRevision(env: WorkActivationEnvironment,
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
   const event = `urn:rezics:event:${hash(operation)}`;
   const nextScalarTerm = scalarRdfTerm(nextScalar);
+  // Scalar/type revisions preserve the title without claiming its controlled write predicate.
   const update = `PREFIX rv: <${RV}> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
     DELETE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} ; rdfs:label ?oldTitle .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(intent.expectedHead)} .
+        ${change.kind === 'title' ? `${iri(intent.work)} rdfs:label ?oldTitle .` : ''}
         ${iri(intent.work)} <${SCALAR_PREDICATE}> ?oldScalar .
         ${change.kind === 'types' ? `${iri(intent.work)} a ?oldType .` : ''} }
     }
     INSERT {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
-      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} ; rdfs:label ${lit(nextTitle)}@${prior.language} .
+      GRAPH ${iri(GRAPHS.current)} { ${iri(intent.work)} rv:head ${iri(revision)} .
+        ${change.kind === 'title' ? `${iri(intent.work)} rdfs:label ${lit(nextTitle)}@${prior.language} .` : ''}
         ${nextScalarTerm ? `${iri(intent.work)} <${SCALAR_PREDICATE}> ${nextScalarTerm} .` : ''}
         ${change.kind === 'types' ? nextTypes.map(type => `${iri(intent.work)} a <${type}> .`).join('\n') : ''} }
       GRAPH ${iri(GRAPHS.revisions)} { ${iri(revision)} a rv:RevisionAnchor ; rv:component ${iri(intent.work)} ;

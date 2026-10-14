@@ -65,11 +65,16 @@ for (const loss of ['expired', 'revoked'] as const) {
     const input = { work: created.work, expectedHead: await head(created.work),
       scalarValue: { kind: 'boolean' as const, lexical: 'false' as const },
       actingSubject: member.actor, idempotencyKey: randomUUID() };
+    const control = await readTitleControl(stack.env, created.work);
     const command = (body: AdmittedWorkScalarInput = input) => setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), body);
     const result = await recorded(`${loss}-authorized`, { titleInput, title, scalarInput: input }, () => command());
     expect(result).toMatchObject({ work: created.work, predecessor: title.revision, replayed: false });
     expect(result.revision).not.toBe(title.revision);
     expect(await head(created.work)).toBe(result.revision);
+    expect(await readTitleControl(stack.env, created.work)).toMatchObject({ basis: control.basis,
+      mode: control.mode, contentHead: result.revision });
+    expect(await editAdmittedMetadataWork(stack.env, account(), stack.access, request(member), titleInput))
+      .toEqual({ ...title, replayed: true });
     const retained = await readExactWorkRevision(stack.env, result.revision, async owner => owner === created.work);
     expect(retained).toMatchObject({ title: 'Saved title', language: 'en', mainVersion: created.mainVersion,
       scalarValue: input.scalarValue });
@@ -98,6 +103,7 @@ for (const loss of ['expired', 'revoked'] as const) {
 
 test('type edit shares the Work revision owner after admitted title control', async () => {
   const { member, created, title } = await setup();
+  const control = await readTitleControl(stack.env, created.work);
   const input = { work: created.work, expectedHead: await head(created.work), types: ['https://schema.org/Book'],
     actingSubject: member.actor, idempotencyKey: randomUUID() };
   const result = await recorded('type-authorized', input, () =>
@@ -105,6 +111,14 @@ test('type edit shares the Work revision owner after admitted title control', as
   expect(result.predecessor).toBe(title.revision);
   expect(await readExactWorkRevision(stack.env, result.revision, async owner => owner === created.work))
     .toMatchObject({ title: 'Saved title', semanticTypes: input.types });
+  expect(await readTitleControl(stack.env, created.work)).toMatchObject({ basis: control.basis,
+    mode: control.mode, contentHead: result.revision });
+  const scalar = await setAdmittedWorkScalar(stack.env, account(), stack.access, request(member), {
+    work: created.work, expectedHead: result.revision, scalarValue: { kind: 'integer', lexical: '0' },
+    actingSubject: member.actor, idempotencyKey: randomUUID(),
+  });
+  expect(await readExactWorkRevision(stack.env, scalar.revision, async owner => owner === created.work))
+    .toMatchObject({ title: 'Saved title', semanticTypes: input.types, scalarValue: { kind: 'integer', lexical: '0' } });
 }, 60_000);
 
 test('revision owner accepts the claimed scalar request at the actual admitted title head', async () => {
