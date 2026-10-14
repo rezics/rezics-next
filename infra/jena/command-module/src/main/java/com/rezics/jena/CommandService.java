@@ -1552,15 +1552,13 @@ final class CommandService extends ActionService {
                 if (link != null) return invalid(link);
             }
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "WorkStructurePublicationDecision")) {
-                if (!hasNamedFocus(validations, "work-structure-publication-v1", "decision-shape",
-                    subject, CommandPolicy.REVISIONS))
+                if (!hasWorkStructurePublicationFocus(dataset, validations, "decision-shape", subject))
                     return invalid("Work structure publication decision focus omitted: " + subject);
                 String link = workStructurePublicationDecisionLinks(dataset, receipt, subject);
                 if (link != null) return invalid(link);
             }
             if (hasType(dataset, CommandPolicy.REVISIONS, subject, "WorkStructurePublicSource")) {
-                if (!hasNamedFocus(validations, "work-structure-publication-v1", "source-shape",
-                    subject, CommandPolicy.REVISIONS))
+                if (!hasWorkStructurePublicationFocus(dataset, validations, "source-shape", subject))
                     return invalid("Work structure publication source focus omitted: " + subject);
                 String link = workStructurePublicationSourceLinks(dataset, subject);
                 if (link != null) return invalid(link);
@@ -1613,12 +1611,43 @@ final class CommandService extends ActionService {
         if (touched || hasSchemaType(dataset, CommandPolicy.CURRENT, subject, "CreativeWork")
             && dataset.contains(NodeFactory.createURI(CommandPolicy.CURRENT), NodeFactory.createURI(subject),
                 NodeFactory.createURI(RV + "workStructurePublicationHead"), Node.ANY)) {
-            if (touched && !hasNamedFocus(validations, "work-structure-publication-v1",
-                "work-shape", subject, CommandPolicy.CURRENT))
+            if (touched && !hasWorkStructurePublicationFocus(dataset, validations, "work-shape", subject))
                 return "Work structure publication focus omitted: " + subject;
             return workStructurePublicationHeadLinks(dataset, subject);
         }
         return null;
+    }
+    private static String workStructurePublicationProfile(DatasetGraph dataset, Node decision) {
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node model = exactlyOne(dataset, revisions, decision, "modelRevision");
+        Node shape = exactlyOne(dataset, revisions, decision, "shapeRevision");
+        // Each v1 pin is optional; sourced v2 anchors must name both revision pins.
+        Node v1 = NodeFactory.createURI("https://rezics.com/definition/work-structure-publication-v1");
+        if ((!dataset.contains(revisions, decision, NodeFactory.createURI(RV + "modelRevision"), Node.ANY) || v1.equals(model))
+            && (!dataset.contains(revisions, decision, NodeFactory.createURI(RV + "shapeRevision"), Node.ANY) || v1.equals(shape)))
+            return "work-structure-publication-v1";
+        if (NodeFactory.createURI("https://rezics.com/definition/work-structure-publication-v2").equals(model)
+            && model.equals(shape)) return "work-structure-publication-v2";
+        return null;
+    }
+    static boolean hasWorkStructurePublicationFocus(DatasetGraph dataset, List<Validation> validations,
+        String shape, String subject) {
+        Node revisions = NodeFactory.createURI(CommandPolicy.REVISIONS);
+        Node owner = NodeFactory.createURI(subject);
+        Node work = shape.equals("work-shape") ? owner : exactlyOne(dataset, revisions, owner,
+            shape.equals("source-shape") ? "work" : "component");
+        if (work == null || !work.isURI()) return false;
+        Node decision = exactlyOne(dataset, NodeFactory.createURI(CommandPolicy.CURRENT), work,
+            "workStructurePublicationHead");
+        if (decision == null || !decision.isURI()) return false;
+        String profile = workStructurePublicationProfile(dataset, decision);
+        if (profile == null || !hasNamedFocus(validations, profile, shape, subject,
+            shape.equals("work-shape") ? CommandPolicy.CURRENT : CommandPolicy.REVISIONS)) return false;
+        Set<String> owners = new HashSet<>(List.of(work.getURI(), decision.getURI()));
+        Node source = exactlyOne(dataset, revisions, decision, "publicSource");
+        if (source != null && source.isURI()) owners.add(source.getURI());
+        return validations.stream().noneMatch(entry -> entry.profileId().startsWith("work-structure-publication-")
+            && !entry.profileId().equals(profile) && entry.focus().stream().anyMatch(owners::contains));
     }
     private static boolean touchesPredicate(DatasetGraph dataset, CommandPolicy.Plan plan, String graph, Node subject,
                                             String predicate) {
@@ -1672,14 +1701,27 @@ final class CommandService extends ActionService {
         boolean published = NodeFactory.createURI(RV + "Published").equals(outcome);
         boolean withdrawn = NodeFactory.createURI(RV + "Withdrawn").equals(outcome);
         if (!published && !withdrawn) return "Work structure publication outcome is invalid: " + subject;
+        String profile = workStructurePublicationProfile(dataset, decision);
+        if (profile == null) return "Work structure publication profile is unsupported or ambiguous: " + subject;
+        boolean sourced = NodeFactory.createURI(RV + "PublicDomain").equals(
+            exactlyOne(dataset, revisions, decision, "rightsBasis"));
         if (published) {
             if (source == null || !source.isURI()
                 || !hasType(dataset, CommandPolicy.REVISIONS, source.getURI(), "WorkStructurePublicSource")
                 || !work.equals(exactlyOne(dataset, revisions, source, "work"))
                 || !main.equals(exactlyOne(dataset, revisions, source, "component"))
                 || !NodeFactory.createURI(RV + "Public").equals(exactlyOne(dataset, revisions, decision, "disclosure"))
-                || !NodeFactory.createURI(RV + "OriginalContribution").equals(exactlyOne(dataset, revisions, decision, "rightsBasis")))
+                || !(NodeFactory.createURI(RV + "OriginalContribution").equals(
+                    exactlyOne(dataset, revisions, decision, "rightsBasis"))
+                    || sourced && profile.equals("work-structure-publication-v2")))
                 return "Work structure publication source is missing or has the wrong owner: " + subject;
+            Node observation = exactlyOne(dataset, revisions, decision, "sourceObservation");
+            // Main owns Source eligibility; this transaction preserves its exact evidence identity.
+            if (sourced ? observation == null || !observation.isURI()
+                || !observation.equals(exactlyOne(dataset, revisions, source, "sourceObservation"))
+                : dataset.contains(revisions, decision, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY)
+                    || dataset.contains(revisions, source, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY))
+                return "Work structure publication source observation mismatch: " + subject;
             String sourceError = workStructureSourceEvidence(dataset, source);
             if (sourceError != null) return sourceError;
         } else if (dataset.contains(revisions, decision, NodeFactory.createURI(RV + "publicSource"), Node.ANY)) {
@@ -1726,6 +1768,9 @@ final class CommandService extends ActionService {
                 if (!same(dataset, revisions, decision, receipts, receiptNode, property))
                     return "Work structure publication receipt field mismatch: " + property;
             }
+            if (sourced ? !same(dataset, revisions, decision, receipts, receiptNode, "sourceObservation")
+                : dataset.contains(receipts, receiptNode, NodeFactory.createURI(RV + "sourceObservation"), Node.ANY))
+                return "Work structure publication receipt field mismatch: sourceObservation";
         }
         return null;
     }

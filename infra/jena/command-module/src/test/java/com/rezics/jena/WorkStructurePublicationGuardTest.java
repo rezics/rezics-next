@@ -146,6 +146,21 @@ public class WorkStructurePublicationGuardTest {
             put(data, receipts, RECEIPT, "sourceObservation", uri(OBSERVATION));
             assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, focuses(v2, v2, v2), Set.of(WORK)));
             assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            for (int i = 0; i < 3; i++) {
+                var valid = focuses(v2, v2, v2);
+                var entry = valid.get(i);
+                String shape = List.of("work-shape", "decision-shape", "source-shape").get(i);
+                String subject = List.of(WORK, DECISION, SOURCE).get(i);
+                assertTrue(CommandService.hasWorkStructurePublicationFocus(data, valid, shape, subject));
+                for (var wrong : List.of(
+                    new CommandService.Validation(v2, null, entry.shape(), List.of(MAIN), entry.graphs(), Map.of()),
+                    new CommandService.Validation(v2, null, entry.shape(), entry.focus(), List.of(CommandPolicy.SOURCE), Map.of()),
+                    new CommandService.Validation(v2, null, entry.shape() + "-other", entry.focus(), entry.graphs(), Map.of()))) {
+                    var changed = new java.util.ArrayList<>(valid);
+                    changed.set(i, wrong);
+                    assertTrue(!CommandService.hasWorkStructurePublicationFocus(data, changed, shape, subject));
+                }
+            }
             for (String profile : List.of(v1, "work-structure-publication-v3"))
                 assertNotNull(CommandService.workStructurePublicationHeadScope(data, WORK,
                     focuses(profile, profile, profile), Set.of(WORK)));
@@ -156,7 +171,7 @@ public class WorkStructurePublicationGuardTest {
                 "publicationDecision", "mainVersion", "structure", "structureProfile", "structureRevision",
                 "selectedGeneration", "sourceRoot", "action", "commandFamily")) {
                 Node original = data.find(uri(receipts), uri(RECEIPT), p(field), Node.ANY).next().getObject();
-                put(data, receipts, RECEIPT, field, uri(MAIN));
+                put(data, receipts, RECEIPT, field, uri("urn:rezics:wrong-binding"));
                 assertNotNull(field, CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
                 put(data, receipts, RECEIPT, field, original);
             }
@@ -170,7 +185,52 @@ public class WorkStructurePublicationGuardTest {
                 assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
                 put(data, revisions, subject, "sourceObservation", uri(OBSERVATION));
             }
+            for (String basis : List.of("UnknownRights", "OriginalContribution")) {
+                put(data, revisions, DECISION, "rightsBasis", p(basis));
+                put(data, receipts, RECEIPT, "rightsBasis", p(basis));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            }
+            put(data, revisions, DECISION, "rightsBasis", p("PublicDomain"));
+            for (String field : List.of("modelRevision", "shapeRevision")) {
+                data.deleteAny(uri(revisions), uri(DECISION), p(field), Node.ANY);
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+                put(data, revisions, DECISION, field, uri("https://rezics.com/definition/" + v2));
+                data.add(uri(revisions), uri(DECISION), p(field), uri("https://rezics.com/definition/" + v1));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, null, DECISION));
+                put(data, revisions, DECISION, field, uri("https://rezics.com/definition/" + v2));
+            }
         } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void originalAndWithdrawalRetainV1FamiliesUnderEitherAdmittedRevision() {
+        for (String profile : List.of("work-structure-publication-v1", "work-structure-publication-v2")) {
+            DatasetGraph data = publication();
+            data.begin(ReadWrite.WRITE);
+            try {
+                for (String field : List.of("modelRevision", "shapeRevision"))
+                    put(data, CommandPolicy.REVISIONS, DECISION, field, uri("https://rezics.com/definition/" + profile));
+                bindReceipt(data);
+                var validations = focuses(profile, profile, profile);
+                assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, validations, Set.of(WORK)));
+                assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                put(data, CommandPolicy.RECEIPTS, RECEIPT, "sourceObservation", uri(OBSERVATION));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                data.deleteAny(uri(CommandPolicy.RECEIPTS), uri(RECEIPT), p("sourceObservation"), Node.ANY);
+                if (profile.endsWith("-v1")) for (String field : List.of("modelRevision", "shapeRevision")) {
+                    data.deleteAny(uri(CommandPolicy.REVISIONS), uri(DECISION), p(field), Node.ANY);
+                    assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                    put(data, CommandPolicy.REVISIONS, DECISION, field, uri("https://rezics.com/definition/" + profile));
+                }
+                data.deleteAny(uri(CommandPolicy.REVISIONS), uri(DECISION), p("publicSource"), Node.ANY);
+                put(data, CommandPolicy.REVISIONS, DECISION, "publicationOutcome", p("Withdrawn"));
+                put(data, CommandPolicy.RECEIPTS, RECEIPT, "action", NodeFactory.createLiteralString("work.withdraw-publication"));
+                put(data, CommandPolicy.RECEIPTS, RECEIPT, "commandFamily", NodeFactory.createLiteralString("work-structure-withdrawal-v1"));
+                assertNull(CommandService.workStructurePublicationHeadScope(data, WORK, validations.subList(0, 2), Set.of(WORK)));
+                assertNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+                data.add(uri(CommandPolicy.REVISIONS), uri(DECISION), p("publicSource"), uri(SOURCE));
+                assertNotNull(CommandService.workStructurePublicationDecisionLinks(data, RECEIPT, DECISION));
+            } finally { data.abort(); data.end(); data.close(); }
+        }
     }
 
     private static String publicationScopeAfterUpdate(DatasetGraph data, String subject, String update,
