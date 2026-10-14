@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test';
 import { createHash } from 'node:crypto';
 import { openRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
+import { ContentCore } from '../../../services/content/src/core.ts';
 import type { RecoveryCoverage } from '../../../services/main/src/modules/work/restore-lineage.ts';
 import { qaStartupTestTimeout } from '../../../scripts/qa/stack-startup.ts';
 import {
@@ -185,6 +186,7 @@ test(
         },
       ];
       let attemptOrdinal = 0;
+      const copyDirectories = new Set<string>();
       for (const { label, reason, tamper } of refusals) {
         const ordinal = ++attemptOrdinal;
         await fixture.timing.phase(
@@ -192,13 +194,26 @@ test(
           async () => {
             const copy = await fixture.copy();
             try {
+              expect(copyDirectories.has(copy.directory)).toBe(false);
+              copyDirectories.add(copy.directory);
               const { key, lost } = await lostOutcome(fixture, copy);
+              const revision = (await new ContentCore(copy.owners.content).readExactBatch(
+                [fixture.revisionId], async ids => new Set(ids),
+              ))[0];
+              expect(revision).toMatchObject({ status: 'erased' });
               await tamper(copy, key);
               const held = await expectRefusedCompletion(fixture, copy, key, reason);
               expect(held.erasures).toEqual(lost.erasures);
               console.info('owner restore erasure case passed', {
                 case: 'completion-refused-' + label,
                 reason: held.hold_reason?.slice(0, 200),
+                ordinal: copy.ordinal,
+                directory: copy.directory,
+                operationState: lost.state,
+                erasures: lost.erasures,
+                releases: lost.releases,
+                erasedRevision: fixture.revisionId,
+                revisionStatus: revision?.status,
               });
             } finally {
               await copy.dispose();
