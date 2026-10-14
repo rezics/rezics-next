@@ -549,23 +549,25 @@ async function visitInjected(page: string) {
   return { ...seen, model: findBrowse(rendered) };
 }
 
-test('the pagination record keeps the header follow-state refresh for a null level', () => {
-  for (const who of personas) {
-    persona = who;
-    const follow = pagination.personas[who].find(sample => sample.label === 'frame-follow');
-    const state = pagination.personas[who].find(sample => sample.label === 'frame-follow-state');
-    const fields = follow?.answer as { following: boolean | null; level: string | null } | undefined;
-    const needs = who !== 'visitor' && !!fields && (fields.following === null || fields.level === null);
-    expect(state !== undefined).toBe(needs);
-    if (!state) continue;
-    const url = new URL(state.path, 'https://recorded.invalid');
-    expect(state.method).toBe('GET');
-    expect(state.status).toBe(200);
-    expect(state.operationId).toBe('getV1MeFollow-state');
-    expect(state.body).toBeUndefined();
-    expect(url.pathname).toBe('/v1/me/follow-state');
-    expect([...url.searchParams.keys()]).toEqual(['actingSubject', 'target']);
-    expect(url.searchParams.get('actingSubject')).toBe(actingSubject(pagination));
-    expect(url.searchParams.get('target')).toBe((sampleOf(pagination, who, 'frame-realm-header').answer as { id: string }).id);
+test('both Recipe records keep the header follow-state refresh for a null level', () => {
+  for (const record of [browse, pagination]) {
+    for (const who of personas) {
+      persona = who;
+      const follow = record.personas[who].find(sample => sample.label === 'frame-follow');
+      const state = record.personas[who].find(sample => sample.label === 'frame-follow-state');
+      const fields = follow?.answer as { following: boolean | null; level: string | null } | undefined;
+      const needs = who !== 'visitor' && !!fields && (fields.following === null || fields.level === null);
+      expect(state !== undefined).toBe(needs);
+      if (!state) continue;
+      const url = new URL(state.path, 'https://recorded.invalid');
+      expect(state.method).toBe('GET');
+      expect(state.status).toBe(200);
+      expect(state.operationId).toBe('getV1MeFollow-state');
+      expect(state.body).toBeUndefined();
+      expect(url.pathname).toBe('/v1/me/follow-state');
+      expect([...url.searchParams.keys()]).toEqual(['actingSubject', 'target']);
+      expect(url.searchParams.get('actingSubject')).toBe(actingSubject(record));
+      expect(url.searchParams.get('target')).toBe((sampleOf(record, who, 'frame-realm-header').answer as { id: string }).id);
+    }
   }
 });
