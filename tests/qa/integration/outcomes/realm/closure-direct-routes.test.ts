@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { readAddress } from '../../../../../apps/web/features/address/client.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
@@ -347,7 +348,8 @@ async function productionVisit(name: PersonaName) {
     const label = requestLabels.getStore()?.(method, path);
     if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
     const headers = new Headers(init?.headers);
-    const personal = headers.has('authorization') || url.pathname.startsWith('/api/main');
+    const personal = headers.has('authorization')
+      || (url.pathname.startsWith('/api/main') && init?.credentials !== 'omit');
     headers.delete('authorization');
     const response = await (personal ? recording.session(name, person) : publicRequest)(label, method, path,
       typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
@@ -356,8 +358,9 @@ async function productionVisit(name: PersonaName) {
   };
   globalThis.fetch = Object.assign(transport, { preconnect: original.preconnect });
   const main = browserMainApi(origin, { fetcher: transport as typeof fetch });
+  const anonymous = browserMainApi(origin, { anonymous: true, fetcher: transport as typeof fetch });
   try {
-    async function entry(label: string, key: string) {
+    async function entry(label: string, key: string, site = false): Promise<void> {
       // proxy admits each /r and /z request before the page renders. A closed
       // Space stops at its missing header; no works/decisions/Zone read follows.
       const address = await named(`${label}-address`, () => readAddress(
@@ -376,11 +379,53 @@ async function productionVisit(name: PersonaName) {
         ...(person.actingSubject ? { token: 'persona-session', actingSubject } : {}),
       }));
       if (page.kind !== 'missing') throw new Error(`Closed production ${label} reached ${page.kind}`);
+      if (address.kind !== 'resolved') return;
+      if (address.data.state === 'redirect' && address.data.canonical.key !== key) {
+        if (label.endsWith('-canonical')) throw new Error('Production address repeated its redirect');
+        await entry(`${label}-canonical`, address.data.canonical.key, site);
+        return;
+      }
+      if (!site) return;
+      // A resolved Zone address passes admission even when its Realm landing is
+      // missing. Site metadata and the page share these request-scoped reads.
+      const publicFrame = realmFrameReads({ main: anonymous });
+      let publication: ReturnType<typeof publicFrame.readCompletePresentation> | undefined;
+      let session: ReturnType<typeof main.v1.me['session-agent']['get']> | undefined;
+      const readSession = () => session ??= named(`${label}-frame-session-agent`, () =>
+        main.v1.me['session-agent'].get());
+      const frame = realmFrameReads({ main: anonymous, personal: person.actingSubject ? main : anonymous,
+        actingSubject: person.actingSubject ?? undefined, resolution: {
+          resolveAddress: async () => address,
+          readCompletePresentation: zone => publication ??= requestLabels.run((_method, path) => {
+            const after = new URL(path, origin).searchParams.get('after');
+            return after ? `${label}-presentation-${after}` : `${label}-presentation`;
+          }, () => publicFrame.readCompletePresentation(zone)),
+          readRealmHeader: realm => named(`${label}-frame-header`, () => publicFrame.readRealmHeader(realm)),
+          readPrivateRealm: async (ref, _locale, resolvedAddress) => {
+            const state = person.actingSubject ? await readSession() : null;
+            const subject = state && !state.error && state.data.sessionAgent.eligible
+              ? state.data.sessionAgent.actingSubject ?? undefined : undefined;
+            return requestLabels.run((_method, path) => path.includes('/join-page')
+              ? `${label}-frame-join-page` : `${label}-frame-private-header`, () => readSpacePage(ref, 'en', {
+              address: resolvedAddress, origin, incoming: new Headers(),
+              ...(person.actingSubject ? { token: 'persona-session', actingSubject: subject } : {}),
+            }));
+          },
+        } });
+      const resolved = await frame.resolveSite(key, 'en');
+      if (resolved.kind !== 'site') return;
+      // siteContentMetadata reads the home route while the page resolves its
+      // Realm frame. Both consume the same cached public presentation.
+      await Promise.all([
+        named(`${label}-frame-routes`, () => frame.readZoneRoute(resolved.zone, '/')),
+        ...(resolved.realm ? [frame.resolveRealm(key, 'en', 'site'),
+          ...(person.actingSubject ? [readSession()] : [])] : []),
+      ]);
     }
     await entry('home', short(closed.realm));
     await entry('decisions', short(closed.realm));
     await entry('exact-decision', short(closed.realm));
-    await entry('zone-entry', short(closed.zone));
+    await entry('zone-entry', short(closed.zone), true);
     person = privateRealm[name];
     await entry('private-teaser', short(privateRealm.realm));
   } finally { globalThis.fetch = original; }
