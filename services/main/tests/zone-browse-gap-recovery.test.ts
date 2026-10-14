@@ -583,6 +583,42 @@ test('fresh-stack write bursts wake recovery before cooldown without declaring a
   } finally { clock.mockRestore(); warn.mockRestore(); }
 });
 
+test('fresh recovery verifies relay history before capturing a cut and preserves that proof across graph retries', async () => {
+  const f = fixture(1);
+  f.state.usableCut = false;
+  f.state.checkpoint.sequence = '0';
+  f.graph.relaySequence = f.acknowledged.sequence = f.delivered.sequence = '65';
+  for (let sequence = 1; sequence <= 65; sequence++) f.headers.add(String(sequence));
+  for (let page = 0; page < 4; page++) {
+    f.graph.sequence = String(BigInt(f.graph.sequence) + 1n);
+    await f.instance.tick();
+    expect(f.calls.graph).toEqual([]);
+    expect(f.state.checkpoint.sequence).toBe('0');
+    expect(await f.current()).toBe(false);
+  }
+  f.afterPage(() => { f.graph.sequence = String(BigInt(f.graph.sequence) + 1n); });
+  await expect(f.instance.tick()).rejects.toThrow('authoritative cut changed');
+  const verified = f.calls.relay.filter(sql => sql.includes('FROM relay.delivered_batch AS batch')).length;
+  expect(verified).toBe(65);
+  await f.instance.tick();
+  expect(await f.current()).toBe(false);
+  await f.instance.tick();
+  expect(await f.current()).toBe(true);
+  expect(f.state.checkpoint.sequence).toBe('65');
+  expect(f.calls.relay.filter(sql => sql.includes('FROM relay.delivered_batch AS batch')).length).toBe(verified);
+});
+
+test('an acknowledged relay rewind discards recovery proof and rechecks the retained prefix', async () => {
+  const f = fixture(1);
+  await f.instance.backfill();
+  expect(await f.current()).toBe(true);
+  f.acknowledged.sequence = '3';
+  f.headerCounts.set('2', -1);
+  await expect(f.instance.backfill()).rejects.toThrow('retained relay header position or count differs');
+  expect(f.state.checkpoint.sequence).toBe('5');
+  expect(await f.current()).toBe(false);
+});
+
 test('partial SQL failures roll back the page and retry without losing candidates', async () => {
   const f = fixture(3);
   await f.gap();

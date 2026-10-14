@@ -24,7 +24,6 @@ interface Reconciliation {
   coverage: RelayHandoffPosition;
   epochs: string;
   phase: 'project' | 'prune';
-  verifiedSequence: string;
   after?: ProjectionKey;
 }
 type RelayEventRow = { stream_scope: string; data_epoch: string; event_id: string; envelope: {
@@ -49,6 +48,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private running: Promise<unknown> | undefined;
   private usableCut = false;
   private checkpoint: RelayHandoffPosition;
+  private verifiedCoverage: RelayHandoffPosition;
   private afterEvent: string | null = null;
   private reconciliation: Reconciliation | undefined;
   private recoveryAttempts = 0;
@@ -59,6 +59,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   constructor(private readonly access: Pool, private readonly relay: Pool,
     private readonly env: WorkActivationEnvironment, private readonly relayConsumer?: string) {
     this.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: env.lineage.dataEpoch, sequence: '0' };
+    this.verifiedCoverage = { ...this.checkpoint };
   }
 
   start(): void {
@@ -211,11 +212,11 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
     await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
       callsLeft: 6, bytesLeft: 256 * 1024 }, async () => {
-      const cut = await this.graphCut();
       if (this.retryAfter > performance.now()) {
         // Cool down expensive scans while writes continue, but observe their
         // cessation. This probe is only permission to retry: the full scan
         // and its before/after cut validation still prove readiness.
+        const cut = await this.graphCut();
         const prior = this.recoveryProbe;
         this.recoveryProbe = cut;
         if (!prior || !this.sameCut(prior, cut)) return;
@@ -225,30 +226,38 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         this.recoveryAttempts = 0;
         this.recoveryProbe = undefined;
       }
+      const coverage = await this.mainStreamCoverage(deadline);
+      // Delivery proof concerns retained relay history, not the moving graph.
+      // Verify its prefix before capturing a source cut, and keep that work
+      // across graph retries. A rewind or gap requires proving it anew.
+      if (compareRelayPositions(this.verifiedCoverage, coverage) > 0) {
+        this.verifiedCoverage = { ...coverage, sequence: '0' };
+        this.reconciliation = undefined;
+      }
+      for (let batch = 0; batch < ZONE_BROWSE_PROJECTION_COST.relayBatches
+        && BigInt(this.verifiedCoverage.sequence) < BigInt(coverage.sequence); batch++) {
+        const sequence = String(BigInt(this.verifiedCoverage.sequence) + 1n);
+        const classification = await this.classifyBatch(sequence, deadline);
+        if (classification.state === 'incomplete-healing') { this.deferHandoff(sequence); return; }
+        if (classification.state === 'gap-conflict') {
+          return this.relayGap(classification.error.message, sequence, coverage,
+            { supplied: Boolean(this.env.receiptCustody), found: false });
+        }
+        this.verifiedCoverage = { ...coverage, sequence };
+        if (classification.events) break;
+      }
+      if (this.verifiedCoverage.sequence !== coverage.sequence) return;
+      const cut = await this.graphCut();
       let state = this.reconciliation;
       if (!state) {
-        const coverage = await this.mainStreamCoverage(deadline);
         if (BigInt(coverage.sequence) > BigInt(cut.relaySequence)) {
           throw new WorkReadUnavailable('Zone browse relay coverage exceeds authoritative Main cut');
         }
-        state = { cut, coverage, epochs: await this.epochs(), phase: 'project', verifiedSequence: '0' };
+        state = { cut, coverage, epochs: await this.epochs(), phase: 'project' };
         this.reconciliation = state;
       }
       this.validateCut(state.cut, cut);
       this.checkDeadline(deadline);
-      for (let batch = 0; batch < ZONE_BROWSE_PROJECTION_COST.relayBatches
-        && BigInt(state.verifiedSequence) < BigInt(state.coverage.sequence); batch++) {
-        const sequence = String(BigInt(state.verifiedSequence) + 1n);
-        const classification = await this.classifyBatch(sequence, deadline);
-        if (classification.state === 'incomplete-healing') { this.deferHandoff(sequence); return; }
-        if (classification.state === 'gap-conflict') {
-          return this.relayGap(classification.error.message, sequence, state.coverage,
-            { supplied: Boolean(this.env.receiptCustody), found: false });
-        }
-        state.verifiedSequence = sequence;
-        if (classification.events) break;
-      }
-      if (state.verifiedSequence !== state.coverage.sequence) return;
       this.handoffDeferred = false;
       let complete = false;
       if (state.phase === 'project') {
@@ -430,6 +439,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     this.handoffRetries = 0;
     this.reconciliation = undefined;
     const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
+    this.verifiedCoverage = { ...this.checkpoint, sequence: '0' };
     let minimum = 'unavailable', acknowledged = 'unavailable', committed = 'unavailable';
     let delivered = coverage.sequence;
     // Fault diagnostics must not hide the original gap if an owner is down.
