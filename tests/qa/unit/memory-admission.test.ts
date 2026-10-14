@@ -865,7 +865,7 @@ test('load waiters retain arrival order and start at least twenty seconds apart 
   writeFileSync(join(scenario.directory, 'qa-startup-concurrency'), '3');
   const starts: { id: number; at: number }[] = [];
   await Promise.all([0, 1, 2].map(id => withMemoryStartupImpl(need, {
-    ...scenario.options, sleep: async ms => {
+    ...scenario.options, pollMs: 5000, sleep: async ms => {
       scenario.advance(ms);
       if (scenario.now() >= 3000) writeFileSync(scenario.loadFile, '32.0 0 0 1/1 1\n');
     },
@@ -964,7 +964,7 @@ test('a pressure dip admits waiters in arrival order without a burst at startup 
   writeFileSync(join(scenario.directory, 'qa-startup-concurrency'), '3');
   const starts: { id: number; at: number }[] = [];
   await Promise.all([0, 1, 2].map(id => withMemoryStartupImpl(need, {
-    ...scenario.options, sleep: async ms => {
+    ...scenario.options, pollMs: 5000, sleep: async ms => {
       scenario.advance(ms);
       if (scenario.now() >= 3000) scenario.setPressure(0);
     },
