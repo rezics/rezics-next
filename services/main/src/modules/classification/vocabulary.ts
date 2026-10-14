@@ -113,7 +113,7 @@ export async function currentConceptValidations(env: WorkActivationEnvironment, 
   return { validations, guard };
 }
 
-function checked(input: DefineVocabularyConceptInput) {
+function checked(input: DefineVocabularyConceptInput, labelsRequired = true) {
   const labels = [...input.labels].sort((a, b) => a.language.localeCompare(b.language));
   const alternativeLabels = [...input.alternativeLabels].sort(
     (a, b) => a.language.localeCompare(b.language) || a.value.localeCompare(b.value),
@@ -130,7 +130,7 @@ function checked(input: DefineVocabularyConceptInput) {
   if (
     !native.test(input.actingSubject) ||
     (input.scheme && (!native.test(input.scheme.id) || !native.test(input.scheme.expectedHead))) ||
-    !labels.length ||
+    (labelsRequired && !labels.length) ||
     labels.length > VOCABULARY_COST.labels ||
     alternativeLabels.length > VOCABULARY_COST.alternativeLabels ||
     broader.length > VOCABULARY_COST.relations ||
@@ -168,8 +168,8 @@ function checkedRetirement(input: RetireVocabularyConceptInput) {
   // Existing callers may send the creation envelope. Those fields bind retries,
   // but retirement preserves the stored labels and hierarchy.
   const fields = checked({ actingSubject: input.actingSubject, scheme: input.scheme ?? null,
-    labels: input.labels ?? [{ language: 'en', value: 'Retirement' }],
-    alternativeLabels: input.alternativeLabels ?? [], broader: input.broader ?? [], narrower: input.narrower ?? [] });
+    labels: input.labels ?? [], alternativeLabels: input.alternativeLabels ?? [],
+    broader: input.broader ?? [], narrower: input.narrower ?? [] }, input.labels !== undefined);
   return { actingSubject: fields.actingSubject, concept: { id: input.concept.id, expectedHead: input.concept.expectedHead },
     state: input.state, ...(input.scheme !== undefined ? { scheme: fields.scheme } : {}),
     ...(input.labels !== undefined ? { labels: fields.labels } : {}),
