@@ -39,6 +39,8 @@ test('in-memory facts retain Unicode source and content-specific syntax', () => 
   expect(first.text).toBe(source.text);
   expect(indexedSource(source)).toBe(first);
   expect(indexedSource({ ...source, text: 'const changed = 1;' }).text).toContain('changed');
+  source.text = 'const replaced = 2;';
+  expect(indexedSource(source).text).toBe(source.text);
 });
 
 test('import resolution invalidates when TypeScript path configuration changes', () => {

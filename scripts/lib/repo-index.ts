@@ -111,6 +111,10 @@ const cache = join(repository, '.temp/repo-index');
 const binary = join(repository, '.temp/repo-index-build/release/repo-index');
 const objects = new Map<string, { digest: string; index: RepoIndex }>();
 const sources = new Map<string, IndexedFile>();
+const sourceObjects = new WeakMap<
+  object,
+  { file: string; text: string; key: string; facts: IndexedFile }
+>();
 const sql = new Map<string, SqlFacts | (() => SqlFacts)>();
 const sqlByHash = new Map<string, (text: string) => SqlFacts>();
 let built = false;
@@ -287,13 +291,15 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
       rememberSqlRecord(facts);
       rememberCandidates(facts.sqlCandidates);
     }
-    for (const [hash, candidate] of payload.sqlHashes ?? [])
+    for (const [hash, candidate] of payload.sqlHashes ?? []) {
+      if (sqlByHash.has(hash)) continue;
       sqlByHash.set(hash, () => {
         const record = facts.sqlCandidates?.[candidate];
         if (!record?.sql)
           throw new Error(`Repository index SQL candidate is missing: ${file}:${candidate}`);
         return record.sql;
       });
+    }
   }
   return index;
 }
@@ -392,14 +398,23 @@ function checkedFiles(files: Record<string, IndexedFile>): Record<string, Indexe
 export function parseSources(
   input: readonly { file: string; text: string }[],
 ): Record<string, IndexedFile> {
-  const missing = input.filter((source) => !sources.has(`${source.file}\0${digest(source.text)}`));
+  const lookup = (source: { file: string; text: string }) => {
+    const previous = sourceObjects.get(source);
+    const key =
+      previous?.file === source.file && previous.text === source.text
+        ? previous.key
+        : `${source.file}\0${digest(source.text)}`;
+    const facts = sources.get(key);
+    if (facts && facts !== previous?.facts)
+      sourceObjects.set(source, { file: source.file, text: source.text, key, facts });
+    return facts;
+  };
+  const missing = input.filter((source) => !lookup(source));
   if (missing.length) {
     const text = JSON.stringify(missing);
     run(repository, `sources:${digest(text)}`, ['--stdin'], text);
   }
-  return Object.fromEntries(
-    input.map((source) => [source.file, sources.get(`${source.file}\0${digest(source.text)}`)!]),
-  );
+  return Object.fromEntries(input.map((source) => [source.file, lookup(source)!]));
 }
 
 export function indexedSource(source: { file: string; text: string }): IndexedFile {
