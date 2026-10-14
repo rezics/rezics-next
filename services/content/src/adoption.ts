@@ -43,6 +43,9 @@ function revision(value: unknown, content = false) {
 /** Structural admission never fetches a target or upgrades a selection to latest. */
 export function checkedResourceReference(value: unknown, exact = false): ResourceReference {
   const ref = object(value); keys(ref, ['target', 'selector']); identifier(ref.target);
+  if ((ref.target as string).startsWith('urn:rezics:media:asset:')
+    && !uuid.test((ref.target as string).slice('urn:rezics:media:asset:'.length)))
+    throw new ContentAdoptionInvalid('invalid Media asset identity');
   const selector = object(ref.selector);
   switch (selector.grain) {
     case 'resource': keys(selector, ['grain']); if (exact) throw new ContentAdoptionInvalid('an exact input is required'); break;
@@ -65,9 +68,11 @@ export function checkedResourceReference(value: unknown, exact = false): Resourc
       revision(selector.revision, true); revision(selector.representation, true);
       if (typeof ref.target !== 'string' || !/^urn:rezics:media:asset:[0-9a-f-]{36}$/.test(ref.target))
         throw new ContentAdoptionInvalid('representation requires a Media asset');
-      if (selector.fragment !== undefined && (typeof selector.fragment !== 'string'
-        || !/^t=npt:\d+(?:\.\d+)?,\d+(?:\.\d+)?$/.test(selector.fragment)))
-        throw new ContentAdoptionInvalid('invalid temporal fragment');
+      if (selector.fragment !== undefined) {
+        text(selector.fragment, 100);
+        if (!/^t=npt:\d+(?:\.\d+)?,\d+(?:\.\d+)?$/.test(selector.fragment))
+          throw new ContentAdoptionInvalid('invalid temporal fragment');
+      }
       break;
     default: throw new ContentAdoptionInvalid('unsupported Resource grain');
   }

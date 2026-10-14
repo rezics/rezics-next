@@ -27,6 +27,9 @@ test('Content derivation custody refuses denied/stale writes, pins revisions, pr
     expect(await core.derivations.record('one', structuredClone(input), 'software', prove)).toEqual({ ...saved, replayed: true });
     await expect(core.derivations.record('one', { ...input, activity: { kind: 'translation' } }, 'software', prove)).rejects.toBeInstanceOf(ContentConflict);
     expect(proofs).toBe(2);
+    await expect(core.derivations.record('wrong-input-owner', { ...input, inputs: [{ ...input.inputs[0]!,
+      target: `https://rezics.com/id/${randomUUID()}` }] }, 'software', prove)).rejects.toBeInstanceOf(ContentConflict);
+    expect(proofs).toBe(2);
     const exactAfter = (await core.readExactBatch([output.revisionId!], async ids => new Set(ids)))[0];
     expect(exactAfter).toEqual(exactBefore);
     expect(await core.derivations.page(output.revisionId!, 1, null)).toEqual([{ ...saved, replayed: undefined }].map(({ replayed: _replayed, ...record }) => record));

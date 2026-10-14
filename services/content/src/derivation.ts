@@ -54,6 +54,17 @@ export class ContentDerivations {
       [input.output.target, s.variantId, s.revision])).rows[0];
       if (!output || output.availability !== 'available') throw new ContentConflict('output revision is unavailable');
       if (output.draft_head !== input.expectedOutputHead) throw new ContentDerivationStale('output head changed');
+      // Content owns these anchors. Hold each exact input through the commit;
+      // another owner's proof cannot replace local membership or availability.
+      for (const reference of input.inputs) {
+        const selector = reference.selector;
+        if (selector.grain !== 'content') continue;
+        const selected = await client.query(`SELECT r.id FROM content.revision r
+          JOIN content.variant v ON v.id=r.variant_id
+          WHERE r.id=$1 AND v.id=$2 AND v.resource_id=$3 AND r.availability='available'
+          FOR SHARE OF r`, [selector.revision, selector.variantId, reference.target]);
+        if (selected.rowCount !== 1) throw new ContentConflict('input revision is unavailable');
+      }
       await prove();
       const record: ContentDerivationRecord = { derivation: `urn:rezics:content:derivation:${randomUUID()}`,
         output: input.output, inputs: input.inputs, activity: { id: `urn:rezics:activity:${randomUUID()}`, kind: input.activity.kind },

@@ -45,7 +45,7 @@
       "text": "/^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$/"
     },
     {
-      "file": "services/content/src/core.ts",
+      "file": "services/content/src/language.ts",
       "text": "Intl.getCanonicalLocales(value)"
     },
     {
