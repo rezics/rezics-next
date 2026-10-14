@@ -180,12 +180,14 @@ function classifyScope(scope: LandScope): { permitted: string[]; claimed: string
 
 /** A missing or contradictory result never authorizes a merge. Cursor and Grok join message segments with no
  * separator, so the handoff can start right after a sentence ("...in place.RESULT: done"). */
-export function handoffResult(text: string): string | undefined {
+export function handoffResult(text: string, step = false): string | undefined {
   const results = [...text.matchAll(/(?:^|(?<=[.!?)\]`'"’”]))RESULT:[^\r\n]*/gm)];
   if (results.length !== 1) return undefined;
   const line = results[0]![0];
   // A qualified `done` is not done. A result that claims less may say why on its own line.
-  return /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(line)?.[1] ?? /^RESULT:[ \t]*(partial|blocked)[ \t]+\S/.exec(line)?.[1];
+  return /^RESULT:[ \t]*(\S+)[ \t]*$/.exec(line)?.[1] ?? /^RESULT:[ \t]*(partial|blocked)[ \t]+\S/.exec(line)?.[1]
+    // For a step the manager accepts what the branch holds: a `done` the worker qualified claims less than done.
+    ?? (step && /^RESULT:[ \t]*done[ \t]+\S/.test(line) ? 'partial' : undefined);
 }
 
 /** Reviewers `GOAL_REVIEW_ENGINE` may select. Sol on the default Codex account is the norm; the others keep
@@ -426,7 +428,7 @@ function priorReview(runDir: string, directory?: string): { findings: ReviewFind
 
 /** Keep landing on the shared merge path; merge receives only the revalidated owner-change list. */
 export async function land(options: LandOptions): Promise<void> {
-  const result = handoffResult(options.handoff);
+  const result = handoffResult(options.handoff, options.step);
   // A step is the manager's acceptance of what the branch holds. A worker stopped by a fault outside its
   // claim says `blocked` and may still leave a slice worth landing; the gates and the review judge it as any step.
   if (result !== 'done' && !(options.step && (result === 'partial' || result === 'blocked'))) {

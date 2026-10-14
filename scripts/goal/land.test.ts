@@ -179,6 +179,9 @@ describe('Goal landing', () => {
     expect(handoffResult('RESULT: done\nRESULT: partial because unfinished')).toBeUndefined();
     expect(handoffResult('RESULT:\n done')).toBeUndefined();
     expect(handoffResult('RESULT: done but unfinished')).toBeUndefined();
+    expect(handoffResult('RESULT: done — first cut rebased; the gate still fails.\nCASES: x', true)).toBe('partial');
+    expect(handoffResult('RESULT: done\nCASES: x', true)).toBe('done');
+    expect(handoffResult('RESULT: done but unfinished\nRESULT: done', true)).toBeUndefined();
     expect(handoffResult('RESULT: partial — acceptance held for review.\n\nCASES: x')).toBe('partial');
     expect(handoffResult('RESULT: blocked by the owner test\nCASES: x')).toBe('blocked');
     expect(handoffResult('RESULT: partial — one\nRESULT: done')).toBeUndefined();
