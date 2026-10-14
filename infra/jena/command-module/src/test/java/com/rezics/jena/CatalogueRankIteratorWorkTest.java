@@ -96,6 +96,7 @@ public class CatalogueRankIteratorWorkTest {
             var expected = List.of(titleOnly.main().getURI(), both.main().getURI(), bodyOnly.main().getURI());
             var expectedUnits = List.of(titleOnly.unit().getURI(), both.unit().getURI(), bodyOnly.unit().getURI());
             var baseline = new HashMap<String, Moves>();
+            var page26 = new HashMap<String, Moves>();
             int population = 3;
             for (int size : new int[] {10, 26, 74, 200}) {
                 while (population < size) {
@@ -122,10 +123,11 @@ public class CatalogueRankIteratorWorkTest {
                     for (int page = 0; page < result.work().size(); page++) {
                         Moves moves = result.work().get(page);
                         assertTrue("native iterator measurement must be present", moves.next() + moves.advance() > 0);
-                        assertTrue("fixed nested next-call ceiling", moves.next() <= NEXT_LIMIT);
-                        assertTrue("fixed nested advance-call ceiling", moves.advance() <= ADVANCE_LIMIT);
+                        assertTrue("fixed nested next-call ceiling: size=" + size + " realm=" + realm + " query=" + phrase + " page=" + page + " " + moves, moves.next() <= NEXT_LIMIT);
+                        assertTrue("fixed nested advance-call ceiling: " + moves, moves.advance() <= ADVANCE_LIMIT);
                         String control = phrase + ":" + page;
                         if (size == 10) baseline.put(control, moves);
+                        if (size == 26) page26.put(control, moves);
                         Moves fixed = baseline.get(control); assertNotNull("same continuation inventory", fixed);
                         System.out.printf("catalogue rank size=%d realm=%s query=%s page=%d next=%d advance=%d bitsets=%d matches=%d%n",
                             size, realm, phrase, page, moves.next(), moves.advance(), moves.bitsets(), moves.matches());
@@ -136,6 +138,11 @@ public class CatalogueRankIteratorWorkTest {
                         assertTrue("nested advance calls grew: " + moves + " baseline=" + fixed, moves.advance() <= fixed.advance() + 16);
                         assertTrue("bitset work grew", moves.bitsets() <= fixed.bitsets() + 2);
                         assertTrue("two-phase checks grew", moves.matches() <= fixed.matches() + 4);
+                        if (size == 200) {
+                            Moves at26 = page26.get(control);
+                            assertTrue("size 200 next calls grew over 26: " + moves + " at26=" + at26, moves.next() <= at26.next() + 8);
+                            assertTrue("size 200 advance calls grew over 26: " + moves + " at26=" + at26, moves.advance() <= at26.advance() + 16);
+                        }
                     }
                 }
             }

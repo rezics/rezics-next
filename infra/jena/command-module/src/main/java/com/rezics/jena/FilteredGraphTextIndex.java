@@ -466,6 +466,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             boolean names = scope != null && scope.names() != null;
             boolean catalogue = scope != null && scope.catalogue();
             Query text = body;
+            Query catalogueTitles = null;
             if (catalogue) {
                 if (!"body".equals(field)) throw new TextIndexException("catalogue ranking requires the body field");
                 QueryParser titles = new QueryParser("publicTitle", lucene.getQueryAnalyzer());
@@ -476,23 +477,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
                     .collect(java.util.stream.Collectors.joining(" "));
                 Query title = parseQuery(titles, words);
-                // A name tier above BM25's bounded 80-character query scores
-                // preserves body relevance while putting names first. Lucene
-                // documents/term frequencies are bounded by signed integers.
+                catalogueTitles = title;
+                // Score each matching title once. Complete Work names retain
+                // their higher tier over cached body-unit names and BM25.
                 text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(
-                    new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(title), 1_000_000f),
-                    body), 0f);
-            }
-            if (catalogue) {
-                QueryParser complete = new QueryParser("publicTitle", lucene.getQueryAnalyzer());
-                complete.setDefaultOperator(QueryParser.Operator.AND);
-                String words = java.util.Arrays.stream(phrase.split("\\s+"))
-                    .map(word -> "\"" + word.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-                    .collect(java.util.stream.Collectors.joining(" "));
-                Query completeNames = new RankKindQuery(parseQuery(complete, words),
-                    lucene.getDocDef().getEntityField(), true);
-                text = new org.apache.lucene.search.DisjunctionMaxQuery(List.of(text,
-                    new org.apache.lucene.search.BoostQuery(new org.apache.lucene.search.ConstantScoreQuery(completeNames), 2_000_000f)), 0f);
+                    new RankKindQuery(new org.apache.lucene.search.ConstantScoreQuery(title),
+                        lucene.getDocDef().getEntityField(), false, true),
+                    new RankKindQuery(body, lucene.getDocDef().getEntityField(), false)), 0f);
             }
             Query query = new BooleanQuery.Builder()
                 .add(text, BooleanClause.Occur.MUST)
@@ -508,7 +499,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 // never an RDF inventory of the Realm population.
                 Query realm = new TermQuery(new Term(RANK_CONTEXT, scope.realm()));
                 if (catalogue) realm = new BooleanQuery.Builder().add(realm, BooleanClause.Occur.SHOULD)
-                    .add(new RankKindQuery(query, entityField, true), BooleanClause.Occur.SHOULD).build();
+                    .add(new RankKindQuery(catalogueTitles, entityField, true), BooleanClause.Occur.SHOULD).build();
                 query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST).add(realm, BooleanClause.Occur.FILTER).build();
             }
             if (names) query = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST)
@@ -521,9 +512,6 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     BooleanClause.Occur.MUST_NOT)
                 .add(new org.apache.lucene.search.PrefixQuery(new Term(entityField, PublicNameProjection.DIRECTORY)),
                     BooleanClause.Occur.MUST_NOT).build();
-            if (catalogue) {
-                query = new RankKindQuery(query, entityField, false);
-            }
             if (names && scope.resources() != null) {
                 if (scope.resources().size() > 64) throw new TextIndexException("name candidate bound exceeded");
                 List<org.apache.lucene.util.BytesRef> units = new ArrayList<>();
@@ -930,8 +918,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
         private final Query candidates;
         private final String entityField;
         private final boolean workNamesOnly;
+        private final boolean titleScores;
         RankKindQuery(Query candidates, String entityField, boolean workNamesOnly) {
-            this.candidates = candidates; this.entityField = entityField; this.workNamesOnly = workNamesOnly;
+            this(candidates, entityField, workNamesOnly, false);
+        }
+        RankKindQuery(Query candidates, String entityField, boolean workNamesOnly, boolean titleScores) {
+            this.candidates = candidates; this.entityField = entityField;
+            this.workNamesOnly = workNamesOnly; this.titleScores = titleScores;
         }
         private boolean admitted(Document doc) {
             String id = doc.get(entityField);
@@ -942,36 +935,44 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
         @Override public Query rewrite(IndexSearcher searcher) throws IOException {
             Query rewritten = candidates.rewrite(searcher);
-            return rewritten == candidates ? this : new RankKindQuery(rewritten, entityField, workNamesOnly);
+            return rewritten == candidates ? this : new RankKindQuery(rewritten, entityField, workNamesOnly, titleScores);
         }
         @Override public void visit(org.apache.lucene.search.QueryVisitor visitor) {
             candidates.visit(visitor.getSubVisitor(BooleanClause.Occur.MUST, this));
         }
         @Override public String toString(String field) {
-            return "rankKind(" + (workNamesOnly ? "work" : "catalogue") + "," + candidates.toString(field) + ")";
+            return "rankKind(" + (titleScores ? "titles" : workNamesOnly ? "work" : "catalogue") + "," + candidates.toString(field) + ")";
         }
         @Override public boolean equals(Object other) {
             return sameClassAs(other) && candidates.equals(((RankKindQuery) other).candidates)
                 && entityField.equals(((RankKindQuery) other).entityField)
-                && workNamesOnly == ((RankKindQuery) other).workNamesOnly;
+                && workNamesOnly == ((RankKindQuery) other).workNamesOnly
+                && titleScores == ((RankKindQuery) other).titleScores;
         }
-        @Override public int hashCode() { return java.util.Objects.hash(classHash(), candidates, entityField, workNamesOnly); }
+        @Override public int hashCode() { return java.util.Objects.hash(classHash(), candidates, entityField, workNamesOnly, titleScores); }
         @Override public org.apache.lucene.search.Weight createWeight(IndexSearcher searcher,
                 org.apache.lucene.search.ScoreMode mode, float boost) throws IOException {
-            return new org.apache.lucene.search.FilterWeight(this, searcher.createWeight(candidates, mode, boost)) {
+            return new org.apache.lucene.search.FilterWeight(this, searcher.createWeight(candidates,
+                    titleScores ? org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES : mode, boost)) {
                 // Query caching must not turn this candidate check into a
                 // whole-segment materialization.
                 @Override public boolean isCacheable(org.apache.lucene.index.LeafReaderContext context) { return false; }
                 @Override public org.apache.lucene.search.Explanation explain(org.apache.lucene.index.LeafReaderContext context, int doc) throws IOException {
-                    return admitted(context.reader().storedFields().document(doc, java.util.Set.of(entityField)))
-                        ? in.explain(context, doc) : org.apache.lucene.search.Explanation.noMatch("excluded catalogue kind");
+                    var identity = context.reader().storedFields().document(doc, java.util.Set.of(entityField));
+                    if (!admitted(identity)) return org.apache.lucene.search.Explanation.noMatch("excluded catalogue kind");
+                    var explanation = in.explain(context, doc);
+                    return titleScores && explanation.isMatch() ? org.apache.lucene.search.Explanation.match(
+                        titleScore(identity.get(entityField), boost), "catalogue title tier", explanation) : explanation;
                 }
                 @Override public org.apache.lucene.search.Matches matches(org.apache.lucene.index.LeafReaderContext context, int doc) throws IOException {
                     return admitted(context.reader().storedFields().document(doc, java.util.Set.of(entityField))) ? in.matches(context, doc) : null;
                 }
                 @Override public org.apache.lucene.search.ScorerSupplier scorerSupplier(org.apache.lucene.index.LeafReaderContext context) throws IOException {
                     var supplier = in.scorerSupplier(context);
-                    if (supplier == null) return null;
+                    // Non-scoring term suppliers can defer their absent-term
+                    // lookup until cost(). Do not build empty iterators for
+                    // every unrelated segment of the catalogue.
+                    if (supplier == null || supplier.cost() == 0) return null;
                     var stored = context.reader().storedFields();
                     return new org.apache.lucene.search.ScorerSupplier() {
                         @Override public long cost() { return supplier.cost(); }
@@ -979,27 +980,35 @@ public final class FilteredGraphTextIndex implements TextIndex {
                         @Override public org.apache.lucene.search.Scorer get(long cost) throws IOException {
                             var scorer = supplier.get(cost);
                             var innerPhase = scorer.twoPhaseIterator();
+                            String[] identity = new String[1];
                             var phase = new org.apache.lucene.search.TwoPhaseIterator(innerPhase == null ? scorer.iterator() : innerPhase.approximation()) {
                                 @Override public boolean matches() throws IOException {
                                     if (innerPhase != null && !innerPhase.matches()) return false;
-                                    return admitted(stored.document(approximation().docID(), java.util.Set.of(entityField)));
+                                    var document = stored.document(approximation().docID(), java.util.Set.of(entityField));
+                                    identity[0] = document.get(entityField);
+                                    return admitted(document);
                                 }
                                 @Override public float matchCost() { return 100f + (innerPhase == null ? 0 : innerPhase.matchCost()); }
                             };
                             return new org.apache.lucene.search.Scorer() {
                                 @Override public int docID() { return scorer.docID(); }
-                                @Override public float score() throws IOException { return scorer.score(); }
+                                @Override public float score() throws IOException { return titleScores ? titleScore(identity[0], boost) : scorer.score(); }
                                 @Override public org.apache.lucene.search.DocIdSetIterator iterator() { return org.apache.lucene.search.TwoPhaseIterator.asDocIdSetIterator(phase); }
                                 @Override public org.apache.lucene.search.TwoPhaseIterator twoPhaseIterator() { return phase; }
                                 @Override public int advanceShallow(int target) throws IOException { return scorer.advanceShallow(target); }
-                                @Override public float getMaxScore(int upTo) throws IOException { return scorer.getMaxScore(upTo); }
-                                @Override public void setMinCompetitiveScore(float score) throws IOException { scorer.setMinCompetitiveScore(score); }
+                                @Override public float getMaxScore(int upTo) throws IOException { return titleScores ? 2_000_000f * boost : scorer.getMaxScore(upTo); }
+                                // The inner constant score is not in title-tier
+                                // units, so a title threshold cannot prune it.
+                                @Override public void setMinCompetitiveScore(float score) throws IOException { if (!titleScores) scorer.setMinCompetitiveScore(score); }
                                 @Override public float smoothingScore(int doc) throws IOException { return scorer.smoothingScore(doc); }
                             };
                         }
                     };
                 }
             };
+        }
+        private static float titleScore(String id, float boost) {
+            return (id.startsWith(PublicNameProjection.PREFIX + "work:") ? 2_000_000f : 1_000_000f) * boost;
         }
     }
 
