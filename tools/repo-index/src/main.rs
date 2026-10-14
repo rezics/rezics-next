@@ -1,6 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use flate2::{Compression, write::DeflateEncoder};
 use oxc_allocator::Allocator;
+use oxc_ast::AstKind;
 use oxc_ast::ast::*;
 use oxc_ast_visit::{Visit, walk};
 use oxc_parser::Parser;
@@ -112,6 +113,45 @@ struct IndexedFile {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     parse_errors: Vec<String>,
     comments: Vec<Value>,
+    syntax: SyntaxFacts,
+}
+#[derive(Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SyntaxFacts {
+    has_functions: bool,
+    has_direct_calls: bool,
+    has_sql_queries: bool,
+    has_sql_operation_literals: bool,
+}
+fn sql_operation_literal(text: &str) -> bool {
+    let bytes = text.as_bytes();
+    if bytes
+        .windows(12)
+        .any(|part| part.eq_ignore_ascii_case(b"pg_advisory_"))
+    {
+        return true;
+    }
+    let mut at = 0;
+    while at < bytes.len() {
+        if !bytes[at].is_ascii_alphanumeric() && bytes[at] != b'_' {
+            at += 1;
+            continue;
+        }
+        let start = at;
+        while at < bytes.len() && (bytes[at].is_ascii_alphanumeric() || bytes[at] == b'_') {
+            at += 1;
+        }
+        if [
+            "select", "update", "insert", "delete", "begin", "commit", "rollback", "perform",
+            "create", "alter", "drop", "for",
+        ]
+        .iter()
+        .any(|word| bytes[start..at].eq_ignore_ascii_case(word.as_bytes()))
+        {
+            return true;
+        }
+    }
+    false
 }
 fn walk(
     path: &Path,
@@ -241,7 +281,11 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
     let mut references = Vec::new();
     if let Some(tree) = &tree {
         visit(tree, &mut |node| {
-            if let Some(relation) = node.get("RangeVar") {
+            // Some statements embed RangeVar directly (COPY, CREATE, ALTER),
+            // while SELECT wraps it in a Node enum. Inspect its actual fields
+            // so both representations produce one reference.
+            if node.get("relname").is_some() && node.get("schemaname").is_some() {
+                let relation = node;
                 let schema = relation["schemaname"].as_str().unwrap_or_default();
                 let name = relation["relname"].as_str().unwrap_or_default();
                 let name = if schema.is_empty() {
@@ -291,26 +335,98 @@ fn sql_facts_with_parse(sql: &str, parse: bool) -> SqlFacts {
     }
 }
 fn is_sql(text: &str) -> bool {
-    let lower = text.trim_start().to_ascii_lowercase();
-    [
-        "select ",
-        "insert ",
-        "update ",
-        "delete ",
-        "create ",
-        "alter ",
-        "drop ",
-        "truncate ",
-        "with ",
-        "lock ",
-        "do ",
-        "begin",
-        "--",
-        "/*",
-    ]
-    .iter()
-    .any(|prefix| lower.starts_with(prefix))
-        || lower.contains("pg_advisory_")
+    let mut input = text;
+    loop {
+        input = input.trim_start_matches(|ch: char| ch.is_ascii_whitespace() || ch == '(');
+        if input.starts_with("--") {
+            input = input.split_once('\n').map_or("", |(_, rest)| rest);
+        } else if let Some(comment) = input.strip_prefix("/*") {
+            let mut depth = 1;
+            let mut at = 0;
+            while at + 1 < comment.len() && depth > 0 {
+                match &comment.as_bytes()[at..at + 2] {
+                    b"/*" => {
+                        depth += 1;
+                        at += 2;
+                    }
+                    b"*/" => {
+                        depth -= 1;
+                        at += 2;
+                    }
+                    _ => at += 1,
+                }
+            }
+            if depth != 0 {
+                return false;
+            }
+            input = &comment[at..];
+        } else {
+            break;
+        }
+    }
+    let keyword = input.bytes().take_while(u8::is_ascii_alphabetic).count();
+    if input
+        .as_bytes()
+        .get(keyword)
+        .is_some_and(|byte| byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'.')
+    {
+        return false;
+    }
+    matches!(
+        input[..keyword].to_ascii_lowercase().as_str(),
+        "abort"
+            | "alter"
+            | "analyze"
+            | "begin"
+            | "call"
+            | "checkpoint"
+            | "close"
+            | "cluster"
+            | "comment"
+            | "commit"
+            | "copy"
+            | "create"
+            | "deallocate"
+            | "declare"
+            | "delete"
+            | "discard"
+            | "do"
+            | "drop"
+            | "end"
+            | "execute"
+            | "explain"
+            | "fetch"
+            | "grant"
+            | "import"
+            | "insert"
+            | "listen"
+            | "load"
+            | "lock"
+            | "merge"
+            | "move"
+            | "notify"
+            | "prepare"
+            | "reassign"
+            | "refresh"
+            | "reindex"
+            | "release"
+            | "reset"
+            | "revoke"
+            | "rollback"
+            | "savepoint"
+            | "security"
+            | "select"
+            | "set"
+            | "show"
+            | "start"
+            | "table"
+            | "truncate"
+            | "unlisten"
+            | "update"
+            | "vacuum"
+            | "values"
+            | "with"
+    )
 }
 fn indexed(
     source: Source,
@@ -328,6 +444,7 @@ fn indexed(
             sql_deflate: Some(compressed_sql(&sql)?),
             parse_errors: vec![],
             comments: vec![],
+            syntax: SyntaxFacts::default(),
         });
     }
     let allocator = Allocator::default();
@@ -355,10 +472,12 @@ fn indexed(
         resolver,
         imports: Vec::new(),
         candidates: Vec::new(),
+        syntax: SyntaxFacts::default(),
     };
     facts.visit_program(&parsed.program);
     let imports = facts.imports;
     let candidates = facts.candidates;
+    let syntax = facts.syntax;
     let parse_errors = parsed
         .diagnostics
         .into_iter()
@@ -372,6 +491,7 @@ fn indexed(
         sql_deflate: None,
         parse_errors,
         comments,
+        syntax,
     })
 }
 fn main() {
@@ -802,6 +922,135 @@ mod tests {
         assert!(tree.get("tree").is_none());
         assert!(tree.get("parseError").is_none());
     }
+    #[test]
+    fn statement_candidates_use_postgres_for_multiline_and_nonselect_sql() {
+        let root = env::current_dir().unwrap();
+        for text in [
+            "( /* heading /* nested */ end */ SELECT\n* FROM owner.records )",
+            "COPY owner.records TO STDOUT",
+            "GRANT SELECT ON TABLE owner.records TO PUBLIC",
+            "COMMENT ON TABLE owner.records IS 'retained'",
+        ] {
+            assert!(is_sql(text), "{text}");
+            let source = format!(
+                "const statement = {};",
+                serde_json::to_string(text).unwrap()
+            );
+            let facts = indexed(
+                Source {
+                    file: "statements.ts".into(),
+                    text: source,
+                },
+                &root,
+                &resolver(&root),
+                false,
+            )
+            .unwrap();
+            let bytes = STANDARD
+                .decode(&facts.sql_candidates[0].sql_deflate)
+                .unwrap();
+            let sql: Value =
+                serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                    .unwrap();
+            assert!(sql.get("tree").is_some(), "{text}: {sql}");
+            assert!(sql.get("parseError").is_none(), "{text}: {sql}");
+            if text.contains("SELECT\n") || text.starts_with("COPY") {
+                assert!(
+                    sql["references"]
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .any(|reference| reference["relation"] == "owner.records")
+                );
+            }
+        }
+        assert!(!is_sql("owner.records"));
+        assert!(!is_sql("table.records"));
+        assert!(!is_sql("create_key.records"));
+        assert!(!is_sql("selectivity of a population."));
+    }
+    #[test]
+    fn structural_facts_distinguish_types_factories_helpers_and_queries() {
+        let root = env::current_dir().unwrap();
+        for (text, functions, direct, queries) in [
+            (
+                "export type Callback = () => void; declare function run(): void;",
+                false,
+                false,
+                false,
+            ),
+            (
+                "export const schema = z.object({ name: z.string() });",
+                false,
+                false,
+                false,
+            ),
+            (
+                "export const run = (callback: () => void) => callback();",
+                true,
+                true,
+                false,
+            ),
+            (
+                "class Store { run() { this.helper(); } }",
+                true,
+                true,
+                false,
+            ),
+            ("const query = (db.query)('SELECT 1');", false, false, true),
+            (
+                "const query = db['execute']('SELECT 1');",
+                false,
+                false,
+                true,
+            ),
+            (
+                "const statement = 'SELECT pg_advisory_lock(23)';",
+                false,
+                false,
+                false,
+            ),
+        ] {
+            let facts = indexed(
+                Source {
+                    file: "syntax.ts".into(),
+                    text: text.into(),
+                },
+                &root,
+                &resolver(&root),
+                false,
+            )
+            .unwrap();
+            assert_eq!(facts.syntax.has_functions, functions, "{text}");
+            assert_eq!(facts.syntax.has_direct_calls, direct, "{text}");
+            assert_eq!(facts.syntax.has_sql_queries, queries, "{text}");
+            if text.contains("pg_advisory") {
+                assert!(!facts.sql_candidates.is_empty());
+                assert!(facts.syntax.has_sql_operation_literals);
+            }
+        }
+        for text in [
+            "prefix UPDATE suffix",
+            "FOR",
+            "PERFORM gate_lock()",
+            "pg_advisory_lock(23)",
+        ] {
+            assert!(sql_operation_literal(text));
+            let facts = indexed(
+                Source {
+                    file: "fragment.ts".into(),
+                    text: format!("const text = {};", serde_json::to_string(text).unwrap()),
+                },
+                &root,
+                &resolver(&root),
+                false,
+            )
+            .unwrap();
+            assert!(facts.syntax.has_sql_operation_literals);
+            assert!(!facts.sql_candidates.is_empty());
+        }
+        assert!(!sql_operation_literal("selectivity for_a_field"));
+    }
 }
 
 struct Facts<'r> {
@@ -811,6 +1060,7 @@ struct Facts<'r> {
     resolver: &'r Resolver,
     imports: Vec<Import>,
     candidates: Vec<SqlCandidate>,
+    syntax: SyntaxFacts,
 }
 impl Facts<'_> {
     fn import(&mut self, source: &str, type_only: bool) {
@@ -835,7 +1085,9 @@ impl Facts<'_> {
         elapsed(&RESOLVING, timing);
     }
     fn candidate(&mut self, text: String, start: u32, end: u32) {
-        if text.contains('.') || is_sql(&text) {
+        let sql_operation = sql_operation_literal(&text);
+        self.syntax.has_sql_operation_literals |= sql_operation;
+        if text.contains('.') || sql_operation || is_sql(&text) {
             self.candidates.push(SqlCandidate {
                 sql_deflate: compressed_sql(&sql_facts_with_parse(&text, is_sql(&text))).unwrap(),
                 text,
@@ -846,6 +1098,15 @@ impl Facts<'_> {
     }
 }
 impl<'a> Visit<'a> for Facts<'_> {
+    fn enter_node(&mut self, kind: AstKind<'a>) {
+        match kind {
+            AstKind::Function(function) if function.body.is_some() => {
+                self.syntax.has_functions = true
+            }
+            AstKind::ArrowFunctionExpression(_) => self.syntax.has_functions = true,
+            _ => {}
+        }
+    }
     fn visit_import_declaration(&mut self, node: &ImportDeclaration<'a>) {
         let type_only = node.import_kind == ImportOrExportKind::Type || node.specifiers.as_ref().is_some_and(|items| !items.is_empty() && items.iter().all(|item| matches!(item,ImportDeclarationSpecifier::ImportSpecifier(specifier) if specifier.import_kind == ImportOrExportKind::Type)));
         self.import(&node.source.value, type_only);
@@ -888,6 +1149,24 @@ impl<'a> Visit<'a> for Facts<'_> {
         walk::walk_ts_import_equals_declaration(self, node);
     }
     fn visit_call_expression(&mut self, node: &CallExpression<'a>) {
+        // Named calls and this.method calls are the helper-effect analyzer's
+        // executable call surfaces; member factories still leave SQL facts.
+        self.syntax.has_direct_calls |= match &node.callee {
+            Expression::Identifier(_) => true,
+            Expression::StaticMemberExpression(member) => {
+                matches!(&member.object, Expression::ThisExpression(_))
+            }
+            _ => false,
+        };
+        self.syntax.has_sql_queries |= match node.callee.get_inner_expression() {
+            Expression::StaticMemberExpression(member) => {
+                matches!(member.property.name.as_str(), "query" | "execute")
+            }
+            Expression::ComputedMemberExpression(member) => {
+                matches!(member.expression.get_inner_expression(), Expression::StringLiteral(name) if matches!(name.value.as_str(), "query" | "execute"))
+            }
+            _ => false,
+        };
         if matches!(&node.callee,Expression::Identifier(name) if name.name == "require") {
             if let Some(Argument::StringLiteral(source)) = node.arguments.first() {
                 self.import(&source.value, false);
