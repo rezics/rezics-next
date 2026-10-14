@@ -1261,7 +1261,7 @@ export class AccessAdmissionRegistry {
       // A shared gate no longer serializes retries of one key; this lock does.
       await lockAdmissionKey(client, principalId, request.action, request.idempotencyKey);
 
-      const existingResult = await client.query<AdmissionRow>(
+      const existingResult = authorityOnly ? { rows: [] } : await client.query<AdmissionRow>(
         `SELECT authority_witness, id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
                 authority_epoch, registered_at, expires_at, state, group_member_id, group_grant_id, group_generation,
                 direct_grant_id, direct_grant_generation, attribution_id, attribution_generation,
@@ -1279,26 +1279,26 @@ export class AccessAdmissionRegistry {
          WHERE principal_id = $1 AND action = $2 AND idempotency_key = $3`,
         [principalId, request.action, request.idempotencyKey]);
       const existing = existingResult.rows[0];
+      if (existing) {
+        // Receipt disclosure uses today's ordinary authority, independently of
+        // the saved witness that still decides whether this admission dispatches.
+        // The probe retains the same transaction's authority locks and writes
+        // no admission, proof, receipt or effect.
+        try { await this.registerRequest(request, client, true); }
+        catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
+      }
       if (existing && (existing.request_digest !== request.requestDigest
         || existing.acting_subject !== request.actingSubject
         || existing.authority_path !== authorityPath || existing.scope_id !== request.scope)) {
         throw new AdmissionConflict('idempotency key belongs to a different intent');
       }
-      let participationSources: AuthoritySource[] = [];
-      let participationDenied: AdmissionDenied | null = null;
-      // Fence Realm policy before selecting membership rows, as Realm managers
-      // do. A denied retry can still recover its receipt without dispatching.
-      try {
-        participationSources = await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
-      } catch (error) {
-        if (!(error instanceof AdmissionDenied) || !existing) throw error;
-        participationDenied = error;
-      }
+      // Fence Realm policy before selecting membership rows, as Realm managers do.
+      const participationSources = await requireRealmParticipation(client, request.scope, request.action, principalId, request.actingSubject);
       const selectedCurrent = !existing?.authority_witness
         || await authorityWitnessCurrent(client, existing.authority_witness);
       const policyAllowed = !existing || await admissionPolicyAllowed(client, principalId, request.actingSubject,
         request.scope, request.action, { witness: existing.authority_witness ?? [], eligible: selectedCurrent });
-      const witnessCurrent = !participationDenied && selectedCurrent && policyAllowed;
+      const witnessCurrent = selectedCurrent && policyAllowed;
 
       const ratingConfiguration = ratingConfigurationAction(request.action);
       const savedRating = existing && ratingConfiguration ? await savedRealmRatingProof(client, existing.id) : null;
@@ -1373,7 +1373,7 @@ export class AccessAdmissionRegistry {
           || savedZonePageContent(savedBaseline, existing.action) !== (zonePage.kind === 'zone' ? zonePage.zone : null)) {
           throw new AdmissionConflict('idempotency key belongs to a different intent');
         }
-        const dispatchEligible = !participationDenied && witnessCurrent
+        const dispatchEligible = witnessCurrent
           && request.principal.emailVerified === true
           && baselineWorkTypesAllowed(request)
           && ['registered', 'claimed'].includes(existing.state) && existing.eligible
@@ -1389,8 +1389,8 @@ export class AccessAdmissionRegistry {
           state: existing.state as RegisteredAdmission['state'], dispatchEligible, replayed: true };
       }
 
-      // A retry may recover the immutable receipt after authority changes. Its
-      // saved proof, rather than a newly selected alternative, decides dispatch.
+      // Current authority permits disclosure; the original selected proof,
+      // rather than a newly selected alternative, still decides dispatch.
       if (existing && authorityPath === 'represented-agent'
         && (request.action === 'work.create' && request.scope === 'work:create:root'
           || ['work.edit', 'relation.change', 'work.derive'].includes(request.action) && existing.represented_representation_id)) {
@@ -1436,8 +1436,8 @@ export class AccessAdmissionRegistry {
       }
 
       if (existing?.authority_witness) {
-        // Recover the original receipt even after its selected sources were
-        // revoked. A new alternative grant never repairs this admission.
+        // Current authority may disclose the original receipt. A newly selected
+        // alternative grant never repairs this admission's dispatch witness.
         if (!transaction) await client.query('COMMIT');
         return { id: existing.id, principalId, actingSubject: existing.acting_subject,
           authorityPath: existing.authority_path, scope: existing.scope_id, action: existing.action,
@@ -1485,7 +1485,6 @@ export class AccessAdmissionRegistry {
         { table: 'authority_subject', id: request.actingSubject },
       ];
       let publishingProof: RepresentedWorkProof | null = null;
-      if (participationDenied) throw participationDenied;
       authoritySources.push(...participationSources);
       const administratorCandidate = !existing && zonePage.kind !== 'refused' && authorityPath === 'represented-agent'
         && !memberReply
