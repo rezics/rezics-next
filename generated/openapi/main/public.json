@@ -516634,7 +516634,25 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "concepts": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "primaryConcept": {
                     "~elyTyp": 7,
                     "nullable": true,
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -516694,7 +516712,25 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "concepts": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "primaryConcept": {
                     "~elyTyp": 7,
                     "nullable": true,
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -516754,7 +516790,25 @@
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                     "type": "string"
                   },
+                  "concepts": {
+                    "items": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "maxItems": 8,
+                    "type": "array",
+                    "uniqueItems": true
+                  },
                   "expectedHead": {
+                    "~elyTyp": 7,
+                    "nullable": true,
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "primaryConcept": {
                     "~elyTyp": 7,
                     "nullable": true,
                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
@@ -516815,9 +516869,27 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "concepts": {
+                      "items": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "maxItems": 8,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
                     "placement": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "primaryConcept": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "profile": {
                       "const": "realm-reply-placement-v1",
@@ -516868,9 +516940,27 @@
               "application/json": {
                 "schema": {
                   "properties": {
+                    "concepts": {
+                      "items": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "maxItems": 8,
+                      "type": "array",
+                      "uniqueItems": true
+                    },
                     "placement": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "primaryConcept": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": [
+                        "string",
+                        "null"
+                      ]
                     },
                     "profile": {
                       "const": "realm-reply-placement-v1",
@@ -575914,6 +576004,15 @@
                 "month",
                 "all"
               ],
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "concept",
+            "required": false,
+            "schema": {
+              "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
               "type": "string"
             }
           },

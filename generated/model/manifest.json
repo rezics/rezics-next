@@ -1,5 +1,5 @@
 {
-  "commandModule": "0.5.40",
+  "commandModule": "0.5.41",
   "profiles": [
     {
       "id": "agent-erasure-v1",
@@ -685,7 +685,7 @@
     },
     {
       "id": "realm-reply-placement-v1",
-      "sha256": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
+      "sha256": "cefcd70e719ad3cbe6abf6b161ff6e58c63c66ba3fd8f8bb26e9e150cf97b0b8",
       "file": "shapes/realm-reply-placement-v1.ttl",
       "binding": {
         "required": [
@@ -4034,7 +4034,7 @@
     "contexts/realm-public-profile-v2.jsonld": "f195208fbeb53917778d651f9e3ad4652eb240013d3592d118b6c909c7b699f1",
     "contexts/realm-release-rating-context-v1.jsonld": "4fc40fca2efe60bafc880649eea0c609679800c9aaa70b4bb6068a8d38937e9c",
     "contexts/realm-release-rating-observation-v1.jsonld": "c03e3bc35348820ed7412098ab7e84624e9144c2c2987b2b1f6b624093e6ef60",
-    "contexts/realm-reply-placement-v1.jsonld": "ba60db48060881d5c2713b1ca0d16179b15d8b56856574bce842dc804c7fcb9a",
+    "contexts/realm-reply-placement-v1.jsonld": "1d3b43568b5e2f4a5b13a50acd66ee6f8e7ea719b4921dbd43fcea8119a6c43d",
     "contexts/realm-standing-rating-context-v1.jsonld": "b21ab6bd59692cb3ccc2fa388c55297e26aed4bba274d252c0f7075afa4bdd43",
     "contexts/realm-standing-rating-observation-v1.jsonld": "3b2e7d8c9a284496a933a3fdebd5194837000cce795e08b315489472a0cf356d",
     "contexts/realm-submission-selection-v1.jsonld": "20a61304008389e68dd9f15d1644144a248104a9fe4ec1abe2fbf841524a09a1",
@@ -4171,7 +4171,7 @@
     "shapes/realm-public-profile-v2.ttl": "2c5bdf0a1d434d2ddf5566a0ad56e8ea84290599a76e729837677d03c4f8b852",
     "shapes/realm-release-rating-context-v1.ttl": "a3edcb7334d29b923da433d5295aebf30d23d6dde295ebae32280e4fba275d49",
     "shapes/realm-release-rating-observation-v1.ttl": "e1926bc5e8371333a5d32adf9ec4f9f03bc3e1cdb89e458e22006fa60775fecb",
-    "shapes/realm-reply-placement-v1.ttl": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
+    "shapes/realm-reply-placement-v1.ttl": "cefcd70e719ad3cbe6abf6b161ff6e58c63c66ba3fd8f8bb26e9e150cf97b0b8",
     "shapes/realm-standing-rating-context-v1.ttl": "7bec3a7793417ef4138e54a6220ceaec7aa76e446df3a9fdadc9d1ba5cc35fab",
     "shapes/realm-standing-rating-observation-v1.ttl": "d824ac73cde5f8a3a67f83339c4a3db9b982a8223b04f2277981d6adba33caa4",
     "shapes/realm-submission-selection-v1.ttl": "9bfc405a024d6db800620c6080cfc98cbae49cf027f57e41ca007337943c8996",
@@ -4241,8 +4241,8 @@
     "shapes/zone-capability-v1.ttl": "a7296e09f052999c0578caa2894ebdbd272cedd04357e4f291e2506e73eed611",
     "shapes/zone-presentation-v1.ttl": "6aecbd83013a8a9f9e2dc712d26b6450df29554f2f2c7d6174c2897b418bece7",
     "shapes/zone-presentation-v2.ttl": "e331efea63e2bfb3ce883fb4d005ab63d7dd976973e43fd1599f655eef3ea730",
-    "packages/model/src/generated/profiles.ts": "f5fcfab407c8e88ef9ca1b7d664d9a198c7eb9a8c0aece31ec93b6c8b1bf7947",
-    "packages/model/src/generated/schemas.ts": "4fb7524a539f99acd4a4856fae614bab56786f77cab329f79027da1a5886c392",
-    "packages/model/src/generated/vocabulary.ts": "0ab3220f5d13708ce9e2097bbb1f498caf3f966bc06a4b4051a07e95d3b247cc"
+    "packages/model/src/generated/profiles.ts": "2effe7a09e8d28f4ca9fa0f0dd02b0022d4be87c2217feb701fb23de2f8df2ce",
+    "packages/model/src/generated/schemas.ts": "5ed6fbc3d0542d430821fb75ad1dea8f5e7abf2f03981376b1c235262047ef90",
+    "packages/model/src/generated/vocabulary.ts": "6d48547035823316b60de2da384a7ef2149ab5d679b30d24ce3d91962bfec43d"
   }
 }

@@ -24,6 +24,10 @@
       "@id": "https://rezics.com/vocab/author",
       "@type": "@id"
     },
+    "rv:concept": {
+      "@id": "https://rezics.com/vocab/concept",
+      "@type": "@id"
+    },
     "rv:contentDigest": {
       "@id": "https://rezics.com/vocab/contentDigest"
     },
@@ -73,6 +77,10 @@
     },
     "rv:previousPlacement": {
       "@id": "https://rezics.com/vocab/previousPlacement",
+      "@type": "@id"
+    },
+    "rv:primaryConcept": {
+      "@id": "https://rezics.com/vocab/primaryConcept",
       "@type": "@id"
     },
     "rv:realm": {

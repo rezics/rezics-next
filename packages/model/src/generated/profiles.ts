@@ -867,7 +867,7 @@ export const profileRegistry = {
     ]
   },
   "realm-reply-placement-v1": {
-    "sha256": "b939a1b25d6351a97f4ac0cf48240a0bf76a3f61b51e1ace558348fd382eb511",
+    "sha256": "cefcd70e719ad3cbe6abf6b161ff6e58c63c66ba3fd8f8bb26e9e150cf97b0b8",
     "file": "shapes/realm-reply-placement-v1.ttl",
     "shapes": [
       "https://rezics.com/definition/realm-reply-placement-v1/slot-shape",
