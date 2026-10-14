@@ -385,6 +385,32 @@ admitted recording/Post without misidentifying it as a RecipeStep or Work.
 
 ### Existing data and retained history
 
+#### Existing data inventory (2026-10-14)
+
+This is a partial inventory, not clearance to reset. Read-only HTTP reads used
+the shared dev Main at `http://localhost:3001` (`task urls`), data epoch
+`8c483e38-59e7-4d95-b27b-de9cd6742a3e`. Counts below distinguish retained inputs,
+recorded answers and live resources; they are not additive. Unknown means
+unobserved, not zero. No owner data was written or live storage copied.
+
+| Item and count | Read producing the count | Classification and reason |
+| --- | --- | --- |
+| **34 distinct public Recipe Works found**, a lower bound; **34 null Recipe pages** | `GET /v1/search/catalogue?q={title}&limit=20` for each of the 30 pinned titles and four demo titles, deduplicated by Work, with no continuation returned; then `GET /v1/recipes/works/{id}` for every match (all 200/null). `GET /v1/works?type=https%3A%2F%2Fschema.org%2FRecipe&limit=20` reports `stale:true`, so its directory is not an inventory authority. | **Needs conversion/preservation until provenance is established.** Public text selection is observable, but a null Recipe page does not prove absent drafts, imported structures or publication history. Reimport alone cannot preserve owned edits, identities or publication decisions. |
+| Owned Recipe drafts and total publications: **unknown** | `GET /v1/me/contributions?limit=20` returned 401; public title searches cannot enumerate private owners or historical publications. | **Needs conversion** for non-disposable authored text, quantities, notes, occurrence identities/order, measures and decisions. Only demonstrated disposable imports can be rebuilt. |
+| Source supports, active/withdrawn totals: **unknown** | `GET /v2/works/01a1309f-2284-767b-a557-629aea689a2f/source-supports` returned 401. Field-support reads also require catalogue-import authority ([owner routes](../../services/main/src/routes/source-supports.ts)). | **Needs conversion** of support bindings, withdrawal/erasure state, rights and replay custody. Retained source text cannot reconstruct later withdrawal decisions; reimport must not resurrect them. |
+| Exact Recipe revision pins held by other resources: **unknown** | The 34 Recipe page reads exposed no Structure revisions; public search exposes selected text revisions, not a reverse inventory of Recipe dependencies. [Exact composition reads](../../services/main/src/routes/compositions.ts) require known Structure/revision IDs and disclosure. | **Needs conversion** with explicit old-to-new revision/occurrence correspondence and dependent-owner verification. New import heads cannot substitute for exact historical pins. |
+| **6 Recipe answer records, 1,156 samples; 116 samples containing Recipe payloads** | Read all `tests/qa/fixtures/outcomes/**/*.json`, counting samples whose request body or answer recursively contains `@type:Recipe`, `recipe-work-page-v1`, `recipe-composition`, `ingredient-line` or `recipe-step`. Payload counts: [author](../../tests/qa/fixtures/outcomes/recipes/author-a-recipe.json) 41, [exchange](../../tests/qa/fixtures/outcomes/recipes/exchange-recipes.json) 44, [reading](../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json) 31; the other three Recipe records contain no such payloads. | **Needs conversion and re-recording through replacement API proofs.** These are old contract evidence, not retained import sources. Preserve the existing evidence until the replacement proves the same outcomes. |
+| **30 Gutenberg extracts from 2 retained editions: 20 English / 10 Italian; 173 ingredient lines (111 / 62)** | Read [extract pins](../../tests/fixtures/gutenberg/recipe-extract-pins.json) and [fixture lock](../../tests/fixtures/fixtures.lock.json); `launchRecipeSources()` in [the corpus builder](../../scripts/load/launch-corpus.ts) verified retained byte sizes/digests, source digests and extract counts. | **Rebuildable by reimport** from retained full text and exact line pins under the revised mapping. Keep source bytes, credit, language and unparsed wording. This classifies the inputs, not all live descendants. |
+| **4 demo Recipe definitions; 1 authored editor fixture with 6 nodes and 3 measures; 1 JSON file-import fixture** | Read [demo plan](../../scripts/dev/seed/plan.ts), [pancake seed](../../scripts/dev/seed/recipes-step.ts), [editor fixture](../../apps/web/features/recipe-editor/fixtures.ts), and [import file](../../tests/qa/integration/recipe-file-import.fixture.json). | Demo/import inputs are **rebuildable** by seed/reimport; the editor fixture **needs conversion** to the new contract because no retained source import recreates its authored occurrence/reference and measurement cases. Runtime test builders likewise need revised fixtures and proofs. |
+
+Completion requires authenticated owner/operator enumeration and a consistent
+backup of the shared dev cut restored into an isolated stack for any direct
+inspection. No such shared-dev recovery set was identified; retained QA corpus
+backups are different populations. Taking a new shared backup engages owner
+fences and is outside this read-only inventory. Until that cut establishes draft,
+support/withdrawal and dependent-pin totals, decision 4 remains open and no
+unobserved data is classified as disposable.
+
 [Recipe exchange practice](../contracts/recipe-exchange.md) says there is no
 production Recipe data requiring a compatibility reader/migration and that
 retained corpora, including thirty Gutenberg recipes, are reimported. This note
