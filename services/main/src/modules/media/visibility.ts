@@ -3,7 +3,7 @@ import type { VerifiedPrincipal } from '../access/admission.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import type { DisclosureTarget } from '../disclosure/read.ts';
 import type { Viewer } from '../suitability/policy.ts';
-import type { WorkActivationEnvironment } from '../work/activate.ts';
+import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readResourceSummaries, type SummaryReader } from './summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaUnavailable } from './store.ts';
 
@@ -24,9 +24,8 @@ type Gate = (targets: readonly DisclosureTarget[], viewer: Viewer,
 const gateOwner = Symbol('mediaVisibility');
 type MediaEnvironment = WorkActivationEnvironment & { [gateOwner]?: Gate };
 
-/** Issued occurrences resolve only their exact Use attachment. Bare Asset
- * representations and exports retain the conservative inventory audience
- * and fail closed when it exceeds one page. */
+/** Exact Uses resolve their own attachment; bare bytes need a readable current
+ * attachment and fail closed when their owner inventory exceeds one page. */
 export function configureMediaVisibility(deps: MainWorkDependencies): void {
   if (!deps.media) return;
   const store = deps.media.store;
@@ -108,8 +107,36 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
         byContext.set(attachment.context, resources);
       }
     }
+    // Context identity is owner data, not permission. Ask the existing Realm
+    // reader for its live disclosure; a public Work cannot grant a private or
+    // closed Realm's Use an independent audience.
+    const realmContexts = new Set<string>();
+    const contexts = [...byContext.keys()].filter(context => context !== DEFAULT_MEDIA_CONTEXT);
+    for (let offset = 0; offset < contexts.length; offset += 64) {
+      const batch = contexts.slice(offset, offset + 64);
+      const rows = (await deps.environment.fuseki.query(`PREFIX rv: <${RV}>
+        SELECT ?realm WHERE { VALUES ?realm { ${batch.map(iri).join(' ')} }
+          GRAPH ${iri(GRAPHS.current)} { ?realm a rv:Realm } } LIMIT 65`)).results?.bindings ?? [];
+      if (rows.length > 64) throw new MediaUnavailable('Realm context identity batch is incomplete');
+      for (const row of rows) {
+        const realm = row.realm?.value;
+        if (!realm || !batch.includes(realm)) throw new MediaUnavailable('Realm context identity is invalid');
+        realmContexts.add(realm);
+      }
+    }
+    const readableRealms = new Set<string>();
+    const realms = [...realmContexts];
+    for (let offset = 0; offset < realms.length; offset += 64) {
+      const result = await readResourceSummaries(deps.environment, undefined, reader, {
+        resources: realms.slice(offset, offset + 64), context: DEFAULT_MEDIA_CONTEXT,
+        language: null, channel: 'media',
+      });
+      for (const summary of result.summaries)
+        if (summary.status === 'available' && summary.type === 'realm') readableRealms.add(summary.reference);
+    }
     const readable = new Set<string>();
     for (const [context, resources] of byContext) {
+      if (realmContexts.has(context) && !readableRealms.has(context)) continue;
       const references = [...resources];
       for (let offset = 0; offset < references.length; offset += 64) {
         const result = await readResourceSummaries(deps.environment, undefined, reader, {
@@ -129,13 +156,12 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       // A media target may name a Work for governance rather than an Asset or Use.
       if (!fact) return !probe.exactUse;
       // An exact Use must still be attached, including mutable selection slots.
-      if (probe.exactUse && fact.attachments.length !== 1) return false;
+      if ((probe.exactUse || fact.exactUse) && fact.attachments.length !== 1) return false;
       if (fact.blocked || fact.attachmentOverflow) return false;
       if ((fact.disclosure !== 'public' || fact.pending) && !(canManage && actor === fact.owner))
         return false;
-      return fact.attachments.every((attachment) =>
-        readable.has(`${attachment.context}\0${attachment.target}`),
-      );
+      return fact.attachments.length === 0 || fact.attachments.some((attachment) =>
+        readable.has(`${attachment.context}\0${attachment.target}`));
     });
   };
 }
@@ -158,6 +184,8 @@ export async function mediaVisibility(
 
 export interface MediaVisibilityFact {
   owner: string;
+  /** Actual owner lookup distinguished a Use from its Asset inventory. */
+  exactUse?: boolean;
   disclosure: string;
   pending: boolean;
   blocked: boolean;

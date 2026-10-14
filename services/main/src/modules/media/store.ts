@@ -538,7 +538,7 @@ export class MediaStore {
     const ids = references.map(reference => nativeId.test(reference) ? reference.slice(ID.length) : null);
     const rows = (await this.pool.query(`WITH requested AS (
       SELECT * FROM unnest($1::text[],$2::uuid[]) AS q(reference,id))
-      SELECT q.reference,a.owner,s.disclosure,
+      SELECT q.reference,a.owner,s.disclosure,requested_use.id IS NOT NULL AS exact_use,
         EXISTS (SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id
           AND j.profile=$3 AND j.status IN ('queued','leased')) AS pending,
         s.lifecycle <> 'active' OR s.moderation <> 'none' OR EXISTS (
@@ -571,7 +571,8 @@ export class MediaStore {
           LIMIT 65) u
       ) attachment ON true`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
     return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,
-      disclosure: row.disclosure as string, pending: row.pending as boolean, blocked: row.blocked as boolean,
+      disclosure: row.disclosure as string, exactUse: row.exact_use as boolean,
+      pending: row.pending as boolean, blocked: row.blocked as boolean,
       attachmentOverflow: row.attachment_overflow as boolean,
       attachments: row.attachments as MediaVisibilityFact['attachments'] }]));
   }
@@ -1291,7 +1292,7 @@ export class MediaStore {
     return settledContentPosition(this.pool, operationId);
   }
 
-  /** Delivery basis for a publication item or immutable campaign art Use. */
+  /** Delivery basis for an exact Use; its current context decides disclosure. */
   async itemDelivery(use: string) {
     if (!uuid.test(use)) return null;
     return (await this.itemDeliveryBatch([use])).get(use) ?? null;
@@ -1315,7 +1316,7 @@ export class MediaStore {
         AND u.role LIKE 'campaign-%'
       LEFT JOIN content.outbox campaign_event ON campaign_event.operation_id = campaign_receipt.operation_id
         AND campaign_event.event_type = 'media.use.created'
-      WHERE u.id = ANY($1::uuid[]) AND (u.role = 'publication-item' OR u.role LIKE 'campaign-%')
+      WHERE u.id = ANY($1::uuid[])
         AND NOT a.cover_only AND media.delivery_clearance(p) = 'cleared'`,
     [[...new Set(uses)]])).rows : [];
     return new Map(rows.map(row => [row.use as string, { target: row.target as string, asset: row.asset_id as string,

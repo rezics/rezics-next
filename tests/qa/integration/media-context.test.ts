@@ -3,10 +3,17 @@ import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { png, sha, startMediaStack, type MediaStack } from './media-support.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../../../services/main/src/modules/media/contract.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
+import { personaSessions, type PersonaSession, type PersonaSessions } from '../support/personas.ts';
+import { closureCommand, closureCredit, closureOriginal, effectClosure, publishClosureRule } from './outcomes/realm/closure-fixture.ts';
 
 let started: Promise<MediaStack> | undefined;
 const stack = () => started ??= startMediaStack('media-context');
-afterAll(async () => { if (started) await (await started).stop(); });
+const deliverySessions: PersonaSessions[] = [];
+afterAll(async () => {
+  for (const sessions of deliverySessions) await sessions.close();
+  if (started) await (await started).stop();
+});
 
 test('media accepts the platform global context for an independent document image use', async () => {
   const s = await stack();
@@ -125,4 +132,122 @@ test('media context inputs share default selection, retry identity and storage w
   expect((await download('urn:invalid:context')).status).toBe(400);
   console.info('Media context input covered', JSON.stringify({ surface: 'asset download',
     global: 200, legacy: 200, native: 200, invalid: 400 }));
+}, 240_000);
+
+const deliveryBytes = new Uint8Array(Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGNQnBb8HwAD8AIKCU5mOAAAAABJRU5ErkJggg==', 'base64'));
+
+let documentFixture: ReturnType<typeof createDocumentUses> | undefined;
+const documentUses = () => documentFixture ??= createDocumentUses();
+
+async function createDocumentUses() {
+  const visibility = 'public';
+  const sessions = await personaSessions(visibility);
+  deliverySessions.push(sessions);
+  const author = sessions.member;
+  const original = await closureOriginal(author, `Media ${visibility} context original`);
+  const reservation = await closureCommand<{ asset: string; upload: string; uploadUrl: string }>(author,
+    'POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null,
+      mediaType: 'image/png', byteLength: deliveryBytes.length, sha256: sha(deliveryBytes),
+      disclosure: 'public', actingSubject: author.actingSubject }, 201);
+  const activated = await author.main('PUT', reservation.uploadUrl, undefined, undefined,
+    { bytes: deliveryBytes, headers: { 'content-type': 'application/octet-stream' } });
+  expect(activated.status, await activated.clone().text()).toBe(201);
+  const image = await activated.json() as { representation: string };
+  const deadline = performance.now() + 30_000;
+  while ((await closureCommand<{ clearance: string }>(author, 'GET',
+    `/v1/media/uploads/${reservation.upload}`)).clearance !== 'cleared') {
+    expect(performance.now()).toBeLessThan(deadline);
+    await Bun.sleep(100);
+  }
+  const create = (context: string) => closureCommand<{ use: string }>(author, 'POST', '/v1/media/uses', {
+    actingSubject: author.actingSubject, target: original.work, representation: image.representation,
+    occurrence: randomUUID(), context, conceal: false,
+  }, 201);
+  const scoped = await create(sessions.realm);
+  const global = await create('urn:rezics:context:global');
+  const pool = boundedPool({ connectionString: process.env.CONTENT_DATABASE_URL, max: 1 });
+  try {
+    const persisted = await pool.query<{ id: string; context: string; role: string; target: string }>(
+      'SELECT id,context,role,target FROM media.use WHERE id = ANY($1::uuid[]) ORDER BY id',
+      [[scoped.use, global.use]]);
+    expect(persisted.rows).toHaveLength(2);
+    expect(persisted.rows.find(row => row.id === scoped.use)).toMatchObject({
+      context: sessions.realm, role: 'document-image', target: original.work,
+    });
+    expect(persisted.rows.find(row => row.id === global.use)?.context).toBe(DEFAULT_MEDIA_CONTEXT);
+    const realm = await sessions.visitor.main('GET', `/v1/realms/${sessions.realm.slice(-36)}`);
+    const target = await sessions.visitor.main('GET', `/v1/resources/${original.work.slice(-36)}?${
+      new URLSearchParams({ context: sessions.realm })}`);
+    console.info('Media Use context confirmation', JSON.stringify({ visibility, persisted: persisted.rows,
+      visitorRealm: { status: realm.status, answer: await realm.text() },
+      visitorTarget: { status: target.status, answer: await target.text() } }));
+    expect(realm.status, 'Public Realm disclosure must be established before a delivery repair')
+      .toBe(200);
+    expect(target.status, 'The document must be publicly readable').toBe(200);
+  } finally { await pool.end(); }
+  return { sessions, original, image, scoped: scoped.use, global: global.use };
+}
+
+async function useAvailable(person: PersonaSession, use: string) {
+  const query = person.actingSubject ? `?${new URLSearchParams({ actingSubject: person.actingSubject })}` : '';
+  const path = `/v1/media/uses/${use}${query}`;
+  const response = await person.main('GET', path);
+  expect(response.status, await response.clone().text()).toBe(200);
+  expect(sha(new Uint8Array(await response.arrayBuffer()))).toBe(sha(deliveryBytes));
+  expect(response.headers.get('etag')).toBe(`"${sha(deliveryBytes)}"`);
+  const conditional = await person.main('GET', path, undefined, undefined,
+    { headers: { 'if-none-match': `"${sha(deliveryBytes)}"` } });
+  expect(conditional.status).toBe(304);
+  expect((await conditional.arrayBuffer()).byteLength).toBe(0);
+}
+
+async function useAbsent(person: PersonaSession, use: string) {
+  const query = person.actingSubject ? `?${new URLSearchParams({ actingSubject: person.actingSubject })}` : '';
+  for (const headers of [{}, { 'if-none-match': `"${sha(deliveryBytes)}"` }]) {
+    const response = await person.main('GET', `/v1/media/uses/${use}${query}`, undefined, undefined, { headers });
+    const absent = await person.main('GET', `/v1/media/uses/${randomUUID()}${query}`, undefined, undefined, { headers });
+    expect(response.status).toBe(404);
+    expect(response.status).toBe(absent.status);
+    expect(await response.json()).toEqual(await absent.json());
+    expect(response.headers.get('etag')).toBeNull();
+    expect(response.headers.get('last-modified')).toBeNull();
+  }
+}
+
+async function setRealmVisibility(sessions: PersonaSessions, visibility: 'public' | 'private') {
+  const path = `/v1/spaces/${sessions.space.slice(-36)}/settings`;
+  const current = await closureCommand<{ generation: string }>(sessions.owner, 'GET',
+    `${path}?${new URLSearchParams({ actingSubject: sessions.owner.actingSubject! })}`);
+  await closureCommand(sessions.owner, 'PUT', path, { actingSubject: sessions.owner.actingSubject,
+    expectedGeneration: current.generation, settings: { visibility, listing: 'listed',
+      admission: visibility === 'public' ? 'open' : 'request', history: 'everything' },
+    reason: 'Exercise the current Use context disclosure' }, 201);
+}
+
+test('unreadable Realm document image Use is absent to visitor and stranger but available to its member', async () => {
+  const f = await documentUses();
+  await setRealmVisibility(f.sessions, 'private');
+  try {
+    const memberRealm = await f.sessions.member.main('GET', `/v1/realms/${f.sessions.realm.slice(-36)}?${
+      new URLSearchParams({ actingSubject: f.sessions.member.actingSubject! })}`);
+    expect(memberRealm.status, await memberRealm.clone().text()).toBe(200);
+    await useAbsent(f.sessions.visitor, f.scoped);
+    await useAbsent(f.sessions.stranger, f.scoped);
+    await useAvailable(f.sessions.member, f.scoped);
+    await useAvailable(f.sessions.visitor, f.global);
+    await closureCredit(f.sessions.visitor, f.original.work, f.sessions.member);
+  } finally { await setRealmVisibility(f.sessions, 'public'); }
+}, 240_000);
+
+test('document image Use follows public Realm disclosure and closure while its independent global Use survives', async () => {
+  const f = await documentUses();
+  await useAvailable(f.sessions.visitor, f.scoped);
+  await useAvailable(f.sessions.visitor, f.global);
+  await closureCredit(f.sessions.visitor, f.original.work, f.sessions.member);
+  await effectClosure(f.sessions, await publishClosureRule(f.sessions));
+  await useAbsent(f.sessions.visitor, f.scoped);
+  await useAbsent(f.sessions.member, f.scoped);
+  await useAvailable(f.sessions.visitor, f.global);
+  await closureCredit(f.sessions.visitor, f.original.work, f.sessions.member);
 }, 240_000);
