@@ -180,8 +180,8 @@ export function ZoneBrowse({ model, card, messages, header }: {
       {model.notes.map(note => <p key={note} className="flex items-start gap-2 text-muted-foreground text-sm">
         <InfoIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />{note}</p>)}
       {model.items.length ? list(model.items) : <EmptyState icon={SearchXIcon}
-        title={model.basis && !model.basis.window.complete ? messages.browseIncompleteTitle : messages.browseEmptyTitle}
-        description={model.basis && !model.basis.window.complete ? messages.catalogueIncomplete : messages.browseEmptyBody} headingLevel={3}>
+        title={model.complete === false ? messages.browseIncompleteTitle : messages.browseEmptyTitle}
+        description={model.complete === false ? messages.catalogueIncomplete : messages.browseEmptyBody} headingLevel={3}>
         {model.clearHref ? <LocalizedLink href={model.clearHref} className={buttonVariants({ variant: 'outline' })}>
           {messages.clearAll}</LocalizedLink> : null}
       </EmptyState>}

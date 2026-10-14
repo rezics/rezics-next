@@ -164,6 +164,7 @@ export async function applyCatalogueYear({ view, search, model }: {
     yearControl.bounded = roster.incomplete;
     const t = materializeData(view.zoneMessages, { locale: view.context.locale });
     const open = roster.incomplete || nextCursor !== null;
+    model.complete = !open;
     model.results = open
       ? t.resultsAtLeast({ count: String(found.length) }) : t.results(found.length);
   }

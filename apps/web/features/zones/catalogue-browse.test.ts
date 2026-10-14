@@ -72,6 +72,7 @@ test('the restored all-years directory pages the publication-year template in it
     const result = await applyCatalogueYear({ view, search, model: page }, { publicationYears, zoneBrowse });
     const requested = calls.slice(before);
     expect(result.failure).toBeNull();
+    expect(page.complete).toBe(page.next === null);
     expect(requested.length).toBeGreaterThan(0);
     expect(requested.length).toBeLessThanOrEqual(YEAR_PAGES);
     expect(requested.every(call => call.fromYear === undefined && call.toYear === undefined)).toBe(true);

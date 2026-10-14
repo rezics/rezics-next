@@ -39,6 +39,7 @@ export interface BrowseModel {
   items: ZoneWork[];
   next: string | null;
   first: string | null;
+  complete?: boolean;
   basis?: Pick<ZoneBrowsePage, 'sourcePosition' | 'window' | 'tags' | 'matches'>;
 }
 
@@ -142,7 +143,7 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     sorts, views,
     results: page.matches.kind === 'exact' ? t.results(page.matches.value)
       : t.resultsAtLeast({ count: String(page.matches.value) }),
-    notes, items: page.items,
+    notes, items: page.items, complete: page.window.complete,
     ...(page.sourcePosition ? { basis: { sourcePosition: page.sourcePosition, window: page.window,
       tags: page.tags, matches: page.matches } } : {}),
     next: page.nextCursor ? browseHref(base, { ...state, cursor: page.nextCursor }) : null,
