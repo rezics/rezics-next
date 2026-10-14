@@ -99,7 +99,8 @@ const envelope = Compile({ type: 'object', additionalProperties: false,
     version: { const: 1 }, row: { type: 'string', pattern: '^[a-z0-9-]+/[a-z0-9-]+$' },
     personas: { type: 'object', additionalProperties: false, required: [...answerPersonas],
       properties: Object.fromEntries(answerPersonas.map(persona => [persona,
-        { type: 'array', minItems: 1, items: sampleSchema }])) },
+        // A production journey may stop at sign-in before it sends any API request.
+        { type: 'array', items: sampleSchema }])) },
   },
 });
 
