@@ -7,10 +7,14 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import type { ZoneSiteRecordedLoad } from '../zones/zone-site-recorded-page.ts';
+import { browserZoneAuthoring } from './api.ts';
 import { readZoneManagementFrame } from './authoring-reads.ts';
 import { zoneManagementReturnAddress } from './management-address.ts';
 import { zoneHomeDocument } from './home-document.tsx';
-import { readZonePublicationRecorded, recordedActingPerson } from './zone-publication-recorded-page.ts';
+import {
+  publicationTarget, readZonePublicationFrame, readZonePublicationRecorded, readZonePublicationRoute,
+  recordedActingPerson, recordedPublicationChoice,
+} from './zone-publication-recorded-page.ts';
 
 const record = publication as AnswerRecord;
 const disposals: (() => void)[] = [];
@@ -330,3 +334,227 @@ test('a signed-in site read keeps its acting Person, and the anonymous reread do
     .toBe(actingSubject('stranger', 'site-home-presentation'));
   expect(recordedActingPerson(record, 'visitor', [{ label: 'site-home-presentation', state: 'populated' }])).toBeNull();
 });
+
+function watched(persona: AnswerPersona, selections: readonly RecordedSelection[], sequence = false) {
+  const transport = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX, sequence });
+  disposals.push(transport.dispose);
+  const paths: string[] = [];
+  const fetcher: typeof fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
+    const raw = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+    const url = new URL(raw, 'https://recorded.invalid');
+    paths.push(url.pathname.slice(BFF_PREFIX.length) + url.search);
+    return transport.fetcher(input, init);
+  }, { preconnect: globalThis.fetch.preconnect });
+  return { fetcher, paths };
+}
+
+const publishedFrame = [
+  { label: 'frame-published-address', state: 'populated' },
+  { label: 'frame-published-presentation', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+const signedFrame = [
+  ...publishedFrame,
+  { label: 'frame-published-joining', state: 'populated' },
+  { label: 'frame-published-follow', state: 'populated' },
+  { label: 'frame-published-platform-access', state: 'populated' },
+  { label: 'frame-published-member-ban', state: 'error' },
+] as const satisfies readonly RecordedSelection[];
+
+test('visitor frame read keeps the published cut and the anonymous Realm header', async () => {
+  const answer = homeAnswer('visitor', 'frame-published-presentation');
+  const header = sample('visitor', 'frame-published-realm-header').answer as { name: { value: string } };
+  const visit = watched('visitor', publishedFrame);
+  const target = publicationTarget(record, 'visitor', publishedFrame);
+  if (target.mode !== 'frame') throw new Error('published frame has no presentation');
+  const view = await readZonePublicationFrame(visit.fetcher, target.space, 'en', target.actingSubject, target.homeRoute);
+  const presentation = sample('visitor', 'frame-published-presentation').path;
+  expect(visit.paths).toEqual([
+    sample('visitor', 'frame-published-address').path,
+    presentation,
+    sample('visitor', 'frame-published-realm-header').path,
+    presentation,
+  ]);
+  expect(target.actingSubject).toBeNull();
+  expect(view.kind).toBe('attached');
+  expect(view.realmName?.value).toBe(header.name.value);
+  expectPublished({ mapped: view.mapped, presentation: view.presentation, address: null }, answer);
+});
+
+test('a signed-in frame read requests membership, platform access and the member ban', async () => {
+  const persona = 'stranger' as const;
+  const answer = homeAnswer(persona, 'frame-published-presentation');
+  const visit = watched(persona, signedFrame);
+  const target = publicationTarget(record, persona, signedFrame);
+  if (target.mode !== 'frame') throw new Error('signed frame has no presentation');
+  const view = await readZonePublicationFrame(visit.fetcher, target.space, 'en', target.actingSubject, target.homeRoute);
+  const presentation = sample(persona, 'frame-published-presentation').path;
+  expect(visit.paths).toEqual([
+    sample(persona, 'frame-published-address').path,
+    presentation,
+    sample(persona, 'frame-published-realm-header').path,
+    sample(persona, 'frame-published-joining').path,
+    sample(persona, 'frame-published-follow').path,
+    sample(persona, 'frame-published-platform-access').path,
+    sample(persona, 'frame-published-member-ban').path,
+    presentation,
+  ]);
+  expect(sample(persona, 'frame-published-address').path).not.toContain('actingSubject');
+  expect(presentation).toContain(`actingSubject=${encodeURIComponent(target.actingSubject ?? '')}`);
+  expect(sample(persona, 'frame-published-member-ban').status).toBe(404);
+  expectPublished({ mapped: view.mapped, presentation: view.presentation, address: null }, answer);
+});
+
+test('visitor empty frame stays empty after the address resolves', async () => {
+  const selections = [
+    { label: 'frame-empty-address', state: 'populated' },
+    { label: 'empty-home-presentation', state: 'empty' },
+  ] as const satisfies readonly RecordedSelection[];
+  const answer = homeAnswer('visitor', 'empty-home-presentation');
+  const visit = watched('visitor', selections);
+  const target = publicationTarget(record, 'visitor', selections);
+  if (target.mode !== 'frame') throw new Error('empty frame has no presentation');
+  const view = await readZonePublicationFrame(visit.fetcher, target.space, 'en', target.actingSubject, target.homeRoute);
+  const presentation = sample('visitor', 'empty-home-presentation').path;
+  expect(visit.paths).toEqual([sample('visitor', 'frame-empty-address').path, presentation, presentation]);
+  expect(view.kind).toBe('standalone');
+  expect(view.realmName).toBeNull();
+  expect(view.mapped).toEqual({ kind: 'empty', name: answer.name });
+});
+
+test('visitor draft route refusal keeps the recorded problem and site address', async () => {
+  const selections = [
+    { label: 'site-address', state: 'populated' },
+    { label: 'published-draft-route-refused', state: 'error' },
+  ] as const satisfies readonly RecordedSelection[];
+  const refused = sample('visitor', 'published-draft-route-refused');
+  const problem = refused.answer as { title: string; code: string };
+  const visit = watched('visitor', selections);
+  const target = publicationTarget(record, 'visitor', selections);
+  if (target.mode !== 'route') throw new Error('draft visit has no route');
+  const view = await readZonePublicationRoute(visit.fetcher, target.space, 'en', target.path, target.actingSubject);
+  expect(visit.paths).toEqual([sample('visitor', 'site-address').path, refused.path]);
+  expect(view.mapped).toEqual({ kind: 'refusal', problem: { status: refused.status, title: problem.title, code: problem.code } });
+  expect(view.backHref).toBe(spaceHref(
+    (sample('visitor', 'site-address').answer as { canonical: Parameters<typeof spaceHref>[0] }).canonical, 'site'));
+});
+
+test('operator frame read shows the mandated publication with the owner credit', async () => {
+  const selections = [
+    { label: 'frame-empty-address', state: 'populated' },
+    { label: 'frame-empty-presentation', state: 'populated' },
+    { label: 'frame-empty-route', state: 'populated' },
+    { label: 'frame-published-realm-header', state: 'populated' },
+    { label: 'frame-published-joining', state: 'populated' },
+    { label: 'frame-published-follow', state: 'populated' },
+    { label: 'frame-published-platform-access', state: 'populated' },
+    { label: 'frame-published-member-ban', state: 'error' },
+  ] as const satisfies readonly RecordedSelection[];
+  const answer = homeAnswer('operator', 'frame-empty-presentation');
+  const visit = watched('operator', selections);
+  const target = publicationTarget(record, 'operator', selections);
+  if (target.mode !== 'frame') throw new Error('mandated frame has no presentation');
+  const view = await readZonePublicationFrame(visit.fetcher, target.space, 'en', target.actingSubject, target.homeRoute);
+  const presentation = sample('operator', 'frame-empty-presentation').path;
+  expect(target.homeRoute).toBe(true);
+  expect(visit.paths).toEqual([
+    sample('operator', 'frame-empty-address').path,
+    presentation,
+    sample('operator', 'frame-published-realm-header').path,
+    sample('operator', 'frame-published-joining').path,
+    sample('operator', 'frame-published-follow').path,
+    sample('operator', 'frame-published-platform-access').path,
+    sample('operator', 'frame-published-member-ban').path,
+    presentation,
+    sample('operator', 'frame-empty-route').path,
+  ]);
+  const reference = expectPublished({ mapped: view.mapped, presentation: view.presentation, address: null }, answer);
+  expect(reference.provenance).toEqual({
+    rightsBasis: 'original-contribution', author: actingSubject('owner', 'manage-configuration'),
+  });
+});
+
+test('owner publication returns the original cuts, then the same cuts from the replayed receipt', async () => {
+  const command = recordedPublicationChoice(record, 'owner', 'publication-acknowledgement');
+  const replayChoice = recordedPublicationChoice(record, 'owner', 'receipt-replay');
+  expect(replayChoice.choice).toEqual(command.choice);
+  expect(replayChoice.actingSubject).toBe(command.actingSubject);
+  const selections = [
+    { label: 'publication-acknowledgement', state: 'populated' },
+    { label: 'receipt-replay', state: 'populated' },
+  ] as const satisfies readonly RecordedSelection[];
+  const visit = watched('owner', selections, true);
+  const authoring = browserZoneAuthoring(browserMainApi('https://recorded.invalid', { fetcher: visit.fetcher }));
+  const acknowledged = await authoring.publish(command.choice, command.actingSubject, 'recorded-publication', command.zoneId);
+  const replayed = await authoring.publish(command.choice, command.actingSubject, 'recorded-publication', command.zoneId);
+  expect(acknowledged.ok && replayed.ok).toBe(true);
+  if (!acknowledged.ok || !replayed.ok) return;
+  const acknowledgedPage = acknowledged.data.receipt?.pages[0];
+  const replayedPage = replayed.data.receipt?.pages[0];
+  expect(acknowledged.data.replayed).toBe(false);
+  expect(replayed.data.replayed).toBe(true);
+  expect(replayed.data.receipt?.homeDocument).toBe(acknowledged.data.receipt?.homeDocument);
+  expect(replayedPage).toMatchObject({
+    revisionId: acknowledgedPage?.revisionId, byteDigest: acknowledgedPage?.byteDigest,
+  });
+  expect(acknowledged.data.receipt?.homeDocument).toBe(command.choice.page);
+  expect(acknowledgedPage?.revisionId).toBe(command.choice.revisionId);
+  expect(acknowledgedPage?.byteDigest).toBe(command.choice.byteDigest);
+  expect(visit.paths).toEqual([
+    sample('owner', 'publication-acknowledgement').path,
+    sample('owner', 'receipt-replay').path,
+  ]);
+});
+
+test('a competing publication names a different content revision', async () => {
+  const original = recordedPublicationChoice(record, 'owner', 'publication-acknowledgement');
+  const competing = recordedPublicationChoice(record, 'owner', 'competing-publication');
+  expect(competing.choice.revisionId).not.toBe(original.choice.revisionId);
+  expect(competing.choice.byteDigest).not.toBe(original.choice.byteDigest);
+  const selections = [{ label: 'competing-publication', state: 'populated' }] as const satisfies readonly RecordedSelection[];
+  const visit = watched('owner', selections);
+  const written = await browserZoneAuthoring(browserMainApi('https://recorded.invalid', { fetcher: visit.fetcher }))
+    .publish(competing.choice, competing.actingSubject, 'recorded-publication', competing.zoneId);
+  expect(written.ok).toBe(true);
+  if (!written.ok) return;
+  expect(written.data.replayed).toBe(false);
+  expect(written.data.receipt?.pages[0]).toMatchObject({
+    revisionId: competing.choice.revisionId, byteDigest: competing.choice.byteDigest,
+  });
+});
+
+test('the mandated publication keeps the owner as the recorded author', async () => {
+  const command = recordedPublicationChoice(record, 'operator', 'mandated-publication');
+  expect(command.actingSubject).toBe(actingSubject('operator', 'frame-empty-presentation'));
+  const selections = [{ label: 'mandated-publication', state: 'populated' }] as const satisfies readonly RecordedSelection[];
+  const visit = watched('operator', selections);
+  const written = await browserZoneAuthoring(browserMainApi('https://recorded.invalid', { fetcher: visit.fetcher }))
+    .publish(command.choice, command.actingSubject, 'recorded-publication', command.zoneId);
+  expect(written.ok).toBe(true);
+  if (!written.ok) return;
+  expect(written.data.replayed).toBe(false);
+  expect(written.data.receipt?.homeDocument).toBe(command.choice.page);
+  expect(written.data.receipt?.pages[0]).toMatchObject({
+    revisionId: command.choice.revisionId, byteDigest: command.choice.byteDigest,
+  });
+  const credit = referenceOf(homeAnswer('operator', 'frame-empty-presentation').home?.reference, 'mandated presentation');
+  expect(credit.provenance.author).toBe(actingSubject('owner', 'manage-configuration'));
+  expect(credit.resourceId).toBe(command.choice.page);
+});
+
+for (const persona of ['visitor', 'stranger', 'member', 'moderator', 'operator'] as const) {
+  test(`${persona} publication refusal keeps the recorded problem`, async () => {
+    const command = recordedPublicationChoice(record, persona, 'owner-receipt-refused');
+    const refused = sample(persona, 'owner-receipt-refused');
+    const problem = refused.answer as { title: string; code: string };
+    const selections = [{ label: 'owner-receipt-refused', state: 'error' }] as const satisfies readonly RecordedSelection[];
+    const visit = watched(persona, selections);
+    const written = await browserZoneAuthoring(browserMainApi('https://recorded.invalid', { fetcher: visit.fetcher }))
+      .publish(command.choice, command.actingSubject, 'recorded-publication', command.zoneId);
+    expect(written.ok).toBe(false);
+    if (written.ok) return;
+    expect(written.failure).toBe(persona === 'visitor' ? 'sign-in' : 'denied');
+    expect(written.problem).toEqual({ title: problem.title, code: problem.code });
+    expect(visit.paths).toEqual([refused.path]);
+  });
+}
