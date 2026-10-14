@@ -126,6 +126,7 @@ test('the Read shelf carries the owner’s private imported review through the p
   const fixture = contractFixture('books', 'private-review', 'owner');
   const loaded = await load(fixture);
   if (!loaded.view.ok) throw new Error('Library did not load');
+  expect(loaded.view.data.rows[0]).toMatchObject({ status: 'read', startedOn: '2026-10-13', finishedOn: '2026-10-13' });
   expect(loaded.view.data.rows[0]!.privateReview).toMatchObject({ ok: true, data: {
     work: loaded.view.data.rows[0]!.work.id, text: 'Original author — private imported reading note.', language: 'en',
   } });

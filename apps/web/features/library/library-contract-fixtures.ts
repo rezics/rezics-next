@@ -61,7 +61,8 @@ export function libraryContractFixture(medium: LibraryMedium, state: LibraryCont
     const original = workStates.find(entry => entry.work === item.work);
     if (!original) throw new Error(`Missing source reader state for ${item.work}`);
     return { ...structuredClone(original), status: { ...original.status, status: item.status,
-      version: item.version, startedOn: null, finishedOn: null }, rating: { global: null, realm: null }, progress: null };
+      version: item.version, startedOn: 'startedOn' in item ? item.startedOn : null,
+      finishedOn: 'finishedOn' in item ? item.finishedOn : null }, rating: { global: null, realm: null }, progress: null };
   });
   directory.statusShelves = directory.statusShelves.map(shelf => ({ ...shelf, count: state === 'empty' ? 0
     : entries.filter(entry => entry.status.status === shelf.status).length }));
