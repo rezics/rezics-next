@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { startMediaStack, type MediaStack } from '../../../tests/qa/integration/media-support.ts';
 import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
+import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
 import { closureOriginal } from '../../../tests/qa/integration/outcomes/realm/closure-fixture.ts';
 import type { PersonaSession } from '../../../tests/qa/support/personas.ts';
 import { unrecordedReasons } from '../src/modules/governance/notices.ts';
@@ -22,6 +23,11 @@ const session = (member: Member): PersonaSession => ({ actingSubject: member.act
 
 test('completed closure conceals discussion reads and consented roster while credited originals stay public', async () => {
   const stack = await startMediaStack('realm-closure-readers', { profileCredits: true });
+  const verify = stack.composition.account.verify.bind(stack.composition.account);
+  stack.composition.account.verify = (request, scopes) => {
+    if (!request.headers.has('authorization')) throw new AccountAssertionDenied('Authentication is required');
+    return verify(request, scopes);
+  };
   const evidence: unknown[] = [];
   let phase = 'preparation';
   async function call(member: Member | undefined, method: string, path: string, body?: unknown, expected?: number) {
@@ -174,17 +180,20 @@ test('completed closure conceals discussion reads and consented roster while cre
       for (const suffix of suffixes) {
         const current = await call(person, 'GET', root + suffix);
         const missing = await call(person, 'GET', absentRoot + suffix);
+        expect(current.status).toBe(suffix.startsWith('/roster') ? 403 : 404);
         if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ caller: person?.actor ?? null, suffix, current, missing });
       }
       for (const suffix of suffixes.slice(0, 3)) {
         const current = await call(person, 'GET', `/v1/realms/${short(empty.realm)}` + suffix);
         const missing = await call(person, 'GET', absentRoot + suffix);
+        expect(current.status).toBe(404);
         if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ empty: true, caller: person?.actor ?? null, suffix, current, missing });
       }
       const actor = encodeURIComponent(person?.actor ?? absent);
       for (const suffix of [`replies/${encodeURIComponent(child.reply)}`, `reply-roots/${encodeURIComponent(original.work)}/count`]) {
         const current = await call(person, 'GET', `/v1/realms/${encodeURIComponent(closed.realm)}/${suffix}?actingSubject=${actor}`);
         const missing = await call(person, 'GET', `/v1/realms/${encodeURIComponent(absent)}/${suffix}?actingSubject=${actor}`);
+        expect(current.status).toBe(person ? suffix.startsWith('replies/') ? 404 : 403 : 401);
         if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ caller: person?.actor ?? null, suffix, current, missing });
       }
       const listed = (await call(person, 'GET', `${liveRoot}/roster`, undefined, 200)).body as { items: { agent: string; displayName: string; featured: boolean }[] };
