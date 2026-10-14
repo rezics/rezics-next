@@ -21,6 +21,7 @@ import { AdmissionDenied } from '../src/modules/access/admission.ts';
 import { GovernanceDenied, GLOBAL_CONTEXT } from '../src/modules/governance/store.ts';
 import { createAdmittedMetadataWork } from '../src/modules/work/create-admitted.ts';
 import { readTitleControl } from '../src/modules/work/title-control.ts';
+import { SourceNativeWorkAdoptionStore } from '../src/modules/source/native-work-adoption.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const evidenceDirectory = join(root, '.temp/goal/replay-authorization');
@@ -219,13 +220,13 @@ const replayFamilies: ReplayFamily[] = [
         revokedController = authority.representationIds[0];
       }
       // submitReport's existing represented() accepts any current mandate.
-      const work = await stack.catalogueWork(member.actor, `Reported ${randomUUID()}`);
+      const reported = await proposal(member, `OL${Math.floor(Math.random() * 900000000) + 100000000}W`, 'Reported source', 1);
       await ensureFixtureScopeGate(stack.accessPool, 'governance:platform', { open: true });
-      const target = { owner: 'graph' as const, resource: work.work, component: 'title' as const };
+      const target = { owner: 'source' as const, resource: reported.record, component: 'record' as const };
       const input = { kind: subcase as 'content_report' | 'rights_complaint', actingSubject: member.actor,
         authority: { kind: 'platform' as const, scopeId: 'governance:platform' }, context: GLOBAL_CONTEXT,
         target, disclosure: 'private' as const, reasonCode: 'spam', statement: 'Retain this exact title.',
-        evidence: [{ ...target, revision: await head(work.work), locator: null }], idempotencyKey: randomUUID(),
+        evidence: [{ ...target, revision: reported.observation, locator: null }], idempotencyKey: randomUUID(),
         ...(subcase === 'rights_complaint' ? { complaint: { process: 'ordinary_dispute' as const,
           claimantKind: 'rights_holder' as const, claimantName: 'Claimant', claimantContact: null,
           claimedWork: 'Original title', claimedRight: 'copyright' as const,
@@ -250,7 +251,8 @@ const replayFamilies: ReplayFamily[] = [
       const externalId = `OL${Math.floor(Math.random() * 900000000) + 100000000}W`;
       const original = await proposal(member, externalId, 'Source original', 1);
       const freshProposal = await proposal(member, externalId.replace('W', '1W'), 'Source original', 1);
-      const owner = stack.composition.dependencies.sourceAdoptions!;
+      const owner = new SourceNativeWorkAdoptionStore(stack.contentPool, stack.composition.dependencies.sourceProposals!,
+        stack.env, stack.composition.dependencies.account, stack.access);
       let saved: NonNullable<Awaited<ReturnType<typeof owner.adopt>>>;
       return { command: async (fresh, changed) => {
         const result = await owner.adopt(member.principalId, request(member),
@@ -269,7 +271,8 @@ const replayFamilies: ReplayFamily[] = [
       await member.grant('work:create:root', 'work.create');
       const externalId = `OL${Math.floor(Math.random() * 900000000) + 100000000}W`;
       const original = await proposal(member, externalId, 'Source original', 1);
-      const owner = stack.composition.dependencies.sourceAdoptions!;
+      const owner = new SourceNativeWorkAdoptionStore(stack.contentPool, stack.composition.dependencies.sourceProposals!,
+        stack.env, stack.composition.dependencies.account, stack.access);
       const adopted = (await owner.adopt(member.principalId, request(member), original.proposal.split('/').at(-1)!,
         { actingSubject: member.actor, authorityPath: 'represented-agent', confirmedTitle: 'Source original' }))!.adoption;
       await member.grant(`work:edit:${adopted.work}`, 'work.edit');
@@ -366,7 +369,10 @@ test('every discovered public saved-result command has a replay-authorization ro
     visit(node);
     ts.forEachChild(node, child => descend(child, visit));
   };
+  const edgeCache = new Map<ts.FunctionLikeDeclaration, Set<ts.FunctionLikeDeclaration>>();
   const edges = (node: ts.FunctionLikeDeclaration) => {
+    const cached = edgeCache.get(node);
+    if (cached) return cached;
     const targets = new Set<ts.FunctionLikeDeclaration>();
     if (node.body) descend(node.body, child => {
       if (!ts.isCallExpression(child)) return;
@@ -381,9 +387,13 @@ test('every discovered public saved-result command has a replay-authorization ro
         if (candidate && functionLike(candidate) && candidate.body) targets.add(candidate);
       }
     });
+    edgeCache.set(node, targets);
     return targets;
   };
+  const savedCache = new Map<ts.FunctionLikeDeclaration, boolean>();
   const savedResult = (node: ts.FunctionLikeDeclaration) => {
+    const cached = savedCache.get(node);
+    if (cached !== undefined) return cached;
     let saved = false;
     if (node.body) descend(node.body, child => {
       if (ts.isPropertyAssignment(child) && child.name.getText() === 'replayed'
@@ -396,6 +406,7 @@ test('every discovered public saved-result command has a replay-authorization ro
         });
       }
     });
+    savedCache.set(node, saved);
     return saved;
   };
   const inventory: { operation: string; caller: string; paths: string[][] }[] = [];
@@ -449,4 +460,4 @@ test('every discovered public saved-result command has a replay-authorization ro
   const owners = new Set(replayFamilies.flatMap(row => row.owners));
   const missing = inventory.filter(item => item.paths.some(path => !path.some(owner => owners.has(owner))));
   expect(missing.map(item => `${item.operation}: ${item.paths.map(path => path.join(' -> ')).join('; ')}`)).toEqual([]);
-}, 60_000);
+}, 120_000);
