@@ -26,7 +26,17 @@ import { PersonPreferencesStore } from '../preferences/store.ts';
 export class ActingContextDenied extends Error {}
 export class ActingContextInvalid extends Error {}
 export class ActingContextStale extends Error {}
-export class ActingContextUnavailable extends Error {}
+export class ActingContextUnavailable extends Error {
+  readonly code?: string;
+  constructor(message?: string, options?: ErrorOptions) {
+    super(message, options);
+    const cause = options?.cause;
+    if (cause && typeof cause === 'object' && 'code' in cause
+      && typeof cause.code === 'string' && /^[0-9A-Z]{5}$/.test(cause.code)) {
+      this.code = cause.code;
+    }
+  }
+}
 
 export const WORK_CREATE_CONTEXT = {
   task: 'work.create', scope: 'work:create:root', action: 'work.create',
@@ -121,11 +131,11 @@ export async function transaction<T>(pool: Pool, work: (client: PoolClient) => P
     try { await client.query('ROLLBACK'); } catch { /* preserve original failure */ }
     if (error instanceof GroupUnavailable || error instanceof RoleUnavailable
       || error instanceof ControlUnavailable) {
-      throw new ActingContextUnavailable(error.message);
+      throw new ActingContextUnavailable(error.message, { cause: error });
     }
     if (error && typeof error === 'object' && 'code' in error
       && ['40001', '40P01', '55P03', '57014'].includes(String(error.code))) {
-      throw new ActingContextUnavailable('authority snapshot changed or timed out');
+      throw new ActingContextUnavailable('authority snapshot changed or timed out', { cause: error });
     }
     throw error;
   } finally { client.release(); }
@@ -286,7 +296,7 @@ export class AccessActingContexts {
           language: selected.language, direction: selected.direction } : null });
       }
       return labels;
-    } catch { throw new ActingContextUnavailable('Agent descriptions are unavailable'); }
+    } catch (error) { throw new ActingContextUnavailable('Agent descriptions are unavailable', { cause: error }); }
   }
 
   /** One public graph read and one bounded current-handle batch for at most 50
@@ -336,8 +346,8 @@ export class AccessActingContexts {
         labels.set(agent, { displayName: visible.has(agent) ? name : null, handle, kind: kinds[kind]! });
       }
       return labels;
-    } catch {
-      throw new ActingContextUnavailable('public Agent descriptions are unavailable');
+    } catch (error) {
+      throw new ActingContextUnavailable('public Agent descriptions are unavailable', { cause: error });
     }
   }
 

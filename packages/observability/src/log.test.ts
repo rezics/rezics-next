@@ -55,6 +55,7 @@ test('a worker fault records the error class and code and omits the message', as
     'rezics.worker.name': 'main.library.backfill',
     'error.class': 'DatabaseError',
     'error.code': '23505',
+    'error.sqlstate': '23505',
   });
   expect(line).not.toContain('reader@example.com');
   expect(line).not.toContain(agent);
@@ -70,6 +71,7 @@ test('a wrapped database failure keeps the outer class and the provider code', a
     'rezics.worker.name': 'main.ranking.build',
     'error.class': 'RecommendationUnavailable',
     'error.code': '08006',
+    'error.sqlstate': '08006',
     'error.chain.classes': ['RecommendationUnavailable', 'Error'],
     'error.chain.codes': ['08006'],
   });

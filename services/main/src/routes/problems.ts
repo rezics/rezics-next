@@ -180,9 +180,16 @@ export function commandError(error: unknown): Response {
   return problem(503, 'dependency_unavailable', 'Work operation could not be completed', { 'retry-after': '1' });
 }
 
-/** Status and problem for a typed refusal. Unrecognized errors return undefined;
+/** Server refusals emit one bounded fault before a caller returns the response.
+ * Status and problem for a typed refusal. Unrecognized errors return undefined;
  * callers choose the fallback (route handlers use 503, the app hook uses 500). */
 export function typedRefusal(error: unknown): Response | undefined {
+  const refusal = mapTypedRefusal(error);
+  if (refusal && refusal.status >= 500) logWorkerFault('main.route.typed_refusal', error);
+  return refusal;
+}
+
+function mapTypedRefusal(error: unknown): Response | undefined {
   if (error instanceof PlatformClosed) return platformExposureProblem(error);
   if (error instanceof TranslationBasisRequired) return problem(409, error.code, error.message);
   if (error instanceof SourceIntakeInvalid) {
@@ -567,7 +574,6 @@ export function typedRefusal(error: unknown): Response | undefined {
     return problem(422, 'query_budget_exceeded', 'Public text population exceeds the complete-result budget');
   }
   if (error instanceof SearchIndexUnavailable) {
-    logWorkerFault('main.route.search_index_unavailable', error);
     return problem(503, 'search_index_unavailable', 'Public text index is unavailable');
   }
   if (error instanceof ContentProjectionUnavailable || error instanceof ContentProjectionGap

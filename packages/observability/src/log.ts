@@ -26,6 +26,7 @@ const allowed = new Set([
   'rezics.worker.trigger',
   'error.class',
   'error.code',
+  'error.sqlstate',
   'error.chain.classes',
   'error.chain.codes',
   'rezics.backfill.examined',
@@ -65,6 +66,7 @@ const relayDiagnosticPositions = new Set([
 ]);
 const classToken = /^[A-Za-z_][A-Za-z0-9_]{0,80}$/;
 const codeToken = /^[A-Za-z0-9_]{1,32}$/;
+const sqlstateToken = /^[0-9A-Z]{5}$/;
 const ERROR_CHAIN_LIMIT = 5;
 const workerName = /^[a-z][a-z0-9._-]{0,63}$/;
 /** Repository-relative caller `path:line` and an optional function name. */
@@ -152,6 +154,10 @@ function publicAttributes(attributes: Attributes): Attributes {
       if (code) result[key] = code;
       continue;
     }
+    if (key === 'error.sqlstate') {
+      if (typeof value === 'string' && sqlstateToken.test(value)) result[key] = value;
+      continue;
+    }
     if (key === 'error.chain.classes' || key === 'error.chain.codes') {
       if (!Array.isArray(value)) continue;
       const tokens = value.slice(0, ERROR_CHAIN_LIMIT).flatMap(item => {
@@ -213,10 +219,12 @@ export function logWorkerFault(worker: string, error: unknown): void {
   const chain = boundedErrorChain(error);
   const codes = chain.flatMap(item => boundedCode(item) ?? []);
   const code = codes[0];
+  const sqlstate = codes.find(value => sqlstateToken.test(value));
   telemetryLog('worker_fault', 'error', {
     ...(workerName.test(worker) && !logLineCarriesPersonalData(worker) ? { 'rezics.worker.name': worker } : {}),
     'error.class': boundedClass(error),
     ...(code ? { 'error.code': code } : {}),
+    ...(sqlstate ? { 'error.sqlstate': sqlstate } : {}),
     ...(chain.length > 1 ? { 'error.chain.classes': chain.map(boundedClass),
       ...(codes.length ? { 'error.chain.codes': codes } : {}) } : {}),
     ...checkoutAttributes(error),
