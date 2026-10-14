@@ -65,7 +65,6 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     return out;
   };
   const session = {
-    get fencesSelectedUnits() { return session.options.localBasis === true; },
     checkDeadline: () => {}, observeDependency: () => {}, displayLanguages: ['en'], request: new Request('http://main.test/v1/resources'),
     options: options.blocked ? { actingSubject: agent(9) } : {},
     position: { dataEpoch: 'epoch', sequence: '9' }, principal: options.blocked ? {} : null,
