@@ -937,15 +937,15 @@ test('deferred thread removals do not hold another bounded page but close their 
   const deferred = await reference(realm, root.reply, root.work);
   const { session } = reader();
   await dirty('reply', deferred.reply);
-  await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, root.reply, undefined,
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, realm, root.reply, undefined,
     [root.reply, first.reply])).resolves.toBeUndefined();
-  await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, root.reply, undefined,
+  await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, realm, root.reply, undefined,
     [root.reply, deferred.reply])).rejects.toBeInstanceOf(WorkReadUnavailable);
   await access.query('DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch]);
   for (const [kind, resource] of [['parent', root.reply], ['work', root.work],
     ['placement', `${realm}|${root.reply}|review`]] as const) {
     await dirty(kind, resource);
-    await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, first.reply))
+    await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, realm, first.reply))
       .rejects.toBeInstanceOf(WorkReadUnavailable);
     await access.query('DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch]);
   }
