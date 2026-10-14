@@ -391,7 +391,9 @@ export async function landTask(id: string, step = false, gateLane: GateLaneOptio
       assertPrepared(task);
       const retry = task.state === 'conflict' && task.mergeStop?.landing && task.mergeStop.kind !== 'task';
       if (running(task) || (task.state !== 'exited' && !retry)) {
-        throw new Error(`${task.id}: land requires an exited task (${task.state})${task.mergeStop ? `\n${task.mergeStop.message}` : task.refusal ? `\n${task.refusal}` : ''}`);
+        throw new Error(`${task.id}: land requires an exited task (${task.state})${task.mergeStop ? `\n${task.mergeStop.message}` : task.refusal ? `\n${task.refusal}` : ''}`
+          + (task.state === 'conflict' && task.mergeStop?.kind === 'task'
+            ? `\nCorrect the brief, reclaim ${task.id} <brief>, then merge ${task.id}.` : ''));
       }
       const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
         && other.worktree === task.worktree && HOLDING.includes(other.state));
@@ -440,12 +442,15 @@ export function resumeDecisionError(attempts: readonly Attempt[], markdown: stri
   const fixes = attempts.filter((attempt, index) => !attempt.continuedFor
     && (attempt.round === 'fix' || (attempt.round === undefined && index > 0))).length;
   if (fixes < 2) return undefined;
-  const section = /^## Decision[ \t]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/m.exec(markdown)?.[1] ?? '';
+  const decision = [...markdown.matchAll(/^## Decision\b[^\r\n]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/gm)].at(-1);
+  const heading = decision?.[0].split(/\r?\n/)[0];
+  const section = decision?.[0] ?? '';
   const lastStart = Date.parse(attempts.at(-1)?.startedAt ?? '');
   const dates = [...section.matchAll(/\b\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?Z|[ \t]+\d{2}:\d{2}(?::\d{2})?[ \t]+UTC|(?=[ \t]+UTC))/g)];
   const dated = dates.some(match => Date.parse(match[0].length === 10 ? `${match[0]}T00:00:00Z` : match[0].replace(/ UTC$/, 'Z').replace(' ', 'T')) > lastStart);
   return dated && /\b(?:cut|split|design note)\b/i.test(section) ? undefined
-    : 'two fix rounds exhausted; brief needs a ## Decision dated UTC after the last attempt started, naming a cut, split or design note';
+    : 'two fix rounds exhausted; brief needs a ## Decision dated UTC after the last attempt started, naming a cut, split or design note'
+      + (heading ? `; looked at "${heading}"` : '; no ## Decision heading found');
 }
 
 export async function resumeTask(id: string, args: string[], waitingToken?: string): Promise<void> {

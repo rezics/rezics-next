@@ -1,6 +1,6 @@
 import { printScopeProgress } from '../qa/cases/outcomes.ts';
 import { withLedger, activeGoals, root, managerOf, stateDir } from './ledger.ts';
-import { running, lastAttempt, elapsed, transportContinuations, transportDrop } from './launch.ts';
+import { running, lastAttempt, elapsed, transportContinuations, transportDrop, readResult, hasHandoff } from './launch.ts';
 import { clearRefusal } from './merge.ts';
 import { currentUsage, codexAccounts, describeAccount } from './usage.ts';
 import { heavyQaStatus, heavyQaWaiters, sharedLifecycleStatus, sharedLifecycleWaiters, qaWaitStatusLines, gateLaneStatus, gateLaneWaiters } from './qa-slots.ts';
@@ -77,14 +77,27 @@ export async function status(): Promise<void> {
     const attempt = lastAttempt(task);
     const continuations = transportContinuations(task);
     const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;
+    const reason = settlementReason(task);
+    const missingHandoff = task.state === 'exited' && !task.waitingResume && !reason && !hasHandoff(readResult(attempt).text);
     console.log(`${task.id} ${(task.waitingResume ? 'waiting' : task.state).padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
       + (running(task) ? `; window ${workerWindowName(task)}` : '')
       + (running(task) && continuations > 0 ? `; continued by itself ${continuations}` : '')
       + (repeated ? '\n  stopped after repeated transport errors' : '')
       + (task.waitingResume ? `\n  resume waiting: ${task.waitingResume.reason}`
-        : settlementReason(task) ? `\n  ${settlementReason(task)}` : '')
+        : reason ? `\n  ${reason}` : missingHandoff
+          ? `\n  attempt ended without a handoff ${elapsed(attempt.endedAt ?? attempt.startedAt)} ago; resume ${task.id} --fresh -m <text>, or add --engine <engine> to move it` : '')
       + (task.state === 'conflict' && task.refusal ? `\n  ${task.refusal}` : ''));
+  }
+  const caller = process.env.GOAL_ID;
+  const exitedGoals = [...new Set(tasks.filter(task => task.state === 'exited').map(task => task.goal))];
+  const free = Math.max(0, Number(process.env.GOAL_MAX_WORKERS ?? 25) - live.length);
+  for (const slug of exitedGoals.filter(slug => !caller || caller === 'program' || slug === caller)) {
+    const exited = tasks.filter(task => task.state === 'exited' && task.goal === slug)
+      .sort((a, b) => Date.parse(lastAttempt(a).endedAt ?? lastAttempt(a).startedAt)
+        - Date.parse(lastAttempt(b).endedAt ?? lastAttempt(b).startedAt) || a.id.localeCompare(b.id));
+    console.log(`Goal ${slug ?? '-'}: ${exited.length} exited; longest exited: ${exited.slice(0, 3)
+      .map(task => `${task.id} ${elapsed(lastAttempt(task).endedAt ?? lastAttempt(task).startedAt)}`).join(', ')}; ${free} live worker places free`);
   }
   const closed = tasks.length - tasks.filter(t => !['verified', 'cancelled'].includes(t.state)).length;
   if (closed) console.log(`${closed} closed task(s) omitted`);
