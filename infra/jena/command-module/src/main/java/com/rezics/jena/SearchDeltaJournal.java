@@ -115,7 +115,6 @@ final class SearchDeltaJournal {
             index = lucene(data);
             if (index == null || captured.get() != null || data.isInTransaction())
                 throw new IllegalStateException("consistent capture requires a fresh text read");
-            try (var qualificationPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.QUALIFICATION)) {
             synchronized (qualified) {
                 begin.run();
                 DirectoryReader opened = null;
@@ -164,7 +163,6 @@ final class SearchDeltaJournal {
                         capturedEvidence.put("reason", uncertain ? "text-index-uncertain"
                             : !Boolean.TRUE.equals(cut.get("available")) ? "cut-unavailable" : "generation-unqualified");
                     evidence = Map.copyOf(capturedEvidence);
-                    PublicSearchPhaseEvidence.checkpoint(evidence);
                     reader = opened;
                     captured.set(this);
                 } catch (IOException | RuntimeException failure) {
@@ -173,8 +171,6 @@ final class SearchDeltaJournal {
                     throw failure;
                 }
             }
-            }
-            PublicSearchPhaseEvidence.enter(PublicSearchPhaseEvidence.Phase.QUERY);
         }
         DirectoryReader reader() { return reader; }
         Map<String, Object> cut() { return cut; }

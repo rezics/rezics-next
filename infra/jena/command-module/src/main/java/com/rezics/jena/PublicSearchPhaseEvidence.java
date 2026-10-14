@@ -6,14 +6,7 @@ import jakarta.servlet.ServletException;
 import jakarta.servlet.ServletRequest;
 import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import jakarta.servlet.http.HttpServletResponseWrapper;
-import jakarta.servlet.ServletOutputStream;
-import jakarta.servlet.WriteListener;
-import java.io.PrintWriter;
-import java.io.OutputStreamWriter;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -33,15 +26,10 @@ import java.util.function.Supplier;
 /** Observations only: readiness, deadlines and cancellation retain their existing owners.
  * Durations overlap, so nested phases must never be summed as disjoint work. */
 final class PublicSearchPhaseEvidence implements Filter {
-    enum Phase { REQUEST, QUERY, READER_OPEN, PARSE, ANALYZER_QUERY, RANK, WITNESS, PROOF, TEXT_PREPARE,
+    enum Phase { REQUEST, QUERY, READER_OPEN, PARSE, RANK, WITNESS, PROOF, TEXT_PREPARE,
         TEXT_COMMIT, QUALIFICATION, AUDIT, RECOVERY, OCCURRENCE_DISCOVERY, OCCURRENCE_PROJECT, MERGE, COMMAND }
     private record Running(Phase phase, long started) {}
     private record View(Running active, Map<Phase, Long> durations, long omitted) {}
-    private static long cpu() {
-        var bean = ManagementFactory.getThreadMXBean();
-        return bean.isCurrentThreadCpuTimeSupported() && bean.isThreadCpuTimeEnabled()
-            ? bean.getCurrentThreadCpuTime() : -1;
-    }
     private record MergeObservation(int threads, long sampledAt) {}
     private static final ThreadLocal<Request> CURRENT = new ThreadLocal<>();
     private static final ThreadLocal<Scope> SEQUENTIAL = new ThreadLocal<>();
@@ -128,86 +116,18 @@ final class PublicSearchPhaseEvidence implements Filter {
             }
             return;
         }
-        request.capture = "1".equals(http.getHeader("x-rezics-search-evidence")) && trace != null;
-        request.cpuStarted = request.capture ? cpu() : -1;
         Request previous = CURRENT.get();
         Scope previousSequential = SEQUENTIAL.get();
         CURRENT.set(request);
         SEQUENTIAL.remove();
-        try { chain.doFilter(servlet, request.capture && response instanceof HttpServletResponse httpResponse
-            ? evidenceResponse(httpResponse, request) : response); }
+        try { chain.doFilter(servlet, response); }
         finally {
             expire(request, clock.getAsLong());
             endPhase();
-            if (request.capture) emit(snapshot(request, "public_search_native_complete"));
             requests.compareAndSet(slot, request, null);
             if (previous == null) CURRENT.remove(); else CURRENT.set(previous);
             if (previousSequential != null) SEQUENTIAL.set(previousSequential);
         }
-    }
-    // Opt-in owning-operation captures carry no RDF values or query text. Ordinary
-    // requests retain the existing bounded deadline observer and event bucket.
-    static void work(String counter, long amount) {
-        Request request = CURRENT.get();
-        if (request != null && request.capture && request.work.size() < 24)
-            request.work.merge(counter, amount, Long::sum);
-    }
-    static void checkpoint(Map<String, Object> cut) {
-        Request request = CURRENT.get();
-        if (request != null && request.capture) for (String key : List.of("dataEpoch", "sequence",
-                "generation", "luceneGeneration", "qualified", "textIndexUncertain", "ordinal", "writeEpoch"))
-            if (cut.containsKey(key)) request.checkpoint.put(key, cut.get(key));
-    }
-    private HttpServletResponse evidenceResponse(HttpServletResponse response, Request request) {
-        return new HttpServletResponseWrapper(response) {
-            private boolean observed;
-            private ServletOutputStream stream;
-            private PrintWriter writer;
-            private void beforeWrite() {
-                if (observed) return;
-                observed = true;
-                String evidence = snapshot(request, "public_search_native_first_write");
-                if (evidence.length() <= 2048) setHeader("X-Rezics-Search-Evidence", evidence);
-            }
-            @Override public ServletOutputStream getOutputStream() throws IOException {
-                if (stream == null) {
-                    ServletOutputStream target = super.getOutputStream();
-                    stream = new ServletOutputStream() {
-                        @Override public boolean isReady() { return target.isReady(); }
-                        @Override public void setWriteListener(WriteListener listener) { target.setWriteListener(listener); }
-                        @Override public void write(int value) throws IOException { beforeWrite(); target.write(value); }
-                        @Override public void write(byte[] bytes, int offset, int length) throws IOException {
-                            beforeWrite(); target.write(bytes, offset, length);
-                        }
-                        @Override public void flush() throws IOException { beforeWrite(); target.flush(); }
-                        @Override public void close() throws IOException { beforeWrite(); target.close(); }
-                    };
-                }
-                return stream;
-            }
-            @Override public PrintWriter getWriter() throws IOException {
-                if (writer == null) writer = new PrintWriter(new OutputStreamWriter(getOutputStream(), getCharacterEncoding()));
-                return writer;
-            }
-        };
-    }
-    private String snapshot(Request request, String name) {
-        long ended = clock.getAsLong(), cpuEnded = cpu();
-        Map<String, Object> event = new LinkedHashMap<>();
-        event.put("event", name);
-        event.put("traceparent", request.trace);
-        event.put("elapsedMs", (ended - request.started) / 1_000_000.0);
-        event.put("threadCpuMs", request.cpuStarted < 0 || cpuEnded < request.cpuStarted ? -1
-            : (cpuEnded - request.cpuStarted) / 1_000_000.0);
-        Map<String, Double> phases = new LinkedHashMap<>(), phaseCpu = new LinkedHashMap<>();
-        request.view.get().durations().forEach((key, value) -> phases.put(key.name(), value / 1_000_000.0));
-        request.cpuNanos.forEach((key, value) -> phaseCpu.put(key.name(), value / 1_000_000.0));
-        event.put("overlappingPhaseMs", phases);
-        event.put("overlappingThreadCpuMs", phaseCpu);
-        event.put("threadCpuNanos", request.cpuStarted < 0 || cpuEnded < request.cpuStarted ? -1 : cpuEnded - request.cpuStarted);
-        event.put("work", request.work);
-        event.put("checkpoint", request.checkpoint);
-        return org.apache.jena.atlas.json.JSON.toStringFlat(CommandService.jsonObject(event));
     }
     private static boolean validTrace(String trace) {
         return trace.matches("00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}")
@@ -218,11 +138,6 @@ final class PublicSearchPhaseEvidence implements Filter {
         final long started;
         final long deadline;
         final String trace;
-        boolean capture;
-        long cpuStarted;
-        final Map<Phase, Long> cpuNanos = new LinkedHashMap<>();
-        final Map<String, Long> work = new LinkedHashMap<>();
-        final Map<String, Object> checkpoint = new LinkedHashMap<>();
         final AtomicBoolean emitted = new AtomicBoolean();
         final AtomicReference<View> view;
         Request(long started, long deadline, String trace, Phase entryPhase) {
@@ -244,13 +159,9 @@ final class PublicSearchPhaseEvidence implements Filter {
         Request request = CURRENT.get();
         if (request != null) {
             owner.expire(request, now);
-            long cpuStarted = request.capture ? cpu() : -1;
             View previous = request.view.getAndUpdate(view -> new View(running, view.durations(), view.omitted()));
             return new Scope(() -> {
                 owner.expire(request, owner.clock.getAsLong());
-                long cpuEnded = request.capture ? cpu() : -1;
-                if (cpuStarted >= 0 && cpuEnded >= cpuStarted)
-                    request.cpuNanos.merge(phase, cpuEnded - cpuStarted, Long::sum);
                 request.view.updateAndGet(view -> {
                 Map<Phase, Long> durations = new LinkedHashMap<>(view.durations());
                 long omitted = view.omitted();

@@ -14,7 +14,7 @@ interface Page { results?: (Identity & Item)[]; items?: Item[]; next?: string | 
 
 /** Incremental seed prefixes change unrelated data only. All requests reach
  * composed Main over HTTP, without a qualification read before readiness. */
-test('public search retains exact Realm membership and bounded work across three seeded corpus sizes', async () => {
+test('public search retains exact Realm membership and bounded work across four seeded corpus sizes', async () => {
   if (Bun.env.G1053_QUERY_CHILD !== 'search-index-availability.test.ts')
     return queryProfileProcess('search-index-availability.test.ts');
   const sink = startWorkProfileSink({ settleMs: 50 });
@@ -40,30 +40,17 @@ test('public search retains exact Realm membership and bounded work across three
   const query = stack.fuseki.query.bind(stack.fuseki), health = stack.fuseki.commandHealth.bind(stack.fuseki);
   const delta = stack.fuseki.searchDeltaSince.bind(stack.fuseki);
   type Call = { family: string; request?: string; startedMs: number; elapsedMs?: number;
-    rows?: number; rankHits?: number; answer?: unknown; error?: string; budgetRemainingMs?: number };
+    phases?: string[]; rows?: number; rankHits?: number; answer?: unknown; error?: string; budgetRemainingMs?: number };
   type Capture = { calls: Call[]; phases: Parameters<typeof searchOperationEvidence.run>[0]['phases'] };
   let active: Capture | undefined;
-  const nativeResponses: unknown[] = [];
-  const originalFetch = globalThis.fetch;
-  globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
-    const headers = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
-    const capture = active && foregroundCounted() && headers.has('x-rezics-search-budget-ms');
-    if (capture) headers.set('x-rezics-search-evidence', '1');
-    const startedMs = performance.now();
-    const response = await originalFetch(input, capture ? { ...init, headers } : init);
-    if (capture) nativeResponses.push({ startedMs, headersReceivedMs: performance.now(),
-      request: typeof init?.body === 'string' ? init.body : undefined,
-      nativeFirstWrite: response.headers.get('x-rezics-search-evidence'),
-      nativeInterval: 'Filter arrival through first response write; remaining streaming and pre-filter/client wait are unobserved. Nested phases overlap.',
-      readCut: response.headers.get('x-rezics-read-cut'), work: response.headers.get('x-rezics-command-work') });
-    return response;
-  }, originalFetch);
   async function observe<T>(family: string, request: string | undefined, read: () => Promise<T>): Promise<T> {
-    if (!active || !foregroundCounted()) return read();
+    const capture = searchOperationEvidence.getStore() as Capture | undefined;
+    if (!capture || !foregroundCounted()) return read();
     const startedMs = performance.now(), budget = fusekiReadBudget.getStore();
     const call: Call = { family, request, startedMs,
+      phases: capture.phases.filter(phase => phase.state === 'active').map(phase => phase.phase),
       budgetRemainingMs: budget?.deadline === undefined ? undefined : budget.deadline - startedMs };
-    active.calls.push(call);
+    capture.calls.push(call);
     try {
       const result = await read();
       if (family === 'query') {
@@ -85,9 +72,9 @@ test('public search retains exact Realm membership and bounded work across three
   function retain() {
     writeFileSync(resolve(directory, 'growth.json'), JSON.stringify({ source, servedSource: source,
       runId: Bun.env.REZICS_QA_RUN_ID, lineage: stack.env.lineage, boundMs: MAX_SEARCH_REQUEST_MS,
-      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals, nativeResponses,
+      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals,
       browseDependency: 'G-2268 owns browse preparation. Retained three-size baseline remains; post-repair browse HTTP capture unresolved.',
-      durationConvention: 'Nested phase durations overlap. atAnswer is copied at HTTP answer; eventual phases may include work after refusal. Native elapsed minus native thread CPU is unobserved wait, not an operator or host cause.', 
+      durationConvention: 'Nested phase durations overlap. atAnswer is copied at HTTP answer; eventual phases may include work after refusal. Client/native internal intervals remain unobserved; elapsed time is not native CPU or an operator cause.',
       missingHistoricalWitnesses: 'Both retained sequence-25 503s lack index checkpoint and native phase witnesses.' }, null, 2));
   }
   try {
@@ -131,7 +118,7 @@ test('public search retains exact Realm membership and bounded work across three
     }
     expect((publication as { sequence: string }).sequence).toBe('25');
     const base = unrelated.length;
-    for (const target of [base, base + 16, base + 64]) {
+    for (const target of [base, base + 16, base + 64, base + 190]) {
       while (unrelated.length < target) {
         const other = await stack.publicWork(author.actor, ['en'], `Other catalogue seed ${unrelated.length}`);
         unrelated.push(other.work);
@@ -176,12 +163,6 @@ test('public search retains exact Realm membership and bounded work across three
           profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile });
           retain();
           expect(sample.calls.find(call => call.rankHits !== undefined)?.rankHits).toBeLessThanOrEqual(1);
-          // An older image must not silently stand in for the measured native owner.
-          const control = sample.calls.find(call => call.request?.includes('text:query'))!;
-          const observed = nativeResponses as { startedMs: number; nativeFirstWrite?: string | null }[];
-          const native = observed.find(row => row.startedMs >= control.startedMs
-            && row.startedMs <= control.startedMs + control.elapsedMs!);
-          expect(native?.nativeFirstWrite, 'Native owner phase capture is required').toBeTruthy();
           if (result.status !== 200) {
             refusals.push({ caller, pageIndex, size: expected.length + unrelated.length, path, answer: result });
             retain();
@@ -217,7 +198,7 @@ test('public search retains exact Realm membership and bounded work across three
     for (const caller of ['catalogue-word', 'catalogue-phrase']) {
       for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
         const measured = profiles.filter(row => row.caller === caller && row.pageIndex === pageIndex);
-        expect(new Set(measured.map(row => row.size)).size).toBe(3);
+        expect(new Set(measured.map(row => row.size)).size).toBe(4);
         assertWorkCostAtScales(measured.map(row => row.profile), {
           fusekiRequests: 72, fusekiReceivedBytes: 8_388_608, postgresStatements: 160,
           minimumObserved: { fusekiRequests: 1, postgresStatements: 1 },
@@ -228,7 +209,6 @@ test('public search retains exact Realm membership and bounded work across three
     }
   } finally {
     active = undefined;
-    globalThis.fetch = originalFetch;
     retain();
     console.log(`Search growth evidence: ${directory}/growth.json`);
     await server.stop(true);

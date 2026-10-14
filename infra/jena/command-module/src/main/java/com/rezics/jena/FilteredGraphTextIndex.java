@@ -105,7 +105,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                     if (count == bound) throw new TextIndexException("rank metadata owner text exceeds its admitted bound");
                     Node value = rows.next().getObject();
                     if (!value.isLiteral()) throw new TextIndexException("rank metadata text is not literal");
-                    FilteredGraphTextIndex.count("rank_metadata_values_visited", 1);
+                    CommandWork.count("rank_metadata_values_visited", 1);
                     if (predicate.equals("searchBody") && source != null) {
                         var rank = rankMetadata(data, id);
                         TextEntityDocuments.replaceRankedBody(lucene, contentBodyScope(id),
@@ -337,14 +337,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
         if (!data.contains(uri(request.graph()), uri(request.unit()),
             org.apache.jena.vocabulary.RDF.type.asNode(), uri(RV + "MatchUnit")))
             return CommandService.ProbeStatus.damaged;
-        FilteredGraphTextIndex.count("exact_unit_rdf_rows_visited", 1);
+        CommandWork.count("exact_unit_rdf_rows_visited", 1);
         var bodies = data.find(uri(request.graph()), uri(request.unit()), predicate, Node.ANY);
         Node body = null;
         int rows = 0;
         try {
             while (bodies.hasNext() && rows < 2) {
                 body = bodies.next().getObject(); rows++;
-                FilteredGraphTextIndex.count("exact_unit_rdf_rows_visited", 1);
+                CommandWork.count("exact_unit_rdf_rows_visited", 1);
             }
         } finally { org.apache.jena.atlas.iterator.Iter.close(bodies); }
         if (rows != 1 || !body.isLiteral() || !request.body().equals(body.getLiteralLexicalForm())
@@ -364,7 +364,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                 @Override protected void doSetNextReader(org.apache.lucene.index.LeafReaderContext context) { base = context.docBase; }
                 @Override public org.apache.lucene.search.ScoreMode scoreMode() { return org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES; }
                 @Override public void collect(int doc) {
-                    FilteredGraphTextIndex.count("exact_unit_postings_visited", 1);
+                    CommandWork.count("exact_unit_postings_visited", 1);
                     documents.add(base + doc);
                     if (documents.size() == 2) throw new ProbeDamaged();
                 }
@@ -392,7 +392,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         searcher.search(matched, new org.apache.lucene.search.SimpleCollector() {
             @Override public org.apache.lucene.search.ScoreMode scoreMode() { return org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES; }
             @Override public void collect(int doc) {
-                FilteredGraphTextIndex.count("exact_unit_phrase_matches_visited", 1); matches[0]++;
+                CommandWork.count("exact_unit_phrase_matches_visited", 1); matches[0]++;
             }
         });
         return matches[0] == 1 ? CommandService.ProbeStatus.present : CommandService.ProbeStatus.absent;
@@ -405,14 +405,14 @@ public final class FilteredGraphTextIndex implements TextIndex {
         try {
             while (rows.hasNext() && count < 2) {
                 value = rows.next().getObject(); count++;
-                FilteredGraphTextIndex.count("exact_unit_rdf_rows_visited", 1);
+                CommandWork.count("exact_unit_rdf_rows_visited", 1);
             }
         } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
         return count == 1 ? value : null;
     }
     private static final class ProbeDamaged extends RuntimeException {}
     private static Query parseQuery(QueryParser parser, String text) throws ParseException {
-        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.ANALYZER_QUERY)) {
+        try (var phase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.PARSE)) {
             return parser.parse(text);
         }
     }
@@ -846,7 +846,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                             prefixDeadline(deadline);
                             String id = term.utf8ToString(), key = id.substring(scope.length());
                             if (!prefixKey(key)) throw new TextIndexException("prefix directory identity is invalid");
-                            FilteredGraphTextIndex.count("typeahead_prefix_entries_visited", 1);
+                            CommandWork.count("typeahead_prefix_entries_visited", 1);
                             String main = prefixResource(key.substring(1, 33));
                             String unit = prefixResource(key.substring(33));
                             String field = key.charAt(0) == '0' ? "title" : "credit";
@@ -931,10 +931,6 @@ public final class FilteredGraphTextIndex implements TextIndex {
     /** Observed Lucene operations, separate from returned TopDocs and RDF
      * witnesses. Nested weights may count the same document at multiple layers;
      * these counters do not claim all physical postings, cache work or I/O. */
-    private static void count(String counter, long amount) {
-        CommandWork.count(counter, amount);
-        PublicSearchPhaseEvidence.work(counter, amount);
-    }
     private static final class RankSearcher extends IndexSearcher {
         RankSearcher(org.apache.lucene.index.IndexReader reader) { super(reader); }
         @Override public org.apache.lucene.search.Weight createWeight(Query query, org.apache.lucene.search.ScoreMode mode, float boost) throws IOException {
@@ -954,19 +950,19 @@ public final class FilteredGraphTextIndex implements TextIndex {
                                     return bulk.score(new org.apache.lucene.search.LeafCollector() {
                                         @Override public void setScorer(org.apache.lucene.search.Scorable scorer) throws IOException {
                                             collector.setScorer(new org.apache.lucene.search.FilterScorable(scorer) {
-                                                @Override public float score() throws IOException { FilteredGraphTextIndex.count("rank_lucene_score_calls", 1); return in.score(); }
+                                                @Override public float score() throws IOException { CommandWork.count("rank_lucene_score_calls", 1); return in.score(); }
                                                 @Override public float smoothingScore(int doc) throws IOException { return in.smoothingScore(doc); }
                                                 @Override public void setMinCompetitiveScore(float score) throws IOException { in.setMinCompetitiveScore(score); }
                                             });
                                         }
-                                        @Override public void collect(int doc) throws IOException { FilteredGraphTextIndex.count("rank_lucene_collection_events", 1); collector.collect(doc); }
-                                        @Override public void collectRange(int min, int max) throws IOException { FilteredGraphTextIndex.count("rank_lucene_collection_events", max - min); collector.collectRange(min, max); }
+                                        @Override public void collect(int doc) throws IOException { CommandWork.count("rank_lucene_collection_events", 1); collector.collect(doc); }
+                                        @Override public void collectRange(int min, int max) throws IOException { CommandWork.count("rank_lucene_collection_events", max - min); collector.collectRange(min, max); }
                                         @Override public void collect(org.apache.lucene.search.DocIdStream stream) throws IOException {
                                             collector.collect(new org.apache.lucene.search.DocIdStream() {
                                                 @Override public void forEach(int max, org.apache.lucene.search.CheckedIntConsumer<IOException> consumer) throws IOException {
-                                                    stream.forEach(max, doc -> { FilteredGraphTextIndex.count("rank_lucene_collection_events", 1); consumer.accept(doc); });
+                                                    stream.forEach(max, doc -> { CommandWork.count("rank_lucene_collection_events", 1); consumer.accept(doc); });
                                                 }
-                                                @Override public int count(int max) throws IOException { int count = stream.count(max); FilteredGraphTextIndex.count("rank_lucene_collection_events", count); return count; }
+                                                @Override public int count(int max) throws IOException { int count = stream.count(max); CommandWork.count("rank_lucene_collection_events", count); return count; }
                                                 @Override public boolean mayHaveRemaining() { return stream.mayHaveRemaining(); }
                                             });
                                         }
@@ -985,11 +981,11 @@ public final class FilteredGraphTextIndex implements TextIndex {
         return new org.apache.lucene.search.DocIdSetIterator() {
             @Override public int docID() { return iterator.docID(); }
             @Override public long cost() { return iterator.cost(); }
-            @Override public int nextDoc() throws IOException { FilteredGraphTextIndex.count("rank_lucene_iterator_next_calls", 1); return iterator.nextDoc(); }
-            @Override public int advance(int target) throws IOException { FilteredGraphTextIndex.count("rank_lucene_iterator_advance_calls", 1); return iterator.advance(target); }
+            @Override public int nextDoc() throws IOException { CommandWork.count("rank_lucene_iterator_next_calls", 1); return iterator.nextDoc(); }
+            @Override public int advance(int target) throws IOException { CommandWork.count("rank_lucene_iterator_advance_calls", 1); return iterator.advance(target); }
             @Override public int docIDRunEnd() throws IOException { return iterator.docIDRunEnd(); }
             @Override public void intoBitSet(int upTo, org.apache.lucene.util.FixedBitSet bits, int offset) throws IOException {
-                FilteredGraphTextIndex.count("rank_lucene_iterator_bitset_calls", 1); iterator.intoBitSet(upTo, bits, offset);
+                CommandWork.count("rank_lucene_iterator_bitset_calls", 1); iterator.intoBitSet(upTo, bits, offset);
             }
         };
     }
@@ -997,13 +993,13 @@ public final class FilteredGraphTextIndex implements TextIndex {
         var phase = scorer.twoPhaseIterator();
         var iterator = observedIterator(phase == null ? scorer.iterator() : phase.approximation());
         var observedPhase = phase == null ? null : new org.apache.lucene.search.TwoPhaseIterator(iterator) {
-            @Override public boolean matches() throws IOException { FilteredGraphTextIndex.count("rank_lucene_two_phase_matches", 1); return phase.matches(); }
+            @Override public boolean matches() throws IOException { CommandWork.count("rank_lucene_two_phase_matches", 1); return phase.matches(); }
             @Override public float matchCost() { return phase.matchCost(); }
             @Override public int docIDRunEnd() throws IOException { return phase.docIDRunEnd(); }
         };
         return new org.apache.lucene.search.Scorer() {
             @Override public int docID() { return scorer.docID(); }
-            @Override public float score() throws IOException { FilteredGraphTextIndex.count("rank_lucene_score_calls", 1); return scorer.score(); }
+            @Override public float score() throws IOException { CommandWork.count("rank_lucene_score_calls", 1); return scorer.score(); }
             @Override public org.apache.lucene.search.DocIdSetIterator iterator() { return observedPhase == null ? iterator : org.apache.lucene.search.TwoPhaseIterator.asDocIdSetIterator(observedPhase); }
             @Override public org.apache.lucene.search.TwoPhaseIterator twoPhaseIterator() { return observedPhase; }
             @Override public int advanceShallow(int target) throws IOException { return scorer.advanceShallow(target); }
@@ -1012,7 +1008,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             @Override public float smoothingScore(int doc) throws IOException { return scorer.smoothingScore(doc); }
             @Override public java.util.Collection<org.apache.lucene.search.Scorable.ChildScorable> getChildren() throws IOException { return scorer.getChildren(); }
             @Override public void nextDocsAndScores(int upTo, org.apache.lucene.util.Bits accept, org.apache.lucene.search.DocAndFloatFeatureBuffer buffer) throws IOException {
-                scorer.nextDocsAndScores(upTo, accept, buffer); FilteredGraphTextIndex.count("rank_lucene_batch_docs", buffer.size);
+                scorer.nextDocsAndScores(upTo, accept, buffer); CommandWork.count("rank_lucene_batch_docs", buffer.size);
             }
         };
     }
@@ -1027,7 +1023,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         final java.util.Set<Node> owners = new java.util.HashSet<>();
         void charge() {
             if (witnesses == RANK_WITNESS_LIMIT) throw new TextIndexException("ranked live-witness budget exceeded");
-            witnesses++; FilteredGraphTextIndex.count("rank_live_witnesses_visited", 1);
+            witnesses++; CommandWork.count("rank_live_witnesses_visited", 1);
         }
         Node selectedUnit(org.apache.jena.sparql.core.DatasetGraph data, Node selection) {
             if (selections.containsKey(selection)) return selections.get(selection);
@@ -1036,9 +1032,9 @@ public final class FilteredGraphTextIndex implements TextIndex {
             var rows = data.find(PUBLIC_GRAPH, Node.ANY, property("selection"), selection);
             Node unit = null;
             try {
-                if (rows.hasNext()) { unit = rows.next().getSubject(); FilteredGraphTextIndex.count("rank_selection_units_visited", 1); }
+                if (rows.hasNext()) { unit = rows.next().getSubject(); CommandWork.count("rank_selection_units_visited", 1); }
                 if (rows.hasNext()) {
-                    rows.next(); FilteredGraphTextIndex.count("rank_selection_units_visited", 1);
+                    rows.next(); CommandWork.count("rank_selection_units_visited", 1);
                     throw new TextIndexException("ranked current selection has ambiguous public unit identities");
                 }
             } finally { org.apache.jena.atlas.iterator.Iter.close(rows); }
@@ -1168,7 +1164,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         try {
             while (selections.size() < bound && heads.hasNext()) {
                 selections.add(heads.next().getObject());
-                FilteredGraphTextIndex.count("catalogue_name_witness_heads_visited", 1);
+                CommandWork.count("catalogue_name_witness_heads_visited", 1);
             }
             if (heads.hasNext()) throw new TextIndexException("catalogue name selection owner exceeds its admitted bound");
         } finally { org.apache.jena.atlas.iterator.Iter.close(heads); }
@@ -1212,7 +1208,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             if (top.scoreDocs.length == 0) { proof.groups.put(key, -1); return false; }
             var hit = top.scoreDocs[0];
             String id = searcher.storedFields().document(hit.doc, java.util.Set.of(entityField)).get(entityField);
-            FilteredGraphTextIndex.count("rank_group_candidates_visited", 1);
+            CommandWork.count("rank_group_candidates_visited", 1);
             String witness = scope.catalogue() && id.startsWith(PublicNameProjection.PREFIX + "work:") ? nameWitness(data, id, scope, proof) : null;
             String admitted = admittedMain(data, witness == null ? id : witness, scope, proof);
             if (key.equals(admitted)) { proof.groups.put(key, hit.doc); return hit.doc == doc; }
@@ -1313,7 +1309,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
     }
     @Override public void addEntity(Entity entity) {
-        FilteredGraphTextIndex.count("text_adds", 1);
+        CommandWork.count("text_adds", 1);
         CommandWork.timed("text_index", () -> addMeasuredEntity(entity));
     }
     private void addMeasuredEntity(Entity entity) {
@@ -1375,7 +1371,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         return doc;
     }
     @Override public void updateEntity(Entity entity) {
-        FilteredGraphTextIndex.count("text_updates", 1);
+        CommandWork.count("text_updates", 1);
         CommandWork.timed("text_index", () -> {
             if (!entity.getMap().containsKey(OccurrenceTextSchema.FIELD)) {
                 var data = rankData.get();
@@ -1393,7 +1389,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
         });
     }
     @Override public void deleteEntity(Entity entity) {
-        FilteredGraphTextIndex.count("text_deletes", 1);
+        CommandWork.count("text_deletes", 1);
         CommandWork.timed("text_index", () -> lucene.deleteEntity(entity));
     }
     @Override public Map<String, Node> get(String uri) { return lucene.get(uri); }
@@ -1454,7 +1450,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             }
             if (subject != null) filtered.add(new TermQuery(new Term(definition.getEntityField(), subject)),
                 BooleanClause.Occur.FILTER);
-            IndexSearcher searcher = new RankSearcher(reader);
+            IndexSearcher searcher = new IndexSearcher(reader);
             var hits = searcher.search(filtered.build(), limit <= 0 ? DEFAULT_LIMIT : limit);
             var stored = searcher.storedFields();
             List<TextHit> result = new ArrayList<>(hits.scoreDocs.length);
