@@ -6,6 +6,7 @@ import { readSpacePage } from '../../../../../apps/web/features/address/space-re
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { gateFor, parsePlatformAccess } from '../../../../../apps/web/features/api/platform-access.ts';
 import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
 import { mainBrowseQuery, parseBrowseState } from '../../../../../apps/web/features/zones/browse-state.ts';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/books/catalogue-browse-and-search-in-its-zone.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -322,23 +323,25 @@ async function productionVisit(name: PersonaName) {
   const person = sessions[name];
   const actingSubject = person.actingSubject ?? undefined;
   const key = await siteKey();
+  const recordFetch = (caller: PersonaSession): typeof fetch => (async (input, init) => {
+    const raw = input instanceof Request ? input.url : String(input);
+    const url = new URL(raw, 'https://record.invalid');
+    const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+    const method = init?.method ?? 'GET';
+    const label = requestLabels.getStore()?.(method, path);
+    if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
+    try {
+      return await recording.session(name, caller)(label, method, path,
+        typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
+        new Headers(init?.headers).get('idempotency-key') ?? undefined,
+        { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Production request ${method} ${path} failed: ${detail}`);
+    }
+  }) as typeof fetch;
   const clientFor = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
-    fetcher: (async (input, init) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
-      const method = init?.method ?? 'GET';
-      const label = requestLabels.getStore()?.(method, path);
-      if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
-      try {
-        return await recording.session(name, caller)(label, method, path,
-          typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
-          new Headers(init?.headers).get('idempotency-key') ?? undefined,
-          { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } });
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        throw new Error(`Production request ${method} ${path} failed: ${detail}`);
-      }
-    }) as typeof fetch,
+    fetcher: recordFetch(caller),
   });
   const personal = clientFor(person);
   const anonymous = clientFor(sessions.visitor);
@@ -417,10 +420,13 @@ async function productionVisit(name: PersonaName) {
   const view = await reader.resolveRealm(key, 'en', 'site');
   if (view.kind !== 'realm') throw new Error(`Production realm did not resolve for ${name}: ${view.kind}`);
   const realmId = view.header.id.slice(-36);
+  const followRead = actingSubject
+    ? named('frame-follow', () => personal.v1.follows({ id: realmId }).get({ query: { kind: 'realm', actingSubject } }))
+    : null;
   await Promise.all([
     presentations.get(zone),
     actingSubject ? named('frame-joining', () => personal.v1.realms({ realm: realmId }).joining.get({ query: { actingSubject } })) : null,
-    actingSubject ? named('frame-follow', () => personal.v1.follows({ id: realmId }).get({ query: { kind: 'realm', actingSubject } })) : null,
+    followRead,
     actingSubject ? (async () => {
       const access = await named('frame-platform-access', () => personal.v1.me['platform-access'].get());
       // The page asks for the member's ban only while that operation is open for this viewer.
@@ -430,6 +436,17 @@ async function productionVisit(name: PersonaName) {
     })() : null,
     named('frame-facets', () => frames.readFacets()),
   ]);
+  if (actingSubject && followRead) {
+    const follow = await followRead;
+    const data = follow.data as { following?: boolean | null; level?: string | null } | null | undefined;
+    // Same presentation as the header: a missing body has no following, and a missing level stays null.
+    const following = data ? data.following ?? false : null;
+    const level = data?.level ?? null;
+    if (following === null || level === null) {
+      const relationships = mainRelationships(actingSubject, { origin: '', fetch: recordFetch(person) });
+      await named('frame-follow-state', () => relationships.state(view.header.id));
+    }
+  }
   const pages: [string, Record<string, string>][] = [
     ['page-browse-default', {}],
     ['page-browse-newest', { sort: 'newest' }],

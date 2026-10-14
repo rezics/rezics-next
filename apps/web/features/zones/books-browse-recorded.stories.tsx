@@ -10,6 +10,7 @@ import { mainApiWithToken } from '../api/main.ts';
 import type { RealmReadClient } from '../realm/read.ts';
 import { RealmBrowseRoute } from '../realm/routes.tsx';
 import type { ZoneBrowsePage } from '../realm/types.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedSelection, type RecordedState } from '../stories/recorded-fetch.ts';
@@ -56,10 +57,15 @@ function searchOf(persona: Persona, label: string): Record<string, string> {
   return Object.fromEntries(new URL(browseSample(persona, label).path, 'https://recorded.invalid').searchParams);
 }
 
+function hasSample(persona: Persona, label: string) {
+  return browseRecord.personas[persona].some(answer => answer.label === label);
+}
+
 function selections(persona: Persona, label: string, state: RecordedState): RecordedSelection[] {
   const frame = ['frame-address', 'frame-presentation', 'frame-realm-header', 'frame-facets', label];
   const signedIn = persona === 'visitor' ? [] : [
     'frame-session-agent', 'frame-person-preferences', 'frame-joining', 'frame-member-ban', 'frame-follow', 'frame-platform-access',
+    ...(hasSample(persona, 'frame-follow-state') ? ['frame-follow-state'] : []),
   ];
   return [...frame, ...signedIn].map(item => ({
     label: item,
@@ -103,11 +109,12 @@ function ProductionBrowse({ persona, label, state }: { persona: Persona; label: 
     let active = true;
     const replay = recordedFetch(browseRecord, persona, selections(persona, label, state));
     const main = mainApiWithToken(undefined, { fetcher: replay.fetcher });
-    const client: RealmReadClient = {
+    const client: RealmReadClient & { fetch: typeof fetch } = {
       main,
       personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher: replay.fetcher }),
       actingSubject: actingSubjectOf(persona),
       signedIn: persona !== 'visitor',
+      fetch: replay.fetcher,
     };
     void RealmBrowseRoute({
       params: Promise.resolve({ locale, realm: siteKey() }),
@@ -143,6 +150,10 @@ function at(base: Story, viewport: 'phone' | 'desktop'): Story {
   return { ...base, globals: { viewport: { value: viewport }, locale } };
 }
 
+function expectRelationshipRead(canvas: ReturnType<typeof within>) {
+  return expect(canvas.queryByText(relationshipMessages.en.unavailable)).toBeNull();
+}
+
 const playPopulated: Play = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement);
   const persona = args.persona ?? 'visitor';
@@ -163,6 +174,7 @@ const playPopulated: Play = async ({ canvasElement, args }) => {
   await expect(new URL(next.getAttribute('href')!, 'https://recorded.invalid').searchParams.get('cursor'))
     .toBe(answer.nextCursor);
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectRelationshipRead(canvas);
 };
 
 const playSearch: Play = async ({ canvasElement, args }) => {
@@ -184,6 +196,7 @@ const playSearch: Play = async ({ canvasElement, args }) => {
   const next = canvas.getByRole('link', { name: messages.next });
   await expect(new URL(next.getAttribute('href')!, 'https://recorded.invalid').searchParams.get('cursor'))
     .toBe(answer.nextCursor);
+  await expectRelationshipRead(canvas);
 };
 
 const playEmpty: Play = async ({ canvasElement, args }) => {
@@ -199,6 +212,7 @@ const playEmpty: Play = async ({ canvasElement, args }) => {
   await expect(sorts.getByRole('link', { name: messages.sortRelevance })).toHaveAttribute('aria-current', 'true');
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectRelationshipRead(canvas);
 };
 
 const playContinuation: Play = async ({ canvasElement, args }) => {
@@ -214,6 +228,7 @@ const playContinuation: Play = async ({ canvasElement, args }) => {
   await expect(sorts.getByRole('link', { name: messages.sortNewest })).toHaveAttribute('aria-current', 'true');
   await expect(canvas.getByRole('link', { name: messages.previous })).toBeVisible();
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
+  await expectRelationshipRead(canvas);
 };
 
 const playLoading: Play = async ({ canvasElement }) => {
