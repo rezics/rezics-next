@@ -345,7 +345,7 @@ window.fetch = async (url, init = {}) => {
 const api = bffAdminApi(input.realm, input.actingSubject);
 function Dialog() {
   const [openedAt] = useState(() => Math.max(input.now, Date.now()));
-  const days = roleDurations.find(([, days]) => days === 30)[1];
+  const days = roleDurations.find(([, days]) => days === 7)[1];
   const change = { kind: 'assignment', roleId: input.roleId, member: input.member,
     assigned: true, validUntil: new Date(openedAt + days * 86400000).toISOString() };
   const result = useRoleChange(api, { ...input, change });
@@ -386,12 +386,17 @@ async function dialogSave() {
       const request = new URL(url);
       const path = request.pathname.replace('/api/main', '') + request.search;
       const body: unknown = raw ? JSON.parse(raw) : undefined;
-      // This preview's validUntil minus the selected 30 days is the exact openedAt
+      // This preview's validUntil minus the selected seven days is the exact openedAt
       // clock. Its own label preserves that instant without inventing an API answer.
       const label = path.endsWith('/role-impact')
         ? saving ? 'dialog-role-save-preview' : 'role-dialog-opened-at'
         : path.endsWith('/role-changes') ? 'dialog-role-assignment-receipt'
-        : path.includes('/agents/') ? 'dialog-impact-member-name'
+        : path.includes('/agents/') ? !saving ? 'dialog-impact-member-name'
+          : path.split('?')[0]!.endsWith(sessions.member.actingSubject!.slice(-36)) ? 'dialog-refreshed-name-member'
+          : path.split('?')[0]!.endsWith(sessions.moderator.actingSubject!.slice(-36)) ? 'dialog-refreshed-name-moderator'
+          : path.split('?')[0]!.endsWith(sessions.owner.actingSubject!.slice(-36)) ? 'dialog-refreshed-name-owner'
+          : 'dialog-refreshed-name-stranger'
+        : path.split('?')[0]!.endsWith('/invitations') ? 'dialog-invitations-refreshed'
         : path.split('?')[0]!.endsWith('/members') ? saving ? 'dialog-members-assigned' : 'dialog-member-roster'
         : saving ? 'dialog-roles-assigned' : 'dialog-roles';
       const response = await sample(label, method, path, body, key ?? undefined);
@@ -415,10 +420,15 @@ async function dialogSave() {
     saving = true;
     const saved = await page.evaluate(async () => {
       const dialog = (window as unknown as { dialog: { save(reason: string): Promise<{ ok: boolean }>;
-        api: { roles(): Promise<unknown>; members(search: string, after: null): Promise<unknown> } } }).dialog;
+        api: { roles(): Promise<unknown>;
+          members(search: string, after: null): Promise<{ ok: boolean; data?: { items: { member: string }[] } }>;
+          names(iris: string[]): Promise<unknown>; invitations(after: null): Promise<unknown> } } }).dialog;
       const result = await dialog.save('Give the joined member the moderation role');
       if (!result.ok) throw new Error(`Production role Save failed: ${JSON.stringify(result)}`);
-      await Promise.all([dialog.api.roles(), dialog.api.members('', null)]);
+      const [, members] = await Promise.all([dialog.api.roles(), dialog.api.members('', null)]);
+      if (!members.ok || !members.data) throw new Error('Saved member roster could not be read');
+      await dialog.api.names(members.data.items.map(item => item.member));
+      await dialog.api.invitations(null);
       return result;
     });
     if (!saved.ok) throw new Error('Production role Save did not confirm');
