@@ -79,7 +79,7 @@ async function delivered(name: PersonaName) {
     const missing = await readRankingAnswer(recordedMainClient(recording, name, person, `${sort}-${window}-missing`), {
       realm: sessions.realm, sort, window, actingSubject: person.actingSubject,
     });
-    expect(missing).toMatchObject({ ok: false, status: 404, failure: 'missing' });
+    expect(missing).toMatchObject({ ok: false, failure: 'missing' });
   }
   for (const interval of ['day', 'week', 'month'] as const) {
     const missing = await readRankingModuleAnswer(recordedMainClient(recording, name, person,

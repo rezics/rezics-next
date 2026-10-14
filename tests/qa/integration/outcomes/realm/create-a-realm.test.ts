@@ -10,6 +10,7 @@ import { loadRealmView } from '../../../../../apps/web/features/realm/realm-page
 import { realmDiscussionReads } from '../../../../../apps/web/features/realm/discussion-read.ts';
 import creation from '../../../../../scripts/qa/cases/outcomes/realm/create-a-realm.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordedMainClient } from '../../../support/recorded-main-client.ts';
 import {
   personaSessions,
   type PersonaName,
@@ -268,8 +269,16 @@ const named = <T,>(label: string | ((method: string, path: string) => string), r
   labels.run(label, run);
 
 async function visit(name: PersonaName) {
-  // /r/new offers sign-in before any Main read for the signed-out visitor.
-  if (name === 'visitor') return;
+  // A submission whose session ended still receives Main’s sign-in refusal.
+  if (name === 'visitor') {
+    const input = { ...command(sessions.visitor), profile: 'space-realm-v2' as const,
+      capabilities: ['realm' as const], actingSubject: sessions.owner.actingSubject!,
+      topics: [], initialSettings: initialCommunitySettings('private', []) };
+    const refused = await recordedMainClient(recording, name, sessions.visitor, 'form-creation')
+      .v1.spaces.post(input, { headers: { 'idempotency-key': randomUUID() } });
+    expect(refused.response.status).toBe(401);
+    return;
+  }
   const person = name === 'owner' ? founder.person : sessions[name];
   const recorded = recording.session(name, person);
   const anonymous = recording.session(name, sessions.visitor);
@@ -311,8 +320,15 @@ async function visit(name: PersonaName) {
     initialSettings: initialCommunitySettings('private', []) };
   const response = await named('creation-receipt', () => createCommunityWithReadback(input, `${operation}:create`,
     (body, key) => main.v1.spaces.post(body, { headers: { 'idempotency-key': key } })));
+  // Keep the existing receipt's label and request. The form's exact private
+  // intent is sampled again with its original key, producing a real replay.
+  const replay = await named('form-creation', () => createCommunityWithReadback(input, `${operation}:create`,
+    (body, key) => main.v1.spaces.post(body, { headers: { 'idempotency-key': key } })));
+  expect(replay.response.status).toBe(200);
+  expect(replay.data).toMatchObject({ replayed: true });
   const step = await named((_method, path) => path.startsWith('/v1/addresses/') ? 'founder-address' : 'founder-managed-realms',
     () => stepAfterCreation(response, handle, actingSubject, founderRealmReads(main)));
+  await named('moderated-realm', () => main.v1.me['managed-realms'].get({ query: { actingSubject } }));
   if (step.step !== 'write') return;
   const realm = step.realm.slice(-36);
   const publication = { ...communityNames('en', input.name, 'Original description by the founding fixture Person.', [])!,

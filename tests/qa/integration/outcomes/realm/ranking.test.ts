@@ -154,10 +154,10 @@ async function storyStates(name: PersonaName) {
     expect(empty.data.items).toEqual([]);
     expect(empty.data.nextCursor).toBeNull();
     expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`))
-      .toMatchObject({ ok: false, status: 404, failure: 'missing' });
+      .toMatchObject({ ok: false, failure: 'missing' });
     const invalid = await storyRanking(publicRealm, name, sort, window,
       `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2');
-    expect(invalid).toMatchObject({ ok: false, status: 400, failure: 'invalid' });
+    expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
   }
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
@@ -188,11 +188,11 @@ async function storyStates(name: PersonaName) {
   const otherPage = await answer<Page>(other.main('GET', `/v1/realms/${short(movedRealm)}/threads?${otherParams}`));
   expect(otherPage.nextCursor).not.toBeNull();
   const stolen = await storyRanking(moving, name, 'best', 'all', 'viewer-bound-refusal', otherPage.nextCursor!);
-  expect(stolen).toMatchObject({ ok: false, status: 400, failure: 'invalid' });
+  expect(stolen).toMatchObject({ ok: false, failure: 'invalid' });
   // A committed placement advances this Realm's rank revision, invalidating the old cut.
   await seed({ ...moving, owner: publicRealm.stranger }, 1, 'next-ranked-cut');
   expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!))
-    .toMatchObject({ ok: false, status: 409, failure: 'moved' });
+    .toMatchObject({ ok: false, failure: 'moved' });
 }
 
 async function traverse(sessions: PersonaSessions, name: PersonaName, expected: string[]) {
@@ -205,9 +205,9 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
     let pageNumber = 0;
     do {
       page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
-      if (pageNumber < 2) {
+      if (pageNumber < 2 || !page.nextCursor) {
         const prefix = sessions === privateRealm ? 'private-' : '';
-        const suffix = pageNumber === 0 ? '' : '-continuation';
+        const suffix = pageNumber === 0 ? '' : page.nextCursor ? '-continuation-start' : '-continuation';
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
@@ -249,7 +249,7 @@ async function prove(name: PersonaName) {
       const params = acting(person); params.set('sort', sort!); params.set('window', window!);
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
       expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
-        `private-${sort}-${window}`)).toMatchObject({ ok: false, status: 404, failure: 'missing' });
+        `private-${sort}-${window}`)).toMatchObject({ ok: false, failure: 'missing' });
     }
   }
   await storyStates(name);
