@@ -1,7 +1,7 @@
 import { Database } from 'bun:sqlite';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
-import { appendFileSync, closeSync, mkdirSync, openSync, readFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { constants } from 'node:os';
 import { checkFailureLines } from './check.ts';
@@ -16,6 +16,18 @@ import { GoalMailStore } from './mail.ts';
 export const JOB_INLINE_MS = 20_000;
 export const JOB_WAIT_MS = 45 * 60_000;
 export const parkedResult = (text: string): boolean => /^RESULT:[ \t]*parked[ \t]*$/m.test(text);
+
+/** A turn that ended while its own job is parked or waking is that job's to continue, whatever it wrote, unless it
+ * handed off a final RESULT. A Grok session can end mid-step with prose only. */
+export function parkedOnJob(task: Task, attempt: number, text: string): boolean {
+  if (parkedResult(text)) return true;
+  if (/^RESULT:[ \t]*\w+/m.test(text)) return false;
+  const directory = jobDirectory(task.worktree);
+  if (!existsSync(join(directory, 'jobs.sqlite'))) return false;
+  const store = new JobStore(directory);
+  try { return store.all().some(job => job.task === task.id && job.attempt === attempt && ['parked', 'waking'].includes(job.phase)); }
+  finally { store.close(); }
+}
 export const jobDirectory = (cwd: string): string => join(cwd, '.temp/goal/jobs');
 
 export interface Job {
@@ -233,7 +245,10 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
       }
       if (running(task)) return;
       const result = readResult(attempt);
-      if (!parkedResult(result.text)) { report('worker ended without RESULT: parked'); return; }
+      // A session that ended mid-step without any handoff (Grok does) still owes this job its continuation;
+      // only a final handoff while the job ran goes to the manager.
+      const final = /^RESULT:[ \t]*(\w+)/m.exec(result.text)?.[1];
+      if (final && final !== 'parked') { report(`worker handed off RESULT: ${final} while its job ran`); return; }
       const session = attempt.session || result.session;
       if (!session) { report('worker session is missing; cannot resume'); return; }
       try { (options.admit ?? admitWorkers)(Object.values(ledger.tasks), engineOf(attempt), false); }

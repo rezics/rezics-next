@@ -18,7 +18,7 @@ import { dispatchEngine, prepareHandover, stageHandover, handoverPrompt, strayFi
 import { blockedAttemptUnchanged, recordResumeHead, updateResumeWorktree } from './resume.ts';
 import type { GateLaneOptions } from './qa-slots.ts';
 import { gateRefusal } from './queue.ts';
-import { parkedResult } from './job.ts';
+import { parkedOnJob } from './job.ts';
 import { processIdentity } from '../qa/process/identity.ts';
 
 /** Declarations and their test registrations belong to the outcomes loader, not to orchestration. */
@@ -198,7 +198,7 @@ export async function finishAttempt(id: string, attemptNumber: number) {
     if (current.waitingResume) return { kind: 'replaced' as const, task: current };
     last.endedAt ??= new Date().toISOString();
     if (result.session && !last.session) last.session = result.session;
-    if (parkedResult(result.text)) {
+    if (parkedOnJob(current, last.n, result.text)) {
       if (current.state === 'running') current.state = 'exited';
       return { kind: 'ended' as const, task: current, repeated: false, refused: undefined };
     }

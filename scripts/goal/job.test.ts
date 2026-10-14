@@ -395,6 +395,23 @@ test('admission retries without rerunning the command and cannot wake a live wor
   } finally { worker.kill(); store.close(); }
 });
 
+test('a worker that ended mid-step without any RESULT is woken by its job; a final handoff goes to the manager', async () => {
+  const f = fixture(); const store = completed(f);
+  try {
+    // A Grok session can end mid-step with prose only; its parked job is still its continuation.
+    writeFileSync(f.task.attempts[0]!.lastMessage!, 'Story tests will run through the job wrapper.');
+    await wakeJobs(store, f.options);
+    expect(f.reports).toHaveLength(0); expect(f.prompts).toHaveLength(1);
+    expect(f.task.attempts[1]!.continuedFor).toBe('job');
+  } finally { store.close(); }
+  const g = fixture(); const final = completed(g);
+  try {
+    writeFileSync(g.task.attempts[0]!.lastMessage!, 'RESULT: blocked\nCASES: none');
+    await wakeJobs(final, g.options);
+    expect(g.prompts).toHaveLength(0); expect(g.reports[0]).toBe('worker handed off RESULT: blocked while its job ran');
+  } finally { final.close(); }
+});
+
 test('missing sessions and replaced worker attempts go to the manager', async () => {
   const f = fixture(); const store = completed(f);
   try {
@@ -404,6 +421,18 @@ test('missing sessions and replaced worker attempts go to the manager', async ()
     f.task.state = 'stopped';
     await wakeJobs(store, f.options); expect(f.reports[1]).toBe('worker attempt was replaced or closed');
     expect(f.prompts).toHaveLength(0);
+  } finally { store.close(); }
+});
+
+test('a turn that ended with prose while its job is parked owes no settlement; once reported it does', () => {
+  const f = fixture();
+  writeFileSync(f.task.attempts[0]!.lastMessage!, 'Story tests will run through the job wrapper.');
+  expect(settlementOwed(f.task)).toBe(true);
+  const store = completed(f);
+  try {
+    expect(settlementOwed(f.task)).toBe(false);
+    store.update('completed', job => { job.phase = 'reported'; });
+    expect(settlementOwed(f.task)).toBe(true);
   } finally { store.close(); }
 });
 
