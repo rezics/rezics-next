@@ -4,6 +4,7 @@ import { fromPlainText } from '@rezics/document';
 import { AdmissionConflict, AdmissionDenied } from '../../src/modules/access/admission.ts';
 import { deactivateFixtureController, expireFixtureAuthority, grantFixtureAuthority, reduceFixtureGrant } from '../../src/modules/access/fixture-authority.ts';
 import { AccessRealmManagement } from '../../src/modules/access/realm-management.ts';
+import { AccessPolicyChanges, POLICY_MANAGE } from '../../src/modules/access/policy-changes.ts';
 import { RealmAdminConflict, RealmAdminDenied } from '../../src/modules/realm-admin/contract.ts';
 import { RealmJoinRequests } from '../../src/modules/realm-admin/join-requests.ts';
 import { choosePublicModerator, moderatorSlot, publishRealmProfile, readCurrentProfile } from '../../src/modules/realm-profile/commands.ts';
@@ -12,7 +13,8 @@ import { RealmReplyContentStore } from '../../src/modules/realm-reply/content-st
 import { RealmSubmissionStore } from '../../src/modules/realm-submission/store.ts';
 import type { SubmissionRequest } from '../../src/modules/realm-submission/schema.ts';
 import { SourceNativeWorkAdoptionStore } from '../../src/modules/source/native-work-adoption.ts';
-import { GRAPHS, iri, RV } from '../../src/modules/work/activate.ts';
+import { GRAPHS, hash, iri, RV } from '../../src/modules/work/activate.ts';
+import { realmSelectionSlotIri } from '../../src/modules/work/select-realm.ts';
 import { changeZoneConfiguration, publishZoneSite, readZoneConfiguration } from '../../src/modules/zone/configuration.ts';
 import { withdrawZoneRealmAttachment } from '../../src/modules/zone/realm-attachment-withdrawal.ts';
 import { type Loss, type Member, type ReplayEntry, stack, request, principal, graphSnapshot, proposal } from './fixtures.ts';
@@ -133,8 +135,30 @@ async function publicationCandidate(member: Member, work: { work: string; mainVe
     publicationDecision: publication.decision, expectedEligibilityHead: null,
     actingSubject: member.actor, disclosure: 'public', rightsBasis: 'original-contribution',
   }));
-  return { actingSubject: member.actor, kind: 'content-publication' as const, ...work,
+  return { actingSubject: member.actor, kind: 'content-publication' as const,
+    work: work.work, mainVersion: work.mainVersion, workRevision: work.workRevision,
     variant: variantId, publicationDecision: publication.decision, contentRevision: draft.revisionId };
+}
+async function selectionHead(realm: string, mainVersion: string) {
+  return (await stack.fuseki.query(`PREFIX rv: <${RV}> SELECT ?head WHERE {
+    GRAPH ${iri(GRAPHS.current)} { ${iri(realmSelectionSlotIri(realm, mainVersion))} rv:selectionHead ?head }
+  } LIMIT 2`)).results?.bindings?.[0]?.head?.value ?? null;
+}
+async function delegatePagePublication(owner: Member, member: Member, page: string) {
+  const scope = `content:publish:${page}`;
+  await member.grant(scope, 'content.publish');
+  if ((await stack.accessPool.query('SELECT id FROM access.policy WHERE scope_id=$1', [scope])).rowCount) return;
+  await owner.grant(scope, POLICY_MANAGE);
+  const epoch = (await stack.accessPool.query<{ authority_epoch: string }>(
+    'SELECT authority_epoch::text FROM access.scope_gate WHERE id=$1', [scope])).rows[0]!.authority_epoch;
+  const change = { action: 'publish-revision' as const, policyId: randomUUID(), scopeId: scope,
+    expectedHeadRevision: '0', mandatory: [], ordered: [{ ruleId: randomUUID(), actions: ['content.publish'],
+      effect: 'allow' as const, condition: { op: 'has-grant', action: 'content.publish' } }] };
+  // Zone editing and publishing its exact home bytes are separate capabilities.
+  // Admit this delegate through the ordinary policy owner, retaining both proofs.
+  await new AccessPolicyChanges(stack.accessPool).change({ principal: await principal(owner),
+    issuerSubject: owner.actor, expectedAuthorityEpoch: epoch, idempotencyKey: randomUUID(),
+    requestDigest: hash(JSON.stringify(change)) }, change);
 }
 async function grantLoss(member: Member, scope: string, action: string) {
   const grant = await member.grant(scope, action);
@@ -301,6 +325,7 @@ const zoneEntries: ReplayEntry[] = (['configure', 'retire', 'recover', 'publish'
       publication = { zone: site.zone, expectedHead, actingSubject: member.actor, idempotencyKey: key,
         routesRevision: site.navigationRevision, navigationRevision: site.navigationRevision,
         pages: [{ page, variantId, revisionId: draft.revisionId, byteDigest: draft.byteDigest, contentEpoch: draft.sourcePosition.dataEpoch }] };
+      if (!baseline) await delegatePagePublication(site.owner, member, page);
     }
     // Attachment authority consumes Realm stewardship in addition to its action.
     if (operation === 'withdraw' && (baseline || subcase === 'steward')) {
@@ -365,14 +390,16 @@ const submissionEntries: ReplayEntry[] = (['submit', 'withdraw', 'decide'] as co
       await reviewer.grant(`review:decide:${realm}`, 'review.decide');
       await reviewer.grant(`publication:adopt:${realm}`, 'publication.adopt');
       const accepted = (await store.decide(await principal(reviewer), realm, first.id, {
-        actingSubject: reviewer.actor, expectedRevision: first.revision, outcome: 'accept', expectedSelectionHead: null,
+        actingSubject: reviewer.actor, expectedRevision: first.revision, outcome: 'accept',
+        expectedSelectionHead: await selectionHead(realm, input.mainVersion),
         publicReason: null, internalNote: null }, randomUUID())).submission;
       expect(accepted.selection).toBeTruthy();
       input = { ...input, kind: 'correction', correctionOf: accepted.selection } as SubmissionRequest;
     }
     const offered = command === 'submit' ? undefined : (await store.submit(await principal(author), realm, input, randomUUID())).submission;
     const decision = { actingSubject: reviewer.actor, expectedRevision: offered?.revision ?? randomUUID(),
-      outcome: (subcase.startsWith('accept') ? 'accept' : subcase) as 'accept' | 'reject' | 'request-changes', expectedSelectionHead: null,
+      outcome: (subcase.startsWith('accept') ? 'accept' : subcase) as 'accept' | 'reject' | 'request-changes',
+      expectedSelectionHead: resource ? null : await selectionHead(realm, input.mainVersion),
       publicReason: 'Reviewed offer', internalNote: 'Private retained note' };
     const withdrawal = { actingSubject: author.actor, expectedRevision: offered?.revision ?? randomUUID() };
     let saved: Awaited<ReturnType<typeof store.submit>>;
@@ -385,6 +412,10 @@ const submissionEntries: ReplayEntry[] = (['submit', 'withdraw', 'decide'] as co
           : await store.decide(await principal(member), realm, offered!.id, {
             ...decision, ...(changed ? { internalNote: 'Different retained note' } : {}) }, actualKey);
       saved ??= result;
+      const expectedState = command === 'submit' ? 'pending'
+        : command === 'withdraw' ? 'withdrawn' : decision.outcome === 'accept' ? 'accepted'
+          : decision.outcome === 'reject' ? 'rejected' : 'changes-requested';
+      if (!fresh && !changed) expect(result.submission.state === expectedState).toBe(true);
       return result;
     }, advance: async () => {
       if (command === 'submit') {
@@ -461,7 +492,7 @@ const replyEntries: ReplayEntry[] = (['create', 'review', 'place'] as const).map
     let saved: unknown;
     return { command: async (fresh, changed) => {
       const actualKey = fresh ? randomUUID() : key;
-      const changedIdentity = { ...identity, ...(changed ? { contextRevision: id() } : {}) };
+      const changedIdentity = { ...identity, ...(changed ? { spoiler: true } : {}) };
       const changedPlacement = { ...placement, ...(changed ? { expectedHead: id() } : {}) };
       const result = command === 'create' ? await store.create(await principal(member), {
         ...changedIdentity }, actualKey,
@@ -481,8 +512,9 @@ const replyEntries: ReplayEntry[] = (['create', 'review', 'place'] as const).map
         body: 'Advanced unreviewed discussion', actingSubject: author.actor }));
       if (command === 'review' || command === 'place' && !baseline) {
         const prior = command === 'review' ? saved as Awaited<ReturnType<typeof store.review>> : approved!;
-        const input = { ...review, revisionId: next.revisionId, revisionDigest: next.revisionDigest,
-          expectedGeneration: prior.generation, supersedes: prior.decisionId };
+        const input = command === 'review' ? { ...review,
+          expectedGeneration: prior.generation, supersedes: prior.decisionId }
+          : { ...review, revisionId: next.revisionId, revisionDigest: next.revisionDigest };
         approved = await store.review(await principal(moderator), moderator.actor, input, randomUUID(),
           realmReplyDigest({ profile: 'realm-reply-review-v1', actingSubject: moderator.actor, ...input }));
       }
@@ -533,7 +565,49 @@ const controllerEntries: ReplayEntry[] = [
     authorityClass: 'controller' as const, family: `${entry.family} by author`, subcases: entry.action === 'submission.submit' ? ['work', 'content-publication'] : ['author-controller'],
     losses: ['revoked' as const] })),
 ];
-export const entries: ReplayEntry[] = [...joinEntries, ...profileEntries, ...zoneEntries, ...submissionEntries, ...replyEntries, ...controllerEntries];
+// Each registration names an observed disclosure whose ordinary controls passed.
+// Keep registrations per witness so a repaired path cannot hide a sibling leak.
+const registeredDisclosures = new Set([
+  'Realm profile / represented-agent / expired',
+  'Realm profile / represented-agent / revoked',
+  'Realm public-choice / represented-agent / expired',
+  'Realm public-choice / represented-agent / revoked',
+  'Realm reply create / person-controller / revoked',
+  'Realm reply place by member / member-controller / revoked',
+  'Realm submission decide / accept-work / expired',
+  'Realm submission decide / accept-work / revoked',
+  'Realm submission decide / reject / expired',
+  'Realm submission decide / reject / revoked',
+  'Realm submission decide / request-changes / expired',
+  'Realm submission decide / request-changes / revoked',
+  'Realm submission submit by author / work / revoked',
+  'Realm submission submit / contribution / expired',
+  'Realm submission submit / contribution / revoked',
+  'Realm submission submit / correction / expired',
+  'Realm submission withdraw by author / author-controller / revoked',
+  'Realm submission withdraw / contribution / expired',
+  'Realm submission withdraw / contribution / revoked',
+  'Zone configure by creator / creator-controller / revoked',
+  'Zone configure / represented-agent / expired',
+  'Zone configure / represented-agent / revoked',
+  'Zone publish by creator / creator-controller / revoked',
+  'Zone recover by creator / creator-controller / revoked',
+  'Zone recover / represented-agent / expired',
+  'Zone recover / represented-agent / revoked',
+  'Zone retire by creator / creator-controller / revoked',
+  'Zone retire / represented-agent / expired',
+  'Zone retire / represented-agent / revoked',
+  'Zone withdraw by steward / steward-controller / revoked',
+  'Zone withdraw / represented-agent / expired',
+  'Zone withdraw / represented-agent / revoked',
+  'Zone withdraw / steward / expired',
+  'Zone withdraw / steward / revoked',
+]);
+export const entries: ReplayEntry[] = [...joinEntries, ...profileEntries, ...zoneEntries, ...submissionEntries, ...replyEntries, ...controllerEntries]
+  .flatMap(entry => entry.subcases.flatMap(subcase => (entry.losses ?? ['expired', 'revoked'] as const).map(loss => ({
+    ...entry, subcases: [subcase], losses: [loss], registration: registeredDisclosures.has(`${entry.family} / ${subcase} / ${loss}`)
+      ? 'registered-failing' as const : 'turned' as const,
+  }))));
 export const area = 'realms';
 export const moduleOwners = ['realm-admin', 'realm-profile', 'realm-reply', 'realm-submission', 'zone'];
 export const replayEntries = entries;
