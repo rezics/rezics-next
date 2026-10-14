@@ -74,6 +74,49 @@ test('validates local references, unions, nullable values, numeric wire queries 
   expect(JSON.stringify(record)).toBe(before);
 });
 
+test('resolves encoded native IRI path parameters for placement and root-count answers, including refusals', () => {
+  const native = { type: 'string', pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' };
+  const realm = 'https://rezics.com/id/00000001-aaaa-4000-a000-000000000001';
+  const reply = 'https://rezics.com/id/00000002-aaaa-4000-a000-000000000002';
+  const parameter = (name: string) => ({ name, in: 'path', required: true, schema: native });
+  const response = { content: { 'application/json': { schema: { type: 'object' } } } };
+  const validator = new AnswerRecordValidator({
+    components: { parameters: { realm: parameter('realm') } },
+    paths: {
+      '/v1/realms/{realm}/replies/{reply}': {
+        parameters: [{ $ref: '#/components/parameters/realm' }],
+        get: { operationId: 'placedReply', parameters: [parameter('reply')],
+          responses: { 200: response, 401: response } },
+      },
+      '/v1/realms/{realm}/reply-roots/{rootTarget}/count': {
+        get: { operationId: 'rootCount', parameters: [parameter('realm'), parameter('rootTarget')],
+          responses: { 200: response, 401: response } },
+      },
+      '/v1/realms/{realm}/threads/{reply}': {
+        get: { operationId: 'thread', parameters: ['realm', 'reply'].map(name => ({ name, in: 'path',
+          schema: { type: 'string', pattern: '^[0-9a-f-]{36}$' } })) },
+      },
+    },
+  });
+  for (const [suffix, operationId] of [['replies', 'placedReply'], ['reply-roots', 'rootCount']] as const) {
+    const path = `/v1/realms/${encodeURIComponent(realm)}/${suffix}/${encodeURIComponent(reply)}${suffix === 'reply-roots' ? '/count' : ''}`;
+    expect(validator.operationId('GET', path)).toBe(operationId);
+    for (const status of [200, 401]) {
+      const recorded = { ...sample, operationId, path, status, answer: {} };
+      expect(validator.responseViolations(recorded)).toEqual([]);
+      validator.validate(answerRecord('realm/closure-threads-and-replies',
+        Object.fromEntries(answerPersonas.map(persona => [persona, [recorded]])) as AnswerRecord['personas']));
+    }
+  }
+  for (const path of [
+    `/v1/realms/${encodeURIComponent(realm)}/threads/${encodeURIComponent(reply)}`,
+    `/v1/realms/${encodeURIComponent(realm)}/replies/${encodeURIComponent('https://other.invalid/id/' + reply.slice(-36))}`,
+    `/v1/realms/${encodeURIComponent(realm)}/replies/%2e%2e`,
+    `/v1/realms/${encodeURIComponent(realm)}/replies/%5c`,
+    `/v1/realms/${encodeURIComponent(realm)}/replies/%ZZ`,
+  ]) expect(() => validator.operationId('GET', path)).toThrow('No public API operation');
+});
+
 test('generated nullable enums and constants preserve the authored null answer under JSON Schema validation', () => {
   const response = { type: 'object', required: ['status', 'policy'], properties: {
     status: { type: ['string', 'null'], enum: ['ongoing', 'completed'], nullable: true },

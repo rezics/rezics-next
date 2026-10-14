@@ -147,14 +147,25 @@ export class AnswerRecordValidator {
   private route(method: string, path: string) {
     if (!path.startsWith('/') || path.startsWith('//') || /[\\\s#]/.test(path)) return undefined;
     const segments = path.split('?')[0]!.split('/');
+    let decoded: string[];
     try {
-      if (segments.some(segment => /^(?:\.|\.\.)$|[\\/]/.test(decodeURIComponent(segment)))) return undefined;
+      decoded = segments.map(segment => decodeURIComponent(segment));
+      if (decoded.some(segment => /^(?:\.|\.\.)$|\\/.test(segment))) return undefined;
     } catch { return undefined; }
     // Literal routes take precedence over parameter routes.
     return this.operations.filter(entry => entry.method === method && entry.path.split('/').length === segments.length)
       .sort((a, b) => (a.path.includes('{') ? 1 : 0) - (b.path.includes('{') ? 1 : 0))
-      .find(entry => entry.path.split('/').every((part, index) =>
-        /^\{[^}]+\}$/.test(part) ? Boolean(segments[index]) : part === segments[index]));
+      .find(entry => entry.path.split('/').every((part, index) => {
+        if (!/^\{[^}]+\}$/.test(part)) return part === segments[index];
+        if (!segments[index]) return false;
+        // An encoded slash remains inside one router parameter. Only its
+        // declared schema can authorize that decoded value, such as a native IRI.
+        if (!decoded[index]!.includes('/')) return true;
+        const parameter = [...(entry.operation.parameters ?? []), ...entry.parameters]
+          .map(ref => this.resolved<Parameter>(ref))
+          .find(parameter => parameter.in === 'path' && parameter.name === part.slice(1, -1));
+        return parameter?.schema !== undefined && this.validator(parameter.schema).Check(decoded[index]);
+      }));
   }
 
   operationId(method: string, path: string): string {
