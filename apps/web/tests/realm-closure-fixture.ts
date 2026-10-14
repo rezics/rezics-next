@@ -215,7 +215,7 @@ export async function realmClosureFixture(browser: Browser, info: TestInfo) {
       });
       const safety = await command<{ generation: string }>(owner.page, 'GET', `/safety-cases/${decision.caseId}?${subject(owner.actor)}`);
       const restored = await command<{ operation: { status: string } }>(owner.page, 'POST', '/moderation/decisions', {
-        ...decision.input, expectedGeneration: safety.generation, outcome: 'restore',
+        ...decision.input, expectedGeneration: safety.generation, outcome: 'reverse',
         reversesDecisionId: decision.id, idempotencyKey: randomUUID(),
       });
       expect(restored.operation.status).toBe('completed');

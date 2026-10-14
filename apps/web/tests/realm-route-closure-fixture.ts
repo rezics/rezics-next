@@ -4,7 +4,7 @@ import { Pool } from 'pg';
 import { fromPlainText } from '@rezics/document';
 import { expect, type Browser, type TestInfo } from '@playwright/test';
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
-import type { DecisionInput, DecisionResult, ReportResult } from '../../../services/main/src/modules/governance/store.ts';
+import type { DecisionInput, DecisionResult } from '../../../services/main/src/modules/governance/store.ts';
 import { DEFAULT_ZONE_PRESENTATION } from '../../../services/main/src/modules/zone/presentation-format.ts';
 import { fixtureReasons } from '../../../tests/qa/integration/g-565-decision-support.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
@@ -51,10 +51,11 @@ export async function closureFixture(browser: Browser, info: TestInfo) {
     const actor = await selectedSessionAgent(page.request, await context.cookies());
     const api = new PublicCommands(page.request);
     // Governance binds its body key to the transport key; keep one intent for every retry.
-    const governance = async <T>(path: string, data: Record<string, unknown> & { idempotencyKey: string }): Promise<T> => {
+    const governance = async <T>(path: string, data: Record<string, unknown>): Promise<T> => {
+      const key = typeof data.idempotencyKey === 'string' ? data.idempotencyKey : randomUUID();
       for (let attempt = 0; attempt < 30; attempt++) {
         const response = await page.request.post(`/api/main/v1${path}`, {
-          headers: { 'idempotency-key': data.idempotencyKey }, data,
+          headers: { 'idempotency-key': key }, data,
         });
         const body = await response.text();
         if ([200, 201].includes(response.status())) return JSON.parse(body) as T;
@@ -208,17 +209,20 @@ export async function closureFixture(browser: Browser, info: TestInfo) {
     return {
       page, realm, live, realmName, liveName, zone, zoneName, homeText, work, title, opening, reply,
       async closeRealm(evidence: TestInfo) {
-        const report = await governance<ReportResult>('/reports', {
-          profile: 'content-report-v1', actingSubject: actor,
-          authority: { kind: 'platform', scopeId: 'governance:platform' }, context: 'urn:rezics:context:global',
-          target: { owner: 'graph', resource: realm.realm, component: 'record' }, disclosure: 'parties',
-          reasonCode: 'reviewed_removal', statement: 'Review the harbor community as a whole.',
-          evidence: [{ owner: 'graph', resource: realm.realm, component: 'record', revision: null, locator: null }],
-          idempotencyKey: randomUUID(),
+        const report = await governance<{ reportId: string; caseId: string }>('/public-reports', {
+          profile: 'public-report-v1', actingSubject: actor, target: realm.realm,
+          category: 'spam_or_manipulation', contentLanguage: 'en',
+          statement: 'Review the harbor community as a whole.',
         });
+        const retained = await api.read<{ evidenceDigest: string;
+          evidence: { owner: string; resource: string; component: string; revision: string | null }[] }>(
+          `/reports/${report.reportId}?actingSubject=${encodeURIComponent(actor)}`);
+        expect(retained.evidence).toEqual([expect.objectContaining({ owner: 'graph', resource: realm.realm,
+          component: 'record', revision: header.revision })]);
         await governance(`/safety-cases/${report.caseId}/claim`, { actingSubject: actor, idempotencyKey: randomUUID() });
         const basis = await api.read<{ generation: string; reports: { evidenceDigest: string }[] }>(
           `/safety-cases/${report.caseId}?actingSubject=${encodeURIComponent(actor)}`);
+        expect(basis.reports[0]!.evidenceDigest).toBe(retained.evidenceDigest);
         const input: DecisionInput = {
           caseId: report.caseId, expectedGeneration: basis.generation, actingSubject: actor, outcome: 'restrict',
           targets: [{ owner: 'graph', resource: realm.realm, component: 'record', locator: null,
@@ -233,7 +237,7 @@ export async function closureFixture(browser: Browser, info: TestInfo) {
         if (!decision) return;
         await governance(`/safety-cases/${decision.input.caseId}/claim`, { actingSubject: actor, idempotencyKey: randomUUID() });
         const basis = await api.read<{ generation: string }>(`/safety-cases/${decision.input.caseId}?actingSubject=${encodeURIComponent(actor)}`);
-        await decide({ ...decision.input, expectedGeneration: basis.generation, outcome: 'restore',
+        await decide({ ...decision.input, expectedGeneration: basis.generation, outcome: 'reverse',
           reversesDecisionId: decision.result.decisionId, rationale: 'Restore this Realm after platform review.',
           idempotencyKey: randomUUID() }, evidence);
         decision = undefined;

@@ -6,8 +6,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import { deflateSync } from 'node:zlib';
 import media from '../../../../../scripts/qa/cases/outcomes/realm/closure-media.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { closureCommand, closureCredit, closureOriginal, closureCell, closureSetup,
-  effectClosure, publishClosureRule } from './closure-fixture.ts';
+  closureReply, effectClosure, publishClosureRule } from './closure-fixture.ts';
 
 setDefaultTimeout(60_000);
 let sessions: PersonaSessions;
@@ -16,6 +17,7 @@ let original: Awaited<ReturnType<typeof closureOriginal>>;
 type Image = { asset: string; representation: string; use: string; etag: string };
 let closedOnly: Image;
 let shared: Image;
+let replyImage: Image;
 let independentUse: string;
 let otherIndependentUse: string;
 const recording = new OutcomeRecorder(media);
@@ -39,7 +41,7 @@ const bytes = new Uint8Array(Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10
   chunk('IHDR', ihdr), chunk('IDAT', deflateSync(new Uint8Array([0, 33, 150, 83, 255]))),
   chunk('IEND', new Uint8Array())]));
 
-async function image(): Promise<Image> {
+async function image(target = original.work): Promise<Image> {
   const author = sessions.member;
   const reservation = await closureCommand<{ asset: string; uploadUrl: string; upload: string }>(author,
     'POST', '/v1/media/uploads', { profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png',
@@ -58,12 +60,12 @@ async function image(): Promise<Image> {
     expect(performance.now(), 'Public image screening must finish').toBeLessThan(deadline);
     await Bun.sleep(100);
   }
-  const use = await createUse(author, activated.representation, sessions.realm);
+  const use = await createUse(author, activated.representation, sessions.realm, target);
   return { asset: reservation.asset, representation: activated.representation, use, etag: `"${sha(bytes)}"` };
 }
-async function createUse(author: PersonaSession, representation: string, context: string) {
+async function createUse(author: PersonaSession, representation: string, context: string, target = original.work) {
   const created = await closureCommand<{ use: string }>(author, 'POST', '/v1/media/uses', {
-    actingSubject: author.actingSubject, target: original.work, representation,
+    actingSubject: author.actingSubject, target, representation,
     occurrence: randomUUID(), context, conceal: false,
   }, 201);
   expect(created.use).toMatch(/^[0-9a-f-]{36}$/);
@@ -100,9 +102,12 @@ beforeAll(async () => {
     original = await closureOriginal(sessions.member, 'Original closure image and independent story');
     closedOnly = await image();
     shared = await image();
+    const reply = await closureReply(sessions, original, 'Public illustrated reply', sessions.member, sessions.owner);
+    await grantPersonaFixtureAuthority(sessions.member, [{ scope: `content:publish:${reply.reply}`, action: 'media.use' }]);
+    replyImage = await image(reply.reply);
     independentUse = await createUse(sessions.member, shared.representation, 'urn:rezics:context:global');
     otherIndependentUse = await createUse(sessions.member, shared.representation, 'urn:rezics:context:global');
-    for (const image of [closedOnly, shared]) {
+    for (const image of [closedOnly, shared, replyImage]) {
       await available(sessions.visitor, `/v1/media/uses/${image.use}`, image.etag);
       await available(sessions.visitor, `/v1/media/representations/${image.representation}/bytes?use=${image.use}`, image.etag);
     }
@@ -114,8 +119,9 @@ beforeAll(async () => {
         { representation: closedOnly.representation },
         { representation: shared.representation, use: shared.use },
         { representation: shared.representation, use: independentUse },
+        { representation: replyImage.representation, use: replyImage.use },
       ] });
-    expect(metadata.items.map(item => item.status)).toEqual(['available', 'available', 'available', 'available']);
+    expect(metadata.items.map(item => item.status)).toEqual(['available', 'available', 'available', 'available', 'available']);
     await closureCredit(sessions.visitor, original.work, sessions.member);
     await effectClosure(sessions, rule);
   });
@@ -149,6 +155,7 @@ async function productionVisit(name: PersonaName) {
   // IDs can produce only empty metadata; live states use the API-created IDs.
   await read('media-delivery-empty', storyId(1), [storyId(2), storyId(3)], ['unavailable', 'unavailable']);
   await read('media-delivery-closed', shared.representation, [shared.use, independentUse], ['unavailable', 'available']);
+  await read('media-delivery-closed-reply', replyImage.representation, [replyImage.use], ['unavailable']);
   await read('media-delivery-open', shared.representation, [independentUse, otherIndependentUse], ['available', 'available']);
 }
 
@@ -175,7 +182,7 @@ async function delivery(name: PersonaName) {
   await closureCredit(person, original.work, sessions.member);
 }
 async function scopedDelivery(person: PersonaSession, query: string) {
-  for (const image of [closedOnly, shared]) {
+  for (const image of [closedOnly, shared, replyImage]) {
     await absent(person, `/v1/media/uses/${image.use}?${query}`, `/v1/media/uses/${randomUUID()}?${query}`, image.etag);
     await absent(person, `/v1/media/representations/${image.representation}/bytes?use=${image.use}&${query}`,
       `/v1/media/representations/${randomUUID()}/bytes?use=${randomUUID()}&${query}`, image.etag);

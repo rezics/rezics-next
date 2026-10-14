@@ -136,6 +136,29 @@ test('completed closure conceals discussion reads and consented roster while cre
     const liveRoot = `/v1/realms/${short(live.realm)}`;
     const absent = native(), absentRoot = `/v1/realms/${short(absent)}`;
     const roster = await command<{ nextCursor: string }>(owner, 'GET', `${root}/roster?limit=1`);
+    const management = await command<{ nextCursor: string; items: { member: string }[] }>(owner, 'GET', `${root}/members?limit=1`);
+    expect(management.nextCursor).not.toBeNull();
+    expect(management.items).toHaveLength(1);
+    const imageData = new Uint8Array(Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQImWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==', 'base64'));
+    await member.grant(`media:owner:${member.actor}`, 'media.upload');
+    const reservation = await command<{ uploadUrl: string }>(member, 'POST', '/v1/media/uploads', {
+      profile: 'media-image-upload-v1', asset: null, mediaType: 'image/png', byteLength: imageData.length,
+      sha256: createHash('sha256').update(imageData).digest('hex'), disclosure: 'public', actingSubject: member.actor,
+    }, 201);
+    const uploaded = await stack.call('PUT', reservation.uploadUrl, { token: member.token, raw: imageData });
+    expect(uploaded.status).toBe(201);
+    const illustration = await uploaded.json() as { representation: string };
+    await member.grant(`content:publish:${opener.reply}`, 'media.use');
+    const mediaUse = await command<{ use: string }>(member, 'POST', '/v1/media/uses', {
+      actingSubject: member.actor, target: opener.reply, representation: illustration.representation,
+      occurrence: randomUUID(), context: closed.realm, conceal: false,
+    }, 201);
+    const metadataBody = { items: [{ representation: illustration.representation, use: mediaUse.use }] };
+    expect((await call(undefined, 'POST', '/v1/media/metadata', metadataBody, 200)).body)
+      .toMatchObject({ items: [{ status: 'available' }] });
+    const imageBytes = await stack.call('GET', `/v1/media/uses/${mediaUse.use}`);
+    expect(imageBytes.status, await imageBytes.clone().text()).toBe(200);
     const threads = await command<{ nextCursor: string; items: { reply: string }[] }>(owner, 'GET', `${root}/threads?sort=new&limit=1`);
     expect(roster.nextCursor).not.toBeNull();
     expect(threads.nextCursor).not.toBeNull();
@@ -169,6 +192,16 @@ test('completed closure conceals discussion reads and consented roster while cre
     };
     await close(closed);
     await close(empty);
+    for (const suffix of ['/members', '/members?limit=1', `/members?limit=1&after=${encodeURIComponent(management.nextCursor)}`,
+      '/members?search=closure', `/members?role=${randomUUID()}`, '/roles']) {
+      const current = await call(owner, 'GET', root + suffix);
+      expect(current.status).toBe(404);
+      expect(current).toEqual(await call(owner, 'GET', absentRoot + suffix));
+    }
+    await call(owner, 'GET', `${liveRoot}/members`, undefined, 200);
+    expect((await call(undefined, 'POST', '/v1/media/metadata', metadataBody, 200)).body)
+      .toEqual({ items: [{ status: 'unavailable', reference: metadataBody.items[0] }] });
+    expect((await stack.call('GET', `/v1/media/uses/${mediaUse.use}`)).status).toBe(404);
     expect((await call(undefined, 'GET', root))).toEqual(await call(undefined, 'GET', absentRoot));
     phase = 'delivery';
     const failures: unknown[] = [];

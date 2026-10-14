@@ -19,13 +19,16 @@ import { readRealmSettings, saveRealmSettings, readRealmAccessSettings, saveReal
   applicableRealmSettings, applicableZoneSettings, lockSpaceSettingsGeneration, readSpaceSettingsGeneration } from './realm-management-settings.ts';
 import { spaceSettingsCommand, type SpaceSettingsCommand, type ZoneSpaceSettings } from '../realm-admin/contract.ts';
 import { settleRealmPolicy } from './realm-management-recovery.ts';
-import { deliverZoneSpacePolicy, policyHead, readZoneSpaceDisclosure, type ZoneSpacePolicyDelivery } from '../space/policy.ts';
+import { deliverZoneSpacePolicy, policyHead, readRealmPolicy, readZoneSpaceDisclosure, type ZoneSpacePolicyDelivery } from '../space/policy.ts';
 import { zoneSpaceCreatorAllowed } from '../space/create-authority.ts';
 import { platformAdministratorProof, platformAdministratorTargetAllowed } from './platform-administrator.ts';
 import { representedGrantProof } from './represented-work-proof.ts';
 import { realmActionScope } from './realm-management-authority.ts';
 import { maintainerControllerProof } from '../work/maintainer-proof.ts';
 import { DATASET, GRAPHS, iri, lit, RV, type WorkActivationEnvironment } from '../work/activate.ts';
+import { discloseInventory } from '../disclosure/read.ts';
+import { disclosureViewer } from '../disclosure/viewer.ts';
+import { WorkReadMissing } from '../work/read-session.ts';
 
 export const realmAdminScope = (realm: string) => `governance:realm:${realm}`;
 export const realmPermissionScope = realmActionScope;
@@ -192,6 +195,22 @@ export class AccessRealmManagement {
 
   private read<T>(realm: string, run: (client: PoolClient, generation: string) => Promise<T>) {
     return this.transaction(realm, run, false, false);
+  }
+
+  private async readDisclosedRoster<T>(realm: string, principal: VerifiedPrincipal,
+    env: WorkActivationEnvironment | undefined, run: (client: PoolClient, generation: string) => Promise<T>) {
+    const fence = async () => {
+      if (!env) return;
+      if (!await readRealmPolicy(env, realm)) throw new WorkReadMissing('Realm is unavailable');
+      const decisions = await discloseInventory(env, [{ owner: 'graph', resource: realm,
+        component: 'record' }], disclosureViewer(principal), 'read');
+      if (decisions[0] !== 'visible') throw new WorkReadMissing('Realm is unavailable');
+    };
+    // A management grant does not exempt member identities from Realm closure.
+    await fence();
+    const result = await this.read(realm, run);
+    await fence();
+    return result;
   }
 
   /** One-time owner enrollment from the server-read successful creation receipt.
@@ -497,8 +516,8 @@ export class AccessRealmManagement {
     return committed;
   }
 
-  roles(principal: VerifiedPrincipal, realm: string, actor: string) {
-    return this.read(realm, async (client, generation) => {
+  roles(principal: VerifiedPrincipal, realm: string, actor: string, env?: WorkActivationEnvironment) {
+    return this.readDisclosedRoster(realm, principal, env, async (client, generation) => {
       await this.authorize(client, principal, realm, actor, 'realm.roles.manage');
       // Holder names are member identities. Only someone who can already read
       // members may see them. Null, not [], so a roles-only manager is not told
@@ -522,14 +541,15 @@ export class AccessRealmManagement {
   }
 
   members(principal: VerifiedPrincipal, realm: string,
-    options: { actingSubject: string; search?: string; role?: string; after?: string; limit?: number }) {
+    options: { actingSubject: string; search?: string; role?: string; after?: string; limit?: number },
+    env?: WorkActivationEnvironment) {
     const limit = options.limit ?? REALM_ADMIN_COST.page;
     if (!Number.isInteger(limit) || limit < 1 || limit > REALM_ADMIN_COST.page
       || options.after && !native.test(options.after) || (options.search?.length ?? 0) > 80
       || options.role !== undefined && !roleUuid.test(options.role)) {
       throw new RealmAdminInvalid('Invalid member page');
     }
-    return this.read(realm, async (client, generation) => {
+    return this.readDisclosedRoster(realm, principal, env, async (client, generation) => {
       await this.authorize(client, principal, realm, options.actingSubject, 'realm.members.manage');
       // A role search seeks holders, then this page projects them. A realm-wide
       // name page would drop holders who sort after it.

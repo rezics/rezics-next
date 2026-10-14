@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { WorkReadMissing } from '../modules/work/read-session.ts';
 import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import { problemResult } from '../api-contract.ts';
 import { escalationCommand, escalationReceipt, impact, memberCommand, memberPage, memberQuery,
@@ -51,6 +52,7 @@ const key = (request: Request): string => {
   return value;
 };
 function errorResponse(error: unknown) {
+  if (error instanceof WorkReadMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
   if (error instanceof RealmJoinRequestMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
   if (error instanceof RealmAdminDenied) return problem(403, 'realm_management_denied', error.message);
   if (error instanceof RealmAdminInvalid) return problem(400, 'invalid_realm_management_request', error.message);
@@ -180,7 +182,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
-        return Response.json(await owner().members(principal, `https://rezics.com/id/${path.realm}`, options), { headers });
+        return Response.json(await owner().members(principal, `https://rezics.com/id/${path.realm}`, options, work.environment), { headers });
       } catch (error) { return errorResponse(error); }
     })
     .get('/v1/realms/:realm/invitations', { params,
@@ -209,7 +211,7 @@ export function realmAdminRoutes(work: MainWorkDependencies) {
     }, async ({ request, params: path, query: options }) => {
       try {
         const principal = await work.account.verify(request, ['governance:decide']);
-        return Response.json(await owner().roles(principal, `https://rezics.com/id/${path.realm}`, options.actingSubject), { headers });
+        return Response.json(await owner().roles(principal, `https://rezics.com/id/${path.realm}`, options.actingSubject, work.environment), { headers });
       } catch (error) { return errorResponse(error); }
     })
     .post('/v1/realms/:realm/role-impact', { params, body: roleCommand,

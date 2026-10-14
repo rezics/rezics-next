@@ -7,6 +7,7 @@ import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activat
 import { readResourceSummaries, type SummaryReader } from './summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaUnavailable } from './store.ts';
 import { readPublicInstructionAdoptions } from '../work/instruction-adoption.ts';
+import { readableReplyAttachments } from './reply-attachments.ts';
 
 // These proofs come from Account verification, never from serialized viewer preferences.
 const audiences = new WeakMap<Viewer, { principal: VerifiedPrincipal; actor?: string; nativeAsset?: string }>();
@@ -176,6 +177,9 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
         for (const summary of result.summaries)
           if (summary.status === 'available') readable.add(`${context}\0${summary.reference}`);
       }
+      const missing = references.filter(reference => !readable.has(`${context}\0${reference}`));
+      for (const reference of await readableReplyAttachments(deps.realmReplies, missing, context, principal, actor))
+        readable.add(`${context}\0${reference}`);
     }
     return targets.map((target, index) => {
       if (target.owner !== 'media') return true;

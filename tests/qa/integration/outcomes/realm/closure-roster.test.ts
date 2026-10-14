@@ -101,6 +101,23 @@ async function reads(name: PersonaName) {
     concealed(failures, path, await observe(person, path),
       await observe(person, `/v1/realms/${short(absentRealm)}/roster${query}`));
   }
+  if (person.actingSubject) {
+    const actor = `actingSubject=${encodeURIComponent(person.actingSubject)}`;
+    for (const suffix of [`/members?${actor}`, `/members?${actor}&limit=1`,
+      `/members?${actor}&limit=1&after=${encodeURIComponent(retainedCursor)}`,
+      `/members?${actor}&search=Fixture`, `/members?${actor}&role=${randomUUID()}`, `/roles?${actor}`]) {
+      const path = root(closed) + suffix;
+      const answer = await observe(person, path);
+      expect(answer.status, path).toBe(404);
+      concealed(failures, path, answer, await observe(person, `/v1/realms/${short(absentRealm)}${suffix}`));
+    }
+  }
+  if (name === 'owner') {
+    const actor = `actingSubject=${encodeURIComponent(live.owner.actingSubject!)}`;
+    const members = await command<{ items: { member: string }[] }>(live.owner, 'GET', `${root(live)}/members?${actor}`);
+    expect(members.items.map(item => item.member).sort()).toEqual(
+      [live.member.actingSubject!, live.moderator.actingSubject!].sort());
+  }
   const controlPath = `${root(live)}/roster`;
   const control = await observe(person, controlPath);
   if (control.status !== 200)
@@ -140,6 +157,13 @@ async function productionVisit(name: PersonaName) {
     return (personal ? personalRequest : publicRequest)(label, init?.method ?? 'GET', path);
   }) as typeof fetch;
   const main = browserMainApi(origin, { anonymous: true, fetcher });
+  if (name === 'owner') {
+    const actor = `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
+    for (const [label, suffix] of [['management-members', '/members'], ['management-role-holders', '/roles']]) {
+      const response = await personalRequest(label!, 'GET', `${root(closed)}${suffix}?${actor}`);
+      expect(response.status).toBe(404);
+    }
+  }
   const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
   globalThis.fetch = fetcher;
   try {

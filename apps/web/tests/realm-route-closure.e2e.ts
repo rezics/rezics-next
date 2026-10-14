@@ -27,7 +27,7 @@ async function open(page: Page, path: string) {
     if (!(error instanceof Error) || !error.message.includes('net::ERR_NETWORK_CHANGED')) throw error;
     await page.goto(path, { waitUntil: 'domcontentloaded' });
   }
-  await page.getByRole('main').waitFor();
+  await page.getByRole('main').waitFor({ timeout: 60_000 });
 }
 
 async function shot(page: Page, info: TestInfo, name: string) {

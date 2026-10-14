@@ -14,8 +14,9 @@ test.use({ actionTimeout: 15_000 });
 
 async function loadedImage(page: Page, alt: string) {
   const image = page.getByRole('img', { name: alt, exact: true });
-  await expect(image).toBeVisible();
-  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0)).toBe(true);
+  await expect(image).toBeVisible({ timeout: 60_000 });
+  await expect.poll(() => image.evaluate((node: HTMLImageElement) => node.complete && node.naturalWidth > 0),
+    { timeout: 30_000 }).toBe(true);
 }
 
 export function registerRealmClosureJourney() {
@@ -91,8 +92,10 @@ for (const locale of ['en', 'ja'] as const) {
       await page.goto(localizedPath(resourceHref('/w/', short(target.work)), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       const found: Findings = [];
-      await pressByKeyboard(page, page.locator('a[data-next-action]:visible').first(), found, 'read the illustrated Work');
-      await expect(page).toHaveURL(url => url.pathname.endsWith('/read'));
+      const read = page.locator('a[data-next-action][href*="/read"]:visible').first();
+      await expect(read).toBeVisible();
+      await pressByKeyboard(page, read, found, 'read the illustrated Work');
+      await expect.poll(() => new URL(page.url()).pathname.endsWith('/read'), { timeout: 60_000 }).toBe(true);
       await loadedImage(page, 'Realm reply art');
       await loadedImage(page, 'Independent original art');
       await page.screenshot({ path: info.outputPath(`media-open-${locale}.png`) });

@@ -30,6 +30,7 @@ import { disclose, discloseInventory, discloseInventoryWithAnonymousNames, type 
 import { bindZoneCampaignReader, currentZoneCampaignUses } from '../modules/zone/showcase-disclosure.ts';
 import { bindNativeAssetAudience, mediaVisibility } from '../modules/media/visibility.ts';
 import { readClosedRealmMediaSelection } from '../modules/media/closed-realm-media.ts';
+import { readableReplyAttachments } from '../modules/media/reply-attachments.ts';
 
 declare module './dependencies.ts' {
   interface MainWorkDependencies {
@@ -282,6 +283,17 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const key=`${context}\0${summary.reference}`;
         available.add(key);
         if (summary.disclosure==='public') publicTargets.add(key);
+      }
+      const missing = [...targets].filter(target => !available.has(`${context}\0${target}`));
+      const publicReplies = await readableReplyAttachments(work.realmReplies, missing, context);
+      for (const target of publicReplies) {
+        const key = `${context}\0${target}`;
+        available.add(key); publicTargets.add(key);
+      }
+      if (principal && actingSubject) {
+        for (const target of await readableReplyAttachments(work.realmReplies,
+          missing.filter(target => !publicReplies.has(target)), context, principal, actingSubject))
+          available.add(`${context}\0${target}`);
       }
     }
     // Public profile avatar targets are Agents rather than Work/semantic resources.
@@ -617,10 +629,13 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         if ((item.role.startsWith('campaign-') || query.zoneVariant !== undefined) && !(await currentZoneCampaignUses(
           work.environment, item.role.startsWith('campaign-') ? item.campaignZone : query.zone,
           reader, item.target)).has(params.use)) return unavailable();
-        const target = (await readResourceSummaries(work.environment, undefined,
-          reader, { resources: [item.target], context: DEFAULT_MEDIA_CONTEXT, language: null, channel: 'media' })).summaries[0]!;
-        if (target.status !== 'available') return unavailable();
-        return await deliver(request, work.media, item, target.disclosure === 'public');
+        const reference = { representation: item.representation, use: params.use };
+        const basis = (await metadataFor(request, [reference], query.actingSubject))[0];
+        if (!basis) return unavailable();
+        return await deliver(request, work.media, item, basis.publicTarget, async () => {
+          const current = (await metadataFor(request, [reference], query.actingSubject))[0];
+          return current ? current.publicTarget : null;
+        });
       } catch (error) { return mediaError(error); }
     }))
     .get('/v1/media/assets/:asset/bytes', {
