@@ -4,7 +4,7 @@ import type { FusekiClient, SparqlResult } from '../src/infrastructure/fuseki.ts
 import { CLASSIFICATION_CONTEXT_PROFILE, CLASSIFICATION_CONTEXT_V2_PROFILE } from '../src/modules/classification/context.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
 import { OutboxIncomplete, RelayEventBlocked, readMainOutboxEnvelope, relayMainOutboxOnce,
-  type MainCloudEvent } from '../src/modules/outbox/relay.ts';
+  type MainCloudEvent, type MainOutboxBatch } from '../src/modules/outbox/relay.ts';
 import { RV } from '../src/modules/work/activate.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -21,7 +21,7 @@ function fixture() {
     const eventId = `urn:rezics:event:classification-context-${n}`;
     return {
       batch: { streamScope: MAIN_RELAY_STREAM_SCOPE, batchId: `urn:rezics:outbox:classification-context-${n}`,
-        dataEpoch: 'epoch', routingEpoch: 'routing', sequence: String(n), graphSequence, eventIds: [eventId] },
+        dataEpoch: 'epoch', routingEpoch: 'routing', sequence: String(n), graphSequence, eventIds: [eventId] } satisfies MainOutboxBatch,
       receipt: {
         kind: `${RV}ClassificationContextCreatedEvent`, ordinal: '0', action: 'classification.context.configure',
         receipt: `urn:rezics:classification-context-receipt:${n}`, eventOperation: operation,
