@@ -170,6 +170,7 @@ test('the recorded unsupported query refusal stays a failure rather than an empt
   // The shared adapter classifies 400 as invalid and does not keep the problem body.
   expect(page).toEqual({ ok: false, failure: 'invalid' });
   expect(page).not.toHaveProperty('problem');
+  if (page.ok || built.ok) throw new Error('The refusal became a catalogue page');
   expect(built).toBe(page);
 });
 

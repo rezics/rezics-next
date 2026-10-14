@@ -175,7 +175,8 @@ async function suppliedClientSession(client: RealmReadClient): Promise<void> {
   const actingSubject = client.actingSubject;
   if (!client.signedIn || !actingSubject) return;
   const personal = client.personal ?? client.main;
-  await personal.v1.me['session-agent'].get();
+  // The route requires the session header. Replay matches the path, not that header.
+  await personal.v1.me['session-agent'].get({ headers: { 'x-session-key': 'recorded-visit' } });
   await personal.v1.me['person-preferences'].get({ query: { actingSubject } });
 }
 
