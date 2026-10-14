@@ -10,66 +10,86 @@ const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 
+// Checkpoints are acknowledged before the child proceeds, so separate pipe chunks
+// and host scheduling cannot change the injected clock at an admission boundary.
+function checkpointChild() {
+  return `
+    import { existsSync } from 'node:fs';
+    import { join } from 'node:path';
+    let sequence = 0;
+    async function checkpoint(line) {
+      const ack = join(process.cwd(), 'ack-' + ++sequence);
+      console.log(line);
+      while (!existsSync(ack)) await Bun.sleep(1);
+    }
+  `;
+}
+
+function checkpointClock(dir: string) {
+  let now = 0, sequence = 0;
+  const lines: string[] = [];
+  return { now: () => now, lines, observe: (line: string) => {
+    lines.push(line);
+    if (line.startsWith('CLOCK ')) now = Number(line.slice(6));
+    writeFileSync(join(dir, 'ack-' + ++sequence), '');
+  } };
+}
+
 test('startup case clocks allow admission until the inherited run deadline', () => {
-  const deadline = Date.now() + 600_000;
+  const now = () => 1000;
   expect(qaStartupTestTimeout(180_000, { REZICS_STACK_PROFILE: 'qa',
-    REZICS_QA_MEMORY_DEADLINE: String(deadline) })).toBeGreaterThan(590_000);
+    REZICS_QA_MEMORY_DEADLINE: '601000' }, now)).toBe(600_000);
   expect(qaStartupTestTimeout(180_000, { REZICS_STACK_PROFILE: 'dev',
-    REZICS_QA_MEMORY_DEADLINE: 'invalid' })).toBe(180_000);
+    REZICS_QA_MEMORY_DEADLINE: 'invalid' }, now)).toBe(180_000);
   expect(qaStartupTestTimeout(180_000, { REZICS_STACK_PROFILE: 'qa',
-    REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 1000) })).toBe(180_000);
+    REZICS_QA_MEMORY_DEADLINE: '2000' }, now)).toBe(180_000);
 });
 
 test('startup parents allow admission past the child work budget and exclude that wait', async () => {
   const dir = mkdtempSync(join(scratch, 'qa-startup-parent-'));
   try {
     mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
-    writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), `
+    writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), checkpointChild() + `
       if (process.env.REZICS_STACK_PROFILE === 'dev') {
         console.log('Dev ready');
         process.exit(0);
       }
       if (process.env.REZICS_QA_MEMORY_EVENTS !== '1') throw new Error('Missing admission events');
-      const deadline = Number(process.env.REZICS_QA_MEMORY_DEADLINE);
-      if (deadline <= Date.now() + 100) throw new Error('Missing admission deadline');
+      if (process.env.REZICS_QA_MEMORY_DEADLINE !== '2000') throw new Error('Missing admission deadline');
       const token = process.pid + '-1';
-      console.log('QA_MEMORY_WAIT_BEGIN ' + token);
-      const waitStarted = Date.now();
-      await Bun.sleep(150);
-      console.log('QA_MEMORY_WAIT_END ' + token + ' ' + (Date.now() - waitStarted));
-      await Bun.sleep(30);
-      console.log('Compose ready');
+      await checkpoint('QA_MEMORY_WAIT_BEGIN ' + token);
+      await checkpoint('CLOCK 150');
+      await checkpoint('QA_MEMORY_WAIT_END ' + token + ' 150');
+      await checkpoint('CLOCK 180');
+      await checkpoint('Compose ready');
     `);
-    const result = await runQaStartupChildAsync(dir, ['stack:up'], 100,
-      { ...process.env, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 2_000) });
-    expect(result.ok).toBe(true);
-    expect(result.output).toContain('Compose ready');
-    expect(result.admissionWaitMs).toBeGreaterThanOrEqual(100);
-    expect(result.activeElapsedMs).toBeGreaterThanOrEqual(30);
-    expect(result.activeElapsedMs).toBeLessThan(1_000);
+    for (const boundary of ['startup', 'admission'] as const) {
+      const clock = checkpointClock(dir);
+      const env = { ...process.env, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '2000' };
+      const result = boundary === 'startup'
+        ? await runQaStartupChildAsync(dir, ['stack:up'], 100, env, clock.observe, clock.now)
+        : await runQaAdmissionChildAsync(dir, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 100, env, clock.observe, clock.now);
+      expect(result.ok).toBe(true);
+      expect(result.admissionWaitMs).toBe(150);
+      expect(result.activeElapsedMs).toBe(30);
+      expect(clock.lines.map(line => line.replace(/\d+-1/g, 'token'))).toEqual([
+        'QA_MEMORY_WAIT_BEGIN token', 'CLOCK 150', 'QA_MEMORY_WAIT_END token 150', 'CLOCK 180', 'Compose ready',
+      ]);
+      for (let index = 1; index <= 5; index++) rmSync(join(dir, 'ack-' + index));
+    }
 
-    const lines: string[] = [];
-    const streamed = await runQaStartupChildAsync(dir, ['stack:up'], 100,
-      { ...process.env, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 2_000) },
-      line => { lines.push(line); });
-    expect(streamed.ok).toBe(true);
-    expect(streamed.admissionWaitMs).toBeGreaterThanOrEqual(100);
-    expect(streamed.activeElapsedMs).toBeGreaterThanOrEqual(30);
-    expect(lines).toContain('Compose ready');
-
-    const bypass = await runQaStartupChildAsync(dir, ['stack:up'], 100,
-      { ...process.env, REZICS_STACK_PROFILE: 'dev', REZICS_QA_MEMORY_DEADLINE: 'invalid', REZICS_QA_MEMORY_EVENTS: undefined });
-    expect(bypass.ok).toBe(true);
-    expect(bypass.output).toContain('Dev ready');
-    expect(bypass.admissionWaitMs).toBe(0);
     const devEnv = { ...process.env, REZICS_STACK_PROFILE: 'dev',
       REZICS_QA_MEMORY_DEADLINE: 'invalid', REZICS_QA_MEMORY_EVENTS: '1' };
-    const inheritedEvents = await runQaAdmissionChildAsync(dir, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 100, devEnv);
+    for (const action of ['stack:up', 'stack:clone']) {
+      const bypass = await runQaStartupChildAsync(dir, [action], 100, devEnv, undefined, () => 0);
+      expect(bypass.ok).toBe(true);
+      expect(bypass.output).toContain('Dev ready');
+      expect(bypass.admissionWaitMs).toBe(0);
+    }
+    const inheritedEvents = await runQaAdmissionChildAsync(dir, 'bun', ['scripts/dev/cli.ts', 'stack:up'],
+      100, devEnv, undefined, () => 0);
     expect(inheritedEvents.ok).toBe(true);
     expect(inheritedEvents.admissionWaitMs).toBe(0);
-    const devClone = await runQaStartupChildAsync(dir, ['stack:clone'], 100, devEnv);
-    expect(devClone.ok).toBe(true);
-    expect(devClone.admissionWaitMs).toBe(0);
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -120,18 +140,28 @@ test('clone keeps its active copying budget after a longer admission wait', asyn
   const dir = mkdtempSync(join(scratch, 'qa-clone-active-'));
   try {
     mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
-    writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), `
+    writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), checkpointChild() + `
       const token = process.pid + '-1';
-      console.log('QA_MEMORY_WAIT_BEGIN ' + token);
-      await Bun.sleep(400);
-      console.log('QA_MEMORY_WAIT_END ' + token + ' 400');
-      await Bun.sleep(1000);
+      await checkpoint('QA_MEMORY_WAIT_BEGIN ' + token);
+      await checkpoint('CLOCK 400');
+      await checkpoint('QA_MEMORY_WAIT_END ' + token + ' 400');
+      await checkpoint('Copy started');
+      await checkpoint('CLOCK 599');
+      await checkpoint('Copy still within budget');
+      await checkpoint('CLOCK 601');
+      for (;;) await Bun.sleep(1000);
     `);
+    const clock = checkpointClock(dir);
     const result = await runQaStartupChildAsync(dir, ['stack:clone'], 200,
-      { ...process.env, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 2000) });
+      { ...process.env, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '2000' }, clock.observe, clock.now);
     expect(result.timedOut).toBe(true);
-    expect(result.admissionWaitMs).toBeGreaterThanOrEqual(350);
-    expect(result.activeElapsedMs).toBeLessThan(350);
+    expect(result.admissionWaitMs).toBe(400);
+    expect(result.activeElapsedMs).toBe(201);
+    expect(clock.lines.map(line => line.replace(/\d+-1/g, 'token'))).toEqual([
+      'QA_MEMORY_WAIT_BEGIN token', 'CLOCK 400', 'QA_MEMORY_WAIT_END token 400',
+      'Copy started', 'CLOCK 599', 'Copy still within budget', 'CLOCK 601',
+    ]);
+    expect(result.output).toContain('timed out after 200 ms of active work');
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -157,8 +187,8 @@ test('a wrapped test startup streams a four-minute injected memory wait within i
       import { qaStartupTestTimeout, runQaAdmissionChildAsync, runQaStartupChildAsync } from ${JSON.stringify(join(root, 'scripts/qa/stack-startup.ts'))};
       test('wrapped startup', async () => {
         const result = process.env.STARTUP_BOUNDARY === 'indirect'
-          ? await runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 400)
-          : await runQaStartupChildAsync(${JSON.stringify(dir)}, ['stack:up'], 400);
+          ? await runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 400, process.env, undefined, () => Number(process.env.TEST_NOW))
+          : await runQaStartupChildAsync(${JSON.stringify(dir)}, ['stack:up'], 400, process.env, undefined, () => Number(process.env.TEST_NOW));
         if (!result.ok) throw new Error(result.output);
         console.log('parent ready');
       }, qaStartupTestTimeout(400));
@@ -166,13 +196,11 @@ test('a wrapped test startup streams a four-minute injected memory wait within i
     const deadline = Date.now() + 300_000;
     for (const boundary of ['direct', 'indirect']) {
     const result = await commandAsync(dir, 'bun', ['test', 'parent.test.ts'], 400,
-      { ...process.env, STARTUP_BOUNDARY: boundary, REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_EVENTS: '1',
-        REZICS_QA_MEMORY_DEADLINE: String(deadline) }, undefined, { runDeadline: deadline });
+      { ...process.env, STARTUP_BOUNDARY: boundary, TEST_NOW: String(deadline - 300_000), REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_EVENTS: '1',
+        REZICS_QA_MEMORY_DEADLINE: String(deadline) }, undefined, { runDeadline: deadline, now: () => deadline - 300_000 });
     expect(result.ok).toBe(true);
     expect(result.output).toContain('parent ready');
     expect(result.output).toMatch(/QA_MEMORY_WAIT_END \d+-\d+ 240000/);
-    expect(result.admissionWaitMs).toBeGreaterThanOrEqual(500);
-    expect(result.activeElapsedMs).toBeLessThan(400);
     }
   } finally { rmSync(dir, { recursive: true, force: true }); }
 });

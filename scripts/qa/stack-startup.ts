@@ -41,17 +41,19 @@ export async function admitIntegrationWorkScope(input: {
 }
 
 /** Bun's case clock cannot pause; the enclosing runner bounds active file work. */
-export function qaStartupTestTimeout(activeMs: number, env: NodeJS.ProcessEnv = process.env): number {
+export function qaStartupTestTimeout(activeMs: number, env: NodeJS.ProcessEnv = process.env,
+  now: () => number = Date.now): number {
   if (env.REZICS_STACK_PROFILE !== undefined && env.REZICS_STACK_PROFILE !== 'qa') return activeMs;
-  return Math.max(activeMs, qaMemoryDeadline(env) - Date.now());
+  return Math.max(activeMs, qaMemoryDeadline(env) - now());
 }
 
 /** Indirect startup scripts must stream admission and retain their active work budget. */
 export async function runQaAdmissionChildAsync(root: string, program: string, args: string[],
-  workTimeout: number, env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void) {
-  const context = startupChildContext(env, workTimeout, Date.now());
+  workTimeout: number, env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
+  now: () => number = Date.now) {
+  const context = startupChildContext(env, workTimeout, now());
   const result = await commandAsync(root, program, args, workTimeout, context.env,
-    onOutputLine, { runDeadline: context.deadline });
+    onOutputLine, { runDeadline: context.deadline, now });
   return { ...result, status: result.ok ? 0 : 1,
     error: result.timedOut ? new Error('QA admission child timed out') : undefined };
 }
@@ -66,14 +68,15 @@ function startupChildContext(env: NodeJS.ProcessEnv, workTimeout: number, starte
 
 /** The child bounds Compose readiness after admission; its parent must allow both. */
 export async function runQaStartupChildAsync(root: string, args: string[], workTimeout: number,
-  env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void) {
-  const context = startupChildContext(env, workTimeout, Date.now());
+  env: NodeJS.ProcessEnv = process.env, onOutputLine?: (line: string) => void,
+  now: () => number = Date.now) {
+  const context = startupChildContext(env, workTimeout, now());
   // Clone's work budget also covers copying. Pause it for admission rather than
   // enlarging it to the run deadline; stack:up bounds readiness in its child.
   const cloneDeadline = args[0] === 'stack:clone' ? context.deadline : undefined;
   const result = await commandAsync(root, 'bun', ['scripts/dev/cli.ts', ...args],
     cloneDeadline === undefined ? context.timeout : workTimeout,
-    context.env, onOutputLine, { runDeadline: cloneDeadline });
+    context.env, onOutputLine, { runDeadline: cloneDeadline, now });
   const admissionWaitMs = admissionWaitDuration(result.output);
   return { ...result, admissionWaitMs, activeElapsedMs: result.elapsedMs - admissionWaitMs,
     status: result.ok ? 0 : 1,

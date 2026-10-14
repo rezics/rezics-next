@@ -12,9 +12,10 @@ const root = resolve(import.meta.dir, '../../..');
 const scratch = join(root, '.temp');
 mkdirSync(scratch, { recursive: true });
 const plenty = { vmTotal: 24 * GiB, vmUsed: 0, hostAvailable: 20 * GiB };
+// Memory and ordering cases control load too: a real busy host otherwise adds
+// deadline admission and a 20-second load queue to their injected timelines.
+const idleHost = { readLoad: () => 0, processors: 1 };
 
-const { startDevCompose } = await import('../../../scripts/dev/cli.ts');
-const { startSearchFuseki } = await import('../../../scripts/operations/search-startup.ts');
 for (const [name, start, readinessMs] of [
   ['dev CLI', startDevCompose, 180_000],
   ['search rebuild', startSearchFuseki, 300_000],
@@ -30,7 +31,7 @@ for (const [name, start, readinessMs] of [
           expect(timeout).toBe(readinessMs);
           now += timeout;
           return 'ready';
-        }, { lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 400_000,
+        }, { ...idleHost, lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 400_000,
           sleep: async ms => { now += ms; }, announce: () => {},
           read: async remaining => {
             readings.push(remaining);
@@ -47,7 +48,7 @@ for (const [name, start, readinessMs] of [
     let now = 0, starts = 0;
     try {
       await expect(start(root, { REZICS_STACK_PROFILE: 'qa', REZICS_QA_MEMORY_DEADLINE: '900000' },
-        'qa', () => { starts++; }, { lockFile: join(dir, 'mutex.sqlite'), now: () => now,
+        'qa', () => { starts++; }, { ...idleHost, lockFile: join(dir, 'mutex.sqlite'), now: () => now,
           pollMs: 400_000, sleep: async ms => { now += ms; }, announce: () => {},
           read: async () => ({ ...plenty, vmUsed: plenty.vmTotal }) })).rejects.toThrow('Memory admission deadline');
       expect(now).toBe(900_000);
@@ -69,12 +70,13 @@ function orderedStartups() {
   const order: number[] = [];
   const sleepers = new Map<number, ReturnType<typeof deferred<void>>>();
   const sleeping = new Map<number, ReturnType<typeof deferred<void>>>();
+  const runs = new Map<number, Promise<void>>();
   const start = (id: number, vm = GiB) => {
     const paused = deferred<void>();
     sleeping.set(id, paused);
     const run = withMemoryStartup({ vm, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
       env: { REZICS_STACK_PROFILE: 'qa' }, root, lockFile, deadline: 1_000,
-      now: () => now, pollMs: 1, readingMaxAgeMs: 0, announce: () => {},
+      ...idleHost, now: () => now, pollMs: 1, readingMaxAgeMs: 0, announce: () => {},
       read: async () => {
         // A slow Docker reader must not block another request's registration.
         const probe = new Database(lockFile);
@@ -86,10 +88,12 @@ function orderedStartups() {
         const wake = deferred<void>(); sleepers.set(id, wake); sleeping.get(id)!.resolve(); await wake.promise;
       },
     }, () => { order.push(id); });
+    runs.set(id, run);
     return run;
   };
   return { dir, lockFile, order, start,
-    paused: (id: number) => sleeping.get(id)!.promise,
+    paused: (id: number) => Promise.race([sleeping.get(id)!.promise,
+      runs.get(id)!.then(() => { throw new Error(`Startup ${id} proceeded instead of waiting`); })]),
     nextPause: (id: number) => { const paused = deferred<void>(); sleeping.set(id, paused); return paused.promise; },
     wake: (id: number) => { now++; sleepers.get(id)!.resolve(); },
     fit: () => { available = true; },
@@ -160,7 +164,7 @@ test('a provisional ordinary slot is returned when memory no longer fits before 
   try {
     await withMemoryStartup({ vm: GiB, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
       root, env: { REZICS_STACK_PROFILE: 'qa', REZICS_QA_STARTUP_SLOT_GATE: gatePath },
-      lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
+      ...idleHost, lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
       read: async () => ({ ...plenty, vmUsed: ++reads === 2 ? plenty.vmTotal : 0 }),
       announce: line => {
         const parts = line.split(' ');
