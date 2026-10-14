@@ -10,7 +10,7 @@ import { sourceIdentity } from '../../../scripts/qa/core.ts';
 interface Identity { work: string; mainVersion: string; contribution: string; revision: string; selection: string }
 interface Item { work?: string; id?: string; primaryCredits: { agent?: string }[] }
 interface Page { results?: (Identity & Item)[]; items?: Item[]; next?: string | null; nextCursor?: string | null;
-  complete?: boolean; count?: { value: number; precision: string }; matches?: { value: number; kind: string } }
+  window?: { complete: boolean }; count?: { value: number; precision: string }; matches?: { value: number; kind: string } }
 
 /** Incremental seed prefixes change unrelated data only. All requests reach
  * composed Main over HTTP, without a qualification read before readiness. */
@@ -27,12 +27,13 @@ test('public search retains exact Realm membership and bounded work across three
   const { createRealmSpace, spaceCreationDigest } = await import('../../../services/main/src/modules/space/create.ts');
   const { selectMainDefault, mainSelectionDigest } = await import('../../../services/main/src/modules/work/select-main.ts');
   const { selectRealmLocal, realmSelectionDigest } = await import('../../../services/main/src/modules/work/select-realm.ts');
-  const { DATASET, GRAPHS, RV, iri } = await import('../../../services/main/src/modules/work/activate.ts');
+  const { DATASET, GRAPHS, RV, iri, activateMetadataWork, metadataWorkRequestDigest }
+    = await import('../../../services/main/src/modules/work/activate.ts');
   const directory = resolve('.temp', 'search-index-availability', `${Bun.env.REZICS_QA_RUN_ID}-${randomUUID()}`);
   mkdirSync(directory, { recursive: true });
   const source = sourceIdentity(resolve('.')), startedPreparation = performance.now();
   const stack = await startMediaStack('search-index-availability', { profileCredits: true });
-  const preparation: unknown[] = [], evidence: unknown[] = [], rawAnswers: unknown[] = [];
+  const preparation: unknown[] = [], evidence: unknown[] = [], rawAnswers: unknown[] = [], refusals: unknown[] = [];
   const profiles: { caller: string; pageIndex: number; size: number; profile: WorkProfile }[] = [];
   const expected: Identity[] = [], unrelated: string[] = [];
   const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
@@ -69,7 +70,7 @@ test('public search retains exact Realm membership and bounded work across three
   function retain() {
     writeFileSync(resolve(directory, 'growth.json'), JSON.stringify({ source, servedSource: source,
       runId: Bun.env.REZICS_QA_RUN_ID, lineage: stack.env.lineage, boundMs: MAX_SEARCH_REQUEST_MS,
-      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers,
+      matchingPopulation: expected.length, unrelated, expected, publication, preparationMs, preparation, evidence, rawAnswers, refusals,
       missingHistoricalWitnesses: 'Both retained sequence-25 503s lack index checkpoint and native phase witnesses.' }, null, 2));
   }
   try {
@@ -82,7 +83,10 @@ test('public search retains exact Realm membership and bounded work across three
     const sequence = async () => (await query(`PREFIX rv: <${RV}> SELECT ?sequence WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?sequence } } LIMIT 1`)).results!.bindings[0]!.sequence!.value;
     for (let n = 0; n < 3; n++) {
-      const work = await stack.privateWork(author.actor, `${phrase} story ${n}`);
+      const title = `${phrase} story ${n}`, semanticTypes = ['https://schema.org/Book'];
+      const work = await activateMetadataWork(stack.env, { title, language: 'en', semanticTypes, authorAgent: author.actor,
+        admission: stack.admission(author.actor, 'work:create:root', 'work.create',
+          metadataWorkRequestDigest(title, semanticTypes, 'en', { authorAgent: author.actor })) });
       const text = await stack.contribution(work.work, author.actor, 'en', `Original ${phrase} story ${n}: a gardener plants a seed.`);
       const selected = { context: { kind: 'main-version-default' as const, id: work.mainVersion }, work: work.work,
         contribution: text.contribution, publicationDecision: text.decision, expectedSelectionHead: null,
@@ -154,7 +158,13 @@ test('public search retains exact Realm membership and bounded work across three
             calls: sample.calls, returnedRows: sample.calls.reduce((sum, call) => sum + (call.rows ?? 0), 0), profile });
           profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile });
           retain();
-          expect(result.status, result.body).toBe(200);
+          if (result.status !== 200) {
+            refusals.push({ caller, pageIndex, size: expected.length + unrelated.length, path, answer: result });
+            retain();
+            // A refusal ends this traversal. Later samples have distinct inputs
+            // or a newly seeded source cut; none retries this request.
+            break;
+          }
           const page = JSON.parse(result.body) as Page;
           for (const item of page.results ?? page.items ?? []) {
             const work = item.work ?? item.id!;
@@ -169,7 +179,7 @@ test('public search retains exact Realm membership and bounded work across three
           const next = page.next ?? page.nextCursor;
           if (!next) {
             expect(caller === 'browse' ? page.matches!.kind : page.count!.precision).toBe('exact');
-            if (caller === 'browse') expect(page.complete).toBe(true);
+            if (caller === 'browse') expect(page.window?.complete).toBe(true);
             expect(delivered.toSorted()).toEqual(expected.map(row => row.work).toSorted());
             break;
           }
@@ -180,6 +190,7 @@ test('public search retains exact Realm membership and bounded work across three
         }
       }
     }
+    expect(refusals, JSON.stringify(refusals)).toHaveLength(0);
     for (const caller of ['catalogue-word', 'catalogue-phrase', 'browse']) {
       for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
         const measured = profiles.filter(row => row.caller === caller && row.pageIndex === pageIndex);

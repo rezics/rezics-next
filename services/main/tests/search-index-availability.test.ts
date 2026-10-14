@@ -2,6 +2,8 @@ import { expect, test } from 'bun:test';
 import { FusekiClient, fusekiReadBudget, type SearchDeltaProof } from '../src/infrastructure/fuseki.ts';
 import { assertPublicTextReady, MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable,
   SearchRequestTimedOut, withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
+import { readRankedCatalogue } from '../src/modules/search/ranked.ts';
+import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 
 const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
@@ -52,4 +54,36 @@ test('public search cancels unfinished work at its original wall bound without a
   expect(performance.now() - started).toBeGreaterThanOrEqual(MAX_SEARCH_REQUEST_MS - 10);
   expect(cancelled).toBe(true);
   expect(attempts).toBe(1);
+});
+
+test('one delivered catalogue slot admits only one initial index candidate to audience disclosure', async () => {
+  const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const hits = Array.from({ length: 3 }, (_, n) => ({ id: `urn:rezics:unit:${n}`, key: id(n), score: '1' }));
+  for (const population of [6, 22, 70]) {
+    const client = new FusekiClient('http://unused.invalid');
+    let candidates = 0;
+    client.query = async sparql => {
+      if (sparql.includes('rv:rankedText')) {
+        const size = Number(/rv:rankedText\(rv:searchBody, "[^"]+", (\d+)/u.exec(sparql)![1]);
+        return { results: { bindings: [{ epoch: term('epoch'), sequence: term('25'), generation: term(generation),
+          page: term(JSON.stringify({ hits: hits.slice(0, size), commit: '7', more: size < hits.length })) }] } };
+      }
+      const units = [...sparql.matchAll(/<(urn:rezics:unit:\d+)>/gu)].map(match => match[1]!);
+      return { results: { bindings: units.map(unit => ({ unit: term(unit), work: term(id(Number(unit.split(':').at(-1)))),
+        main: term(id(Number(unit.split(':').at(-1)))), contribution: term(id(10)), revision: term(id(11)),
+        selection: term(id(12)), language: term('en') })) } };
+    };
+    const env = { fuseki: client, lineage, objectDirectory: '.temp/search-availability-owner' };
+    const position = { dataEpoch: lineage.dataEpoch, sequence: '25', generation, population,
+      serverInstanceId: '11111111-1111-4111-8111-111111111111', publicSearchWriteEpoch: '2' };
+    const page = await searchGraphSnapshot.run({ clients: new Set([client]), lineage, position },
+      () => readRankedCatalogue(env, { phrase: 'needle story', language: null, pageSize: 1 }, async rows => {
+        candidates += rows.length;
+        return rows;
+      }));
+    expect(candidates).toBe(1);
+    expect(page.results.map(row => row.work)).toEqual([id(0)]);
+    expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
+    expect(page.next).not.toBeNull();
+  }
 });
