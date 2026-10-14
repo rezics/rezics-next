@@ -61,8 +61,10 @@ async function exchange(person: PersonaSession, method: string, path: string, bo
 }
 async function command<T>(person: PersonaSession, method: string, path: string, body?: unknown, status = 200): Promise<T> {
   const answer = await exchange(person, method, path, body);
-  if (answer.status !== status)
+  if (answer.status !== status) {
+    record({ event: 'prerequisite-refused', request: { method, path, body: body ?? null }, answer });
     throw new Error(`${phase}: ${method} ${path}: expected ${status}, received ${answer.status} ${answer.body}`);
+  }
   const value = JSON.parse(answer.body) as T;
   retainIds(value);
   return value;
@@ -101,7 +103,7 @@ async function createReplacement() {
     const impact = await command<{ digest: string }>(owner, 'POST', `${root}/role-impact`, input);
     await command(owner, 'POST', `${root}/role-changes`, { ...input, impactDigest: impact.digest }, 201);
   }
-  return created;
+  return { realm: created.realm, space: created.space };
 }
 
 async function observe(state: Phase) {
@@ -167,9 +169,11 @@ beforeAll(async () => {
           retainIds(site);
         }
         // A refused setup command stops before the shared helper can settle or repeat it.
-        if (observation.response.status >= 400 || observation.response.status === 202)
+        if (observation.response.status >= 400 || observation.response.status === 202) {
+          record({ event: 'prerequisite-refused', request: observation.request, answer: observation.response });
           throw new Error(`personas: ${observation.request.method} ${observation.request.path}: `
             + `${observation.response.status} ${observation.response.body}`);
+        }
       }
     } });
     phase = 'independent-spaces';
@@ -230,8 +234,8 @@ beforeAll(async () => {
     await observe('published-replacement');
   } catch (error) {
     prerequisite = String(error);
-    record({ event: 'prerequisite-refused', error: prerequisite });
-    console.error('Realm entry prerequisite refused', prerequisite);
+    record({ event: 'setup-failed', error: prerequisite });
+    console.error('Realm entry setup failed', prerequisite);
   } finally {
     const durationMs = performance.now() - setupStarted;
     record({ event: 'preparation-end', at: new Date().toISOString(), durationMs });
