@@ -1,11 +1,31 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { inputSelectedNativeTests, legacyHostJenaGateFiles, ownerGateFiles, testArgs, testExclusions, unitHarnessFiles, unitOwnerFiles } from '../../../scripts/qa/acceptance.ts';
 import { expandTestPaths, isolatedIntegrationFiles, planStackProjects, selfManagedFaultFiles, splitTestArgs } from '../../../scripts/qa/core.ts';
+import { repositoryGuards } from '../../../scripts/qa/repository-guards.ts';
 
 const root = resolve(import.meta.dir, '../../..');
+
+test('database authentication and rate-limit proofs run in integration while repository guards need no database', () => {
+  const guards = repositoryGuards.map(guard => guard.file);
+  for (const [guard, integration] of [
+    ['services/account/tests/authentication-subject.test.ts', 'services/account/tests/authentication-subject.integration.test.ts'],
+    ['services/main/tests/g-543-rate-limit.test.ts', 'services/main/tests/rate-limit.integration.test.ts'],
+  ] as const) {
+    expect(guards).toContain(guard);
+    expect(guards).not.toContain(integration);
+    expect(ownerGateFiles(root)).not.toContain(integration);
+    expect(unitOwnerFiles(root)).not.toContain(integration);
+    expect(testArgs('integration', undefined, { files: [integration] })).toEqual([integration]);
+    expect(readFileSync(resolve(root, guard), 'utf8')).not.toMatch(/\b(?:accountFixture|startPostgresCluster)\b|\bnew\s+Pool\s*\(/);
+  }
+  const selection = 'services/account/tests/authentication-subject-selection.test.ts';
+  expect(ownerGateFiles(root)).toContain(selection);
+  expect(guards).not.toContain(selection);
+  expect(testArgs('integration')).not.toContain(selection);
+});
 
 test('migrated Main runtime fixtures stay registered in the integration tier and receive independent projects', () => {
   const integration = ['edit', 'outbox'].map(name => `services/main/tests/${name}.integration.test.ts`);
