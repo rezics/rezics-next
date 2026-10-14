@@ -30,7 +30,7 @@ for (const persona of ['visitor', 'stranger', 'operator'] as const) {
       expect(resolved.kind).toBe('join');
       if (resolved.kind !== 'join') throw new Error('Admission landing missing');
       const label = persona === 'visitor' ? 'request-landing' : 'join-landing';
-      expect(resolved.page).toEqual(record.personas[persona].find(sample => sample.label === label)!.answer);
+      expect<unknown>(resolved.page).toEqual(record.personas[persona].find(sample => sample.label === label)!.answer);
       expect(actingSubject === undefined).toBe(persona === 'visitor');
     } finally { replay.dispose(); }
   });
@@ -47,7 +47,7 @@ for (const persona of ['member', 'moderator'] as const) {
       const { resolved, actingSubject } = await replay.read('en');
       expect(resolved.kind).toBe('realm');
       if (resolved.kind !== 'realm' || !actingSubject) throw new Error('Recorded membership missing');
-      expect(resolved.header).toEqual(record.personas[persona].find(sample => sample.label === 'frame-realm')!.answer);
+      expect<unknown>(resolved.header).toEqual(record.personas[persona].find(sample => sample.label === 'frame-realm')!.answer);
       expect((await readMembership(replay.personal, resolved.header.id, actingSubject)).policy?.state).toBe('joined');
     } finally { replay.dispose(); }
   });

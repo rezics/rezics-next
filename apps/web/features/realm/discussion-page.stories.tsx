@@ -114,11 +114,11 @@ export const Empty: Story = { args: { state: 'empty' }, async play({ canvasEleme
   await expect(await within(canvasElement).findByText(({ ...english, ...feedCatalogs[locale] }).emptyDiscussions)).toBeVisible();
 } };
 export const EmptyPhone: Story = { ...Empty, globals: phone };
-export const Error: Story = { args: { state: 'error' }, async play({ canvasElement, globals }) {
+export const ServerError: Story = { args: { state: 'error' }, async play({ canvasElement, globals }) {
   const locale = (globals.locale as UiLocale | undefined) ?? 'en';
   await expect(await within(canvasElement).findByRole('alert')).toHaveTextContent(({ ...english, ...feedCatalogs[locale] }).serverBody);
 } };
-export const ErrorPhone: Story = { ...Error, globals: phone };
+export const ServerErrorPhone: Story = { ...ServerError, globals: phone };
 export const Gone: Story = { args: { state: 'gone' } };
 export const GonePhone: Story = { ...Gone, globals: phone };
 export const Loading: Story = { args: { state: 'loading' }, async play({ canvasElement }) {

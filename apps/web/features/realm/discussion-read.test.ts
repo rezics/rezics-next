@@ -35,7 +35,7 @@ test('board links preserve the selected Concept and content language without mix
 
 test('closed and absent discussions retain the same ordinary failure for every reader', async () => {
   for (const actor of [undefined, 'stranger', 'member', 'owner', 'moderator', 'operator']) {
-    const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async () =>
+    const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async (_input: RequestInfo | URL) =>
       Response.json({ code: 'not_found', message: 'Not found' }, { status: 404 })) as typeof fetch });
     for (const realm of ['closed', 'absent']) {
       const reads = realmDiscussionReads(main, realm, actor);
@@ -47,7 +47,7 @@ test('closed and absent discussions retain the same ordinary failure for every r
 });
 
 test('unsupported board selection remains a refusal rather than locally filtered success', async () => {
-  const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async () =>
+  const main = treaty<MainApp>('https://contract.invalid', { fetcher: (async (_input: RequestInfo | URL) =>
     Response.json({ code: 'invalid_request' }, { status: 400 })) as typeof fetch });
   expect(await realmDiscussionReads(main, 'realm').threads({ sort: 'new', window: 'week', concept: 'board' }))
     .toMatchObject({ ok: false, failure: 'invalid', status: 400 });
