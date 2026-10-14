@@ -32,9 +32,9 @@ export function NotificationDeliveries({ item, main, isCurrent }: {
     setReads(next);
   }
   if (!item.deliveries.length) return null;
-  const status: Record<string, string> = { pending: copy.deliveryWaiting, sending: copy.deliverySending,
-    uncertain: copy.deliveryUncertain, delivered: copy.deliveryDelivered, failed: copy.deliveryFailed,
-    cancelled: copy.deliveryCancelled, suppressed: copy.deliverySuppressed };
+  const status = new Map<string, string>([['pending', copy.deliveryWaiting], ['sending', copy.deliverySending],
+    ['uncertain', copy.deliveryUncertain], ['delivered', copy.deliveryDelivered], ['failed', copy.deliveryFailed],
+    ['cancelled', copy.deliveryCancelled], ['suppressed', copy.deliverySuppressed]]);
   return <div className="relative z-10 grid justify-items-start gap-2 text-sm">
     <Button size="sm" variant="ghost" disabled={loading} isLoading={loading}
       onClick={() => void load()}>{copy.deliveryDetails}</Button>
@@ -42,7 +42,7 @@ export function NotificationDeliveries({ item, main, isCurrent }: {
     {reads ? <ul className="grid gap-2" aria-label={copy.deliveryDetails}>
       {reads.map((read, index) => {
         if (read.ok) return <li key={item.deliveries[index]!.id}>
-          <p role="status">{status[read.data.state] ?? copy.deliveryUnknown}</p>
+          <p role="status">{status.get(read.data.state) ?? copy.deliveryUnknown}</p>
         </li>;
         const text = failureText(read.failure, { failedTitle: copy.deliveryFailedTitle, offline: t.notificationsFailedBody,
           server: t.notificationsServerBody, missingTitle: copy.deliveryMissing, missingBody: '',
