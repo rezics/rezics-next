@@ -663,7 +663,9 @@ function replacementClaims(task: Task, ledger: Ledger, source: ReturnType<typeof
   const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
   const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
     ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
-  if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
+  // Another Goal's area is likewise checked for added paths only: a held path was admitted, with `--allow-area`
+  // where it needed it, and a resume that changes anything else in the brief must not refuse it again.
+  if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(added.paths, task.goal, areasOf(activeGoals(ledger))));
   if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
   return { claims, changed };
 }

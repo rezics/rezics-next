@@ -2448,6 +2448,17 @@ describe('goalctl reclaim', () => {
     } finally { rmSync(dir, { recursive: true, force: true }); }
   });
 
+  test('a path in another Goal\'s area that the task already holds is not refused again', () => {
+    const dir = repo();
+    try {
+      expect(run(dir, ['reclaim', 'G-010', writeBrief(dir, 'services/main/src/modules/beta/read.ts'), '--allow-area']).status).toBe(0);
+      const result = run(dir, ['reclaim', 'G-010', writeBrief(dir, 'services/main/src/modules/beta/read.ts, services/main/src/modules/alpha/other.ts')]);
+      expect(result.stderr).not.toContain('lies in Goal');
+      expect(result.status).toBe(0);
+      expect(ledgerOf(dir).tasks['G-010']!.paths).toEqual(['services/main/src/modules/beta/read.ts', 'services/main/src/modules/alpha/other.ts']);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+
   test('still refuses a claim overlap with another open task when --allow-area is set', () => {
     const dir = repo();
     try {
