@@ -1,11 +1,12 @@
 import { documentText } from '@rezics/document';
 import type { CanonicalAddress } from '@rezics/model/address';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, waitFor, within } from 'storybook/test';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import publication from '../../../../tests/qa/fixtures/outcomes/zone/publication.json';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
+import { surfaceText } from '../address/messages.ts';
 import { spaceHref } from '../address/path.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import realmDe from '../realm/messages/de.ts';
@@ -16,8 +17,8 @@ import { zoneSitePrefix } from '../zones/zone-site-recorded-page.ts';
 import { zoneHomeDocument } from './home-document.tsx';
 import { messages as editorMessages } from './messages.ts';
 import { zoneEditorPath } from './routes.ts';
-import { ZonePublicationManagementPage, ZonePublicationRecordedPage } from './zone-publication-recorded-page.tsx';
-import { managementVisit, recordedActingPerson } from './zone-publication-recorded-page.ts';
+import { ZonePublicationCommandPage, ZonePublicationManagementPage, ZonePublicationRecordedPage } from './zone-publication-recorded-page.tsx';
+import { managementVisit, recordedActingPerson, recordedPublicationChoice } from './zone-publication-recorded-page.ts';
 
 const record = publication as AnswerRecord;
 
@@ -89,22 +90,55 @@ function recordedPath(persona: AnswerPersona, label: string, locale: UiLocale = 
   return localizedPath(spaceHref(recordedAddress(persona, label), 'site', tail), locale);
 }
 
-const published = [{ label: 'published-presentation', state: 'populated' }] as const satisfies readonly RecordedSelection[];
-const unchanged = [{ label: 'unchanged-public-presentation', state: 'populated' }] as const satisfies readonly RecordedSelection[];
-const empty = [{ label: 'empty-home-presentation', state: 'empty' }] as const satisfies readonly RecordedSelection[];
+const publishedFrame = [
+  { label: 'frame-published-address', state: 'populated' },
+  { label: 'frame-published-presentation', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+const signedFrame = [
+  ...publishedFrame,
+  { label: 'frame-published-joining', state: 'populated' },
+  { label: 'frame-published-follow', state: 'populated' },
+  { label: 'frame-published-platform-access', state: 'populated' },
+  { label: 'frame-published-member-ban', state: 'error' },
+] as const satisfies readonly RecordedSelection[];
+const unchanged = [
+  { label: 'frame-published-address', state: 'populated' },
+  { label: 'unchanged-public-presentation', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+const empty = [
+  { label: 'frame-empty-address', state: 'populated' },
+  { label: 'empty-home-presentation', state: 'empty' },
+] as const satisfies readonly RecordedSelection[];
 const draftRefused = [
   { label: 'site-address', state: 'populated' },
   { label: 'published-draft-route-refused', state: 'error' },
 ] as const satisfies readonly RecordedSelection[];
-const loading = [{ label: 'published-presentation', state: 'loading' }] as const satisfies readonly RecordedSelection[];
-const selected = [{ label: 'selected-presentation', state: 'populated' }] as const satisfies readonly RecordedSelection[];
-const competing = [{ label: 'competing-presentation', state: 'populated' }] as const satisfies readonly RecordedSelection[];
-const unchangedCompeting = [{ label: 'unchanged-competing-presentation', state: 'populated' }] as const satisfies readonly RecordedSelection[];
+const loading = [
+  { label: 'frame-published-address', state: 'populated' },
+  { label: 'frame-published-presentation', state: 'loading' },
+] as const satisfies readonly RecordedSelection[];
+const selected = [
+  { label: 'frame-published-address', state: 'populated' },
+  { label: 'selected-presentation', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+const mandatedFrame = [
+  { label: 'frame-empty-address', state: 'populated' },
+  { label: 'frame-empty-presentation', state: 'populated' },
+  { label: 'frame-empty-route', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+  { label: 'frame-published-joining', state: 'populated' },
+  { label: 'frame-published-follow', state: 'populated' },
+  { label: 'frame-published-platform-access', state: 'populated' },
+  { label: 'frame-published-member-ban', state: 'error' },
+] as const satisfies readonly RecordedSelection[];
 
 const meta = {
   title: 'Zone editor/Recorded publication',
   component: ZonePublicationRecordedPage,
-  args: { record, persona: 'visitor' as const, selections: published, locale: 'en' as const },
+  args: { record, persona: 'visitor' as const, selections: publishedFrame, locale: 'en' as const },
   render: (args, { globals }) => (
     <ZonePublicationRecordedPage {...args} locale={(globals.locale as UiLocale | undefined) ?? args.locale} />
   ),
@@ -120,28 +154,34 @@ async function expectLines(canvas: ReturnType<typeof within>, lines: readonly st
   for (const line of lines) await expect(canvas.getByText(line)).toBeVisible();
 }
 
-function showPublished(persona: AnswerPersona, label: string, locale: UiLocale = 'en') {
+function realmHeading(persona: AnswerPersona): string {
+  const name = answerOf(persona, 'frame-published-realm-header').name;
+  if (!name || typeof name !== 'object' || typeof (name as { value?: unknown }).value !== 'string') {
+    throw new Error(`Recorded ${persona} realm header has no name`);
+  }
+  return (name as { value: string }).value;
+}
+
+function showFrame(persona: AnswerPersona, label: string, locale: UiLocale = 'en') {
   return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
     const lines = recordedLines(persona, label);
     const credit = recordedCredit(persona, label);
-    const name = recordedName(persona, label);
+    const acting = recordedActingPerson(record, persona, [{ label, state: 'populated' }]);
     await expect(canvas.findByRole('region', { name: persona })).resolves.toBeVisible();
-    await expect(canvas.findByRole('heading', { level: 1, name })).resolves.toBeVisible();
+    if (acting) await expect(canvas.findByText(acting)).resolves.toBeVisible();
+    await expect(canvas.findByRole('heading', { level: 1, name: realmHeading(persona) })).resolves.toBeVisible();
     await expectLines(canvas, lines);
     await expect(canvas.getByText(credit.rightsBasis)).toBeVisible();
-    await expect(canvas.getByText(credit.author)).toBeVisible();
-    await expect(canvas.getByText(ownerAuthor)).toBeVisible();
-    await expect(canvas.getByRole('navigation', { name })).toBeVisible();
+    await expect(canvas.getAllByText(credit.author).length).toBeGreaterThan(0);
+    await expect(canvas.getAllByText(ownerAuthor).length).toBeGreaterThan(0);
+    await expect(canvas.getByRole('navigation', { name: surfaceText.site[locale] })).toBeVisible();
     await expect(canvas.getByRole('link', { name: homeLabel(locale) })).toBeVisible();
     const counts = new Map<string, number>();
     for (const mount of recordedMounts(persona, label)) counts.set(mount, (counts.get(mount) ?? 0) + 1);
     for (const [mount, count] of counts) await expect(canvas.getAllByRole('link', { name: mount })).toHaveLength(count);
     await expect(canvasElement.querySelector('[data-zone-site-home-surface]'))
       .toHaveAttribute('data-zone-site-home-surface', recordedSurface(persona, label));
-    const viewer = recordedActingPerson(record, persona, [{ label: 'site-home-presentation', state: 'populated' }]);
-    if (viewer && viewer !== credit.author) await expect(canvas.queryByText(viewer)).toBeNull();
-    if (viewer === credit.author) await expect(canvas.getAllByText(viewer)).toHaveLength(1);
   };
 }
 
@@ -182,19 +222,20 @@ function at(story: Story, viewport: 'phone' | 'desktop'): Story {
 }
 
 const publishedVisitor = {
-  parameters: { route: { pathname: recordedPath('visitor', 'published-presentation') } },
-  play: showPublished('visitor', 'published-presentation'),
+  args: { selections: publishedFrame },
+  parameters: { route: { pathname: recordedPath('visitor', 'frame-published-presentation') } },
+  play: showFrame('visitor', 'frame-published-presentation'),
 } satisfies Story;
 const publishedVisitorGerman = {
-  args: { locale: 'de' as const },
+  args: { selections: publishedFrame, locale: 'de' as const },
   globals: { locale: 'de' as const },
-  parameters: { route: { pathname: recordedPath('visitor', 'published-presentation', 'de') } },
-  play: showPublished('visitor', 'published-presentation', 'de'),
+  parameters: { route: { pathname: recordedPath('visitor', 'frame-published-presentation', 'de') } },
+  play: showFrame('visitor', 'frame-published-presentation', 'de'),
 } satisfies Story;
 const unchangedVisitor = {
   args: { selections: unchanged },
   parameters: { route: { pathname: recordedPath('visitor', 'unchanged-public-presentation') } },
-  play: showPublished('visitor', 'unchanged-public-presentation'),
+  play: showFrame('visitor', 'unchanged-public-presentation'),
 } satisfies Story;
 const emptyVisitor = {
   args: { selections: empty },
@@ -212,28 +253,28 @@ const loadingVisitor = {
   play: showLoading,
 } satisfies Story;
 
-function unchangedPersona(persona: AnswerPersona): Story {
+function signedPersona(persona: AnswerPersona): Story {
   return {
-    args: { persona, selections: unchanged },
-    parameters: { route: { pathname: recordedPath(persona, 'unchanged-public-presentation') } },
-    play: showPublished(persona, 'unchanged-public-presentation'),
+    args: { persona, selections: signedFrame },
+    parameters: { route: { pathname: recordedPath(persona, 'frame-published-presentation') } },
+    play: showFrame(persona, 'frame-published-presentation'),
   };
 }
 
 const selectedOwner = {
   args: { persona: 'owner' as const, selections: selected },
   parameters: { route: { pathname: recordedPath('owner', 'selected-presentation') } },
-  play: showPublished('owner', 'selected-presentation'),
+  play: showFrame('owner', 'selected-presentation'),
 } satisfies Story;
 const competingOwner = {
-  args: { persona: 'owner' as const, selections: competing },
-  parameters: { route: { pathname: recordedPath('owner', 'competing-presentation') } },
-  play: showPublished('owner', 'competing-presentation'),
+  args: { persona: 'owner' as const, selections: signedFrame },
+  parameters: { route: { pathname: recordedPath('owner', 'frame-published-presentation') } },
+  play: showFrame('owner', 'frame-published-presentation'),
 } satisfies Story;
-const unchangedCompetingOwner = {
-  args: { persona: 'owner' as const, selections: unchangedCompeting },
-  parameters: { route: { pathname: recordedPath('owner', 'unchanged-competing-presentation') } },
-  play: showPublished('owner', 'unchanged-competing-presentation'),
+const mandatedOperator = {
+  args: { persona: 'operator' as const, selections: mandatedFrame },
+  parameters: { route: { pathname: recordedPath('operator', 'frame-empty-presentation') } },
+  play: showFrame('operator', 'frame-empty-presentation'),
 } satisfies Story;
 
 export const PublishedVisitorPhone: Story = at(publishedVisitor, 'phone');
@@ -248,20 +289,87 @@ export const DraftRefusedVisitorPhone: Story = at(draftRefusedVisitor, 'phone');
 export const DraftRefusedVisitorDesktop: Story = at(draftRefusedVisitor, 'desktop');
 export const LoadingVisitorPhone: Story = at(loadingVisitor, 'phone');
 export const LoadingVisitorDesktop: Story = at(loadingVisitor, 'desktop');
-export const UnchangedStrangerPhone: Story = at(unchangedPersona('stranger'), 'phone');
-export const UnchangedStrangerDesktop: Story = at(unchangedPersona('stranger'), 'desktop');
-export const UnchangedMemberPhone: Story = at(unchangedPersona('member'), 'phone');
-export const UnchangedMemberDesktop: Story = at(unchangedPersona('member'), 'desktop');
-export const UnchangedModeratorPhone: Story = at(unchangedPersona('moderator'), 'phone');
-export const UnchangedModeratorDesktop: Story = at(unchangedPersona('moderator'), 'desktop');
-export const UnchangedOperatorPhone: Story = at(unchangedPersona('operator'), 'phone');
-export const UnchangedOperatorDesktop: Story = at(unchangedPersona('operator'), 'desktop');
+export const FrameStrangerPhone: Story = at(signedPersona('stranger'), 'phone');
+export const FrameStrangerDesktop: Story = at(signedPersona('stranger'), 'desktop');
+export const FrameMemberPhone: Story = at(signedPersona('member'), 'phone');
+export const FrameMemberDesktop: Story = at(signedPersona('member'), 'desktop');
+export const FrameModeratorPhone: Story = at(signedPersona('moderator'), 'phone');
+export const FrameModeratorDesktop: Story = at(signedPersona('moderator'), 'desktop');
+export const FrameOperatorPhone: Story = at(signedPersona('operator'), 'phone');
+export const FrameOperatorDesktop: Story = at(signedPersona('operator'), 'desktop');
 export const SelectedOwnerPhone: Story = at(selectedOwner, 'phone');
 export const SelectedOwnerDesktop: Story = at(selectedOwner, 'desktop');
 export const CompetingOwnerPhone: Story = at(competingOwner, 'phone');
 export const CompetingOwnerDesktop: Story = at(competingOwner, 'desktop');
-export const UnchangedCompetingOwnerPhone: Story = at(unchangedCompetingOwner, 'phone');
-export const UnchangedCompetingOwnerDesktop: Story = at(unchangedCompetingOwner, 'desktop');
+export const MandatedOperatorPhone: Story = at(mandatedOperator, 'phone');
+export const MandatedOperatorDesktop: Story = at(mandatedOperator, 'desktop');
+
+function showCommand(persona: AnswerPersona, commandLabel: string, clicks = 1) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const command = recordedPublicationChoice(record, persona, commandLabel);
+    await expect(canvas.findByRole('region', { name: persona })).resolves.toBeVisible();
+    await expect(canvas.getByText(command.actingSubject)).toBeVisible();
+    const button = canvas.getByRole('button', { name: editorMessages.en.publishReviewed });
+    for (let index = 0; index < clicks; index += 1) await userEvent.click(button);
+    await expect(canvas.findByText(command.choice.page)).resolves.toBeVisible();
+    await expect(canvas.getByText(command.choice.revisionId)).toBeVisible();
+    await expect(canvas.getByText(command.choice.byteDigest)).toBeVisible();
+  };
+}
+
+function showRefusal(persona: AnswerPersona) {
+  return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+    const canvas = within(canvasElement);
+    const refused = sample(persona, 'owner-receipt-refused').answer as { title: string; code: string };
+    await userEvent.click(canvas.getByRole('button', { name: editorMessages.en.publishReviewed }));
+    await expect(canvas.findByRole('alert')).resolves.toHaveTextContent(refused.title);
+    await expect(canvas.getByText(refused.code)).toBeVisible();
+    await expect(canvas.queryByText(recordedLines('visitor', 'published-presentation')[0]!)).toBeNull();
+  };
+}
+
+const commandMeta = { render: (args: { persona: AnswerPersona; selections: readonly RecordedSelection[]; locale: UiLocale;
+  commandLabel: string; presentationLabel: string; sequence?: boolean }) =>
+  <ZonePublicationCommandPage record={record} persona={args.persona} selections={args.selections} locale={args.locale}
+    commandLabel={args.commandLabel} presentationLabel={args.presentationLabel} sequence={args.sequence} /> };
+
+function commandStory(persona: AnswerPersona, commandLabel: string, presentationLabel: string, sequence = false, clicks = 1): Story {
+  const selections = sequence
+    ? [{ label: 'publication-acknowledgement', state: 'populated' as const }, { label: 'receipt-replay', state: 'populated' as const }]
+    : [{ label: commandLabel, state: 'populated' as const }];
+  return {
+    args: { persona, selections, locale: 'en' as const, commandLabel, presentationLabel, sequence },
+    ...commandMeta,
+    play: showCommand(persona, commandLabel, clicks),
+  } as Story;
+}
+
+function refusalStory(persona: AnswerPersona): Story {
+  return {
+    args: { persona, selections: [{ label: 'owner-receipt-refused', state: 'error' as const }], locale: 'en' as const,
+      commandLabel: 'owner-receipt-refused', presentationLabel: 'published-presentation' },
+    ...commandMeta,
+    play: showRefusal(persona),
+  } as Story;
+}
+
+export const ReceiptReplayPhone: Story = at(commandStory('owner', 'publication-acknowledgement', 'selected-presentation', true, 2), 'phone');
+export const ReceiptReplayDesktop: Story = at(commandStory('owner', 'publication-acknowledgement', 'selected-presentation', true, 2), 'desktop');
+export const CompetingPublishPhone: Story = at(commandStory('owner', 'competing-publication', 'competing-presentation'), 'phone');
+export const CompetingPublishDesktop: Story = at(commandStory('owner', 'competing-publication', 'competing-presentation'), 'desktop');
+export const MandatedPublishPhone: Story = at(commandStory('operator', 'mandated-publication', 'frame-empty-presentation'), 'phone');
+export const MandatedPublishDesktop: Story = at(commandStory('operator', 'mandated-publication', 'frame-empty-presentation'), 'desktop');
+export const RefuseVisitorPhone: Story = at(refusalStory('visitor'), 'phone');
+export const RefuseVisitorDesktop: Story = at(refusalStory('visitor'), 'desktop');
+export const RefuseStrangerPhone: Story = at(refusalStory('stranger'), 'phone');
+export const RefuseStrangerDesktop: Story = at(refusalStory('stranger'), 'desktop');
+export const RefuseMemberPhone: Story = at(refusalStory('member'), 'phone');
+export const RefuseMemberDesktop: Story = at(refusalStory('member'), 'desktop');
+export const RefuseModeratorPhone: Story = at(refusalStory('moderator'), 'phone');
+export const RefuseModeratorDesktop: Story = at(refusalStory('moderator'), 'desktop');
+export const RefuseOperatorPhone: Story = at(refusalStory('operator'), 'phone');
+export const RefuseOperatorDesktop: Story = at(refusalStory('operator'), 'desktop');
 
 const zoneId = new URL(sample('owner', 'manage-configuration').path, 'https://recorded.invalid').pathname.split('/')[3]!;
 const ownerActing = new URL(sample('owner', 'manage-configuration').path, 'https://recorded.invalid').searchParams.get('actingSubject')!;
