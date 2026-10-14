@@ -550,6 +550,7 @@
   text-autospace: normal;
 }
 .rezics-document .tiptap { outline: none; min-width: 0; }
+.rezics-document .tiptap:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; border-radius: 0.25rem; }
 .document-editor .tiptap { min-height: 45dvh; }
 .document-editor-compact .tiptap { min-height: 6rem; }
 .rezics-document p { margin-block: 0.75em; }

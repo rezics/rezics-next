@@ -344,7 +344,8 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-reply-boards.test.ts',
       'Realm board placement preserves two Concepts, manager moves, clearing and retirement through the public API',
       'Places a discussion in two Concept boards, reads filtered pages, checks author and manager placement changes, clears classification and retires a board through Main.'),
-    browser: missing('L11'),
+    browser: missing('L11',
+      'realm-boards in apps/web/tests/realm-discussions.e2e.ts is authored but blocked by Main: GET /v1/realms/01a13c1c-b514-7051-b8e8-e542e03e219f/threads?sort=best&window=all returned HTTP 503 work_read_unavailable while RealmRankingsIncomplete reported realm_rankings_are_projecting (QA 20261014t202500-ebccb2).'),
   },
   {
     kind: 'realm',
@@ -352,7 +353,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1042-community-cost-follows-threads.test.ts',
       'threads API profiles keep bounded hydration as follows grows',
       'Runs the Main API corpus child to create an opening and nested reply, then checks discussion lists and a two-item thread as follows grow.'),
-    browser: missing('gap'),
+    browser: journeyBrowser('apps/web/tests/realm-discussions.e2e.ts', 'realm-threads',
+      'realm-threads: a member publishes a thread and nested replies that another reader sees after reload in English and Japanese',
+      'A member publishes an opening post, first reply and nested reply through the real pages with the keyboard; the writer and a second reader see all saved text after reload in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -449,7 +452,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/g-1034-realm-ranking.test.ts',
       'complete Realm Best/Top and fixed header work at 100/400/1600 real threads with retained history',
       'Reads Realm Best and Top through Main at 100, 400 and 1600 real threads, checking constant request and statement counts and bounded hydration for anonymous and member reads.'),
-    browser: missing('gap'),
+    browser: journeyBrowser('apps/web/tests/realm-discussions.e2e.ts', 'realm-ranking',
+      'realm-ranking: a reader votes and reloads Best, New and Top with each time window in English and Japanese',
+      'A member votes through the real Realm page with the keyboard, reloads the saved vote, checks Best, New and Top ordering and week, month and all-time windows after reload in English and Japanese.'),
   },
   {
     kind: 'realm',

@@ -188,7 +188,7 @@ function Reply({ node, context }: { node: ReplyNode; context: ThreadContext }) {
           aria-controls={repliesId}
           aria-label={folded ? t.expandReply({ name }) : t.collapseReply({ name })}
           onClick={() => setFolded(!folded)}
-          className="group/line col-start-1 row-start-2 flex cursor-pointer justify-center pt-1 outline-none"
+          className="group/line col-start-1 row-start-2 flex cursor-pointer justify-center rounded-sm pt-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           {folded ? (
             <span

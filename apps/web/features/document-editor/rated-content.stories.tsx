@@ -149,6 +149,41 @@ export const SuitabilityEvidenceStillEnforcesAge: Story = {
   },
 };
 
+const viewingRecovery = fn();
+function MissingAccountViewing() {
+  const [ready, setReady] = useState(true);
+  return <WebRatedContentProvider viewer={{ ...viewer, ready }} actingSubject={target} locale="en">
+    <div className="max-w-lg space-y-4 p-6">
+      <Button onClick={() => setReady(false)}>Account viewing unavailable</Button>
+      <WebRatedContent target={target}><p>Public text with renewed viewing evidence</p></WebRatedContent>
+    </div>
+  </WebRatedContentProvider>;
+}
+export const CachedAssessmentRenewsUnavailableViewing: Story = {
+  beforeEach: () => {
+    viewingRecovery.mockClear();
+    const original = window.fetch.bind(window);
+    const mocked = spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = String(input instanceof Request ? input.url : input);
+      if (!url.endsWith('/suitability/reads')) return original(input, init);
+      viewingRecovery();
+      const current = snapshot('unknown', []);
+      return Promise.resolve(Response.json(viewingRecovery.mock.calls.length === 1
+        ? { items: current.items } : current));
+    });
+    return () => mocked.mockRestore();
+  },
+  render: () => <MissingAccountViewing />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await expect(await canvas.findByText('Public text with renewed viewing evidence')).toBeVisible();
+    await expect(viewingRecovery).toHaveBeenCalledTimes(1);
+    await userEvent.click(canvas.getByRole('button', { name: 'Account viewing unavailable' }));
+    await waitFor(() => expect(viewingRecovery).toHaveBeenCalledTimes(2));
+    await expect(await canvas.findByText('Public text with renewed viewing evidence')).toBeVisible();
+  },
+};
+
 let releaseOldRating: ((ratings: ContentRatings) => void) | undefined;
 const refreshedRead = fn(async (): Promise<ContentRatings> => {
   if (refreshedRead.mock.calls.length === 1) return new Promise(resolve => { releaseOldRating = resolve; });

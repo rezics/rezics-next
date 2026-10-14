@@ -11,7 +11,9 @@ import {
 import { materializeData } from 'native-i18n';
 import { catalogs } from '../i18n/catalogs.ts';
 import { parseAddressSegment } from '../features/address/path.ts';
+import { selectedSessionAgent } from './direction-9-fixture.ts';
 import { realmHref } from '../features/realm/route.ts';
+import { mediaMessages } from '../features/document-editor/media-messages.ts';
 import {
   keyboardReach,
   pressByKeyboard,
@@ -34,6 +36,7 @@ import {
 } from './realm-community-fixture.ts';
 
 const expect = baseExpect.configure({ timeout: 30_000 });
+const diagnosticRealms = new WeakMap<Page, string>();
 test.use({ actionTimeout: 30_000, reducedMotion: 'reduce' });
 test.setTimeout(600_000);
 test.afterAll(closeParticipant);
@@ -50,11 +53,16 @@ async function capture(page: Page, info: TestInfo, name: string, detail = '') {
   await info.attach(`${name}-screen`, { path: `${file}.png`, contentType: 'image/png' });
 }
 function recordApiFailures(page: Page) {
+  page.on('requestfailed', request => {
+    if (new URL(request.url()).pathname.startsWith('/api/main/'))
+      console.log(`Realm journey transport failure: ${request.method()} ${request.url()} ${request.failure()?.errorText}`);
+  });
   page.on('response', async (response) => {
     const url = new URL(response.url());
-    if (!url.pathname.startsWith('/api/main/') || response.status() < 400) return;
+    if (!url.pathname.startsWith('/api/main/') || (response.status() < 400
+      && !url.pathname.endsWith('/suitability/reads'))) return;
     console.log(
-      `Realm journey API refusal: ${response.request().method()} ${url.pathname}${url.search} HTTP ${response.status()} ${await response.text()}`,
+      `Realm journey API response: ${response.request().method()} ${url.pathname}${url.search} ${response.request().postData() ?? ''} HTTP ${response.status()} ${await response.text()}`,
     );
   });
 }
@@ -64,11 +72,18 @@ test.afterEach(async ({ browser }, info) => {
   for (const context of browser.contexts())
     for (const page of context.pages()) {
       const parts = new URL(page.url()).pathname.split('/');
-      const realm = parts[2] === 'r' ? parseAddressSegment(parts[3] ?? '') : null;
+      const realm = diagnosticRealms.get(page);
       const reply = parts[4] === 'discussions' ? parseAddressSegment(parts[5] ?? '') : null;
       let detail = '';
-      if (realm && realm.kind !== 'alias' && reply && reply.kind !== 'alias') {
-        const path = `/api/main/v1/realms/${realm.id}/threads/${reply.id}?sort=best`;
+      if (realm && reply && reply.kind !== 'alias') {
+        const cookies = await context.cookies();
+        const actor = cookies.some((cookie) => cookie.name === 'rezics_session_key')
+          ? await selectedSessionAgent(page.request, cookies)
+          : null;
+        const path = `/api/main/v1/realms/${realm}/threads/${reply.id}?${new URLSearchParams({
+          sort: 'best',
+          ...(actor ? { actingSubject: actor } : {}),
+        })}`;
         const response = await page.request.get(path);
         detail = `GET ${path}\nHTTP ${response.status()}\n${await response.text()}`;
       }
@@ -93,6 +108,7 @@ async function hydrated(control: Locator) {
 }
 
 async function typeByKeyboard(page: Page, control: Locator, value: string, found: Findings) {
+  await expect(control).toBeVisible();
   await hydrated(control);
   await keyboardReach(page, control, found, value);
   await page.keyboard.insertText(value);
@@ -103,6 +119,18 @@ async function activate(page: Page, control: Locator, found: Findings) {
   await pressByKeyboard(page, control, found, await control.innerText());
 }
 
+async function readerText(page: Page, text: string, locale: 'en' | 'ja', found: Findings) {
+  const body = page.getByText(text, { exact: true });
+  const failed = page.getByRole('status').filter({ hasText: mediaMessages[locale].ratingFailed });
+  await expect(body.or(failed.first()).first()).toBeVisible();
+  if (!await body.isVisible() && await failed.first().isVisible()) {
+    await activate(page, failed.first().getByRole('button', {
+      name: mediaMessages[locale].retryRating, exact: true,
+    }), found);
+  }
+  await expect(body).toBeVisible();
+}
+
 /** Menus use arrow navigation rather than the document's Tab order. */
 async function chooseMenu(
   page: Page,
@@ -111,11 +139,11 @@ async function chooseMenu(
   next: string,
   found: Findings,
 ) {
-  await activate(
-    page,
-    page.getByRole('button', { name: `${label}: ${current}`, exact: true }),
-    found,
-  );
+  const trigger = page.getByRole('button', { name: `${label}: ${current}`, exact: true });
+  await hydrated(trigger);
+  await keyboardReach(page, trigger, found, `${label}: ${current}`);
+  await expect(trigger).toBeFocused();
+  await page.keyboard.press('ArrowDown');
   const choices = page.getByRole('menuitemradio');
   await expect(choices.first()).toBeVisible();
   await page.keyboard.press('Home');
@@ -126,6 +154,7 @@ async function chooseMenu(
       )[0] === next
     ) {
       await page.keyboard.press('Enter');
+      await expect(choices.first()).not.toBeVisible();
       await expect(
         page.getByRole('button', { name: `${label}: ${next}`, exact: true }),
       ).toBeVisible();
@@ -273,6 +302,7 @@ test('realm-threads: a member publishes a thread and nested replies that another
 }, info) => {
   test.setTimeout(600_000);
   const found: Findings = [];
+  recordApiFailures(page);
   const manager = await managerSession(page);
   const realm = await createRealm(
     manager.api,
@@ -288,6 +318,8 @@ test('realm-threads: a member publishes a thread and nested replies that another
   );
   await waitForWorkTypeahead(manager.api, work);
   const writer = await participantFor(browser, info);
+  diagnosticRealms.set(page, realm.id);
+  diagnosticRealms.set(writer.page, realm.id);
   recordApiFailures(writer.page);
   await grant(`work:read:${work.work}`, 'work.read', writer.principalId, writer.actor);
   await grant(`reply:create:${work.work}`, 'reply.create', writer.principalId, writer.actor);
@@ -304,6 +336,9 @@ test('realm-threads: a member publishes a thread and nested replies that another
       writer.page.getByRole('link', { name: t.createPost, exact: true }),
       found,
     );
+    await expect(writer.page.getByText(p.draftSaved, { exact: true })).toBeVisible();
+    const changeWork = writer.page.getByRole('button', { name: p.workChange, exact: true });
+    if (await changeWork.isVisible()) await activate(writer.page, changeWork, found);
     const search = writer.page.getByRole('searchbox', { name: p.workSearch, exact: true });
     await typeByKeyboard(writer.page, search, work.title, found);
     await activate(
@@ -347,9 +382,7 @@ test('realm-threads: a member publishes a thread and nested replies that another
       writer.page.getByRole('button', { name: f.comment, exact: true }),
       found,
     );
-    await expect(
-      writer.page.getByRole('textbox', { name: f.addComment, exact: true }),
-    ).not.toBeVisible();
+    await expect(writer.page.getByRole('textbox', { name: f.addComment, exact: true })).toBeEmpty();
     await expect(writer.page.getByText(comment, { exact: true })).toBeVisible();
     const article = writer.page.getByRole('article').filter({ hasText: comment });
     await activate(writer.page, article.getByRole('button', { name: f.reply, exact: true }), found);
@@ -375,11 +408,12 @@ test('realm-threads: a member publishes a thread and nested replies that another
     await writer.page.reload();
     await expect(writer.page.getByText(nested, { exact: true })).toBeVisible();
     await page.goto(thread);
+    await readerText(page, body, locale, found);
     await page.reload();
     await expect(page.locator('html')).toHaveAttribute('lang', locale);
     await expect(page.getByRole('heading', { level: 1, name: title, exact: true })).toBeVisible();
-    for (const text of [body, comment, nested])
-      await expect(page.getByText(text, { exact: true })).toBeVisible();
+    // A failed suitability lookup offers a real retry; it never authorizes showing the body.
+    for (const text of [body, comment, nested]) await readerText(page, text, locale, found);
   }
   expectClean(found);
 });
@@ -470,6 +504,13 @@ test('realm-ranking: a reader votes and reloads Best, New and Top with each time
     await chooseMenu(voter.page, f.sortLabel, f.top, f.best, found);
     await voter.page.reload();
     await expect(headings).toHaveText(best);
+    await keyboardReach(
+      voter.page,
+      card.getByRole('link', { name: titles[1]!, exact: true }),
+      found,
+      'ranked thread',
+    );
+    await capture(voter.page, info, `realm-ranking-${locale}`);
   }
   expectClean(found);
 });

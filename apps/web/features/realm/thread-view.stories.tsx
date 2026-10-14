@@ -108,6 +108,20 @@ export const Thread: Story = {
   },
 };
 
+/** An expanded branch has a visible keyboard control before it is folded. */
+export const KeyboardFoldFocus: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const fold = canvas.getAllByRole('button', { name: 'Hide the reply by Priya Raman' })[0]!;
+    for (let step = 0; step < 200 && canvasElement.ownerDocument.activeElement !== fold; step++) await userEvent.tab();
+    await expect(fold).toHaveFocus();
+    await expect(getComputedStyle(fold).boxShadow).not.toBe('none');
+    await userEvent.keyboard('{Enter}');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await expect(fold).toHaveFocus();
+  },
+};
+
 /** A blocked author's words stay withheld even after the reader opens the collapsed branch. */
 export const BlockedReply: Story = {
   args: { read: { ...storyThread, items: storyThread.items.map(item => item.reply === storyReply(2)

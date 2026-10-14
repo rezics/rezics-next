@@ -66,6 +66,13 @@ export function WebRatedContentProvider({ viewer, actingSubject, locale, childre
       });
     }
   }, [currentGeneration]);
+  useEffect(() => {
+    if (viewer.ready) return;
+    // A cached assessment does not replace current viewing evidence when Account is unavailable.
+    // Main can supply both in one read, including the unknown-age public-text basis.
+    for (const target of mounted.current.keys()) requested.current.delete(target);
+    schedule();
+  }, [viewer.ready, schedule]);
   const mount = useCallback((target: string) => {
     mounted.current.set(target, (mounted.current.get(target) ?? 0) + 1);
     if (!requested.current.has(target)) schedule();

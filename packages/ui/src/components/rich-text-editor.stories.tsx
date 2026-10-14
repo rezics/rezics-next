@@ -78,6 +78,17 @@ export const ForumReply: Story = {
   },
 };
 
+/** The same input used for a post and a reply remains visible when reached by Tab. */
+export const KeyboardWritingFocus: Story = {
+  async play({ canvasElement }) {
+    const editor = await within(canvasElement).findByRole('textbox', { name: 'Document' });
+    for (let step = 0; step < 30 && canvasElement.ownerDocument.activeElement !== editor; step++) await userEvent.tab();
+    await expect(editor).toHaveFocus();
+    await expect(getComputedStyle(editor).outlineStyle).toBe('solid');
+    await expect(getComputedStyle(editor).outlineWidth).toBe('2px');
+  },
+};
+
 /** On a phone a reply formats the same way as on a desktop; the bar sits under the selection, clear of the system's menu. */
 export const ForumReplyPhone: Story = {
   render: () => <Example initial={fromPlainText('Reply from a phone.', 'blocks')} compact contextual pointerMode="coarse" />,

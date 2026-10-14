@@ -322,7 +322,7 @@ export function ThreadView({
   const continuation = (reply: string, depth = 0) => controls.get(reply)?.filter(value => value.kind !== 'ancestors')
     .map(value => value.kind === 'siblings' && depth < THREAD_DEPTH
       ? <MoreReplies key={`${continuationKey(value)}:${value.cursor}`} continuation={value} load={load}
-          href={replyHref(value.reply, value.cursor)} />
+          href={replyHref(value.reply)} />
       : <LocalizedLink key={continuationKey(value)} href={replyHref(value.reply, value.kind === 'siblings' ? value.cursor : undefined)}
           className="inline-flex min-h-9 w-fit items-center gap-1.5 py-1 font-medium text-primary text-sm
             underline-offset-4 hover:underline">
