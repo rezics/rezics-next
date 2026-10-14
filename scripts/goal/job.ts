@@ -20,7 +20,8 @@ export const jobDirectory = (cwd: string): string => join(cwd, '.temp/goal/jobs'
 export interface Job {
   id: string; task: string; attempt: number; cwd: string; command: string[]; created: number;
   phase: 'running' | 'inline' | 'parked' | 'waking' | 'woken' | 'reported';
-  owner?: ProcessIdentity; code?: number; ended?: number; resumedAttempt?: number; reason?: string;
+  owner?: Pick<ProcessIdentity, 'pid'> & Partial<ProcessIdentity>;
+  code?: number; ended?: number; resumedAttempt?: number; reason?: string;
 }
 
 /** Jobs stay with their worktree; the resident coordinator discovers them from its task ledger. */
@@ -156,7 +157,7 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}): P
       }
       if (job.phase === 'waking') { report('wake intent has no published attempt; reconcile before another resume'); return; }
       if (job.code === undefined) {
-        if (!(options.alive ?? processAlive)(job.owner)) report('command owner exited without recording a result');
+        if (!job.owner || !(options.alive ?? processAlive)(job.owner)) report('command owner exited without recording a result');
         return;
       }
       if (running(task)) return;
