@@ -1,14 +1,24 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { commandInstance } from '../../../../../apps/web/features/api/command.ts';
+import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { settle } from '../../../../../apps/web/features/manage/read.ts';
+import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
+import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { authoringModel, draftChoice, draftWire, publicationChoice, reduceEditor } from '../../../../../apps/web/features/zone-editor/model.ts';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import revoked from '../../../../../scripts/qa/cases/outcomes/zone/publish-after-editor-revocation-revoked-editors.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(90_000);
+setDefaultTimeout(210_000);
+const recording = new OutcomeRecorder(revoked);
 let sessions: PersonaSessions;
 interface Saved { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
-interface Site { zone: string; page: string; root: string; variantId: string; navigationRevision: string; saved: Saved; later: Saved;
+interface Site { space: string; zone: string; page: string; root: string; variantId: string; navigationRevision: string; saved: Saved; later: Saved;
   document: DocumentSnapshot; laterDocument: DocumentSnapshot; publicationKey: string; committedKey: string }
 interface Exact { reference: { revisionId: string; byteDigest: string; sourceRevision: string | null; provenance: Record<string, unknown> }; body: { document: DocumentSnapshot } }
 interface Access { authorityEpoch: string; you: Array<{ representationId: string; generation: string }> }
@@ -66,7 +76,7 @@ async function publicBundle(site: Site, person: PersonaSession) {
   return home.page;
 }
 async function createSite(): Promise<Site> {
-  const created = await answer<{ zone: string; zoneRevision: string }>(sessions.owner.main('POST', '/v1/spaces', {
+  const created = await answer<{ space: string; zone: string; zoneRevision: string }>(sessions.owner.main('POST', '/v1/spaces', {
     profile: 'space-zone-v1', name: 'Original saved site', language: 'en', capabilities: ['zone'], actingSubject: sessions.owner.actingSubject }), 201);
   const root = `/v1/zones/${created.zone.slice(-36)}`;
   await answer(sessions.owner.main('PUT', `${root}/configuration`, { expectedHead: created.zoneRevision,
@@ -74,7 +84,7 @@ async function createSite(): Promise<Site> {
   const editor = await answer<{ configuration: { homeDocument: string }; draft: { variantId: string }; preview: { navigation: { revision: string } } }>(
     sessions.owner.main('GET', `${root}/showcase-editor?${acting(sessions.owner.actingSubject!)}`));
   const document = fromPlainText('Previous public original garden', 'blocks'), laterDocument = fromPlainText('Persistently saved private original garden', 'blocks');
-  const base = { zone: created.zone, page: editor.configuration.homeDocument, root, variantId: editor.draft.variantId,
+  const base = { space: created.space, zone: created.zone, page: editor.configuration.homeDocument, root, variantId: editor.draft.variantId,
     navigationRevision: editor.preview.navigation.revision, document, laterDocument,
     publicationKey: randomUUID(), committedKey: randomUUID() };
   const saved = await answer<Saved>(sessions.owner.main('POST', '/v1/content-drafts', draftBody(base, sessions.owner.actingSubject!, document, null)), 201);
@@ -85,12 +95,16 @@ async function createSite(): Promise<Site> {
 }
 const fixtures = new Map<PersonaName, { sessions: PersonaSessions; site: Site }>();
 beforeAll(async () => {
+  await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     sessions = await personaSessions('public');
     fixtures.set(name, { sessions, site: await createSite() });
   }
 }, 300_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { for (const context of fixtures.values()) await context.sessions.close(); }
+});
 function fixture(name: PersonaName) {
   const context = fixtures.get(name)!;
   sessions = context.sessions;
@@ -241,10 +255,10 @@ async function observer(name: 'visitor' | 'stranger') {
   expect(await publicBundle(site, person)).toEqual(previous);
 }
 
-outcomeTest(revoked, 'visitor', () => observer('visitor'));
-outcomeTest(revoked, 'stranger', () => observer('stranger'));
-outcomeTest(revoked, 'member', () => revokedController('member'));
-outcomeTest(revoked, 'owner', async () => {
+outcomeTest(revoked, 'visitor', () => qualify('visitor', () => observer('visitor')), recording);
+outcomeTest(revoked, 'stranger', () => qualify('stranger', () => observer('stranger')), recording);
+outcomeTest(revoked, 'member', () => qualify('member', () => revokedController('member')), recording);
+outcomeTest(revoked, 'owner', () => qualify('owner', async () => {
   const site = fixture('owner'), owner = sessions.owner, subject = owner.actingSubject!;
   const recovery = await answer<{ agent: string }>(owner.main('POST', '/v1/agents', {
     profile: 'agent-provision-v1', kind: 'person', displayName: 'Original controller restoration recipient' }), 201);
@@ -265,9 +279,9 @@ outcomeTest(revoked, 'owner', async () => {
   await publishRetained(site, owner, subject, provenance);
   await recoveredEditor(site, owner, subject);
   await competingPublication(site, owner, subject, provenance);
-});
-outcomeTest(revoked, 'moderator', () => revokedController('moderator'));
-outcomeTest(revoked, 'operator', async () => {
+}), recording);
+outcomeTest(revoked, 'moderator', () => qualify('moderator', () => revokedController('moderator')), recording);
+outcomeTest(revoked, 'operator', () => qualify('operator', async () => {
   const site = fixture('operator'), operator = sessions.operator, subject = operator.actingSubject!;
   const grant = await mandate(site);
   const provenance = await previewRetained(site, operator, subject);
@@ -298,4 +312,136 @@ outcomeTest(revoked, 'operator', async () => {
   await previewRetained(site, operator, subject, provenance);
   await publishRetained(site, operator, subject, provenance);
   await recoveredEditor(site, operator, subject);
-});
+}), recording);
+
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function qualify(name: PersonaName, proof: () => Promise<void>) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The existing API proof owns 90 s; its production visit owns another 120 s.
+    await within(90_000, 'API proof', proof);
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+
+const requestLabels = new AsyncLocalStorage<(path: string) => string>();
+async function productionVisit(name: PersonaName) {
+  const { site, sessions: people } = fixtures.get(name)!;
+  const person = people[name], subject = person.actingSubject;
+  const transport = (anonymous: boolean): typeof fetch => (async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+    const label = requestLabels.getStore()?.(path);
+    if (!label) throw new Error(`Production request has no label: ${path}`);
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+    // The public reader uses no bearer; personal requests always use this persona's bearer.
+    return recording.session(name, anonymous ? people.visitor : person)(label, init?.method ?? 'GET', path, body, key);
+  }) as typeof fetch;
+  const main = browserMainApi('https://record.invalid', { fetcher: transport(false) });
+  const publicMain = browserMainApi('https://record.invalid', { anonymous: true, fetcher: transport(true) });
+  const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
+  // /z/[space]/[[...path]] resolves the public site first. Its home metadata
+  // reads the route while standaloneSite reads the complete presentation.
+  const publicFrame = realmFrameReads({ main: publicMain, keepProblem: false });
+  const resolved = await requestLabels.run(path => path.startsWith('/v1/addresses/')
+    ? 'public-site-address' : 'public-site-presentation', () => publicFrame.resolveSite(site.space.slice(-36), 'en'));
+  if (resolved.kind !== 'site') return;
+  const personalFrame = realmFrameReads({ main: publicMain, personal: main,
+    actingSubject: subject ?? undefined, keepProblem: false });
+  await Promise.all([
+    named('public-home-route', () => personalFrame.readZoneRoute(resolved.zone, '/')),
+    // Anonymous resolveSite and standaloneSite share the cached presentation.
+    ...(subject ? [named('public-home-presentation', () => personalFrame.readCompletePresentation(resolved.zone))] : []),
+  ]);
+  // manager() sends an anonymous visitor to sign-in before any management reads.
+  if (!subject) return;
+  const nativeFetch = globalThis.fetch;
+  // readSpacePage uses the server transport, not Eden. Route only its recording origin.
+  globalThis.fetch = (async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== 'https://record.invalid') return nativeFetch(input, init);
+    return transport(!new Headers(init?.headers).has('authorization'))(input, init);
+  }) as typeof fetch;
+  try {
+    async function render(prefix: 'management' | 'saved-preview') {
+      let freshResolution = false;
+      const frame = realmFrameReads({ main: publicMain, keepProblem: false, resolution: {
+        readPrivateRealm: (ref, _locale, address) => requestLabels.run(path => path.includes('/join-page')
+          ? `${prefix}-fallback-join${freshResolution ? '-fresh' : ''}`
+          : `${prefix}-fallback-realm${freshResolution ? '-fresh' : ''}`, () => readSpacePage(ref, 'en', {
+          address, actingSubject: subject!, token: 'recording-persona', origin: 'https://record.invalid', incoming: new Headers(),
+        })),
+      } });
+      const address = await resolveZoneManagementAddress(site.zone.slice(-36), 'en', {
+        configuration: id => named(`${prefix}-configuration`, () => settle(() =>
+          main.v1.zones({ id }).configuration.get({ query: { actingSubject: subject } }), { management: true })),
+        site: async (ref, locale) => {
+          const resolveSite = (fresh: boolean) => {
+            freshResolution = fresh;
+            return requestLabels.run(path => path.startsWith('/v1/addresses/')
+              ? `${prefix}-address${fresh ? '-fresh' : ''}` : `${prefix}-site-presentation${fresh ? '-fresh' : ''}`,
+            () => frame.resolveSite(ref, locale, fresh));
+          };
+          const resolved = await resolveSite(false);
+          return resolved.kind === 'missing' ? resolveSite(true) : resolved;
+        },
+      });
+      if (address.kind !== 'site') return null;
+      // Layout and home share the address and authoring cache. Independent render reads start together.
+      const [editor, zone] = await Promise.all([
+        named(`${prefix}-editor`, () => settle(() => main.v1.zones({ id: address.site.zone })['showcase-editor']
+          .get({ query: { actingSubject: subject } }), { management: true })),
+        named(`${prefix}-zone`, () => settle(() => main.v1.zones({ id: address.site.zone })
+          .get({ query: { actingSubject: subject } }), { management: true })),
+        ...(address.binding ? [] : [named(`${prefix}-lifecycle-configuration`, () => settle(() =>
+          main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject: subject } }), { management: true }))]),
+      ]);
+      if (!editor.ok || !zone.ok) return null;
+      const model = authoringModel(editor.data, zone.data, address.site.zone, site.zone.slice(-36));
+      if (!model) throw new Error('Production authoring reads did not form an editor');
+      return { model, preview: editor.data.preview };
+    }
+    const opened = await render('management');
+    if (!opened) return;
+    const preview = await render('saved-preview');
+    if (!preview) return;
+    const navigation = await named('saved-preview-navigation', () => loadCompleteZoneNavigation(main,
+      site.zone.slice(-36), subject, preview.model.state));
+    if (!navigation.ok) throw new Error(`Production saved preview failed: ${navigation.failure}`);
+    if (preview.preview.presentation.official?.theme) {
+      await named('saved-preview-theme-report', () => realmFrameReads({ main: publicMain, personal: main,
+        actingSubject: subject, keepProblem: false }).readCompletePresentation(site.zone.slice(-36)));
+    }
+    const client = browserZoneAuthoring(main);
+    let state = reduceEditor(opened.model.state, { type: 'edit',
+      value: JSON.stringify(fromPlainText('Restored editor production garden', 'blocks')) });
+    const choice = draftChoice(state, subject);
+    const save = commandInstance();
+    const saved = await named('editor-save', () => client.saveDraft(draftWire(choice), save.id()));
+    save.finish(saved);
+    if (!saved.ok) throw new Error(`Production save failed: ${saved.failure}`);
+    state = reduceEditor(state, { type: 'saved', captured: choice.captured, savedValue: choice.savedValue,
+      basis: saved.data, replayed: saved.data.replayed });
+    const publication = publicationChoice(state);
+    if (!publication) throw new Error('Production editor has no saved publication choice');
+    const publish = commandInstance();
+    const published = await named('editor-publication', () => client.publish(publication, subject,
+      publish.id(), site.zone.slice(-36)));
+    publish.finish(published);
+    if (!published.ok) throw new Error(`Production publication failed: ${published.failure}`);
+  } finally { globalThis.fetch = nativeFetch; }
+}
