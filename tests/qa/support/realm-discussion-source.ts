@@ -41,7 +41,9 @@ export type RealmSourceMeasurements = {
 
 function distribution(values: number[]): Distribution {
   const sorted = [...values].sort((a, b) => a - b);
-  return { count: values.length, medianMs: sorted.length ? sorted[Math.ceil(sorted.length / 2) - 1]! : 0,
+  const middle = Math.floor(sorted.length / 2);
+  const median = !sorted.length ? 0 : sorted.length % 2 ? sorted[middle]! : (sorted[middle - 1]! + sorted[middle]!) / 2;
+  return { count: values.length, medianMs: median,
     p95Ms: sorted.length ? sorted[Math.ceil(sorted.length * .95) - 1]! : 0,
     totalMs: values.reduce((sum, value) => sum + value, 0) };
 }

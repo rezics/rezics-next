@@ -234,6 +234,7 @@ test('distributions keep actual retries, phase overlap and waits distinct and re
   expect(report.requests).toBe(3); expect(report.retries).toBe(1); expect(report.retryGapMs).toBe(20);
   expect(report.classes['Main POST /v1/realm-replies']).toEqual({ count: 3, medianMs: 20, p95Ms: 30, totalMs: 60 });
   expect(report.phases.identities!.wallMs).toBe(70); expect(report.phases.identities!.overlapMs).toBe(5);
+  expect(realmSourceMeasurements(events.slice(0, 2), {}).classes['Main POST /v1/realm-replies']!.medianMs).toBe(15);
   const changed = { ...events[2]!, body: { rootRevision: 'different' } };
   expect(() => realmSourceMeasurements([events[0]!, changed], {})).toThrow('changed command intent');
   expect(stable(report)).not.toContain('password');
