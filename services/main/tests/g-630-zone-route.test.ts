@@ -32,7 +32,8 @@ test('G630: exact route paths admit native resources and pass slug tabs to the h
 
 function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
   workMount?: boolean; privateMount?: boolean; granted?: boolean; moved?: 'once' | 'always';
-  removedDuringRead?: boolean; deniedWorkScope?: boolean; collectionSemantic?: boolean; revoked?: boolean }) {
+  removedDuringRead?: boolean; deniedWorkScope?: boolean; collectionSemantic?: boolean; revoked?: boolean;
+  closedRealm?: boolean }) {
   const zone = id(), space = id(), realm = id(), navigation = id(), collection = id(), structure = id();
   const resource = id(), occurrence = id(), head = id(), generation = id(), revision = id();
   const directory = resolve('.temp', `g-630-unit-${randomUUID()}`);
@@ -56,6 +57,8 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
         return rows(refs.map(resource => ({ [variable]: resource, head })));
       }
       queries.push(query);
+      if (query.includes('SELECT ?space ?realmRevision')) return rows(input.closedRealm ? []
+        : [{ space, disclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?spaceDisclosure')) return rows([{ spaceDisclosure: `${RV}Public` }]);
       if (query.includes('SELECT ?epoch ?sequence ?hold ?r ?type')) {
         const requested = [collection, resource].filter(target => query.includes(`<${target}>`));
@@ -122,9 +125,24 @@ function fixture(input: { member: boolean; readable: boolean; adopted?: boolean;
     ? { resource: target.work, head, protectedRevision: target.workRevision } : undefined);
   configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const request = new Request('http://main.local/v1/zones/test/routes');
-  return { work, request, zone, resource, collection, queries, scopes, directory,
+  return { work, request, zone, realm, resource, collection, queries, scopes, directory,
     close: () => rmSync(directory, { recursive: true, force: true }) };
 }
+
+test('independent home, document and Collection detail routes omit a closed Realm without losing their resources', async () => {
+  for (const workMount of [false, true]) for (const closedRealm of [false, true]) {
+    const f = fixture({ member: true, readable: true, adopted: true, workMount, closedRealm });
+    try {
+      const paths = ['/', ...(workMount ? ['/guide'] : [`/picks/${f.resource.slice(-36)}`,
+        `/picks/${f.resource.slice(-36)}/discussion`])];
+      for (const path of paths) expect(await resolveZoneRoute(f.work, f.request, { zone: f.zone, path }))
+        .toMatchObject({ realm: closedRealm ? null : f.realm });
+      const dependent = resolveZoneRoute(f.work, f.request, { zone: f.zone, path: `/w/${f.resource.slice(-36)}` });
+      if (closedRealm) await expect(dependent).rejects.toBeInstanceOf(ZoneRouteMissing);
+      else expect(await dependent).toMatchObject({ realm: f.realm, resource: { id: f.resource } });
+    } finally { f.close(); }
+  }
+});
 
 test('G630 class guard: paths × membership × disclosure; a readable non-member never resolves', async () => {
   for (const member of [false, true]) for (const readable of [false, true]) {

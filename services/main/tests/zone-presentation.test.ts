@@ -6,7 +6,7 @@ import type { ContentCore, ExactReadResult } from '../../content/src/core.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { hash, prepareComponent, RV, type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { compositionReceiptIri } from '../src/modules/structure/change.ts';
-import { readZonePublication, readZonePublishedHomeContent } from '../src/modules/zone/publication.ts';
+import { readZonePublication, readZonePublishedHomeContent, readZoneModuleData } from '../src/modules/zone/publication.ts';
 import { ZoneUnavailable, ZonePublicationUnavailable } from '../src/modules/zone/configuration.ts';
 import { zonePublishedPageBinding } from '../src/modules/zone/config-format.ts';
 import { ZONE_LOCAL_SHOWCASE_BLOCK, zoneDocumentShowcase } from '../src/modules/presentation/zone-document.ts';
@@ -14,7 +14,8 @@ import { bindZoneCampaignReader, configureZoneShowcaseDisclosure, currentZoneCam
   from '../src/modules/zone/showcase-disclosure.ts';
 import { checkZoneConfiguration, InvalidZoneConfiguration, ZONE_CONFIG_FORMAT,
   ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
-import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, ZONE_PRESENTATION_PROFILE, zoneRenderTokens, type ZonePresentation }
+import { DEFAULT_ZONE_PRESENTATION, ZONE_PRESETS, ZONE_PRESENTATION_PROFILE, ZONE_PUBLIC_READ_SOURCES,
+  zoneRenderTokens, type ZonePresentation }
   from '../src/modules/zone/presentation-format.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
@@ -29,6 +30,37 @@ function configuration(presentation: unknown, queryBlocks: unknown[] = []) {
     navigation: three, state: 'active', disclosure: 'public', presentation,
     budget: { timeMs: 2000, rows: 1000 }, queryBlocks, model: ZONE_PROFILE }));
 }
+
+test('every built-in Realm module source is unavailable without a live public Realm', async () => {
+  const presentation = { ...DEFAULT_ZONE_PRESENTATION, modules: ZONE_PUBLIC_READ_SOURCES.map(block => ({
+    id: block, type: 'shelf' as const, title: block, source: { kind: 'query-block' as const, block },
+  })) };
+  const config = checkZoneConfiguration(Buffer.from(JSON.stringify({
+    ...JSON.parse(configuration(presentation).toString()), defaultRealm: three,
+  })));
+  for (const visibility of ['public', 'restricted', 'private', 'closed'] as const) {
+    const environment = { lineage: { dataEpoch: 'epoch', routingEpoch: '1' }, fuseki: {
+      query: async (query: string) => {
+        expect(query).toContain(`rv:realmState rv:Active`);
+        expect(query).toContain(`<${three}>`);
+        return { results: { bindings: visibility === 'closed' ? [] : [{
+          space: { value: two }, visibility: { value: visibility },
+          disclosure: { value: `${RV}${visibility === 'private' ? 'Private' : 'Public'}` },
+        }] } };
+      },
+    } } as unknown as WorkActivationEnvironment;
+    const data = await readZoneModuleData(environment, config);
+    expect(data.flatMap(module => module.sources.map(source => source.state))).toEqual(
+      ZONE_PUBLIC_READ_SOURCES.map(() => ['public', 'restricted'].includes(visibility) ? 'public-read' : 'unavailable'));
+    expect(data.flatMap(module => module.sources.flatMap(source => source.members))).toEqual([]);
+  }
+  const unavailable = await readZoneModuleData({} as WorkActivationEnvironment, { ...config, defaultRealm: undefined });
+  expect(unavailable.every(module => module.sources[0]?.state === 'unavailable')).toBe(true);
+  const fault = { ...config, defaultRealm: three };
+  await expect(readZoneModuleData({ fuseki: { query: async () => { throw new Error('Realm source fault'); } },
+    lineage: { dataEpoch: 'epoch', routingEpoch: '1' } } as unknown as WorkActivationEnvironment, fault))
+    .rejects.toThrow('Realm source fault');
+});
 
 describe('zone-presentation-v2', () => {
   test('accepts a bounded, typed layout and a matching query source', () => {
