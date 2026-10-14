@@ -17,6 +17,7 @@ import { contentLanguageVisible } from './read.ts';
 import { readZoneVisibility } from '../zone/route-visibility.ts';
 import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 import { TRENDING_WORK_COST } from './cost-contract.ts';
+import { discloseRealmOccurrences } from '../disclosure/realm-occurrences.ts';
 
 export const trendingQuery = t.Object({ scope: t.Optional(t.String({ maxLength: 100 })),
   kind: t.Optional(t.Union([t.Literal('work'), t.Literal('contribution'), t.Literal('adoption')])),
@@ -152,8 +153,10 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
         TRENDING_COST.realmRelations + 1) : [];
         if (rows.some(row => !row.work || !row.realm || !row.actor
           || !ids.includes(row.work.value))) throw new WorkReadUnavailable('Trending placement is incomplete');
-        const placements = rows.map(row => ({ work: row.work!.value, realm: row.realm!.value,
-          actor: row.actor!.value, language: row.language?.value ?? null, zone: row.zone?.value ?? null }));
+        const placements = await discloseRealmOccurrences(session.deps.environment,
+          rows.map(row => ({ work: row.work!.value, realm: row.realm!.value,
+            actor: row.actor!.value, language: row.language?.value ?? null, zone: row.zone?.value ?? null })),
+          session.viewer, 'feed');
         const followed = new Set<number>();
         if (scope === 'followed') {
           for (let offset = 0; offset < placements.length; offset += 20) {
@@ -196,8 +199,9 @@ export class RankingHomeTrendingReader implements HomeTrendingReader {
       || follows && (await session.deps.follows!.matches(principal!, agent!, [])).revision !== follows.revision) {
       throw new WorkReadMoved('Trending changed');
     }
+    const visible = await discloseRealmOccurrences(session.deps.environment, items, session.viewer, 'feed');
     return { profile: 'home-trending-v1', rankingVersion: checkpoint.generation,
-      window, items, hasMore, cursor: hasMore && cursor
+      window, items: visible.map((item, index) => ({ ...item, rank: index + 1 })), hasMore, cursor: hasMore && cursor
         ? encodeReadCursor(binding, session.position, cursor) : null, sourcePosition: session.position };
   }
 }

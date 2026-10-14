@@ -41,6 +41,8 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
     language: (_work: string): string | null => null,
     contentLanguages: [] as string[],
     unfollowed: new Set<string>(),
+    closedRealms: new Set<string>(),
+    closeAfterAdmission: false,
   };
   const values = (query: string, variable: string) => [...new Set([...query.matchAll(new RegExp(`VALUES \\?${variable} \\{([^}]+)\\}`, 'g'))]
     .flatMap(match => [...match[1]!.matchAll(/<([^>]+)>/g)].map(term => term[1]!)))];
@@ -74,8 +76,14 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
   };
   const environment = { fuseki: graph, objectDirectory: '.temp/trending-refill',
     lineage: { dataEpoch: position.dataEpoch, routingEpoch: 'routing' } };
-  configureDisclosure(environment, fixtureDisclosureReader(async targets => targets.map(target =>
-    rejection === 'denied' && rejects.has(target.resource) ? 'hidden' : 'visible')));
+  configureDisclosure(environment, fixtureDisclosureReader(async targets => {
+    const decisions = targets.map(target => state.closedRealms.has(target.resource)
+      || rejection === 'denied' && rejects.has(target.resource) ? 'hidden' as const : 'visible' as const);
+    if (state.closeAfterAdmission && targets.some(target => target.component === 'record')) {
+      for (const target of targets) state.closedRealms.add(target.resource);
+    }
+    return decisions;
+  }));
   configureFixtureDisclosureAncestry(environment, target => target.work ? { resource: target.work, head,
     ...(target.workRevision !== undefined ? { protectedRevision: target.workRevision } : {}) } : undefined);
   const projection = {
@@ -118,6 +126,25 @@ function fixture(count: number, rejected = 0, rejection: Rejection = 'hide') {
     { query, principal: viewer, agent });
   return { candidates, rejects, state, projection, session, read, hydration, admissions, placements, seeks };
 }
+
+test('Trending refills past closed Realm placements while global original rankings survive', async () => {
+  const f = fixture(12);
+  for (const row of f.candidates.slice(0, 7)) f.state.closedRealms.add(f.state.realm(row.work));
+  const result = await f.read();
+  expect(result.items.map(item => item.work)).toEqual(f.candidates.slice(7).map(row => row.work));
+  expect(result.items.map(item => item.rank)).toEqual([1, 2, 3, 4, 5]);
+  const originals = await readRankings(f.session({ limit: 12 }), f.projection,
+    { realm: null, metric: 'reads', interval: 'week', order: 'score' });
+  expect(originals.items.map(item => item.id)).toEqual(f.candidates.map(row => row.work));
+});
+
+test('Trending removes Realm labels when closure arrives after placement admission', async () => {
+  const f = fixture(5);
+  f.state.closeAfterAdmission = true;
+  const result = await f.read();
+  expect(result.items).toEqual([]);
+  for (const row of f.candidates) expect(JSON.stringify(result)).not.toContain(f.state.realm(row.work));
+});
 
 for (const rejection of ['hide', 'absent', 'denied'] as const) {
   for (const rejected of [TRENDING_COST.examinedLimit - 1, TRENDING_COST.examinedLimit, TRENDING_COST.examinedLimit + 1]) {

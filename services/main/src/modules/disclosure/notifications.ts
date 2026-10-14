@@ -33,7 +33,12 @@ export async function discloseNotifications(pool: Pool, subjects: readonly { inp
   channel: DisclosureChannel, viewer: Viewer = { ...ANONYMOUS_VIEWER, signedIn: true }): Promise<SubjectResolution[]> {
   const descriptors: DisclosureTarget[] = [], ranges: number[][] = [];
   for (const subject of subjects) {
-    const selected = subject.result.status === 'available' ? targets(subject.input, subject.result.subject.fields) : [];
+    const selected: DisclosureTarget[] = subject.result.status === 'available'
+      ? [...targets(subject.input, subject.result.subject.fields),
+        // The subject may share an independently published Work. Its retained
+        // Realm occurrence still has to be eligible on this delivery channel.
+        ...(subject.input.realm ? [{ owner: 'graph' as const, resource: subject.input.realm,
+          component: 'record' as const }] : [])] : [];
     ranges.push(selected.map((_, index) => descriptors.length + index));
     descriptors.push(...selected);
   }
@@ -53,6 +58,7 @@ export async function discloseNotifications(pool: Pool, subjects: readonly { inp
         // Process notices remain deliverable even when their optional Work link is hidden.
         ? { ...subject.result, subject: { ...subject.result.subject,
           fields: Object.fromEntries(Object.entries(subject.result.subject.fields)
-            .filter(([key]) => !['linkTarget', 'linkRevision', 'linkTitle', 'title', 'avatar', 'avatarUrl'].includes(key))) } }
+            .filter(([key]) => !['linkTarget', 'linkRevision', 'linkTitle', 'title', 'avatar', 'avatarUrl',
+              'realm', 'realmName', 'realmRouteSegment', 'excerpt'].includes(key))) } }
         : { status: 'undisclosed' });
 }

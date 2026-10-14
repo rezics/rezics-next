@@ -27,6 +27,7 @@ import { clip, discussionParts } from '../realm-reply/discussion-text.ts';
 import { feedCompositions } from './compositions.ts';
 import { retainedMembershipBasis } from '../read-basis/membership.ts';
 import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
+import { discloseRealmOccurrences } from '../disclosure/realm-occurrences.ts';
 
 export interface FeedReader { principal: VerifiedPrincipal; agent: string }
 /** Keep the candidate's place without retaining any author, words or image. */
@@ -50,7 +51,7 @@ export async function visibleFeedSources(session: WorkReadSession, rows: readonl
   const reviews = rows.filter(row => row.kind === 'review').map(row => row.id);
   const [activities, reviewSources] = await inOrder(feedSources(session, { ids: graph }),
     feedReviewSources(session, reviews));
-  return [...activities, ...reviewSources];
+  return discloseRealmOccurrences(session.deps.environment, [...activities, ...reviewSources], session.viewer, 'feed');
 }
 
 /** One pointer batch fences the composition labels and order used by chapter cards. */
@@ -778,7 +779,9 @@ export async function readFeed(session: WorkReadSession, query: FeedQuery, reade
   const policy = await session.disclosure(fenceTargets, 'feed');
   const hidden = new Set(disclosed.filter((_item, index) => policy[index * 2] !== 'visible'
     || policy[index * 2 + 1] !== 'visible').map(item => item.id));
-  const safe = disclosed.filter(item => !hidden.has(item.id));
+  const visibleRealms = new Set((await discloseRealmOccurrences(session.deps.environment,
+    disclosed.map(item => final.get(item.id)!), session.viewer, 'feed')).map(source => source.id));
+  const safe = disclosed.filter(item => !hidden.has(item.id) && visibleRealms.has(item.id));
   const { chosen: selected, seen, realms } = select(safe);
   followedSeen = seen; recentRealms = realms;
   const targets = viewerTargets(selected);

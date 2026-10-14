@@ -5,6 +5,7 @@ import { readWorkClassifications } from '../work/read-classifications.ts';
 import { digest } from '../recommendation/derived-generation.ts';
 import { AUTHOR_NEWS_KINDS, feedWorkAuthors, followIdentities } from './presentation.ts';
 import { compareMainFeedPosition, requireMainFeedCoverage } from './frame.ts';
+import { discloseRealmOccurrences } from '../disclosure/realm-occurrences.ts';
 
 export const HEAD_COST = { candidates: 20 } as const;
 /** The head probe reports only currently admitted public references. When the
@@ -52,11 +53,6 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
     source.work && AUTHOR_NEWS_KINDS.includes(source.kind) ? [source.work] : [])) : null;
   const matches = reader && scope === 'following' ? await follows.matches(reader.principal, reader.agent,
     filtered.map(source => followIdentities(source, source.work ? authors?.get(source.work) : undefined))) : null;
-  const groups = new Set(filtered.filter((_, index) => !matches || matches.matches[index]).map(source =>
-    source.kind === 'review' && source.readerReview
-      ? digest(['review', source.actor, source.realm, source.readerReview.created_at.toISOString().slice(0, 13)])
-      : rows.find(row => row.id === source.id)?.group_key).filter((key): key is string => !!key));
-  const count = groups.size;
   if ((await feed.checkpoint(session.position.dataEpoch)).revision !== checkpoint.revision
     || reader && personal && (await homePersonal!.fence(reader.principal, reader.agent)).revision !== personal.revision) {
     throw new WorkReadMoved('Feed head changed');
@@ -64,8 +60,20 @@ export async function readNewSince(session: WorkReadSession, afterSequence: stri
   if (reader && matches && (await follows.matches(reader.principal, reader.agent, [])).revision !== matches.revision) {
     throw new WorkReadMoved('Follows changed');
   }
-  const complete = rows.length <= cap;
   const reviewPending = await feed.reviewPending(checkpoint.review_sequence);
+  const matched = filtered.filter((_, index) => !matches || matches.matches[index]);
+  // Include the requested scope in the same final audience batch: a closed
+  // Realm is exact zero even when its retained source probe was truncated.
+  const visible = await discloseRealmOccurrences(session.deps.environment,
+    [...matched, ...(realm ? [{ realm }] : [])], session.viewer, 'count');
+  const visibleRealms = new Set(visible.map(source => source.realm));
+  const scopeVisible = !realm || visibleRealms.has(realm);
+  const groups = new Set(matched.filter(source => !source.realm || visibleRealms.has(source.realm)).map(source =>
+    source.kind === 'review' && source.readerReview
+      ? digest(['review', source.actor, source.realm, source.readerReview.created_at.toISOString().slice(0, 13)])
+      : rows.find(row => row.id === source.id)?.group_key).filter((key): key is string => !!key));
+  const count = scopeVisible ? groups.size : 0;
+  const complete = !scopeVisible || rows.length <= cap;
   return { profile: 'home-feed-head-v1' as const, scope, afterSequence,
     newPosts: { value: count, kind: complete ? 'exact' as const : 'lower-bound' as const },
     state: checkpointOrder === 0 && checkpoint.after_id === '\uffff' && !reviewPending
