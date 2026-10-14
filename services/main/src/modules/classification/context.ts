@@ -129,6 +129,8 @@ async function validateCandidate(env: WorkActivationEnvironment, realm: string,
     { shape: `${CLASSIFICATION_CONTEXT_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
   ], { realm, context });
   if (selection) validations.push(...await profileValidations(env.fuseki, 'classification-context-v2', [
+    { shape: `${CLASSIFICATION_CONTEXT_V2_PROFILE}/global-shape`, focus: [GLOBAL_CLASSIFICATION_CONTEXT], graphs: [GRAPHS.current] },
+    { shape: `${CLASSIFICATION_CONTEXT_V2_PROFILE}/realm-shape`, focus: [realm], graphs: [GRAPHS.current] },
     { shape: `${CLASSIFICATION_CONTEXT_V2_PROFILE}/context-shape`, focus: [context], graphs: [GRAPHS.current] },
   ], { realm, context }));
   return validations;
