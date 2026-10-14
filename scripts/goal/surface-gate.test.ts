@@ -16,7 +16,8 @@ afterEach(() => {
 });
 
 function fixture() {
-  const parent = join(import.meta.dir, '../../.temp/surface-gate-tests');
+  // Exercise the gate's nested checkout paths, where the ancestor itself contains "unit-gate-".
+  const parent = join(import.meta.dir, '../../.temp/unit-gate-fixtures/surface-gate-tests');
   mkdirSync(parent, { recursive: true });
   const cwd = mkdtempSync(join(parent, 'case-')); roots.push(cwd);
   const write = (file: string, value: string) => {
