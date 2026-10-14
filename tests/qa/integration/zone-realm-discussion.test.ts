@@ -1,4 +1,4 @@
-import { expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import type { Static } from 'typebox';
@@ -9,6 +9,12 @@ import { relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/r
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { startHomeStack } from './feed-read-support.ts';
 import { arrange, local, threeWriteDebits, type Page, type Posted } from './zone-realm-discussion-support.ts';
+import { personaSessions, type PersonaSession, type PersonaSessions } from '../support/personas.ts';
+import { RealmAboutPostCommand } from '../../../services/main/src/modules/realm-reply/about-command.ts';
+import { RealmAboutThreadStore } from '../../../services/main/src/modules/realm-reply/about-store.ts';
+import { boundedPool } from '../../../services/main/src/infrastructure/pg-pool.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
+import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 
 test('about-post accepts supported RFC 5646 language extensions and preserves the author language on replay', async () => {
   const home = await startHomeStack('zone-realm-discussion-languages');
@@ -228,17 +234,16 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       profile: 'agent-provision-v1', kind: 'organization', displayName: 'Discussion organization',
     }, home.author.token), 201);
     const organizationPost = await a.post(page, organization.agent, 'Organization post', home.author.token);
-    // No intent exists to fence a concurrent admitted request. Such refusals
-    // retain the key as recoverable, while creating no owner effects.
-    expect(organizationPost.status, await organizationPost.text()).toBe(503);
+    // An ordinary author refusal creates no intent or stored terminal outcome.
+    expect(organizationPost.status, await organizationPost.text()).toBe(403);
     expect(await a.effects(page.about)).toEqual(unchanged);
     const refused = async (input: Page, status: number) => {
       const response = await a.post(input, a.reader, 'Refused contribution', home.reader.token);
       expect(response.status, await response.text()).toBe(status);
       expect(await a.effects(page.about)).toEqual(unchanged);
     };
-    await refused({ ...page, routeRevision: `https://rezics.com/id/${randomUUID()}` }, 503);
-    await refused({ ...page, targetRevision: `https://rezics.com/id/${randomUUID()}` }, 503);
+    await refused({ ...page, routeRevision: `https://rezics.com/id/${randomUUID()}` }, 409);
+    await refused({ ...page, targetRevision: `https://rezics.com/id/${randomUUID()}` }, 409);
     const limit = home.deps.rateLimit;
     if (!limit) throw new Error('Discussion fixture requires the real Main rate limiter');
     const originalConsume = limit.store.consume;
@@ -250,16 +255,16 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       expect(writeDebits).toBe(3);
     } finally { limit.store.consume = originalConsume; }
     await a.policy(a.realm.realm, 'mandatory');
-    await refused(page, 503);
-    await a.policy(a.realm.realm, 'open');
+    try { await refused(page, 403); }
+    finally { await a.policy(a.realm.realm, 'open'); }
 
     const other = await a.realmFor();
     await a.policy(other.realm, 'open');
     await a.configure({ defaultRealm: other.realm });
-    await refused(page, 503);
+    await refused(page, 409);
     await a.publish();
     expect((await a.route(page.path)).realm).toBe(other.realm);
-    await refused(page, 503);
+    await refused(page, 409);
 
     await a.configure({ defaultRealm: a.realm.realm });
     await a.publish();
@@ -268,6 +273,311 @@ test('stale page bases, policy refusal and ended attachments create no discussio
       realm: a.realm.realm, actingSubject: a.author,
     }, home.author.token));
     expect((await a.route(page.path)).realm).toBeNull();
-    await refused(current, 503);
+    await refused(current, 409);
   } finally { await home.stop(); }
 }, 300_000);
+
+describe('ordinary fresh discussion refusals with real persona authority', () => {
+  type PersonaPage = Page & { realm: string };
+  let sessions: PersonaSessions;
+  let pool: ReturnType<typeof boundedPool>;
+  let graph: FusekiClient;
+  let ownerPage: PersonaPage, moderatorPage: PersonaPage, operatorPage: PersonaPage;
+  const short = local;
+  const acting = (person: PersonaSession) => new URLSearchParams({ actingSubject: person.actingSubject! });
+  async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
+    const response = await request;
+    const raw = await response.text();
+    expect(response.status, `${response.status}: ${raw}`).toBe(status);
+    return JSON.parse(raw) as T;
+  }
+  async function answerPage(fixture: PersonaSessions, segment: string): Promise<PersonaPage> {
+  const owner = fixture.owner;
+  const zoneRoot = `/v1/zones/${short(fixture.zone)}`;
+  const work = await answer<{ work: string; mainVersion: string }>(
+    owner.main('POST', '/v1/works', {
+      profile: 'metadata-only-v1',
+      title: `Original discussion fixture ${segment}`,
+      language: 'en',
+      authoring: 'own-work',
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  const contribution = await answer<{ contribution: string; draftRevision: string }>(
+    owner.main('POST', '/v1/contributions', {
+      profile: 'text-contribution-v1',
+      work: work.work,
+      language: 'en',
+      body: 'An original fixture essay about attachment and discussion.',
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  const publication = await answer<{ publicationDecision: string }>(
+    owner.main('POST', '/v1/contribution-publications', {
+      profile: 'text-publication-v1',
+      contribution: contribution.contribution,
+      expectedDraftHead: contribution.draftRevision,
+      expectedPublicationHead: null,
+      rightsBasis: 'original-contribution',
+      disclosure: 'public',
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  await answer(
+    owner.main('POST', '/v1/publication-selections', {
+      profile: 'main-default-selection-v1',
+      work: work.work,
+      contribution: contribution.contribution,
+      publicationDecision: publication.publicationDecision,
+      expectedSelectionHead: null,
+      context: { kind: 'main-version-default', id: work.mainVersion },
+      selectionBasis: 'main-maintainer',
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  const navigation = await answer<{ revision: string }>(
+    owner.main('GET', `${zoneRoot}?${acting(owner)}`),
+  );
+  const mount = await answer<{ revision: string }>(
+    owner.main('POST', `${zoneRoot}/mounts`, {
+      expectedHead: navigation.revision,
+      target: work.work,
+      routeSegment: segment,
+      disclosure: 'public',
+      actingSubject: owner.actingSubject,
+    }),
+  );
+  // Every page bundle pins an original Zone home draft, credited to this steward.
+  const prior = await answer<{ revision: string }>(
+    owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`),
+  );
+  await answer(
+    owner.main('PUT', `${zoneRoot}/configuration`, {
+      expectedHead: prior.revision,
+      prepareHomeDocument: true,
+      actingSubject: owner.actingSubject,
+    }),
+  );
+  const homeDocument = (
+    await answer<{ configuration: { homeDocument: string } }>(
+      owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`),
+    )
+  ).configuration.homeDocument;
+  expect(homeDocument).toBeString();
+  const variantId = `urn:rezics:variant:${randomUUID()}`;
+  const draft = await answer<{
+    revisionId: string;
+    byteDigest: string;
+    sourcePosition: { dataEpoch: string };
+  }>(
+    owner.main('POST', '/v1/content-drafts', {
+      profile: 'content-text-v1',
+      resourceId: homeDocument,
+      variantId,
+      expectedHead: null,
+      document: fromPlainText('Original steward-authored discussion home.', 'blocks'),
+      language: { kind: 'tag', tag: 'en', originalTag: 'en' },
+      direction: 'ltr',
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  const config = await answer<{ revision: string }>(
+    owner.main('GET', `${zoneRoot}/configuration?${acting(owner)}`),
+  );
+  await answer(
+    owner.main('POST', `${zoneRoot}/site-publications`, {
+      expectedHead: config.revision,
+      routesRevision: mount.revision,
+      navigationRevision: mount.revision,
+      pages: [
+        {
+          page: homeDocument,
+          variantId,
+          revisionId: draft.revisionId,
+          byteDigest: draft.byteDigest,
+          contentEpoch: draft.sourcePosition.dataEpoch,
+        },
+      ],
+      actingSubject: owner.actingSubject,
+    }),
+    201,
+  );
+  const route = await answer<{ revision: string; realm: string; resource: { id: string } }>(
+    owner.main('GET', `${zoneRoot}/routes?path=%2F${segment}`),
+  );
+  expect(route.realm).toBe(fixture.realm);
+  expect(route.resource.id).toBe(work.work);
+  const header = await answer<{ revision: string }>(
+    owner.main('GET', `/v1/works/${short(work.work)}?${acting(owner)}`),
+  );
+  return {
+    realm: fixture.realm,
+    zone: fixture.zone,
+    about: work.work,
+    targetRevision: header.revision,
+    routeRevision: route.revision,
+    path: `/${segment}`,
+  };
+}
+
+  beforeAll(async () => {
+    const started = performance.now();
+    sessions = await personaSessions('public');
+    pool = boundedPool({ connectionString: Bun.env.CONTENT_DATABASE_URL, max: 2 });
+    graph = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN, Bun.env.FUSEKI_COMMAND_TOKEN);
+    ownerPage = await answerPage(sessions, 'withdrawal');
+    moderatorPage = await answerPage(sessions, 'review');
+    operatorPage = await answerPage(sessions, 'operator');
+    for (const page of [ownerPage, moderatorPage, operatorPage]) {
+      page.routeRevision = (await answer<{ revision: string }>(sessions.visitor.main('GET',
+        `/v1/zones/${short(page.zone)}/routes?${new URLSearchParams({ path: page.path })}`))).revision;
+    }
+    console.info('Discussion preparation evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID,
+      preparationMs: performance.now() - started }));
+  }, 240_000);
+  afterAll(async () => { try { await sessions?.close(); } finally { await pool?.end(); } });
+
+  async function state(page: PersonaPage) {
+    const operations = (await pool.query(`SELECT id,reply,phase,terminal_refusal,terminal_outcome,
+      placement_admission_id,placement_receipt FROM content.realm_about_post_operation
+      WHERE realm=$1 AND about=$2 ORDER BY id`, [page.realm, page.about])).rows;
+    const replies = (await pool.query(`SELECT r.id,r.author,r.root_target,r.root_revision,r.parent_reply,
+      v.draft_head AS revision_id,body.body FROM content.reply r JOIN content.variant v ON v.id=r.variant_id
+      JOIN content.revision body ON body.id=v.draft_head WHERE r.root_target=$1 ORDER BY r.id`, [page.about])).rows;
+    const canonical = (await pool.query(`SELECT opener_reply,root_revision,state FROM content.realm_about_thread
+      WHERE realm=$1 AND about=$2`, [page.realm, page.about])).rows;
+    const placements = (await graph.query(`PREFIX rv: <${RV}> SELECT ?reply ?placement WHERE {
+      GRAPH ${iri(GRAPHS.revisions)} { ?placement a rv:RealmReplyPlacement ; rv:realm ${iri(page.realm)} ;
+        rv:reply ?reply ; rv:rootTarget ${iri(page.about)} ; rv:placementOutcome rv:Accepted . }
+    } LIMIT 16`)).results?.bindings ?? [];
+    return { operations, replies, canonical, placements };
+  }
+
+  async function observedPost(label: string, person: PersonaSession, page: PersonaPage, text: string,
+    key = randomUUID(), actor = person.actingSubject!) {
+    // Transparent observation of real owner calls, never injected refusals.
+    const basisOwner = RealmAboutPostCommand.prototype as unknown as {
+      basis: (...args: unknown[]) => Promise<unknown>;
+    };
+    const basis = basisOwner.basis, refusalOwner = RealmAboutThreadStore.prototype;
+    const refuse = refusalOwner.refuseIntent;
+    const errors: { class: string; message: string; stack: string | undefined }[] = [];
+    const refusals: { outcome: unknown; result: unknown }[] = [];
+    basisOwner.basis = async function (...args) {
+      try { return await basis.apply(this, args); }
+      catch (error) {
+        if (error instanceof Error) errors.push({ class: error.constructor.name, message: error.message, stack: error.stack });
+        throw error;
+      }
+    };
+    refusalOwner.refuseIntent = async function (...args) {
+      const result = await refuse.apply(this, args);
+      refusals.push({ outcome: args[3], result });
+      return result;
+    };
+    const { realm, ...coordinates } = page;
+    const input = { profile: 'realm-about-post-v1', ...coordinates, actingSubject: actor,
+      language: 'en', direction: 'ltr', body: text };
+    try {
+      const started = performance.now();
+      const response = await person.main('POST', `/v1/realms/${short(realm)}/about-posts`, input, key, { settle: false });
+      const body = await response.json();
+      const requestMs = performance.now() - started;
+      const settled = await state(page);
+      console.info('Discussion boundary evidence', JSON.stringify({ label, qa: Bun.env.REZICS_QA_RUN_ID,
+        personaAccount: person.accountId, actingSubject: actor, key, realm, input,
+        status: response.status, body, requestMs, errors, refusals, settled }));
+      return { status: response.status, body, errors, refusals, settled };
+    } finally { basisOwner.basis = basis; refusalOwner.refuseIntent = refuse; }
+  }
+
+  async function policy(mode: 'open' | 'mandatory') {
+    const root = `/v1/realms/${short(sessions.realm)}/settings`;
+    const current = await answer<{ generation: string; ruleBasis: { revision: string | null } }>(
+      sessions.owner.main('GET', `${root}?${acting(sessions.owner)}`));
+    await answer(sessions.owner.main('PUT', root, { expectedGeneration: current.generation,
+      expectedRulesRevision: current.ruleBasis.revision, reason: 'Observe ordinary discussion authority boundaries',
+      settings: { visibility: 'public', reviewMode: mode, reviewRequired: mode === 'mandatory',
+        whoMaySubmit: 'members', selfJoin: true, rules: [] }, actingSubject: sessions.owner.actingSubject }), 201);
+  }
+  function absentSelection(answered: Awaited<ReturnType<typeof observedPost>>, expected: unknown) {
+    expect(answered.refusals).toEqual([{ outcome: expected, result: { kind: 'absent' } }]);
+    expect(answered.settled.operations).toHaveLength(0);
+    expect(answered.settled.replies).toHaveLength(0);
+    expect(answered.settled.canonical).toHaveLength(0);
+    expect(answered.settled.placements).toHaveLength(0);
+  }
+
+  test('withdrawn attachment answers an ordinary basis refusal and preserves canonical contributions', async () => {
+    const first = await observedPost('normal-post-control', sessions.owner, ownerPage, 'Normal owner control');
+    expect(first.status).toBe(201);
+    const second = await observedPost('normal-member-control', sessions.member, ownerPage, 'Independent member contribution');
+    expect(second.status).toBe(201);
+    const before = await state(ownerPage);
+    let refused: Awaited<ReturnType<typeof observedPost>>;
+    try {
+      await answer(sessions.owner.main('POST', `/v1/zones/${short(sessions.zone)}/realm-attachment-withdrawals`, {
+        realm: sessions.realm, actingSubject: sessions.owner.actingSubject }));
+      refused = await observedPost('withdrawn-attachment-post-refused', sessions.owner, ownerPage, 'After withdrawal');
+    } finally {
+      // A failed assertion or server response cannot withdraw the next case's basis.
+      const config = await answer<{ revision: string }>(sessions.owner.main('GET',
+        `/v1/zones/${short(sessions.zone)}/configuration?${acting(sessions.owner)}`));
+      await answer(sessions.owner.main('PUT', `/v1/zones/${short(sessions.zone)}/configuration`, {
+        expectedHead: config.revision, defaultRealm: sessions.realm, actingSubject: sessions.owner.actingSubject }));
+    }
+    expect(refused.status).toBe(409);
+    expect(refused.body).toMatchObject({ code: 'read_basis_changed' });
+    expect(refused.errors).toMatchObject([{ class: 'WorkReadMoved', message: 'Zone discussion basis changed' }]);
+    expect(refused.refusals).toEqual([{ outcome: { kind: 'read-moved', message: 'Zone discussion basis changed' },
+      result: { kind: 'absent' } }]);
+    expect(refused.settled).toEqual(before);
+    const lookup = await answer<{ thread: { reply: string } }>(sessions.visitor.main('GET',
+      `/v1/realms/${short(sessions.realm)}/about-thread?${new URLSearchParams({ about: ownerPage.about })}`));
+    expect(lookup.thread.reply).toBe(first.body.reply);
+    const thread = await answer<{ items: { author: { id: string } }[] }>(sessions.visitor.main('GET',
+      `/v1/realms/${short(sessions.realm)}/threads/${short(lookup.thread.reply)}`));
+    expect(thread.items.map(item => item.author.id).sort()).toEqual(
+      [sessions.owner.actingSubject!, sessions.member.actingSubject!].sort());
+  }, 90_000);
+
+  test('mandatory review refuses a joined moderator before selecting an intent', async () => {
+    let refused: Awaited<ReturnType<typeof observedPost>>;
+    try {
+      await policy('mandatory');
+      refused = await observedPost('review-required-post-refused', sessions.moderator, moderatorPage, 'Requires review');
+    } finally { await policy('open'); }
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ code: 'realm_reply_denied' });
+    expect(refused.errors).toMatchObject([{ class: 'RealmReplyDenied', message: 'Realm policy requires moderator approval' }]);
+    absentSelection(refused, { kind: 'reply-denied', message: 'Realm policy requires moderator approval' });
+  }, 90_000);
+
+  test('the operator can post as its own Person after an ordinary refusal without impersonating the owner', async () => {
+    const key = randomUUID(), text = 'Operator as its own Person';
+    let refused: Awaited<ReturnType<typeof observedPost>>;
+    try {
+      await policy('mandatory');
+      refused = await observedPost('operator-review-required', sessions.operator, operatorPage, text, key);
+    } finally { await policy('open'); }
+    // A fresh refusal is a request answer, not a stored terminal outcome for the key.
+    const own = await observedPost('operator-own-post', sessions.operator, operatorPage, text, key);
+    const forged = await observedPost('impersonation-refused', sessions.operator, operatorPage,
+      'Impersonation attempt', randomUUID(), sessions.owner.actingSubject!);
+    expect(own.status).toBe(201);
+    expect(own.body.author).toBe(sessions.operator.actingSubject!);
+    expect(own.settled.operations).toMatchObject([{ phase: 'posted', terminal_refusal: false, terminal_outcome: null }]);
+    expect(own.settled.replies).toMatchObject([{ author: sessions.operator.actingSubject! }]);
+    expect(own.settled.placements).toHaveLength(1);
+    expect(forged.status).toBe(403);
+    expect(forged.settled).toEqual(own.settled);
+    expect(refused.status).toBe(403);
+    expect(refused.body).toMatchObject({ code: 'realm_reply_denied' });
+    absentSelection(refused, { kind: 'reply-denied', message: 'Realm policy requires moderator approval' });
+  }, 90_000);
+});

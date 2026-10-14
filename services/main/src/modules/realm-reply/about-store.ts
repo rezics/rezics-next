@@ -207,7 +207,10 @@ export class RealmAboutThreadStore {
     return this.transaction(async client => this.refuseSelected(client, await this.selected(client, id), outcome));
   }
 
-  /** A refusal can race allocation even when the command's first read was empty. */
+  /** A refusal can race allocation even when the command's first read was empty.
+   * An absent result rejects only this request, without settling the key or
+   * fencing a later allocation. Selected and dispatched outcomes stay ordered
+   * with reservation/dispatch by the existing intent and operation locks. */
   async refuseIntent(principal: string, key: string, digest: string,
     outcome: AboutTerminalOutcome): Promise<AboutRefusalOutcome> {
     const storedKey = principalIntentKey(principal, key);

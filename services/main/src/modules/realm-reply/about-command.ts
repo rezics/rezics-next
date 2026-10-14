@@ -32,7 +32,9 @@ const terminalErrors = {
  * - Selected child waiting for its opener: recoverable 202, same operation.
  * - Definite basis/disclosure, draft/identity or admission refusal before
  *   dispatch: terminal only for an allocated, undispatched selection.
- * - No allocated intent or dispatch without a completed owner outcome,
+ * - A definite refusal before selection is an ordinary request rejection,
+ *   with no stored terminal outcome or claim about a concurrent request.
+ * - Dispatch without a completed owner outcome,
  *   missing receipt, transport/owner outage, admission/receipt conflict or
  *   read budget failure: recoverable 503.
  * - Successful graph receipt: finish native settlement; fresh post 201,
@@ -331,9 +333,14 @@ export class RealmAboutPostCommand {
         if (!outcome) throw new RealmReplyUnavailable('Discussion refusal recovery is pending');
         const current = await this.store.refuseIntent(principalKey, key, digest, outcome);
         if (current.kind === 'posted') return { status: 200 as const, body: await this.posted(current.operation) };
+        if (current.kind === 'absent' && !selected) {
+          // No selection means this request rejected before owner effects.
+          // This ordinary answer does not settle the key: another request can
+          // still allocate it. The locked owner check above preserves a raced
+          // selection's refusal, dispatch recovery or committed success.
+          throw terminalError(outcome);
+        }
         if (current.kind === 'recoverable' || current.kind === 'absent') {
-          // An absent row cannot fence a request already past its authority
-          // probes. Keep the same key recoverable rather than returning denial.
           throw new RealmReplyUnavailable('Discussion dispatch recovery is pending');
         }
         if (current.kind === 'refused') throw terminalError(current.operation.terminalOutcome!);

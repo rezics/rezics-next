@@ -7,6 +7,7 @@ import { AdmissionConflict, AdmissionDenied, AdmissionUnavailable } from '../../
 import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import type { TitleControlState } from '../../../services/main/src/modules/work/title-control.ts';
 import { RealmAboutThreadStore } from '../../../services/main/src/modules/realm-reply/about-store.ts';
+import { RealmAboutPostCommand } from '../../../services/main/src/modules/realm-reply/about-command.ts';
 import { GRAPHS, iri, RV } from '../../../services/main/src/modules/work/activate.ts';
 import { startHomeStack, type HomeStack } from './feed-read-support.ts';
 import { arrange, local, type Page, type Posted } from './zone-realm-discussion-support.ts';
@@ -112,6 +113,109 @@ async function refusal(response: Response, status: 403 | 409) {
   expect(response.status, body).toBe(status);
   return { status: response.status, body };
 }
+
+test('a fresh refusal overlapping a same-key dispatched winner preserves its immutable outcome', async () => {
+  const home = await startHomeStack('zone-realm-discussion-same-key-refusal');
+  try {
+    const a = await arrange(home);
+    for (const outcome of ['dispatched', 'posted'] as const) {
+      const page = await a.page(`same-key-${outcome}`), key = randomUUID(), text = 'One immutable same-key contribution';
+      const owner = RealmAboutThreadStore.prototype;
+      const read = owner.readIntent, posted = owner.recordPosted, refuse = owner.refuseIntent;
+      const basisOwner = RealmAboutPostCommand.prototype as unknown as { basis: (...args: unknown[]) => Promise<unknown> };
+      const basis = basisOwner.basis;
+      let miss!: () => void, releaseRead!: () => void, reachedPosted!: () => void, releasePosted!: () => void;
+      const missed = new Promise<void>(resolve => { miss = resolve; });
+      const heldRead = new Promise<void>(resolve => { releaseRead = resolve; });
+      const posting = new Promise<void>(resolve => { reachedPosted = resolve; });
+      const heldPosted = new Promise<void>(resolve => { releasePosted = resolve; });
+      let first = true;
+      const errors: { class: string; message: string; stack: string | undefined }[] = [];
+      const decisions: Awaited<ReturnType<typeof refuse>>[] = [];
+      owner.readIntent = async function (...args) {
+        const result = await read.apply(this, args);
+        if (args[1] === key && first) {
+          first = false;
+          expect(result).toBeNull();
+          miss();
+          await heldRead;
+        }
+        return result;
+      };
+      owner.recordPosted = async function (...args) {
+        if (outcome === 'dispatched') { reachedPosted(); await heldPosted; }
+        return posted.apply(this, args);
+      };
+      owner.refuseIntent = async function (...args) {
+        const result = await refuse.apply(this, args);
+        if (args[1] === key) decisions.push(result);
+        return result;
+      };
+      basisOwner.basis = async function (...args) {
+        try { return await basis.apply(this, args); }
+        catch (error) {
+          if (error instanceof Error) errors.push({ class: error.constructor.name, message: error.message, stack: error.stack });
+          throw error;
+        }
+      };
+      let laggingRequest: Promise<Response> | undefined, winnerRequest: Promise<Response> | undefined;
+      const barrier = async (at: Promise<void>, request: Promise<Response>) => {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          await Promise.race([at, request.then(async response => {
+            throw new Error(`Request returned before owner barrier: ${response.status} ${await response.clone().text()}`);
+          }), new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('Owner barrier timed out')), 30_000); })]);
+        } finally { clearTimeout(timer); }
+      };
+      try {
+        laggingRequest = a.post(page, a.author, text, home.author.token, key);
+        await barrier(missed, laggingRequest);
+        winnerRequest = a.post(page, a.author, text, home.author.token, key);
+        let winner: Posted | undefined;
+        if (outcome === 'dispatched') await barrier(posting, winnerRequest);
+        else winner = await home.json<Posted>(await winnerRequest, 201);
+        const before = await operation(home, a.realm.realm, page.about);
+        expect(before).toMatchObject({ phase: outcome === 'posted' ? 'posted' : 'identified', terminal_refusal: false });
+        expect(before.placement_admission_id).toBeTruthy();
+        expect(await acceptedPlacements(home, a.realm.realm, before.reply)).toHaveLength(1);
+        // Change the actual public policy after the winner's graph commit. No
+        // injected error or authority bypass supplies the lagging refusal.
+        await a.policy(a.realm.realm, 'mandatory');
+        releaseRead();
+        const lagging = await laggingRequest;
+        const answer = await lagging.json();
+        const retained = await operation(home, a.realm.realm, page.about);
+        console.info('Discussion overlap evidence', JSON.stringify({ qa: Bun.env.REZICS_QA_RUN_ID,
+          outcome, key, input: a.input(page, a.author, text), status: lagging.status, answer, errors,
+          decisions, before, retained, placements: await acceptedPlacements(home, a.realm.realm, before.reply) }));
+        expect(errors).toMatchObject([{ class: 'RealmReplyDenied', message: 'Realm policy requires moderator approval' }]);
+        expect(decisions).toMatchObject([{ kind: outcome === 'posted' ? 'posted' : 'recoverable' }]);
+        expect(retained).toEqual(before);
+        expect(lagging.status).toBe(outcome === 'posted' ? 200 : 503);
+        if (outcome === 'dispatched') {
+          expect(answer).toMatchObject({ code: 'realm_reply_unavailable', title: 'Discussion dispatch recovery is pending' });
+          releasePosted();
+          winner = await home.json<Posted>(await winnerRequest, 201);
+        } else expect(answer).toEqual(winner);
+        // Settled success replays while the newer review policy still refuses
+        // fresh posts. Its immutable answer is not relabeled by that policy.
+        expect(await home.json(await a.post(page, a.author, text, home.author.token, key), 200)).toEqual(winner);
+        expect(await operation(home, a.realm.realm, page.about)).toMatchObject({ phase: 'posted', terminal_refusal: false });
+        const terminal = (await home.stack.contentPool.query(`SELECT terminal_outcome FROM content.realm_about_post_operation
+          WHERE id=$1`, [before.id])).rows[0];
+        expect(terminal).toEqual({ terminal_outcome: null });
+        expect(await a.effects(page.about)).toEqual({ threads: 1, operations: 1, replies: 1, revisions: 1 });
+        expect(await acceptedPlacements(home, a.realm.realm, before.reply)).toHaveLength(1);
+      } finally {
+        releaseRead(); releasePosted();
+        await Promise.allSettled([laggingRequest, winnerRequest].filter(request => request !== undefined));
+        owner.readIntent = read; owner.recordPosted = posted; owner.refuseIntent = refuse; basisOwner.basis = basis;
+        await a.policy(a.realm.realm, 'open');
+      }
+    }
+  } finally { await home.stop(); }
+}, 300_000);
+
 
 test('lost about-post responses after each durable owner phase resume one opener and preserve a pending child', async () => {
   const home = await startHomeStack('zone-realm-discussion-recovery');
