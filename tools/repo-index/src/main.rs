@@ -2326,6 +2326,55 @@ class Owner { method() { db.execute('SELECT * FROM owner.class'); } }
         }
     }
     #[test]
+    fn compact_query_and_initializer_arrays_preserve_parsed_elision_positions() {
+        let root = env::current_dir().unwrap();
+        let text = "const params = [ , key, , ]; db.query('UPDATE owner.records SET value=$2', [ , key, , ]);";
+        let facts = indexed(
+            Source {
+                file: "holes.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let variable = facts
+            .variable_facts
+            .as_ref()
+            .unwrap()
+            .iter()
+            .find(|fact| fact.name == "params")
+            .unwrap();
+        let initializer = decode(&variable.initializer_ast_deflate);
+        let query = decode(&facts.sql_node_facts.as_ref().unwrap()[0].node_ast_deflate);
+        for (elements, prefix) in [
+            (&initializer["body"][0]["expression"]["elements"], "[ , key"),
+            (
+                &query["body"][0]["expression"]["arguments"][1]["elements"],
+                "[ , key",
+            ),
+        ] {
+            assert_eq!(elements.as_array().unwrap().len(), 3);
+            assert_eq!(elements[0]["type"], "OmittedExpression");
+            assert_eq!(elements[1]["name"], "key");
+            assert_eq!(elements[2]["type"], "OmittedExpression");
+            let start = elements[0]["start"].as_u64().unwrap() as usize;
+            let end = elements[0]["end"].as_u64().unwrap() as usize;
+            assert_eq!(&text[start..end], ",");
+            assert!(start >= text.find(prefix).unwrap());
+        }
+        assert_ne!(
+            initializer["body"][0]["expression"]["elements"][0]["start"],
+            query["body"][0]["expression"]["arguments"][1]["elements"][0]["start"]
+        );
+    }
+    #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
         let root = env::current_dir().unwrap();
         let resolver = resolver(&root);
@@ -3346,6 +3395,15 @@ struct InitializerExpression<'n, 'a>(&'n Expression<'a>);
 struct InitializerExpressions<'n, 'a>(&'n oxc_allocator::Vec<'a, Expression<'a>>);
 struct InitializerArguments<'n, 'a>(&'n oxc_allocator::Vec<'a, Argument<'a>>);
 struct InitializerElements<'n, 'a>(&'n oxc_allocator::Vec<'a, ArrayExpressionElement<'a>>);
+struct InitializerElision(oxc_span::Span);
+impl ESTree for InitializerElision {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "OmittedExpression");
+        state.serialize_span(self.0);
+        state.end();
+    }
+}
 impl ESTree for InitializerProgram<'_, '_> {
     fn serialize<S: Serializer>(&self, serializer: S) {
         let mut state = serializer.serialize_struct();
@@ -3400,6 +3458,8 @@ impl ESTree for InitializerElements<'_, '_> {
         for element in self.0 {
             if let Some(expression) = element.as_expression() {
                 state.serialize_element(&InitializerExpression(expression));
+            } else if let ArrayExpressionElement::Elision(elision) = element {
+                state.serialize_element(&InitializerElision(elision.span));
             } else {
                 state.serialize_element(element);
             }
