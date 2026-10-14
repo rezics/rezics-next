@@ -191,7 +191,16 @@ async function measureHttp(name: string, request: { method: string; path: string
 }
 
 test('HTTP publication observation follows Main and excludes sibling and unrelated owner SQL', async () => {
-  sessions = await personaSessions('public');
+  let setupRequest = 0;
+  sessions = await personaSessions('public', { observeMain: async observed => {
+    // Setup may fail before measureHttp exists. Retain the real caller packet
+    // through the fixture's passive observer, without retrying its request.
+    await Bun.write(artifact(`setup-${++setupRequest}`), JSON.stringify({ source,
+      runId: process.env.REZICS_QA_RUN_ID, phase, request: observed.request,
+      response: { status: observed.response.status, rawBody: observed.response.body },
+      requestStartedAt: observed.requestStartedAt, answeredAt: observed.answeredAt,
+      elapsedMs: observed.answeredAt - observed.requestStartedAt }, null, 2));
+  } });
   const client = new Client({ connectionString: process.env.ACCESS_DATABASE_URL });
   await client.connect();
   try {
