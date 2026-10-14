@@ -152,7 +152,8 @@ beforeAll(async () => {
     await prepareSurface();
     for (const name of personaNames) {
       const page = await answer<{ result: { nextCursor: string | null } }>(
-        sessions[name].main('POST', '/v1/query', storyQuery('closed')));
+        sessions[name].main('POST', '/v1/query', storyQuery('closed'), undefined,
+          { headers: { 'accept-language': 'en' } }));
       expect(page.result.nextCursor, `${name}: pre-closure query continuation`).not.toBeNull();
       queryContinuations.set(name, page.result.nextCursor!);
     }
@@ -196,7 +197,13 @@ async function storySearches(name: PersonaName) {
     if (fixture.kind === 'error') continue;
     const query = storyQuery(fixture.kind,
       fixture.kind === 'closed-continuation' ? queryContinuations.get(name) : undefined);
-    await answer(sample(fixture.kind, fixture.method, fixture.path, query), fixture.status);
+    const answerPage = await answer<{ result: { items: { id: string }[] } }>(
+      sample(fixture.kind, fixture.method, fixture.path, query, undefined,
+        { headers: { 'accept-language': 'en' } }), fixture.status);
+    if (fixture.kind === 'empty') expect(answerPage.result.items).toEqual([]);
+    if (fixture.kind === 'global') {
+      expect(answerPage.result.items.some(item => publications.some(publication => publication.work === item.id))).toBe(true);
+    }
   }
 }
 
