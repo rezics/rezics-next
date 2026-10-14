@@ -98,7 +98,7 @@ export type AnimeProgressFact =
     completed: boolean;
     position: string | null;
     version: number;
-    data: { completed: boolean; position: string | null; version: number; occurrence: string };
+    data: { completed: boolean; position: string | null; version: number; occurrence?: string };
   }
   | AnimeRefusal;
 
@@ -164,14 +164,18 @@ export function mapAnimeProgress(answer: TreatyAnswer<ProgressPage>, episode: An
     return { kind: 'refusal', failure: 'unavailable', title: null, body: page, headers: answer.headers ?? answer.response?.headers };
   }
   const position = page.position ?? null;
-  const occurrence = page.occurrence ?? episode.occurrence;
+  // The loaded progress keeps an occurrence only when the answer names one.
+  const recorded = typeof page.occurrence === 'string' ? page.occurrence : undefined;
   return {
     kind: 'progress',
-    occurrence,
+    occurrence: recorded ?? episode.occurrence,
     completed: page.completed,
     position,
     version: page.version,
-    data: { completed: page.completed, position, version: page.version, occurrence },
+    data: {
+      completed: page.completed, position, version: page.version,
+      ...(recorded ? { occurrence: recorded } : {}),
+    },
   };
 }
 
