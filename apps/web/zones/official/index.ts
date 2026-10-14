@@ -6,12 +6,25 @@ import { packageDigest, type ZonePackage } from '@rezics/zone-sdk';
 // (features/zones/execution.ts); otherwise it is never imported. Only a package's JSON declarations
 // (`declared.ts`) are read when its code is switched off by the reader.
 
-const entries = import.meta.glob<ZonePackage>('./*/index.tsx', { import: 'default' });
-const files = import.meta.glob<string>('./*/**/*', { query: '?raw', import: 'default' });
+function createRegistry() {
+  return {
+    entries: import.meta.glob<ZonePackage>('./*/index.tsx', { import: 'default' }),
+    files: import.meta.glob<string>('./*/**/*', { query: '?raw', import: 'default' }),
+  };
+}
+
+let registry: ReturnType<typeof createRegistry> | undefined;
+
+// Readers can be imported outside Vite; only installed-package operations need
+// its build-time glob registry. The browser retains the same lazy imports.
+function installedPackages() {
+  return registry ??= createRegistry();
+}
 
 const digests = new Map<string, Promise<string | null>>();
 
 async function digestOf(slug: string): Promise<string | null> {
+  const { files } = installedPackages();
   const prefix = `./${slug}/`;
   const paths = Object.keys(files).filter(path => path.startsWith(prefix));
   if (!paths.length) return null;
@@ -28,6 +41,7 @@ export function installedDigest(slug: string): Promise<string | null> {
 
 /** Imports the package; call only after the execution decision allowed it. */
 export async function loadPackage(slug: string): Promise<ZonePackage | null> {
+  const { entries } = installedPackages();
   const entry = entries[`./${slug}/index.tsx`];
   return entry ? entry() : null;
 }
