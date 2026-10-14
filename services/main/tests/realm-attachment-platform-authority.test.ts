@@ -15,7 +15,7 @@ import { accessAuthorityRoutes } from '../src/routes/access-authority.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const root = resolve(import.meta.dir, '../../..');
-const migration = '2063_realm_attachment_assignment.sql';
+const migration = '2067_realm_attachment_assignment.sql';
 const template = 'realm_attachment_assignment_template';
 const assignment = 'access.grant.assign.realm.attach';
 const permission = 'platform:resource:realm.attach';
