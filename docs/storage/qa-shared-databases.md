@@ -89,6 +89,69 @@ process RSS after readiness was Account/Main 162.6/208.6 MiB small and
 Docker working set excludes some cache, restores used disk rather than tmpfs,
 and no destructive, sustained-write or concurrency peak was sampled.
 
+### Native engine capped fixture restores
+
+A follow-up on 2026-10-14 uses Docker Engine 29.9.0 on Fedora Linux 44,
+62.64 GiB engine RAM, with the engine reporting `overlayfs`. The persistent
+restore and regular persistent QA startup now apply
+`infra/dev/compose.qa-resources.yaml`; the tmpfs override remains separate.
+Admission reads the same authored caps. The restored five-service topology
+has enforced limits of PostgreSQL 2 GiB, Fuseki 7 GiB, RustFS 1 GiB,
+toxiproxy 128 MiB and Mailpit 256 MiB: 10.375 GiB total. Each container's
+`HostConfig.Memory` was compared with its admission component.
+
+The small cut was rebuilt locally as `fx-small-13d43669bd5c` because the
+retained cut was incompatible with this checkout. Restore
+`fixture-caps-small-mv8368wz` completed owner readiness and sampled smoke
+at 12:31:46 UTC. These timings end at fixture readiness (SQL owners,
+Fuseki/Lucene, RustFS and sampled data), before starting Account/Main HTTP
+processes; they are not comparable to the earlier HTTP-ready component sum.
+
+| Native restore phase (seconds) | Small | Medium |
+| --- | ---: | ---: |
+| Admission queue (excluded from active work) | 145.297 | 2.153 |
+| Parallel volume copy (before admission) | 3.696 | 68.765 |
+| PostgreSQL copy | 3.307 | 3.047 |
+| Fuseki copy | 3.116 | 2.927 |
+| RustFS copy | 3.339 | 68.611 |
+| Admission to fixture ready, uninterrupted wall minus queue | 18.592 | 10.412 |
+| Total active fixture restore | 24.434 | 80.056 |
+
+The small and medium backup volume roots and their immediate children showed no `C`
+(no-copy-on-write) attribute under `lsattr`. This checks the attribute; copy
+latency alone does not prove that every file was reflinked. There was no cache
+eviction or host exclusivity. The small invocation reached readiness and passed
+all five cap assertions, then its overall 600-second test clock expired in
+nested Task teardown after build and queueing; it is a completed observation,
+not a passing QA invocation. Cleanup in the measurement was changed to direct
+Compose teardown to avoid the nested Task admission.
+
+Medium cut `fx-medium-9871fdf065dd` used seed `restore-caps-measure` to
+avoid colliding with another worker's in-progress default-seed backup. Its
+first build failed with PostgreSQL `53200`; the successful build and restore
+used `REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION=2048`, matching the earlier
+experiment setting, while retaining the 2 GiB PostgreSQL cap. Restore
+`fixture-caps-medium-mv84013x` completed at 12:53:17 UTC. Its admitted QA
+invocation passed ten assertions and completed teardown in 395.17 seconds
+including build, queueing and observation. The 68.765-second copy is faster
+than the earlier 292.458 seconds, but is not the anticipated few seconds;
+RustFS still accounts for almost all of it. These are single observations,
+not a latency distribution or a qualification of the default medium build.
+
+Evidence is under this worktree's `.temp/restore-measure/`: `small.json`, `medium.json`,
+`restores/<run-id>/run.json` and `fixtures/<fixture-id>/manifest.json`.
+The temporary `measure.test.ts` calls `restoreFixture` with a `runPhase` hook
+around startup and final smoke, subtracts `admissionWaitMs`, inspects caps,
+and records `copyMs`. It is invoked through:
+
+```sh
+REZICS_FIXTURE_ROOT="$PWD/.temp/restore-measure/fixtures" \
+  bun scripts/goal/goalctl.ts test ./.temp/restore-measure/measure.test.ts
+MEASURE_PROFILE=medium REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION=2048 \
+  REZICS_FIXTURE_ROOT="$PWD/.temp/restore-measure/fixtures" \
+  bun scripts/goal/goalctl.ts test ./.temp/restore-measure/measure.test.ts
+```
+
 ### Clone primitives on those cuts
 
 Each SQL observation created all four databases serially with
@@ -214,13 +277,14 @@ The [admission guard](../../scripts/qa/memory-admission.ts) charges startup
 promises, then reads actual running memory. Thus 10.38 GiB is a particular
 allocation, not a permanent charge for every ordinary file.
 
-Inspection of the measured persistent restores found `HostConfig.Memory = 0`
-for PostgreSQL, RustFS, toxiproxy and Mailpit; only Fuseki had a 7 GiB limit.
-The restore starts from the base Compose topology, whereas the other service
-caps are declared in the QA override. The 10.375 GiB admission promise therefore
-does not establish a physical bound for this persistent path. Align its actual
-limits with admission in a separate harness change before relying on caps to
-size concurrency; this note changes no runtime configuration.
+Inspection of the earlier Docker Desktop persistent restores found
+`HostConfig.Memory = 0` for PostgreSQL, RustFS, toxiproxy and Mailpit;
+only Fuseki had a 7 GiB limit. Those restores started from the base Compose
+topology, whereas the other caps were declared only in the tmpfs QA override.
+The native follow-up above repairs that mismatch with a storage-independent
+QA resource override and checks each actual container cap against admission.
+The earlier uncapped working-set samples remain historical measurements;
+they do not establish safe concurrent peak usage under the repaired caps.
 
 The [preparation ceiling](workload-budgets.md#data-preparation-and-import)
 remains 600 seconds of active work. Queue wait is reported separately. Physical
