@@ -3,12 +3,11 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { createCommunityWithReadback, initialCommunitySettings, stepAfterCreation,
-  founderRealmReads } from '../../../../../apps/web/features/communities/create-form.tsx';
+  founderRealmReads, profilePublicationOpensRealm } from '../../../../../apps/web/features/communities/create-form.tsx';
 import { communityNames } from '../../../../../apps/web/features/communities/name-fields.ts';
 import { discoveryApi } from '../../../../../apps/web/features/discover/api.ts';
-import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
-import { readMembership } from '../../../../../apps/web/features/realm/membership-state.ts';
-import { operationOpen, parsePlatformAccess } from '../../../../../apps/web/features/api/platform-access.ts';
+import { loadRealmView } from '../../../../../apps/web/features/realm/realm-page.tsx';
+import { realmDiscussionReads } from '../../../../../apps/web/features/realm/discussion-read.ts';
 import creation from '../../../../../scripts/qa/cases/outcomes/realm/create-a-realm.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
@@ -272,21 +271,27 @@ async function visit(name: PersonaName) {
   // /r/new offers sign-in before any Main read for the signed-out visitor.
   if (name === 'visitor') return;
   const person = name === 'owner' ? founder.person : sessions[name];
+  const recorded = recording.session(name, person);
+  const anonymous = recording.session(name, sessions.visitor);
+  const send = async (path: string, personal: boolean, init?: RequestInit) => {
+    const method = init?.method ?? 'GET';
+    const label = labels.getStore();
+    if (!label) throw new Error(`Unlabelled production request: ${method} ${path}`);
+    const headers = new Headers(init?.headers);
+    const key = headers.get('idempotency-key') ?? undefined;
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    for (const name of ['authorization', 'cookie', 'x-session-key']) headers.delete(name);
+    return (personal ? recorded : anonymous)(typeof label === 'string' ? label : label(method, path),
+      method, path, body, key, { headers: Object.fromEntries(headers.entries()), settle: false });
+  };
   function client(caller: PersonaSession) {
-    const sample = recording.session(name, caller);
     return browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
       const url = new URL(input instanceof Request ? input.url : String(input));
       const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
-      const method = init?.method ?? 'GET';
-      const label = labels.getStore();
-      if (!label) throw new Error(`Unlabelled production request: ${method} ${path}`);
-      const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
-      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
-      return sample(typeof label === 'string' ? label : label(method, path), method, path, body, key,
-        { headers: Object.fromEntries(new Headers(init?.headers).entries()), settle: false });
+      return send(path, caller === person, init);
     }) as typeof fetch });
   }
-  const main = client(person), publicMain = client(sessions.visitor);
+  const main = client(person);
   const [state] = await Promise.all([
     named('session-agent', () => main.v1.me['session-agent'].get()),
     named('agent-choices', () => main.v1.me.agents.get({ query: { languages: 'en' } })),
@@ -303,36 +308,61 @@ async function visit(name: PersonaName) {
   const handle = `circle-${randomUUID().slice(0, 12)}`;
   const input = { profile: 'space-realm-v2' as const, language: 'en',
     name: 'Original fixture reading circle', handle, topics: [], capabilities: ['realm' as const], actingSubject,
-    initialSettings: initialCommunitySettings('public', []) };
+    initialSettings: initialCommunitySettings('private', []) };
   const response = await named('creation-receipt', () => createCommunityWithReadback(input, `${operation}:create`,
     (body, key) => main.v1.spaces.post(body, { headers: { 'idempotency-key': key } })));
   const step = await named((_method, path) => path.startsWith('/v1/addresses/') ? 'founder-address' : 'founder-managed-realms',
     () => stepAfterCreation(response, handle, actingSubject, founderRealmReads(main)));
   if (step.step !== 'write') return;
   const realm = step.realm.slice(-36);
-  const publication = { ...communityNames('en', input.name, 'An original fixture reading circle.', [])!,
-    iconSelection: null, bannerSelection: null, replyPolicy: 'members-direct' as const,
+  const publication = { ...communityNames('en', input.name, 'Original description by the founding fixture Person.', [])!,
+    iconSelection: null, bannerSelection: null, replyPolicy: 'moderated' as const,
     count: { kind: 'exact' as const, value: null }, moderators: [] };
-  const saved = await named('published-profile', () => main.v1.realms({ realm }).profile.put({
+  const saved = await named('private-profile-unavailable', () => main.v1.realms({ realm }).profile.put({
     profile: 'realm-public-profile-v2', expectedHead: null, actingSubject, publication,
   }, { headers: { 'idempotency-key': `${operation}:profile` } }));
-  if (!saved.data) return;
-  const frame = realmFrameReads({ main: publicMain, personal: main, actingSubject });
-  const resolved = await named((_method, path) => path.startsWith('/v1/addresses/') ? 'landing-address' : 'created-realm-header',
-    () => frame.resolveRealm(realm, 'en'));
-  if (resolved.kind !== 'realm') return;
-  await named('landing-zone', () => frame.readRealmZone(realm));
+  const problem = saved.error?.value;
+  const code = problem && typeof problem === 'object' && 'code' in problem && typeof problem.code === 'string'
+    ? problem.code : null;
+  if (!saved.data && !profilePublicationOpensRealm(code, 'private')) return;
+  // Request-local reads share one answer, as the page's React caches do.
+  const held = new Map<string, Promise<Response>>();
+  const landingRead = async (path: string, personal = false, init?: RequestInit) => {
+    const identity = JSON.stringify([personal, init?.method ?? 'GET', path]);
+    let pending = held.get(identity);
+    if (!pending) { pending = send(path, personal, init); held.set(identity, pending); }
+    return (await pending).clone();
+  };
+  const landingFetch: typeof fetch = async (input, init) => {
+    const url = new URL(input instanceof Request ? input.url : String(input));
+    const personal = init?.credentials === 'same-origin' || new Headers(init?.headers).has('authorization');
+    return landingRead(url.pathname.replace(/^\/api\/main/, '') + url.search, personal, init);
+  };
+  const landingLabels = (_method: string, path: string) => {
+    const pathname = new URL(path, 'https://record.invalid').pathname;
+    if (pathname === '/v1/addresses/resolve') return 'landing-address';
+    if (pathname === '/v1/me/session-agent') return 'landing-session-agent';
+    if (pathname === '/v1/me/person-preferences') return 'landing-preferences';
+    if (pathname === '/v1/me/platform-access') return 'landing-platform-access';
+    if (pathname.startsWith('/v1/follows/')) return 'landing-follow';
+    if (pathname.endsWith('/zone')) return 'landing-zone';
+    if (pathname.endsWith('/joining')) return 'landing-joining';
+    if (pathname.endsWith('/member-ban')) return 'landing-member-ban';
+    if (pathname.endsWith('/join-page')) return 'landing-join-page';
+    if (pathname.endsWith('/presentation')) return 'landing-presentation';
+    return path.includes('actingSubject=') ? 'created-realm-header' : 'landing-public-header';
+  };
+  const view = await named(landingLabels, () => loadRealmView(realm, 'en', {}, 'community', {
+    fetch: landingFetch, read: landingRead, personal: main, origin: 'https://record.invalid',
+    signedIn: true, token: 'persona-transport', languages: 'en',
+  }));
+  if (view.kind !== 'view') return;
+  const discussions = realmDiscussionReads(main, realm, actingSubject);
   await Promise.all([
-    named((_method, path) => path.startsWith('/v1/follows/') ? 'landing-follow' : 'landing-joining',
-      () => readMembership(main, step.realm, actingSubject)),
-    named('landing-platform-access', async () => {
-      const access = await main.v1.me['platform-access'].get();
-      if (operationOpen('getV1RealmsByRealmMember-ban', parsePlatformAccess(access.data))) {
-        await named('landing-member-ban', () => main.v1.realms({ realm })['member-ban'].get({ query: { actingSubject } }));
-      }
-    }),
+    named('landing-threads', () => discussions.threads({ sort: 'best', window: 'week' })),
+    named((_method, path) => path.startsWith('/v1/classification-vocabulary') ? 'landing-boards' : 'landing-boards-context',
+      () => discussions.boards()),
   ]);
-  await named('landing-threads', () => main.v1.realms({ realm }).threads.get({ query: { sort: 'best', actingSubject } }));
   // The established founder now owns three Spaces. Another form submission stops at the refusal.
   if (name === 'owner') {
     await named('creation-quota-denied', () => createCommunityWithReadback({ ...input,
