@@ -1495,8 +1495,8 @@ export class GovernanceStore {
         if (prior.decision_id !== decisionId
           || (prior.cancellation_request_digest !== null && prior.cancellation_request_digest !== request))
           throw new GovernanceConflict('idempotency key reused');
-        // A legacy cancellation has no retained historical answer. Preserve its
-        // existing first-call answer from the stored decision and cancelled flag.
+        // Newly bound keys retain the first post-upgrade answer, including when
+        // the cancellation itself predates receipt storage.
         return prior.cancellation_result ?? this.decisionResult(client, prior.decision_id, true);
       }
       const operation = (await client.query<{
@@ -1507,12 +1507,14 @@ export class GovernanceStore {
       )).rows[0];
       if (!operation) throw new GovernanceUnavailable('decision operation is unavailable');
       // Other keys cannot replace the original binding or retained first answer.
-      // Legacy cancellations keep their unknown historical digest and result.
+      // Record the first post-upgrade request and answer without inventing history.
       if (operation.cancelled) {
+        const result = operation.cancellation_result ?? await this.decisionResult(client, decisionId, true);
         if (operation.cancellation_principal_id === null) await client.query(
-          `UPDATE access.safety_decision_operation SET cancellation_principal_id = $2,cancellation_key = $3
-           WHERE decision_id = $1`, [decisionId, authority.principalId, idempotencyKey]);
-        return operation.cancellation_result ?? this.decisionResult(client, decisionId, true);
+          `UPDATE access.safety_decision_operation SET cancellation_principal_id = $2,cancellation_key = $3,
+           cancellation_request_digest = $4,cancellation_result = $5 WHERE decision_id = $1`,
+          [decisionId, authority.principalId, idempotencyKey, request, result]);
+        return result;
       }
       const outcome = await this.operationResult(client, decisionId);
       if (outcome.status === 'completed')

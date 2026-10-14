@@ -362,7 +362,7 @@ test('cancellation retains its first answer after a later lawful decision advanc
   expect(anotherKey).toEqual(first);
 });
 
-test('a migrated cancellation retains unknown historical fields and binds its known decision before refusing changed-decision reuse', async () => {
+test('a migrated cancellation retains its first post-upgrade answer and refuses changed-decision reuse', async () => {
   const f = legacy, key = randomUUID();
   const before = await snapshot(f.decision);
   expect(before.operation[0]!.row).toMatchObject({ cancelled: true, cancellation_principal_id: null,
@@ -371,16 +371,17 @@ test('a migrated cancellation retains unknown historical fields and binds its kn
   expect(first.status).toBe(200);
   expect(first.body).toEqual({ profile: 'moderation-decision-v1', ...f.decision, replayed: true,
     operation: { ...f.decision.operation, status: 'cancelled', continuation: null } });
+  expect(first.body.enforcement[0].fenceEpoch).toBe('1');
   expect(await f.cancel(key)).toEqual(first);
+  const { profile: _profile, ...ownerAnswer } = first.body;
   const bound = await snapshot(f.decision);
   expect(bound).toEqual({ ...before, operation: [{ row: { ...before.operation[0]!.row,
-    cancellation_principal_id: f.caller.principalId, cancellation_key: key } }] });
+    cancellation_principal_id: f.caller.principalId, cancellation_key: key,
+    cancellation_request_digest: expect.stringMatching(/^[0-9a-f]{64}$/), cancellation_result: ownerAnswer } }] });
   const next = await f.reconsider();
+  expect(next.enforcement[0]!.fenceEpoch).toBe('2');
   const advanced = await snapshot(f.decision), nextBefore = await snapshot(next);
-  const today = await f.cancel(key);
-  expect(today.status).toBe(200);
-  expect(today.body).toEqual({ ...first.body, enforcement: next.enforcement });
-  expect(today.body.enforcement[0].fenceEpoch).toBe('2');
+  expect(await f.cancel(key)).toEqual(first);
   const refused = await f.cancel(key, f.caller.actor, f.caller, next.decisionId);
   expect(refused.status).toBe(409);
   expect(refused.body).toMatchObject({ code: 'idempotency_conflict', title: 'idempotency key reused' });
