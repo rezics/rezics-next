@@ -396,6 +396,12 @@ export function mountLinks(view: RealmView): SiteLink[] {
   }));
 }
 
+/** The fetch a replayed client already uses. Production omits the client and keeps the browser session. */
+function replayFetch(client: RealmReadClient): typeof fetch | undefined {
+  const carried = (client as RealmReadClient & { fetch?: typeof fetch }).fetch;
+  return typeof carried === 'function' ? carried : undefined;
+}
+
 /**
  * The Zone frame around one Realm tab, or around a page of the Zone's own site, which names its `address`
  * and the `crumbs` from the Zone's home to it.
@@ -453,6 +459,7 @@ export async function RealmFrame({
     ? await readingSelection(data, realm.zone.id, search)
     : { state: null, reading: null };
   // Join or Follow first, as every community page offers; the page style stays beside it.
+  const relationshipFetch = client ? replayFetch(client) : undefined;
   const actions = (
     <>
       <RealmMembership
@@ -465,6 +472,7 @@ export async function RealmFrame({
         rulesHref={realmHref(locale, realm.ref, 'about')}
         locale={locale}
         messages={messages}
+        transport={relationshipFetch ? { fetch: relationshipFetch, origin: '' } : undefined}
       />
       {realm.zone ? (
         <LocalizedLink

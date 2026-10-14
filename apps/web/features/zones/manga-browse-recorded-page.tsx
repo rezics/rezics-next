@@ -18,7 +18,7 @@ const locale = 'en' as const;
 type Persona = (typeof mangaBrowsePersonas)[number];
 
 function selections(persona: Persona, label: string, state: RecordedState): RecordedSelection[] {
-  return recordedFrameLabels(persona, label).map(item => ({
+  return recordedFrameLabels(record, persona, label).map(item => ({
     label: item,
     state: item === label ? state : recordedSample(record, persona, item).status >= 400 ? 'error' : 'populated',
   }));
@@ -41,11 +41,13 @@ export function MangaBrowseRecordedPage({ persona, label, state }: {
     let active = true;
     const replay = recordedFetch(record, persona, selections(persona, label, state));
     const main = mainApiWithToken(undefined, { fetcher: replay.fetcher });
-    const client: RealmReadClient = {
+    // The same replaying fetch serves the frame reads and the membership control's hydration.
+    const client: RealmReadClient & { fetch: typeof fetch } = {
       main,
       personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher: replay.fetcher }),
       actingSubject: recordedActingSubject(record, persona),
       signedIn: persona !== 'visitor',
+      fetch: replay.fetcher,
     };
     void RealmBrowseRoute({
       params: Promise.resolve({ locale, realm: recordedSiteKey(record) }),

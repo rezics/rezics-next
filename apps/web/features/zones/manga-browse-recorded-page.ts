@@ -34,9 +34,13 @@ export function recordedSearch(record: AnswerRecord, persona: AnswerPersona, lab
 /**
  * Frame reads the site browse route makes, plus the page sample.
  * A missing browse mount is the recorded 404. Signed-in reads follow the session person.
+ * The header refetches follow state only for a persona whose recorded follow has no level or following.
  */
-export function recordedFrameLabels(persona: AnswerPersona, label: string): string[] {
+export function recordedFrameLabels(record: AnswerRecord, persona: AnswerPersona, label: string): string[] {
+  const followState = record.personas[persona].filter(sample => sample.label === 'frame-follow-state').length === 1
+    ? ['frame-follow-state'] : [];
   return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', label,
     ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
-      'frame-member-ban', 'frame-follow', 'frame-platform-access'])];
+      'frame-member-ban', 'frame-follow', 'frame-platform-access']),
+    ...followState];
 }

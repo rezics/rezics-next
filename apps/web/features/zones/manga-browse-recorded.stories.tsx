@@ -6,6 +6,7 @@ import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
 import type { ZoneBrowsePage } from '../realm/types.ts';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { messages } from './messages.ts';
 import { MangaBrowseRecordedPage } from './manga-browse-recorded-page.tsx';
@@ -84,6 +85,7 @@ const playPopulated: Play = async ({ canvasElement, args }) => {
   await expect(sorts.queryByRole('link', { name: messages.sortRelevance })).toBeNull();
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectRelationships(canvas);
 };
 
 const playSearch: Play = async ({ canvasElement, args }) => {
@@ -103,6 +105,7 @@ const playSearch: Play = async ({ canvasElement, args }) => {
     await expect(sorts.getByRole('link', { name })).toBeVisible();
   await expect(sorts.getByRole('link', { name: messages.sortRelevance })).toHaveAttribute('aria-current', 'true');
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
+  await expectRelationships(canvas);
 };
 
 const playEmpty: Play = async ({ canvasElement, args }) => {
@@ -118,7 +121,18 @@ const playEmpty: Play = async ({ canvasElement, args }) => {
   await expect(sorts.getByRole('link', { name: messages.sortRelevance })).toHaveAttribute('aria-current', 'true');
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectRelationships(canvas);
 };
+
+/** The membership control hydrates after paint. Absence is the settled page, not a check before the request. */
+async function expectRelationships(canvas: ReturnType<typeof within>) {
+  let notice = false;
+  try {
+    await canvas.findByText(relationshipMessages.en.unavailable, {}, { timeout: 400 });
+    notice = true;
+  } catch { /* The notice stayed absent for the wait. */ }
+  await expect(notice).toBe(false);
+}
 
 const playLoading: Play = async ({ canvasElement }) => {
   const canvas = within(canvasElement);

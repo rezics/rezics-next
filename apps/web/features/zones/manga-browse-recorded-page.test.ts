@@ -101,7 +101,7 @@ function expectRecordedPage(model: BrowseModel, answer: ZoneBrowsePage) {
 }
 
 async function visit(page: string) {
-  const seen = replay(recordedFrameLabels(persona, page));
+  const seen = replay(recordedFrameLabels(record, persona, page));
   const rendered = await ZoneSiteRoute({
     params: Promise.resolve({ locale: 'en', space: recordedSiteKey(record), path: ['browse'] }),
     searchParams: Promise.resolve(recordedSearch(record, persona, page)),
@@ -110,7 +110,7 @@ async function visit(page: string) {
 }
 
 async function visitInjected(page: string) {
-  const seen = replay(recordedFrameLabels(persona, page).filter(label => label !== 'frame-routes'));
+  const seen = replay(recordedFrameLabels(record, persona, page).filter(label => label !== 'frame-routes'));
   const actor = recordedActingSubject(record, persona);
   const main = api.mainApiWithToken(undefined, { fetcher });
   const rendered = await RealmBrowseRoute({
@@ -192,7 +192,7 @@ test('the owner facet labels stay the headings in every interface locale', async
   const concept = facets.facets.find(item => item.name === 'concept' && item.current);
   if (!concept) throw new Error('The recorded facet list has no current concept facet');
   for (const locale of uiLocales) {
-    const seen = replay(recordedFrameLabels('owner', 'page-browse-default'));
+    const seen = replay(recordedFrameLabels(record, 'owner', 'page-browse-default'));
     const rendered = await ZoneSiteRoute({
       params: Promise.resolve({ locale, space: recordedSiteKey(record), path: ['browse'] }),
       searchParams: Promise.resolve({}),

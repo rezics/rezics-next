@@ -164,6 +164,7 @@ async function browse(name: PersonaName) {
   const person = sessions[name], root = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
     'space', short(sessions.zone), 'browse');
+  await recordFollowHydration(name);
   await pageReads(name);
   const sample = recording.session(name, person), sampledCards = new Set<string>();
   const filters = [{}, { q: phrase }, { concept: manga }, { concept: oneShot }, { status: 'upcoming' },
@@ -223,6 +224,29 @@ async function browse(name: PersonaName) {
       selectionBasis: 'realm-manager-review', actingSubject: person.actingSubject }), 403);
   }
 }
+/** The header control refetches when the server follow has no following or no level. */
+async function recordFollowHydration(name: PersonaName) {
+  const person = sessions[name];
+  const actingSubject = person.actingSubject;
+  if (!actingSubject) return;
+  const realmId = short(sessions.realm);
+  const headerResponse = await sessions.visitor.main('GET', `/v1/realms/${realmId}`);
+  if (!headerResponse.ok) throw new Error(`Realm header for follow state: HTTP ${headerResponse.status}: ${await headerResponse.text()}`);
+  const header = await headerResponse.json() as { id?: string };
+  if (!header.id) throw new Error('Realm header has no id for follow state');
+  const followResponse = await person.main('GET', `/v1/follows/${realmId}?${new URLSearchParams({
+    kind: 'realm', actingSubject,
+  })}`);
+  let refresh = true;
+  if (followResponse.ok) {
+    const follow = await followResponse.json() as { following?: boolean | null; level?: string | null };
+    refresh = follow.following == null || follow.level == null;
+  } else await followResponse.body?.cancel();
+  if (!refresh) return;
+  const params = new URLSearchParams({ actingSubject, target: header.id, kind: 'realm' });
+  await answer(recording.session(name, person)('frame-follow-state', 'GET', `/v1/me/follow-state?${params}`));
+}
+
 async function pageReads(name: PersonaName) {
   const publicRead = recording.session(name, sessions.visitor);
   const realmRoot = `/v1/realms/${short(sessions.realm)}`;
