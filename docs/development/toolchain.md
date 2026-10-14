@@ -16,6 +16,13 @@ A few integration tests start a host PostgreSQL 18 with `initdb`; install the
 server and its contrib extensions (Fedora: `postgresql-server postgresql-contrib`)
 because Content migrations create `pg_trgm`.
 
+The development host uses native Docker Engine 29.9 (`docker-ce`), context
+`default`, through `/var/run/docker.sock` as of 2026-10-14. It replaced Docker
+Desktop because the QEMU VM pinned up to 18 GiB of host RAM as shared memory
+and imposed a 24 GiB container ceiling. Start the native engine with
+`sudo systemctl start docker`. QA admission uses host MemAvailable and one
+reserve on this engine; Docker Desktop retains its separate VM and host budgets.
+
 Task is the command facade for developers and agents. Run `task --list`; pass
 extra arguments after `--`. Yarn installs dependencies with `task install` or
 `task toolchain:install`; it does not run application commands. The lockfile is
