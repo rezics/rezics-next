@@ -1,4 +1,9 @@
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { readAddress } from '../../../../../apps/web/features/address/client.ts';
+import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { closeRealm, closureCell } from './closure-fixture.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -7,7 +12,9 @@ import {
   personaSessions, type PersonaName, type PersonaSession, type PersonaSessions,
 } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+const recording = new OutcomeRecorder(declaration);
+const requestLabels = new AsyncLocalStorage<(path: string) => string>();
 let closed: PersonaSessions;
 let live: PersonaSessions;
 let setupFailure: string | null = null;
@@ -54,6 +61,7 @@ async function listMembers(sessions: PersonaSessions) {
   });
 }
 beforeAll(async () => {
+  await recording.prepare();
   closed = await personaSessions('public');
   live = await personaSessions('public');
   try {
@@ -77,7 +85,9 @@ beforeAll(async () => {
   if (setupFailure) console.log(`Roster prerequisite: ${setupFailure}`);
   if (closureFailure) console.log(`Roster closure prerequisite: ${closureFailure}`);
 }, 180_000);
-afterAll(async () => { await closed?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); } finally { await closed?.close(); }
+});
 
 async function reads(name: PersonaName) {
   expect(closureFailure, closureFailure ?? '').toBeNull();
@@ -103,9 +113,68 @@ async function reads(name: PersonaName) {
   }
   reportFailures(failures);
 }
-outcomeTest(declaration, 'visitor', () => closureCell(declaration, 'visitor', () => closed, () => reads('visitor')));
-outcomeTest(declaration, 'stranger', () => closureCell(declaration, 'stranger', () => closed, () => reads('stranger')));
-outcomeTest(declaration, 'member', () => closureCell(declaration, 'member', () => closed, () => reads('member')));
-outcomeTest(declaration, 'owner', () => closureCell(declaration, 'owner', () => closed, () => reads('owner')));
-outcomeTest(declaration, 'moderator', () => closureCell(declaration, 'moderator', () => closed, () => reads('moderator')));
-outcomeTest(declaration, 'operator', () => closureCell(declaration, 'operator', () => closed, () => reads('operator')));
+async function within(milliseconds: number, part: string, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function productionVisit(name: PersonaName) {
+  const person = closed[name];
+  const originalFetch = globalThis.fetch;
+  const origin = 'https://record.invalid';
+  // RealmMembersRoute stops at loadRealmView's missing resolution, before readRoster.
+  // Public frame reads have no bearer, including for a signed-in visitor.
+  const publicRequest = recording.session(name, closed.visitor);
+  const personalRequest = recording.session(name, person);
+  const fetcher = (async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    if (url.origin !== origin) return originalFetch(input, init);
+    const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+    const label = requestLabels.getStore()?.(path);
+    if (!label) throw new Error(`Production request has no label: ${path}`);
+    const personal = new Headers(init?.headers).has('authorization');
+    return (personal ? personalRequest : publicRequest)(label, init?.method ?? 'GET', path);
+  }) as typeof fetch;
+  const main = browserMainApi(origin, { anonymous: true, fetcher });
+  const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
+  globalThis.fetch = fetcher;
+  try {
+    const frame = realmFrameReads({ main, keepProblem: false, resolution: {
+      resolveAddress: (scope, key) => named('members-address', () =>
+        readAddress({ scope, key }, 'en', origin, new Headers(), undefined, true)),
+      readPrivateRealm: (ref, _locale, address) => requestLabels.run(path => {
+        if (path.includes('/join-page')) return 'members-join-page';
+        return 'members-private-header';
+      }, () => readSpacePage(ref, 'en', {
+        address, origin, incoming: new Headers(),
+        ...(person.actingSubject ? { token: 'recorded-persona', actingSubject: person.actingSubject } : {}),
+      })),
+    } });
+    const resolution = await frame.resolveRealm(short(closed.realm), 'en');
+    if (resolution.kind === 'realm') throw new Error('Closed Realm unexpectedly opened the production members page');
+  } finally { globalThis.fetch = originalFetch; }
+}
+
+async function qualify(name: PersonaName) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The existing closureCell API proof owns its original 60 s deadline.
+    await within(60_000, 'API proof', () => closureCell(declaration, name, () => closed, () => reads(name)));
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+outcomeTest(declaration, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(declaration, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(declaration, 'member', () => qualify('member'), recording);
+outcomeTest(declaration, 'owner', () => qualify('owner'), recording);
+outcomeTest(declaration, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(declaration, 'operator', () => qualify('operator'), recording);
