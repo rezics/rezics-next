@@ -134,6 +134,10 @@ async function freePort(): Promise<number> {
   });
 }
 
+// Account bootstraps one durable operator per database. Both independently
+// constructed cases sign in as that operator instead of trying to bootstrap two.
+let accountOperator: { id: string; email: string; password: string } | undefined;
+
 async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<void> {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.CONTENT_DATABASE_URL
     || !Bun.env.ACCESS_DATABASE_URL || !Bun.env.ACCOUNT_DATABASE_URL
@@ -142,7 +146,15 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
     throw new Error('Run through the isolated QA integration tier');
   }
   const evidence = new CompletionEvidence();
+  const caseStarted = performance.now();
   evidence.record('scenario', { continuation });
+  if (!accountOperator && Bun.env.REZICS_QA_PREPARATION_STARTED_AT) {
+    evidence.record('qa-preparation-through-case-start', {
+      elapsedMs: Date.now() - Number(Bun.env.REZICS_QA_PREPARATION_STARTED_AT),
+    });
+  }
+  const accountSetupStarted = performance.now();
+  evidence.record('account-setup-start', { continuation });
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
@@ -199,7 +211,20 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
       return { id: (await response.json() as { user: { id: string } }).user.id,
         email, password, cookie: response.headers.get('set-cookie')! };
     };
-    const operator = await signUp('operator');
+    const operator = await evidence.measure('Account operator setup', null, async () => {
+      if (!accountOperator) {
+        const created = await signUp('operator');
+        accountOperator = { id: created.id, email: created.email, password: created.password };
+        return created;
+      }
+      const response = await fetch(`${base}/api/auth/sign-in/email`, {
+        method: 'POST', headers: { 'content-type': 'application/json', origin: base },
+        body: JSON.stringify({ email: accountOperator.email, password: accountOperator.password }),
+      });
+      expect(response.status).toBe(200);
+      expect((await response.json() as { user: { id: string } }).user.id).toBe(accountOperator.id);
+      return { ...accountOperator, cookie: response.headers.get('set-cookie')! };
+    });
     operators.add(operator.id);
     const headers = new Headers({ cookie: operator.cookie, origin: base });
     const verifierClient = await auth.api.adminCreateOAuthClient({ headers, body: {
@@ -239,6 +264,7 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
       VALUES ($1,$2,$3)`, [otherPrincipalId, `${base}/api/auth`, otherMember.id]);
     await grantRecordedPlatformUse(accessPool, otherPrincipalId, ['catalogue-import']);
     const otherToken = await tokenFor('openid source:adopt source:read work:edit', otherMember.cookie);
+    evidence.record('account-setup-completed', { continuation, elapsedMs: performance.now() - accountSetupStarted });
     await migrateContent(contentPool);
     const sourceIntake = new SourceIntakeStore(contentPool);
     const fuseki = new ObservedFuseki(Bun.env.FUSEKI_URL!, evidence);
@@ -683,6 +709,7 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
     await server.stop();
     await Promise.all([accountPool.end(), accessPool.end(), contentPool.end()]);
     evidence.record('cleanup-completed', {});
+    evidence.record('scenario-completed', { continuation, elapsedMs: performance.now() - caseStarted });
   }
 }
 
