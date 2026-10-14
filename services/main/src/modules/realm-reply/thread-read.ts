@@ -719,7 +719,7 @@ export async function readRealmThread(session: WorkReadSession, realm: string, f
       throw new WorkReadExpired('Sibling order changed; restart this branch');
     }
   }
-  await threads.assertThreadProjection(session, realm, focus, population);
+  await threads.assertThreadProjection(session, realm, focus, population, nodes.map(node => node.reply));
   retained.assertLive();
   return response;
 }

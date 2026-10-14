@@ -9,6 +9,8 @@ import { RealmRankingsIncomplete, type RealmRankKey } from '../src/modules/ranki
 import { RealmReplyThreadStore, type PlacedHead, type ThreadNode, type ThreadVote } from '../src/modules/realm-reply/thread-store.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
 import { RV } from '../src/modules/work/activate.ts';
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { decodeReadCursor, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 // Realm threads over an in-memory graph, Content and vote projection: the
@@ -63,7 +65,7 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     return out;
   };
   const session = {
-    checkDeadline: () => {}, displayLanguages: ['en'], request: new Request('http://main.test/v1/resources'),
+    checkDeadline: () => {}, observeDependency: () => {}, displayLanguages: ['en'], request: new Request('http://main.test/v1/resources'),
     options: options.blocked ? { actingSubject: agent(9) } : {},
     position: { dataEpoch: 'epoch', sequence: '9' }, principal: options.blocked ? {} : null,
     realm: async () => {
@@ -99,7 +101,15 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
     deps: {
       access: {},
       environment: { lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
-        objectDirectory: '.temp/thread-unit', fuseki: { query: async () => ({ results: { bindings: [{
+        objectDirectory: '.temp/thread-unit', fuseki: { query: async (query: string) => query.includes('SELECT ?resource ?head')
+          ? { results: { bindings: [...(query.match(/VALUES \?resource \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+            .map(match => ({ resource: bind(match[1]!), head: bind(reply(900)) })) } }
+          : query.includes('SELECT ?work ?head ?owningWork')
+          ? { results: { bindings: [...new Set([...(query.match(/VALUES \?work \{([^}]+)\}/)?.[1] ?? '').matchAll(/<([^>]+)>/g)]
+            .map(match => match[1]!))]
+            .map(id => ({ work: bind(id), head: bind(reply(900)),
+              ...(id === work ? { owningWork: bind(work), owningHead: bind(reply(900)) } : {}) })) } }
+          : ({ results: { bindings: [{
           epoch: bind(session.position.dataEpoch), sequence: bind(session.position.sequence), r: bind(work), type: bind('work'), work: bind(work),
           head: bind(reply(900)), public: bind('true'), erased: bind('false'),
           label: { value: 'Rainy Night Bookshop', 'xml:lang': 'en' },
@@ -263,6 +273,10 @@ export function world(placed: Placed[], options: { privateRealm?: boolean; votes
       },
     },
   } as unknown as WorkReadSession;
+  configureFixtureDisclosureAncestry(session.deps.environment, target =>
+    target.owner === 'content' || target.resource === work
+      ? { resource: work, head: reply(900), protectedRevision: target.workRevision ?? null } : undefined);
+  configureDisclosure(session.deps.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   return { session, calls };
 }
 
@@ -456,7 +470,7 @@ function projectionReadiness(mainSequence = '3', contentSequence = '7') {
 test('thread readiness admits Main stream 3 and Content 7 when the graph cut is 100', async () => {
   const fixture = projectionReadiness();
   await fixture.store.assertThreadProjection(fixture.session, realm, reply(1));
-  expect(fixture.positions).toEqual([['epoch', 'content-epoch', '7', '3', realm, reply(1), null]]);
+  expect(fixture.positions).toEqual([['epoch', 'content-epoch', '7', '3', realm, [reply(1)], null]]);
   fixture.session.position.sequence = '101';
   await fixture.store.assertThreadProjection(fixture.session, realm, reply(1));
   expect(fixture.positions[1]).toEqual(fixture.positions[0]);
@@ -493,4 +507,47 @@ test('thread readiness rechecks acknowledged coverage when the window closes', a
   fixture.cover({ streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4' });
   await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1))).resolves.toBeUndefined();
   expect(fixture.positions.map(position => position[3])).toEqual(['3', '4']);
+});
+
+
+test('thread readiness passes only bounded selected keys and rejects an unbounded or missing focus', async () => {
+  const fixture = projectionReadiness();
+  await fixture.store.assertThreadProjection(fixture.session, realm, reply(1), undefined,
+    [reply(1), reply(2), reply(2)]);
+  expect(fixture.positions[0]![5]).toEqual([reply(1), reply(2)]);
+  await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1), undefined, [reply(2)]))
+    .rejects.toThrow('Invalid thread scope');
+  await expect(fixture.store.assertThreadProjection(fixture.session, realm, reply(1), undefined,
+    Array.from({ length: REALM_THREAD_COST.replies + REALM_THREAD_COST.ancestors + 2 }, (_, i) => reply(i + 1))))
+    .rejects.toThrow('Invalid thread scope');
+  expect(fixture.positions).toHaveLength(1);
+});
+
+test('Best and every Top window traverse all roots beyond the legacy cohort with bounded hydration', async () => {
+  const placed = Array.from({ length: REALM_THREAD_COST.cohort + 5 }, (_, index) => ({ id: index + 1, author: 1, minutes: 60 * 24 * 8 + index }));
+  for (const [sort, window] of [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']] as const) {
+    const { session } = world(placed);
+    const selected: number[] = [];
+    const admitted = session.deps.realmReplyThreads!.admitted.bind(session.deps.realmReplyThreads!);
+    Object.assign(session.deps.realmReplyThreads!, { admitted: async (realm: string, heads: readonly PlacedHead[]) => {
+      selected.push(heads.length);
+      return admitted(realm, heads);
+    } });
+    const reached: string[] = [], cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = await readRealmThreads(session, realm, { sort, window, cursor, limit: 20 });
+      reached.push(...page.items.map(item => item.reply));
+      expect(page.count).toEqual({ value: page.items.length, kind: 'exact-page', total: null });
+      expect(page.items.length).toBeLessThanOrEqual(20);
+      if (page.nextCursor) {
+        expect(cursors.has(page.nextCursor)).toBe(false);
+        cursors.add(page.nextCursor);
+      }
+      cursor = page.nextCursor ?? undefined;
+    } while (cursor);
+    expect(new Set(reached).size).toBe(placed.length);
+    expect(reached.sort()).toEqual(placed.map(item => reply(item.id)).sort());
+    expect(Math.max(...selected)).toBeLessThanOrEqual(20);
+  }
 });

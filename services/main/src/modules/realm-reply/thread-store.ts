@@ -103,11 +103,14 @@ export class RealmReplyThreadStore {
   get rankingContent() {
     return this.content;
   }
-  /** The published branch remains usable while unrelated work and absent additions
-   * wait. Existing dependencies and owner epochs are checked on both sides of hydration. */
+  /** Only the selected neighbourhood is fenced; the rest of the thread is visited
+   * through continuations. Unrelated work and absent additions leave it usable.
+   * Existing dependencies and owner epochs close on both sides of hydration. */
   async assertThreadProjection(session: WorkReadSession, realm: string, focus: string,
-    population?: string): Promise<void> {
-    if (!native.test(realm) || !native.test(focus)) throw new RealmReplyInvalid('Invalid thread scope');
+    population?: string, selected: readonly string[] = [focus]): Promise<void> {
+    if (!native.test(realm) || !native.test(focus) || !selected.includes(focus)
+      || selected.length > REALM_THREAD_COST.replies + 1 + REALM_THREAD_COST.ancestors
+      || selected.some(reply => !native.test(reply))) throw new RealmReplyInvalid('Invalid thread scope');
     // The projector checkpoints the acknowledged Main stream. A graph cut
     // can advance independently and is never a position in that stream.
     const main = requireMainFeedCoverage(await session.deps.relayPosition?.read(), session.position.dataEpoch);
@@ -117,7 +120,7 @@ export class RealmReplyThreadStore {
     const ready = (await this.access.query<{ ready: boolean }>(`SELECT ready
       FROM access.read_realm_thread_scope_cut($1,$5,$6,$2::uuid,$3::bigint,$4::numeric,$7)`,
     [session.position.dataEpoch, source.data_epoch, source.sequence, main.sequence,
-      realm, focus, population ?? null])).rows[0];
+      realm, [...new Set(selected)], population ?? null])).rows[0];
     if (!ready?.ready) throw new WorkReadUnavailable('Realm replies are projecting');
   }
 

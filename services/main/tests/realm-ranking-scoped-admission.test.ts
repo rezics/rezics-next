@@ -101,7 +101,7 @@ async function pending(realm: string, placement = native()) {
       $2,$2,true,ARRAY[$2],clock_timestamp())`, [epoch, placement, realm]);
 }
 
-async function dirty(kind: 'realm' | 'reply' | 'parent' | 'work', resource: string) {
+async function dirty(kind: 'realm' | 'reply' | 'parent' | 'work' | 'placement', resource: string) {
   await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource)
     VALUES($1,$2,$3) ON CONFLICT DO NOTHING`, [epoch, kind, resource]);
 }
@@ -379,14 +379,15 @@ test('thread admission also survives unrelated Realm additions at established st
   await expect(session.deps.realmReplyThreads!.assertThreadProjection(session, a, item.reply)).resolves.toBeUndefined();
 });
 
-test('thread admission fences only the affected root inside one Realm', async () => {
+test('thread admission fences only the selected neighbourhood inside one Realm', async () => {
   const a = native(), b = native();
   const first = await reference(a), second = await reference(a), other = await reference(b);
   const firstChild = await reference(a, first.reply, first.work);
   const secondChild = await reference(a, second.reply, second.work);
   const { session } = reader('8', '4');
   const ready = (realm: string, reply: string) => session.deps.realmReplyThreads!
-    .assertThreadProjection(session, realm, reply);
+    .assertThreadProjection(session, realm, reply, undefined,
+      reply === first.reply ? [reply, firstChild.reply] : reply === second.reply ? [reply, secondChild.reply] : [reply]);
   await dirty('reply', secondChild.reply);
   await expect(ready(a, first.reply)).resolves.toBeUndefined();
   await expect(ready(a, firstChild.reply)).resolves.toBeUndefined();
@@ -750,7 +751,8 @@ for (const [source, removal] of [
         .toEqual([unaffected.reply]);
     }
     for (const focus of [parent.reply, command.reply]) {
-      const ready = session.deps.realmReplyThreads.assertThreadProjection(session, realm, focus);
+      const ready = session.deps.realmReplyThreads.assertThreadProjection(session, realm, focus, undefined,
+        focus === parent.reply ? [focus, command.reply] : [focus]);
       if (removal) await expect(ready).rejects.toBeInstanceOf(WorkReadUnavailable);
       else await expect(ready).resolves.toBeUndefined();
     }
@@ -926,4 +928,67 @@ test('admission SQL and visited rows stay bounded as unrelated dirty inventory g
   expect(Math.max(...costs.map(cost => cost.visited)), JSON.stringify(costs)).toBeLessThan(100);
   expect(Math.max(...costs.map(cost => cost.visited)) - Math.min(...costs.map(cost => cost.visited)))
     .toBeLessThanOrEqual(10);
+});
+
+
+test('deferred thread removals do not hold another bounded page but close their selected page', async () => {
+  const realm = native(), root = await reference(realm);
+  const first = await reference(realm, root.reply, root.work);
+  const deferred = await reference(realm, root.reply, root.work);
+  const { session } = reader();
+  await dirty('reply', deferred.reply);
+  await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, root.reply, undefined,
+    [root.reply, first.reply])).resolves.toBeUndefined();
+  await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, root.reply, undefined,
+    [root.reply, deferred.reply])).rejects.toBeInstanceOf(WorkReadUnavailable);
+  await access.query('DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch]);
+  for (const [kind, resource] of [['parent', root.reply], ['work', root.work],
+    ['placement', `${realm}|${root.reply}|review`]] as const) {
+    await dirty(kind, resource);
+    await expect(session.deps.realmReplyThreads.assertThreadProjection(session, realm, first.reply))
+      .rejects.toBeInstanceOf(WorkReadUnavailable);
+    await access.query('DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1', [epoch]);
+  }
+});
+
+
+test('thread cut visits exact selected keys as the same thread grows beyond the reply budget', async () => {
+  const realm = native(), root = await reference(realm);
+  const selected = await reference(realm, root.reply, root.work);
+  const functionBody = (await access.query<{ prosrc: string }>(`SELECT prosrc FROM pg_proc
+    WHERE oid='access.read_realm_thread_scope_cut(text,text,text[],uuid,bigint,numeric,text)'::regprocedure`))
+    .rows[0]!.prosrc;
+  const parameters = ['_epoch', '_realm', '_replies', '_content_epoch', '_content_sequence', '_main_sequence', '_population'];
+  const types = ['text', 'text', 'text[]', 'uuid', 'bigint', 'numeric', 'text'];
+  const sql = parameters.reduce((sql, parameter, index) => sql.replaceAll(
+    new RegExp(`\\b${parameter}\\b`, 'g'), `$${index + 1}::${types[index]}`), functionBody);
+  interface Plan { 'Relation Name'?: string; 'Actual Rows': number; 'Actual Loops': number;
+    'Rows Removed by Filter'?: number; Plans?: Plan[] }
+  const scans = (plan: Plan): Plan[] => [plan, ...(plan.Plans ?? []).flatMap(scans)];
+  for (const size of [0, 2000]) {
+    if (size) await access.query(`INSERT INTO access.realm_thread_reference
+      (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active)
+      SELECT $1,$2,id,id,$3,$3,$4,clock_timestamp(),clock_timestamp(),true
+      FROM (SELECT 'https://rezics.com/id/'||gen_random_uuid() AS id FROM generate_series(1,$5::integer)) refs`,
+    [epoch, realm, root.reply, root.work, size]);
+    await access.query('ANALYZE access.realm_thread_reference');
+    const client = await access.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SET LOCAL enable_seqscan=off');
+      await client.query('SET LOCAL enable_bitmapscan=off');
+      // Explain the installed function body: EXPLAIN of a function call hides
+      // its internal scans and would miss the original whole-thread walk.
+      const explained = (await client.query(`EXPLAIN (ANALYZE,FORMAT JSON,TIMING OFF) ${sql}`,
+        [epoch, realm, [root.reply, selected.reply], contentEpoch, '7', '3', null]))
+        .rows[0]['QUERY PLAN'][0].Plan as Plan;
+      const references = scans(explained).filter(plan => plan['Relation Name'] === 'realm_thread_reference');
+      expect(references.length).toBeGreaterThan(0);
+      expect(references.reduce((sum, plan) => sum + (plan['Actual Rows']
+        + (plan['Rows Removed by Filter'] ?? 0)) * plan['Actual Loops'], 0)).toBeLessThanOrEqual(2);
+    } finally {
+      await client.query('ROLLBACK');
+      client.release();
+    }
+  }
 });

@@ -183,6 +183,7 @@ test('sibling continuations retain their published scope across unrelated graph 
 test('unrelated graph movement during hydration does not mint an expired sibling continuation', async () => {
   const { session } = world(siblings(192));
   session.options.localBasis = true;
+  Object.assign(session, { fencesSelectedUnits: true });
   const batch = session.deps.content!.readExactBatch.bind(session.deps.content!);
   Object.assign(session.deps.content!, { readExactBatch: async (ids: string[]) => {
     const result = await batch(ids, async ids => new Set(ids));
@@ -219,7 +220,8 @@ function selectedThreadSession(fixture: ReturnType<typeof world>) {
   const { session } = fixture;
   const owner = new WorkReadSession(session.deps, session.request, { ...session.options, localBasis: true },
     { ...session.position });
-  Object.assign(session, { options: owner.options, observeDependency: owner.observeDependency.bind(owner) });
+  Object.assign(session, { options: owner.options, fencesSelectedUnits: owner.fencesSelectedUnits,
+    observeDependency: owner.observeDependency.bind(owner) });
   return { session, owner };
 }
 
@@ -283,7 +285,8 @@ test('thread projection fences receive the same Realm and focused branch before 
     scopes.push(args.slice(1));
   } });
   await readRealmThread(session, realm, reply(1), 'new');
-  expect(scopes).toEqual([[realm, reply(1), undefined], [realm, reply(1), undefined]]);
+  expect(scopes).toEqual([[realm, reply(1), undefined],
+    [realm, reply(1), undefined, [reply(1), reply(3), reply(2)]]]);
 });
 
 test('a removed cursor anchor leaves no gap in a keyset seek', async () => {
@@ -371,4 +374,37 @@ test('continuations never admit a withdrawn focus, an inaccessible Realm or an i
   } });
   await expect(readRealmThread(session, realm, reply(1), 'new', next.cursor))
     .rejects.toBeInstanceOf(WorkReadUnavailable);
+});
+
+
+test('wide and deep continuations fence only each selected neighbourhood and reach every branch', async () => {
+  const placed = [...siblings(193), ...Array.from({ length: 80 }, (_, index) =>
+    ({ id: 1000 + index, parent: index ? 999 + index : 1, author: 1 }))];
+  for (const sort of ['best', 'top', 'new'] as const) {
+    const { session } = world(placed);
+    const scopes: string[][] = [];
+    Object.assign(session.deps.realmReplyThreads!, { assertThreadProjection: async (_session: WorkReadSession,
+      _realm: string, focus: string, _population?: string, selected: readonly string[] = [focus]) => {
+      scopes.push([...selected]);
+    } });
+    const pending: { reply: string; cursor?: string }[] = [{ reply: reply(1) }];
+    const seen = new Set<string>(), controls = new Set<string>();
+    while (pending.length) {
+      const next = pending.shift()!;
+      const page = await readRealmThread(session, realm, next.reply, sort, next.cursor);
+      page.items.forEach(item => seen.add(item.reply));
+      for (const continuation of page.continuations.filter(item => item.kind !== 'ancestors')) {
+        const key = JSON.stringify(continuation);
+        expect(controls.has(key)).toBe(false);
+        controls.add(key);
+        pending.push(continuation);
+      }
+      expect(controls.size).toBeLessThan(20);
+    }
+    expect([...seen].sort()).toEqual(placed.map(item => reply(item.id)).sort());
+    expect(scopes.filter((_scope, index) => index % 2 === 0).every(scope => scope.length === 1)).toBe(true);
+    expect(Math.max(...scopes.map(scope => scope.length)))
+      .toBeLessThanOrEqual(REALM_THREAD_COST.replies + 1 + REALM_THREAD_COST.ancestors);
+    expect(scopes.every(scope => scope.length < placed.length)).toBe(true);
+  }
 });
