@@ -102,7 +102,7 @@ export async function realmClosureFixture(browser: Browser, info: TestInfo) {
       await page.goto('/en');
     }
     const actor = await selectedSessionAgent(page.request, await context.cookies());
-    const agent = await command<{ displayName?: string; name?: string }>(page, 'GET', `/agents/${short(actor)}`);
+    const agent = await command<{ displayName?: string; name?: string }>(page, 'GET', `/agents/${short(actor)}?${subject(actor)}`);
     return { page, actor, principalId: await principal(actor), name: agent.displayName ?? agent.name ?? actor };
   }
   try {
@@ -203,7 +203,7 @@ export async function realmClosureFixture(browser: Browser, info: TestInfo) {
       const result = await command<{ decisionId: string; operation: { status: string } }>(owner.page, 'POST', '/moderation/decisions', input);
       expect(result.operation.status).toBe('completed');
       decision = { id: result.decisionId, input, head: header.revision, caseId: report.caseId };
-      const response = await owner.page.request.get(`/api/main/v1/realms/${short(closed.realm)}`);
+      const response = await owner.page.request.get(`/api/main/v1/realms/${short(closed.realm)}?${subject(owner.actor)}`);
       expect(response.status(), await response.text()).toBe(404);
     }
     async function restore() {

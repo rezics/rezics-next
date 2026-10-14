@@ -5,7 +5,7 @@ import { localizedPath } from '../i18n/locale.ts';
 import { i18n } from '../i18n/instance.ts';
 import { realmHref } from '../features/realm/route.ts';
 import { realmHref as manageHref } from '../features/manage/routes.ts';
-import { resourceHref } from '../features/address/path.ts';
+import { parseAddressSegment, resourceHref } from '../features/address/path.ts';
 import { mediaMessages } from '../features/document-editor/media-messages.ts';
 import { command, imageDocument, realmClosureFixture, short } from './realm-closure-fixture.ts';
 import { expectClean, type Findings, keyboardReach, motionRunning, pressByKeyboard } from './g-743-matrix.ts';
@@ -59,7 +59,10 @@ for (const locale of ['en', 'ja'] as const) {
       expect(inbox.items.some(item => item.subject?.ref === closedReply)).toBe(false);
       await page.screenshot({ path: info.outputPath(`notifications-closed-${locale}.png`) });
       await pressByKeyboard(page, liveNotice.getByRole('link').first(), found, 'open independent Realm notice');
-      await expect(page).toHaveURL(url => url.pathname.includes(short(live.realm)) || url.pathname.includes(short(live.space)));
+      await expect(page).toHaveURL(url => {
+        const ref = parseAddressSegment(decodeURIComponent(url.pathname.split('/')[3] ?? ''));
+        return ref !== null && ref.kind !== 'alias' && [short(live.realm), short(live.space)].includes(ref.id);
+      });
       await expect(page.getByRole('main')).toContainText(live.name);
       await page.reload();
       await expect(page.getByRole('main')).toContainText(live.name);
@@ -83,8 +86,8 @@ for (const locale of ['en', 'ja'] as const) {
       await page.goto(localizedPath(resourceHref('/w/', short(target.work)), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       const found: Findings = [];
-      // Reaching a real reading control proves the page remains usable without a pointer.
-      await keyboardReach(page, page.getByRole('main').getByRole('link').first(), found, 'Work reading control');
+      await pressByKeyboard(page, page.locator('a[data-next-action]:visible').first(), found, 'read the illustrated Work');
+      await expect(page).toHaveURL(url => url.pathname.endsWith('/read'));
       await loadedImage(page, 'Realm reply art');
       await loadedImage(page, 'Independent original art');
       await page.screenshot({ path: info.outputPath(`media-open-${locale}.png`) });
