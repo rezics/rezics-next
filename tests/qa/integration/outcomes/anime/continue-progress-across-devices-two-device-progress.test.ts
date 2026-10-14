@@ -7,7 +7,7 @@ import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 import { displayLanguageHeaders } from '../../../../../apps/web/i18n/display-languages.ts';
 
-setDefaultTimeout(120_000);
+setDefaultTimeout(240_000);
 let sessions: PersonaSessions;
 const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string }>();
 const failures: { request: unknown; status: number; answer: string }[] = [];
@@ -65,7 +65,20 @@ import row from '../../../../../scripts/qa/cases/outcomes/anime/continue-progres
 const recording = new OutcomeRecorder(row);
 let preparing = true;
 const sample = async (name: PersonaName, person: PersonaSession, label: string, ...args: Parameters<PersonaSession['main']>) => {
-  const response = await recording.session(name, person)(label, ...args);
+  if (failures.some(failure => failure.status >= 500)) throw new Error('Stopped after the recorded 5xx');
+  const started = Date.now();
+  console.info(`[persona-request] ${name} ${label} started ${args[0]} ${args[1]}`);
+  const response = await recording.session(name, { main: async (...request) => {
+    const response = await person.main(...request);
+    console.info(`[persona-request] ${name} ${label} ${response.status} ${Date.now() - started}ms`);
+    if (response.status >= 500) {
+      failures.push({ request: { label, method: request[0], path: request[1], body: request[2] },
+        status: response.status, answer: await response.clone().text() });
+      await Bun.write(`.temp/anime-continue-progress-across-devices-two-device-progress-failures-${Bun.env.REZICS_QA_RUN_ID}.json`,
+        JSON.stringify({ preparation, failures }, null, 2));
+    }
+    return response;
+  } })(label, ...args);
   if (response.status >= 500) await answer(Promise.resolve(response));
   return response;
 };
@@ -326,10 +339,104 @@ async function journey(name: PersonaName) {
   await isolated(name, person, name === 'owner' ? sessions.member : sessions.owner);
 }
 
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { mainEpisodeApi } from '../../../../../apps/web/features/tracking/episode-api.ts';
+import { markPosition, standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+
+async function withinDeadline(label: string, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label} exceeded 120 s`)), 120_000);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function productionReads(name: PersonaName) {
+  const person = sessions[name];
+  // RelationshipControl does not request state without a signed-in acting Person.
+  if (!person.actingSubject) return;
+  const device = await secondDevice(person);
+  let phase = 'panel';
+  const counts = new Map<string, number>();
+  let beforeRead: (() => Promise<void>) | undefined;
+  const preflightReaders = new Set<string>();
+  let beforeWrite: (() => Promise<void>) | undefined;
+  const client = (reader: PersonaSession, side: string) => browserMainApi('http://recorded.invalid', {
+    fetcher: (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const method = init?.method ?? 'GET';
+      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      const stem = `${phase}-${side}-${method === 'PUT' ? 'write' : path.includes('/progress?') ? 'progress' : path.includes('/parts?') ? 'structure' : path.includes('/reading-positions/') ? 'resume' : path.includes('/compositions/') ? 'page' : path.includes('/edition-preferences/') ? 'preference' : path.includes('/progress-summaries/') ? 'summary' : url.pathname.split('/').at(-1)!}`;
+      const count = (counts.get(stem) ?? 0) + 1;
+      counts.set(stem, count);
+      if (side === 'second-device' && method === 'PUT') await beforeWrite?.();
+      const response = await sample(name, reader, `${stem}-${count}`, method, path,
+        init?.body ? JSON.parse(String(init.body)) : undefined,
+        new Headers(init?.headers).get('idempotency-key') ?? undefined,
+        { headers: displayLanguageHeaders({ signedIn: true, pageUrl: `https://rezics.com/en/w/${short(show.work)}` }) });
+      // A restarted read can use several requests: gate each device's first successful
+      // preflight, rather than a request ordinal that a recovery can consume.
+      if (beforeRead && response.ok && path.includes('/progress?') && !preflightReaders.has(side)) {
+        preflightReaders.add(side);
+        await beforeRead();
+      }
+      return response;
+    }) as typeof fetch,
+  });
+  const first = mainEpisodeApi(person.actingSubject, () => client(person, 'first-device'));
+  const second = mainEpisodeApi(person.actingSubject, () => client(device, 'second-device'));
+  const relationships = mainRelationships(person.actingSubject, { origin: 'http://recorded.invalid',
+    fetch: (async (input, init) => {
+      const url = new URL(String(input));
+      return sample(name, person, 'work-follow-state', init?.method ?? 'GET', url.pathname + url.search);
+    }) as typeof fetch });
+  await relationships.state(show.work);
+  // SeriesProgressPanel mounts these browser reads even with no edition chooser.
+  const panel = mainTrackingApi(person.actingSubject, () => client(person, 'first-device'));
+  await Promise.all([panel.preference(show.work), panel.editions(show.work), panel.relations(show.work),
+    panel.definition('correspondence-equivalent')]);
+  await panel.series(show.work, 'en');
+  // Episode 2 is untouched by the proof; all original answers precede these writes.
+  const episode = { structure, occurrence: occurrences[1]! };
+  for (const completed of [true, false]) {
+    phase = completed ? 'reachable-mark' : 'reachable-clear';
+    await first.progress(episode);
+    await second.progress(episode);
+    // Both mark() preflight reads finish before either write; then device one commits first.
+    let arrivals = 0;
+    let releaseReads!: () => void;
+    const readsReady = new Promise<void>(resolve => { releaseReads = resolve; });
+    preflightReaders.clear();
+    beforeRead = async () => { if (++arrivals === 2) releaseReads(); await readsReady; };
+    let releaseWrite!: () => void;
+    const firstWritten = new Promise<void>(resolve => { releaseWrite = resolve; });
+    beforeWrite = () => firstWritten;
+    const change = { completed, ...(completed ? { position: markPosition({ number: 2, special: false }) } : {}) };
+    const one = first.mark(episode, change).then(async result => {
+      if (!result.ok) throw new Error(`First device ${phase}: ${result.failure}`);
+      releaseWrite();
+      return standingOf(first, show.work);
+    });
+    const two = second.mark(episode, change).then(async result => {
+      if (!result.ok) throw new Error(`Second device ${phase}: ${result.failure}`);
+      return standingOf(second, show.work);
+    });
+    const refreshed = await Promise.all([one, two]);
+    for (const result of refreshed) if (!result.ok) throw new Error(`Refresh ${phase}: ${result.failure}`);
+    beforeRead = undefined;
+    beforeWrite = undefined;
+  }
+}
+
 const qualification: { persona: string; passed: boolean; error?: string }[] = [];
 async function qualify(name: PersonaName) {
   try {
-    await journey(name);
+    // The unchanged API proof, including its original opening samples, keeps its own 120 s deadline.
+    await withinDeadline('API proof', () => journey(name));
+    await withinDeadline('production control recording', () => productionReads(name));
     qualification.push({ persona: name, passed: true });
   } catch (error) {
     qualification.push({ persona: name, passed: false, error: String(error) });
