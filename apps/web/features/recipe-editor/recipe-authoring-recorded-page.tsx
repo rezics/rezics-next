@@ -1,22 +1,17 @@
 'use client';
 
-import { ChefHatIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { signInPath } from '../auth/paths.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
-import { EmptyState } from '../shell/empty-state.tsx';
 import { messages as shellMessages } from '../shell/messages.ts';
-import { NoAuthority } from '../work-levels-edit/edit-frame.tsx';
-import { copyOf as editCopy } from '../work-levels-edit/messages.ts';
 import { globalWorkHref } from '../work-page/route.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { RecipeEditor } from './editor.tsx';
+import { RecipeAuthoringBody as ProductionRecipeAuthoringBody } from './authoring-page.tsx';
 import type { RecipeExport } from './export-api.ts';
 import { mainRecipeImportApi, type RecipeImportApi } from './import-api.ts';
-import { copyOf, messages } from './messages.ts';
 import { recipeEditHref } from './route.ts';
 import {
   loadRecipeAuthoring,
@@ -58,54 +53,9 @@ export function RecipeAuthoringBody({
   importApi?: RecipeImportApi;
   saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }) {
-  const t = copyOf(locale);
   if (view.kind === 'discrepancy') return <p role="alert">{view.detail}</p>;
-  if (view.kind === 'no-authority') {
-    return (
-      <NoAuthority
-        workRef={workRef}
-        signedIn={view.signedIn}
-        t={editCopy(locale)}
-        signInHref={signInHref}
-      />
-    );
-  }
-  if (view.kind === 'unavailable') {
-    return (
-      <EmptyState
-        icon={ChefHatIcon}
-        role="status"
-        tone="destructive"
-        title={t.unavailableTitle}
-        description={t.unavailableBody}
-      />
-    );
-  }
-  if (view.kind === 'not-recipe') {
-    return (
-      <EmptyState
-        icon={ChefHatIcon}
-        role="status"
-        title={t.notRecipeTitle}
-        description={t.notRecipeBody}
-      />
-    );
-  }
-  return (
-    <RecipeEditor
-      work={view.work}
-      mainVersion={view.mainVersion}
-      language={view.language}
-      actingSubject={view.actingSubject}
-      workHref={workHref}
-      initial={view.initial}
-      locale={locale}
-      messages={messages[locale]}
-      main={main}
-      importApi={importApi}
-      saveExport={saveExport}
-    />
-  );
+  return <ProductionRecipeAuthoringBody view={view} locale={locale} workRef={workRef} workHref={workHref}
+    signInHref={signInHref} main={main} importApi={importApi} saveExport={saveExport} />;
 }
 
 type Shown =

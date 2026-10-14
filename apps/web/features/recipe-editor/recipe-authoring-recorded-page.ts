@@ -2,156 +2,20 @@ import { browserMainApi } from '../api/browser.ts';
 import { seedTypes, type TypeRegistry } from '../catalogue/types.ts';
 import { pinnedCommunities, spaceCommunities } from '../shell/communities-relationships.ts';
 import { mainRelationships } from '../relationships/api.ts';
+import type { RecipeAuthoringMapped as AuthoringView } from './authoring-page.ts';
 import type { MainClient } from '../studio/types.ts';
-import { idOf, workKind } from '../studio/types.ts';
-import { allowedActionsOf, mayEdit } from '../work-levels-edit/allowed.ts';
-import { settle, settleNullable } from '../work-page/books-edition-page.read.ts';
-import type { WorkHeader } from '../work-page/types.ts';
-import { labelFromSummary, recipeLanguage } from './authored-language.ts';
-import type { RecipeEditorProps } from './editor.tsx';
-import { initialDetails } from './initial-details.ts';
-import type { RecipePageLike } from './model.ts';
-import { stateOf } from './model.ts';
-import type { NotesState } from './saves.ts';
-
-const emptyNotes = (): NotesState => ({ text: null, head: null, body: '', publicationHead: null });
-
-export type RecipeAuthoringMapped =
-  | { kind: 'no-authority'; signedIn: boolean }
-  | { kind: 'unavailable' }
-  | { kind: 'not-recipe' }
-  | { kind: 'discrepancy'; detail: string }
-  | {
-      kind: 'editor';
-      work: string;
-      mainVersion: string;
-      language: string;
-      actingSubject: string;
-      initial: RecipeEditorProps['initial'];
-    };
+import { idOf } from '../studio/types.ts';
 
 function problemTitle(problem: unknown): string | null {
   if (typeof problem !== 'object' || problem === null) return null;
   const value = problem as { title?: unknown; detail?: unknown };
-  if (typeof value.title === 'string' && value.title) return value.title;
-  if (typeof value.detail === 'string' && value.detail) return value.detail;
-  return null;
+  return typeof value.title === 'string' && value.title ? value.title
+    : typeof value.detail === 'string' && value.detail ? value.detail : null;
 }
 
-/** One contributions page. An empty page is empty notes; a hit or a continuation is a record gap. */
-async function notesFromContributions(
-  main: MainClient,
-  actingSubject: string,
-  work: string,
-  language: string,
-): Promise<NotesState | { discrepancy: string }> {
-  const page = await main.v1.me.contributions.get({ query: { actingSubject, limit: 20 } });
-  if (page.error || !page.data) {
-    return {
-      discrepancy: `GET /v1/me/contributions for ${work} in ${language} failed (${page.error?.status ?? 'empty'})`,
-    };
-  }
-  if (page.data.items.length === 0 && page.data.nextCursor == null) return emptyNotes();
-  const next = page.data.nextCursor ?? 'none';
-  return {
-    discrepancy: `Record gap: notes for ${work} in ${language} need a further read after GET /v1/me/contributions?actingSubject=${encodeURIComponent(actingSubject)}&limit=20 (items ${page.data.items.length}, next ${next})`,
-  };
-}
-
-/**
- * The reads `RecipeEditPage` opens with, on a client the caller supplies.
- * Production passes the request-cached host client and its notes scan. A story passes the replaying client.
- * A visitor has no acting subject, so the authority read is not sent.
- */
-export async function loadRecipeAuthoring(
-  main: MainClient,
-  input: {
-    id: string;
-    actingSubject: string | null;
-    signedIn: boolean;
-    readNotes?: (actingSubject: string, work: string, language: string) => Promise<NotesState>;
-    /** Session pages reuse the request-cached header. A story reads through `main`. */
-    readHeader?: () => Promise<{ ok: true; data: WorkHeader } | { ok: false }>;
-  },
-): Promise<RecipeAuthoringMapped> {
-  const actingSubject = input.actingSubject;
-  const [allowed, header] = await Promise.all([
-    actingSubject
-      ? allowedActions(main, input.id, actingSubject)
-      : Promise.resolve([] as readonly string[]),
-    input.readHeader?.() ??
-      settle(() =>
-        main.v1.works({ id: input.id }).get({ query: { actingSubject: actingSubject ?? undefined } }),
-      ),
-  ]);
-  if (!mayEdit(allowed)) return { kind: 'no-authority', signedIn: input.signedIn };
-  if (!header.ok || !actingSubject) return { kind: 'unavailable' };
-  const work = header.data;
-  if (workKind(work.types) !== 'recipe') return { kind: 'not-recipe' };
-  const [summary, metadata] = await Promise.all([
-    settle(() => main.v1.resources({ resource: input.id }).get({ query: { actingSubject } })),
-    main.v1.works({ id: input.id }).metadata.get({ query: { actingSubject } }),
-  ]);
-  const recorded = metadata.data ?? null;
-  const summaryName = summary.ok ? labelFromSummary(summary.data) : null;
-  const language = recipeLanguage({
-    labelLanguage: summaryName?.language ?? null,
-    metadataTitles: Boolean(recorded?.localized?.some((row) => row.title)),
-    headerTitleLanguage: work.title.language,
-  });
-  if (!language) return { kind: 'unavailable' };
-  const [recipe, notes] = await Promise.all([
-    settleNullable(async () =>
-      main.v1.recipes.works({ id: input.id }).get({ query: { actingSubject } }),
-    ),
-    input.readNotes
-      ? input.readNotes(actingSubject, work.id, language)
-      : notesFromContributions(main, actingSubject, work.id, language),
-  ]);
-  if (notes && typeof notes === 'object' && 'discrepancy' in notes)
-    return { kind: 'discrepancy', detail: notes.discrepancy };
-  if (!recipe.ok) return { kind: 'unavailable' };
-  const page = recipe.data as RecipePageLike | null;
-  const label = summaryName ?? { value: work.title.value, language: work.title.language };
-  return {
-    kind: 'editor',
-    work: work.id,
-    mainVersion: work.mainVersion,
-    language,
-    actingSubject,
-    initial: {
-      recipe: stateOf(page),
-      next: page?.next ?? null,
-      notes: notes as NotesState,
-      details: {
-        head: recorded?.revision ?? null,
-        values: initialDetails(recorded, language, {
-          label,
-          description: work.description,
-          tagline: work.tagline,
-          originalTitle: work.originalTitle,
-          completionStatus: work.completionStatus,
-          mainVersionLabel: work.mainVersionLabel,
-        }),
-      },
-    },
-  };
-}
-
-async function allowedActions(
-  main: MainClient,
-  id: string,
-  actingSubject: string,
-): Promise<readonly string[]> {
-  try {
-    const { data } = await main.v1
-      .resources({ resource: id })
-      .page.get({ query: { actingSubject } });
-    return allowedActionsOf(data);
-  } catch {
-    return [];
-  }
-}
+// The recorded visit delegates every authoring read to the production editor boundary.
+export { loadRecipeAuthoring } from './authoring-page.ts';
+export type RecipeAuthoringMapped = AuthoringView | { kind: 'discrepancy'; detail: string };
 
 export type RecipeVisitFrame = { ok: true; registry: TypeRegistry } | { ok: false; detail: string };
 
