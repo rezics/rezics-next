@@ -98,7 +98,7 @@ export type AnimeProgressFact =
     completed: boolean;
     position: string | null;
     version: number;
-    data: { completed: boolean; position: string | null; version: number };
+    data: { completed: boolean; position: string | null; version: number; occurrence: string };
   }
   | AnimeRefusal;
 
@@ -164,13 +164,14 @@ export function mapAnimeProgress(answer: TreatyAnswer<ProgressPage>, episode: An
     return { kind: 'refusal', failure: 'unavailable', title: null, body: page, headers: answer.headers ?? answer.response?.headers };
   }
   const position = page.position ?? null;
+  const occurrence = page.occurrence ?? episode.occurrence;
   return {
     kind: 'progress',
-    occurrence: page.occurrence ?? episode.occurrence,
+    occurrence,
     completed: page.completed,
     position,
     version: page.version,
-    data: { completed: page.completed, position, version: page.version },
+    data: { completed: page.completed, position, version: page.version, occurrence },
   };
 }
 
