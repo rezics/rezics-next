@@ -9,12 +9,27 @@ import {
   type PersonaSessions,
 } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(admission);
 const rootOf = (id: string) => `/v1/realms/${id.slice(-36)}`;
 const acting = (person: PersonaSession) =>
   `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
+async function phase<T>(name: string, milliseconds: number, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${name} reached ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+function personaProof(name: PersonaName, proof: () => Promise<() => Promise<void>>) {
+  return async () => {
+    // The first 60 seconds belong to the outcome proof; supporting records have their own budget.
+    const reads = await phase(`${name} proof`, 60_000, proof);
+    await phase(`${name} supporting records`, 120_000, reads);
+  };
+}
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request,
     raw = await response.text();
@@ -38,6 +53,15 @@ type RequestPage = {
   nextCursor: string | null;
   complete: boolean;
 };
+type MemberPage = { items: { member: string }[] };
+async function memberNames(page: MemberPage, prefix: string, anonymous: boolean) {
+  const owner = sessions.owner;
+  const sample = recording.session('owner', anonymous ? sessions.visitor : owner);
+  for (const member of new Set(page.items.map(item => item.member))) {
+    const name = (Object.keys(sessions) as PersonaName[]).find(name => sessions[name]?.actingSubject === member);
+    await answer(sample(`${prefix}-${name}`, 'GET', `/v1/agents/${member.slice(-36)}${anonymous ? '' : `?${acting(owner)}`}`));
+  }
+}
 async function requestMode(space: string) {
   const path = `/v1/spaces/${space.slice(-36)}/settings`,
     owner = sessions.owner;
@@ -97,6 +121,7 @@ async function refusedInboxReads(name: 'stranger' | 'member' | 'moderator' | 'op
   await answer(sample('requests-address-settings-refused', 'GET', `/v1/spaces/${id}/settings?${acting(person)}`), 403);
   await answer(sample('management-refused-realm-header', 'GET', `${root}?${acting(person)}&language=en`),
     name === 'member' || name === 'moderator' ? 200 : 404);
+  await answer(sample('management-refused-realm-zone', 'GET', `${root}/zone?${acting(person)}`), 404);
   await answer(sample('requests-access-realm', 'GET', `${root}?${acting(person)}`),
     name === 'member' || name === 'moderator' ? 200 : 404);
   if (name === 'member' || name === 'moderator')
@@ -124,7 +149,7 @@ afterAll(async () => {
   finally { await sessions?.close(); }
 });
 
-outcomeTest(admission, 'visitor', async () => {
+outcomeTest(admission, 'visitor', personaProof('visitor', async () => {
   const root = rootOf(sessions.realm),
     person = sessions.visitor;
   const sample = recording.session('visitor', person);
@@ -144,9 +169,12 @@ outcomeTest(admission, 'visitor', async () => {
     }),
     401,
   );
-}, recording);
+  return async () => {
+    await answer(sample('join-address', 'GET', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`));
+  };
+}), recording);
 
-outcomeTest(admission, 'stranger', async () => {
+outcomeTest(admission, 'stranger', personaProof('stranger', async () => {
   const person = sessions.stranger,
     root = rootOf(sessions.realm),
     path = `${root}/join-requests`;
@@ -155,7 +183,6 @@ outcomeTest(admission, 'stranger', async () => {
   await (await sample('own-requests-before-request', 'GET', `${path}/mine?${acting(person)}&limit=50`)).body?.cancel();
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
   await joinReads('stranger');
-  await refusedInboxReads('stranger');
   const first = await submit(person, root, randomUUID(), sample);
   expect(await answer(person.main('POST', path, first.input, first.key))).toMatchObject({
     requestId: first.receipt.requestId,
@@ -207,19 +234,22 @@ outcomeTest(admission, 'stranger', async () => {
   ).toMatchObject({ state: 'withdrawn', reason: first.input.reason });
   await answer(sample('join-own-request-withdrawn', 'GET', `${path}/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-  // The confirm step takes its generation from mine, and trims the entered reason.
-  await submit(person, root);
-  const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
-    sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
-  );
-  const pending = confirmPage.items.find(item => item.state === 'pending')!;
-  await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
-    actingSubject: person.actingSubject,
-    expectedRequestGeneration: pending.requestGeneration,
-    reason: 'I cannot join this month.',
-  }, randomUUID()), 201);
-  await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
-}, recording);
+  return async () => {
+    await refusedInboxReads('stranger');
+    // The confirm step takes its generation from mine, and trims the entered reason.
+    await submit(person, root);
+    const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
+      sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
+    );
+    const pending = confirmPage.items.find(item => item.state === 'pending')!;
+    await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
+      actingSubject: person.actingSubject,
+      expectedRequestGeneration: pending.requestGeneration,
+      reason: 'I cannot join this month.',
+    }, randomUUID()), 201);
+    await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
+  };
+}), recording);
 
 async function joined(name: 'member' | 'moderator') {
   const person = sessions[name], sample = recording.session(name, person);
@@ -236,17 +266,6 @@ async function joined(name: 'member' | 'moderator') {
   await answer(sample('realm-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
   await answer(sample('appeal-access', 'GET', '/v1/me/platform-access'));
   await answer(sample('own-ban-absent', 'GET', `${root}/member-ban?${acting(person)}`), 404);
-  await refusedInboxReads(name);
-  await pageSession(name, 'frame');
-  const publicSample = recording.session(name, sessions.visitor);
-  await answer(publicSample('frame-address', 'GET', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`));
-  await answer(publicSample('frame-public-realm', 'GET', root), 404);
-  await answer(sample('frame-realm', 'GET', `${root}?${acting(person)}`));
-  await answer(sample('frame-joining', 'GET', `${root}/joining?${acting(person)}`));
-  await answer(sample('frame-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
-  await answer(sample('frame-platform-access', 'GET', '/v1/me/platform-access'));
-  await answer(sample('frame-own-ban', 'GET', `${root}/member-ban?${acting(person)}`), 404);
-  await answer(sample('frame-presentation', 'GET', `/v1/zones/${sessions.zone.slice(-36)}/presentation?${acting(person)}`));
   await answer(
     person.main('POST', `${root}/join-requests/${randomUUID()}/decisions`, {
       actingSubject: person.actingSubject,
@@ -265,10 +284,24 @@ async function joined(name: 'member' | 'moderator') {
     }),
     403,
   );
+  return async () => {
+    await refusedInboxReads(name);
+    await pageSession(name, 'frame');
+    const publicSample = recording.session(name, sessions.visitor);
+    await answer(publicSample('frame-address', 'GET', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`));
+    await answer(publicSample('frame-public-realm', 'GET', root), 404);
+    await answer(sample('frame-realm', 'GET', `${root}?${acting(person)}`));
+    await answer(sample('frame-realm-zone', 'GET', `${root}/zone?${acting(person)}`), 404);
+    await answer(sample('frame-presentation', 'GET', `/v1/zones/${sessions.zone.slice(-36)}/presentation?${acting(person)}`));
+    await answer(sample('frame-joining', 'GET', `${root}/joining?${acting(person)}`));
+    await answer(sample('frame-follow', 'GET', `/v1/follows/${sessions.realm.slice(-36)}?kind=realm&${acting(person)}`));
+    await answer(sample('frame-platform-access', 'GET', '/v1/me/platform-access'));
+    await answer(sample('frame-own-ban', 'GET', `${root}/member-ban?${acting(person)}`), 404);
+  };
 }
-outcomeTest(admission, 'member', () => joined('member'), recording);
+outcomeTest(admission, 'member', personaProof('member', () => joined('member')), recording);
 
-outcomeTest(admission, 'owner', async () => {
+outcomeTest(admission, 'owner', personaProof('owner', async () => {
   const owner = sessions.owner;
   const sample = recording.session('owner', owner);
   for (const [label, path] of [
@@ -375,45 +408,66 @@ outcomeTest(admission, 'owner', async () => {
   expect(await answer(owner.main('GET', `${settingsPath}?${acting(owner)}`))).toMatchObject({
     settings: { history: 'from-admission' },
   });
-  // RequestsView confirms against the inbox generation and the selected row.
-  // Use later requests so the original concurrent-decision samples stay intact.
-  for (const decision of ['declined', 'accepted'] as const) {
-    const submitted = await submit(sessions.stranger, root);
-    const page = await answer<RequestPage & { generation: string; items: { id: string; requestGeneration: string }[] }>(
-      sample(`decision-confirm-inbox-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`),
-    );
-    const selected = page.items.find(item => item.id === submitted.receipt.requestId)!;
-    await answer(sample(`decision-confirm-${decision}`, 'POST', `${path}/${selected.id}/decisions`, {
+  return async () => {
+    await answer(sample('person-preferences', 'GET', `/v1/me/person-preferences?${acting(owner)}`));
+    // RequestsView confirms against the inbox generation and the selected row.
+    // Use later requests so the original concurrent-decision samples stay intact.
+    for (const decision of ['declined', 'accepted'] as const) {
+      const submitted = await submit(sessions.stranger, root);
+      const page = await answer<RequestPage & { generation: string; items: { id: string; requestGeneration: string }[] }>(
+        sample(`decision-confirm-inbox-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`),
+      );
+      const selected = page.items.find(item => item.id === submitted.receipt.requestId)!;
+      // The dialog's Refresh reloads the inbox and restores the selected request.
+      await answer(sample(`decision-confirm-selected-refreshed-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`));
+      await answer(sample(`decision-confirm-${decision}`, 'POST', `${path}/${selected.id}/decisions`, {
+        actingSubject: owner.actingSubject,
+        expectedGeneration: page.generation,
+        expectedRequestGeneration: selected.requestGeneration,
+        decision,
+        reason: 'Decision reason.',
+      }, randomUUID()), 201);
+      await answer(sample(`decision-confirm-inbox-after-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`));
+    }
+    // Only the owner reaches MembersView in this private Realm. Its invite
+    // dialog defaults to seven days and sends no reason or generation.
+    const invitationInput = {
       actingSubject: owner.actingSubject,
-      expectedGeneration: page.generation,
-      expectedRequestGeneration: selected.requestGeneration,
-      decision,
-      reason: 'Decision reason.',
-    }, randomUUID()), 201);
-    await answer(sample(`decision-confirm-inbox-after-${decision}`, 'GET', `${path}?${acting(owner)}&limit=50&q=`));
-  }
-  // Only the owner reaches MembersView in this private Realm. Its invite
-  // dialog defaults to seven days and sends no reason or generation.
-  const invitationInput = {
-    actingSubject: owner.actingSubject,
-    member: sessions.member.actingSubject,
-    expiresInSeconds: 604_800,
+      member: sessions.member.actingSubject,
+      expiresInSeconds: 604_800,
+    };
+    const invitationKey = randomUUID();
+    const beforeMembers = await answer<MemberPage>(sample('members-before-invitation', 'GET', `${root}/members?${acting(owner)}`));
+    await answer(sample('roles-before-invitation', 'GET', `${root}/roles?${acting(owner)}`));
+    await answer(sample('outgoing-invitations-before-confirm', 'GET', `${root}/invitations?${acting(owner)}`));
+    await memberNames(beforeMembers, 'members-before-invitation-name', true);
+    // Entering the Person's IRI resolves locally; the dialog still checks the roster.
+    await answer(sample('invitation-confirm-roster', 'GET', `${root}/members?${acting(owner)}&search=${encodeURIComponent(sessions.member.actingSubject!)}`));
+    await answer(sample('invitation-confirm', 'POST', `${root}/invitations`, invitationInput, invitationKey));
+    // MembersView.done starts a route refresh, then reloads members/names and invitations.
+    await answer(sample('invitation-refresh-realm-header', 'GET', `${root}?${acting(owner)}&language=en`));
+    await answer(sample('invitation-refresh-realm-zone', 'GET', `${root}/zone?${acting(owner)}`), 404);
+    const afterMembers = await answer<MemberPage>(sample('members-after-invitation', 'GET', `${root}/members?${acting(owner)}`));
+    await answer(sample('roles-after-invitation', 'GET', `${root}/roles?${acting(owner)}`));
+    const afterInvitations = await answer<MemberPage>(sample('members-page-invitations-after-confirm', 'GET', `${root}/invitations?${acting(owner)}`));
+    await memberNames({ items: [...afterMembers.items, ...afterInvitations.items] }, 'members-after-invitation-name', true);
+    const refreshed = await answer<MemberPage>(sample('invitation-refresh-members', 'GET', `${root}/members?${acting(owner)}`));
+    await memberNames(refreshed, 'invitation-refresh-member-name', false);
+    await answer(sample('outgoing-invitations-after-confirm', 'GET', `${root}/invitations?${acting(owner)}`));
   };
-  const invitationKey = randomUUID();
-  await answer(sample('invitation-confirm', 'POST', `${root}/invitations`, invitationInput, invitationKey));
-  await answer(sample('outgoing-invitations-after-confirm', 'GET', `${root}/invitations?${acting(owner)}`));
-}, recording);
+}), recording);
 
-outcomeTest(admission, 'moderator', async () => {
-  await joined('moderator');
+outcomeTest(admission, 'moderator', personaProof('moderator', async () => {
+  const reads = await joined('moderator');
   await answer(
     sessions.moderator.main(
       'GET',
       `${rootOf(sessions.realm)}/moderation?${acting(sessions.moderator)}`,
     ),
   );
-}, recording);
-outcomeTest(admission, 'operator', async () => {
+  return reads;
+}), recording);
+outcomeTest(admission, 'operator', personaProof('operator', async () => {
   const person = sessions.operator,
     root = rootOf(sessions.realm);
   const sample = recording.session('operator', person);
@@ -424,7 +478,6 @@ outcomeTest(admission, 'operator', async () => {
   await answer(sample('request-inbox-denied', 'GET', `${root}/join-requests?${acting(person)}`), 403);
   await answer(sample('requests-refused', 'GET', `${root}/join-requests?${acting(person)}&limit=50&q=`), 403);
   await joinReads('operator');
-  await refusedInboxReads('operator');
   const request = await submit(person, root, randomUUID(), sample);
   await answer(sample('own-request-pending', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`));
   await answer(
@@ -447,17 +500,20 @@ outcomeTest(admission, 'operator', async () => {
   );
   await answer(sample('own-request-withdrawn', 'GET', `${root}/join-requests/mine?${acting(person)}&limit=50`));
   await answer(person.main('GET', `${root}?${acting(person)}`), 404);
-  const path = `${root}/join-requests`;
-  // The confirm step takes its generation from mine, and trims the entered reason.
-  await submit(person, root);
-  const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
-    sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
-  );
-  const pending = confirmPage.items.find(item => item.state === 'pending')!;
-  await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
-    actingSubject: person.actingSubject,
-    expectedRequestGeneration: pending.requestGeneration,
-    reason: 'I cannot join this month.',
-  }, randomUUID()), 201);
-  await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
-}, recording);
+  return async () => {
+    await refusedInboxReads('operator');
+    const path = `${root}/join-requests`;
+    // The confirm step takes its generation from mine, and trims the entered reason.
+    await submit(person, root);
+    const confirmPage = await answer<RequestPage & { items: { id: string; requestGeneration: string }[] }>(
+      sample('withdraw-confirm-own-request', 'GET', `${path}/mine?${acting(person)}&limit=50`),
+    );
+    const pending = confirmPage.items.find(item => item.state === 'pending')!;
+    await answer(sample('withdraw-confirm', 'POST', `${path}/${pending.id}/withdraw`, {
+      actingSubject: person.actingSubject,
+      expectedRequestGeneration: pending.requestGeneration,
+      reason: 'I cannot join this month.',
+    }, randomUUID()), 201);
+    await answer(sample('withdraw-confirm-own-request-after', 'GET', `${path}/mine?${acting(person)}&limit=50`));
+  };
+}), recording);
