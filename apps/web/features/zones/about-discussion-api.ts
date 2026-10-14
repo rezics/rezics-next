@@ -87,7 +87,11 @@ export async function readAboutDiscussion(main: MainClient, input: {
       query: { path: input.path, ...actor },
     });
     const route = routeRead.data;
-    if (!route || routeRead.error) return { kind: 'unavailable' };
+    if (!route || routeRead.error) {
+      console.error(JSON.stringify({ event: 'zone_discussion_read_failed', operation: 'zone.routes',
+        zone: input.zone, path: input.path, actingSubject: input.actingSubject, error: routeRead.error }));
+      return { kind: 'unavailable' };
+    }
     if (!route.realm) return { kind: 'none' };
     const about = attachedDiscussionAbout(route);
     // An index or an unpublished home has no page resource the command can address.
@@ -103,6 +107,9 @@ export async function readAboutDiscussion(main: MainClient, input: {
     ]);
     const frameReady = Boolean(target && target.resource === about && lookup.data && !lookup.error
       && header.data && !header.error);
+    if (!frameReady) console.error(JSON.stringify({ event: 'zone_discussion_read_failed',
+      realm: route.realm, about, actingSubject: input.actingSubject,
+      target, lookup: lookup.error, header: header.error }));
     let thread: { ok: true; data: ThreadRead } | { ok: false } | null = null;
     if (frameReady && lookup.data?.thread) {
       const read = await main.v1.realms({ realm }).threads({ reply: uuid(lookup.data.thread.reply) }).get({
@@ -121,5 +128,9 @@ export async function readAboutDiscussion(main: MainClient, input: {
       thread, signedIn: input.signedIn, actingSubject: input.actingSubject, personal: input.personal,
       postingOpen: input.postingOpen,
     });
-  } catch { return { kind: 'unavailable' }; }
+  } catch (error) {
+    console.error(JSON.stringify({ event: 'zone_discussion_read_failed', zone: input.zone, path: input.path,
+      error: error instanceof Error ? { name: error.name, message: error.message } : null }));
+    return { kind: 'unavailable' };
+  }
 }

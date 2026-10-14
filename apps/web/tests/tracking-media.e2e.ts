@@ -99,10 +99,14 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
   const found: Findings = [];
   const page = await device(browser, info, phone, seeded.episodes.work);
   const visit = async (path: string) => {
-    try { await page.goto(path); }
-    catch (error) {
-      if (!(error instanceof Error) || !error.message.includes('net::ERR_NETWORK_CHANGED')) throw error;
-      await page.goto(path);
+    for (let attempt = 0; ; attempt++) {
+      try { await page.goto(path); return; }
+      catch (error) {
+        if (attempt === 2 || !(error instanceof Error)
+          || !/net::ERR_NETWORK_CHANGED|another navigation to "chrome-error:\/\//.test(error.message)) throw error;
+        // Chromium first commits its error document after a host network change.
+        await page.waitForTimeout(1000);
+      }
     }
   };
   try {
@@ -111,7 +115,8 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
       await visit(localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('link', { name: 'Anime', exact: true })).toBeVisible();
-      await visit(localizedPath(`${resourceHref('/w/', seeded.episodes.work.slice(-36))}/connections`, locale));
+      await page.waitForLoadState('networkidle');
+      await visit(`${new URL(page.url()).pathname}/connections`);
       await loaded(page, '[data-episode-progress]', 180_000);
       const panel = page.locator('[data-episode-progress]');
       const jump = async (number: number) => {
