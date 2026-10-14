@@ -1,127 +1,342 @@
-import { readingLine, type IngredientQualifier } from '../recipe-editor/ingredient-line.ts';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { expect, userEvent, within } from 'storybook/test';
-import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
-import recorded from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
-import type { UiLocale } from '../../i18n/define.ts';
+import { expect, userEvent, waitFor, within } from 'storybook/test';
+import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
+import recipes from '../../../../tests/qa/fixtures/outcomes/recipes/read-a-recipe.json';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { seedTypes, type TypeRegistry } from '../catalogue/types.ts';
+import { createReaderStore } from '../catalogue/reader-store.ts';
+import { copyOf as recipeEditorCopy } from '../recipe-editor/messages.ts';
+import { formatMeasure } from '../recipe-editor/quantity.ts';
+import { mainRelationships } from '../relationships/api.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { WorkCredits } from './credits.tsx';
+import { copyOf as trackingCopy } from '../tracking/messages.ts';
+import { readAnimeReaderState } from './anime-hub-recorded-page.ts';
+import { booksEditionReads } from './books-edition-page.read.ts';
 import { messages } from './messages.ts';
-import { loadRecipeIdentity, recipePageReader, recipeReadingReads, type RecipeIdentity } from './recipe-reading-recorded-page.ts';
-import { RecipeRegionView } from './recipe-reading-recorded-page.tsx';
+import { recipeWorkFrame, recipeWorkOverview } from './recipe-reading-recorded-page.tsx';
 import { RegionSkeleton } from './region.tsx';
-import type { Loaded, RecipeWorkPage } from './types.ts';
-import { WorkHeader } from './work-header.tsx';
+import { EVERYONE, workHref } from './route.ts';
+import type { RecipeWorkPage, WorkHeader } from './types.ts';
 
-const record = recorded as AnswerRecord;
-type Phase = 'published' | 'loading' | 'private';
-function sample(persona: AnswerPersona, label: string) {
-  const entry = record.personas[persona].find(item => item.label === label);
-  if (!entry) throw new Error(`Missing recipe answer ${persona}/${label}`);
-  return entry;
+const record = recipes as AnswerRecord;
+type Persona = AnswerPersona;
+type Locale = 'en' | 'zh-Hans';
+type Phase = 'published' | 'loading' | 'scale' | 'continuation';
+
+function sample(persona: Persona, label: string): AnswerSample {
+  const found = record.personas[persona].find(item => item.label === label);
+  if (!found) throw new Error(`Missing recorded sample ${persona}/${label}`);
+  return found;
 }
 
-/** Header, projection, selected text and recipe body use the production supplied-client boundary. */
-function RecordedRecipeReading({ persona, locale, phase }: { persona: AnswerPersona; locale: UiLocale; phase: Phase }) {
-  const [view, setView] = useState<{ identity: Extract<RecipeIdentity, { kind: 'ready' }>;
-    recipe: Loaded<RecipeWorkPage | null> | null; readPage: ReturnType<typeof recipePageReader> } | null>(null);
+function recordedId(path: string): string {
+  const id = new URL(path, 'https://recorded.invalid').pathname.match(
+    /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/,
+  )?.[0];
+  if (!id) throw new Error(`Recorded path has no id: ${path}`);
+  return id;
+}
+
+function actingSubjectOf(path: string): string | null {
+  return new URL(path, 'https://recorded.invalid').searchParams.get('actingSubject');
+}
+
+function asRecipe(value: unknown): RecipeWorkPage {
+  return value as RecipeWorkPage;
+}
+
+function asHeader(value: unknown): WorkHeader {
+  return value as WorkHeader;
+}
+
+/** One sample answers repeated identical reads. Duplicate keys stay unselected. */
+function selectionsFor(persona: Persona, phase: Phase): RecordedSelection[] {
+  const selections: RecordedSelection[] = [
+    { label: 'type-registry', state: 'populated' },
+    { label: 'rating-contexts', state: 'populated' },
+    { label: 'work-header', state: 'populated' },
+    { label: 'agent-credits', state: 'populated' },
+    { label: 'page-projection', state: 'populated' },
+    { label: 'recipe-notes-empty', state: 'error' },
+    { label: 'author-works', state: 'populated' },
+    { label: 'ratings', state: 'populated' },
+    { label: 'reader-stats', state: 'populated' },
+    { label: 'parts-preview', state: 'error' },
+    { label: 'wholes-preview-empty', state: 'populated' },
+    { label: 'availability-parts', state: 'error' },
+    { label: 'rating-populations', state: 'populated' },
+    { label: 'connections-empty', state: 'populated' },
+    { label: 'availability-realizations-empty', state: 'populated' },
+    { label: 'availability-releases-empty', state: 'populated' },
+    { label: 'classifications-empty', state: 'populated' },
+    { label: 'also-enjoyed-empty', state: 'populated' },
+    { label: 'work-facts', state: 'populated' },
+    { label: 'discussion-empty', state: 'populated' },
+    { label: 'work-credits', state: 'populated' },
+    { label: 'work-adoptions', state: 'populated' },
+    { label: 'work-showcase', state: 'populated' },
+    { label: 'classification-facets', state: 'populated' },
+    { label: 'platform-access', state: 'populated' },
+    { label: 'recipe-start', state: phase === 'loading' ? 'loading' : 'populated' },
+  ];
+  if (persona !== 'visitor') selections.push(
+    { label: 'reader-state-empty', state: 'populated' },
+    { label: 'progress-equivalent-definition', state: 'error' },
+    { label: 'progress-edition-preference', state: 'populated' },
+    { label: 'progress-series-summary', state: 'populated' },
+    { label: 'recipe-follow-state', state: 'populated' },
+    { label: 'progress-medium-parts', state: 'populated' },
+  );
+  if (phase === 'scale') selections.push(
+    { label: 'recipe-scaled-start', state: 'populated' },
+    { label: 'recipe-scaled-page-2', state: 'populated' },
+  );
+  if (phase === 'continuation') selections.push({ label: 'recipe-continuation', state: 'populated' });
+  return selections;
+}
+
+function RecordedRecipeReading({ persona, locale, phase }: { persona: Persona; locale: Locale; phase: Phase }) {
   const [fault, setFault] = useState<string | null>(null);
+  const [node, setNode] = useState<ReactNode>(null);
+  const misses = useRef<string[]>([]);
   useEffect(() => {
     let live = true;
-    setView(null); setFault(null);
-    const header = sample(persona, 'work-header');
-    const url = new URL(header.path, 'https://recorded.invalid');
-    const id = url.pathname.split('/').at(-1)!;
-    const actingSubject = url.searchParams.get('actingSubject') ?? undefined;
-    const selections: RecordedSelection[] = [
-      { label: 'work-header', state: 'populated' }, { label: 'page-projection', state: 'populated' },
-      { label: 'agent-credits', state: 'populated' }, { label: 'work-credits', state: 'populated' },
-      { label: 'recipe-notes-empty', state: 'error' }, { label: 'author-works', state: 'populated' },
-      { label: 'recipe-start', state: phase === 'loading' ? 'loading' : 'populated' },
-      { label: 'recipe-continuation', state: 'populated' }, { label: 'recipe-scaled-start', state: 'populated' },
-      { label: 'recipe-scaled-page-2', state: 'populated' }, { label: 'private-work-refused', state: 'error' },
-    ];
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    misses.current = [];
+    setFault(null);
+    setNode(null);
+    const headerSample = sample(persona, 'work-header');
+    const actingSubject = actingSubjectOf(headerSample.path);
+    const replay = recordedFetch(record, persona, selectionsFor(persona, phase), { pathPrefix: BFF_PREFIX });
+    const note = (error: unknown) => {
+      if (error instanceof DOMException && error.name === 'AbortError') return;
+      const message = error instanceof Error ? error.message : 'Recipe read failed';
+      misses.current.push(message);
+      if (live) setFault(misses.current.join('\n'));
+    };
     const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
       try { return await replay.fetcher(input, init); }
-      catch (error) { if (live && !(error instanceof DOMException && error.name === 'AbortError')) setFault(String(error)); throw error; }
-    }) as typeof fetch;
-    const main = browserMainApi(window.location.origin, { anonymous: !actingSubject, fetcher });
-    const reads = recipeReadingReads({ main, actingSubject });
-    void (async () => {
-      const identity = await loadRecipeIdentity(reads, id);
-      if (identity.kind !== 'ready') throw new Error(`Recipe identity ${identity.kind}`);
-      const href = phase === 'private' ? new URL(sample(persona, 'private-work-refused').path,
-        'https://recorded.invalid').pathname : identity.href;
-      const readPage = recipePageReader({ main, actingSubject }, href);
-      if (phase === 'loading') {
-        if (live) setView({ identity, recipe: null, readPage });
-        void reads.readRecipe(href);
-        return;
+      catch (error) {
+        note(error);
+        throw error;
       }
-      const recipe = await reads.readRecipe(href);
-      if (live) setView({ identity, recipe, readPage });
-    })().catch(error => { if (live) setFault(String(error)); });
-    return () => { live = false; replay.dispose(); };
+    }) as typeof fetch;
+    const main = browserMainApi(window.location.origin, { anonymous: actingSubject === null, fetcher });
+    const host = {
+      main,
+      anonymous: browserMainApi(window.location.origin, { anonymous: true, fetcher }),
+      publicOrigin: window.location.origin,
+      publicFetch: fetcher,
+      actingSubject,
+      signedIn: actingSubject !== null,
+    };
+    const id = recordedId(headerSample.path);
+    const copy = messages[locale];
+    void (async () => {
+      try {
+        const types = await main.v1.types.get();
+        if (types.error || !types.data) throw new Error(`Type registry answered ${types.error?.status ?? 'nothing'}`);
+        seedTypes(types.data as TypeRegistry);
+        const header = await booksEditionReads({ main, ...(actingSubject ? { actingSubject } : {}) }).readWorkHeader(id);
+        if (!header.ok) throw new Error(`Work header was ${header.failure}`);
+        const seed = actingSubject ? await readAnimeReaderState(main, actingSubject, id) : null;
+        const readerActions = actingSubject
+          ? createReaderStore({ actingSubject, seed: seed ?? {}, main: () => main }) : undefined;
+        const relationships = actingSubject ? mainRelationships(actingSubject, { fetch: fetcher }) : undefined;
+        const overview = recipeWorkOverview({
+          host, workRef: id, id, work: header.data, scope: EVERYONE, locale, messages: copy,
+        });
+        if (phase === 'loading') {
+          void overview.then(() => undefined, error => note(error));
+          const frame = await recipeWorkFrame({
+            host, workRef: id, id, work: header.data, locale, messages: copy, readerActions, relationships,
+            children: <RegionSkeleton id="work-type-loading" title={header.data.title.value}
+              label={copy.loadingRegion} lines={5} />,
+          });
+          if (!live || misses.current.length) return;
+          setNode(frame);
+          return;
+        }
+        const body = await overview;
+        if (!live || misses.current.length) return;
+        const frame = await recipeWorkFrame({
+          host, workRef: id, id, work: header.data, locale, messages: copy, readerActions, relationships,
+          children: body,
+        });
+        if (!live || misses.current.length) return;
+        setNode(frame);
+      } catch (error) {
+        if (live) note(error);
+      }
+    })();
+    const timer = window.setInterval(() => {
+      if (live && misses.current.length) setFault(misses.current.join('\n'));
+    }, 50);
+    return () => {
+      live = false;
+      window.clearInterval(timer);
+      replay.dispose();
+    };
   }, [persona, locale, phase]);
-  const t = messages[locale];
-  if (fault) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</pre>;
-  if (!view) return <RegionSkeleton id="recipe-loading" title={t.recipeMethod} label={t.loadingRegion} />;
-  const { identity, recipe, readPage } = view;
-  return <main className="mx-auto grid min-w-0 max-w-4xl gap-6 p-4 sm:p-8" lang={locale}>
-    <p className="break-all text-muted-foreground text-sm">{persona} · {identity.actingSubject ?? 'none'}</p>
-    {phase !== 'private' ? <WorkHeader work={identity.header} locale={locale} messages={t}
-      credits={<WorkCredits agentCredits={identity.agentCredits} credits={identity.credits} locale={locale} messages={t} />} /> : null}
-    {recipe ? <RecipeRegionView recipe={recipe} href={identity.href} actingSubject={identity.actingSubject}
-      text={identity.notes} locale={locale} messages={t} readPage={readPage} />
-      : <RegionSkeleton id="recipe-method-loading" title={t.recipeMethod} label={t.loadingRegion} lines={8} />}
-  </main>;
+  if (fault) return <p role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</p>;
+  if (!node) return <p role="status" aria-busy="true" className="p-6">{messages[locale].loading}</p>;
+  const acting = actingSubjectOf(sample(persona, 'work-header').path);
+  return <>
+    <p className="px-6 pt-4 text-sm"><span>{persona}</span><span>{`· ${acting ?? 'none'}`}</span></p>
+    {node}
+  </>;
 }
 
-const meta = { title: 'Work page/Recipe reading recorded', component: RecordedRecipeReading,
-  args: { persona: 'visitor', locale: 'en', phase: 'published' }, globals: { viewport: { value: 'desktop' } },
-  parameters: { controls: { disable: true } },
+const publishedRef = recordedId(sample('visitor', 'work-header').path);
+
+const meta = {
+  title: 'Work page/Recorded recipe reading',
+  component: RecordedRecipeReading,
+  args: { persona: 'visitor', locale: 'en', phase: 'published' },
+  parameters: { controls: { disable: true }, route: { pathname: workHref(publishedRef) } },
+  globals: { locale: 'en', viewport: { value: 'desktop' } },
 } satisfies Meta<typeof RecordedRecipeReading>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-const published: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
+async function expectNoReplayMiss(canvasElement: HTMLElement) {
+  await new Promise(resolve => setTimeout(resolve, 300));
+  const alert = within(canvasElement).queryByRole('alert');
+  if (alert) throw new Error(alert.textContent ?? 'Recorded request missed');
+}
+
+async function expectPublished(canvasElement: HTMLElement, persona: Persona, locale: Locale) {
   const canvas = within(canvasElement);
-  const page = sample(args.persona, 'recipe-start').answer as RecipeWorkPage;
-  await canvas.findByRole('heading', { name: (sample(args.persona, 'work-header').answer as { title: { value: string } }).title.value });
-  await expect(canvas.getByText(readingLine({ ...(page.occurrences.find(node => node.occurrence === page.ingredients[0]!.occurrence)!.qualifier as IngredientQualifier), amount: page.ingredients[0]!.amount }))).toBeVisible();
-  await expect(canvas.queryByText(/PRIVATE DRAFT/)).not.toBeInTheDocument();
+  const copy = messages[locale];
+  const header = asHeader(sample(persona, 'work-header').answer);
+  const page = asRecipe(sample(persona, 'recipe-start').answer);
+  const yieldMeasure = page.measures.find(item => item.kind === 'yield');
+  if (!yieldMeasure) throw new Error('Recorded recipe has no yield');
+  const title = await canvas.findByRole('heading', { level: 1, name: header.title.value }, { timeout: 8000 });
+  const sauce = await canvas.findByRole('heading', { level: 4, name: 'Sauce' }, { timeout: 8000 });
+  await expect(title).toBeVisible();
+  await expect(title).toHaveAttribute('lang', header.title.language);
+  await expect(sauce).toBeVisible();
+  await expect(canvas.getByText(persona)).toBeVisible();
+  const acting = actingSubjectOf(sample(persona, 'work-header').path);
+  await expect(canvas.getByText(`· ${acting ?? 'none'}`)).toBeVisible();
+  await expect(canvas.getAllByRole('link', { name: 'Outcome owner' }).length).toBeGreaterThan(0);
+  await expect(canvas.getByRole('heading', { name: copy.recipeMethod })).toBeVisible();
+  await expect(canvas.getByText(page.ingredients[0]!.line)).toBeVisible();
+  await expect(canvas.getByText(formatMeasure(yieldMeasure.value, yieldMeasure.unitText), { exact: false })).toBeVisible();
+  await expect(canvas.queryByRole('radio', { name: copy.unitWritten })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: copy.recipeNotes })).toBeNull();
+  await expect(canvas.queryByText('PRIVATE DRAFT')).toBeNull();
+  await expect(canvas.getByRole('heading', { name: copy.aboutAuthor })).toBeVisible();
+  const edit = recipeEditorCopy(locale).editRecipe;
+  if (persona === 'owner') await expect(canvas.getByRole('link', { name: edit })).toBeVisible();
+  else await expect(canvas.queryByRole('link', { name: edit })).toBeNull();
+  const tracking = trackingCopy(locale);
+  if (acting) {
+    await expect(canvas.findByRole('button', { name: /^Follow/ }, { timeout: 8000 })).resolves.toBeVisible();
+    await expect(canvas.findByRole('heading', { name: tracking.workProgress }, { timeout: 8000 })).resolves.toBeVisible();
+    await expect(canvas.getByText(tracking.notStarted)).toBeVisible();
+  } else {
+    await expect(canvas.queryByRole('heading', { name: tracking.workProgress })).toBeNull();
+  }
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+  await expectNoReplayMiss(canvasElement);
+}
+
+function published(persona: Persona, locale: Locale, viewport: 'desktop' | 'phone'): Story {
+  return {
+    args: { persona, locale, phase: 'published' },
+    globals: { locale, viewport: { value: viewport } },
+    play: ({ canvasElement }) => expectPublished(canvasElement, persona, locale),
+  };
+}
+
+async function showMore(canvasElement: HTMLElement, locale: Locale) {
+  const canvas = within(canvasElement);
+  const copy = messages[locale];
+  const button = await canvas.findByRole('button', { name: copy.showMoreRecipe });
+  button.scrollIntoView();
+  await userEvent.click(button);
+  const garnish = await canvas.findByRole('heading', { name: 'Empty garnish' }, { timeout: 8000 });
+  garnish.scrollIntoView();
+  await expect(garnish).toBeVisible();
+  await expect(canvas.getByText('Mix the sauce.')).toBeVisible();
+  await expect(canvas.getByText('Cook for five minutes.')).toBeVisible();
+  await expect(canvas.queryByText('PRIVATE DRAFT')).toBeNull();
+  await expect(canvas.queryByRole('alert')).toBeNull();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+}
+
+export const Visitor: Story = published('visitor', 'en', 'desktop');
+export const Stranger: Story = published('stranger', 'en', 'desktop');
+export const Member: Story = published('member', 'en', 'desktop');
+export const Owner: Story = published('owner', 'en', 'desktop');
+export const Moderator: Story = published('moderator', 'en', 'desktop');
+export const Operator: Story = published('operator', 'en', 'desktop');
+export const VisitorPhone: Story = published('visitor', 'en', 'phone');
+export const OwnerPhone: Story = published('owner', 'en', 'phone');
+export const ModeratorPhone: Story = published('moderator', 'en', 'phone');
+
+export const Loading: Story = {
+  args: { phase: 'loading' },
+  play: async ({ canvasElement }) => {
+    const canvas = within(canvasElement);
+    await expect(canvas.findByRole('heading', { level: 1, name: 'Original paged sauce' }, { timeout: 8000 }))
+      .resolves.toBeVisible();
+    await expect(canvas.getByRole('status', { name: messages.en.loadingRegion })).toBeVisible();
+    await expect(canvas.getByText('visitor')).toBeVisible();
+    await expect(canvas.queryByText('1 1/2 cups tomato')).toBeNull();
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+    await expectNoReplayMiss(canvasElement);
+  },
 };
-export const Visitor: Story = { play: published };
-export const VisitorPhone: Story = { ...Visitor, globals: { viewport: { value: 'phone' } } };
-export const Stranger: Story = { args: { persona: 'stranger' }, play: published };
-export const Member: Story = { args: { persona: 'member' }, play: published };
-export const Owner: Story = { args: { persona: 'owner' }, play: published };
-export const Moderator: Story = { args: { persona: 'moderator' }, play: published };
-export const Operator: Story = { args: { persona: 'operator' }, play: published };
-export const ChinesePhone: Story = { args: { locale: 'zh-Hans' }, globals: { locale: 'zh-Hans', viewport: { value: 'phone' } }, play: published };
-export const Loading: Story = { args: { phase: 'loading' }, async play({ canvasElement }) {
-  await expect(within(canvasElement).findByRole('status', { name: messages.en.loadingRegion })).resolves.toBeVisible();
-} };
-export const LoadingPhone: Story = { ...Loading, globals: { viewport: { value: 'phone' } } };
-export const PrivateDenied: Story = { args: { phase: 'private' }, async play({ canvasElement }) {
-  await expect(within(canvasElement).findByRole('alert')).resolves.toBeVisible();
-  await expect(within(canvasElement).queryByRole('spinbutton')).not.toBeInTheDocument();
-} };
-export const PrivateDeniedPhone: Story = { ...PrivateDenied, globals: { viewport: { value: 'phone' } } };
-export const ScalingAndContinuation: Story = { async play(context) {
-  await published(context);
-  const canvas = within(context.canvasElement);
-  const servings = canvas.getByRole('spinbutton', { name: messages.en.servings });
-  await userEvent.tripleClick(servings); await userEvent.keyboard('8');
-  await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
-  const scaled = sample(context.args.persona, 'recipe-scaled-start').answer as RecipeWorkPage;
-  await expect(canvas.findByText(readingLine({ ...(scaled.occurrences.find(node => node.occurrence === scaled.ingredients[0]!.occurrence)!.qualifier as IngredientQualifier), amount: scaled.ingredients[0]!.amount }))).resolves.toBeVisible();
-  await userEvent.click(canvas.getByRole('button', { name: messages.en.showMoreRecipe }));
-  await expect(canvas.findByText('Mix the sauce.')).resolves.toBeVisible();
-  await expect(canvas.findByText('Cook for five minutes.')).resolves.toBeVisible();
-} };
-export const ScalingAndContinuationPhone: Story = { ...ScalingAndContinuation, globals: { viewport: { value: 'phone' } } };
+
+export const LoadingPhone: Story = {
+  ...Loading,
+  globals: { locale: 'en', viewport: { value: 'phone' } },
+};
+
+export const Continuation: Story = {
+  args: { phase: 'continuation' },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'visitor', 'en');
+    await showMore(canvasElement, 'en');
+  },
+};
+
+export const Scaled: Story = {
+  args: { phase: 'scale' },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'visitor', 'en');
+    const canvas = within(canvasElement);
+    const servings = canvas.getByLabelText(messages.en.servings);
+    await userEvent.clear(servings);
+    await userEvent.type(servings, '8');
+    await waitFor(() => expect(servings).toHaveValue(8));
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: messages.en.scaleRecipe })).toBeEnabled());
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await expect(canvas.getByText(asRecipe(sample('visitor', 'recipe-start').answer).ingredients[0]!.line)).toBeVisible();
+    await showMore(canvasElement, 'en');
+  },
+};
+
+export const ScaledPhone: Story = {
+  args: { persona: 'owner', phase: 'scale' },
+  globals: { locale: 'en', viewport: { value: 'phone' } },
+  play: async ({ canvasElement }) => {
+    await expectPublished(canvasElement, 'owner', 'en');
+    const canvas = within(canvasElement);
+    const servings = canvas.getByLabelText(messages.en.servings);
+    await userEvent.clear(servings);
+    await userEvent.type(servings, '8');
+    await waitFor(() => expect(servings).toHaveValue(8));
+    await userEvent.click(canvas.getByRole('button', { name: messages.en.scaleRecipe }));
+    await waitFor(() => expect(canvas.getByRole('button', { name: messages.en.scaleRecipe })).toBeEnabled());
+    await expect(canvas.queryByRole('alert')).toBeNull();
+    await showMore(canvasElement, 'en');
+  },
+};
+
+export const SimplifiedChinese: Story = published('visitor', 'zh-Hans', 'desktop');
+export const SimplifiedChinesePhone: Story = published('visitor', 'zh-Hans', 'phone');
