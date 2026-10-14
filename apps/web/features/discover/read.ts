@@ -11,6 +11,7 @@ type Answer<T> = { data: T | null; error: { status: number; value: unknown } | n
 export async function settle<T>(call: () => Promise<Answer<T>>): Promise<Loaded<T>> {
   try {
     const { data, error, response } = await call();
+    if (error?.value instanceof Error) return { ok: false, failure: 'unavailable' };
     if (error) return failedDiscoveryRead(error.status, error.value);
     if (response?.status === 202) return failedDiscoveryRead(202, data);
     return data === null ? { ok: false, failure: 'unavailable' } : { ok: true, data };

@@ -8,6 +8,14 @@ export const SERVER_READ_LIMITS = {
 export const SERVER_DEADLINE_HEADER = 'x-rezics-server-deadline';
 export type FetchSender = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
+/** The upstream answered, but its body could not finish; this is not an offline reader. */
+export class UpstreamResponseError extends Error {
+  constructor(cause: unknown) {
+    super('Upstream response interrupted', { cause });
+    this.name = 'UpstreamResponseError';
+  }
+}
+
 export function deadlineFromHeaders(headers: Headers): number | undefined {
   const value = Number(headers.get(SERVER_DEADLINE_HEADER));
   return Number.isSafeInteger(value) && value > 0
@@ -87,6 +95,7 @@ export async function serverFetch(
     method === 'HEAD' ||
     (options.idempotentRead === true && method === 'POST' && typeof init.body === 'string');
   const callerSignal = init.signal ?? request?.signal;
+  let receivedResponse = false;
   for (let attempt = 0; ; attempt++) {
     const controller = new AbortController();
     const signal = callerSignal
@@ -146,6 +155,7 @@ export async function serverFetch(
         () => {},
       );
       const response = await Promise.race([pending, aborted]);
+      receivedResponse = true;
       if (!response.body) {
         cleanup();
         return response;
@@ -166,7 +176,7 @@ export async function serverFetch(
                 value.close();
               } else value.enqueue(chunk.value);
             } catch (error) {
-              if (!signal.aborted) value.error(error);
+              if (!signal.aborted) value.error(connectionLost(error) ? new UpstreamResponseError(error) : error);
               cancel(error);
               cleanup();
             }
@@ -214,7 +224,7 @@ export async function serverFetch(
         Date.now() >= deadlineAt ||
         !connectionLost(error)
       )
-        throw error;
+        throw receivedResponse && connectionLost(error) ? new UpstreamResponseError(error) : error;
     }
   }
 }

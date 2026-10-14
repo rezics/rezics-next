@@ -82,6 +82,8 @@ export function browseTypeCondition(category: string): FilterCondition {
 }
 async function value<T>(read: Promise<Answer<T>>): Promise<T> {
   const { data, error, response } = await read;
+  // Eden's synthetic 503 on a failed transport is not an HTTP answer from Main.
+  if (error?.value instanceof Error) throw error.value;
   if (response?.status === 202) throw new BrowseReadError(202, null, data ?? error?.value);
   if (error || data === null) {
     const code =

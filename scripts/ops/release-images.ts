@@ -78,6 +78,7 @@ export const runtimeArtifacts = [
   'apps/accounts/features/config/env.ts',
   // Account consent and Main MCP discovery inspect the installed public contract.
   'generated/openapi/main/public.json',
+  'generated/openapi/main/exposure.ts',
   // Main's query template reader imports the generated template catalog.
   'generated/query/templates.ts',
 ];

@@ -398,7 +398,7 @@ test('parent and continuation are passed through without restarting a moved page
   answer = () => ({ data: null, error: { status: 409 } });
   expect(
     await readParts(fixture.current, { parent: fixture.current, after: 'page-2', limit: 3 }),
-  ).toEqual({ ok: false, failure: 'moved' });
+  ).toEqual({ ok: false, failure: 'moved', status: 409, problem: { status: 409 } });
   expect(calls).toEqual([
     {
       operation: 'parts',
@@ -432,7 +432,9 @@ for (const operation of ['parts', 'wholes', 'relations'] as const) {
       [410, 'missing'],
     ] as const) {
       answer = () => ({ data: null, error: { status } });
-      expect(await reads[operation](fixture.current, {})).toEqual({ ok: false, failure });
+      expect(await reads[operation](fixture.current, {})).toEqual({
+        ok: false, failure, status, problem: { status },
+      });
     }
   });
 }

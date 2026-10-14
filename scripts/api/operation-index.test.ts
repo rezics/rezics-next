@@ -1,4 +1,6 @@
 import { beforeAll, describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import {
   attachCallingTests,
   buildOperationIndex,
@@ -36,8 +38,11 @@ describe('Main API operation index', () => {
       bearer: 'no',
       idempotencyKey: false,
       routeFile: 'services/main/src/routes/zone-modules.ts',
-      handlerLine: 95,
     });
+    const operation = result.matches[0]!;
+    const source = readFileSync(resolve(import.meta.dir, '../..', operation.routeFile), 'utf8');
+    expect(source.split('\n')[operation.handlerLine - 1])
+      .toContain(".get('/v1/realms/:realm/modules/browse'");
   });
 
   it('reports no match with the nearest operationIds', () => {

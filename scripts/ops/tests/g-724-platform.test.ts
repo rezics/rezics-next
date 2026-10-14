@@ -49,11 +49,12 @@ test('platform action candidates are syntactic; grant proofs retain exact contro
     principal_epoch: '0',
   };
   let current: PlatformAdministratorProof | null = saved;
+  let gateOpen = true;
   let statements = 0;
   const client = {
     query: async (sql: string) => {
       statements++;
-      if (sql.includes('FROM access.scope_gate')) return { rows: [] };
+      if (sql.includes('FROM access.scope_gate')) return { rows: gateOpen ? [{ id: 'platform:access' }] : [] };
       if (sql.includes('access.read_platform_permissions'))
         return {
           rows: [
@@ -72,6 +73,9 @@ test('platform action candidates are syntactic; grant proofs retain exact contro
   } as unknown as PoolClient;
   expect(await platformAdministratorProofCurrent(client, saved, principal, actor)).toBe(true);
   expect(statements).toBe(3);
+  gateOpen = false;
+  expect(await platformAdministratorProofCurrent(client, saved, principal, actor)).toBe(false);
+  gateOpen = true;
   for (const key of [
     'receipt',
     'representation_id',

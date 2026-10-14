@@ -214,7 +214,7 @@ describe('Browse page model', () => {
         window: { scanned: 60, complete: false },
       },
     });
-    expect(model.notes).toEqual(['标签正在同步最新变化，请稍后再试。']);
+    expect(model.notes).toEqual(['可能还有更多匹配作品。此数量为下限。', '标签正在同步最新变化，请稍后再试。']);
     expect(model.results).toBe('至少 60 个结果');
     expect(model.sorts.map((sort) => sort.sort)).toEqual(['relevance', 'newest', 'updated']);
   });
