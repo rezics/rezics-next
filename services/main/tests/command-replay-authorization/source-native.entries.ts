@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { AdmissionDenied } from '../../src/modules/access/admission.ts';
 import { readTitleControl } from '../../src/modules/work/title-control.ts';
 import { SourceAdoptionConflict, SourceNativeWorkAdoptionStore } from '../../src/modules/source/native-work-adoption.ts';
-import { type ReplayEntry, root, stack, request, loseGrant, proposal, sourceSnapshot } from './fixtures.ts';
+import { type ReplayEntry, stack, request, loseGrant, proposal, sourceSnapshot } from './fixtures.ts';
 
 export const entries: ReplayEntry[] = [
   { operation: "POST /v1/sources/proposals/{}/adoption/native-work", authorityClass: 'domain-grant',

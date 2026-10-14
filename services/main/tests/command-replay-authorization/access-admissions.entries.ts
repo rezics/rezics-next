@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { AdmissionConflict, AdmissionDenied } from '../../src/modules/access/admission.ts';
 import { createAdmittedMetadataWork } from '../../src/modules/work/create-admitted.ts';
-import { type ReplayEntry, root, stack, request, graphSnapshot, loseGrant } from './fixtures.ts';
+import { type ReplayEntry, stack, request, graphSnapshot, loseGrant } from './fixtures.ts';
 
 export const entries: ReplayEntry[] = [
   { operation: "POST /v1/works", authorityClass: 'domain-grant',

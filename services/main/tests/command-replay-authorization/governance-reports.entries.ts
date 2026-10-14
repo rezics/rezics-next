@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { deactivateFixtureController, ensureFixtureScopeGate, expireFixtureAuthority, grantFixtureAuthority } from '../../src/modules/access/fixture-authority.ts';
 import { GovernanceConflict, GovernanceDenied, GLOBAL_CONTEXT } from '../../src/modules/governance/store.ts';
-import { type ReplayEntry, root, stack, principal, proposal } from './fixtures.ts';
+import { type ReplayEntry, stack, principal, proposal } from './fixtures.ts';
 
 export const entries: ReplayEntry[] = [
   { operation: "POST /v1/reports", authorityClass: 'controller',
