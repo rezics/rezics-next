@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { mediaContextInput } from '../modules/media/context-input.ts';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, selectionConflictProblem, writeProblems } from '../api-responses.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -615,7 +616,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/media/assets/:asset/bytes', {
       params: t.Object({ asset: uuid }),
       query: t.Object({ target: nativeId, actingSubject: nativeId,
-        context: t.Optional(t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), nativeId])) },
+        context: t.Optional(mediaContextInput) },
       { additionalProperties: false }),
       response: { 200: t.Any(), ...authorizedReadProblems },
     }, async ({ request, params, query }: { request: Request; params: { asset: string };

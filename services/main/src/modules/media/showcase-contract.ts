@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import { canonicalLanguage } from '../display-language/tag.ts';
 import { pixelCrop, type ImageSize, type RenditionCandidate } from '../media-rendition/policy.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaInvalid } from './contract.ts';
+import { mediaContextInput } from './context-input.ts';
 
 export const SHOWCASE_ROLES = [
   'background-landscape',
@@ -230,7 +231,7 @@ export const campaignArtCommand = t.Object({
 export const showcaseSelectionCommand = t.Object(
   {
     profile: t.Literal('work-showcase-selection-v1'),
-    context: t.Optional(context),
+    context: t.Optional(mediaContextInput),
     expectedSelection: t.Nullable(uuid),
     role: showcaseRole,
     language: t.Optional(t.String({ minLength: 1, maxLength: 255 })),
@@ -246,7 +247,7 @@ export const showcaseSelectionCommand = t.Object(
 export const showcaseTrailerCommand = t.Object(
   {
     profile: t.Literal('work-showcase-trailer-v1'),
-    context: t.Optional(context),
+    context: t.Optional(mediaContextInput),
     expectedSelection: t.Nullable(uuid),
     url: t.Nullable(t.String({ maxLength: 2048 })),
     actingSubject: native,
@@ -257,7 +258,7 @@ export const showcaseBatchCommand = t.Object(
   {
     profile: t.Literal('work-showcase-batch-v1'),
     targets: t.Array(native, { minItems: 1, maxItems: 64 }),
-    context: t.Optional(context),
+    context: t.Optional(mediaContextInput),
     actingSubject: t.Optional(native),
   },
   { additionalProperties: false },

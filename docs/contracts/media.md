@@ -5,6 +5,8 @@ its role on another Resource. Separate identities permit reuse without sharing
 authority, crop or rights. Delivery URLs never identify selections. Staged
 processing keeps unverified uploads and stale transforms out of public media.
 
+Media context inputs accept the platform's `urn:rezics:context:global` as the default selection while retaining `urn:rezics:media:context:default` in storage and answers; legacy default inputs and native context IDs remain accepted.
+
 ## Image presentation
 
 Maintainer decision, 2026-10-02. NSFW, authored concealment and age assessment

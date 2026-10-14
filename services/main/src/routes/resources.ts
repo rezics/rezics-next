@@ -1,3 +1,4 @@
+import { mediaContextInput } from '../modules/media/context-input.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, readProblems, selectionConflictProblem, writeProblems } from '../api-responses.ts';
@@ -29,7 +30,6 @@ import { workReadError } from './work-reads.ts';
 const ID = 'https://rezics.com/id/';
 const nativeId = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
 const uuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
-const context = t.Union([t.Literal(DEFAULT_MEDIA_CONTEXT), nativeId]);
 const language = t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 });
 
 const unavailable = () => problem(404, 'resource_unavailable', 'Resource is unavailable');
@@ -184,7 +184,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .get('/v1/resources/:resource', {
       params: t.Object({ resource: uuid }),
-      query: t.Object({ actingSubject: t.Optional(nativeId), context: t.Optional(context),
+      query: t.Object({ actingSubject: t.Optional(nativeId), context: t.Optional(mediaContextInput),
         language: t.Optional(language),position: readingPositionQuery }, { additionalProperties: false }),
       response: { 200: t.Object({}, { additionalProperties: true }), ...authorizedReadProblems },
     }, async ({ request, params, query }) => {
@@ -207,7 +207,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       body: t.Object({ profile: t.Literal('resource-summary-batch-v1'),
         resources: t.Array(t.String({ pattern: SUMMARY_REFERENCE_PATTERN, maxLength: MAX_SUMMARY_REFERENCE_LENGTH }),
           { minItems: 1, maxItems: MAX_SUMMARY_BATCH }),
-        actingSubject: t.Optional(nativeId), context: t.Optional(context), language: t.Optional(language),position: readingPositionQuery },
+        actingSubject: t.Optional(nativeId), context: t.Optional(mediaContextInput), language: t.Optional(language),position: readingPositionQuery },
       { additionalProperties: false }),
       response: { 200: resourceSummaryBatch, ...authorizedReadProblems },
     }, async ({ request, body }) => {
@@ -249,7 +249,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     })
     .put('/v1/resources/:resource/avatar', {
       params: t.Object({ resource: uuid }),
-      body: t.Object({ profile: t.Literal('resource-avatar-selection-v1'), context: t.Optional(context),
+      body: t.Object({ profile: t.Literal('resource-avatar-selection-v1'), context: t.Optional(mediaContextInput),
         expectedSelection: t.Nullable(uuid), asset: t.Nullable(uuid),
         crop: t.Optional(t.Nullable(t.String({ maxLength: 64 }))), actingSubject: nativeId },
       { additionalProperties: false }),

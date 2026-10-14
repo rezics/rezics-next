@@ -1,6 +1,7 @@
 import { t } from 'elysia';
 import { labels, readAssessment } from '../suitability/contract.ts';
 import { coverCreditSchema } from './cover-credit.ts';
+import { mediaContextInput } from './context-input.ts';
 
 export const mediaUuid = t.String({ pattern: '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' });
 export const mediaNative = t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' });
@@ -55,4 +56,4 @@ export const inferenceCommand=t.Object({actingSubject:mediaNative,sha256:t.Strin
     Neutral:t.Number({minimum:0,maximum:1}),Porn:t.Number({minimum:0,maximum:1}),Sexy:t.Number({minimum:0,maximum:1})},{additionalProperties:false})),
 },{additionalProperties:false});
 export const documentUseCommand=t.Object({actingSubject:mediaNative,target:mediaNative,representation:mediaUuid,
-  occurrence:mediaUuid,context:t.Optional(t.String()),conceal:t.Optional(t.Boolean())},{additionalProperties:false});
+  occurrence:mediaUuid,context:t.Optional(mediaContextInput),conceal:t.Optional(t.Boolean())},{additionalProperties:false});
