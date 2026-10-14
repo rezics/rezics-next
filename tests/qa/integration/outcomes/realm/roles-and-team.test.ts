@@ -29,12 +29,16 @@ type Role = {
   moreHolders: boolean | null;
 };
 type Roles = { generation: string; cap: number; roles: Role[] };
+type TargetScope = { kind: 'concept'; id: string } | null;
 type Impact = {
   digest: string;
-  exact: boolean;
+  exact: true;
   affectedCount: number;
   generation: string;
-  changes: { member: string; gained: string[]; lost: string[] }[];
+  targetScope?: TargetScope;
+  previousTargetScope?: TargetScope;
+  changes: { member: string; gained: string[]; lost: string[];
+    jurisdictions?: { targetScope: TargetScope; gained: string[]; lost: string[] }[] }[];
 };
 type Receipt = { receiptId: string; generation: string; replayed: boolean; impact: Impact };
 type Change =
@@ -58,6 +62,8 @@ async function preview(change: Change, person = sessions.owner, label?: string) 
   const request = label ? recording.session('owner', person).bind(null, label) : person.main;
   const impact = await answer<Impact>(request('POST', `${root()}/role-impact`, command));
   expect(impact.exact).toBe(true);
+  expect(impact.generation).toBe(command.expectedGeneration);
+  expect(impact.digest).toMatch(/^[0-9a-f]{64}$/);
   expect(impact.affectedCount).toBe(impact.changes.length);
   return { command: { ...command, impactDigest: impact.digest }, impact };
 }
@@ -68,6 +74,7 @@ async function change(change: Change) {
     201,
   );
   expect(receipt.impact).toEqual(intent.impact);
+  expect(receipt.generation).toBe((BigInt(intent.command.expectedGeneration) + 1n).toString());
   return intent;
 }
 beforeAll(async () => {
@@ -191,16 +198,23 @@ outcomeTest(team, 'owner', async () => {
     { member: stranger.actingSubject, gained: ['realm.roles.manage'], lost: [],
       jurisdictions: [{ targetScope: null, gained: ['realm.roles.manage'], lost: [] }] },
   ]);
+  expect(intent.impact.targetScope).toBeNull();
+  expect(intent.impact.previousTargetScope).toBeNull();
+  await answer(owner.main('POST', `${root()}/role-changes`, {
+    ...intent.command,
+    impactDigest: (intent.impact.digest[0] === '0' ? '1' : '0') + intent.impact.digest.slice(1),
+  }), 409);
   const receipt = await answer<Receipt>(
     sample('role-assignment-receipt', 'POST', `${root()}/role-changes`, intent.command, key),
     201,
   );
   expect(receipt.impact).toEqual(intent.impact);
+  expect(receipt.generation).toBe((BigInt(intent.command.expectedGeneration) + 1n).toString());
   await answer(sample('roles-assigned', 'GET', `${root()}/roles?${acting(owner)}`));
   await answer(recording.session('owner', sessions.visitor)('holder-name-stranger', 'GET', `/v1/agents/${stranger.actingSubject!.slice(-36)}`));
   expect(
     await answer(owner.main('POST', `${root()}/role-changes`, intent.command, key)),
-  ).toMatchObject({ receiptId: receipt.receiptId, replayed: true });
+  ).toEqual({ ...receipt, replayed: true });
   await answer(
     sample(
       'role-intent-conflict', 'POST',
@@ -255,7 +269,10 @@ outcomeTest(team, 'owner', async () => {
     (await change(assignment(independentRole, moderator.actingSubject!, false))).impact.changes,
   ).toEqual([]);
   await answer(moderator.main('GET', `${root()}/moderation?${acting(moderator)}`));
-  await change(assignment(roleId, stranger.actingSubject!, false));
+  expect((await change(assignment(roleId, stranger.actingSubject!, false))).impact.changes).toEqual([
+    { member: stranger.actingSubject, gained: [], lost: ['realm.roles.manage'],
+      jurisdictions: [{ targetScope: null, gained: [], lost: ['realm.roles.manage'] }] },
+  ]);
   await answer(stranger.main('GET', `${root()}/roles?${acting(stranger)}`), 403);
 
   const race = await preview({

@@ -59,6 +59,8 @@ async function setup() {
     const preview = await call('POST', '/role-impact', input);
     expect(preview.status).toBe(200);
     const result = await call('POST', '/role-changes', { ...input, impactDigest: preview.body.digest }, owner.token, key);
+    expect(result.body.impact).toEqual(preview.body);
+    expect(result.body.generation).toBe((BigInt(input.expectedGeneration) + 1n).toString());
     return { preview: preview.body as unknown as RoleImpact, result };
   };
   return { stack, owner, moderator, outsider, realm, scope, admin, call, actorQuery, command, apply, roles };
@@ -78,7 +80,8 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     const key = randomUUID();
     const assigned = await s.apply(assignment, key);
     expect(assigned.result.status).toBe(201);
-    expect(assigned.preview.changes).toEqual([{ member: s.moderator.actor, gained: ['governance.moderate'], lost: [] }]);
+    expect(assigned.preview.changes).toEqual([{ member: s.moderator.actor, gained: ['governance.moderate'], lost: [],
+      jurisdictions: [{ targetScope: null, gained: ['governance.moderate'], lost: [] }] }]);
     // A role holder is part of the team even before joining the Realm.
     const team = await s.call('GET', `/members${s.actorQuery()}&search=${encodeURIComponent(s.moderator.actor)}`);
     expect(team.status).toBe(200);
@@ -87,7 +90,7 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     const audit = await s.call('GET', `/audit${s.actorQuery()}&kind=realm_management`);
     expect(audit.status).toBe(200);
     expect(audit.body.items).toContainEqual(expect.objectContaining({ id: assigned.result.body.receiptId,
-      detail: { kind: 'assignment', role: { id: roleId, name: 'Moderators' },
+      detail: { kind: 'assignment', role: { id: roleId, name: 'Moderators', targetScope: null },
         member: s.moderator.actor, assigned: true, validUntil: assignment.change.kind === 'assignment'
           ? assignment.change.validUntil : null,
         changes: assigned.preview.changes } }));
@@ -99,7 +102,7 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     expect((await s.call('GET', `/moderation${s.actorQuery(s.moderator.actor)}`, undefined, s.moderator.token)).status).toBe(200);
     const replay = await s.call('POST', '/role-changes', { ...assignment, impactDigest: assigned.preview.digest }, s.owner.token, key);
     expect(replay.status).toBe(200);
-    expect(replay.body).toMatchObject({ replayed: true, receiptId: assigned.result.body.receiptId });
+    expect(replay.body).toEqual({ ...assigned.result.body, replayed: true });
     expect((await s.call('POST', '/role-changes', { ...assignment, reason: 'Different intent',
       impactDigest: assigned.preview.digest }, s.owner.token, key)).status).toBe(409);
     expect((await s.call('POST', '/role-impact', assignment)).status).toBe(409);
@@ -111,6 +114,7 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     expect((await s.call('POST', '/role-changes', { ...revoke, impactDigest: preview.body.digest })).status).toBe(409);
     const independent = await s.apply(revoke);
     expect(independent.preview.affectedCount).toBe(0);
+    expect(independent.preview.changes).toEqual([]);
     expect((await s.call('GET', `/moderation${s.actorQuery(s.moderator.actor)}`, undefined, s.moderator.token)).status).toBe(200);
     const race = await s.command({ kind: 'role', roleId, name: 'Staff', permissions: ['governance.rule.publish'] });
     const basis = await s.call('POST', '/role-impact', race);
@@ -124,7 +128,8 @@ test('Realm roles: exact impact matches enforced grants; retries, stale and conc
     const removed = await s.apply(await s.command({ ...assignment.change, kind: 'assignment', roleId,
       member: s.moderator.actor, assigned: false, validUntil: new Date(Date.now() + 60_000).toISOString() }));
     expect(removed.result.status).toBe(201);
-    expect(removed.preview.changes).toEqual([{ member: s.moderator.actor, gained: [], lost: ['governance.rule.publish'] }]);
+    expect(removed.preview.changes).toEqual([{ member: s.moderator.actor, gained: [], lost: ['governance.rule.publish'],
+      jurisdictions: [{ targetScope: null, gained: [], lost: ['governance.rule.publish'] }] }]);
     expect(await subject.resolve({ principalId: s.moderator.principalId, owner: 'access',
       ref: String(removed.result.body.receiptId), revision: null,
       disclosureBasis: 'realm-role-change-v1', realm: s.realm })).toMatchObject({ status: 'available',
