@@ -14,6 +14,7 @@ import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import { IndependentZoneRecordedPage } from './independent-zone-recorded-page.tsx';
+import { zoneSitePrefix } from './zone-site-recorded-page.ts';
 
 const record = independentZone as AnswerRecord;
 const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const satisfies readonly AnswerPersona[];
@@ -62,10 +63,10 @@ function credit(persona: AnswerPersona): { rightsBasis: string; author: string }
 
 function canonical(persona: AnswerPersona): CanonicalAddress {
   const address = (sample(persona, 'page-address').answer as { canonical?: { prefix?: unknown; key?: unknown; suffixSource?: unknown } }).canonical;
-  if (!address || address.prefix !== '/z/' || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
+  if (!address || address.prefix !== zoneSitePrefix || typeof address.key !== 'string' || typeof address.suffixSource !== 'string') {
     throw new Error(`${persona} address has no site canonical`);
   }
-  return { prefix: '/z/', key: address.key, suffixSource: address.suffixSource };
+  return { prefix: zoneSitePrefix, key: address.key, suffixSource: address.suffixSource };
 }
 
 const meta = {

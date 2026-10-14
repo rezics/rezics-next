@@ -16,6 +16,7 @@ import { savedSiteCuts, type SiteMountCut, type SitePresentationCut } from './si
 import { zoneTheme, type ReaderTheme } from './theme.ts';
 import {
   mapZoneSiteRecordedPage,
+  zoneSitePrefix,
   type ZoneSiteCredit,
   type ZoneSiteMapped,
   type ZoneSiteProblem,
@@ -177,7 +178,7 @@ function zoneIdentity(value: unknown): IndependentZoneIdentity | { detail: strin
   const canonical = data.canonical;
   if (!canonical || typeof canonical !== 'object') return { detail: 'address has no canonical site' };
   const site = canonical as Record<string, unknown>;
-  if (site.prefix !== '/z/' || typeof site.key !== 'string' || typeof site.suffixSource !== 'string') {
+  if (site.prefix !== zoneSitePrefix || typeof site.key !== 'string' || typeof site.suffixSource !== 'string') {
     return { detail: 'address canonical is not a zone site' };
   }
   const capabilities = data.capabilities;
@@ -187,7 +188,7 @@ function zoneIdentity(value: unknown): IndependentZoneIdentity | { detail: strin
   const zone = idOf(caps.zone);
   if (!zone) return { detail: 'address zone is not a native id' };
   if (caps.realm !== undefined) return { detail: 'address names a realm' };
-  return { zone, canonical: { prefix: '/z/', key: site.key, suffixSource: site.suffixSource } };
+  return { zone, canonical: { prefix: zoneSitePrefix, key: site.key, suffixSource: site.suffixSource } };
 }
 
 export type IndependentZoneEditor =
