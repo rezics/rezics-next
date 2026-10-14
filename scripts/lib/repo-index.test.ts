@@ -1,7 +1,21 @@
 import { expect, test } from 'bun:test';
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { delimiter, join, resolve } from 'node:path';
-import { indexedFiles, indexedSource, indexedSql, repositoryIndex } from './repo-index.ts';
+import {
+  indexedFiles,
+  indexedSource,
+  indexedSql,
+  repositoryIndex,
+  repoIndexBuildKey,
+} from './repo-index.ts';
 import { cruiseDependencies } from '../static/mechanism-dependencies.ts';
 
 function withTree(run: (root: string) => void) {
@@ -28,7 +42,10 @@ test('guard preparation finds Rustup without a login-shell PATH', () => {
        const { indexedSource } = await import(${JSON.stringify(resolve(import.meta.dir, 'repo-index.ts'))});
        console.log(indexedSource({ file: 'fixture.ts', text: 'export const value = 1;' }).ast.type);`,
     ],
-    { cwd: resolve(import.meta.dir, '../..'), env: { ...process.env, PATH: path } },
+    {
+      cwd: resolve(import.meta.dir, '../..'),
+      env: { ...process.env, PATH: path },
+    },
   );
   expect({
     exitCode: result.exitCode,
@@ -55,7 +72,7 @@ test('guard preparation preserves configured Cargo precedence and rejects a mism
     );
     expect(result.exitCode).not.toBe(0);
     expect(Buffer.from(result.stderr).toString()).toContain(
-      'test "$(cargo --version)" = "cargo 1.98.1 (797e8a9bc 2026-08-05)"',
+      'Repository index requires cargo 1.98.1',
     );
   });
 });
@@ -79,7 +96,10 @@ test('repository syntax facts reuse content and invalidate edits, additions and 
 });
 
 test('in-memory facts retain Unicode source and content-specific syntax', () => {
-  const source = { file: 'unicode.tsx', text: 'const 名 = "界"; const view = <div>{名}</div>;' };
+  const source = {
+    file: 'unicode.tsx',
+    text: 'const 名 = "界"; const view = <div>{名}</div>;',
+  };
   const first = indexedSource(source);
   expect(first.text).toBe(source.text);
   expect(indexedSource(source)).toBe(first);
@@ -116,7 +136,9 @@ test('import resolution invalidates when TypeScript path configuration changes',
     const configure = (target: string) =>
       writeFileSync(
         join(root, 'tsconfig.json'),
-        JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@owner': [target] } } }),
+        JSON.stringify({
+          compilerOptions: { baseUrl: '.', paths: { '@owner': [target] } },
+        }),
       );
     configure('./first.ts');
     expect(indexedFiles(root, ['.'])['caller.ts']!.imports[0]!.resolved).toBe('first.ts');
@@ -126,7 +148,10 @@ test('import resolution invalidates when TypeScript path configuration changes',
 });
 
 test('JavaScript string facts preserve lone UTF-16 surrogates', () => {
-  const facts = indexedSource({ file: 'surrogate.ts', text: 'const value = "\\ud800";' });
+  const facts = indexedSource({
+    file: 'surrogate.ts',
+    text: 'const value = "\\ud800";',
+  });
   expect(JSON.stringify(facts.ast)).toContain('\\ud800');
 });
 
@@ -153,7 +178,11 @@ test('import rules preserve type-only edges and follow dynamic imports and reexp
     };
     const findings = cruiseDependencies(root, config, ['.']);
     expect(findings.other).toEqual([
-      { importer: 'runtime.ts', imported: 'owner/internal.ts', rule: 'runtime-boundary' },
+      {
+        importer: 'runtime.ts',
+        imported: 'owner/internal.ts',
+        rule: 'runtime-boundary',
+      },
     ]);
     writeFileSync(join(root, 'typed.ts'), 'import { Shape, secret } from "./owner/internal.ts";');
     expect(cruiseDependencies(root, config, ['.']).other).toHaveLength(2);
@@ -174,4 +203,86 @@ test('SQL facts come from PostgreSQL parsing and retain qualified relation posit
 
 test('invalid executable syntax fails rather than yielding an incomplete index', () => {
   expect(() => indexedSource({ file: 'invalid.ts', text: 'export const = ;' })).toThrow();
+});
+
+test('binary keys cover source paths, bytes, lockfile and toolchain independently of worktree', () => {
+  withTree((root) => {
+    mkdirSync(join(root, 'tools/repo-index/src'), { recursive: true });
+    const source = join(root, 'tools/repo-index/src/main.rs');
+    const lock = join(root, 'tools/repo-index/Cargo.lock');
+    writeFileSync(source, 'fn main() {}');
+    writeFileSync(lock, 'lock');
+    const first = repoIndexBuildKey(root, 'cargo 1.98.1');
+    withTree((other) => {
+      mkdirSync(join(other, 'tools/repo-index/src'), { recursive: true });
+      writeFileSync(join(other, 'tools/repo-index/src/main.rs'), 'fn main() {}');
+      writeFileSync(join(other, 'tools/repo-index/Cargo.lock'), 'lock');
+      expect(repoIndexBuildKey(other, 'cargo 1.98.1')).toBe(first);
+    });
+    expect(repoIndexBuildKey(root, 'cargo 1.98.2')).not.toBe(first);
+    writeFileSync(source, 'fn main() { println!("changed"); }');
+    expect(repoIndexBuildKey(root, 'cargo 1.98.1')).not.toBe(first);
+    writeFileSync(source, 'fn main() {}');
+    writeFileSync(lock, 'changed lock');
+    expect(repoIndexBuildKey(root, 'cargo 1.98.1')).not.toBe(first);
+    writeFileSync(lock, 'lock');
+    writeFileSync(join(root, 'tools/repo-index/src/extra.rs'), 'extra');
+    expect(repoIndexBuildKey(root, 'cargo 1.98.1')).not.toBe(first);
+  });
+});
+
+test('concurrent first callers build once, reuse offline and retry failed builds', async () => {
+  const directory = resolve(import.meta.dir, '../../.temp');
+  const root = mkdtempSync(join(directory, 'repo-index-build-test-'));
+  try {
+    mkdirSync(join(root, 'tools/repo-index/src'), { recursive: true });
+    writeFileSync(join(root, 'tools/repo-index/src/main.rs'), 'fn main() {}');
+    writeFileSync(join(root, 'tools/repo-index/Cargo.lock'), 'locked');
+    const bin = join(root, 'bin');
+    mkdirSync(bin);
+    writeFileSync(
+      join(bin, 'cargo'),
+      `#!/bin/sh
+if [ "$1" = --version ]; then echo 'cargo 1.98.1 (797e8a9bc 2026-08-05)'; exit; fi
+printf 'build\\n' >> "$CARGO_HOME/builds"
+[ "$FAIL_BUILD" != 1 ] || exit 1
+while [ "$1" != --target-dir ]; do shift; done
+shift
+sleep 0.2
+mkdir -p "$1/release"
+printf '#!/bin/sh\\nexit 0\\n' > "$1/release/repo-index"
+chmod +x "$1/release/repo-index"
+`,
+    );
+    chmodSync(join(bin, 'cargo'), 0o755);
+    const cacheRoot = join(root, 'cache');
+    mkdirSync(join(cacheRoot, 'cargo'), { recursive: true });
+    const launch = (fail = false) =>
+      Bun.spawn([process.execPath, resolve(import.meta.dir, 'repo-index.ts'), '--build', root], {
+        env: {
+          ...process.env,
+          PATH: [bin, process.env.PATH].join(delimiter),
+          REZICS_REPO_INDEX_CACHE: cacheRoot,
+          FAIL_BUILD: fail ? '1' : '0',
+        },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      });
+    const first = launch();
+    const second = launch();
+    expect(await Promise.all([first.exited, second.exited])).toEqual([0, 0]);
+    const executable = (await new Response(first.stdout).text()).trim();
+    expect((await new Response(second.stdout).text()).trim()).toBe(executable);
+    expect(readFileSync(join(cacheRoot, 'cargo/builds'), 'utf8')).toBe('build\n');
+    // A failing Cargo builder cannot affect an already published key.
+    expect(await launch(true).exited).toBe(0);
+    writeFileSync(join(root, 'tools/repo-index/src/main.rs'), 'changed');
+    expect(await launch(true).exited).not.toBe(0);
+    const retry = launch();
+    expect(await retry.exited).toBe(0);
+    expect((await new Response(retry.stdout).text()).trim()).not.toBe(executable);
+    expect(readFileSync(join(cacheRoot, 'cargo/builds'), 'utf8')).toBe('build\nbuild\nbuild\n');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

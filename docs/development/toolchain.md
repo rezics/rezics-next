@@ -106,7 +106,17 @@ writing compact initializer syntax; opaque expressions retain their original
 kind and source range for the TypeScript rules to read.
 [`sha2`](https://docs.rs/sha2/0.10.9/sha2/) provides per-file SHA-256 content keys
 that let the reader register source identities without loading source payloads.
-Task keeps Cargo's registry and build output in this worktree's `.temp/`.
+Task and the guard reader resolve the same executable through
+`scripts/lib/repo-index.ts`. Cargo's crate cache is shared at
+`~/.cache/rezics/repo-index/cargo`, isolated from `~/.cargo`. Successful binaries
+live at `~/.cache/rezics/repo-index/<key>/repo-index`; the SHA-256 key includes
+all paths and bytes under `tools/repo-index/` (including `Cargo.lock`), the exact
+Cargo version, OS and architecture. A kernel `flock` allows one build per key,
+rechecks inputs before publication and releases on process exit. Matching
+worktrees reuse the executable without downloading or compiling. Build output
+is temporary under the shared cache; parsed JSON indexes stay worktree-local.
+`REZICS_REPO_INDEX_CACHE` overrides the shared root for isolated verification.
+Native Rust tests keep their target output in `.temp/repo-index-test`.
 Building needs a C compiler and libclang development headers for `pg_query`'s
 bindings. The Task command supplies the C compiler's system include directory
 when `BINDGEN_EXTRA_CLANG_ARGS` is unset.
