@@ -25415,52 +25415,6 @@
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8"
         }
-      },
-      {
-        "label": "session-agent",
-        "operationId": "getV1MeSession-agent",
-        "method": "GET",
-        "path": "/v1/me/session-agent",
-        "status": 200,
-        "answer": {
-          "profile": "session-agent-v1",
-          "sessionAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "mainAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "initialActingSubject": "https://rezics.com/id/d850c94e-a0d5-4919-b9a7-de8d3855c32a"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "reader-content-preferences",
-        "operationId": "getV1MePerson-preferences",
-        "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd850c94e-a0d5-4919-b9a7-de8d3855c32a",
-        "status": 200,
-        "answer": {
-          "profile": "person-preferences-v1",
-          "profileVisibility": "public",
-          "followPolicy": "everyone",
-          "hideReadingActivity": false,
-          "contentLanguages": [],
-          "spoilerPolicy": "hide-unread",
-          "version": 0,
-          "blockedPeople": []
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
       }
     ],
     "member": [
@@ -38424,52 +38378,6 @@
           "groups": [],
           "operations": [],
           "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "session-agent",
-        "operationId": "getV1MeSession-agent",
-        "method": "GET",
-        "path": "/v1/me/session-agent",
-        "status": 200,
-        "answer": {
-          "profile": "session-agent-v1",
-          "sessionAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "mainAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "initialActingSubject": "https://rezics.com/id/8aafb825-0e34-4874-81b5-0dc7d2eb665d"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "reader-content-preferences",
-        "operationId": "getV1MePerson-preferences",
-        "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F8aafb825-0e34-4874-81b5-0dc7d2eb665d",
-        "status": 200,
-        "answer": {
-          "profile": "person-preferences-v1",
-          "profileVisibility": "public",
-          "followPolicy": "everyone",
-          "hideReadingActivity": false,
-          "contentLanguages": [],
-          "spoilerPolicy": "hide-unread",
-          "version": 0,
-          "blockedPeople": []
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -52817,52 +52725,6 @@
           "cache-control": "private, no-store",
           "content-type": "application/json;charset=utf-8"
         }
-      },
-      {
-        "label": "session-agent",
-        "operationId": "getV1MeSession-agent",
-        "method": "GET",
-        "path": "/v1/me/session-agent",
-        "status": 200,
-        "answer": {
-          "profile": "session-agent-v1",
-          "sessionAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "mainAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "initialActingSubject": "https://rezics.com/id/2bc7654f-4732-4e36-843e-b05df81ad50f"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "reader-content-preferences",
-        "operationId": "getV1MePerson-preferences",
-        "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F2bc7654f-4732-4e36-843e-b05df81ad50f",
-        "status": 200,
-        "answer": {
-          "profile": "person-preferences-v1",
-          "profileVisibility": "public",
-          "followPolicy": "everyone",
-          "hideReadingActivity": false,
-          "contentLanguages": [],
-          "spoilerPolicy": "hide-unread",
-          "version": 0,
-          "blockedPeople": []
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
       }
     ],
     "moderator": [
@@ -65826,52 +65688,6 @@
           "groups": [],
           "operations": [],
           "generation": "f63d99cc8ba7444b2bc346fc34c54e86bd6e97207141b5e1f28e38da9bbfb367"
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "session-agent",
-        "operationId": "getV1MeSession-agent",
-        "method": "GET",
-        "path": "/v1/me/session-agent",
-        "status": 200,
-        "answer": {
-          "profile": "session-agent-v1",
-          "sessionAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "mainAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "initialActingSubject": "https://rezics.com/id/5e4d1521-2a7f-4d66-a2ef-54782167de49"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "reader-content-preferences",
-        "operationId": "getV1MePerson-preferences",
-        "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5e4d1521-2a7f-4d66-a2ef-54782167de49",
-        "status": 200,
-        "answer": {
-          "profile": "person-preferences-v1",
-          "profileVisibility": "public",
-          "followPolicy": "everyone",
-          "hideReadingActivity": false,
-          "contentLanguages": [],
-          "spoilerPolicy": "hide-unread",
-          "version": 0,
-          "blockedPeople": []
         },
         "headers": {
           "cache-control": "private, no-store",
@@ -78842,52 +78658,6 @@
           ],
           "operations": [],
           "generation": "5e4727555f686e24508e8f4b06066506ed2469520a66b3e5df63554ebea1743a"
-        },
-        "headers": {
-          "cache-control": "private, no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "session-agent",
-        "operationId": "getV1MeSession-agent",
-        "method": "GET",
-        "path": "/v1/me/session-agent",
-        "status": 200,
-        "answer": {
-          "profile": "session-agent-v1",
-          "sessionAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "mainAgent": {
-            "actingSubject": null,
-            "revision": null,
-            "eligible": false
-          },
-          "initialActingSubject": "https://rezics.com/id/c7def11c-53ad-4a23-b7ac-655cadb92087"
-        },
-        "headers": {
-          "cache-control": "no-store",
-          "content-type": "application/json;charset=utf-8"
-        }
-      },
-      {
-        "label": "reader-content-preferences",
-        "operationId": "getV1MePerson-preferences",
-        "method": "GET",
-        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fc7def11c-53ad-4a23-b7ac-655cadb92087",
-        "status": 200,
-        "answer": {
-          "profile": "person-preferences-v1",
-          "profileVisibility": "public",
-          "followPolicy": "everyone",
-          "hideReadingActivity": false,
-          "contentLanguages": [],
-          "spoilerPolicy": "hide-unread",
-          "version": 0,
-          "blockedPeople": []
         },
         "headers": {
           "cache-control": "private, no-store",

@@ -200,12 +200,6 @@ async function recipePageReads(name: PersonaName, person: PersonaSession, sample
   await (await publicSample('metadata-work-header', 'GET', `/v1/works/${id}`)).body?.cancel();
   await (await publicSample('classification-facets', 'GET', '/v1/facets')).body?.cancel();
   await (await sample('platform-access', 'GET', '/v1/me/platform-access')).body?.cancel();
-  if (person.actingSubject) {
-    await (await sample('session-agent', 'GET', '/v1/me/session-agent')).body?.cancel();
-    await (await sample('reader-content-preferences', 'GET',
-      `/v1/me/person-preferences?${acting(person)}`, undefined, undefined,
-      { headers: { 'x-session-key': '' } })).body?.cancel();
-  }
 }
 
 // Use the production tracking client so its paths, query order and headers are recorded unchanged.
