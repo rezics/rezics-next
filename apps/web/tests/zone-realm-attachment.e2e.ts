@@ -196,10 +196,13 @@ async function compose(page: Page, body: string, language: string, spoiler: bool
   await input.focus();
   await page.keyboard.type(body);
   await expect(input).toHaveValue(body);
-  await area.getByRole('button', { name: new RegExp(`^${aboutDiscussionMessages.en.language}:`) }).press('Enter');
+  const languageButton = area.getByRole('button', { name: new RegExp(`^${aboutDiscussionMessages.en.language}:`) });
+  await languageButton.press('Enter');
   const search = page.getByRole('searchbox', { name: 'Find a language', exact: true });
   await search.fill(language === 'ar' ? 'Arabic' : language === 'en' ? 'English' : 'Japanese');
   await search.press('Enter');
+  await expect(search).toBeHidden();
+  await expect(languageButton).toBeFocused();
   if (spoiler) {
     await area.getByRole('checkbox', { name: 'Contains spoilers' }).focus();
     await page.keyboard.press('Space');
