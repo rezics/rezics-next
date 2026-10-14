@@ -417,7 +417,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-search.test.ts',
       'realm/closure-search / visitor: gets ordinary unavailable Realm searches and continuations while independently published originals stay globally searchable and credited',
       'Reads scoped search and retained continuations after closure, checks the Realm is unavailable and independently published original Works remain globally searchable with author credits.'),
-    browser: missing('gap', 'The realm-closure-search browser journey is blocked before closure: POST /v1/query with {"profile":"resource-list-v1","context":"global","scope":{"kind":"all"},"sort":"relevance","limit":20,"q":"Closuregardenc300f524c8b7"} repeatedly returned HTTP 503 work_read_unavailable after the original Work basis settled. Main reports WorkReadUnavailable caused by WorkReadMoved. See QA 20261014t202845-0892a9 logs/e2e-playwright.log and .temp/realm-closure-evidence/20261014t202845-0892a9-e-search-8e94d2a2-db59-4254-b662-433d402f8f47.json.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure-search.e2e.ts',
+      'apps/web/tests/journeys/realm-closure-discovery.ts',
+      'realm-closure-search: a returning member loses closed Realm results after reload and keeps the original',
+      'Finds a published original in its Realm, closes the Realm, reloads both scoped search streams into unavailable states, and keyboard-opens the globally searchable original with author credit in English and Japanese.'),
   },
   {
     kind: 'realm',
