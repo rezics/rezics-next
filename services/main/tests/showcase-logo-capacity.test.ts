@@ -4,7 +4,7 @@ import { copyFileSync, mkdirSync, rmSync } from 'node:fs';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { join, resolve } from 'node:path';
 import type { Pool } from 'pg';
-import { boundedPool } from '../src/infrastructure/pg-pool.ts';
+import { boundedPool, NestedPoolCheckoutError } from '../src/infrastructure/pg-pool.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { ContentCore, migrateContent } from '../../content/src/index.ts';
 import { DEFAULT_MEDIA_CONTEXT } from '../src/modules/media/contract.ts';
@@ -147,6 +147,16 @@ test('eight active languages count both tones once and removal frees capacity on
     await expect(store.showcase.select(admission(), { ...logo(failedTarget, 'it'), asset: randomUUID() }, inspect)).rejects.toThrow();
     expect(await languages(pool, failedTarget)).toEqual([]);
     expect((await pool.query('SELECT head FROM media.selection_slot WHERE target=$1', [failedTarget])).rows).toEqual([]);
+  });
+}, 30_000);
+
+test('a Showcase command still refuses a checkout nested inside its caller', async () => {
+  await isolated('nested', async (pool, store) => {
+    const held = await pool.connect();
+    try {
+      await expect(store.showcase.select(admission(), logo(native(), 'en'), inspect))
+        .rejects.toBeInstanceOf(NestedPoolCheckoutError);
+    } finally { held.release(); }
   });
 }, 30_000);
 

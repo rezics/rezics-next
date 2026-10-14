@@ -1,3 +1,4 @@
+import { AsyncResource } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
@@ -85,6 +86,13 @@ export const SHOWCASE_LOGO_CAPACITY_SQL = `SELECT array_agg(DISTINCT split_part(
   FROM media.selection_slot WHERE target=$1 AND context=$2
     AND role LIKE 'showcase-%' AND role LIKE 'showcase-logo:%' AND showcase_active`;
 
+/** Keep sibling commands' checkout tracking separate while inheriting any
+ * connection the caller already holds, so real nesting still fails. */
+function showcaseCommand<T>(work: () => Promise<T>): Promise<T> {
+  const scope = new AsyncResource('showcase-command');
+  return scope.runInAsyncScope(work).finally(() => scope.emitDestroy());
+}
+
 /** Showcase is an extension of media selections, not a second document owner. */
 export class MediaShowcaseStore {
   constructor(private readonly pool: Pool) {}
@@ -92,6 +100,11 @@ export class MediaShowcaseStore {
   /** A campaign keeps its exact Use when another slide creates art of the same
    * role. One operation lock and exact source probes, O(log M) owner work. */
   async createCampaign(admission: MediaAdmission, input: CampaignArtInput,
+    inspect: Inspector): Promise<CommandOutcome> {
+    return showcaseCommand(() => this.createCampaignCommand(admission, input, inspect));
+  }
+
+  private async createCampaignCommand(admission: MediaAdmission, input: CampaignArtInput,
     inspect: Inspector): Promise<CommandOutcome> {
     const role = showcaseSlot(input).replace(/^showcase-/, 'campaign-');
     if (!NATIVE.test(input.zone) || !NATIVE.test(input.target) || !UUID.test(input.asset)
@@ -158,6 +171,11 @@ export class MediaShowcaseStore {
     input: ShowcaseSelectionInput | ShowcaseTrailerInput,
     inspect: Inspector,
   ): Promise<CommandOutcome> {
+    return showcaseCommand(() => this.selectCommand(admission, input, inspect));
+  }
+
+  private async selectCommand(admission: MediaAdmission,
+    input: ShowcaseSelectionInput | ShowcaseTrailerInput, inspect: Inspector): Promise<CommandOutcome> {
     const trailer = 'url' in input;
     const role = trailer ? 'showcase-trailer' : showcaseSlot(input);
     const normalized = trailer ? normalizeTrailer(input.url) : null;
