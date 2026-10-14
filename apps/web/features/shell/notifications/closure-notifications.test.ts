@@ -5,9 +5,9 @@ import { readLatest, readNotificationCount, readNotificationDelivery, readWindow
 
 describe('closed Realm notification reader', () => {
   test('publishing credit keeps the member and moderator Persons distinct from acting and recipient authority', () => {
-    expect(closureCredit.closedAuthor).toBe(closureAnswers('member').recipient);
-    expect(closureCredit.closedReplyAuthors).toEqual([
-      closureAnswers('member').recipient, closureAnswers('moderator').recipient]);
+    expect(closureAnswers('member').recipient).toBe(closureCredit.closedAuthor);
+    expect(closureAnswers('member').recipient).toBe(closureCredit.closedReplyAuthors[0]);
+    expect(closureAnswers('moderator').recipient).toBe(closureCredit.closedReplyAuthors[1]);
     expect(closureCredit.liveAuthor).not.toBe(closureActor.id);
   });
   test('visitor inbox, count and delivery retain the authentication refusal', async () => {
