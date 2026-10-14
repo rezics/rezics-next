@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { gateFor } from '../../../../../apps/web/features/api/platform-access.ts';
+import { readMemberBan } from '../../../../../apps/web/features/realm-appeal/ban-read.ts';
+import { readMembership } from '../../../../../apps/web/features/realm/membership-state.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/publication.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { settledWrite } from '../../../support/settled-write.ts';
@@ -16,7 +22,7 @@ type Presentation = { revision: string; presentation: ZonePresentation; renderTo
 type Receipt = { receipt: string; revision: string; homeDocument: string; homeRevision: string;
   routesRevision: string; navigationRevision: string; themeRevision: string;
   pages: Array<Pick<Page, 'page' | 'variantId' | 'revisionId'>>; replayed: boolean };
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(row);
 type Sample = ReturnType<OutcomeRecorder['session']>;
@@ -286,6 +292,7 @@ async function refuses(name: Exclude<PersonaName, 'owner'>) {
       expect(exact.reference).toEqual(published.page!.reference);
     });
   }
+  await productionVisit(name);
 }
 
 outcomeTest(row, 'visitor', () => refuses('visitor'), recording);
@@ -352,4 +359,72 @@ outcomeTest(row, 'owner', async () => {
   await answer(publicSample('superseded-content-refused', 'GET', `/v1/content-revisions/${f.draft.revisionId}`), 404);
   const exact = await answer<{ reference: Reference }>(publicSample('competing-exact-content', 'GET', `/v1/content-revisions/${laterPage.revisionId}`));
   expect(exact.reference.provenance).toMatchObject({ rightsBasis: 'original-contribution', author: owner.actingSubject });
+  await productionVisit('owner');
 }, recording);
+
+const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
+
+function frameLabel(prefix: string, method: string, path: string, seen: Map<string, number>): string {
+  const pathname = path.split('?')[0] ?? path;
+  const base = pathname.includes('/addresses/resolve') ? `${prefix}-address`
+    : pathname.endsWith('/presentation') ? `${prefix}-presentation`
+      : /\/v1\/realms\/[0-9a-f-]{36}$/.test(pathname) ? `${prefix}-realm-header`
+        : pathname.endsWith('/joining') ? `${prefix}-joining`
+          : pathname.startsWith('/v1/follows/') ? `${prefix}-follow`
+            : pathname.endsWith('/platform-access') ? `${prefix}-platform-access`
+              : pathname.endsWith('/member-ban') ? `${prefix}-member-ban`
+                : pathname.endsWith('/routes') ? `${prefix}-route`
+                  : '';
+  if (!base) throw new Error(`Unlabelled production request: ${method} ${path}`);
+  const count = seen.get(base) ?? 0;
+  seen.set(base, count + 1);
+  return count === 0 ? base : `${base}-${count + 1}`;
+}
+
+/** The public frame's own reads, through the production client. Anonymous address and Realm
+ * header stay on the signed-out client; membership, presentation and routes use the persona. */
+async function productionVisit(name: PersonaName) {
+  const f = await site();
+  const person = sessions[name];
+  const actingSubject = person.actingSubject ?? undefined;
+  const seen = new Map<string, number>();
+  const clientFor = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
+    anonymous: caller === sessions.visitor,
+    fetcher: (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+      const labeler = requestLabels.getStore();
+      if (!labeler) throw new Error(`Production request has no label: ${method} ${path}`);
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+      const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+      return recording.session(name, caller)(labeler(method, path), method, path, body, key);
+    }) as typeof fetch,
+  });
+  const personal = clientFor(person);
+  const anonymous = clientFor(sessions.visitor);
+  const frames = realmFrameReads({ main: anonymous, personal, actingSubject });
+  const labeled = <T,>(prefix: string, run: () => Promise<T>) => requestLabels.run(
+    (method, path) => frameLabel(prefix, method, path, seen), run);
+
+  const resolved = await labeled('frame-published', () => frames.resolveRealm(short(f.path), 'en', 'site'));
+  if (resolved.kind !== 'realm') throw new Error(`Published frame resolved to ${resolved.kind}`);
+  if (actingSubject) {
+    await labeled('frame-published', async () => {
+      await readMembership(personal, resolved.header.id, actingSubject);
+      const access = await personal.v1.me['platform-access'].get();
+      await readMemberBan(personal, resolved.header.id, actingSubject, gateFor(access.data));
+    });
+  }
+  // The shared empty Zone has no Realm. Its address is anonymous; the operator's
+  // post-mandate home is the personal presentation and route.
+  if (name === 'owner') return;
+  const emptyKey = short(sessions.zone);
+  await labeled('frame-empty', () => frames.readAddress(emptyKey, 'en'));
+  if (name === 'operator' && actingSubject) {
+    await labeled('frame-empty', async () => {
+      await frames.readCompletePresentation(emptyKey);
+      await frames.readZoneRoute(emptyKey, '/');
+    });
+  }
+}
