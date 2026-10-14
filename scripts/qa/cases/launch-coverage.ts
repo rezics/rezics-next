@@ -344,8 +344,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/realm-reply-boards.test.ts',
       'Realm board placement preserves two Concepts, manager moves, clearing and retirement through the public API',
       'Places a discussion in two Concept boards, reads filtered pages, checks author and manager placement changes, clears classification and retires a board through Main.'),
-    browser: missing('L11',
-      'realm-boards in apps/web/tests/realm-discussions.e2e.ts is authored but blocked by Main: GET /v1/realms/01a13c1c-b514-7051-b8e8-e542e03e219f/threads?sort=best&window=all returned HTTP 503 work_read_unavailable while RealmRankingsIncomplete reported realm_rankings_are_projecting (QA 20261014t202500-ebccb2).'),
+    browser: journeyBrowser('apps/web/tests/realm-discussions.e2e.ts', 'realm-boards',
+      'realm-boards: a visitor selects boards and returns to all discussions after reload in English and Japanese',
+      'A visitor selects two Concept boards by keyboard, reloads each filtered discussion list and returns to all discussions in English and Japanese.'),
   },
   {
     kind: 'realm',

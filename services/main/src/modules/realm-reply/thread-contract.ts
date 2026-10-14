@@ -48,6 +48,12 @@ export const realmThreadSummary = t.Object({ reply: readId, placement: readId,
   /** From the exact revision already read. Omitted when that revision never declared one; `false` is a cleared declaration. */
   spoiler: t.Optional(t.Boolean()),
   vote: threadVote, replies: count });
+/** Readiness is this same public GET returning 200. Before initial projection,
+ * 503 work_read_unavailable is an honest unavailable answer, never an empty
+ * ranking. Clients bound readiness polling to 120 seconds, then report failure.
+ * A successful placement publishes its exact ranking cut before acknowledgement;
+ * additive replay uses that cut while the projector catches up. Removal and
+ * recovery fences still refuse reads until their dependencies are settled. */
 export const realmThreadsQuery = t.Object({ sort: t.Optional(threadSort), window: t.Optional(threadWindow),
   concept: t.Optional(readId),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: REALM_THREAD_COST.pageSize })),
