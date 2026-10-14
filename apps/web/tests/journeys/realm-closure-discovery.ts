@@ -34,9 +34,11 @@ async function visit(page: Page, path: string) {
   }
 }
 
-export function registerRealmClosureDiscoveryJourneys() {
+export function registerRealmClosureDiscoveryJourneys(
+  surfaces: readonly ('feed' | 'rankings' | 'search')[] = ['feed', 'rankings', 'search'],
+) {
   test.use({ actionTimeout: 15_000 });
-  for (const surface of ['feed', 'rankings', 'search'] as const) {
+  for (const surface of surfaces) {
     test(`realm-closure-${surface}: a returning member loses closed Realm results after reload and keeps the original`, async ({ page }, info) => {
       test.setTimeout(360_000);
       await signIn(page, '/en', credentials().member);
