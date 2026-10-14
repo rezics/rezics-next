@@ -47,13 +47,13 @@ import { realmDiscovery } from '../address/space-read.ts';
 import { EntityPage } from '../entity-page/entity-page.tsx';
 import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
 import { publishedFrameModel } from '../realm/zone-presentation-read.ts';
-import type { SiteMountCut } from './site-cuts.ts';
+import type { SiteMountCut, SitePresentationCut } from './site-cuts.ts';
 import { MemberList } from './site-pages.tsx';
 import { ZoneEditLink } from '../zone-editor/edit-link.tsx';
 import { ZoneSiteRecordedCredit } from './zone-site-recorded-page.tsx';
 import { mapZoneSiteHome, zoneSiteRouteMissing } from './zone-site-recorded-page.ts';
 import { ZoneHomeContent } from '../zone-editor/home-content.tsx';
-import type { SitePresentationCut } from './site-cuts.ts';
+import { independentZoneContext } from './independent-zone-recorded-page.ts';
 import type { ZoneContext, ZoneTokens } from '@rezics/zone-sdk';
 import { cookies, headers } from 'next/headers';
 import { parseTheme, THEME_COOKIE } from '../shell/preferences.ts';
@@ -441,28 +441,7 @@ async function standaloneSite(
       ? failure(shown.failure, siteHref(locale, addressKey(resolved.address.canonical), path), messages, shown.reference)
       : null;
   }
-  const ref = addressKey(resolved.address.canonical);
-  const zone: ZoneContext = {
-    slug: presentation.data.official,
-    realm: null,
-    name: zoneContentText(
-      presentation.data.name ?? resolved.address.canonical.suffixSource,
-      presentation.data.language,
-    ),
-    description: null,
-    icon: null,
-    hero: null,
-    tokens: presentation.data.presentation.tokens,
-    locale,
-    links: {
-      home: siteHref(locale, ref, []),
-      browse: siteHref(locale, ref, ['browse']),
-      works: siteHref(locale, ref, ['browse']),
-      discussions: '',
-      decisions: '',
-      about: '',
-    },
-  };
+  const { zone, ref } = independentZoneContext(presentation.data, resolved.address.canonical, locale);
   const mounts = presentation.data.navigation;
   const frame = (children: ReactNode) => <StandaloneZoneSiteFrame zone={zone} zoneId={resolved.zone} address={ref}
     locale={locale} messages={messages} presentation={presentation.data}>{children}</StandaloneZoneSiteFrame>;
