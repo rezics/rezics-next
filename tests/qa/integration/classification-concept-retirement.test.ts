@@ -14,6 +14,20 @@ test('Concept steward retires the exact current head without changing retained r
   const home = await startHomeStack('concept-retirement');
   try {
     const { author, reader, stack } = home;
+    const trace: unknown[] = [];
+    const graph = stack.env.fuseki;
+    const nativeQuery = graph.query.bind(graph), nativeCommand = graph.commandWithReceipt.bind(graph);
+    graph.query = async (...args) => {
+      const result = await nativeQuery(...args);
+      if (args[0].includes('SELECT ?scheme ?schemeHead ?path ?expression ?sense ?revision ?manifest'))
+        trace.push({ selection: result });
+      return result;
+    };
+    graph.commandWithReceipt = async envelope => {
+      const result = await nativeCommand(envelope);
+      if (envelope.update.includes('rv:conceptState rv:Retired')) trace.push({ command: result });
+      return result;
+    };
     const call = (path: string, body?: object, token = author.token, key = randomUUID()) => home.app.handle(
       new Request(`http://main.local${path}`, { method: body ? 'POST' : 'GET', headers: {
         authorization: `Bearer ${token}`, ...(body ? { 'content-type': 'application/json', 'idempotency-key': key } : {}),
@@ -52,7 +66,12 @@ test('Concept steward retires the exact current head without changing retained r
     expect(stale.code).toBe('operation_cancelled');
     const key = randomUUID();
     const queriesBefore = stack.fuseki.queries;
-    const retired = await home.json<Vocabulary>(await call('/v1/classification-vocabulary', retire, author.token, key), 201);
+    const retirementResponse = await call('/v1/classification-vocabulary', retire, author.token, key);
+    if (retirementResponse.status !== 201) throw new Error(JSON.stringify({
+      request: { method: 'POST', path: '/v1/classification-vocabulary', body: retire },
+      answer: { status: retirementResponse.status, body: await retirementResponse.json() }, trace,
+    }));
+    const retired = await home.json<Vocabulary>(retirementResponse, 201);
     expect(stack.fuseki.queries - queriesBefore).toBeLessThanOrEqual(VOCABULARY_COST.graphReads);
     expect(retired).toMatchObject({ scheme: created.scheme, schemeHead: created.schemeHead,
       concept: created.concept, path: created.path, expression: created.expression,
