@@ -79,7 +79,7 @@ function fixture(result = 'done', kind: Task['kind'] = 'tooling') {
   const worktree = join(directory, '.temp/tree');
   git('worktree', 'add', '-qb', 'goal/fixture', worktree);
   const brief = join(directory, '.temp/brief.md');
-  writeFileSync(brief, `---\nid: G-001\nkind: ${kind}\ntitle: Deliver a file\neffort: high\npaths: [delivered.txt]\n---\n`);
+  writeFileSync(brief, `---\nid: G-001\nkind: ${kind}\ntitle: Deliver a file\neffort: high\npaths: [delivered.txt]\n---\n\n## Mechanisms\n\nnone\n`);
   mkdirSync(join(worktree, '.temp/goal'), { recursive: true });
   copyFileSync(brief, join(worktree, '.temp/goal/brief.md'));
   const output = join(run, 'attempt.json');
