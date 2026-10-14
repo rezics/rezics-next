@@ -26,6 +26,7 @@ export interface SqlFacts {
   tokens: SqlToken[];
   serializationTokens: SqlToken[];
   tree?: unknown;
+  treeDeflate?: string;
   parseError?: string;
   references: { relation: string; offset: number }[];
   bodies?: { text: string; sql?: SqlFacts; sqlDeflate?: string }[];
@@ -37,12 +38,50 @@ export interface IndexedFile {
   imports: IndexedImport[];
   namedImports?: { local: string; imported: string; source: string }[];
   directCallNames?: string[];
+  functionFacts?: {
+    start: number;
+    end: number;
+    bodyStart: number;
+    bodyEnd: number;
+    name?: string;
+    className?: string;
+    parameters: string[];
+    defaultReferences: string[];
+    hasSqlQueries: boolean;
+    hasSqlOperationLiterals: boolean;
+  }[];
+  callFacts?: {
+    start: number;
+    end: number;
+    functionStart?: number;
+    calleeName?: string;
+    calleeKind?: 'identifier' | 'this-member';
+    className?: string;
+    argumentNames: string[];
+    argumentSpans: { start: number; end: number }[];
+    inlineFunctionSpans: { start: number; end: number }[];
+  }[];
+  aliases?: {
+    name: string;
+    references: string[];
+    initializerStart: number;
+    initializerEnd: number;
+  }[];
   sqlCandidates?: {
     text: string;
     start: number;
     end: number;
     sql?: SqlFacts;
     sqlDeflate?: string;
+    literalKind?: 'string' | 'template';
+    interpolated?: boolean;
+    parentKind?: string;
+    bindingName?: string;
+    propertyKey?: string;
+    firstCallArgument?: boolean;
+    enclosingTemplateStart?: number | null;
+    templateAstDeflate?: string;
+    templateAst?: AstNode;
   }[];
   sql?: SqlFacts;
   sqlDeflate?: string;
@@ -50,11 +89,13 @@ export interface IndexedFile {
   comments?: { start: number; end: number }[];
   astDeflate?: string;
   runtimeAstDeflate?: string;
+  graphDeflate?: string;
   syntax?: {
     hasFunctions: boolean;
     hasDirectCalls: boolean;
     hasSqlQueries: boolean;
     hasSqlOperationLiterals: boolean;
+    hasInterpolatedTemplates?: boolean;
   };
 }
 export interface RepoIndex {
@@ -111,6 +152,27 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     throw new Error(`Unsupported repository index version: ${index.version}`);
   objects.set(output, { digest: metadata.digest, index });
   for (const [file, facts] of Object.entries(index.files)) {
+    if (facts.graphDeflate) {
+      const encoded = facts.graphDeflate;
+      const fields = ['functionFacts', 'callFacts', 'aliases'] as const;
+      const load = () => {
+        const graph = JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64')).toString()) as Pick<
+          IndexedFile,
+          (typeof fields)[number]
+        >;
+        for (const field of fields)
+          Object.defineProperty(facts, field, { value: graph[field], enumerable: false });
+      };
+      for (const field of fields)
+        Object.defineProperty(facts, field, {
+          configurable: true,
+          enumerable: false,
+          get: () => {
+            load();
+            return facts[field];
+          },
+        });
+    }
     for (const field of ['ast', 'runtimeAst'] as const) {
       const encoded = field === 'ast' ? facts.astDeflate : facts.runtimeAstDeflate;
       if (!encoded) continue;
@@ -130,7 +192,23 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
     // reads only the trees needed by its own rules.
     if (facts.astDeflate || facts.ast) sources.set(`${file}\0${digest(facts.text)}`, facts);
     rememberSqlRecord(facts);
-    for (const candidate of facts.sqlCandidates ?? []) rememberSqlRecord(candidate);
+    for (const candidate of facts.sqlCandidates ?? []) {
+      rememberSqlRecord(candidate);
+      if (candidate.templateAstDeflate) {
+        const encoded = candidate.templateAstDeflate;
+        Object.defineProperty(candidate, 'templateAst', {
+          configurable: true,
+          enumerable: false,
+          get: () => {
+            const ast = JSON.parse(
+              inflateRawSync(Buffer.from(encoded, 'base64')).toString(),
+            ) as AstNode;
+            Object.defineProperty(candidate, 'templateAst', { value: ast, enumerable: false });
+            return ast;
+          },
+        });
+      }
+    }
   }
   return index;
 }
@@ -152,6 +230,21 @@ function rememberSqlRecord(record: { text: string; sql?: SqlFacts; sqlDeflate?: 
 }
 
 function rememberSql(text: string, facts: SqlFacts): void {
+  // Both guards consume the same PostgreSQL scanner stream. Older indexes
+  // stored it twice; the reader exposes both names without duplicating tokens.
+  facts.serializationTokens ??= facts.tokens;
+  if (facts.treeDeflate) {
+    const encoded = facts.treeDeflate;
+    Object.defineProperty(facts, 'tree', {
+      configurable: true,
+      enumerable: false,
+      get: () => {
+        const tree = JSON.parse(inflateRawSync(Buffer.from(encoded, 'base64')).toString());
+        Object.defineProperty(facts, 'tree', { value: tree, enumerable: false });
+        return tree;
+      },
+    });
+  }
   sql.set(text, facts);
   for (const body of facts.bodies ?? []) rememberSqlRecord(body);
 }

@@ -1,8 +1,20 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript-6';
-import { forEachIndexedChild, indexedSourceFile, indexedOffsets, indexedRelationNodes } from '../lib/repo-index-ast.ts';
-import { parseSources, repositoryIndex, indexedSql, prepareSql, indexedSource } from '../lib/repo-index.ts';
+import {
+  forEachIndexedChild,
+  indexedSourceFile,
+  indexedOffsets,
+  indexedRelationNodes,
+  indexedTemplateNodes,
+} from '../lib/repo-index-ast.ts';
+import {
+  parseSources,
+  repositoryIndex,
+  indexedSql,
+  prepareSql,
+  indexedSource,
+} from '../lib/repo-index.ts';
 import { migrationDirectories, migrationRecords } from '../ops/migrate.ts';
 
 export interface SqlSource {
@@ -26,8 +38,12 @@ function tokens(sql: string): Token[] {
   const previous = tokenCache.get(sql);
   if (previous) return previous;
   const offset = indexedOffsets(sql);
-  const result = indexedSql(sql).tokens.flatMap(token => {
-    if (!token.string && !token.quoted && (/^[^a-z_0-9$\s]+$/i.test(token.text) || /^\d/.test(token.text)))
+  const result = indexedSql(sql).tokens.flatMap((token) => {
+    if (
+      !token.string &&
+      !token.quoted &&
+      (/^[^a-z_0-9$\s]+$/i.test(token.text) || /^\d/.test(token.text))
+    )
       return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
     return [{ ...token, offset: offset(token.offset) }];
   });
@@ -166,8 +182,8 @@ function dynamicDdl(source: SqlSource): { start: number; end: number; sql: strin
 }
 
 export function migratedRelations(sources: SqlSource[]): Set<string> {
-  prepareSql(sources.map(source => source.text));
-  const expandedSources = sources.map(source => {
+  prepareSql(sources.map((source) => source.text));
+  const expandedSources = sources.map((source) => {
     // Expand dynamic statements at their original position, before following DDL.
     let expanded = source.text;
     for (const statement of dynamicDdl(source).reverse()) {
@@ -256,7 +272,7 @@ export function migrationSources(root: string): SqlSource[] {
 
 /** Keep empty and subsequently dropped owner schemas in the audit domain. */
 export function migrationSchemas(sources: SqlSource[]): Set<string> {
-  prepareSql(sources.map(source => source.text));
+  prepareSql(sources.map((source) => source.text));
   const schemas = new Set<string>(['public']);
   for (const source of sources) {
     const input = tokens(source.text);
@@ -277,7 +293,10 @@ function sqlReferences(
   requests?: string[],
 ): { relation: string; offset: number }[] {
   if (!sql.includes('.')) return [];
-  if (requests) { requests.push(sql); return []; }
+  if (requests) {
+    requests.push(sql);
+    return [];
+  }
   const input = tokens(sql);
   const result: { relation: string; offset: number }[] = [];
   const add = (at: number, allowColumns = false) => {
@@ -341,8 +360,12 @@ function sqlReferences(
             word(input[i - 2], value),
           )))
     ) {
-      const match = /^\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*\.\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*$/i.exec(input[i].text);
-      const identifierName = (value: string) => value.startsWith('"') ? value.slice(1, -1).replaceAll('""', '"') : value.toLowerCase();
+      const match =
+        /^\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*\.\s*("(?:""|[^"])+"|[a-z_][a-z_0-9$]*)\s*$/i.exec(
+          input[i].text,
+        );
+      const identifierName = (value: string) =>
+        value.startsWith('"') ? value.slice(1, -1).replaceAll('""', '"') : value.toLowerCase();
       const name = match ? `${identifierName(match[1])}.${identifierName(match[2])}` : undefined;
       if (name) result.push({ relation: name, offset: input[i].offset + 1 });
     }
@@ -372,36 +395,93 @@ export function sourceRelations(source: SqlSource, schemas: Set<string>): Relati
 }
 const schemaHintPatterns = new Map<string, RegExp>();
 const sourceReferenceFacts = new WeakMap<object, Map<string, RelationReference[]>>();
-function sourceRelationFacts(source: SqlSource, schemas: Set<string>, requests?: string[]): RelationReference[] {
+type RelationPlan = {
+  sql: string;
+  named: boolean;
+  reference: (ref: { relation: string; offset: number }) => RelationReference | undefined;
+};
+const sourceReferencePlans = new WeakMap<object, Map<string, RelationPlan[]>>();
+function sourceRelationFacts(
+  source: SqlSource,
+  schemas: Set<string>,
+  requests?: string[],
+): RelationReference[] {
   const indexed = indexedSource(source);
   const key = JSON.stringify([...schemas].sort());
   const cached = sourceReferenceFacts.get(indexed)?.get(key);
-  if (cached) return cached.map(reference => ({ ...reference }));
+  if (cached) return cached.map((reference) => ({ ...reference }));
+  const evaluate = (plan: RelationPlan[]) =>
+    plan.flatMap((item) =>
+      sqlReferences(item.sql, schemas, item.named).flatMap((ref) => {
+        const reference = item.reference(ref);
+        return reference ? [reference] : [];
+      }),
+    );
+  const previousPlan = sourceReferencePlans.get(indexed)?.get(key);
+  if (previousPlan) {
+    if (requests) {
+      requests.push(...previousPlan.map((item) => item.sql));
+      return [];
+    }
+    const references = evaluate(previousPlan);
+    const facts = sourceReferenceFacts.get(indexed) ?? new Map();
+    facts.set(key, references);
+    sourceReferenceFacts.set(indexed, facts);
+    return references.map((reference) => ({ ...reference }));
+  }
   // Quotes may be escaped in source, and SQL permits whitespace around the dot.
   if (![...schemas].some((schema) => source.text.includes(schema))) return [];
   let hints = schemaHintPatterns.get(key);
   if (!hints) {
-    const alternatives = [...schemas].map(schema => schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-    hints = new RegExp(`(?:^|[^a-z_0-9$])(?:${alternatives.map(schema => `"?${schema}"?`).join('|')})\\s*\\.`, 'i');
+    const alternatives = [...schemas].map((schema) =>
+      schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    );
+    hints = new RegExp(
+      `(?:^|[^a-z_0-9$])(?:${alternatives.map((schema) => `"?${schema}"?`).join('|')})\\s*\\.`,
+      'i',
+    );
     schemaHintPatterns.set(key, hints);
   }
+  const mayReference = (text: string) =>
+    hints!.test(text) || text.includes('/*') || text.includes('--');
   const candidates = indexed.sqlCandidates;
-  if (candidates && !source.text.includes('${') && !candidates.some(candidate => candidate.text.includes('\\') || hints!.test(candidate.text))) return [];
-  const ast = indexedSourceFile(source);
-  const result: RelationReference[] = [];
+  if (
+    candidates &&
+    !source.text.includes('${') &&
+    !candidates.some((candidate) => candidate.text.includes('\\') || mayReference(candidate.text))
+  )
+    return [];
+  const plan: RelationPlan[] = [];
+  const audit = (sql: string, named: boolean, reference: RelationPlan['reference']) => {
+    if (sql.includes('.') && mayReference(sql)) plan.push({ sql, named, reference });
+  };
+  const finish = () => {
+    const plans = sourceReferencePlans.get(indexed) ?? new Map();
+    plans.set(key, plan);
+    sourceReferencePlans.set(indexed, plans);
+    if (requests) {
+      requests.push(...plan.map((item) => item.sql));
+      return [];
+    }
+    const result = evaluate(plan);
+    const facts = sourceReferenceFacts.get(indexed) ?? new Map();
+    facts.set(key, result);
+    sourceReferenceFacts.set(indexed, facts);
+    return result.map((reference) => ({ ...reference }));
+  };
   const visit = (node: ts.Node) => {
+    const ast = node.getSourceFile();
     if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) {
       const parent = node.parent;
       const named =
         (ts.isVariableDeclaration(parent) &&
           /(?:table|relation)(?:name)?$/i.test(parent.name.getText(ast))) ||
         (ts.isPropertyAssignment(parent) && /^table$/i.test(parent.name.getText(ast)));
-      for (const ref of sqlReferences(node.text, schemas, named, requests))
-        result.push({
-          file: source.file,
-          line: ast.getLineAndCharacterOfPosition(node.getStart(ast) + 1 + ref.offset).line + 1,
-          relation: ref.relation,
-        });
+      audit(node.text, named, (ref) => ({
+        file: source.file,
+        line: ast.getLineAndCharacterOfPosition(node.getStart(ast) + 1 + ref.offset).line + 1,
+        relation: ref.relation,
+      }));
     } else if (ts.isTemplateExpression(node)) {
       // Raw positions retain source line numbers, including multiline interpolations.
       const start = node.getStart(ast) + 1;
@@ -422,60 +502,134 @@ function sourceRelationFacts(source: SqlSource, schemas: Set<string>, requests?:
         const prefix = /("[a-z_][a-z_0-9]*"|[a-z_][a-z_0-9]*)\.$/i.exec(sql.slice(0, holeStart));
         const at = prefix ? holeStart - prefix[0].length : -1;
         for (const value of stringAlternatives(span.expression)) {
-          for (const ref of sqlReferences(
-            sql.slice(0, holeStart) + value.text + sql.slice(holeEnd),
-            schemas,
-            false,
-            requests,
-          )) {
-            if (
-              ref.offset === at ||
-              (ref.offset >= holeStart && ref.offset < holeStart + value.text.length)
-            )
-              result.push({
-                file: source.file,
-                line:
-                  ast.getLineAndCharacterOfPosition(
-                    ref.offset === at ? start + at : value.node.getStart(ast) + 1,
-                  ).line + 1,
-                relation: ref.relation,
-              });
-          }
+          audit(sql.slice(0, holeStart) + value.text + sql.slice(holeEnd), false, (ref) =>
+            ref.offset === at ||
+            (ref.offset >= holeStart && ref.offset < holeStart + value.text.length)
+              ? {
+                  file: source.file,
+                  line:
+                    ast.getLineAndCharacterOfPosition(
+                      ref.offset === at ? start + at : value.node.getStart(ast) + 1,
+                    ).line + 1,
+                  relation: ref.relation,
+                }
+              : undefined,
+          );
         }
       }
       // Prevent a hole from joining identifiers on either side.
-      for (const ref of sqlReferences(sql, schemas, false, requests))
-        result.push({
-          file: source.file,
-          line: ast.getLineAndCharacterOfPosition(start + ref.offset).line + 1,
-          relation: ref.relation,
-        });
+      audit(sql, false, (ref) => ({
+        file: source.file,
+        line: ast.getLineAndCharacterOfPosition(start + ref.offset).line + 1,
+        relation: ref.relation,
+      }));
       // Visit expressions only; template chunks have already been read as one SQL string.
       for (const span of node.templateSpans) visit(span.expression);
       return;
     }
     forEachIndexedChild(node, visit);
   };
-  for (const node of indexedRelationNodes(source)) visit(node);
-  if (!requests) {
-    const facts = sourceReferenceFacts.get(indexed) ?? new Map();
-    facts.set(key, result);
-    sourceReferenceFacts.set(indexed, facts);
-    return result.map(reference => ({ ...reference }));
-  }
-  return result;
+  if (
+    candidates?.every((candidate) => candidate.literalKind && 'enclosingTemplateStart' in candidate)
+  ) {
+    const offset = indexedOffsets(source.text);
+    let lines: number[] | undefined;
+    const lineAt = (position: number) => {
+      if (!lines) {
+        lines = [0];
+        for (let at = 0; at < source.text.length; at++)
+          if (source.text[at] === '\n') lines.push(at + 1);
+      }
+      let low = 0,
+        high = lines.length;
+      while (low + 1 < high) {
+        const middle = (low + high) >>> 1;
+        if (lines[middle] <= position) low = middle;
+        else high = middle;
+      }
+      return low + 1;
+    };
+    const schemaNames = [...schemas].map((schema) => schema.toLowerCase());
+    const templates = new Set<number>();
+    for (const candidate of candidates)
+      if (candidate.interpolated && candidate.enclosingTemplateStart === candidate.start) {
+        const text = source.text
+          .slice(offset(candidate.start), offset(candidate.end))
+          .toLowerCase();
+        if (text.includes('\\') || schemaNames.some((schema) => text.includes(schema)))
+          templates.add(candidate.start);
+      }
+    const projected = new Map<number, ts.Node>();
+    for (const candidate of candidates)
+      if (
+        templates.has(candidate.start) &&
+        !projected.has(offset(candidate.start)) &&
+        candidate.templateAst
+      ) {
+        for (const node of indexedTemplateNodes(
+          source,
+          new Set([candidate.start]),
+          candidate.templateAst,
+        ))
+          projected.set(node.getStart(), node);
+      }
+    const nodes =
+      projected.size === templates.size
+        ? projected
+        : templates.size
+          ? new Map(indexedTemplateNodes(source, templates).map((node) => [node.getStart(), node]))
+          : projected;
+    if (nodes.size !== templates.size) {
+      for (const node of indexedRelationNodes(source)) visit(node);
+      return finish();
+    }
+    const visited = new Set<number>();
+    for (const candidate of candidates) {
+      if (candidate.interpolated) {
+        if (templates.has(candidate.start) && !visited.has(candidate.start)) {
+          visited.add(candidate.start);
+          const node = nodes.get(offset(candidate.start));
+          if (node) visit(node);
+        }
+        continue;
+      }
+      if (
+        candidate.enclosingTemplateStart !== null &&
+        candidate.enclosingTemplateStart !== undefined &&
+        templates.has(candidate.enclosingTemplateStart)
+      )
+        continue;
+      const named =
+        candidate.parentKind === 'VariableDeclarator'
+          ? /(?:table|relation)(?:name)?$/i.test(candidate.bindingName ?? '')
+          : candidate.parentKind === 'Property' && /^table$/i.test(candidate.propertyKey ?? '');
+      audit(candidate.text, named, (ref) => ({
+        file: source.file,
+        line: lineAt(offset(candidate.start) + 1 + ref.offset),
+        relation: ref.relation,
+      }));
+    }
+  } else for (const node of indexedRelationNodes(source)) visit(node);
+  return finish();
 }
 
 const repositoryGroups = new WeakMap<SqlSource, readonly SqlSource[]>();
 const preparedGroups = new WeakMap<readonly SqlSource[], Set<string>>();
-function prepareSourceRelations(sources: readonly SqlSource[], schemas: Set<string>): void {
+function prepareSourceRelations(
+  sources: readonly SqlSource[],
+  schemas: Set<string>,
+  profile?: (phase: string) => void,
+): void {
   const key = JSON.stringify([...schemas].sort());
   const prepared = preparedGroups.get(sources) ?? new Set<string>();
   if (prepared.has(key)) return;
   parseSources(sources);
+  profile?.('sql-source-index');
   const requests: string[] = [];
   for (const source of sources) sourceRelationFacts(source, schemas, requests);
+  profile?.('sql-request-collection');
   prepareSql(requests);
+  profile?.('sql-fragment-index');
   prepared.add(key);
   preparedGroups.set(sources, prepared);
 }
@@ -484,12 +638,15 @@ export function missingRelations(
   sources: SqlSource[],
   relations: Set<string>,
   schemas: Set<string>,
+  profile?: (phase: string) => void,
 ): RelationReference[] {
   const group = sources.length === 1 ? repositoryGroups.get(sources[0]) : undefined;
-  prepareSourceRelations(group ?? sources, schemas);
-  return sources
+  prepareSourceRelations(group ?? sources, schemas, profile);
+  const result = sources
     .flatMap((source) => sourceRelations(source, schemas))
     .filter((ref) => !relations.has(ref.relation));
+  profile?.('sql-relation-rules');
+  return result;
 }
 
 /** Test-only, exact-name declarations keep historical schemas and negative

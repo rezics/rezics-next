@@ -1,8 +1,21 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join, posix, resolve } from 'node:path';
 import ts from 'typescript-6';
-import { indexedSourceFile, indexedOffsets, indexedSourceNodes, indexedScopedDeclarations } from '../lib/repo-index-ast.ts';
-import { parseSources, repositoryIndex, prepareSql, indexedSql, indexedSource } from '../lib/repo-index.ts';
+import {
+  indexedSourceFile,
+  indexedOffsets,
+  indexedSourceNodes,
+  indexedScopedDeclarations,
+  indexedSqlNodes,
+  indexedTraceNodes,
+} from '../lib/repo-index-ast.ts';
+import {
+  parseSources,
+  repositoryIndex,
+  prepareSql,
+  indexedSql,
+  indexedSource,
+} from '../lib/repo-index.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import type { SqlSource } from './sql-relations.ts';
 
@@ -32,15 +45,20 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'access.event_temporal_checkpoint',
     class: 'projection checkpoint (background)',
-    reason: 'The background Event fold advances finite cold and journal cursors; request writers use scoped publication/window fences and never wait on this writer.',
-    writers: [access + '1769_event_temporal_projection.sql',
+    reason:
+      'The background Event fold advances finite cold and journal cursors; request writers use scoped publication/window fences and never wait on this writer.',
+    writers: [
+      access + '1769_event_temporal_projection.sql',
       access + '1770_event_temporal_relay_backfill.sql',
-      access + '1771_event_temporal_scoped_coverage.sql', main + 'modules/event/projection.ts'],
+      access + '1771_event_temporal_scoped_coverage.sql',
+      main + 'modules/event/projection.ts',
+    ],
   },
   {
     key: 'event-temporal-projection',
     class: 'projection checkpoint (background)',
-    reason: 'Only the background Event fold serializes its bounded cursor turn; request writers and readers never acquire this key.',
+    reason:
+      'Only the background Event fold serializes its bounded cursor turn; request writers and readers never acquire this key.',
     writers: [main + 'modules/event/projection.ts'],
   },
   {
@@ -189,8 +207,7 @@ export const serializationAllowlist: SerializationAllowance[] = [
       access + migration,
       main + writer,
       // The upgrade seeds scan frontiers from the already-completed coverage.
-      ...(relation === 'access.read_ranking_checkpoint'
-        ? [access + '1399_read_rankings.sql'] : []),
+      ...(relation === 'access.read_ranking_checkpoint' ? [access + '1399_read_rankings.sql'] : []),
       ...(relation === 'access.realm_directory_position'
         ? [
             access + '1161_realm_directory_refresh.sql',
@@ -199,10 +216,15 @@ export const serializationAllowlist: SerializationAllowance[] = [
         : []),
       // Offline recovery invalidates the cursor while the owner fence is held.
       ...(relation === 'access.realm_directory_position'
-        ? [main + 'modules/work/access-recovery-coverage.ts', main + 'modules/access/fixture-erasure-recovery.ts'] : []),
+        ? [
+            main + 'modules/work/access-recovery-coverage.ts',
+            main + 'modules/access/fixture-erasure-recovery.ts',
+          ]
+        : []),
       // Held recovery restores scheduler eligibility without a retained live lease.
       ...(relation === 'access.discovery_refresh_catalog'
-        ? [main + 'modules/work/access-recovery-coverage.ts'] : []),
+        ? [main + 'modules/work/access-recovery-coverage.ts']
+        : []),
     ],
   })),
   {
@@ -225,9 +247,12 @@ export const serializationAllowlist: SerializationAllowance[] = [
   {
     relation: 'verification.assessment_producer_gate',
     class: 'operator/startup',
-    reason: 'Only maintenance closes the producer mode and drains in-flight DML with a table SHARE lock; ordinary producers read configuration without gate row locks or generation updates.',
-    writers: [content + '1704_verification_assessment_producer.sql',
-      main + 'modules/verification/store.ts'],
+    reason:
+      'Only maintenance closes the producer mode and drains in-flight DML with a table SHARE lock; ordinary producers read configuration without gate row locks or generation updates.',
+    writers: [
+      content + '1704_verification_assessment_producer.sql',
+      main + 'modules/verification/store.ts',
+    ],
   },
   {
     relation: 'access.recovery_fence',
@@ -357,7 +382,7 @@ function lex(sql: string): Token[] {
   const previous = sqlTokenCache.get(sql);
   if (previous) return previous;
   const offset = indexedOffsets(sql);
-  const result = indexedSql(sql).serializationTokens.flatMap(token => {
+  const result = indexedSql(sql).serializationTokens.flatMap((token) => {
     if (!token.string && !token.quoted && /^[^a-z_0-9$\s]+$/i.test(token.text))
       return [...token.text].map((text, i) => ({ text, offset: offset(token.offset) + i }));
     return [{ ...token, offset: offset(token.offset), literal: token.string }];
@@ -518,30 +543,61 @@ interface SqlFragment extends SqlSource {
   bindings?: Map<string, string>;
 }
 
+let fragmentTimings:
+  | {
+      tree: number;
+      nodes: number;
+      visit: number;
+      initializer: number;
+      files: number;
+      initializers: number;
+    }
+  | undefined;
 const scopeDeclarations = new WeakMap<ts.Node, Map<string, ts.VariableDeclaration[]>>();
+const initializerValues = new WeakMap<ts.Node, Map<string, ts.Expression | undefined>>();
 function initializer(node: ts.Node, name: string): ts.Expression | undefined {
+  const start = fragmentTimings ? performance.now() : 0;
+  try {
+    const values = initializerValues.get(node) ?? new Map();
+    if (values.has(name)) return values.get(name);
+    const value = findInitializer(node, name);
+    values.set(name, value);
+    initializerValues.set(node, values);
+    return value;
+  } finally {
+    if (fragmentTimings) {
+      fragmentTimings.initializer += performance.now() - start;
+      fragmentTimings.initializers++;
+    }
+  }
+}
+function findInitializer(node: ts.Node, name: string): ts.Expression | undefined {
   let scope: ts.Node | undefined = node;
   while (scope) {
     let declarations = scopeDeclarations.get(scope);
     if (!declarations) {
       declarations = new Map();
-      for (const child of indexedScopedDeclarations(scope)) if (child.initializer) {
-        const name = child.name.getText();
-        const entries = declarations.get(name) ?? [];
-        entries.push(child);
-        declarations.set(name, entries);
-      }
+      for (const child of indexedScopedDeclarations(scope))
+        if (child.initializer) {
+          const name = child.name.getText();
+          const entries = declarations.get(name) ?? [];
+          entries.push(child);
+          declarations.set(name, entries);
+        }
       scopeDeclarations.set(scope, declarations);
     }
     const declaration = declarations
       .get(name)
-      ?.find(candidate => candidate.getStart() < node.getStart());
+      ?.find((candidate) => candidate.getStart() < node.getStart());
     if (declaration) return declaration.initializer;
     scope = scope.parent;
   }
   return undefined;
 }
-const expressionValues = new WeakMap<ts.Expression, Map<number, { text: string; constant: boolean }>>();
+const expressionValues = new WeakMap<
+  ts.Expression,
+  Map<number, { text: string; constant: boolean }>
+>();
 function expressionValue(node: ts.Expression, depth = 0): { text: string; constant: boolean } {
   const depths = expressionValues.get(node) ?? new Map();
   const previous = depths.get(depth);
@@ -551,7 +607,10 @@ function expressionValue(node: ts.Expression, depth = 0): { text: string; consta
   expressionValues.set(node, depths);
   return value;
 }
-function computeExpressionValue(node: ts.Expression, depth: number): { text: string; constant: boolean } {
+function computeExpressionValue(
+  node: ts.Expression,
+  depth: number,
+): { text: string; constant: boolean } {
   if (depth > 8) return { text: node.getText(), constant: false };
   if (ts.isStringLiteralLike(node)) return { text: node.text, constant: true };
   if (
@@ -636,7 +695,10 @@ function substituteSymbols(
     },
   );
 }
-const sqlVariantValues = new WeakMap<ts.Expression, Map<number, { text: string; conditions: Condition[] }[]>>();
+const sqlVariantValues = new WeakMap<
+  ts.Expression,
+  Map<number, { text: string; conditions: Condition[] }[]>
+>();
 function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions: Condition[] }[] {
   const depths = sqlVariantValues.get(node) ?? new Map();
   const previous = depths.get(depth);
@@ -646,7 +708,10 @@ function sqlVariants(node: ts.Expression, depth = 0): { text: string; conditions
   sqlVariantValues.set(node, depths);
   return value;
 }
-function computeSqlVariants(node: ts.Expression, depth: number): { text: string; conditions: Condition[] }[] {
+function computeSqlVariants(
+  node: ts.Expression,
+  depth: number,
+): { text: string; conditions: Condition[] }[] {
   if (depth > 8) return [];
   if (ts.isConditionalExpression(node))
     return [true, false].flatMap((truth) =>
@@ -702,16 +767,122 @@ function computeSqlVariants(node: ts.Expression, depth: number): { text: string;
   const value = expressionValue(node);
   return value.constant ? [{ text: value.text, conditions: [] }] : [];
 }
+const sqlOperationLiteral =
+  /\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i;
+function requiresSqlInitializer(node: ts.Expression): boolean {
+  if (ts.isIdentifier(node)) return true;
+  if (ts.isConditionalExpression(node))
+    return requiresSqlInitializer(node.whenTrue) || requiresSqlInitializer(node.whenFalse);
+  if (
+    ts.isParenthesizedExpression(node) ||
+    ts.isAsExpression(node) ||
+    ts.isSatisfiesExpression(node)
+  )
+    return requiresSqlInitializer(node.expression);
+  if (ts.isTemplateExpression(node))
+    return node.templateSpans.some((span) => requiresSqlInitializer(span.expression));
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
+    return requiresSqlInitializer(node.left) || requiresSqlInitializer(node.right);
+  if (ts.isArrayLiteralExpression(node))
+    return node.elements.some((element) => requiresSqlInitializer(element as ts.Expression));
+  if (
+    ts.isPrefixUnaryExpression(node) &&
+    (node.operator === ts.SyntaxKind.MinusToken || node.operator === ts.SyntaxKind.PlusToken)
+  )
+    return requiresSqlInitializer(node.operand);
+  if (
+    ts.isCallExpression(node) &&
+    /^(JSON\.stringify|String|Number|BigInt)$/.test(node.expression.getText()) &&
+    node.arguments.length === 1
+  )
+    return requiresSqlInitializer(node.arguments[0]);
+  return false;
+}
 function sourceFragments(source: SqlSource): SqlFragment[] {
-  const syntax = indexedSource(source).syntax;
+  const indexed = indexedSource(source);
+  const syntax = indexed.syntax;
   // Pure type/constant providers cannot contribute SQL or call effects. Their
   // declarations and relative imports are loaded only when a traced key uses them.
   if (syntax && !syntax.hasSqlQueries && !syntax.hasSqlOperationLiterals) return [];
+  const candidates = indexed.sqlCandidates;
+  if (syntax && !syntax.hasSqlQueries && candidates?.every((candidate) => candidate.literalKind)) {
+    const offset = indexedOffsets(source.text);
+    const templates: ts.TemplateExpression[] = [];
+    let projected = true;
+    if (syntax.hasInterpolatedTemplates) {
+      const outer = candidates.filter(
+        (candidate) =>
+          candidate.interpolated && candidate.enclosingTemplateStart === candidate.start,
+      );
+      const seen = new Set<number>();
+      for (const candidate of outer) {
+        if (seen.has(candidate.start)) continue;
+        seen.add(candidate.start);
+        if (!candidate.templateAst) {
+          projected = false;
+          break;
+        }
+        templates.push(
+          ...indexedSqlNodes(source, candidate.templateAst).filter(ts.isTemplateExpression),
+        );
+      }
+    }
+    if (projected && !templates.some(requiresSqlInitializer)) {
+      // Unrelated logging templates need no file scope. SQL-value identifiers
+      // still use the complete indexed scope to preserve lexical resolution.
+      const entries: { start: number; fragment: SqlFragment }[] = [];
+      for (const candidate of candidates)
+        if (
+          !candidate.interpolated &&
+          !candidate.firstCallArgument &&
+          sqlOperationLiteral.test(candidate.text)
+        )
+          entries.push({
+            start: candidate.start,
+            fragment: {
+              file: source.file,
+              text: candidate.text,
+              line: source.text.slice(0, offset(candidate.start)).split('\n').length,
+              conditions: [],
+            },
+          });
+      const metadata = new Map(
+        candidates
+          .filter((candidate) => candidate.interpolated)
+          .map((candidate) => [offset(candidate.start), candidate]),
+      );
+      for (const node of templates) {
+        const candidate = metadata.get(node.getStart());
+        if (candidate?.firstCallArgument) continue;
+        for (const value of sqlVariants(node))
+          if (sqlOperationLiteral.test(value.text))
+            entries.push({
+              start: candidate?.start ?? node.getStart(),
+              fragment: {
+                file: source.file,
+                ...value,
+                line: node.getSourceFile().getLineAndCharacterOfPosition(node.getStart()).line + 1,
+              },
+            });
+      }
+      return entries.sort((left, right) => left.start - right.start).map((entry) => entry.fragment);
+    }
+  }
+  const treeStart = fragmentTimings ? performance.now() : 0;
   const ast = indexedSourceFile(source);
+  if (fragmentTimings) {
+    fragmentTimings.tree += performance.now() - treeStart;
+    fragmentTimings.files++;
+  }
   const result: SqlFragment[] = [{ file: source.file, text: '', line: 1, ast }];
   const add = (node: ts.Expression, parameters?: ts.Expression[]) => {
     for (const value of sqlVariants(node)) {
-      if (!/\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i.test(value.text)) continue;
+      if (
+        !/\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i.test(
+          value.text,
+        )
+      )
+        continue;
       result.push({
         file: source.file,
         ...value,
@@ -747,7 +918,12 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
       }
     }
   };
-  for (const node of indexedSourceNodes(source)) visit(node);
+  const nodeStart = fragmentTimings ? performance.now() : 0;
+  const nodes = indexedSqlNodes(source);
+  if (fragmentTimings) fragmentTimings.nodes += performance.now() - nodeStart;
+  const visitStart = fragmentTimings ? performance.now() : 0;
+  for (const node of nodes) visit(node);
+  if (fragmentTimings) fragmentTimings.visit += performance.now() - visitStart;
   return result;
 }
 
@@ -965,7 +1141,9 @@ function pathConditions(node: ts.Node): Condition[] {
 // comparisons stay symbolic; disjoint branches must never invent an upgrade.
 const compatibilityResults = new Map<string, boolean>();
 function compatible(conditions: Condition[]): boolean {
-  const key = JSON.stringify(conditions.map(condition => [condition.expression, condition.truth]).sort());
+  const key = JSON.stringify(
+    conditions.map((condition) => [condition.expression, condition.truth]).sort(),
+  );
   const previous = compatibilityResults.get(key);
   if (previous !== undefined) return previous;
   const result = compatibleFormula(conditions);
@@ -1172,11 +1350,17 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
   const fragmentTexts = new Map<string, number>();
   const expand = (fragment: SqlFragment, chain: Set<string>): Effect[] => {
     let text = fragmentTexts.get(fragment.text);
-    if (text === undefined) { text = fragmentTexts.size; fragmentTexts.set(fragment.text, text); }
+    if (text === undefined) {
+      text = fragmentTexts.size;
+      fragmentTexts.set(fragment.text, text);
+    }
     const key = JSON.stringify([
-      text, fragment.file, fragment.line,
+      text,
+      fragment.file,
+      fragment.line,
       fragment.parameters?.map(symbolValue) ?? [],
-      [...(fragment.bindings ?? [])].sort(), [...chain].sort(),
+      [...(fragment.bindings ?? [])].sort(),
+      [...chain].sort(),
     ]);
     const previous = effectValues.get(key);
     if (previous) return previous;
@@ -1194,9 +1378,12 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
         fragment.text.length,
       ]) {
         const text = fragment.text.slice(start, end);
-        sqlTokenCache.set(text, input
-          .filter(token => token.offset >= start && token.offset < end)
-          .map(token => ({ ...token, offset: token.offset - start })));
+        sqlTokenCache.set(
+          text,
+          input
+            .filter((token) => token.offset >= start && token.offset < end)
+            .map((token) => ({ ...token, offset: token.offset - start })),
+        );
         if (text.trim())
           result.push(
             ...expand(
@@ -1264,6 +1451,191 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
   return (fragment) => expand(fragment, new Set());
 }
 
+type NativeFunctionSelection = {
+  functions: Map<string, Set<number | null>>;
+  names: Map<string, string>;
+};
+/** Build the call graph from parser facts before decoding source trees. Defaults
+ * and aliases widen the graph; actual expansion still evaluates the TS rules. */
+function nativeFunctionSelection(
+  sources: SqlSource[],
+  seeds: Set<string>,
+): NativeFunctionSelection | undefined {
+  if (new Set(sources.map((source) => source.file)).size !== sources.length) return;
+  const records = sources.map((source) => ({
+    source,
+    facts: indexedSource(source),
+    offset: indexedOffsets(source.text),
+  }));
+  if (
+    records.some(
+      ({ facts }) =>
+        !facts.functionFacts || !facts.callFacts || !facts.aliases || !facts.namedImports,
+    )
+  )
+    return;
+  const names = new Map<string, string>();
+  const definitions = new Map<
+    string,
+    { file: string; start: number | null; parameters: string[] }
+  >();
+  const imports = new Map<string, Map<string, string>>();
+  const aliases = new Map<
+    string,
+    Map<string, NonNullable<(typeof records)[number]['facts']['aliases']>>
+  >();
+  const recordsByFile = new Map(records.map((record) => [record.source.file, record]));
+  for (const { source, facts, offset } of records) {
+    definitions.set(`${source.file}:module`, { file: source.file, start: null, parameters: [] });
+    for (const fn of facts.functionFacts!) {
+      const id = `${source.file}:${offset(fn.start)}`;
+      definitions.set(id, { file: source.file, start: fn.start, parameters: fn.parameters });
+      if (fn.name)
+        names.set(`${source.file}#${fn.className ? fn.className + '.' : ''}${fn.name}`, id);
+    }
+    const imported = new Map<string, string>();
+    for (const binding of facts.namedImports!)
+      if (binding.source.startsWith('.')) {
+        const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+        imported.set(binding.local, `${module}#${binding.imported}`);
+      }
+    imports.set(source.file, imported);
+    const declarations = new Map<string, NonNullable<typeof facts.aliases>>();
+    for (const alias of facts.aliases!) {
+      const values = declarations.get(alias.name) ?? [];
+      values.push(alias);
+      declarations.set(alias.name, values);
+    }
+    aliases.set(source.file, declarations);
+  }
+  if ([...seeds].some((id) => !definitions.has(id))) return;
+  const functionInitializers = new Map(
+    records.map(({ source, facts }) => [
+      source.file,
+      new Set(facts.functionFacts!.map((fn) => `${fn.start}:${fn.end}`)),
+    ]),
+  );
+  const aliasText = new WeakMap<object, string>();
+  const resolvedNames = new Map<string, Set<string>>();
+  const targets = (file: string, inputs: string[]): Set<string> => {
+    const result = new Set<string>();
+    for (const input of inputs) {
+      const cacheKey = `${file}#${input}`;
+      let resolved = resolvedNames.get(cacheKey);
+      if (!resolved) {
+        resolved = new Set<string>();
+        const seen = new Set<string>(),
+          pending = [input];
+        for (let at = 0; at < pending.length; at++) {
+          const name = pending[at];
+          if (seen.has(name)) continue;
+          seen.add(name);
+          const local = names.get(`${file}#${name}`);
+          const imported = imports.get(file)?.get(name);
+          const id = local ?? (imported && names.get(imported));
+          if (id) resolved.add(id);
+          for (const alias of aliases.get(file)?.get(name) ?? []) {
+            if (
+              functionInitializers
+                .get(file)
+                ?.has(`${alias.initializerStart}:${alias.initializerEnd}`)
+            )
+              continue;
+            pending.push(...alias.references);
+            let text = aliasText.get(alias);
+            if (text === undefined) {
+              const record = recordsByFile.get(file)!;
+              text = record.source.text
+                .slice(record.offset(alias.initializerStart), record.offset(alias.initializerEnd))
+                .replace(/\s+/g, '');
+              aliasText.set(alias, text);
+            }
+            if (text) pending.push(text);
+          }
+        }
+        resolvedNames.set(cacheKey, resolved);
+      }
+      for (const id of resolved) result.add(id);
+    }
+    return result;
+  };
+  const outgoing = new Map<string, Set<string>>(),
+    incoming = new Map<string, Set<string>>();
+  const edge = (from: string, to: string) => {
+    const children = outgoing.get(from) ?? new Set<string>();
+    children.add(to);
+    outgoing.set(from, children);
+    const parents = incoming.get(to) ?? new Set<string>();
+    parents.add(from);
+    incoming.set(to, parents);
+  };
+  for (const { source, facts, offset } of records) {
+    for (const fn of facts.functionFacts!)
+      for (const target of targets(source.file, fn.defaultReferences))
+        edge(`${source.file}:${offset(fn.start)}`, target);
+    for (const call of facts.callFacts!) {
+      if (!call.calleeName) continue;
+      const ownerId =
+        call.functionStart === undefined
+          ? `${source.file}:module`
+          : `${source.file}:${offset(call.functionStart)}`;
+      if (!definitions.has(ownerId)) return;
+      const callee =
+        call.calleeKind === 'this-member'
+          ? `${call.className ?? ''}.${call.calleeName}`
+          : call.calleeName;
+      const local = names.get(`${source.file}#${callee}`),
+        imported = imports.get(source.file)?.get(callee);
+      const target = local ?? (imported && names.get(imported));
+      const importedFile = imported?.slice(0, imported.lastIndexOf('#'));
+      if (
+        !target &&
+        !(importedFile && recordsByFile.has(importedFile)) &&
+        !definitions.get(ownerId)?.parameters.includes(callee)
+      )
+        continue;
+      if (target) edge(ownerId, target);
+      const callbackNames = [...call.argumentNames];
+      for (const span of call.argumentSpans) {
+        if (call.inlineFunctionSpans.some((fn) => fn.start === span.start && fn.end === span.end))
+          continue;
+        callbackNames.push(
+          source.text.slice(offset(span.start), offset(span.end)).replace(/\s+/g, ''),
+        );
+      }
+      for (const target of targets(source.file, callbackNames)) edge(ownerId, target);
+      for (const fn of call.inlineFunctionSpans) {
+        const id = `${source.file}:${offset(fn.start)}`;
+        if (definitions.has(id)) edge(ownerId, id);
+      }
+    }
+  }
+  const relevant = new Set(seeds),
+    callers = [...seeds];
+  for (let at = 0; at < callers.length; at++)
+    for (const id of incoming.get(callers[at]) ?? [])
+      if (!relevant.has(id)) {
+        relevant.add(id);
+        callers.push(id);
+      }
+  const callees = [...relevant];
+  for (let at = 0; at < callees.length; at++)
+    for (const id of outgoing.get(callees[at]) ?? [])
+      if (!relevant.has(id)) {
+        relevant.add(id);
+        callees.push(id);
+      }
+  const functions = new Map<string, Set<number | null>>();
+  for (const id of relevant) {
+    const definition = definitions.get(id);
+    if (!definition) continue;
+    const starts = functions.get(definition.file) ?? new Set<number | null>();
+    starts.add(definition.start);
+    functions.set(definition.file, starts);
+  }
+  return { functions, names };
+}
+
 /** Follow named/imported helpers and inline transaction callbacks. This is a
  * conservative effect analysis, not a proof of arbitrary JavaScript: computed
  * dispatch and runtime SQL remain outside the literal SQL guard's domain. */
@@ -1273,30 +1645,63 @@ function gateUpgrades(
   effects: (fragment: SqlFragment) => Effect[],
   profile?: (phase: string) => void,
 ): SerializationFinding[] {
-  const sourceByFile = new Map(sources.map(source => [source.file, source]));
+  const sourceByFile = new Map(sources.map((source) => [source.file, source]));
   const sourceFiles = new Set(sourceByFile.keys());
-  const seeds = new Set<string>();
-  for (const [file, fragments] of byFile) {
-    if (fragments.some(fragment => fragment.node && ts.isCallExpression(fragment.node.parent) &&
-      fragment.node.parent.arguments[0] === fragment.node && effects(fragment).some(effect =>
-        effect.kind !== 'boundary' && /(?:^|[._])gate$/.test(effect.relation)))) seeds.add(file);
-  }
+  const owner = (node: ts.Node | undefined): ts.Node | undefined => {
+    while (node && !ts.isFunctionLike(node) && !ts.isSourceFile(node)) node = node.parent;
+    return node;
+  };
+  const fragmentEffects = new WeakMap<SqlFragment, Effect[]>();
+  const expandedEffects = (fragment: SqlFragment): Effect[] => {
+    const previous = fragmentEffects.get(fragment);
+    if (previous) return previous;
+    const result = effects(fragment);
+    fragmentEffects.set(fragment, result);
+    return result;
+  };
+  const seeds = new Set<string>(),
+    functionSeeds = new Set<string>();
+  for (const [file, fragments] of byFile)
+    for (const fragment of fragments) {
+      if (
+        !fragment.node ||
+        !ts.isCallExpression(fragment.node.parent) ||
+        fragment.node.parent.arguments[0] !== fragment.node
+      )
+        continue;
+      if (
+        !expandedEffects(fragment).some(
+          (effect) => effect.kind !== 'boundary' && /(?:^|[._])gate$/.test(effect.relation),
+        )
+      )
+        continue;
+      seeds.add(file);
+      const fn = owner(fragment.node);
+      if (fn)
+        functionSeeds.add(ts.isSourceFile(fn) ? `${file}:module` : `${file}:${fn.getStart()}`);
+    }
   if (!seeds.size) return [];
+  const selection = nativeFunctionSelection(sources, functionSeeds);
   const outgoing = new Map<string, Set<string>>();
   const incoming = new Map<string, Set<string>>();
-  let completeGraph = true;
-  for (const source of sources) {
+  let completeGraph = !selection;
+  for (const source of selection ? [] : sources) {
     const indexed = indexedSource(source);
-    if (!indexed.namedImports || !indexed.directCallNames) { completeGraph = false; break; }
+    if (!indexed.namedImports || !indexed.directCallNames) {
+      completeGraph = false;
+      break;
+    }
     const calls = new Set(indexed.directCallNames);
     for (const binding of indexed.namedImports) {
       if (!calls.has(binding.local) || !binding.source.startsWith('.')) continue;
       const target = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
       if (!sourceFiles.has(target)) continue;
       const callees = outgoing.get(source.file) ?? new Set<string>();
-      callees.add(target); outgoing.set(source.file, callees);
+      callees.add(target);
+      outgoing.set(source.file, callees);
       const callers = incoming.get(target) ?? new Set<string>();
-      callers.add(source.file); incoming.set(target, callers);
+      callers.add(source.file);
+      incoming.set(target, callers);
     }
   }
   // Only callers of a gate effect can produce an upgrade. Include all their
@@ -1304,17 +1709,27 @@ function gateUpgrades(
   const relevant = new Set(seeds);
   if (completeGraph) {
     const callers = [...relevant];
-    for (let index = 0; index < callers.length; index++) for (const file of incoming.get(callers[index]) ?? []) {
-      if (!relevant.has(file)) { relevant.add(file); callers.push(file); }
-    }
+    for (let index = 0; index < callers.length; index++)
+      for (const file of incoming.get(callers[index]) ?? []) {
+        if (!relevant.has(file)) {
+          relevant.add(file);
+          callers.push(file);
+        }
+      }
     const callees = [...relevant];
-    for (let index = 0; index < callees.length; index++) for (const file of outgoing.get(callees[index]) ?? []) {
-      if (!relevant.has(file)) { relevant.add(file); callees.push(file); }
-    }
+    for (let index = 0; index < callees.length; index++)
+      for (const file of outgoing.get(callees[index]) ?? []) {
+        if (!relevant.has(file)) {
+          relevant.add(file);
+          callees.push(file);
+        }
+      }
   }
-  profile?.(`gate-files:${completeGraph ? relevant.size : sources.length}/${sources.length}`);
+  profile?.(
+    `gate-files:${selection ? selection.functions.size : completeGraph ? relevant.size : sources.length}/${sources.length}`,
+  );
   const traces = new Map<string, FunctionTrace>();
-  const named = new Map<string, string>();
+  const named = new Map(selection?.names);
   const imports = new Map<string, Map<string, string>>();
   const functionNodes = new Map<ts.Node, string>();
   const loadImports = (source: SqlSource): Map<string, string> => {
@@ -1324,28 +1739,44 @@ function gateUpgrades(
     imports.set(source.file, values);
     const namedImports = indexedSource(source).namedImports;
     if (namedImports) {
-      for (const binding of namedImports) if (binding.source.startsWith('.')) {
-        const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
-        values.set(binding.local, `${module}#${binding.imported}`);
-      }
+      for (const binding of namedImports)
+        if (binding.source.startsWith('.')) {
+          const module = posix.normalize(posix.join(posix.dirname(source.file), binding.source));
+          values.set(binding.local, `${module}#${binding.imported}`);
+        }
       return values;
     }
     for (const node of indexedSourceNodes(source)) {
-      if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier) || !node.moduleSpecifier.text.startsWith('.')) continue;
-      const module = posix.normalize(posix.join(posix.dirname(source.file), node.moduleSpecifier.text));
+      if (
+        !ts.isImportDeclaration(node) ||
+        !ts.isStringLiteral(node.moduleSpecifier) ||
+        !node.moduleSpecifier.text.startsWith('.')
+      )
+        continue;
+      const module = posix.normalize(
+        posix.join(posix.dirname(source.file), node.moduleSpecifier.text),
+      );
       const bindings = node.importClause?.namedBindings;
-      if (bindings && ts.isNamedImports(bindings)) for (const binding of bindings.elements) {
-        values.set(binding.name.text, `${module}#${binding.propertyName?.text ?? binding.name.text}`);
-      }
+      if (bindings && ts.isNamedImports(bindings))
+        for (const binding of bindings.elements) {
+          values.set(
+            binding.name.text,
+            `${module}#${binding.propertyName?.text ?? binding.name.text}`,
+          );
+        }
     }
     return values;
   };
-  const owner = (node: ts.Node | undefined): ts.Node | undefined => {
-    while (node && !ts.isFunctionLike(node) && !ts.isSourceFile(node)) node = node.parent;
-    return node;
-  };
   for (const source of sources) {
-    if (completeGraph && !relevant.has(source.file)) continue;
+    if (
+      selection
+        ? !selection.functions.has(source.file)
+        : completeGraph && !relevant.has(source.file)
+    )
+      continue;
+    const selectedNodes = selection
+      ? indexedTraceNodes(source, selection.functions.get(source.file)!)
+      : indexedSourceNodes(source);
     const fragments = byFile.get(source.file) ?? [];
     const ast = fragments[0]?.ast ?? indexedSourceFile(source);
     const moduleId = `${source.file}:module`;
@@ -1394,10 +1825,11 @@ function gateUpgrades(
           ),
           events: [],
         });
-        if (name) named.set(`${source.file}#${className ? className + '.' : ''}${name}`, id);
+        if (name && !selection)
+          named.set(`${source.file}#${className ? className + '.' : ''}${name}`, id);
       }
     };
-    for (const node of indexedSourceNodes(source)) visit(node);
+    for (const node of selectedNodes) visit(node);
     // Module-level SQL constants are checked for serialization above, but only
     // their invocation belongs to a transaction's effect trace.
     for (const fragment of fragments) {
@@ -1409,7 +1841,7 @@ function gateUpgrades(
         continue;
       const id = functionNodes.get(owner(fragment.node)!);
       if (!id) continue;
-      for (const effect of effects(fragment)) {
+      for (const effect of expandedEffects(fragment)) {
         if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
         traces.get(id)!.events.push({
           effect: {
@@ -1443,8 +1875,12 @@ function gateUpgrades(
           // A transaction callback executes where the helper calls its run/work
           // parameter, after BEGIN and the initial exclusive fences.
           const imported = call && fileImports.get(call);
-          const knownImport = imported && sourceFiles.has(imported.slice(0, imported.lastIndexOf('#')));
-          if (call && (named.has(`${source.file}#${call}`) || knownImport || trace.parameters.includes(call)))
+          const knownImport =
+            imported && sourceFiles.has(imported.slice(0, imported.lastIndexOf('#')));
+          if (
+            call &&
+            (named.has(`${source.file}#${call}`) || knownImport || trace.parameters.includes(call))
+          )
             trace.events.push({
               call,
               args: node.arguments.map(
@@ -1456,7 +1892,7 @@ function gateUpgrades(
         }
       }
     };
-    for (const node of indexedSourceNodes(source)) calls(node);
+    for (const node of selectedNodes) calls(node);
   }
   profile?.('gate-traces');
   const embeddedCallbacks = new Set<string>();
@@ -1489,19 +1925,21 @@ function gateUpgrades(
     let declarations = moduleDeclarations.get(file);
     if (!declarations) {
       declarations = new Map();
-      for (const node of indexedScopedDeclarations(ast)) if (node.initializer) {
-        const name = node.name.getText(ast);
-        const entries = declarations.get(name) ?? [];
-        entries.push(node);
-        declarations.set(name, entries);
-      }
+      for (const node of indexedScopedDeclarations(ast))
+        if (node.initializer) {
+          const name = node.name.getText(ast);
+          const entries = declarations.get(name) ?? [];
+          entries.push(node);
+          declarations.set(name, entries);
+        }
       moduleDeclarations.set(file, declarations);
     }
     let value: string | undefined;
     for (const declaration of declarations.get(name) ?? []) {
       const resolved = expressionValue(declaration.initializer!);
       if (resolved.constant) value = symbolValue(declaration.initializer!);
-      else if (declaration.initializer && ts.isIdentifier(declaration.initializer)) value = constant(file, declaration.initializer.text, next);
+      else if (declaration.initializer && ts.isIdentifier(declaration.initializer))
+        value = constant(file, declaration.initializer.text, next);
     }
     constants.set(key, value);
     return value;
@@ -1574,22 +2012,29 @@ function gateUpgrades(
       const targets = [
         event.call,
         named.get(`${trace.file}#${event.call}`),
+        named.get(`${trace.file}#${trace.defaults.get(event.call)}`),
         imported ? named.get(imported) : undefined,
-        ...event.args.flatMap(argument => [argument, named.get(`${trace.file}#${argument}`)]),
+        ...event.args.flatMap((argument) => [
+          argument,
+          named.get(`${trace.file}#${argument}`),
+          named.get(`${trace.file}#${trace.defaults.get(argument)}`),
+        ]),
       ];
-      for (const target of targets) if (target && traces.has(target)) {
-        const callers = parents.get(target) ?? new Set<string>();
-        callers.add(trace.id);
-        parents.set(target, callers);
-      }
+      for (const target of targets)
+        if (target && traces.has(target)) {
+          const callers = parents.get(target) ?? new Set<string>();
+          callers.add(trace.id);
+          parents.set(target, callers);
+        }
     }
   }
   const pending = [...writes];
   for (let index = 0; index < pending.length; index++) {
-    for (const parent of parents.get(pending[index]) ?? []) if (!writes.has(parent)) {
-      writes.add(parent);
-      pending.push(parent);
-    }
+    for (const parent of parents.get(pending[index]) ?? [])
+      if (!writes.has(parent)) {
+        writes.add(parent);
+        pending.push(parent);
+      }
   }
   const findings: SerializationFinding[] = [];
   for (const trace of traces.values()) {
@@ -1622,23 +2067,38 @@ export function serializationFindings(
   }
   parseSources(sources);
   profile?.('source-index');
-  prepareSql(migrations.map(source => source.text));
+  prepareSql(migrations.map((source) => source.text));
   // Loading each migration registers its indexed dollar bodies before asking
   // for procedural fragments, so they reuse the parent parse rather than spawn.
   for (const source of migrations) indexedSql(source.text);
-  prepareSql(migrations.flatMap(source => [
-    source.text,
-    ...[...source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)]
-      .map(body => body[2]),
-  ]));
+  prepareSql(
+    migrations.flatMap((source) => [
+      source.text,
+      ...[...source.text.matchAll(/(?:AS|DO)\s+(\$[a-z_0-9]*\$)([\s\S]*?)\1/gi)].map(
+        (body) => body[2],
+      ),
+    ]),
+  );
   profile?.('sql-index');
   const singletons = singletonTables(migrations),
     findings: SerializationFinding[] = [];
   profile?.('singletons');
-  const bySource = new Map(sources.map(source => [source, sourceFragments(source)]));
+  const detail = profile
+    ? { tree: 0, nodes: 0, visit: 0, initializer: 0, files: 0, initializers: 0 }
+    : undefined;
+  let bySource: Map<SqlSource, SqlFragment[]>;
+  fragmentTimings = detail;
+  try {
+    bySource = new Map(sources.map((source) => [source, sourceFragments(source)]));
+  } finally {
+    fragmentTimings = undefined;
+  }
   profile?.('source-fragments');
-  const byFile = new Map(sources.map(source => [source.file, bySource.get(source)!]));
-  prepareSql([...bySource.values()].flatMap(fragments => fragments.map(fragment => fragment.text)));
+  if (detail) profile?.(`fragment-detail:${JSON.stringify(detail)}`);
+  const byFile = new Map(sources.map((source) => [source.file, bySource.get(source)!]));
+  prepareSql(
+    [...bySource.values()].flatMap((fragments) => fragments.map((fragment) => fragment.text)),
+  );
   profile?.('fragment-index');
   const allowed = (target: string, file: string, key = false) =>
     allowlist.some(
