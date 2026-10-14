@@ -59,8 +59,12 @@ test('resource Query re-pins a moving read basis and ignores unrelated populatio
     await command('/v1/discovery/generation-activations', { profile: 'discovery-generation-activation-v1',
       actingSubject: author.actor, generation: scoped.generation, expectedHeadRevision: null });
 
+    let newWork: string | undefined;
     for (const scope of [{ kind: 'all' }, { kind: 'realm', realm: space.realm }] as const)
     for (const phase of ['baseline', 'opening', 'selection'] as const) {
+      if (scope.kind === 'all' && phase === 'opening') {
+        newWork = (await stack.publicWork(author.actor, ['en'], `${phrase} new original`)).work;
+      }
       let moved = false;
       stack.fuseki.query = async (body, maxBytes) => {
         const answer = await original(body, maxBytes);
@@ -84,6 +88,7 @@ test('resource Query re-pins a moving read basis and ignores unrelated populatio
       const page = JSON.parse(body) as { result: { items: { id: string }[] } };
       expect(page.result.items.map(item => item.id), phase).toContain(work.work);
       expect(page.result.items.map(item => item.id), phase).toContain(space.realm);
+      if (scope.kind === 'all' && newWork) expect(page.result.items.map(item => item.id), phase).toContain(newWork);
       stack.fuseki.query = original;
     }
   } finally {

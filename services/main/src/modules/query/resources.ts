@@ -752,11 +752,17 @@ async function readResourceListAtPosition(
           ]
         : [];
     });
-    const projectedWorks = await session.deps.discovery!.resourceMembership(
-      active,
-      admitted.filter((row) => row.kind === 'work').map((row) => row.id),
-    );
-    let projected = admitted.filter((row) => row.kind !== 'work' || projectedWorks.has(row.id));
+    // Native names and the current publication/scope predicate already admit
+    // these identities. Discovery membership is needed only when a Concept
+    // condition consumes that retained relation; projection lag cannot erase
+    // a newly published matching Work from an ordinary resource search.
+    const projectedWorks = conditions.some(condition => condition.facet === 'concept')
+      ? await session.deps.discovery!.resourceMembership(
+          active,
+          admitted.filter((row) => row.kind === 'work').map((row) => row.id),
+        ) : null;
+    let projected = projectedWorks
+      ? admitted.filter((row) => row.kind !== 'work' || projectedWorks.has(row.id)) : admitted;
     const concepts = projected.filter((row) => row.kind === 'concept');
     if (concepts.length) {
       const counts = new Map(
