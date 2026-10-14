@@ -64,9 +64,9 @@ async function requireClosure(person: PersonaSession) {
 
 async function independent(person: PersonaSession) {
   for (const publication of publications) {
-    await answer(person.main('GET', `/v1/works/${short(publication.work)}`));
+    await answer(person.main('GET', `/v1/works/${short(publication.work)}?${acting(person)}`));
     const credits = await answer<{ items: { agent: string; role: string }[] }>(
-      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits`),
+      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits?${acting(person)}`),
     );
     expect(credits.items).toContainEqual(
       expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }),
@@ -184,6 +184,8 @@ afterAll(async () => {
 function storyQuery(kind: RealmSearchState, cursor?: string) {
   const fixture = realmSearchFixture(kind);
   return { ...fixture.query,
+    // The live corpus has two matching originals, not the story's sample title.
+    q: kind === 'empty' ? fixture.query.q : phrase, limit: 1,
     ...(fixture.state.scope.kind === 'realm'
       ? { context: { realm: sessions.realm }, scope: { kind: 'realm' as const, realm: sessions.realm } } : {}),
     ...(cursor ? { cursor } : {}),

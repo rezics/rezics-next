@@ -83,6 +83,10 @@ beforeAll(async () => {
     await closureRole(sessions, sessions.moderator, ['review.decide', 'publication.adopt']);
     await closureRole(sessions, sessions.owner, ['review.decide', 'publication.adopt']);
     await closureRole(live, live.moderator, ['review.decide', 'publication.adopt']);
+    // Thread watches admit an existing placement, before subsequent replies
+    // produce the retained notifications under test.
+    await closureReply(sessions, original, 'Initial closed-Realm thread placement.');
+    await closureReply(live, control, 'Initial independent thread placement.');
     for (const name of recipients) {
       await closureCommand(sessions[name], 'PUT', '/v1/me/notification-endpoints/push', {
         profile: 'notification-endpoint-v1', deviceId: 'closure-fixture',

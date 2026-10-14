@@ -30,6 +30,7 @@ import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
 import type { CanonicalAddress } from '@rezics/model/address';
 import { canonicalAddresses } from '../address/canonical.ts';
 import { readZoneVisibility } from './route-visibility.ts';
+import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { slideIsCurrent } from './showcase-disclosure.ts';
 export { ZONE_ROUTE_COST } from './route-cost.ts';
 
@@ -230,7 +231,7 @@ class RouteRead {
     if (!state.realm) return state;
     const target = state.realm;
     const readable = await this.dependency(`zone-realm:${target}`, async () => {
-      try { await this.scopeSession.realm(target); return true; }
+      try { await readRealmBasis(this.scopeSession, target); return true; }
       catch (error) {
         if (error instanceof WorkReadMissing) return false;
         throw error;

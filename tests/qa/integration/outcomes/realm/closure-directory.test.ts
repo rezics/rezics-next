@@ -77,7 +77,8 @@ beforeAll(async () => {
   live = await personaSessions('public');
   await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
-    const response = await closed[name].main('POST', '/v1/query', directoryBody);
+    const response = await closed[name].main('POST', '/v1/query', directoryBody, undefined,
+      { headers: { 'accept-language': 'en' } });
     expect(response.status).toBe(200);
     const { result } = await response.json() as { result: Page };
     expect(result.nextCursor).not.toBeNull();
@@ -103,10 +104,21 @@ async function storyReads(name: PersonaName) {
   const read = (label: string, body: ReturnType<typeof browseQuery>) =>
     discoveryApi(recordedMainClient(recording, name, closed[name], label), 'en').resources(body);
   // The production directory sends no actingSubject, including authenticated visits.
-  const page = await read('directory', directoryBody);
-  expect(page.items.map(item => item.id)).not.toContain(closed.realm);
-  expect(page.nextCursor).not.toBeNull();
-  await read('directory-continuation', browseQuery({ ...directoryState, cursor: page.nextCursor }, 1));
+  const deadline = performance.now() + 30_000;
+  for (;;) {
+    const page = await read('directory', directoryBody);
+    expect(page.items.map(item => item.id)).not.toContain(closed.realm);
+    expect(page.nextCursor).not.toBeNull();
+    try {
+      await read('directory-continuation', browseQuery({ ...directoryState, cursor: page.nextCursor }, 1));
+      break;
+    } catch (error) {
+      // A live projection can move after the first page; execute its declared
+      // restart and still prove the continuation phase on a current basis.
+      if (!(error instanceof BrowseReadError) || error.status !== 409 || error.code !== 'read_basis_changed') throw error;
+      expect(performance.now(), 'Directory continuation must obtain a stable basis').toBeLessThan(deadline);
+    }
+  }
   const empty = await read('directory-empty', browseQuery({ ...directoryState, q: 'no-matching-live-realms' }, 1));
   expect(empty.items).toEqual([]);
   const filtered = await read('directory-filtered', browseQuery({ ...directoryState, q: 'Original',

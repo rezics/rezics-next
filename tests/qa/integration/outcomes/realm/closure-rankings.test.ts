@@ -52,9 +52,9 @@ async function requireClosure(person: PersonaSession) {
 
 async function independent(person: PersonaSession) {
   for (const publication of publications) {
-    await answer(person.main('GET', `/v1/works/${short(publication.work)}`));
+    await answer(person.main('GET', `/v1/works/${short(publication.work)}?${acting(person)}`));
     const credits = await answer<{ items: { agent: string; role: string }[] }>(
-      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits`),
+      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits?${acting(person)}`),
     );
     expect(credits.items).toContainEqual(
       expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }),
@@ -92,7 +92,8 @@ async function delivered(name: PersonaName) {
     await missing(person, `${root}${suffix}${query}`, `${absent}${suffix}${query}`);
   }
   for (const path of ['/v1/rankings/trending', '/v1/trending?scope=global']) {
-    const page = await answer<unknown>(person.main('GET', path));
+    const query = path.startsWith('/v1/trending?') && person.actingSubject ? `&${acting(person)}` : '';
+    const page = await answer<unknown>(person.main('GET', path + query));
     const bytes = JSON.stringify(page);
     expect(bytes).not.toContain(sessions.realm);
     for (const publication of publications) expect(bytes).not.toContain(publication.selection);

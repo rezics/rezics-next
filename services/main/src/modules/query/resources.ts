@@ -1,4 +1,5 @@
 import { listResult } from '../../api-list.ts';
+import { readRealmBasis } from '../realm-reads/read-realm.ts';
 import { GRAPHS, iri, lit } from '../work/activate.ts';
 import {
   publicWork,
@@ -415,7 +416,7 @@ async function readResourceListAtPosition(
   const limit = input.limit ?? 20,
     q = input.q?.trim() ?? '';
   const realm = input.scope.kind === 'realm' ? input.scope.realm : undefined;
-  if (realm && (await session.realm(realm)).visibility !== 'public')
+  if (realm && (await readRealmBasis(session, realm)).visibility !== 'public')
     throw new WorkReadInvalid('Scope is not public');
   const binding = [
     'resource-list-v2',

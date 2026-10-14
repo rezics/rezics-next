@@ -336,7 +336,7 @@ export async function closureRole(sessions: PersonaSessions, holder: PersonaSess
   const owner = sessions.owner;
   const roleId = randomUUID();
   for (const change of [
-    { kind: 'role', roleId, name: 'Original fixture editors', permissions },
+    { kind: 'role', roleId, name: `Original fixture editors ${roleId}`, permissions },
     { kind: 'assignment', roleId, member: holder.actingSubject, assigned: true,
       validUntil: new Date(Date.now() + 3_600_000).toISOString() },
   ]) {

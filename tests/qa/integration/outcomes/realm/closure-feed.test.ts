@@ -41,9 +41,9 @@ async function requireClosure(person: PersonaSession) {
 
 async function independent(person: PersonaSession) {
   for (const publication of publications) {
-    await answer(person.main('GET', `/v1/works/${short(publication.work)}`));
+    await answer(person.main('GET', `/v1/works/${short(publication.work)}?${acting(person)}`));
     const credits = await answer<{ items: { agent: string; role: string }[] }>(
-      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits`),
+      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits?${acting(person)}`),
     );
     expect(credits.items).toContainEqual(
       expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }),
@@ -72,9 +72,11 @@ async function feed(person: PersonaSession, scope: 'all' | 'following', realm?: 
 async function prepareSurface() {
   for (const name of ['stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     const person = sessions[name];
+    const current = await answer<{ revision: string | null }>(person.main('GET',
+      `/v1/me/follow-state?target=${encodeURIComponent(sessions.realm)}&${acting(person)}`));
     await answer(person.main('POST', '/v1/follows', {
       profile: 'follow-command-v1', target: sessions.realm,
-      actingSubject: person.actingSubject, following: true, level: 'all', expectedRevision: null,
+      actingSubject: person.actingSubject, following: true, level: 'all', expectedRevision: current.revision,
     }));
   }
   const baseline = await feed(sessions.visitor, 'all', sessions.realm);
