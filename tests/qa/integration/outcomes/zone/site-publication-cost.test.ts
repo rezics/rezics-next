@@ -226,15 +226,20 @@ test('equivalent admitted 8, 16 and 32 page publications complete with exact rec
   expect(sessions).toBeDefined();
   expect(httpBoundaryQualified).toBe(true);
   const owner = sessions!.owner, results: Array<{ count: number; status: number }> = [];
+  const siteStarted = performance.now();
+  // Persona setup uses two of the creator's three monthly Space admissions.
+  // Publication scaling reuses one lawfully created Zone, not another quota.
+  const created = await answer<Created>(owner.main('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Publication cost',
+    language: 'en', visibility: 'public', capabilities: ['zone'], actingSubject: owner.actingSubject }), 201);
+  const path = `/v1/zones/${created.zone.slice(-36)}`;
+  const prepared = await answer<{ revision: string }>(owner.main('PUT', `${path}/configuration`, {
+    expectedHead: created.zoneRevision, prepareHomeDocument: true, actingSubject: owner.actingSubject }));
+  const configuration = await answer<{ configuration: { homeDocument: string } }>(owner.main('GET',
+    `${path}/configuration?actingSubject=${encodeURIComponent(owner.actingSubject!)}`));
+  const sitePreparationMs = performance.now() - siteStarted;
+  let expectedHead = prepared.revision, priorPageCount = 0;
   for (const count of [8, 16, 32]) {
     const prepStarted = performance.now();
-    const created = await answer<Created>(owner.main('POST', '/v1/spaces', { profile: 'space-zone-v1', name: 'Publication cost',
-      language: 'en', visibility: 'public', capabilities: ['zone'], actingSubject: owner.actingSubject }), 201);
-    const path = `/v1/zones/${created.zone.slice(-36)}`;
-    const prepared = await answer<{ revision: string }>(owner.main('PUT', `${path}/configuration`, {
-      expectedHead: created.zoneRevision, prepareHomeDocument: true, actingSubject: owner.actingSubject }));
-    const configuration = await answer<{ configuration: { homeDocument: string } }>(owner.main('GET',
-      `${path}/configuration?actingSubject=${encodeURIComponent(owner.actingSubject!)}`));
     const pages: Page[] = [], drafts = [];
     for (let index = 0; index < count; index += 4) {
       const saved = await Promise.all(Array.from({ length: 4 }, async (_, offset) => {
@@ -250,11 +255,11 @@ test('equivalent admitted 8, 16 and 32 page publications complete with exact rec
         revisionId: response.revisionId, byteDigest: response.byteDigest, contentEpoch: response.sourcePosition.dataEpoch })));
     }
     const preparationMs = performance.now() - prepStarted;
-    const body = { expectedHead: prepared.revision, actingSubject: owner.actingSubject,
+    const body = { expectedHead, actingSubject: owner.actingSubject,
       routesRevision: created.navigationRevision, navigationRevision: created.navigationRevision, pages };
     const key = randomUUID();
     const measured = await measureHttp(String(count), { method: 'POST', path: `${path}/site-publications`, key, body },
-      { preparationMs, setupMs: sessions!.elapsedSeconds * 1000, drafts });
+      { preparationMs, sitePreparationMs, setupMs: sessions!.elapsedSeconds * 1000, priorPageCount, drafts });
     const sql = measured.statements, graphReads = measured.graph.filter(statement => statement.method === 'query');
     const sqlResults = sql.flatMap(statement => statement.results ?? []);
     const writes = sqlResults.filter(result => ['INSERT', 'UPDATE', 'DELETE'].includes(result.command));
@@ -268,7 +273,8 @@ test('equivalent admitted 8, 16 and 32 page publications complete with exact rec
       nativeWork: measured.profile.nativeVisits };
     const responseBody = JSON.parse(measured.rawBody) as ZoneSitePublicationReceipt;
     await Bun.write(artifact(String(count)), JSON.stringify({ phase, source, runId: process.env.REZICS_QA_RUN_ID,
-      count, preparationMs, setupMs: sessions!.elapsedSeconds * 1000, elapsedMs: measured.elapsedMs,
+      count, preparationMs, sitePreparationMs, priorPageCount,
+      setupMs: sessions!.elapsedSeconds * 1000, elapsedMs: measured.elapsedMs,
       request: { method: 'POST', path: `${path}/site-publications`, key, body },
       response: { status: measured.status, rawBody: measured.rawBody, body: responseBody }, drafts, totals,
       perPage: Object.fromEntries(Object.entries(totals).filter(([, value]) => typeof value === 'number' || value === null)
@@ -283,6 +289,8 @@ test('equivalent admitted 8, 16 and 32 page publications complete with exact rec
         ...page, language: 'en' }))));
       expect(responseBody.homeDocument).toBe(configuration.configuration.homeDocument);
       expect(measured.graph.filter(statement => statement.method === 'command')).toHaveLength(1);
+      expectedHead = responseBody.revision;
+      priorPageCount = count;
     }
     results.push({ count, status: measured.status });
   }
