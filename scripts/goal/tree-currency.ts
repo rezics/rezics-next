@@ -21,27 +21,44 @@ function workerBranch(cwd: string): string | undefined {
 
 const HARNESS_PATHS = ['scripts/goal/', 'scripts/qa/', 'tests/qa/support/'];
 
-/** Ancestry, rather than a patch comparison, detects whether this tree has main's last harness fix. */
+/** Follow a local wave only while HEAD shares wave work that has not reached main. */
+export function worktreeBase(cwd: string): string {
+  const main = git(cwd, ['rev-parse', 'main']);
+  const waves = git(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/wave/']).split('\n').filter(Boolean);
+  for (const wave of waves) {
+    const base = spawnSync('git', ['merge-base', 'HEAD', wave], { cwd, encoding: 'utf8' });
+    if (base.status === 1) continue; // An unrelated local wave carries none of this branch's work.
+    if (base.status !== 0) throw new Error(base.stderr);
+    const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', base.stdout.trim(), main], { cwd, encoding: 'utf8' });
+    if (ancestor.status === 1) return wave;
+    if (ancestor.status !== 0) throw new Error(ancestor.stderr);
+  }
+  return 'main';
+}
+
+/** Ancestry, rather than a patch comparison, detects whether this tree has its base's last harness fix. */
 export function warnHarnessCurrency(cwd: string, print: (line: string) => void = console.log): number {
   if (!workerBranch(cwd)) return 0;
-  const main = git(cwd, ['rev-parse', 'main']);
-  const last = git(cwd, ['log', '-1', '--format=%H', main, '--', ...HARNESS_PATHS]);
+  const base = worktreeBase(cwd);
+  const head = git(cwd, ['rev-parse', base]);
+  const last = git(cwd, ['log', '-1', '--format=%H', head, '--', ...HARNESS_PATHS]);
   if (!last) return 0;
   const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', last, 'HEAD'], { cwd, encoding: 'utf8' });
   if (ancestor.status === 0) return 0;
   if (ancestor.status !== 1) throw new Error(ancestor.stderr);
-  const count = Number(git(cwd, ['rev-list', '--count', `HEAD..${main}`, '--', ...HARNESS_PATHS]));
-  print(`Harness: ${count} commits behind main; a harness failure on this tree may already be fixed. Commit your changes, run task goal -- check or rebase onto main, and run again.`);
+  const count = Number(git(cwd, ['rev-list', '--count', `HEAD..${head}`, '--', ...HARNESS_PATHS]));
+  print(`Harness: ${count} commits behind ${base}; a harness failure on this tree may already be fixed. Commit your changes, run task goal -- check or rebase onto ${base}, and run again.`);
   return count;
 }
 
 export interface WorktreeUpdate { before: string; after: string; failed: boolean; line: string }
 
-/** Resume and check use the same snapshot of main, with no autostash and no updates to other refs. */
+/** Resume and check use the same base snapshot, with no autostash and no updates to other refs. */
 export function updateWorktree(cwd: string, id: string, liveSharers: readonly string[] = []): WorktreeUpdate {
   const before = git(cwd, ['rev-parse', 'HEAD']);
-  const main = git(cwd, ['rev-parse', 'main']);
-  const behind = Number(git(cwd, ['rev-list', '--count', `${before}..${main}`]));
+  const base = worktreeBase(cwd);
+  const head = git(cwd, ['rev-parse', base]);
+  const behind = Number(git(cwd, ['rev-list', '--count', `${before}..${head}`]));
   let action: string;
   let failed = false;
   if (liveSharers.length) {
@@ -50,11 +67,11 @@ export function updateWorktree(cwd: string, id: string, liveSharers: readonly st
     action = 'left alone: uncommitted changes';
   } else if (!behind) {
     action = 'already current';
-  } else if (git(cwd, ['rev-list', '--count', `${main}..${before}`]) === '0') {
-    git(cwd, ['merge', '--ff-only', main]);
+  } else if (git(cwd, ['rev-list', '--count', `${head}..${before}`]) === '0') {
+    git(cwd, ['merge', '--ff-only', head]);
     action = 'fast-forwarded';
   } else {
-    const rebased = spawnSync('git', ['rebase', '--no-autostash', '--no-update-refs', main], {
+    const rebased = spawnSync('git', ['rebase', '--no-autostash', '--no-update-refs', head], {
       cwd, encoding: 'utf8', env: { ...process.env, GIT_EDITOR: 'true', GIT_SEQUENCE_EDITOR: 'true' },
     });
     if (rebased.status === 0) {
@@ -68,7 +85,7 @@ export function updateWorktree(cwd: string, id: string, liveSharers: readonly st
     }
   }
   const after = git(cwd, ['rev-parse', 'HEAD']);
-  return { before, after, failed, line: `${id} worktree: ${before} -> ${after}; ${behind} commits behind main; ${action}` };
+  return { before, after, failed, line: `${id} worktree: ${before} -> ${after}; ${behind} commits behind ${base}; ${action}` };
 }
 
 export function prepareCheckTree(cwd: string, print: (line: string) => void = console.log): WorktreeUpdate | undefined {

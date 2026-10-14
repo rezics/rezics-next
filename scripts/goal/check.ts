@@ -10,7 +10,7 @@ import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaMode
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { selectSurface, runSurfaceGate } from './surface-gate.ts';
-import { prepareCheckTree } from './tree-currency.ts';
+import { prepareCheckTree, worktreeBase } from './tree-currency.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
 export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection' | 'currency';
@@ -32,7 +32,7 @@ function gitOutput(cwd: string, args: string[]): string {
 
 /** Diffing the base directly includes staged and unstaged edits; untracked source files are not in that diff. */
 export function checkChangedFiles(cwd: string): string[] {
-  const base = gitOutput(cwd, ['merge-base', 'HEAD', 'main']).trim();
+  const base = gitOutput(cwd, ['merge-base', 'HEAD', worktreeBase(cwd)]).trim();
   return [...new Set([
     ...gitOutput(cwd, ['diff', '--no-renames', '--name-only', '-z', base, '--']).split('\0'),
     ...gitOutput(cwd, ['ls-files', '--others', '--exclude-standard', '-z']).split('\0'),

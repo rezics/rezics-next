@@ -20,7 +20,7 @@ export function recordResumeHead(task: Task): void {
 }
 
 /** Called under the ledger lock after launch admission, before staging or starting the worker. The
- * snapshot of main makes the count and update describe the same revision even if main moves again. */
+ * base snapshot makes the count and update describe the same revision even if the branch moves again. */
 export function updateResumeWorktree(task: Task, liveSharers: readonly Task[]): string {
   return updateWorktree(task.worktree, task.id, liveSharers.map(sharer => sharer.id)).line;
 }
