@@ -14,7 +14,7 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { messages } from '../zones/messages.ts';
 import { zoneSitePrefix } from '../zones/zone-site-recorded-page.ts';
-import { zoneHomeDocument } from './home-document.tsx';
+import { zoneHomeDocument, zoneHomeProse, type ZoneHomePage } from './home-document.tsx';
 import { messages as editorMessages } from './messages.ts';
 import { zoneEditorPath } from './routes.ts';
 import { ZonePublicationCommandPage, ZonePublicationManagementPage, ZonePublicationRecordedPage } from './zone-publication-recorded-page.tsx';
@@ -47,10 +47,27 @@ function recordedName(persona: AnswerPersona, label: string): string {
   return name;
 }
 
+function recordedPage(persona: AnswerPersona, label: string): ZoneHomePage {
+  const home = answerOf(persona, label).home;
+  if (!zoneHomeDocument(home)) throw new Error(`Recorded ${persona}/${label} has no home document`);
+  return home as ZoneHomePage;
+}
+
+/** Slides the public home promotes in place of a resolved default Showcase. An empty slide list leaves the fallback in the prose. */
+function promotedSlides(page: ZoneHomePage): { title: string; href: string }[] {
+  const showcase = page.showcases?.find(item => item.id === '$default' && item.module === null);
+  if (!showcase || !page.showcaseData) return [];
+  return (showcase.slides ?? page.showcaseData.slides).flatMap(slide =>
+    typeof slide.title === 'string' && slide.title && 'href' in slide && typeof slide.href === 'string'
+      ? [{ title: slide.title, href: slide.href }] : []);
+}
+
 function recordedLines(persona: AnswerPersona, label: string): string[] {
-  const document = zoneHomeDocument(answerOf(persona, label).home);
+  const page = recordedPage(persona, label);
+  const document = zoneHomeDocument(page);
   if (!document) throw new Error(`Recorded ${persona}/${label} has no home document`);
-  return documentText(document).split('\n').filter(line => line.length > 0);
+  const represented = promotedSlides(page).length > 0 ? ['$default'] : [];
+  return documentText(zoneHomeProse(document, page.blocks, represented)).split('\n').filter(line => line.length > 0);
 }
 
 function recordedCredit(persona: AnswerPersona, label: string): { rightsBasis: string; author: string } {
@@ -165,13 +182,25 @@ function realmHeading(persona: AnswerPersona): string {
 function showFrame(persona: AnswerPersona, label: string, locale: UiLocale = 'en') {
   return async ({ canvasElement }: { canvasElement: HTMLElement }) => {
     const canvas = within(canvasElement);
+    const page = recordedPage(persona, label);
     const lines = recordedLines(persona, label);
+    const slides = promotedSlides(page);
     const credit = recordedCredit(persona, label);
     const acting = recordedActingPerson(record, persona, [{ label, state: 'populated' }]);
     await expect(canvas.findByRole('region', { name: persona })).resolves.toBeVisible();
     if (acting) await expect(canvas.findByText(acting)).resolves.toBeVisible();
     await expect(canvas.findByRole('heading', { level: 1, name: realmHeading(persona) })).resolves.toBeVisible();
     await expectLines(canvas, lines);
+    for (const slide of slides) {
+      const link = canvas.getByRole('link', { name: slide.title });
+      await expect(link).toBeVisible();
+      await expect(link).toHaveAttribute('href', slide.href);
+    }
+    for (const block of page.blocks) {
+      if (slides.length > 0 && block.status === 'resolved' && block.showcase === '$default') {
+        await expect(canvas.queryByText(block.fallback)).toBeNull();
+      }
+    }
     await expect(canvas.getByText(credit.rightsBasis)).toBeVisible();
     await expect(canvas.getAllByText(credit.author).length).toBeGreaterThan(0);
     await expect(canvas.getAllByText(ownerAuthor).length).toBeGreaterThan(0);
@@ -310,10 +339,19 @@ function showCommand(persona: AnswerPersona, commandLabel: string, clicks = 1) {
     const command = recordedPublicationChoice(record, persona, commandLabel);
     await expect(canvas.findByRole('region', { name: persona })).resolves.toBeVisible();
     await expect(canvas.getByText(command.actingSubject)).toBeVisible();
-    const button = canvas.getByRole('button', { name: editorMessages.en.publishReviewed });
-    for (let index = 0; index < clicks; index += 1) await userEvent.click(button);
-    await expect(canvas.findByText(command.choice.page)).resolves.toBeVisible();
-    await expect(canvas.getByText(command.choice.revisionId)).toBeVisible();
+    const publishButton = () => canvas.getByRole('button', { name: editorMessages.en.publishReviewed });
+    for (let index = 0; index < clicks; index += 1) {
+      await waitFor(() => expect(publishButton()).toBeEnabled());
+      await userEvent.click(publishButton());
+      await expect(canvas.findByText(command.choice.page)).resolves.toBeVisible();
+    }
+    if (clicks > 1) {
+      await waitFor(() => expect(canvas.queryByText(editorMessages.en.published)).toBeNull());
+      await expect(canvas.getAllByText(command.choice.revisionId)).toHaveLength(2);
+    } else {
+      await expect(canvas.getByText(editorMessages.en.published)).toBeVisible();
+      await expect(canvas.getByText(command.choice.revisionId)).toBeVisible();
+    }
     await expect(canvas.getByText(command.choice.byteDigest)).toBeVisible();
   };
 }
