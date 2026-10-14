@@ -96,6 +96,8 @@ export default {
   budgetBody: '한 번에 불러오기에는 너무 많아요. 잠시 후 다시 시도해 보세요.',
   signIn: '로그인',
   deniedTitle: '로그인하면 볼 수 있어요',
+  forbiddenTitle: '이 피드를 볼 수 없어요',
+  forbiddenBody: '이 피드에 접근할 권한이 없어요. 다른 보기를 선택할 수 있어요.',
   deniedBody: '로그인이 끝났을 수 있어요. 로그인한 뒤 다시 시도해 보세요.',
   missingBody: '옮겨졌거나 공개되지 않았을 수 있어요.',
   discussionsMissing: '이 토론은 여기에 없어요',

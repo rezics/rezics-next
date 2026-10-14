@@ -147,6 +147,8 @@ export const messages = {
   budgetBody: 'This is too much to load at once. Try again in a moment.',
   signIn: 'Sign in',
   deniedTitle: 'Sign in to see this',
+  forbiddenTitle: 'This feed isn’t available to you',
+  forbiddenBody: 'You don’t have access to this feed. You can choose another view.',
   deniedBody: 'Your session may have ended. Sign in, then try again.',
   missingBody: 'It may have moved, or it isn’t public.',
   feedMissing: 'This feed isn’t here',

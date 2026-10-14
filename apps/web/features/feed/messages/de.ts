@@ -96,6 +96,8 @@ export default {
   budgetBody: 'Das ist auf einmal zu viel. Versuch es gleich noch einmal.',
   signIn: 'Anmelden',
   deniedTitle: 'Melde dich an, um das zu sehen',
+  forbiddenTitle: 'Dieser Feed ist für dich nicht verfügbar',
+  forbiddenBody: 'Du hast keinen Zugriff auf diesen Feed. Du kannst eine andere Ansicht wählen.',
   deniedBody: 'Deine Anmeldung ist vielleicht abgelaufen. Melde dich an und versuch es noch einmal.',
   missingBody: 'Vielleicht wurde es verschoben oder ist nicht öffentlich.',
   discussionsMissing: 'Diese Diskussionen gibt es hier nicht',

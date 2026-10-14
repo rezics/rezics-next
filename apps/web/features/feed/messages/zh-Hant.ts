@@ -88,6 +88,8 @@ export default {
   budgetBody: '一次載入的內容太多了。請稍後再試一次。',
   signIn: '登入',
   deniedTitle: '登入後即可查看',
+  forbiddenTitle: '你無法查看此動態',
+  forbiddenBody: '你沒有存取此動態的權限，可以選擇其他檢視。',
   deniedBody: '你的登入可能已結束。請登入後再試一次。',
   missingBody: '可能已移動，或未公開。',
   discussionsMissing: '這些討論不在這裡',

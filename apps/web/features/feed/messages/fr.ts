@@ -96,6 +96,8 @@ export default {
   budgetBody: 'C’est trop à charger d’un coup. Réessayez dans un instant.',
   signIn: 'Se connecter',
   deniedTitle: 'Connectez-vous pour voir ceci',
+  forbiddenTitle: 'Ce fil n’est pas disponible pour vous',
+  forbiddenBody: 'Vous n’avez pas accès à ce fil. Vous pouvez choisir une autre vue.',
   deniedBody: 'Votre session a peut-être expiré. Connectez-vous, puis réessayez.',
   missingBody: 'Il a peut-être été déplacé, ou il n’est pas public.',
   discussionsMissing: 'Ces discussions ne sont pas ici',

@@ -124,6 +124,8 @@ export default {
   budgetBody: '一次要加载的内容太多了。请稍后再试。',
   signIn: '登录',
   deniedTitle: '登录后即可查看',
+  forbiddenTitle: '你无法查看此动态',
+  forbiddenBody: '你没有访问此动态的权限，可以选择其他视图。',
   deniedBody: '你的登录可能已经结束。请登录后再试。',
   missingBody: '可能已经移动，或并未公开。',
   discussionsMissing: '这些讨论不在这里',

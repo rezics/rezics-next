@@ -96,6 +96,8 @@ export default {
   budgetBody: 'Es demasiado para cargarlo de una vez. Inténtalo de nuevo dentro de un momento.',
   signIn: 'Iniciar sesión',
   deniedTitle: 'Inicia sesión para ver esto',
+  forbiddenTitle: 'Este feed no está disponible para ti',
+  forbiddenBody: 'No tienes acceso a este feed. Puedes elegir otra vista.',
   deniedBody: 'Puede que tu sesión haya terminado. Inicia sesión e inténtalo de nuevo.',
   missingBody: 'Puede que se haya movido o que no sea público.',
   discussionsMissing: 'Estas discusiones no están aquí',

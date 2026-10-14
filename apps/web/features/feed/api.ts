@@ -1,4 +1,5 @@
 import { browserMainApi } from '../api/browser.ts';
+import { settleFeedRead } from './read.ts';
 import { type FeedbackKind, type FeedbackStrength, type FeedHead, type FeedPage, type FeedQuery, type FollowKind,
   type Loaded, type MainClient, settle, type SuggestedFollow, uuidOf, type Vote } from './types.ts';
 
@@ -28,7 +29,7 @@ export interface FeedApi {
   feedback(input: { actingSubject: string; kind: FeedbackKind; target: string; strength: FeedbackStrength },
     key: string): Promise<Loaded<unknown>>;
   hideContinue(work: string, hidden: boolean, actingSubject: string, key: string): Promise<Loaded<unknown>>;
-  head(input: { after: string; scope: 'following' | 'all'; actingSubject?: string }): Promise<Loaded<FeedHead>>;
+  head(input: NonNullable<NonNullable<Parameters<MainClient['v1']['feed']['head']['get']>[0]>['query']>): Promise<Loaded<FeedHead>>;
   watermark(scope: 'following' | 'all', input: { actingSubject: string; dataEpoch: string; sequence: string },
     key: string): Promise<Loaded<unknown>>;
 }
@@ -36,7 +37,7 @@ export interface FeedApi {
 export function mainFeedApi(main: MainClient = browserMainApi()): FeedApi {
   const headers = (key: string) => ({ headers: { 'idempotency-key': key } });
   return {
-    page: query => settle(() => main.v1.feed.get({ query })),
+    page: query => settleFeedRead(() => main.v1.feed.get({ query })),
 
     vote: (item, input, key) => settle(() => main.v1.feed({ id: uuidOf(item) }).vote.post({
       profile: 'feed-vote-command-v1', ...input }, headers(key))),
@@ -66,7 +67,7 @@ export function mainFeedApi(main: MainClient = browserMainApi()): FeedApi {
     hideContinue: (work, hidden, actingSubject, key) => settle(() => main.v1.me.continue({ work: uuidOf(work) })
       .hidden.put({ actingSubject, hidden }, headers(key))),
 
-    head: input => settle(() => main.v1.feed.head.get({ query: input })),
+    head: input => settleFeedRead(() => main.v1.feed.head.get({ query: input })),
 
     watermark: (scope, input, key) => settle(() => main.v1.me['feed-watermarks']({ scope }).put({ ...input, scope },
       headers(key))),

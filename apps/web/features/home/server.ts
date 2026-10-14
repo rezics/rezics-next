@@ -5,6 +5,7 @@ import { ACCESS_COOKIE } from '../auth/cookies.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import { type ReaderSeed, readReaderSeed } from '../catalogue/reader-store.ts';
 import { type FeedDefaults, type FeedState, feedQuery, parseFeedState } from '../feed/state.ts';
+import { readFeedPage } from '../feed/read.ts';
 import { type ContinueItem, type FeedPage, type FeedQuery, type Loaded, settle, type SuggestedFollow,
   type TrendingItem } from '../feed/types.ts';
 import { readFollowed, readModerated, readOfficialZones, shellReader } from '../shell/communities-read.ts';
@@ -45,14 +46,6 @@ const followsAnything = cache(async (): Promise<boolean | null> => {
   return page.ok ? page.data.items.length > 0 : null;
 });
 
-/** The first page of a feed view. Main answers 409 when its projection moved mid-read; a first page reads again once. */
-async function readFeedPage(query: FeedQuery): Promise<Loaded<FeedPage>> {
-  const reader = await shellReader();
-  const client = query.actingSubject ? reader.main : reader.anonymous;
-  const first = await settle(() => client.v1.feed.get({ query }));
-  return !first.ok && first.failure === 'moved' ? settle(() => client.v1.feed.get({ query })) : first;
-}
-
 /** Who is reading and which view they asked for: quick reads the page frame and its controls need. */
 export interface HomeView {
   signedIn: boolean;
@@ -73,11 +66,11 @@ export interface HomeView {
 
 /** The first page of posts: Main's slowest read on Home, so the route streams it in behind the frame. */
 export interface HomePosts {
-  /** The query that produced `page`: the public All feed when the personal one was refused. */
+  /** The requested query, retained even when Main refuses its read. */
   query: FeedQuery;
   page: Loaded<FeedPage>;
   readerSeed: ReaderSeed | null;
-  /** Main could not serve the personal read, so the page shows the public All feed instead and says so. */
+  /** Compatibility with older page callers; reads now retain the requested view's failure. */
   personalRefused: boolean;
 }
 
@@ -143,22 +136,14 @@ export async function readConceptTopicFeed(conceptId: string, locale: UiLocale, 
 
 export type { ConceptFeedPage, FollowedConceptTab };
 
-export async function readHomePosts(view: HomeView, locale: UiLocale): Promise<HomePosts> {
+export async function readHomePosts(view: HomeView, _locale: UiLocale): Promise<HomePosts> {
   const reader = await shellReader();
-  let page = await readFeedPage(view.query);
-  let shown = view.query;
-  // A personal view Main cannot serve still leaves the reader something to read: the public feed, with a note.
-  // A pinned tab's failure is its own and shows as such.
-  const personalRefused = Boolean(view.actingSubject) && !page.ok && view.state.tab !== 'pinned';
-  if (personalRefused) {
-    shown = feedQuery({ ...view.state, tab: 'all', filter: null }, { language: locale });
-    page = await readFeedPage(shown);
-  }
+  const page = await readFeedPage(view.query.actingSubject ? reader.main : reader.anonymous, view.query);
   const works = page.ok ? page.data.items.flatMap(item => item.primaryAction.kind === 'want-to-read'
     ? [item.primaryAction.work] : []) : [];
   const readerSeed = view.actingSubject && works.length
     ? await readReaderSeed(reader.main, view.actingSubject, works) : null;
-  return { query: shown, page, personalRefused, readerSeed };
+  return { query: view.query, page, personalRefused: false, readerSeed };
 }
 
 /** Works in progress and followed Works with unread chapters, newest first; null when there are none. */

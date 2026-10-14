@@ -41,7 +41,11 @@ export type FeedbackStrength = FeedbackBody['strength'];
  */
 export type ReadFailure = 'moved' | 'invalid' | 'sign-in' | 'missing' | 'budget' | 'closed' | 'offline' | 'unavailable';
 
-export type Loaded<T> = { ok: true; data: T } | { ok: false; failure: ReadFailure; reference?: string };
+export type Loaded<T> = { ok: true; data: T } | {
+  ok: false; failure: ReadFailure; reference?: string;
+  /** Feed reads retain the HTTP answer even when presentation groups failures. */
+  status?: number; problem?: unknown;
+};
 
 /** Which sentence a failure may use. `absent` is not an error. */
 export type FailureNotice = 'absent' | 'offline' | 'server' | 'missing' | 'denied' | 'moved' | 'budget';

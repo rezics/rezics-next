@@ -88,6 +88,8 @@ export default {
   budgetBody: '一度に読み込むには多すぎます。しばらくしてからもう一度お試しください。',
   signIn: 'ログイン',
   deniedTitle: 'ログインすると表示されます',
+  forbiddenTitle: 'このフィードは閲覧できません',
+  forbiddenBody: 'このフィードへのアクセス権がありません。別の表示を選べます。',
   deniedBody: 'ログインの期限が切れた可能性があります。ログインしてからもう一度お試しください。',
   missingBody: '移動したか、公開されていない可能性があります。',
   discussionsMissing: 'このディスカッションはありません',

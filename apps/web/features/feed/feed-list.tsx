@@ -20,6 +20,7 @@ import { postRhythm } from './post-row.tsx';
 import { relativeTime } from './time.ts';
 import { useFeed } from './feed-context.tsx';
 import { appendPosts, projecting, recoverProjection, sameProjection } from './projection.ts';
+import { feedHeadScope } from './read.ts';
 import { failureText, type FeedHead, type FeedItem, type FeedPage, type FeedQuery, type Loaded, type ReadFailure } from './types.ts';
 
 /** How often an open feed asks whether newer posts exist. */
@@ -39,6 +40,8 @@ interface ListState {
   loading: boolean;
   failure: ReadFailure | null;
   reference?: string;
+  status?: number;
+  problem?: unknown;
   /** Consecutive pages that added nothing; Main's filters can leave a page empty. */
   sparse: number;
 }
@@ -98,10 +101,15 @@ export function feedContinuation(
 }
 
 /** The first page failed: say what failed, and offer the one next step. */
-function FeedFailure({ failure, reference }: { failure: ReadFailure; reference?: string }) {
+function FeedFailure({ failure, reference, status, retry }: {
+  failure: ReadFailure; reference?: string; status?: number; retry?: () => void;
+}) {
   const { t, signInHref } = useFeed();
   const router = useRouter();
-  const text = failureText(failure, { failedTitle: t.failed, offline: t.failedBody, server: t.serverBody,
+  const text = status === 403 && failure !== 'closed'
+    ? { kind: 'shown' as const, title: t.forbiddenTitle, description: t.forbiddenBody,
+      action: 'none' as const, reference: false }
+    : failureText(failure, { failedTitle: t.failed, offline: t.failedBody, server: t.serverBody,
     missingTitle: t.feedMissing, missingBody: t.missingBody, deniedTitle: t.deniedTitle, deniedBody: t.deniedBody,
     movedTitle: t.moved, movedBody: t.movedBody, budget: t.budgetBody });
   if (text.kind === 'absent') return null;
@@ -118,7 +126,7 @@ function FeedFailure({ failure, reference }: { failure: ReadFailure; reference?:
     >
       {text.action === 'none' ? null : text.action === 'sign-in'
         ? <LocalizedLink href={signInHref} className={buttonVariants()}>{t.signIn}</LocalizedLink>
-        : <Button onClick={() => router.refresh()}>
+        : <Button onClick={moved ? () => router.refresh() : retry ?? (() => router.refresh())}>
           <RotateCwIcon aria-hidden="true" />
           {moved ? t.refresh : t.retry}
         </Button>}
@@ -130,11 +138,12 @@ function FeedFailure({ failure, reference }: { failure: ReadFailure; reference?:
  * Asks Main, while the page is visible, how many posts arrived since the one
  * the reader is looking at began; never inserts them above the reader.
  */
-function useNewPosts(page: FeedPage, scope: 'following' | 'all' | null, interval: number) {
+function useNewPosts(page: FeedPage, scope: string | null, interval: number) {
   const { api, actingSubject, signedIn } = useFeed();
   const [head, setHead] = useState<FeedHead | null>(null);
   useEffect(() => {
     if ((signedIn && !actingSubject) || !scope) return;
+    setHead(null);
     const polled = scope;
     let stopped = false;
     // The page's source cut is the reader's view. A lagging checkpoint can
@@ -144,17 +153,20 @@ function useNewPosts(page: FeedPage, scope: 'following' | 'all' | null, interval
       if (document.visibilityState !== 'visible') return;
       const read = await api().head({
         after,
+        afterReview: page.projection.reviewSequence,
         scope: polled,
         ...(actingSubject ? { actingSubject } : {}),
       });
       if (stopped) return;
-      // A Main without the head read (404) is not asked again on this page.
-      if (!read.ok && read.failure === 'missing') {
+      // An absent or refused head read is not asked again on this page.
+      if (!read.ok && (read.failure === 'missing' || read.failure === 'closed' ||
+        read.failure === 'sign-in' || read.status === 403)) {
+        setHead(null);
         stopped = true;
         clearInterval(timer);
         return;
       }
-      if (read.ok) setHead(read.data);
+      setHead(read.ok ? read.data : null);
     }
     const timer = setInterval(() => void check(), interval);
     return () => {
@@ -167,10 +179,12 @@ function useNewPosts(page: FeedPage, scope: 'following' | 'all' | null, interval
     signedIn,
     page.sourcePosition.sequence,
     page.sourcePosition.dataEpoch,
+    page.projection.reviewSequence,
     scope,
     interval,
   ]);
   return head &&
+    head.scope === scope &&
     head.afterSequence === page.sourcePosition.sequence &&
     head.projection.dataEpoch === page.sourcePosition.dataEpoch &&
     head.newPosts.value > 0
@@ -222,7 +236,7 @@ export function FeedList({
   /** How often to ask for newer posts; stories shorten it. */
   headInterval?: number;
 }) {
-  if (!initial.ok) return <FeedFailure failure={initial.failure} reference={initial.reference} />;
+  if (!initial.ok) return <FeedFailure {...initial} />;
   return (
     <FeedPages
       key={`${JSON.stringify(query)}:${initial.data.projection.sequence}`}
@@ -267,7 +281,7 @@ function FeedPages({
   // A pinned tab is only part of All: its new posts and what was seen are not All's.
   const scope = query.savedFilter ? null : (query.scope ?? 'all');
   const sparseLimit = query.savedFilter ? PINNED_SPARSE_PAGES : SPARSE_PAGES;
-  const fresh = useNewPosts(page, scope, headInterval);
+  const fresh = useNewPosts(page, feedHeadScope(query), headInterval);
   useWatermark(state.page, scope, state.recovering);
 
   useLayoutEffect(() => {
@@ -286,12 +300,18 @@ function FeedPages({
   useEffect(() => {
     if (!state.recovering) return;
     let stopped = false;
-    async function check() {
-      if (stopped || reading.current || document.visibilityState !== 'visible') return;
+    async function check(manual = false) {
+      if (stopped || (!manual && state.failure) || reading.current || document.visibilityState !== 'visible') return;
       reading.current = true;
       try {
         const first = await api().page(query);
-        if (stopped || !first.ok || projecting(first.data)) return;
+        if (stopped) return;
+        if (!first.ok) {
+          setState((current) => ({ ...current, failure: first.failure, reference: first.reference,
+            status: first.status, problem: first.problem }));
+          return;
+        }
+        if (projecting(first.data)) return;
         const recovered = await recoverProjection(
           api(),
           query,
@@ -302,7 +322,8 @@ function FeedPages({
         );
         if (stopped) return;
         if (!recovered.ok) {
-          setState((current) => ({ ...current, failure: recovered.failure, reference: recovered.reference }));
+          setState((current) => ({ ...current, failure: recovered.failure, reference: recovered.reference,
+            status: recovered.status, problem: recovered.problem }));
           return;
         }
         // Measure at commit time: the reader may have scrolled during the read.
@@ -329,7 +350,7 @@ function FeedPages({
       }
     }
     const timer = setInterval(() => void check(), headInterval);
-    retryProjection.current = check;
+    retryProjection.current = () => check(true);
     const onVisible = () => void check();
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -344,12 +365,14 @@ function FeedPages({
     const cursor = state.cursor;
     if (!cursor || reading.current || state.failure === 'closed') return;
     reading.current = true;
-    setState((current) => ({ ...current, loading: true, failure: null, reference: undefined }));
+    setState((current) => ({ ...current, loading: true, failure: null, reference: undefined,
+      status: undefined, problem: undefined }));
     const next = await api().page({ ...query, cursor });
     reading.current = false;
     if (!active.current) return;
     setState((current) => {
-      if (!next.ok) return { ...current, loading: false, failure: next.failure, reference: next.reference };
+      if (!next.ok) return { ...current, loading: false, failure: next.failure, reference: next.reference,
+        status: next.status, problem: next.problem };
       if (!sameProjection(current.page, next.data))
         return { ...current, loading: false, failure: 'moved' as const, reference: undefined };
       const items = appendPosts(current.items, next.data.items);
@@ -431,37 +454,8 @@ function FeedPages({
       ) : null}
       <div ref={sentinel} aria-hidden="true" />
       {feedContinuation(state.failure, state.cursor, state.loading) === 'error' ? (
-        <div
-          role="alert"
-          className="flex flex-wrap items-center justify-center gap-3 px-4 py-6 text-sm"
-        >
-          <span className="text-muted-foreground">
-            {state.failure === 'moved' ? t.moved
-              : state.failure === 'offline' ? t.failedBody
-                : state.failure === 'unavailable' ? t.serverBody
-                  : state.failure === 'sign-in' ? t.deniedBody
-                    : state.failure === 'budget' ? t.budgetBody
-                      : t.loadMoreFailed}
-            {state.failure === 'unavailable' && state.reference
-              ? <span className="mt-1 block text-xs">{t.errorReference}: <span className="font-mono">{state.reference}</span></span>
-              : null}
-          </span>
-          {state.failure === 'moved' ? (
-            <Button size="sm" variant="outline" onClick={() => router.refresh()}>
-              <RefreshCwIcon aria-hidden="true" />
-              {t.refresh}
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => void (catchingUp ? retryProjection.current?.() : loadMore())}
-            >
-              <RotateCwIcon aria-hidden="true" />
-              {t.retry}
-            </Button>
-          )}
-        </div>
+        <FeedFailure failure={state.failure!} reference={state.reference} status={state.status}
+          retry={() => void (catchingUp ? retryProjection.current?.() : loadMore())} />
       ) : feedContinuation(state.failure, state.cursor, state.loading) === 'more' ? (
         <div className="flex justify-center px-4 py-6">
           <Button variant="outline" onClick={() => void loadMore()}>
