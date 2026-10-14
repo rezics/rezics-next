@@ -1,4 +1,5 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
+import type { InstructionAdoption } from './instruction-adoption.ts';
 import { AdmissionDenied, AdmissionExpired, AdmissionUnavailable,
   type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from './restore-lineage.ts';
@@ -21,6 +22,7 @@ export async function changeAdmittedWorkStructurePublication(
   request: Request,
   input: WorkStructurePublicationInput & { idempotencyKey: string },
   publicationFence: <T>(dispatch: (allowed: boolean) => Promise<T>) => Promise<T>,
+  prepareDependencies?: (admissionId: string) => Promise<readonly InstructionAdoption[]>,
 ): Promise<WorkStructurePublicationReceipt & { replayed: boolean }> {
   const digest = workStructurePublicationDigest(input);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
@@ -44,12 +46,13 @@ export async function changeAdmittedWorkStructurePublication(
       if (!admission.dispatchEligible || admission.state === 'registered') {
         terminal = await sealWorkStructurePublicationAdmission(env, admission);
       } else {
-        terminal = await publicationFence(allowed => !allowed
+        terminal = await publicationFence(async allowed => !allowed
           ? denyWorkStructurePublicationAdmission(env, admission, input)
           : changeStructuredWorkPublication(env, admission, input,
             id => access.admittedActingSubject
               ? access.admittedActingSubject(id)
-              : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable'))));
+              : Promise.reject(new AdmissionDenied('Structure author provenance is unavailable')),
+            input.operation === 'publish' ? await prepareDependencies?.(admission.id) : []));
       }
     }
     if (!terminal) throw new PendingAdmittedWork(registered.id, 'work-publication');

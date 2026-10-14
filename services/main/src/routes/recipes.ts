@@ -582,7 +582,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
         const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
           RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
         const instructions = await workRead(work, request, { actingSubject: query.actingSubject },
-          session => readRecipeInstructions(session, scanned.records));
+          session => readRecipeInstructions(session, scanned.records, { work: header.work, revision: header.revision }));
         const contents = [...new Map(instructions.flatMap(item => item.document
           ? [[JSON.stringify(item.reference), { reference: item.reference, document: item.document }] as const] : [])).values()];
         const body = query.format === 'native'

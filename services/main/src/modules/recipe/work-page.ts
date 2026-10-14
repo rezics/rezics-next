@@ -375,7 +375,7 @@ export async function readRecipeWorkPage(session: WorkReadSession, work: string,
       structure, revision })) throw new WorkReadMoved('Recipe Structure disclosure changed');
   };
   if (page.profile === 'recipe-work-page-stale') { await fence(); return page; }
-  const result = { ...page, instructions: await readRecipeInstructions(session, page.occurrences) };
+  const result = { ...page, instructions: await readRecipeInstructions(session, page.occurrences, { work, revision }) };
   if (Buffer.byteLength(JSON.stringify(result)) > RECIPE_WORK_PAGE_BYTES) {
     throw new WorkReadLimit('Recipe page exceeds 1 MiB');
   }

@@ -26,7 +26,7 @@ test('procedure export retains empty sections and reports reference projection l
     { '@type': 'HowToStep', text: 'Stir.tomato' },
   ]);
   expect(exported.losses).toEqual([{ occurrence: structure, code: 'reference-not-representable',
-    pointer: '/recipeInstructions/1/text/0/content/1' }]);
+    pointer: '/recipeInstructions/0/1/text/0/content/1' }]);
 });
 
 test('missing hydration and recordings are explicit unsupported forms, never silently successful projection', () => {

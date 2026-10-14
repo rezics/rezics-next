@@ -6,6 +6,7 @@ import type { Viewer } from '../suitability/policy.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { readResourceSummaries, type SummaryReader } from './summary.ts';
 import { DEFAULT_MEDIA_CONTEXT, MediaUnavailable } from './store.ts';
+import { readPublicInstructionAdoptions } from '../work/instruction-adoption.ts';
 
 // These proofs come from Account verification, never from serialized viewer preferences.
 const audiences = new WeakMap<Viewer, { principal: VerifiedPrincipal; actor?: string; nativeAsset?: string }>();
@@ -55,6 +56,10 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
         references.slice(offset, offset + 64),
       ))
         facts.set(reference, fact);
+    const uses = [...facts].filter(([, fact]) => fact.exactUse && fact.structureInstruction)
+      .map(([reference]) => reference.slice('https://rezics.com/id/'.length));
+    const grantedUses = new Set(uses.length ? (await readPublicInstructionAdoptions(deps.environment,
+      { mediaUses: uses }, viewer)).flatMap(item => item.mediaUse ? [`https://rezics.com/id/${item.mediaUse}`] : []) : []);
     const audience = audiences.get(viewer);
     const principal = audience?.principal,
       actor = audience?.actor;
@@ -177,7 +182,7 @@ export function configureMediaVisibility(deps: MainWorkDependencies): void {
       if (fact.blocked) return false;
       if (!probe.exactUse && nativeOwner(probe.reference, fact)) return canManage;
       if (fact.attachmentOverflow) return false;
-      if ((fact.disclosure !== 'public' || fact.pending) && !(canManage && actor === fact.owner))
+      if ((fact.disclosure !== 'public' && !grantedUses.has(probe.reference) || fact.pending) && !(canManage && actor === fact.owner))
         return false;
       return fact.attachments.length === 0 || fact.attachments.some((attachment) =>
         readable.has(`${attachment.context}\0${attachment.target}`));
@@ -205,6 +210,7 @@ export interface MediaVisibilityFact {
   owner: string;
   /** Actual owner lookup distinguished a Use from its Asset inventory. */
   exactUse?: boolean;
+  structureInstruction?: boolean;
   disclosure: string;
   pending: boolean;
   blocked: boolean;

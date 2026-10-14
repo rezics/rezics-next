@@ -4,6 +4,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { Pool, PoolClient } from 'pg';
 import { withReferenceFence } from '../erasure/reference-fence.ts';
 import type { ContentCore, ContentPosition } from '../../../../content/src/core.ts';
+import { derivedId } from '../structure/graph.ts';
 import type { ImportedCoverProvenance } from './typed-schema.ts';
 import { coverCreditFromProvenance, type CoverCredit } from './cover-credit.ts';
 import { advanceContentSequence, settledContentPosition } from '../content-sequence.ts';
@@ -553,6 +554,7 @@ export class MediaStore {
     const rows = (await this.summaryConnection().query(`WITH requested AS (
       SELECT * FROM unnest($1::text[],$2::uuid[]) AS q(reference,id))
       SELECT q.reference,a.owner,s.disclosure,requested_use.id IS NOT NULL AS exact_use,
+        COALESCE(requested_use.operation_id LIKE 'structure-instruction:%',false) AS structure_instruction,
         EXISTS (SELECT 1 FROM media.transform_job j WHERE j.asset_id=a.id
           AND j.profile=$3 AND j.status IN ('queued','leased')) AS pending,
         s.lifecycle <> 'active' OR s.moderation <> 'none' OR EXISTS (
@@ -586,6 +588,7 @@ export class MediaStore {
       ) attachment ON true`, [references, ids, REQUIRED_MATCH_PROFILE])).rows;
     return new Map(rows.map(row => [row.reference as string, { owner: row.owner as string,
       disclosure: row.disclosure as string, exactUse: row.exact_use as boolean,
+      structureInstruction: row.structure_instruction as boolean,
       pending: row.pending as boolean, blocked: row.blocked as boolean,
       attachmentOverflow: row.attachment_overflow as boolean,
       attachments: row.attachments as MediaVisibilityFact['attachments'] }]));
@@ -1318,6 +1321,33 @@ export class MediaStore {
       }
     });
     return settledContentPosition(this.pool, operationId);
+  }
+
+  /** Exact publication attachment; the public graph decision remains the delivery grant. */
+  async createStructureInstructionUse(admissionId: string, actor: string, target: string, occurrence: string,
+    asset: string, revision: string, representation: string): Promise<string> {
+    const operationId = `structure-instruction:${admissionId}:${occurrence}`;
+    const digest = hash(JSON.stringify({ actor, target, occurrence, asset, revision, representation }));
+    return transaction(this.pool, async client => {
+      const use = derivedId(operationId).slice(ID.length);
+      if (await prior(client, operationId, digest, 'media.use.create')) return use;
+      const available = await client.query(`SELECT a.id FROM media.asset a
+        JOIN media.asset_state s ON s.id = a.state_head
+        JOIN content.revision r ON r.id = $2 AND r.variant_id = a.variant_id AND r.availability = 'available'
+        JOIN media.representation p ON p.id = $3 AND p.asset_id = a.id AND p.availability = 'available'
+        WHERE a.id = $1 AND a.owner = $4 AND s.lifecycle = 'active' AND s.moderation = 'none'
+          AND media.delivery_clearance(p) = 'cleared'
+          AND EXISTS (SELECT 1 FROM jsonb_array_elements(r.body->'representations') item WHERE item->>'id' = p.id::text)
+        FOR SHARE OF a,s,r,p`, [asset, revision, representation, actor]);
+      if (!available.rowCount) throw new MediaMissing('Instruction recording is unavailable');
+      await receipt(client, { operationId, digest, action: 'media.use.create', outcome: 'succeeded',
+        eventType: 'media.use.created', payload: { target, occurrence, use } });
+      await client.query(`INSERT INTO media.use (id,asset_id,asset_variant_id,asset_revision_id,
+        representation_id,target,context,role,crop,actor,operation_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,'publication-item',NULL,$8,$9)`,
+      [use, asset, assetVariant(asset), revision, representation, target, DEFAULT_MEDIA_CONTEXT, actor, operationId]);
+      return use;
+    });
   }
 
   /** Delivery basis for an exact Use; its current context decides disclosure. */

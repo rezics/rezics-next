@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia';
+import { readPublicInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
 import { mediaContextInput } from '../modules/media/context-input.ts';
 import { problemResult } from '../api-contract.ts';
 import { authorizedReadProblems, selectionConflictProblem, writeProblems } from '../api-responses.ts';
@@ -265,6 +266,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     const administrator=!!(principal&&actingSubject&&(work.access.canActAsPlatformAdministrator
       ? await work.access.canActAsPlatformAdministrator(principal,actingSubject):true));
     const bases=await work.media.store.presentation.metadata(refs);
+    const exactUses = bases.flatMap(basis => basis?.structureInstruction && basis.metadata.use ? [basis.metadata.use] : []);
+    const grantedUses = new Set(exactUses.length ? (await readPublicInstructionAdoptions(work.environment,
+      { mediaUses: exactUses }, reader.viewer ?? ANONYMOUS_VIEWER)).flatMap(item => item.mediaUse ? [item.mediaUse] : []) : []);
     const groups=new Map<string,Set<string>>();
     for (const basis of bases) if (basis?.target) {
       const targets=groups.get(basis.context)??new Set<string>();targets.add(basis.target);groups.set(basis.context,targets);
@@ -298,7 +302,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const own=[facts.length];
       const asset: DisclosureTarget={owner:'media',resource:`https://rezics.com/id/${basis.metadata.asset}`,
         component:'cover',context:basis.context};
-      assetFences.push(asset);
+      assetFences.push(basis.structureInstruction && basis.metadata.use ? { ...asset, resource: `https://rezics.com/id/${basis.metadata.use}`,
+        component: 'media_use', work: basis.target ?? undefined } : asset);
       // A page image names one attachment. Its sibling Uses cannot determine
       // this audience; direct Asset governance still fences every occurrence.
       if (basis.metadata.use) {
@@ -314,7 +319,7 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const assetDecision=assetDecisions[indexes[index]![0]!];
       if (!basis || assetDecision!=='visible' || basis.target && !available.has(`${basis.context}\0${basis.target}`)
         || indexes[index]!.some(index=>decisions[index]!=='visible')
-        || basis.disclosure!=='public' && !(controlsActor && basis.owner===actingSubject)) return null;
+        || basis.disclosure!=='public' && !grantedUses.has(basis.metadata.use ?? '') && !(controlsActor && basis.owner===actingSubject)) return null;
       const canProtectLabels=!!(administrator && principal && actingSubject && await work.access.canProtectMedia?.(principal,actingSubject,
         `https://rezics.com/id/${basis.metadata.representation}`));
       const canProtectConceal=!!(administrator && principal && actingSubject && basis.metadata.use
@@ -328,9 +333,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       const conceal=basis.metadata.controls.conceal?{...basis.metadata.controls.conceal,...concealControls,
         canEdit:concealControls.canEdit&&(!basis.metadata.controls.conceal.locked||canProtectConceal)}:null;
       // A public Asset can still be used by a draft Work or a private Context.
-      const publicTarget=basis.disclosure==='public' && indexes[index]!.every(index=>publicMedia[index])
+      const publicTarget=(basis.disclosure==='public' || grantedUses.has(basis.metadata.use ?? '')) && indexes[index]!.every(index=>publicMedia[index])
         && (!basis.target || publicTargets.has(`${basis.context}\0${basis.target}`));
-      return {...basis,publicTarget,metadata:{...basis.metadata,
+      return {...basis,disclosure: grantedUses.has(basis.metadata.use ?? '') ? 'public' : basis.disclosure,publicTarget,metadata:{...basis.metadata,
         controls:{nsfw,ageRating,conceal},
         canEdit:nsfw.canEdit||ageRating.canEdit||!!conceal?.canEdit,canProtect:canProtectLabels||canProtectConceal}};
     }));

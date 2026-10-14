@@ -3,6 +3,7 @@ import type { OccurrenceRecord } from '../structure/format.ts';
 import type { ExactInstructionSelector } from '../structure/selection.ts';
 import type { WorkReadSession } from '../work/read-session.ts';
 import { WorkReadLimit } from '../work/read-session.ts';
+import { readPublicInstructionAdoptions } from '../work/instruction-adoption.ts';
 
 export interface InstructionReference { target: string; selector: ExactInstructionSelector }
 export interface RecipeInstruction {
@@ -15,10 +16,15 @@ export const isAdoptedInstruction = (record: OccurrenceRecord) =>
     && !!record.selection.selector;
 
 /** Hydrates only this bounded page, deduplicating revisions without deduplicating ordered uses. */
-export async function readRecipeInstructions(session: WorkReadSession, records: readonly OccurrenceRecord[]):
+export async function readRecipeInstructions(session: WorkReadSession, records: readonly OccurrenceRecord[],
+  cut?: { work: string; revision: string }):
   Promise<RecipeInstruction[]> {
   const adopted = records.filter(isAdoptedInstruction);
   const instructions: RecipeInstruction[] = [];
+  const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment, cut) : Promise.resolve([]);
+  const adoptions = adopted.some(record => record.selection?.mode === 'fixed-revision'
+    && record.selection.selector?.grain === 'representation') ? await readAdoptions() : [];
+  if (adoptions.length) session.observeDependency(`recipe-instruction-adoptions:${cut?.revision}`, adoptions, readAdoptions);
   const revisions = [...new Set(adopted.flatMap(record => record.selection?.mode === 'fixed-revision'
     && record.selection.selector?.grain === 'content' ? [record.selection.revision] : []))];
   const exact = new Map<string, Awaited<ReturnType<NonNullable<typeof session.deps.content>['readExactBatch']>>[number]>();
@@ -41,6 +47,13 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
         && value.reference.variantId === selector.variantId && value.body.document) {
         instruction.status = 'available';
         instruction.document = value.body.document as DocumentSnapshot;
+      }
+    } else {
+      const adoption = adoptions.find(item => item.occurrence === record.occurrence && item.target === record.target
+        && JSON.stringify(item.selector) === JSON.stringify(selector));
+      if (adoption?.mediaUse && await session.deps.media?.store.itemDelivery(adoption.mediaUse)) {
+        instruction.status = 'available';
+        instruction.mediaUse = adoption.mediaUse;
       }
     }
     instructions.push(instruction);

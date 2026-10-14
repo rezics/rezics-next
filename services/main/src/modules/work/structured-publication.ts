@@ -10,6 +10,7 @@ import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, type WorkActivationEnvironment } from './activate.ts';
 import { WORK_STRUCTURE_PUBLICATION_RECEIPT_FAMILY, WORK_STRUCTURE_WITHDRAWAL_RECEIPT_FAMILY }
   from './receipt-family.ts';
+import { instructionAdoptionTriples, type InstructionAdoption } from './instruction-adoption.ts';
 
 export const WORK_STRUCTURE_PUBLICATION_PROFILE = 'https://rezics.com/definition/work-structure-publication-v1';
 export const WORK_STRUCTURE_PUBLICATION_OPERATION = 'work-structure-publication-v1';
@@ -253,7 +254,7 @@ const MAX_ORIGINAL_CONTRIBUTOR_REVISIONS = 128;
 /** The public attestation is valid only for a complete, local source authored by this actor. */
 export async function verifyOriginalWorkStructureContribution(env: Pick<WorkActivationEnvironment, 'fuseki'>,
   source: { structure: string; revision: string; generation: string; manifest: string;
-    placementCount: number; actingSubject: string }, admittedActingSubject: (id: string) => Promise<string>)
+    placementCount: number; actingSubject: string; adoptions?: readonly InstructionAdoption[] }, admittedActingSubject: (id: string) => Promise<string>)
   : Promise<boolean> {
   const exactRoot = await env.fuseki.query(`PREFIX rv: <${RV}>
     PREFIX schema: <https://schema.org/>
@@ -275,7 +276,8 @@ export async function verifyOriginalWorkStructureContribution(env: Pick<WorkActi
         ?placement rv:generation ${iri(source.generation)} ; rv:occurrence ?occurrence ;
           schema:item ?item .
         OPTIONAL { ?placement rv:qualifier ?qualifier }
-        FILTER(?item != ?occurrence && (!BOUND(?qualifier) || ?item != ?qualifier))
+        FILTER(?item != ?occurrence && (!BOUND(?qualifier) || ?item != ?qualifier)
+          ${source.adoptions?.length ? `&& ?occurrence NOT IN (${source.adoptions.map(item => iri(item.occurrence)).join(',')})` : ''})
       } }
     }`);
   if (exactRoot.boolean !== true) return false;
@@ -423,7 +425,7 @@ export async function denyWorkStructurePublicationAdmission(env: WorkActivationE
 
 async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmission,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>,
-  admittedActingSubject: (id: string) => Promise<string>): Promise<WorkStructurePublicationReceipt> {
+  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = []): Promise<WorkStructurePublicationReceipt> {
   const header = await readCompositionHeader(env, input.structure);
   if (!header) return sealForReason(env, admission, input, 'source-unavailable');
   let reviewed;
@@ -442,6 +444,7 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
       structure: input.structure, revision: header.head, generation: header.generation,
       manifest: header.manifest, placementCount: header.placementCount,
       actingSubject: input.actingSubject,
+      adoptions,
     }, admittedActingSubject);
   } catch (error) {
     if (!(error instanceof AdmissionDenied)) throw error;
@@ -469,6 +472,7 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
     structure: input.structure, structureProfile: reviewed.graphProfile,
     structureRevision: input.expectedStructureHead, selectedGeneration: header.generation,
     sourceRoot: header.manifest, rightsBasis: input.rightsBasis, disclosure: input.disclosure,
+    dependencies: adoptions,
     attestation: { actingSubject: input.actingSubject, action, scope: admission.scope,
       admissionId: admission.id, authorityEpoch: admission.authorityEpoch,
       requestDigest: admission.requestDigest },
@@ -492,6 +496,7 @@ async function publish(env: WorkActivationEnvironment, admission: RegisteredAdmi
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?next }
       GRAPH ${iri(GRAPHS.current)} { ${iri(input.work)} rv:workStructurePublicationHead ${iri(decision)} }
       GRAPH ${iri(GRAPHS.revisions)} {
+        ${instructionAdoptionTriples(source, adoptions)}
         ${sourceTerm} a rv:WorkStructurePublicSource ; rv:work ${iri(input.work)} ;
           rv:structureProfile ${structureIri(reviewed.graphProfile)} ; rv:structure ${iri(input.structure)} ;
           rv:component ${iri(input.expectedMainVersion)} ;
@@ -671,7 +676,7 @@ async function withdraw(env: WorkActivationEnvironment, admission: RegisteredAdm
 
 export async function changeStructuredWorkPublication(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, input: WorkStructurePublicationInput,
-  admittedActingSubject: (id: string) => Promise<string>): Promise<WorkStructurePublicationReceipt> {
+  admittedActingSubject: (id: string) => Promise<string>, adoptions: readonly InstructionAdoption[] = []): Promise<WorkStructurePublicationReceipt> {
   checkInput(input);
   const digest = workStructurePublicationDigest(input);
   const action = actionFor(input);
@@ -684,5 +689,5 @@ export async function changeStructuredWorkPublication(env: WorkActivationEnviron
   if (existing) return checkedWorkStructurePublicationReceipt(existing, admission, input, digest);
   if (Date.parse(admission.expiresAt) <= Date.now()) throw new PendingActivation('Work publication admission expired');
   return input.operation === 'publish'
-    ? publish(env, admission, input, admittedActingSubject) : withdraw(env, admission, input);
+    ? publish(env, admission, input, admittedActingSubject, adoptions) : withdraw(env, admission, input);
 }

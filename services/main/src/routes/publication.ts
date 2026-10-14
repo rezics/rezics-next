@@ -2,6 +2,7 @@ import { chooseMainLanguage, readMainLanguageHeads } from '../modules/work/selec
 import { discloseInventory } from '../modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../modules/suitability/policy.ts';
 import { Elysia, t } from 'elysia';
+import { prepareInstructionAdoptions } from '../modules/work/instruction-adoption.ts';
 import { ObjectIntegrityError, ObjectUnavailable } from '../infrastructure/immutable-objects.ts';
 import { readRealmMediaSet, RealmMediaUnavailable, RealmMediaMissing } from '../modules/content-publication/realm-media.ts';
 import type { FusekiClient } from '../infrastructure/fuseki.ts';
@@ -144,7 +145,8 @@ export function publicationRoutes(fuseki: FusekiClient, work: MainWorkDependenci
       try {
         const receipt = await changeAdmittedWorkStructurePublication(work.environment, work.account,
           work.access, request, { ...body, idempotencyKey }, dispatch =>
-          withStructuredPublicationFence(work, body.work, dispatch));
+          withStructuredPublicationFence(work, body.work, dispatch), body.operation === 'publish'
+            ? admissionId => prepareInstructionAdoptions(work, body, admissionId) : undefined);
         return Response.json({ profile: 'work-structure-publication-v1', operation: body.operation,
           work: receipt.work, publicationDecision: receipt.publicationDecision!,
           ...(receipt.mainVersion ? { mainVersion: receipt.mainVersion } : {}),

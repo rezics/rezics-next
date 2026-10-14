@@ -32,6 +32,7 @@ export interface MetadataBasis {
   metadata: ImageMetadata; owner: string; actor: string | null; target: string | null;
   context: string; disclosure: string; objectNamespace: string; byteLength: number;
   campaign?: boolean; campaignZone?: string | null;
+  structureInstruction?: boolean;
 }
 export interface MediaFieldInput {
   representation?: string; use?: string; field: ImageField;
@@ -137,6 +138,7 @@ export class MediaPresentationStore {
         FROM jsonb_array_elements($1::jsonb) WITH ORDINALITY r(value,ordinality))
       SELECT q.ordinality,p.id,p.asset_id,p.byte_digest,p.media_type,p.pixel_width,p.pixel_height,p.byte_length,
         a.owner,a.object_namespace,a.cover_only,s.disclosure,u.id AS use_id,u.actor,u.target,u.context,
+        COALESCE(u.operation_id LIKE 'structure-instruction:%',false) AS structure_instruction,
         cover_revision.body->'importedCover' AS cover_provenance,
         (u.role LIKE 'campaign-%' OR u.id IS NULL AND EXISTS (
           SELECT 1 FROM media.use campaign WHERE campaign.representation_id = COALESCE(p.source_id,p.id)
@@ -222,6 +224,7 @@ export class MediaPresentationStore {
           conceal: row.use_id ? control('conceal','conceal') : null }, canEdit: false, canProtect: false },
         owner: row.owner, actor: row.actor ?? null, target: row.target ?? null,
         context: row.context ?? DEFAULT_MEDIA_CONTEXT, disclosure: row.disclosure,
+        structureInstruction: row.structure_instruction as boolean,
         objectNamespace: row.object_namespace, byteLength: row.byte_length, campaign: row.campaign ?? false,
         campaignZone: row.campaign_zone ?? null };
     });
