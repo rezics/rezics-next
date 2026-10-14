@@ -43,6 +43,18 @@ import {
   type ZoneWorkPage,
 } from './types.ts';
 
+/**
+ * Clients for one read. Production omits this and keeps the request-cached host
+ * client; a story passes the replaying client. Public reads stay on `main`.
+ */
+export interface RealmReadClient {
+  main: MainClient;
+  /** Presentation and membership. The public client when the reader is signed out. */
+  personal?: MainClient;
+  actingSubject?: string;
+  signedIn: boolean;
+}
+
 // Published modules use the public viewer. Member-readable Realm and Zone
 // reads carry the eligible saved Agent; every cache is scoped to this request.
 
@@ -218,13 +230,24 @@ const browsePage = cache(
 );
 
 /** One page of the Zone's browse read for a Query (cached per request by its exact Query). */
-export const readZoneBrowse = (realm: string, locale: UiLocale, query: ZoneBrowseQuery) =>
-  browsePage(realm, locale, JSON.stringify(query));
+export function readZoneBrowse(
+  realm: string,
+  locale: UiLocale,
+  query: ZoneBrowseQuery,
+  client?: MainClient,
+): Promise<Loaded<ZoneBrowsePage>> {
+  // A supplied client is the replay. Production keeps the request-cached host client.
+  return client ? readBrowseAnswer(client, realm, query) : browsePage(realm, locale, JSON.stringify(query));
+}
 
-/** Main's admitted Facets, for the labels of the Facets a browse page shows. */
-export const readFacets = cache(async (): Promise<RealmFrameRead<FacetList>> =>
+const cachedFacets = cache(async (): Promise<RealmFrameRead<FacetList>> =>
   realmFrameReads({ keepProblem: false, main: main() }).readFacets(),
 );
+
+/** Main's admitted Facets, for the labels of the Facets a browse page shows. */
+export function readFacets(client?: MainClient): Promise<RealmFrameRead<FacetList>> {
+  return client ? realmFrameReads({ keepProblem: false, main: client }).readFacets() : cachedFacets();
+}
 
 /** A mod Work's disclosed releases, newest first; `closed` while the platform has not opened the read. */
 export const readModReleases = cache(async (work: string): Promise<Loaded<ModReleasePage>> => {

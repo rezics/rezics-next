@@ -1,10 +1,14 @@
-import { afterEach, expect, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import '../../tests/support/official-package-fixture.ts';
+import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import { materializeData } from 'native-i18n';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import browseFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-browse-and-search-in-its-zone.json';
 import paginationFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-pagination-in-its-zone.json';
 import { spaceHref } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
+import { ACCESS_COOKIE, SESSION_KEY_COOKIE } from '../auth/cookies.ts';
 import { buildBrowsePage } from '../realm/browse-page.ts';
 import { readBrowseAnswer, readFacetAnswer } from '../realm/browse-page-read.ts';
 import type { Loaded, ZoneBrowsePage } from '../realm/types.ts';
@@ -80,65 +84,6 @@ function expectCatalogue(built: Loaded<BrowseModel>, answer: ZoneBrowsePage) {
   expect(next?.searchParams.get('cursor') ?? null).toBe(answer.nextCursor);
 }
 
-test('the owner browse answer keeps titles, credit, lower-bound count, sorts and the opaque continuation', async () => {
-  const { sample, page, built } = await readRecorded(browse, 'owner', 'browse-newest-0', 'populated', true);
-  const answer = pageAnswer(sample);
-  expect(page.ok).toBe(true);
-  if (!built) throw new Error('The owner page was not built');
-  expectCatalogue(built, answer);
-  if (!built.ok) return;
-  expect(built.data.sorts.map(item => [item.sort, item.current])).toEqual([['newest', true], ['updated', false]]);
-  expect(built.data.state.text).toBeNull();
-  expect(new URL(built.data.next!, 'https://recorded.invalid').searchParams.get('type')).toBe('schema:Recipe');
-  expect(built.data.first).toBeNull();
-});
-
-test('the owner search answer keeps the recorded text, relevance sort and lower-bound count', async () => {
-  const { sample, built } = await readRecorded(browse, 'owner', 'search-relevance-0', 'populated', true);
-  const answer = pageAnswer(sample);
-  if (!built) throw new Error('The owner page was not built');
-  expectCatalogue(built, answer);
-  if (!built.ok) return;
-  expect(built.data.state.text).toBe(answer.query.text);
-  expect(built.data.sorts.map(item => [item.sort, item.current])).toEqual([
-    ['relevance', true], ['newest', false], ['updated', false],
-  ]);
-});
-
-test('the owner empty search stays an exact zero catalogue', async () => {
-  const { sample, built } = await readRecorded(browse, 'owner', 'search-no-match', 'empty', true);
-  const answer = pageAnswer(sample);
-  expect(answer.items).toEqual([]);
-  expect(answer.matches).toEqual({ value: 0, kind: 'exact' });
-  if (!built) throw new Error('The owner page was not built');
-  expectCatalogue(built, answer);
-  if (!built.ok) return;
-  expect(built.data.items).toEqual([]);
-  expect(built.data.next).toBeNull();
-  expect(built.data.first).toBeNull();
-});
-
-test('the owner unsupported query refusal stays a failure rather than an empty catalogue', async () => {
-  const { sample, page, built } = await readRecorded(browse, 'owner', 'unsupported-query-shape', 'error', true);
-  expect(sample.status).toBe(400);
-  expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
-  expect(built).toBe(page as typeof built);
-});
-
-test('the owner next page is the recorded continuation, with an exact count and no further cursor', async () => {
-  const { sample, built } = await readRecorded(browse, 'owner', 'browse-newest-1', 'populated', true);
-  const answer = pageAnswer(sample);
-  expect(answer.matches).toEqual({ value: 21, kind: 'exact' });
-  expect(answer.nextCursor).toBeNull();
-  if (!built) throw new Error('The owner page was not built');
-  expectCatalogue(built, answer);
-  if (!built.ok) return;
-  expect(built.data.next).toBeNull();
-  expect(built.data.first).not.toBeNull();
-  expect(new URL(built.data.first!, 'https://recorded.invalid').searchParams.has('cursor')).toBe(false);
-});
-
 test('the owner filtered first page keeps the recorded query and continuation', async () => {
   const { sample, built } = await readRecorded(pagination, 'owner', 'browse-newest-first', 'populated', true);
   const answer = pageAnswer(sample);
@@ -173,35 +118,6 @@ test('a changed cursor query stays the recorded refusal rather than a locally fi
   expect(built).toBe(page as typeof built);
 });
 
-test('the visitor browse reader keeps titles, language and the opaque continuation', async () => {
-  const { sample, page } = await readRecorded(browse, 'visitor', 'browse-newest-0', 'populated', false);
-  const answer = pageAnswer(sample);
-  expect(page.ok).toBe(true);
-  if (!page.ok) return;
-  expect(page.data.items.map(item => item.title.value)).toEqual(answer.items.map(item => item.title.value));
-  expect(page.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
-  expect(page.data.matches).toEqual(answer.matches);
-  expect(page.data.nextCursor).toBe(answer.nextCursor);
-  expect(page.data.items[0]?.title.language).toBe('en');
-});
-
-test('the visitor next page is the recorded terminal continuation', async () => {
-  const { sample, page } = await readRecorded(browse, 'visitor', 'browse-newest-1', 'populated', false);
-  const answer = pageAnswer(sample);
-  expect(page.ok).toBe(true);
-  if (!page.ok) return;
-  expect(page.data.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
-  expect(page.data.matches).toEqual({ value: 21, kind: 'exact' });
-  expect(page.data.nextCursor).toBeNull();
-});
-
-test('the visitor unsupported query stays a failure', async () => {
-  const { sample, page } = await readRecorded(browse, 'visitor', 'unsupported-query-shape', 'error', false);
-  expect(sample.status).toBe(400);
-  expect(sample.answer).toMatchObject({ code: 'unsupported_query_shape' });
-  expect(page).toEqual({ ok: false, failure: 'invalid' });
-});
-
 test('the visitor filtered continuation is the recorded terminal page', async () => {
   const { sample, page } = await readRecorded(pagination, 'visitor', 'browse-newest-continuation', 'populated', false);
   const answer = pageAnswer(sample);
@@ -219,3 +135,183 @@ test('the visitor changed cursor stays the recorded refusal', async () => {
   expect(sample.answer).toMatchObject({ code: 'invalid_work_read' });
   expect(page).toEqual({ ok: false, failure: 'invalid' });
 });
+
+let persona: AnswerPersona = 'visitor';
+const host = { ...(await import('next/headers')) };
+const restoreHost = replaceModule(import.meta.resolve('next/headers'), host, {
+  cookies: async () => ({ get: (name: string) => persona === 'visitor' ? undefined
+    : name === ACCESS_COOKIE ? { value: `recorded-${persona}` }
+      : name === SESSION_KEY_COOKIE ? { value: '00000000-0000-4000-8000-000000000001' } : undefined }),
+  headers: async () => new Headers(),
+});
+const api = { ...(await import('../api/main.ts')) };
+let fetcher: typeof fetch;
+const restoreApi = replaceModule(import.meta.resolve('../api/main.ts'), api, {
+  mainApiWithToken: (token: string | undefined) => api.mainApiWithToken(token, { fetcher }),
+});
+const { ZoneSiteRoute } = await import('./site-route.tsx');
+const { ZoneBrowse } = await import('./browse.tsx');
+const { RealmBrowseRoute } = await import('../realm/routes.tsx');
+afterAll(() => { restoreApi(); restoreHost(); });
+
+const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
+const pages = ['page-browse-default', 'page-search-default', 'page-search-relevance', 'page-search-no-match'] as const;
+
+function productionSample(label: string) {
+  return sampleOf(browse, persona, label);
+}
+
+function searchFrom(label: string) {
+  return Object.fromEntries(new URL(productionSample(label).path, 'https://recorded.invalid').searchParams);
+}
+
+function replay(labels: string[]) {
+  const transport = recordedFetch(browse, persona, labels.map(label => ({ label,
+    state: productionSample(label).status >= 400 ? 'error' : 'populated' })));
+  disposals.push(transport.dispose);
+  const requests: { method: string; path: string; query: Record<string, string>; authorization: string | null }[] = [];
+  const gaps: string[] = [];
+  fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    requests.push({ method: request.method, path: url.pathname, query: Object.fromEntries(url.searchParams),
+      authorization: request.headers.get('authorization') });
+    try { return await transport.fetcher(input, init); }
+    catch (error) { gaps.push(error instanceof Error ? error.message : String(error)); throw error; }
+  }) as typeof fetch;
+  const escaped = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(fetcher, {
+    preconnect: globalThis.fetch.preconnect,
+  }));
+  disposals.push(() => escaped.mockRestore());
+  return { requests, gaps };
+}
+
+function findBrowse(node: ReactNode): BrowseModel {
+  const found = (function walk(current: ReactNode): ReactElement<{ model: BrowseModel }> | null {
+    if (Array.isArray(current)) return current.map(walk).find(Boolean) ?? null;
+    if (!isValidElement<{ children?: ReactNode; model?: BrowseModel }>(current)) return null;
+    return current.type === ZoneBrowse
+      ? current as ReactElement<{ model: BrowseModel }>
+      : walk(current.props.children);
+  })(node);
+  if (!found) throw new Error('The production browse route did not render the catalogue');
+  return found.props.model;
+}
+
+function frameLabels(page: string) {
+  return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', page,
+    ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
+      'frame-follow', 'frame-platform-access'])];
+}
+
+/** Labels the browse route reaches. The site route's `routes` read is absent here. */
+function routeLabels(page: string) {
+  return frameLabels(page).filter(label => label !== 'frame-routes');
+}
+
+async function visit(page: string) {
+  const siteKey = new URL(productionSample('frame-address').path, 'https://recorded.invalid').searchParams.get('key');
+  if (!siteKey) throw new Error('Recorded address has no site key');
+  const seen = replay(frameLabels(page));
+  const rendered = await ZoneSiteRoute({
+    params: Promise.resolve({ locale: 'en', space: siteKey, path: ['browse'] }),
+    searchParams: Promise.resolve(searchFrom(page)),
+  });
+  return { ...seen, model: findBrowse(rendered) };
+}
+
+function expectRecordedPage(model: BrowseModel, answer: ZoneBrowsePage) {
+  expect(model.items.map(item => item.id)).toEqual(answer.items.map(item => item.id));
+  expect(model.items.map(item => item.title?.value)).toEqual(answer.items.map(item => item.title.value));
+  expect(model.items.map(item => item.author?.value ?? null)).toEqual(answer.items.map(item =>
+    item.primaryCredits.find(credit => credit.displayName)?.displayName ?? null));
+  expect(model.results).toBe(resultsText(answer));
+  expect(model.state.text).toBe(answer.query.text);
+  const next = model.next ? new URL(model.next, 'https://recorded.invalid') : null;
+  expect(next?.searchParams.get('cursor') ?? null).toBe(answer.nextCursor);
+  expect(next?.searchParams.has('limit') ?? false).toBe(false);
+  expect(next?.searchParams.has('language') ?? false).toBe(false);
+  const sorts: BrowseModel['sorts'][number]['sort'][] = answer.query.text
+    ? ['relevance', 'newest', 'updated'] : ['newest', 'updated'];
+  expect(model.sorts.map(item => item.sort)).toEqual(sorts);
+  expect(model.sorts.find(item => item.current)?.sort).toBe(answer.query.sort);
+}
+
+for (const who of personas) {
+  for (const page of pages) {
+    test(`${who} production ${page} keeps the recorded catalogue and sends no limit or language`, async () => {
+      persona = who;
+      const answer = pageAnswer(productionSample(page));
+      const { requests, gaps, model } = await visit(page);
+      expect(gaps).toEqual([]);
+      expectRecordedPage(model, answer);
+      const browseCalls = requests.filter(request => request.path.endsWith('/modules/browse'));
+      expect(browseCalls.length).toBeGreaterThan(0);
+      expect(browseCalls.every(request => request.authorization === null
+        && request.query.limit === undefined && request.query.language === undefined)).toBe(true);
+      expect(browseCalls.at(-1)?.query).toEqual(searchFrom(page));
+      const actor = who === 'visitor' ? undefined : (productionSample('frame-session-agent').answer as {
+        sessionAgent: { actingSubject: string };
+      }).sessionAgent.actingSubject;
+      const realmId = new URL(productionSample('frame-realm-header').path, 'https://recorded.invalid').pathname.split('/')[3];
+      expect(requests.filter(request => request.path === `/v1/realms/${realmId}`)
+        .every(request => request.authorization === null && Object.keys(request.query).length === 0)).toBe(true);
+      const presentations = requests.filter(request => request.path.endsWith('/presentation'));
+      expect(presentations.every(request => request.query.actingSubject === actor
+        && request.authorization === (actor ? `Bearer recorded-${who}` : null))).toBe(true);
+      const routeAt = requests.findIndex(request => request.path.endsWith('/routes'));
+      const browseAt = requests.findIndex(request => request.path.endsWith('/modules/browse'));
+      if (routeAt >= 0) expect(routeAt).toBeLessThan(browseAt);
+    });
+  }
+
+  test(`${who} cannot follow the recorded next page: the site route reads routes with that cursor`, async () => {
+    persona = who;
+    const answer = pageAnswer(productionSample('page-browse-default'));
+    const cursor = answer.nextCursor;
+    expect(cursor).toBeTruthy();
+    const siteKey = new URL(productionSample('frame-address').path, 'https://recorded.invalid').searchParams.get('key');
+    const { gaps } = replay([...frameLabels('page-browse-default-continuation-1')]);
+    await expect(ZoneSiteRoute({
+      params: Promise.resolve({ locale: 'en', space: siteKey!, path: ['browse'] }),
+      searchParams: Promise.resolve({ cursor: cursor! }),
+    })).rejects.toThrow(/Unmatched recorded request/);
+    expect(gaps.some(gap => gap.includes('/routes') && gap.includes(`cursor=${cursor}`) && gap.includes('"method":"GET"'))).toBe(true);
+  });
+
+  for (const page of pages) {
+    test(`${who} production route ${page} reads the recorded catalogue through the supplied client`, async () => {
+      persona = who;
+      const answer = pageAnswer(productionSample(page));
+      const { requests, gaps, model } = await visitInjected(page);
+      expect(gaps).toEqual([]);
+      expectRecordedPage(model, answer);
+      const browseCalls = requests.filter(request => request.path.endsWith('/modules/browse'));
+      expect(browseCalls.length).toBeGreaterThan(0);
+      expect(browseCalls.every(request => request.authorization === null
+        && request.query.limit === undefined && request.query.language === undefined)).toBe(true);
+      expect(browseCalls.at(-1)?.query).toEqual(searchFrom(page));
+      expect(requests.some(request => request.path.endsWith('/routes'))).toBe(false);
+    });
+  }
+}
+
+async function visitInjected(page: string) {
+  const key = new URL(productionSample('frame-address').path, 'https://recorded.invalid').searchParams.get('key');
+  if (!key) throw new Error('Recorded address has no site key');
+  const seen = replay(routeLabels(page));
+  const actor = persona === 'visitor' ? undefined : (productionSample('frame-session-agent').answer as {
+    sessionAgent: { actingSubject: string };
+  }).sessionAgent.actingSubject;
+  const main = api.mainApiWithToken(undefined, { fetcher });
+  const rendered = await RealmBrowseRoute({
+    params: Promise.resolve({ locale: 'en', realm: key }),
+    searchParams: Promise.resolve(searchFrom(page)),
+  }, undefined, {
+    main,
+    personal: actor ? api.mainApiWithToken(`recorded-${persona}`, { fetcher }) : main,
+    actingSubject: actor,
+    signedIn: persona !== 'visitor',
+  });
+  return { ...seen, model: findBrowse(rendered) };
+}

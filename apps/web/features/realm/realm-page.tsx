@@ -43,7 +43,7 @@ import { readingFromBanResponse, type BanReading } from '../realm-appeal/reading
 import { RealmMembership } from './membership.tsx';
 import { type Membership, readMembership } from './membership-state.ts';
 import type { RealmMessages } from './messages.ts';
-import { readCompletePresentation, readRealmZone, type RealmResolution, resolveRealm } from './read.ts';
+import { readCompletePresentation, readRealmZone, realmFrameReads, type RealmReadClient, type RealmResolution, resolveRealm } from './read.ts';
 import type { ZoneMount, ZonePresentationRead } from './types.ts';
 import { RealmTabs } from './realm-tabs.tsx';
 import { idOf, type RealmTab, realmHref, siteHref } from './route.ts';
@@ -231,36 +231,55 @@ export async function loadRealmView(
   locale: UiLocale,
   search: Search,
   surface: 'community' | 'site' = 'community',
-  replay?: RealmReplay,
+  host?: RealmReplay | RealmReadClient,
 ): Promise<RealmView | Exclude<RealmResolution, { kind: 'realm' }>> {
+  // Membership stories pass their recorded transport. Browse stories pass the production clients.
+  const replay = host && 'read' in host ? host : undefined;
+  const client = host && 'main' in host ? host : undefined;
   const played = replay ? await replayRealm(ref, locale, replay) : null;
   if (played && played.kind !== 'realm') return played;
-  const actingSubject = replay?.signedIn ? await replaySubject(replay) : null;
-  if (replay?.signedIn && actingSubject) {
-    const preferences = await replay.read(`/v1/me/person-preferences?actingSubject=${encodeURIComponent(actingSubject)}`, true);
+  const replayActor = replay?.signedIn ? await replaySubject(replay) : null;
+  if (replay?.signedIn && replayActor) {
+    const preferences = await replay.read(`/v1/me/person-preferences?actingSubject=${encodeURIComponent(replayActor)}`, true);
     await preferences.body?.cancel();
   }
+  const hosted = client ? realmFrameReads({
+    keepProblem: false,
+    main: client.main,
+    personal: client.personal ?? client.main,
+    actingSubject: client.actingSubject,
+  }) : null;
   const [resolved, messages, zoneMessages, jar, reader] = await Promise.all([
-    played ?? resolveRealm(ref, locale, surface),
+    played ?? (hosted ? hosted.resolveRealm(ref, locale, surface) : resolveRealm(ref, locale, surface)),
     getMessages('realm', locale),
     getMessages('zones', locale),
-    replay ? null : cookies(),
+    replay ? null : client
+      ? Promise.resolve({ get: () => undefined } as Awaited<ReturnType<typeof cookies>>)
+      : cookies(),
     replay ? {
       signedIn: replay.signedIn,
-      actingSubject: actingSubject ?? undefined,
+      actingSubject: replayActor ?? undefined,
       personal: replay.personal,
-      avatarQuery: actingSubject ? `?actingSubject=${encodeURIComponent(actingSubject)}` : '',
+      avatarQuery: replayActor ? `?actingSubject=${encodeURIComponent(replayActor)}` : '',
+    } satisfies RealmReader : client ? {
+      signedIn: client.signedIn,
+      actingSubject: client.actingSubject,
+      personal: client.personal ?? client.main,
+      avatarQuery: client.actingSubject ? `?actingSubject=${encodeURIComponent(client.actingSubject)}` : '',
     } satisfies RealmReader : realmReader(),
   ]);
+  const readAttachment = (realmId: string) => hosted ? hosted.readRealmZone(realmId) : readRealmZone(realmId);
+  const readPublication = (zoneId: string) => hosted
+    ? hosted.readCompletePresentation(zoneId) : readCompletePresentation(zoneId);
   if (resolved.kind !== 'realm') return resolved;
   let realm = resolved;
   // A Realm entry can lack Zone capability; its attachment supplies the site address.
   // Story replay already resolved the Realm from its recorded reads, so this host read stays on the production path.
   if (!replay && (surface === 'community' || !realm.zone)) {
-    const attached = await readRealmZone(realm.realm);
+    const attached = await readAttachment(realm.realm);
     if (attached.ok) {
       const zoneId = attached.data.zone.slice(-36);
-      const publication = await readCompletePresentation(zoneId);
+      const publication = await readPublication(zoneId);
       const address = publication.ok && publication.data.address
         ? { ...publication.data.address, prefix: '/z/' as const } : null;
       if (publication.ok && publication.data.zone === attached.data.zone
@@ -272,12 +291,10 @@ export async function loadRealmView(
     }
   }
   const [read, membership, ban] = await Promise.all([
-    surface === 'site' && realm.zone ? readCompletePresentation(realm.zone.id) : null,
-    replay
-      ? reader.actingSubject ? readMembership(replay.personal, realm.header.id, reader.actingSubject) : null
-      : reader.actingSubject
-        ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
-        : null,
+    surface === 'site' && realm.zone ? readPublication(realm.zone.id) : null,
+    reader.actingSubject
+      ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
+      : null,
     replay
       ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay.read) : null
       : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
@@ -402,6 +419,7 @@ export async function RealmFrame({
   siteMounts,
   siteTokens,
   siteNavigation,
+  client,
   children,
 }: {
   view: RealmView;
@@ -419,8 +437,12 @@ export async function RealmFrame({
   siteTokens?: ZoneTokens;
   /** The authorized editor read supplies presentation links before publication. */
   siteNavigation?: SitePresentationCut['navigation'];
+  /** Set when a story replays the frame. Production omits it and reads the request. */
+  client?: RealmReadClient;
 }) {
-  const [jar, request] = await Promise.all([cookies(), headers()]);
+  const [jar, request] = client
+    ? [{ get: () => undefined } as Awaited<ReturnType<typeof cookies>>, new Headers()] as const
+    : await Promise.all([cookies(), headers()]);
   const { realm, presentation, execution, pkg, data, zone, messages, zoneMessages, lookEnabled } = view;
   const site = tab === null;
   const tokens = site && structuralPreview && siteTokens ? siteTokens : presentation.tokens;

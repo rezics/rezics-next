@@ -40,6 +40,7 @@ import {
   readRoster,
   readZoneBrowse,
   resolveRealm,
+  type RealmReadClient,
 } from './read.ts';
 import {
   loadRealmView,
@@ -113,10 +114,11 @@ async function realmRoute(
   content: Content,
   site = false,
   loadView: typeof loadRealmView = loadRealmView,
+  client?: RealmReadClient,
 ) {
   const [{ locale, realm }, search] = await Promise.all([params, searchParams]);
   if (!isUiLocale(locale)) notFound();
-  const view = await loadView(realm, locale, search, site ? 'site' : 'community');
+  const view = await loadView(realm, locale, search, site ? 'site' : 'community', client);
   if (view.kind === 'missing') notFound();
   if (view.kind === 'unavailable')
     return <RealmUnavailable messages={await getMessages('realm', locale)} failure={view.failure} reference={view.reference} />;
@@ -126,21 +128,21 @@ async function realmRoute(
       locale,
       site ? siteHref(locale, realm, tab === 'home' ? [] : [tab]) : realmHref(locale, realm, tab),
     );
-  return (
-    <RealmFrame
-      view={view}
-      tab={site ? null : tab === 'rules' || tab === 'members' ? 'about' : tab}
-      locale={locale}
-      search={search}
-      address={site ? siteHref(locale, view.context.ref, tab === 'home' ? [] : [tab]) : undefined}
-      crumbs={site && tab === 'browse' && view.pkg?.catalogue ? [
-        { label: view.zone.name, href: spaceHref(view.context.ref, 'site') },
-        { label: zoneContentText(view.zoneMessages.browseTab, locale), href: null },
-      ] : undefined}
-    >
-      {await content(view, locale, search)}
-    </RealmFrame>
-  );
+  const frame = {
+    view,
+    tab: site ? null : tab === 'rules' || tab === 'members' ? 'about' : tab,
+    locale,
+    search,
+    address: site ? siteHref(locale, view.context.ref, tab === 'home' ? [] : [tab]) : undefined,
+    crumbs: site && tab === 'browse' && view.pkg?.catalogue ? [
+      { label: view.zone.name, href: spaceHref(view.context.ref, 'site') },
+      { label: zoneContentText(view.zoneMessages.browseTab, locale), href: null },
+    ] : undefined,
+    client,
+    children: await content(view, locale, search),
+  };
+  // A replay has no Next request store. Resolving the frame here yields the same tree.
+  return client ? RealmFrame(frame) : <RealmFrame {...frame} />;
 }
 
 /** Cursor links for a paged tab: the next page, and the first page once past it. */
@@ -248,7 +250,11 @@ export function SiteHomeRoute(props: RealmRouteProps, loadView?: typeof loadReal
  * release filter (`releaseFilter`) leads with it; once a condition is chosen the results are the
  * Works Main finds with one release meeting every condition, each saying which release matched.
  */
-export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadRealmView) {
+export function RealmBrowseRoute(
+  props: RealmRouteProps,
+  loadView?: typeof loadRealmView,
+  client?: RealmReadClient,
+) {
   return realmRoute(
     props,
     'browse',
@@ -263,7 +269,7 @@ export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadR
       );
       const spec = view.pkg?.releaseFilter?.(locale) ?? null;
       // The registry names the release facets and the values they admit; a Zone's spec only adds its words.
-      const served = spec ? await readFacets() : null;
+      const served = spec ? await readFacets(client?.main) : null;
       const release =
         spec && served?.ok ? resolveReleaseFilter(spec, served.data.facets, locale) : null;
       const releaseState = release ? parseReleaseFilter(search, release) : noReleaseFilter;
@@ -319,8 +325,9 @@ export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadR
       const state = parseBrowseState(search);
       const [page, facets] = await Promise.all([
         readZoneBrowse(view.context.realm, locale,
-          view.pkg?.catalogue ? catalogueBrowseQuery(search) : mainBrowseQuery(state)),
-        readFacets(),
+          view.pkg?.catalogue ? catalogueBrowseQuery(search) : mainBrowseQuery(state),
+          client?.main),
+        readFacets(client?.main),
       ]);
       const catalogue = view.pkg?.catalogue;
       const built = buildBrowsePage({
@@ -356,6 +363,7 @@ export function RealmBrowseRoute(props: RealmRouteProps, loadView?: typeof loadR
     },
     true,
     loadView,
+    client,
   );
 }
 
