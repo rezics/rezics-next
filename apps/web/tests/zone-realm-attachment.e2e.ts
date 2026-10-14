@@ -9,6 +9,8 @@ import { localizedPath } from '../i18n/locale.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { axeViolations, formatViolations } from './a11y-axe.ts';
 import { retainedAboutPost } from '../features/zones/about-discussion-intent.ts';
+import { aboutDiscussionMessages } from '../features/zones/about-discussion-messages.ts';
+import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
 import { grantPlatformUse, platformAdministratorSession } from '../../../tests/qa/fixtures/platform-grant.ts';
 
 // An editor attaches a Realm from another Space and publishes a routable Work page.
@@ -186,7 +188,7 @@ async function compose(page: Page, body: string, language: string, spoiler: bool
   await expect(input).toHaveValue(body);
   await area.getByRole('button', { name: /^Content language:/ }).press('Enter');
   const search = page.getByRole('searchbox', { name: 'Find a language', exact: true });
-  await search.fill(language === 'ar' ? 'Arabic' : 'Japanese');
+  await search.fill(language === 'ar' ? 'Arabic' : language === 'en' ? 'English' : 'Japanese');
   await search.press('Enter');
   if (spoiler) {
     await area.getByRole('checkbox', { name: 'Contains spoilers' }).focus();
@@ -419,6 +421,90 @@ test('a Realm steward can attach, list, and withdraw a Zone', async ({ page }, i
   await expect(page.getByText('No Realm is attached.')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByText('This Zone shows this Realm.')).toHaveCount(0);
   await shoot(page, 'zone-realm-removed', info);
+});
+
+test('attached-realm-discussion: two Persons post concurrently and reopen the same thread after reload', async ({ page, browser }, info) => {
+  test.setTimeout(600_000);
+  const found: Findings = [];
+  const { member, principalId, zoneSpace, realmSpace, actingSubject } = await attachRealm(page, info);
+  await grantPlatformUse(await platformAdministratorSession(), principalId, 'realm-reply');
+  const about = await publishedWorkPage(page, zoneSpace.zone!, actingSubject, principalId);
+  const zoneUrl = localizedPath(zoneMemberHref(uuidOf(zoneSpace.space!), 'guide', about), 'en');
+  const visitor = await command<{ agent: string }>(page, 'agents', {
+    profile: 'agent-provision-v1', kind: 'person', displayName: 'Harbor visitor',
+  });
+  const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: phone, reducedMotion: 'reduce' });
+  const other = await context.newPage();
+  try {
+    await signInAtAccounts(other, '/en/manage', member);
+    const sessionKey = (await context.cookies()).find(cookie => cookie.name === 'rezics_session_key')!.value;
+    const session = await other.request.get('/api/main/v1/me/session-agent', { headers: { 'x-session-key': sessionKey } });
+    expect(session.ok()).toBe(true);
+    const selected = await other.request.put('/api/main/v1/me/session-agent', {
+      headers: { 'x-session-key': sessionKey, 'idempotency-key': randomUUID() },
+      data: { actingSubject: visitor.agent, expectedRevision: (await session.json() as {
+        sessionAgent: { revision: string | null } }).sessionAgent.revision },
+    });
+    expect(selected.ok()).toBe(true);
+    expect(visitor.agent).not.toBe(actingSubject);
+    await Promise.all([page.goto(zoneUrl), other.goto(zoneUrl)]);
+    const bodies = ['The harbor guide helped me find the pier.', '港の案内について話し合いましょう。'];
+    await Promise.all([compose(page, bodies[0]!, 'en', false), compose(other, bodies[1]!, 'ja', false)]);
+    // Both real browser commands leave together; no route interception or invented receipt.
+    const writes: Array<{ url: string; request: string; status: number; body: string }> = [];
+    const answers: Promise<void>[] = [];
+    for (const tab of [page, other]) tab.on('response', response => {
+      if (response.request().method() === 'POST' && new URL(response.url()).pathname.endsWith('/about-posts')) {
+        const write = { url: response.url(), request: response.request().postData() ?? '', status: response.status(), body: '' };
+        writes.push(write);
+        answers.push(response.text().then(body => { write.body = body; }));
+      }
+    });
+    await Promise.all([page, other].map(tab => pressByKeyboard(tab,
+      discussion(tab).getByRole('button', { name: aboutDiscussionMessages.en.send, exact: true }), found, 'Post message')));
+    for (const tab of [page, other]) {
+      // A genuine 202 or lost response exposes recovery with the same retained intent.
+      for (let attempt = 0; attempt < 12; attempt++) {
+        const area = recoveryDiscussion(tab);
+        if (await area.count() === 0) break;
+        const retry = area.getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
+        if (await retry.isVisible()) await pressByKeyboard(tab, retry, found, 'Retry retained message');
+        await expect(discussion(tab).getByRole('button', { name: aboutDiscussionMessages.en.sending })).toHaveCount(0, { timeout: 30_000 });
+        if ((await retained(tab)).length === 0) break;
+        await tab.waitForTimeout(500);
+      }
+      await Promise.all(answers);
+      expect(await retained(tab), JSON.stringify(writes)).toEqual([]);
+    }
+    await Promise.all([page.reload(), other.reload()]);
+    for (const tab of [page, other]) {
+      const area = discussion(tab);
+      await expect(area.locator('article'), JSON.stringify(writes)).toHaveCount(2, { timeout: 30_000 });
+      for (const body of bodies) await expect(area.getByText(body, { exact: true })).toBeVisible();
+    }
+    const link = discussion(page).getByRole('link', { name: aboutDiscussionMessages.en.continueThread });
+    const threadUrl = await link.getAttribute('href');
+    expect(await discussion(other).getByRole('link', { name: aboutDiscussionMessages.en.continueThread }).getAttribute('href')).toBe(threadUrl);
+    await pressByKeyboard(page, link, found, 'Open the full discussion');
+    await page.reload();
+    for (const body of bodies) await expect(page.getByText(body, { exact: true })).toBeVisible({ timeout: 30_000 });
+
+    // Interface locale changes preserve the attached Realm and canonical discussion.
+    await other.goto(localizedPath(new URL(other.url()).pathname, 'ja'));
+    await expect(other.locator('html')).toHaveAttribute('lang', 'ja');
+    const japanese = other.getByRole('region', { name: aboutDiscussionMessages.ja.title, exact: true })
+      .filter({ has: other.getByRole('link', { name: 'North realm', exact: true }) });
+    await expect(japanese.locator('article')).toHaveCount(2);
+    for (const body of bodies) await expect(japanese.getByText(body, { exact: true })).toBeVisible();
+    const reopen = japanese.getByRole('link', { name: aboutDiscussionMessages.ja.continueThread });
+    await keyboardReach(other, reopen, found, 'Open discussion (ja)');
+    expect(await reopen.getAttribute('href')).toBe(localizedPath(threadUrl!, 'ja'));
+    await shoot(other, 'attached-realm-discussion-ja-reloaded', info);
+    await shoot(page, 'attached-realm-thread-reloaded', info);
+    expectClean(found);
+  } finally {
+    await context.close();
+  }
 });
 
 // The Zone resource page's discussion lookup exhausts its per-request Fuseki budget.

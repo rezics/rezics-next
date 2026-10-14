@@ -6,6 +6,8 @@ import { readFileSync } from 'node:fs';
 import { type Browser, expect as playwrightExpect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import type { MediaFixture } from './tracking-media-seed.ts';
+import { copyOf } from '../features/tracking/messages.ts';
+import { expectClean, type Findings, keyboardReach, pressByKeyboard } from './g-743-matrix.ts';
 
 // A manga chapter, a game and an identified anime episode past a thousand, on the real stack. Two browser contexts
 // are two devices of one reader. The records are written once through Main's routes
@@ -91,6 +93,55 @@ async function shot(page: Page, info: TestInfo, name: string, target?: Locator) 
 
 const chapters = (page: Page) => page.locator('[data-chapter-progress]');
 const play = (page: Page) => page.locator('[data-game-progress]');
+
+test('thousand-episodes: an Anime reader reaches the inventory end by keyboard and returns after reload in English and Japanese', async ({ browser }, info) => {
+  test.setTimeout(600_000);
+  const found: Findings = [];
+  const page = await device(browser, info, phone, seeded.episodes.work);
+  try {
+    for (const locale of ['en', 'ja'] as const) {
+      const t = copyOf(locale);
+      await page.goto(localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(page.getByRole('link', { name: 'Anime', exact: true })).toBeVisible();
+      await page.goto(localizedPath(`${resourceHref('/w/', seeded.episodes.work.slice(-36))}/connections`, locale));
+      await loaded(page, '[data-episode-progress]', 180_000);
+      const panel = page.locator('[data-episode-progress]');
+      const jump = async (number: number) => {
+        const input = panel.getByLabel(t.jumpTo, { exact: true });
+        await keyboardReach(page, input, found, `Episode number (${locale})`);
+        await page.keyboard.press('ControlOrMeta+A');
+        await page.keyboard.type(String(number));
+        await pressByKeyboard(page, panel.getByRole('button', { name: t.jumpGo, exact: true }), found, `Go (${locale})`);
+      };
+      // Cross the first inventory page, then its fiftieth, and distinguish the last two occurrences.
+      for (const number of [1, 21, 1000, 1001, 1002]) {
+        await jump(number);
+        await expect(panel.locator('[data-selected="main"]')).toContainText(`Episode ${number}`, { timeout: 180_000 });
+        await expect(panel.locator('[data-selected="main"] [data-state]')).toBeVisible();
+      }
+      await jump(1003);
+      await expect(panel.getByText(t.noSuchEpisode({ number: '1003' }), { exact: true })).toBeVisible({ timeout: 180_000 });
+      await expect(panel.locator('[data-selected="main"]')).toHaveCount(0);
+      await jump(1002);
+      const mark = panel.getByRole('button', { name: t.markWatched, exact: true });
+      if (await mark.isVisible()) await pressByKeyboard(page, mark, found, `Mark watched (${locale})`);
+      await expect(panel.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+      await page.reload();
+      await loaded(page, '[data-episode-progress]', 180_000);
+      await expect(page.locator('html')).toHaveAttribute('lang', locale);
+      await expect(panel.locator('[data-where]')).toHaveText(t.lastWatched({ place: 'Episode 1002' }));
+      await jump(1002);
+      await expect(panel.locator('[data-selected="main"]')).toContainText('Episode 1002', { timeout: 180_000 });
+      await expect(panel.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
+      await shot(page, info, `thousand-episodes-${locale}-reloaded`, panel);
+      await page.setViewportSize(desktop);
+    }
+    expectClean(found);
+  } finally {
+    await page.context().close();
+  }
+});
 
 test('identified manga chapter progress resumes across volumes and devices', async ({ browser }, info) => {
   test.setTimeout(300_000);
