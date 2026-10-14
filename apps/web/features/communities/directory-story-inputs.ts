@@ -1,13 +1,17 @@
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
+import { direction } from '@rezics/main/language';
+import { browseCategories } from '../catalogue/registry.ts';
+import { servedTypes } from '../catalogue/type-fixtures.ts';
 import type { ResourceCard, ServedPage } from '../discover/api.ts';
 import { browseQuery, emptyBrowse, type BrowseState } from '../discover/browse-state.ts';
 import { creationSample, foundingPersonas } from './creation-story-inputs.ts';
 
 export type DirectoryStoryState = 'populated' | 'continuation' | 'filtered' | 'empty' | 'error' | 'moved' | 'loading';
-const realmType = 'https://rezics.com/vocab/Realm';
+const realmTypes = browseCategories(servedTypes.types).find(category => category.id === 'communities')?.types;
+if (!realmTypes) throw new Error('The served registry must declare the communities category');
 const position = { dataEpoch: 'directory-story', sequence: '1' };
 function liveCard(id: string, value: string): ResourceCard {
-  return { id, name: { value, language: 'en', direction: 'ltr', basis: 'fallback' }, kind: 'realm', types: [realmType],
+  return { id, name: { value, language: 'en', direction: direction('en', value), basis: 'fallback' }, kind: 'realm', types: realmTypes,
     icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: id, resourceType: 'realm' } };
 }
 const publicAddress = creationSample('visitor', 'public-created-address').answer as {
