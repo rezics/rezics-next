@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { type WriteRound } from '../../../../../apps/web/features/api/command.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { readMembership } from '../../../../../apps/web/features/realm/membership-state.ts';
+import { settle } from '../../../../../apps/web/features/manage/read.ts';
+import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
+import { browserZoneAuthoring, commitCommand } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { authoringModel, draftChoice, draftWire, publicationChoice } from '../../../../../apps/web/features/zone-editor/model.ts';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import { platformOperationOpen, type PlatformAccessSummary } from '../../../../../generated/openapi/main/exposure.ts';
 import row from '../../../../../scripts/qa/cases/outcomes/zone/home-rendering.ts';
@@ -17,7 +26,8 @@ type Presentation = { revision: string; presentation: ZonePresentation; renderTo
 type Receipt = { receipt: string; revision: string; homeDocument: string; homeRevision: string;
   routesRevision: string; navigationRevision: string; themeRevision: string;
   pages: Array<Pick<Page, 'page' | 'variantId' | 'revisionId'>>; replayed: boolean };
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+const fileWall = setTimeout(() => { throw new Error('Zone home rendering file exceeded 480 s'); }, 480_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(row);
 const short = (id: string) => id.slice(-36);
@@ -36,7 +46,7 @@ beforeAll(async () => {
 }, 180_000);
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await sessions?.close(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 let fixture: Promise<Awaited<ReturnType<typeof prepareSite>>> | undefined;
@@ -150,7 +160,7 @@ async function privateNavigation(f: Awaited<ReturnType<typeof site>>, person: Pe
 async function render(name: PersonaName) {
   const f = await site();
   const person = sessions[name];
-  const sample = recording.session(name, person);
+  const sample = proofRequests(person);
   await frameReads(name, person, f);
   if (name === 'visitor') await supportingReads(sample, f);
   await publicBundle(f, person, sample);
@@ -196,8 +206,8 @@ async function render(name: PersonaName) {
 
 async function frameReads(name: PersonaName, person: PersonaSession, f: Awaited<ReturnType<typeof site>>) {
   // The frame's public client stays anonymous even in a signed-in proof.
-  const anonymous = recording.session(name, sessions.visitor);
-  const personal = recording.session(name, person);
+  const anonymous = proofRequests(sessions.visitor);
+  const personal = proofRequests(person);
   const language = { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } };
   const realm = short(sessions.realm);
   for (const home of [
@@ -233,16 +243,174 @@ async function frameReads(name: PersonaName, person: PersonaSession, f: Awaited<
   }
 }
 
-outcomeTest(row, 'visitor', () => render('visitor'), recording);
-outcomeTest(row, 'stranger', () => render('stranger'), recording);
-outcomeTest(row, 'member', () => render('member'), recording);
-outcomeTest(row, 'moderator', () => render('moderator'), recording);
-outcomeTest(row, 'operator', () => render('operator'), recording);
-outcomeTest(row, 'owner', () => render('owner'), recording);
+outcomeTest(row, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(row, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(row, 'member', () => qualify('member'), recording);
+outcomeTest(row, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(row, 'operator', () => qualify('operator'), recording);
+outcomeTest(row, 'owner', () => qualify('owner'), recording);
 
 async function supportingReads(sample: ReturnType<typeof recording.session>, f: Awaited<ReturnType<typeof site>>) {
   await answer(sample('space-address', 'GET', `/v1/addresses/resolve?${new URLSearchParams({
     scope: 'space', key: short(f.space),
   })}`));
   await answer(sample('empty-home-presentation', 'GET', `/v1/zones/${short(sessions.zone)}/presentation`));
+}
+
+function proofRequests(person: PersonaSession): ReturnType<typeof recording.session> {
+  return (_label, ...args) => person.main(...args);
+}
+
+async function within(milliseconds: number, part: string, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function qualify(name: PersonaName) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The original API proof owns 60 s; recording the production visit owns another 120 s.
+    await within(60_000, 'API proof', () => render(name));
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+
+const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
+const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
+
+async function productionVisit(name: PersonaName) {
+  const f = await site();
+  const person = sessions[name];
+  const clientFor = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
+    fetcher: (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      const method = init?.method ?? 'GET';
+      const label = requestLabels.getStore()?.(method, path);
+      if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
+      return recording.session(name, caller)(label, method, path,
+        typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
+        new Headers(init?.headers).get('idempotency-key') ?? undefined,
+        { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } });
+    }) as typeof fetch,
+  });
+  const main = clientFor(person);
+  const anonymous = clientFor(sessions.visitor);
+  const actingSubject = person.actingSubject ?? undefined;
+  const frames = realmFrameReads({ main: anonymous, personal: main, actingSubject });
+
+  // React's request cache shares these reads between metadata, resolution and the page.
+  async function home(prefix: 'published' | 'empty' | 'published-index' | 'unpublished', address: string, routePath = '/') {
+    const readAddress = frames.readAddress;
+    const addresses = new Map<string, ReturnType<typeof readAddress>>();
+    const presentations = new Map<string, ReturnType<typeof frames.readCompletePresentation>>();
+    const presentation = (zone: string) => {
+      let read = presentations.get(zone);
+      if (!read) {
+        read = (async () => {
+          if (actingSubject) {
+            await named(`frame-${prefix}-session-agent`, () => main.v1.me['session-agent'].get());
+            await named(`frame-${prefix}-person-preferences`, () => main.v1.me['person-preferences'].get({ query: { actingSubject } }));
+          }
+          return named(`frame-${prefix}-presentation`, () => frames.readCompletePresentation(zone));
+        })();
+        presentations.set(zone, read);
+      }
+      return read;
+    };
+    const reader = realmFrameReads({ main: anonymous, personal: main, actingSubject, resolution: {
+      resolveAddress: (_scope, key, locale) => {
+        let read = addresses.get(key);
+        if (!read) {
+          read = named(`frame-${prefix}-space-address`, () => readAddress(key, locale));
+          addresses.set(key, read);
+        }
+        return read;
+      },
+      readCompletePresentation: presentation,
+      readRealmHeader: realm => named(`frame-${prefix}-realm-header`, () => frames.readRealmHeader(realm)),
+    } });
+    const resolved = await reader.resolveSite(address, 'en');
+    if (resolved.kind !== 'site') return;
+    // Metadata and the page share resolution, then start their independent reads together.
+    const routeLabel = prefix === 'published' ? 'published-home-route'
+      : prefix === 'published-index' ? 'published-index-empty'
+        : prefix === 'unpublished' ? 'unpublished-route-refused' : 'frame-empty-home-route';
+    const [, realm] = await Promise.all([
+      named(routeLabel, () => frames.readZoneRoute(resolved.zone, routePath)),
+      resolved.realm ? reader.resolveRealm(address, 'en', 'site') : null,
+    ]);
+    // A standalone Zone has no Realm header or membership and renders its saved frame.
+    if (!realm) {
+      // StandaloneZoneSiteFrame shares ZoneEditLink's authority probe between
+      // its frame and masthead; the attached Realm frame has no such probe.
+      if (actingSubject) await named(`frame-${prefix}-editor-open`, () => settle(
+        () => main.v1.zones({ id: resolved.zone })['showcase-editor'].get({ query: { actingSubject } }), { management: true }));
+      return;
+    }
+    if (realm.kind !== 'realm') return;
+    await Promise.all([
+      presentation(resolved.zone),
+      actingSubject ? requestLabels.run((_method, path) => path.includes('/joining')
+        ? `frame-${prefix}-joining` : `frame-${prefix}-follow`,
+      () => readMembership(main, realm.header.id, actingSubject)) : null,
+      actingSubject ? (async () => {
+        const access = await named(`frame-${prefix}-platform-access`, () => main.v1.me['platform-access'].get());
+        if (access.data && platformOperationOpen('getV1RealmsByRealmMember-ban', access.data)) {
+          await named(`frame-${prefix}-own-ban`, () => main.v1.realms({ realm: short(realm.header.id) })['member-ban'].get({ query: { actingSubject } }));
+        }
+      })() : null,
+    ]);
+    // Public home content is delivered by presentation, without an exact revision read.
+  }
+  await home('published', short(f.space));
+  await home('published-index', short(f.space), '/published-link');
+  await home('unpublished', short(f.space), '/draft-link');
+  await home('empty', f.emptyAddress);
+
+  // manager sends anonymous visitors to sign-in before the editor's first read.
+  if (!actingSubject) return;
+  async function authoring(prefix: 'management') {
+    const address = await resolveZoneManagementAddress(short(f.space), 'en', {
+      configuration: zoneId => named(`${prefix}-configuration`, () => settle(
+        () => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } }), { management: true })),
+      site: (key, locale) => requestLabels.run((_method, path) => path.includes('/addresses/')
+        ? `${prefix}-address` : `${prefix}-site-presentation`, () => frames.resolveSite(key, locale)),
+    });
+    if (address.kind !== 'site') return null;
+    const zoneId = address.site.zone;
+    const [editor, zone] = await Promise.all([
+      named(`${prefix}-editor`, () => settle(() => main.v1.zones({ id: zoneId })['showcase-editor'].get({ query: { actingSubject } }), { management: true })),
+      named(`${prefix}-zone`, () => settle(() => main.v1.zones({ id: zoneId }).get({ query: { actingSubject } }), { management: true })),
+      address.binding ? null : named(`${prefix}-lifecycle-configuration`, () => main.v1.zones({ id: zoneId }).configuration.get({ query: { actingSubject } })),
+    ]);
+    if (!editor.ok || !zone.ok) return null;
+    return authoringModel(editor.data, zone.data, zoneId, 'Published site');
+  }
+  const opened = await authoring('management');
+  if (!opened) return;
+  const zoneId = short(f.path);
+  const client = browserZoneAuthoring(main);
+  const round = (): WriteRound => ({ key: randomUUID(), seq: 1, superseded: () => false, confirm: () => {}, afterConfirmed: false });
+  const choice = draftChoice({ ...opened.state, value: JSON.stringify(fromPlainText('Saved production owner text', 'blocks')) }, actingSubject);
+  const saved = await named('editor-save', () => commitCommand(round(), key => client.saveDraft(draftWire(choice), key)));
+  if (!saved.ok) return;
+  // A second editor opened at the same head reaches the stale-save notice;
+  // its Load theirs action is the production trigger for readDraft.
+  const stale = await named('editor-stale-save', () => commitCommand(round(), key => client.saveDraft(draftWire(choice), key)));
+  if (stale.ok || stale.failure !== 'stale') return;
+  await requestLabels.run((_method, path) => path.includes('/showcase-editor') ? 'editor-reopen-draft' : 'editor-reopen-heads',
+    () => client.readDraft(zoneId, actingSubject!));
+  const publication = publicationChoice({ ...opened.state, value: choice.savedValue, savedValue: choice.savedValue,
+    expectedHead: saved.data.revisionId, basis: saved.data });
+  if (publication) await named('editor-publication', () => commitCommand(round(), key => client.publish(publication, actingSubject!, key, zoneId)));
 }
