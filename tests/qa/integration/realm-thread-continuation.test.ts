@@ -5,6 +5,7 @@ import { Pool } from 'pg';
 import { migrateContent } from '../../../services/content/src/migrate.ts';
 import { activityTime, bestKey } from '../../../services/main/src/modules/feed/ranking.ts';
 import { REALM_THREAD_COST } from '../../../services/main/src/modules/realm-reply/thread-contract.ts';
+import { MAIN_RELAY_STREAM_SCOPE } from '../../../services/main/src/modules/outbox/relay-position.ts';
 import { WorkReadUnavailable, type WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import {
   RealmReplyThreadStore,
@@ -155,26 +156,27 @@ test('Realm continuations reach sibling 192 and branch 33 with bounded indexed r
     await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource)
       SELECT $1,'population','pending-'||id FROM generate_series(1,10000) AS id`, [epoch]);
     await access.query('ANALYZE access.realm_thread_dirty');
-    const session = { position: { dataEpoch: epoch, sequence: '7' } } as WorkReadSession;
+    const focus = native(90002);
+    await access.query(`INSERT INTO access.realm_thread_reference
+      (data_epoch,realm,reply,placement,parent,thread,work,occurred_at,activity_at,active)
+      VALUES($1,$2,$3,$3,NULL,$3,$4,clock_timestamp(),clock_timestamp(),true)`, [epoch, realm, focus, work]);
+    const session = { position: { dataEpoch: epoch, sequence: '7' },
+      deps: { relayPosition: { read: async () => ({ streamScope: MAIN_RELAY_STREAM_SCOPE,
+        dataEpoch: epoch, sequence: '7' }) } } } as unknown as WorkReadSession;
     statements = [];
-    await store.assertThreadProjection(session);
-    for (const statement of statements) {
-      const plan = (await access.query(`EXPLAIN (ANALYZE,BUFFERS,FORMAT JSON,TIMING OFF) ${statement.text}`,
-        statement.values)).rows[0]['QUERY PLAN'][0].Plan as Plan;
-      evidence.push({ name: 'projection-population-backlog', statement: statement.text, plan });
-      const pending = nodes(plan).filter(node => node['Relation Name'] === 'realm_thread_dirty');
-      expect(pending).toHaveLength(1);
-      expect(pending[0]!['Index Name']).toBe('realm_reply_projection_pending');
-      expect(pending.reduce((sum, node) => sum + examined(node), 0)).toBe(0);
-    }
+    await store.assertThreadProjection(session, realm, focus);
+    expect(statements).toHaveLength(1);
+    expect(statements[0]!.values[5]).toEqual([focus]);
+    // The installed function's internal plan is qualified by the owner test;
+    // EXPLAIN of this call alone cannot expose its dependency range scans.
     await access.query(`INSERT INTO access.realm_thread_dirty(data_epoch,kind,resource)
-      VALUES($1,'reply','unprojected-reply')`, [epoch]);
-    await expect(store.assertThreadProjection(session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+      VALUES($1,'reply',$2)`, [epoch, focus]);
+    await expect(store.assertThreadProjection(session, realm, focus)).rejects.toBeInstanceOf(WorkReadUnavailable);
     await access.query(`DELETE FROM access.realm_thread_dirty WHERE data_epoch=$1 AND kind='reply'`, [epoch]);
     await content.query('UPDATE content.owner_control SET sequence=sequence+1 WHERE singleton');
-    await expect(store.assertThreadProjection(session)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    await expect(store.assertThreadProjection(session, realm, focus)).resolves.toBeUndefined();
 
-    const focus = native(90002), wide = native(90003), inactive = native(90004);
+    const wide = native(90003), inactive = native(90004);
     const siblings = references(focus, 1, 192), large = references(wide, 1000, 10000);
     // The inactive prefix shares the same parent, so a request cannot hide a
     // full-population scan behind a small final LIMIT.
