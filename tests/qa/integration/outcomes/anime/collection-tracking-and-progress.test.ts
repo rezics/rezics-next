@@ -86,7 +86,7 @@ beforeAll(async () => {
   const started = Date.now();
   try {
   const source = sourceIdentity(process.cwd());
-  sessions = await personaSessions({ observeMain: async observed => {
+  sessions = await personaSessions('public', { observeMain: async observed => {
     if (observed.response.status < 500) return;
     const persona = sessions && (['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)
       .find(name => sessions[name] === observed.caller);
