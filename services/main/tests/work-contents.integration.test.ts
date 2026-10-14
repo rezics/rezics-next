@@ -160,12 +160,12 @@ test('Reader: public and private composition pages, current Content, cursor and 
         canReadWork: async (principal: VerifiedPrincipal, actor: string, target: string) => privateReadActive
           && stack.access.canReadWork(principal, actor, target),
         activePrincipalId: stack.access.activePrincipalId.bind(stack.access),
-        canReadAsBaselineMember: async (principal: VerifiedPrincipal, actor: string) => privateReadActive
-          && principal.subject === b.principal.subject && actor === b.actor } as never,
+        canReadAsBaselineMember: stack.access.canReadAsBaselineMember.bind(stack.access) } as never,
       progress: new StructureProgressStore(stack.contentPool) });
     const progressPath = `/v1/compositions/${short(made.structure)}/occurrences/${short(changed.occurrences[0]!)}/progress`;
-    const progressCall = (method: string, token: string, actor: string, body?: object, key?: string) =>
-      progressApp.handle(new Request(`http://main.local${progressPath}${method === 'GET'
+    const progressCall = (method: string, token: string, actor: string, body?: object, key?: string,
+      path = progressPath) =>
+      progressApp.handle(new Request(`http://main.local${path}${method === 'GET'
         ? `?actingSubject=${encodeURIComponent(actor)}&selectedRevision=${encodeURIComponent(chapter.selectedRevision)}` : ''}`,
       { method, headers: { authorization: `Bearer ${token}`,
         ...(body ? { 'content-type': 'application/json', 'idempotency-key': key ?? randomUUID() } : {}) },
@@ -176,10 +176,24 @@ test('Reader: public and private composition pages, current Content, cursor and 
       b.token, b.actor, { actingSubject: b.actor, selectedRevision: chapter.selectedRevision,
         expectedVersion: 0, completed: true, position: null }));
     expect(savedProgress).toMatchObject({ completed: true, version: 1 });
+    // Losing Work read does not revoke control of the reader's Person. Hidden
+    // and absent occurrences stay equal for that otherwise authorized reader.
+    expect(await stack.access.canReadAsBaselineMember({ ...b.principal, emailVerified: true }, b.actor)).toBe(true);
     privateReadActive = false;
-    expect((await progressCall('GET', b.token, b.actor)).status).toBe(404);
+    const hiddenProgress = await progressCall('GET', b.token, b.actor);
+    const absentProgress = await progressCall('GET', b.token, b.actor, undefined, undefined,
+      `/v1/compositions/${short(made.structure)}/occurrences/${randomUUID()}/progress`);
+    expect(hiddenProgress.status).toBe(404);
+    expect(absentProgress.status).toBe(404);
+    expect(await hiddenProgress.json()).toEqual(await absentProgress.json());
     privateReadActive = true;
-    expect((await progressCall('GET', b.token, a.actor)).status).toBe(404);
+    expect((await json<{ version: number }>(await progressCall('GET', b.token, b.actor))).version).toBe(1);
+    // A readable occurrence cannot confer another Person's progress authority.
+    expect(await stack.access.canReadAsBaselineMember({ ...b.principal, emailVerified: true }, a.actor)).toBe(false);
+    const foreignProgress = await progressCall('GET', b.token, a.actor);
+    expect(foreignProgress.status).toBe(403);
+    expect(await foreignProgress.json()).toMatchObject({ code: 'authority_denied' });
+    expect((await json<{ version: number }>(await progressCall('GET', a.token, a.actor))).version).toBe(0);
     expect((await get(`${chapterPath}?language=ja`)).status).toBe(404);
     expect((await get(`${chapterPath}?revision=${encodeURIComponent(made.revision)}`)).status).toBe(409);
     expect((await get(`/v1/chapters/${short(changed.occurrences[2]!)}`)).status).toBe(404);
@@ -621,8 +635,16 @@ test('Legacy group preparation: bounded durable batches, restart, CAS, lost ackn
     expect(partialRead.manifest.topGroups).toBeUndefined();
     await expect(chapterStoryNumber(session(), partialRead.header, legacy.direct[0]!,
       { ordinal: 1, path: [] }, partialRead)).rejects.toThrow(/group|prepar|unavailable/iu);
-    const coverageStore = { directory: stack.env.objectDirectory, structureObjects: objects, structureGroupRoots: store,
+    // Main's production composition stores Work/model custody in S3. The
+    // recovery cut must use that same owner alongside the legacy Structure store.
+    const coverageStore = { directory: stack.env.objectDirectory, workObjects: stack.env.workObjects,
+      structureObjects: objects, structureGroupRoots: store,
       structureQualifierRoots: stack.env.structureQualifierRoots };
+    expect(coverageStore.workObjects).toBeDefined();
+    // The filesystem-only cut cannot read this stack's independently stored
+    // Work bytes; it must not be mistaken for missing legacy Structure custody.
+    await expect(captureObjectRecoveryCoverage(stack.fuseki, { ...coverageStore, workObjects: undefined }))
+      .rejects.toThrow('committed immutable object is unavailable');
     const pendingObjects = new Set<string>();
     const partialCoverage = await captureObjectRecoveryCoverage(stack.fuseki, coverageStore, pendingObjects);
     expect(pendingObjects.has(checkpoint.groups.page.slice(7))).toBe(true);
@@ -956,7 +978,9 @@ test('Legacy Structure retention: OwnerOperations GC pins both checkpoint famili
     // Both required resolver objects remain present at this boundary.
     const malformedQualifierRoots: StructureQualifierRootStore = Object.create(qualifierRoots);
     Object.defineProperty(malformedQualifierRoots, 'retainedRoots', { value: async () => undefined });
+    expect(stack.env.workObjects).toBeDefined();
     await expect(captureObjectRecoveryCoverage(stack.fuseki, { directory: stack.env.objectDirectory,
+      workObjects: stack.env.workObjects,
       structureObjects: objects, structureGroupRoots: roots, structureQualifierRoots: malformedQualifierRoots }))
       .rejects.toThrow('Qualifier custody is unavailable or corrupt');
 
