@@ -64,11 +64,10 @@ export async function readBoard(session: WorkReadSession, realm: string, concept
   } } LIMIT 2`, 2);
   if (rows.length > 1) throw new WorkReadUnavailable('Board Concept is ambiguous');
   const row = rows[0];
-  if (!row) throw new WorkReadMissing('Board is unavailable');
-  if (row.concept?.value !== concept || row.head?.type !== 'uri' || !native.test(row.head.value))
+  if (row && (row.concept?.value !== concept || row.head?.type !== 'uri' || !native.test(row.head.value)))
     throw new WorkReadUnavailable('Board Concept head is incomplete');
   const decisions = await session.disclosure([{ owner: 'graph', resource: concept,
-    revision: row.head?.value, component: 'record' }], 'search');
+    revision: row?.head?.value, component: 'record' }], 'search');
   if (decisions.length !== 1) throw new WorkReadUnavailable('Board disclosure is incomplete');
-  if (decisions[0] !== 'visible') throw new WorkReadMissing('Board is unavailable');
+  if (!row || decisions[0] !== 'visible') throw new WorkReadMissing('Board is unavailable');
 }

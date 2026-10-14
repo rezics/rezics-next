@@ -104,7 +104,11 @@ function boardWorld(options: { retired?: boolean; hidden?: boolean } = {}) {
   const fixture = world([{ id: 1, author: 1 }, { id: 2, author: 1, approved: false },
     { id: 3, author: 1 }, { id: 4, author: 1 }]);
   const { session } = fixture, original = session.query.bind(session);
-  Object.assign(session, { disclosure: async (targets: unknown[]) => targets.map(() => options.hidden ? 'hidden' : 'visible') });
+  let boardDisclosures = 0;
+  Object.assign(session, { disclosure: async (targets: unknown[]) => {
+    boardDisclosures += targets.length;
+    return targets.map(() => options.hidden ? 'hidden' : 'visible');
+  } });
   session.query = async (query, limit) => {
     if (query.includes('SELECT ?concept ?head')) {
       expect(limit).toBe(2);
@@ -123,7 +127,7 @@ function boardWorld(options: { retired?: boolean; hidden?: boolean } = {}) {
     }
     return rows;
   };
-  return fixture;
+  return { ...fixture, get boardDisclosures() { return boardDisclosures; } };
 }
 
 test('New board pages seek matching placements before the bound and exclude unapproved replies from counts', async () => {
@@ -155,10 +159,11 @@ test('a thread continuation cannot enter another board or leave its board', asyn
 
 test('retired and withheld boards answer gone before reading thread content', async () => {
   for (const options of [{ retired: true }, { hidden: true }]) {
-    const { session, calls } = boardWorld(options);
+    const fixture = boardWorld(options), { session, calls } = fixture;
     await expect(readRealmThreads(session, realm, { concept: news, sort: 'new' })).rejects.toBeInstanceOf(WorkReadMissing);
     expect(calls.bodies).toBe(0);
     expect(calls.admitted).toBe(0);
+    expect(fixture.boardDisclosures).toBe(1);
   }
 });
 

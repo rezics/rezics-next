@@ -1905,7 +1905,8 @@
     "operation": "GET /v1/realms/{realm}/threads",
     "ids": [
       "path:realm",
-      "query:actingSubject"
+      "query:actingSubject",
+      "query:concept"
     ],
     "status": "unregistered"
   },
