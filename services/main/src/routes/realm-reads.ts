@@ -1,3 +1,4 @@
+import { logWorkerFault } from '@rezics/observability/log';
 import { Elysia, t } from 'elysia';
 import { pageQuery, readId, readLanguage, readUuid } from '../modules/work/read-contract.ts';
 import { WorkReadInvalid, WorkReadLimit, WorkReadMissing, WorkReadMoved,
@@ -13,8 +14,9 @@ import { pageDiscoveryHeaders, pageDiscoveryPolicy } from '../modules/space/visi
 import type { ReadOptions, WorkReadSession } from '../modules/work/read-session.ts';
 import { RealmProfileUnavailable } from '../modules/realm-profile/schema.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
-import { commandError, problem } from './problems.ts';
+import { commandError, problem, typedRefusal } from './problems.ts';
 import { workReadProblems } from './work-reads.ts';
+import { SearchIndexUnavailable } from '../modules/work/search-readiness.ts';
 
 const params = t.Object({ realm: readUuid });
 const headers = { 'cache-control': 'no-store' };
@@ -25,10 +27,36 @@ function realmReadError(error: unknown): Response {
   if (error instanceof WorkReadMissing) return problem(404, 'realm_unavailable', 'Realm is unavailable');
   if (error instanceof WorkReadMoved) return problem(409, 'read_basis_changed', 'Restart from the first page');
   if (error instanceof WorkReadLimit) return problem(422, 'realm_read_budget_exceeded', 'Realm read exceeds its budget');
-  if (error instanceof WorkReadUnavailable) return problem(503, 'realm_read_unavailable', 'Realm read is unavailable');
-  if (error instanceof RealmProfileUnavailable) return problem(503, 'realm_read_unavailable',
-    'Realm public profile is unavailable');
+  if (error instanceof WorkReadUnavailable || error instanceof RealmProfileUnavailable) {
+    logWorkerFault('main.route.realm_read_unavailable', realmFaultCause(error));
+    return problem(503, 'realm_read_unavailable', error instanceof RealmProfileUnavailable
+      ? 'Realm public profile is unavailable' : 'Realm read is unavailable');
+  }
+  const refusal = typedRefusal(error);
+  if (refusal) {
+    // SearchIndexUnavailable already emits its fault in the shared translator.
+    if (refusal.status >= 500 && !(error instanceof SearchIndexUnavailable)) {
+      logWorkerFault('main.route.realm_read_unavailable', realmFaultCause(error));
+    }
+    return refusal;
+  }
   return commandError(error);
+}
+
+// Only authored, fixed reasons become diagnostic codes. Never serialize a
+// provider message, resource identifier, query, credential or hidden record.
+const faultReasons = new Map([
+  ['Realm public profile is ambiguous', 'realm_profile_ambiguous'],
+  ['Realm public profile is invalid', 'realm_profile_invalid'],
+  ['Moderator choice relation is ambiguous', 'moderator_choice_ambiguous'],
+  ['Realm count is unavailable', 'realm_count_unavailable'],
+]);
+class RealmReadFault extends Error {
+  constructor(readonly code: string, cause: unknown) { super('Realm read fault', { cause }); }
+}
+function realmFaultCause(error: unknown): unknown {
+  const code = error instanceof Error ? faultReasons.get(error.message) : undefined;
+  return code ? new RealmReadFault(code, error) : error;
 }
 
 // Anonymous public reads; private Realms require a live approved membership.

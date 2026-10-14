@@ -68,7 +68,7 @@ export async function readRealmHeader(session: WorkReadSession, realm: string) {
   let snapshot: Awaited<ReturnType<NonNullable<typeof governance>['realmHeaderRules']>> | undefined;
   if (governance) {
     try { snapshot = await governance.realmHeaderRules(realm); }
-    catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
+    catch (error) { throw new WorkReadUnavailable('Realm governance rule is unavailable', { cause: error }); }
   }
   if (snapshot?.rules === null) throw new WorkReadUnavailable('Realm governance rule is unavailable');
   const rules = snapshot?.rules?.map(rule => {
@@ -138,7 +138,7 @@ export async function readRealmLanding(session: WorkReadSession, realm: string) 
       : selected({ original: language, labels: { [language]: names[0].name.value } });
     let rules;
     try { rules = await session.deps.governance?.rules?.publishedRealmRules(realm, true); }
-    catch { throw new WorkReadUnavailable('Realm governance rule is unavailable'); }
+    catch (error) { throw new WorkReadUnavailable('Realm governance rule is unavailable', { cause: error }); }
     if (rules === null || rules === undefined) {
       throw new WorkReadUnavailable('Realm governance rule is unavailable');
     }

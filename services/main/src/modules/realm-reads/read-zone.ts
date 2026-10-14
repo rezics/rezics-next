@@ -29,15 +29,20 @@ export async function readRealmZone(session: WorkReadSession, realm: string,
   let publication: Awaited<ReturnType<typeof readZonePublication>>;
   try { publication = await publicationRead(session.deps.environment, zone); }
   catch (error) {
-    if (error instanceof ZoneUnavailable) throw new WorkReadUnavailable('Realm Zone presentation is unavailable');
+    if (error instanceof ZoneUnavailable) throw new WorkReadUnavailable('Realm Zone presentation is unavailable', { cause: error });
     throw error;
   }
   if (publication.disclosure === 'private') await readZoneVisibility(session, zone);
   // The current attachment only finds a candidate. Its publicly selected
   // configuration decides the entry; the Realm and Zone have independent Spaces.
-  if (publication.zone !== zone || publication.realm !== realm
-    || publication.space !== rows[0].zoneSpace.value
+  if (publication.zone !== zone || publication.space !== rows[0].zoneSpace.value
     || (publication.official !== null) !== (rows[0].official?.value === 'true')) {
+    throw new WorkReadUnavailable('Realm Zone presentation differs from its public relation');
+  }
+  // A saved attachment can find the creation shell, whose selected public
+  // configuration has no attachment. That is settled absence, not a fault.
+  if (publication.realm === null) throw new WorkReadMissing('Realm Zone is unavailable');
+  if (publication.realm !== realm) {
     throw new WorkReadUnavailable('Realm Zone presentation differs from its public relation');
   }
   await readRealmBasis(session, realm);
