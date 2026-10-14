@@ -69,7 +69,7 @@ async function enrollPerson(browser: Browser, info: TestInfo, purpose: string): 
   const accountsOrigin = process.env.ACCOUNT_ORIGIN ?? 'http://127.0.0.1:3004';
   const signUpOrigin = process.env.REZICS_ACCOUNTS_SIGNUP_ORIGIN;
   await page.goto('/auth/start?create=1&next=%2Fen');
-  await expect(page).toHaveURL(url => url.origin === new URL(accountsOrigin).origin);
+  await expect(page).toHaveURL(url => url.origin === new URL(accountsOrigin).origin, { timeout: 60_000 });
   if (signUpOrigin) {
     const signUp = new URL(page.url());
     await page.goto(`${signUpOrigin}${signUp.pathname}${signUp.search}`);

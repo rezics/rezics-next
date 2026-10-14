@@ -52,6 +52,17 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
+/** The thread link stretches over its row, so its keyboard ring must surround that row. */
+export const KeyboardThreadFocus: Story = {
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const title = canvas.getByRole('link', { name: 'October read-along: Pride and Prejudice, chapters 1–12' });
+    for (let stop = 0; stop < 100 && document.activeElement !== title; stop++) await userEvent.tab();
+    await expect(title).toHaveFocus();
+    await expect(getComputedStyle(title, '::after').boxShadow).not.toBe('none');
+  },
+};
+
 /** Each thread is a post titled by its first line, leading to its page, with its own reply count. */
 export const Threads: Story = {
   async play({ canvasElement }) {
