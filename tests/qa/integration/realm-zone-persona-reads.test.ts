@@ -5,6 +5,7 @@ import { personaNames, personaSessions, type PersonaSession, type PersonaSession
 import { closeRealm } from './outcomes/realm/closure-fixture.ts';
 
 let sessions: PersonaSessions;
+let bothAuthorities: PersonaSessions, delegatedSteward: PersonaSessions, zoneMandate: PersonaSessions;
 const absent = randomUUID();
 const evidence = `.temp/goal/${Bun.env.REZICS_QA_RUN_ID ?? 'local'}-realm-zone-personas.jsonl`;
 beforeAll(async () => {
@@ -17,6 +18,11 @@ beforeAll(async () => {
       response: answer.response, durationMs: answer.answeredAt - answer.requestStartedAt,
     })}\n`);
   } });
+  // Preparation belongs to the existing hook budget; each case then measures
+  // its attachment/read journey. The three Realms and their Spaces are independent.
+  [bothAuthorities, delegatedSteward, zoneMandate] = await Promise.all([
+    personaSessions('public'), personaSessions('public'), personaSessions('public'),
+  ]);
 }, 180_000);
 
 async function answer<T>(pending: Promise<Response>, status = 200): Promise<T> {
@@ -52,7 +58,7 @@ async function anonymousEntry(fixture: PersonaSessions, state: string) {
 }
 
 test('anonymous Realm entry after attachment under both authorities consumes only the public selection', async () => {
-  const fixture = await personaSessions('public');
+  const fixture = bothAuthorities;
   // The public persona fixture attaches an independently owned Zone through
   // its owner, who also holds Realm stewardship. It saves without publication.
   expect((await configuration(fixture.owner, fixture.zone)).configuration.defaultRealm).toBe(fixture.realm);
@@ -60,7 +66,7 @@ test('anonymous Realm entry after attachment under both authorities consumes onl
 }, 60_000);
 
 test('anonymous Realm entry after delegated stewardship preserves independent Zone authority', async () => {
-  const fixture = await personaSessions('public');
+  const fixture = delegatedSteward;
   const original = await configuration(fixture.owner, fixture.zone);
   await attach(fixture.owner, fixture.zone, original.revision, null);
   const target = await createZone(fixture.moderator);
@@ -86,7 +92,7 @@ test('anonymous Realm entry after delegated stewardship preserves independent Zo
 }, 60_000);
 
 test('anonymous Realm entry after a Zone mandate refuses attachment without Realm stewardship', async () => {
-  const fixture = await personaSessions('public');
+  const fixture = zoneMandate;
   const target = await createZone(fixture.owner);
   const operator = fixture.operator;
   const grants = await answer<{ authorityEpoch: string; items: {
