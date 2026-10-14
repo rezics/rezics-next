@@ -21,7 +21,7 @@ test('a discovery category retains the full HTTP status and problem, including u
 test('a failed discovery transport supplies no invented Main status or problem', async () => {
   for (const error of [new TypeError('Failed to fetch'), new DOMException('Deadline exceeded', 'TimeoutError')]) {
     const main = browserMainApi('https://story.invalid', { anonymous: true,
-      fetcher: (async () => { throw error; }) as typeof fetch });
+      fetcher: Object.assign(async () => { throw error; }, { preconnect: globalThis.fetch.preconnect }) });
     const api = discoveryApi(main, 'en');
     expect(await readDiscovery(main, { scope: 'global' })).toEqual({ ok: false, failure: 'unavailable' });
     expect(await readBrowse(() => api.resources({ profile: 'resource-list-v1', context: 'global',

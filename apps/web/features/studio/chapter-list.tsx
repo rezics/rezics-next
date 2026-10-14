@@ -36,7 +36,7 @@ import { type ChapterFact, type ChapterFacts, type ChapterState, chapterFacts, d
   type Destination, dropEdge, groupsOf, moveOperation, publishable, stepDestination } from './outline.ts';
 import { lengthLabel } from './parts.tsx';
 import { studioAgentName } from './studio-frame.tsx';
-import type { ContentsItem, ContentsPage, Loaded, MainClient } from './types.ts';
+import type { ChapterPage, ContentsItem, ContentsPage, Loaded, MainClient } from './types.ts';
 import { idOf } from './types.ts';
 
 type T = ContractOf<StudioMessages>;
@@ -48,7 +48,7 @@ export interface ChapterListProps {
   agents?: readonly AgentOption[];
   book: { id: string; mainVersion: string; title: string; language: string };
   /** The Book's top level (chapters, volumes, parts, extras); `none` while the Book has no composition. */
-  page: Loaded<ContentsPage> | { ok: false; failure: 'none' };
+  page: ChapterPage;
   /** The volume shown open, with its first page of chapters and their facts, read with the top level. */
   opened?: { occurrence: string; page: ContentsPage; facts: Promise<ChapterFacts> } | null;
   /** The identity Main read the chapters as (this Agent, or another of this person's that writes the Book). */
