@@ -469,7 +469,15 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     await Promise.all([page.goto(zoneUrl), other.goto(zoneUrl)]);
     const bodies = ['The harbor guide helped me find the pier.', '港の案内について話し合いましょう。'];
     try {
-      await expect(discussion(page).getByText(aboutDiscussionMessages.en.empty)).toBeVisible({ timeout: 30_000 });
+      for (const tab of [page, other]) {
+        // New fixture publications can still be moving. Follow the real region's offered recovery.
+        await expect(async () => {
+          const retry = tab.locator('[data-discussion-state="unavailable"]')
+            .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
+          if (await retry.isVisible()) await retry.press('Enter');
+          await expect(discussion(tab).getByText(aboutDiscussionMessages.en.empty)).toBeVisible({ timeout: 8_000 });
+        }).toPass({ timeout: 90_000 });
+      }
     } catch (error) {
       const path = `/${addressPath(new URL(page.url()).pathname)!.tail.join('/')}`;
       for (const endpoint of [

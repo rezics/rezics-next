@@ -131,8 +131,11 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
       await expect(panel.getByText(t.noSuchEpisode({ number: '1003' }), { exact: true })).toBeVisible({ timeout: 180_000 });
       await expect(panel.locator('[data-selected="main"]')).toHaveCount(0);
       await jump(1002);
+      await expect(panel.locator('[data-selected="main"]')).toContainText('Episode 1002', { timeout: 180_000 });
+      const state = panel.locator('[data-selected="main"] span[data-state]');
+      await expect(state).toBeVisible();
       const mark = panel.getByRole('button', { name: t.markWatched, exact: true });
-      if (await mark.isVisible()) await pressByKeyboard(page, mark, found, `Mark watched (${locale})`);
+      if (await state.getAttribute('data-state') === 'open') await pressByKeyboard(page, mark, found, `Mark watched (${locale})`);
       await expect(panel.locator('[data-selected="main"] [data-state="done"]')).toBeVisible();
       await page.reload();
       await loaded(page, '[data-episode-progress]', 180_000);
