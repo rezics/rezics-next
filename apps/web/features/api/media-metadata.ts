@@ -1,7 +1,7 @@
 import type { MediaImageControl, MediaImageMetadata, MediaImageReference } from '@rezics/ui/media-image';
 // The key's own module: this file also runs in server renders, where client modules cannot be called.
 import { mediaImageKey } from '@rezics/ui/media-image-key';
-import { BFF_PREFIX } from './browser.ts';
+import { BFF_PREFIX, browserMainApi } from './browser.ts';
 
 const selection = /^selection:([0-9a-f-]{36})$/;
 
@@ -32,7 +32,15 @@ type Descriptor = {
 };
 
 function normalize(value: Descriptor, reference: MediaImageReference, actor?: string | null): MediaImageMetadata {
+  if (!selection.test(reference.representationId)
+    && (value.representation !== reference.representationId || value.use !== (reference.mediaUseId ?? null)))
+    throw new Error('Unexpected image metadata reference');
   const url = new URL(`${BFF_PREFIX}${value.url}`, 'http://web.local');
+  // A descriptor cannot lend a different Use's authority to this occurrence.
+  const delivered = imageReferenceFromUrl(url.pathname + url.search);
+  if (delivered?.representationId !== value.representation || delivered.mediaUseId !== (value.use ?? undefined))
+    throw new Error('Unexpected image delivery reference');
+  url.searchParams.delete('actingSubject');
   if (actor) url.searchParams.set('actingSubject', actor);
   const present = (entry: [string, MediaImageControl | null | undefined]): entry is [string, MediaImageControl] => entry[1] != null;
   const controls = value.controls && Object.fromEntries(Object.entries(value.controls).filter(present).map(([field, control]) =>
@@ -65,14 +73,25 @@ export function mediaMetadataOf(items: readonly ({ status: 'available' } & Descr
     ? [normalize(item, references[index]!, actingSubject)] : []);
 }
 
+/** Keep Main's problem and retry contract available to callers; only HTTP 202 is pending. */
+export class MediaMetadataError extends Error {
+  constructor(readonly status: number, readonly problem: unknown, readonly headers: Headers) {
+    super('Image metadata unavailable');
+    this.name = 'MediaMetadataError';
+  }
+  get pending() { return this.status === 202; }
+}
+
 export async function resolveMediaMetadata(references: MediaImageReference[], actingSubject?: string | null,
   fetcher: typeof fetch = fetch): Promise<MediaImageMetadata[]> {
+  if (!references.length) return [];
   const items = mediaMetadataItems(references);
-  const response = await fetcher(`${BFF_PREFIX}/v1/media/metadata`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ items, ...(actingSubject ? { actingSubject } : {}) }), cache: 'no-store',
+  const { data, error, response, status } = await browserMainApi(
+    typeof window === 'undefined' ? 'http://web.local' : window.location.origin,
+    { anonymous: !actingSubject, cache: 'no-store', fetcher },
+  ).v1.media.metadata.post({ items, ...(actingSubject ? { actingSubject } : {}) }, {
+    fetch: { signal: AbortSignal.timeout(10_000) },
   });
-  if (!response.ok) throw new Error('Image metadata unavailable');
-  const result = await response.json() as { items: ({ status: 'available' } & Descriptor | { status: 'unavailable' })[] };
-  return mediaMetadataOf(result.items, references, actingSubject);
+  if (status !== 200 || error || !data) throw new MediaMetadataError(status, error?.value ?? data, response.headers);
+  return mediaMetadataOf(data.items, references, actingSubject);
 }

@@ -36,11 +36,12 @@ export function WebMediaProvider({ viewer: initial, actingSubject, locale, child
         if (active && revision === requestRevision) setSnapshot({ basis: initial, viewer: { ...initial, ready: false } });
       }
     };
-    window.addEventListener('focus', refresh);
-    document.addEventListener('visibilitychange', refresh);
+    const refreshOnEvent = () => { void refresh(); };
+    window.addEventListener('focus', refreshOnEvent);
+    document.addEventListener('visibilitychange', refreshOnEvent);
     if (!initial.ready) void refresh();
-    return () => { active = false; controller?.abort(); window.removeEventListener('focus', refresh);
-      document.removeEventListener('visibilitychange', refresh); };
+    return () => { active = false; controller?.abort(); window.removeEventListener('focus', refreshOnEvent);
+      document.removeEventListener('visibilitychange', refreshOnEvent); };
   }, [initial, actingSubject]);
   const resolve = useCallback((references: MediaImageReference[]) => resolveMediaMetadata(references, actingSubject), [actingSubject]);
   const refreshKey = `${actingSubject ?? 'anonymous'}:${refreshSerial}`;

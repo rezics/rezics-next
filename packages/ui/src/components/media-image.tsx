@@ -91,13 +91,14 @@ export function MediaImageProvider({ viewer, images: supplied = {}, resolve, lab
   const resolver = useRef(resolve);
   resolver.current = resolve;
   useEffect(() => { live.current = true; return () => { live.current = false; }; }, []);
-  useEffect(() => {
-    if (priorRefresh.current === refreshKey) return;
+  // Reset before descendants render: an Agent switch must never paint the previous
+  // reader's descriptors while waiting for a passive effect to clear them.
+  if (priorRefresh.current !== refreshKey) {
     priorRefresh.current = refreshKey;
     generation.current++;
     setRequestEpoch(generation.current);
     requested.current.clear(); pending.current.clear(); setLoaded({});
-  }, [refreshKey]);
+  }
   const request = useCallback((reference: MediaImageReference) => {
     const key = mediaImageKey(reference);
     if (!resolver.current || requested.current.has(key)) return;
@@ -155,7 +156,12 @@ export function ImageAuthoringScope({ resolve, scope, children }: { resolve: Ima
  * instead of waiting for the client batch; the surrounding provider keeps the viewer, refresh and every other image. */
 export function ResolvedMediaImages({ images, children }: { images: Readonly<Record<string, MediaImageMetadata | null>>; children: ReactNode }) {
   const parent = useContext(ImageContext);
-  const context = useMemo(() => ({ ...parent, images: { ...parent.images, ...images } }), [parent, images]);
+  const [basis, setBasis] = useState({ images, refreshKey: parent.refreshKey });
+  if (basis.images !== images) setBasis({ images, refreshKey: parent.refreshKey });
+  // SSR descriptors are a snapshot. Once viewing authority refreshes, the mounted
+  // image must ask Main again, including when only its Realm occurrence closed.
+  const current = basis.images !== images || basis.refreshKey === parent.refreshKey;
+  const context = useMemo(() => ({ ...parent, images: current ? { ...parent.images, ...images } : parent.images }), [parent, images, current]);
   return <ImageContext.Provider value={context}>{children}</ImageContext.Provider>;
 }
 
@@ -218,15 +224,17 @@ export function useMediaImagePresentation(src: string | undefined, image?: Omit<
 }
 
 /** A mask never mounts the original image; revealing is local and resets with labels or preference changes. */
-export function MediaImage({ metadata: supplied, representationId, mediaUseId, conceal = false, viewer: suppliedViewer, labels: overrides, revealable = true, compact = false, className, src: fallbackSrc, alt = '', ...props }: MediaImageProps) {
+export function MediaImage({ metadata: supplied, representationId, mediaUseId, conceal = false, viewer: suppliedViewer, labels: overrides, revealable = true, compact = false, className, src: fallbackSrc, alt = '', onError, ...props }: MediaImageProps) {
   const { context, metadata, viewer, effectiveConceal, presentation } = useImageDecision({ metadata: supplied,
     representationId, mediaUseId, conceal, viewer: suppliedViewer, src: fallbackSrc });
   const labels = { ...context.labels, ...overrides };
   const identity = `${mediaImageKey(metadata ?? { representationId: representationId ?? String(fallbackSrc ?? ''), mediaUseId })}:${metadata?.revision ?? ''}:${metadata?.nsfw ?? ''}:${metadata?.ageRating.status}:${metadata?.ageRating.status === 'assessed' ? metadata.ageRating.labels.join(',') : ''}:${effectiveConceal}:${presentation}:${viewer.nsfwDisplay}`;
   const [reveal, setReveal] = useState({ identity, open: false });
+  const [failedDelivery, setFailedDelivery] = useState<string | null>(null);
   if (reveal.identity !== identity) setReveal({ identity, open: false });
   const src = safeDocumentUrl(metadata?.src ?? fallbackSrc, true);
-  if (presentation === 'loading' || presentation === 'unavailable' || presentation === 'rating-hidden' || !src) {
+  const deliveryKey = `${context.requestEpoch}:${identity}:${src}`;
+  if (presentation === 'loading' || presentation === 'unavailable' || presentation === 'rating-hidden' || !src || failedDelivery === deliveryKey) {
     const label = presentation === 'loading' ? labels.loading : presentation === 'rating-hidden' ? labels.ratingHidden : labels.unavailable;
     if (!revealable || compact) return <span data-slot="media-image-placeholder" role="img" aria-label={label} title={label} style={props.style}
       className={cn('flex items-center justify-center overflow-hidden rounded-lg bg-muted text-muted-foreground', className)}><EyeOffIcon aria-hidden="true" className="size-4 shrink-0" /></span>;
@@ -244,5 +252,11 @@ export function MediaImage({ metadata: supplied, representationId, mediaUseId, c
       <span>{reason}</span>{revealable ? <Button type="button" variant="secondary" size="sm" onClick={() => setReveal({ identity, open: true })} aria-expanded="false">{labels.reveal}</Button> : null}
     </span>;
   }
-  return <img {...props} data-slot="media-image" src={src} alt={alt} className={className} loading={props.loading ?? 'lazy'} referrerPolicy="no-referrer" />;
+  return <img {...props} data-slot="media-image" src={src} alt={alt} className={className} loading={props.loading ?? 'lazy'} referrerPolicy="no-referrer"
+    onError={event => {
+      // Closure can take effect between descriptor and bytes. Never fall back to
+      // the authored URL, which may name a different, still-public occurrence.
+      if (metadata) setFailedDelivery(deliveryKey);
+      onError?.(event);
+    }} />;
 }

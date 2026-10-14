@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useMemo, useState } from 'react';
-import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { expect, fireEvent, userEvent, waitFor, within } from 'storybook/test';
 import { Button } from './button.tsx';
 import { ImageSettings } from './image-settings.tsx';
 import { RichTextEditor } from './rich-text-editor.tsx';
@@ -210,5 +210,66 @@ export const ResolvedByServer: Story = { render: () => <ServerResolved />,
     await expect(canvas.getByRole('img', { name: 'NSFW image' })).toBeVisible();
     await expect(canvas.queryByRole('img', { name: 'Resolved NSFW art' })).toBeNull();
     await expect(canvas.getByText('0 metadata requests')).toBeVisible();
+  },
+};
+
+function DeliveryFailure() {
+  const src = useMemo(source, []);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  const [refresh, setRefresh] = useState(0);
+  return <MediaImageProvider viewer={viewer} refreshKey={refresh} resolve={async refs => refs.map(ref => ({
+    ...ref, src, nsfw: 'sfw', ageRating: { status: 'unassessed' },
+  }))}>
+    <div className="grid max-w-lg gap-4 p-4">
+      <MediaImage representationId="exact-representation" mediaUseId="closed-use"
+        src="/independent-public-fallback.png" alt="Exact Realm illustration" />
+      <Button onClick={() => setRefresh(value => value + 1)}>Refresh delivery</Button>
+    </div>
+  </MediaImageProvider>;
+}
+export const ByteDenialNeverFallsBack: Story = { render: () => <DeliveryFailure />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const image = await canvas.findByRole('img', { name: 'Exact Realm illustration' });
+    // A browser image load can fail after Main's descriptor succeeded, including
+    // closure between requests. Its status is unavailable to the img element.
+    await fireEvent.error(image);
+    await expect(await canvas.findByText('Content unavailable')).toBeVisible();
+    await expect(canvas.queryByRole('img')).toBeNull();
+    await expect(canvasElement.querySelector('[src="/independent-public-fallback.png"]')).toBeNull();
+    await userEvent.click(canvas.getByRole('button', { name: 'Refresh delivery' }));
+    await expect(await canvas.findByRole('img', { name: 'Exact Realm illustration' })).toBeVisible();
+  },
+};
+
+function ChangingReader() {
+  const src = useMemo(source, []);
+  useEffect(() => () => URL.revokeObjectURL(src), [src]);
+  const [actor, setActor] = useState('member');
+  const oldRead = useRef<() => void>(() => {});
+  const [started, setStarted] = useState(false);
+  return <MediaImageProvider viewer={viewer} refreshKey={actor} resolve={async refs => {
+    if (actor !== 'member') return [];
+    setStarted(true);
+    return new Promise(resolve => { oldRead.current = () => resolve(refs.map(ref => ({
+      ...ref, src, nsfw: 'sfw', ageRating: { status: 'unassessed' },
+    }))); });
+  }}>
+    <div className="grid max-w-lg gap-4 p-4">
+      <MediaImage representationId="closed-representation" mediaUseId="closed-use" alt="Previous reader's illustration" />
+      <Button disabled={!started} onClick={() => setActor('realm-owner')}>Choose Realm owner</Button>
+      <Button onClick={() => oldRead.current()}>Finish previous read</Button>
+    </div>
+  </MediaImageProvider>;
+}
+export const IdentityChangeRejectsPreviousAnswer: Story = { render: () => <ChangingReader />,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    await waitFor(() => expect(canvas.getByRole('button', { name: 'Choose Realm owner' })).toBeEnabled());
+    await userEvent.click(canvas.getByRole('button', { name: 'Choose Realm owner' }));
+    await expect(await canvas.findByText('Content unavailable')).toBeVisible();
+    await userEvent.click(canvas.getByRole('button', { name: 'Finish previous read' }));
+    await waitFor(() => expect(canvas.queryByRole('img', { name: "Previous reader's illustration" })).toBeNull());
+    await expect(canvas.getByText('Content unavailable')).toBeVisible();
   },
 };

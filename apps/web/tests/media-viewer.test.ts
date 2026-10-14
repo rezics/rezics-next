@@ -48,6 +48,14 @@ test('media display defaults do not grant age-category eligibility', () => {
   expect(mediaViewer({ ...preferences, nsfwDisplay: 'invalid' })).toBeNull();
 });
 
+test('a pending Account response never becomes a ready media viewer', async () => {
+  const preferences = { age: 'adult', accountEligible: true, adultAvailable: true,
+    categories: { general: true, r15: true, r18: true, r18g: true }, nsfwDisplay: 'show' };
+  expect(await readMediaViewer({ accountOrigin: 'http://account.local', accessToken: 'actual-token',
+    fetch: (async () => Response.json(preferences, { status: 202 })) as unknown as typeof fetch }))
+    .toMatchObject({ ready: false, signedIn: true, nsfwDisplay: 'mask' });
+});
+
 test('media viewer reads preserve unavailable state and never expose private Account fields', async () => {
   let calls = 0;
   const fetcher = (async () => { calls++; throw new Error('offline'); }) as unknown as typeof fetch;

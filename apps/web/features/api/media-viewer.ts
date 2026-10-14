@@ -54,7 +54,7 @@ export async function readMediaViewer(input: {
       },
       { fetch: input.fetch, deadlineAt: input.deadlineAt, timeoutMs: SERVER_READ_LIMITS.metadata },
     );
-    const viewer = response.ok ? mediaViewer(await response.json()) : null;
+    const viewer = response.status === 200 ? mediaViewer(await response.json()) : null;
     if (viewer) return viewer;
   } catch {
     /* Unavailable account state must not briefly reveal managed images. */
