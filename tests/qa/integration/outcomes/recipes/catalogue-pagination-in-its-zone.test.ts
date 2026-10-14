@@ -109,28 +109,29 @@ async function pageReads(name: PersonaName) {
     'space', short(sessions.space), 'browse');
   if (name !== 'visitor') {
     const personal = recording.session(name, person);
-    await (await personal('page-realm-context', 'GET', `/v1/realms/${short(sessions.realm)}`)).body?.cancel();
-    await (await personal('page-space-address', 'GET',
+    await (await personal('frame-personal-realm-header', 'GET', `/v1/realms/${short(sessions.realm)}`)).body?.cancel();
+    await (await personal('frame-personal-space-address', 'GET',
       `/v1/addresses/resolve?scope=space&key=${short(sessions.space)}`)).body?.cancel();
   }
   const publicRead = recording.session(name, sessions.visitor);
   const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   const shapes: Array<[string, Record<string, string>]> = [
-    ['default', {}],
-    ['newest', { sort: 'newest' }],
-    ['updated', { sort: 'updated' }],
-    ['search', { q: phrase }],
-    ['search-relevance', { q: phrase, sort: 'relevance' }],
-    ['search-newest', { q: phrase, sort: 'newest' }],
-    ['search-updated', { q: phrase, sort: 'updated' }],
-    ['no-match', { q: `${phrase}Missing` }],
-    ['no-match-relevance', { q: `${phrase}Missing`, sort: 'relevance' }],
+    ['page-browse-default', {}],
+    ['page-browse-newest', { sort: 'newest' }],
+    ['page-browse-updated', { sort: 'updated' }],
+    ['page-search-default', { q: phrase }],
+    ['page-search-relevance', { q: phrase, sort: 'relevance' }],
+    ['page-search-newest', { q: phrase, sort: 'newest' }],
+    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-search-no-match', { q: `${phrase}Missing` }],
+    ['page-search-no-match-relevance', { q: `${phrase}Missing`, sort: 'relevance' }],
   ];
   for (const [label, shape] of shapes) {
     const query = new URLSearchParams(shape);
     for (let page = 0; page < 5; page++) {
       const suffix = query.size ? `?${query}` : '';
-      const result = await answer<Page>(publicRead(`page-${label}-${page}`, 'GET', `${path}${suffix}`));
+      const result = await answer<Page>(publicRead(page ? `${label}-continuation-${page}` : label,
+        'GET', `${path}${suffix}`));
       if (!result.nextCursor) break;
       query.set('cursor', result.nextCursor);
     }
