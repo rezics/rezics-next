@@ -240,9 +240,13 @@ export async function realmClosureFixture(browser: Browser, info: TestInfo) {
       const use = await command<{ use: string }>(writer.page, 'POST', '/media/uses', {
         actingSubject: writer.actor, target, representation: activated.representation, occurrence: randomUUID(), context, conceal: false,
       });
-      const metadata = await command<{ items: { controls: { nsfw: { basis: unknown; valueHead: string | null } } }[] }>(writer.page,
-        'POST', '/media/metadata', { items: [{ representation: activated.representation, use: use.use }], actingSubject: writer.actor });
-      const field = metadata.items[0]!.controls.nsfw;
+      const metadataRequest = { items: [{ representation: activated.representation, use: use.use }], actingSubject: writer.actor };
+      const metadata = await command<{ items: { status: string; controls?: { nsfw: { basis: unknown; valueHead: string | null } } }[] }>(writer.page,
+        'POST', '/media/metadata', metadataRequest);
+      const evidence = `POST /v1/media/metadata\nrequest: ${JSON.stringify(metadataRequest)}\nHTTP 200: ${JSON.stringify(metadata)}`;
+      expect(metadata.items[0]?.status, evidence).toBe('available');
+      expect(metadata.items[0]?.controls, evidence).toBeDefined();
+      const field = metadata.items[0]!.controls!.nsfw;
       await command(writer.page, 'POST', `/media/representations/${activated.representation}/labels`, {
         actingSubject: writer.actor, field: 'nsfw', basis: field.basis, expectedValueHead: field.valueHead,
         value: 'sfw', mode: 'edit', authority: 'author',
