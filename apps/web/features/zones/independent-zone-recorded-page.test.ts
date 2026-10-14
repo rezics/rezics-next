@@ -7,19 +7,23 @@ import { resolvedAddress } from '../address/client.ts';
 import { addressKey } from '../address/path.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { signInPath } from '../auth/paths.ts';
+import type { AgentOption } from '../auth/acting-identity.ts';
 import { pageRequest } from '../entity-page/request-fixture.ts';
 import { localizedPath } from '../../i18n/locale.ts';
-import { manager } from '../manage/server.ts';
+import * as i18nServer from '../../i18n/server.ts';
+import * as manageServer from '../manage/server.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
 import { readCompletePresentation, resolveSite } from '../realm/read.ts';
 import { idOf } from '../realm/route.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../zone-editor/api.ts';
-import { readZoneManagementFrame } from '../zone-editor/authoring-reads.ts';
+import { readZoneManagementFrame, type ZoneManagementFrame } from '../zone-editor/authoring-reads.ts';
+import * as editorRead from '../zone-editor/read.ts';
 import { zoneHomeDocument } from '../zone-editor/home-document.tsx';
 import { authoringModel, draftChoice, draftWire, publicationChoice, publicationWire } from '../zone-editor/model.ts';
 import { zoneEditorPath } from '../zone-editor/routes.ts';
 import { loadSavedPreviewFrame } from '../zone-editor/saved-preview-frame.ts';
+import ZoneEditorLayout, { zoneManagementShell as shellFromLayout } from '../../app/[locale]/manage/z/[space]/layout.tsx';
 import { zoneHomeView as homeFromPage } from '../../app/[locale]/manage/z/[space]/page.tsx';
 import { zonePreviewBody as previewFromPage } from '../../app/[locale]/manage/z/[space]/preview/page.tsx';
 import {
@@ -27,7 +31,7 @@ import {
   zoneManagementShell as shellFromStory,
   zonePreviewBody as previewFromStory,
 } from './independent-zone-recorded-page-manage.tsx';
-import { zoneHomeView, zoneManagementShell, zonePreviewBody } from './independent-zone-recorded-page-routes.tsx';
+import * as shellRoutes from './independent-zone-recorded-page-routes.tsx';
 import {
   independentZoneHomeBoundary,
   independentZoneVisit,
@@ -148,12 +152,54 @@ test('production and replay install the same home boundary', () => {
   expect(production.editorOpen).toBeNull();
 });
 
-test('production and replay install the same management boundaries', () => {
-  expect(homeFromPage).toBe(zoneHomeView);
-  expect(homeFromStory).toBe(zoneHomeView);
-  expect(previewFromPage).toBe(zonePreviewBody);
-  expect(previewFromStory).toBe(zonePreviewBody);
-  expect(shellFromStory).toBe(zoneManagementShell);
+test('production and replay install the same management boundaries', async () => {
+  expect(homeFromPage).toBe(shellRoutes.zoneHomeView);
+  expect(homeFromStory).toBe(shellRoutes.zoneHomeView);
+  expect(previewFromPage).toBe(shellRoutes.zonePreviewBody);
+  expect(previewFromStory).toBe(shellRoutes.zonePreviewBody);
+  expect(shellFromLayout).toBe(shellRoutes.zoneManagementShell);
+  expect(shellFromStory).toBe(shellRoutes.zoneManagementShell);
+
+  const space = zoneSpace('owner');
+  const actingSubject = actingPerson('owner');
+  const locale = 'en' as const;
+  const agent: AgentOption = {
+    iri: actingSubject, label: 'Outcome owner', handle: null, kind: 'person', path: 'direct-principal',
+  };
+  const children = 'recorded home';
+  const frame: ZoneManagementFrame = {
+    missing: false, name: 'Independent original site', lifecycleOnly: true,
+    lifecycleAddress: { zoneId: space, spaceId: space, returnAddress: space },
+    draftZoneId: space, authoring: { kind: 'missing' }, lifecycle: { kind: 'missing' },
+  };
+  const manageMessages = { title: 'Manage' };
+  const main = { v1: {} };
+  const shellSpy = spyOn(shellRoutes, 'zoneManagementShell');
+  const managerSpy = spyOn(manageServer, 'manager').mockResolvedValue({
+    principal: 'recorded', agent, actingSubject, main, anonymous: main, signInHref: '/en/auth/start',
+  } as Awaited<ReturnType<typeof manageServer.manager>>);
+  const localeSpy = spyOn(i18nServer, 'requestLocale').mockResolvedValue(locale);
+  const messagesSpy = spyOn(i18nServer, 'getMessages').mockResolvedValue(
+    manageMessages as Awaited<ReturnType<typeof i18nServer.getMessages>>,
+  );
+  const frameSpy = spyOn(editorRead, 'loadZoneManagementFrame').mockResolvedValue(frame);
+  disposals.push(() => {
+    shellSpy.mockRestore();
+    managerSpy.mockRestore();
+    localeSpy.mockRestore();
+    messagesSpy.mockRestore();
+    frameSpy.mockRestore();
+  });
+
+  const rendered = await ZoneEditorLayout({ children, params: Promise.resolve({ space }) });
+  expect(managerSpy).toHaveBeenCalledWith(locale, zoneEditorPath(space));
+  expect(messagesSpy).toHaveBeenCalledWith('manage', locale);
+  expect(frameSpy).toHaveBeenCalledWith(main, space, locale, actingSubject);
+  expect(shellSpy).toHaveBeenCalledTimes(1);
+  expect(shellSpy.mock.calls[0]?.[0]).toEqual({
+    space, frame, agent, actingSubject, locale, manageMessages, children,
+  });
+  expect(rendered).toBe(shellSpy.mock.results[0]?.value);
 });
 
 const managed = ['stranger', 'member', 'moderator', 'owner', 'operator'] as const;
@@ -224,7 +270,7 @@ test('a visitor is sent to sign in before any Zone editor read', async () => {
   globalThis.fetch = Object.assign(async () => { called = true; throw new Error('visitor management sent a request'); },
     { preconnect: globalThis.fetch.preconnect }) as unknown as typeof fetch;
   try {
-    await pageRequest(async () => { await manager('en', zoneEditorPath(space)); });
+    await pageRequest(async () => { await manageServer.manager('en', zoneEditorPath(space)); });
     throw new Error('visitor management continued into the editor');
   } catch (error) {
     const digest = error && typeof error === 'object' && 'digest' in error && typeof error.digest === 'string'
