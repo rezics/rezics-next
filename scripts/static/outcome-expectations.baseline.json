@@ -1,10 +1,5 @@
 [
   {
-    "file": "tests/qa/integration/outcomes/anime/catalogue-browse-and-search-in-its-zone.test.ts",
-    "row": "anime/catalogue-browse-and-search-in-its-zone",
-    "expression": "if (last?.status === 503 && (await last.clone().json() as { code?: string }).code === 'work_read_unavailable') return last;"
-  },
-  {
     "file": "tests/qa/integration/outcomes/zone/attached-realm-discussion.test.ts",
     "row": "zone/attached-realm-discussion",
     "expression": "answer<{ code: string }>( post(sessions.moderator, moderationPage, 'Requires review', undefined, sample, 'review-required-post-refused'), 503, )"

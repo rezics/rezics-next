@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
-import { outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(90_000);
@@ -224,8 +224,8 @@ async function journey(name: PersonaName) {
   const format = await formatResponse(person);
   formatAnswers.push({ persona: name, request: `GET ${formatPath()}`, status: format.status, answer: await format.clone().text() });
   await Bun.write(`.temp/anime-format-answers-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({ formatAnswers }, null, 2));
-  if (name === 'visitor') await ancestry();
   const opening = await answer<Page>(Promise.resolve(format));
+  if (name === 'visitor') await ancestry();
   expect(opening.items).toHaveLength(5);
   expect(opening.matches).toEqual({ value: 5, kind: 'lower-bound' });
   const queries = [
@@ -435,22 +435,9 @@ function formatPath() {
 }
 
 async function formatResponse(person: PersonaSession): Promise<Response> {
-  let last: Response | undefined;
-  try {
-    // These headers came from this persona's actual OAuth-backed HTTP request.
-    // The shared helper repeats only work_read_unavailable; retain its last public
-    // refusal when the deadline aborts the next fetch.
-    return await outcomeResponse(async signal => {
-      const response = await fetch(`http://127.0.0.1:${Bun.env.MAIN_PORT}${formatPath()}`, {
-        headers: credentials.get(person), signal,
-      });
-      last = response.clone();
-      return response;
-    }, 5_000);
-  } catch (error) {
-    if (last?.status === 503 && (await last.clone().json() as { code?: string }).code === 'work_read_unavailable') return last;
-    throw error;
-  }
+  return fetch(`http://127.0.0.1:${Bun.env.MAIN_PORT}${formatPath()}`, {
+    headers: credentials.get(person), signal: AbortSignal.timeout(5_000),
+  });
 }
 
 

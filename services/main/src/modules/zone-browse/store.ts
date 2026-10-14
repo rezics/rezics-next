@@ -150,12 +150,16 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         GRAPH ${iri(GRAPHS.revisions)} { ?selection rv:dataEpoch ?epoch ; rv:sequence ?sequence . }
         ${where}
       } ORDER BY STR(?realm) STR(?work) LIMIT ${ZONE_BROWSE_PROJECTION_COST.batch}`, 128 * 1024)).results?.bindings ?? [];
+    if (rows.length > ZONE_BROWSE_PROJECTION_COST.batch) {
+      throw new WorkReadUnavailable('Zone browse adoption page exceeds its bound');
+    }
     const examined: ProjectionKey[] = [];
+    if (!rows.length) return examined;
     await this.poolPage(this.access, deadline, async client => {
       // SerialStatisticsProjection holds this row FOR UPDATE while changing
       // summaries. Its triggers cannot race an adoption's initial stats copy.
       await client.query('SELECT generation FROM access.serial_stats_checkpoint WHERE singleton FOR SHARE');
-      for (const row of rows) {
+      const candidates = rows.map(row => {
         const realm = row.realm?.value, work = row.work?.value;
         if (!realm || !work || !ID.test(realm) || !ID.test(work)
           || !/^\d{1,38}$/.test(row.sequence?.value ?? '') || !/^\d+$/.test(row.epochOrder?.value ?? '')) {
@@ -164,13 +168,20 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
         this.checkDeadline(deadline);
         examined.push({ realm, work });
         const order = BigInt(row.sequence!.value) + BigInt(row.epochOrder!.value) * 10n ** 38n;
-        await client.query(`INSERT INTO access.zone_browse_entry (realm, work, adopted_order, updated_at, word_count)
-          SELECT $1, $2, $3::numeric, s.last_updated_at, s.word_count
-          FROM (VALUES (true)) AS anchor(singleton)
-          LEFT JOIN access.serial_stats_checkpoint c USING (singleton)
-          LEFT JOIN access.serial_summary s ON s.generation = c.generation AND s.work = $2
-          ON CONFLICT (realm, work) DO UPDATE SET updated_at = EXCLUDED.updated_at, word_count = EXCLUDED.word_count`, [realm, work, order.toString()]);
-      }
+        return { realm, work, adopted_order: order.toString() };
+      });
+      // The native seek already bounds this relation to 64 rows. Keep the
+      // statistics lock and atomic page, without one network trip per Work.
+      await client.query(`INSERT INTO access.zone_browse_entry (realm, work, adopted_order, updated_at, word_count)
+        SELECT candidate.realm, candidate.work, candidate.adopted_order, s.last_updated_at, s.word_count
+        FROM jsonb_to_recordset($1::jsonb) AS candidate(realm text, work text, adopted_order numeric)
+        LEFT JOIN access.serial_stats_checkpoint c ON c.singleton
+        LEFT JOIN LATERAL (
+          SELECT last_updated_at, word_count FROM access.serial_summary
+          WHERE generation = c.generation AND work = candidate.work LIMIT 1
+        ) s ON true
+        ON CONFLICT (realm, work) DO UPDATE SET updated_at = EXCLUDED.updated_at, word_count = EXCLUDED.word_count`,
+      [JSON.stringify(candidates)]);
     });
     return examined;
   }

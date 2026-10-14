@@ -60,12 +60,16 @@ function fixture(count = 65) {
       return { rows: [] };
     }
     if (statement.includes('INSERT INTO access.zone_browse_entry')) {
-      calls.insert++;
-      if (failures.insertAt === calls.insert) throw new Error('candidate write failed');
-      const candidate = { realm: String(values[0]), work: String(values[1]), adopted_order: String(values[2]) };
       const target = transaction ?? candidates;
-      const prior = target.get(key(candidate));
-      target.set(key(candidate), prior ?? candidate);
+      const page = JSON.parse(String(values[0])) as Candidate[];
+      for (const candidate of page) {
+        // Inject a candidate-row failure inside the atomic statement. The
+        // transaction must still roll back every row of the page.
+        calls.insert++;
+        if (failures.insertAt === calls.insert) throw new Error('candidate write failed');
+        const prior = target.get(key(candidate));
+        target.set(key(candidate), prior ?? candidate);
+      }
       return { rows: [] };
     }
     if (statement.includes('DELETE FROM access.zone_browse_entry')) {

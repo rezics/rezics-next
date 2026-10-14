@@ -1,7 +1,7 @@
 import { zoneCards } from './cards.ts';
 import { zoneAdoption } from './adoption.ts';
 import type { Static } from 'typebox';
-import { primaryDiscoveryCredits } from '../discovery/credits.ts';
+import { primaryDiscoveryCreditBatch } from '../discovery/credits.ts';
 import type { BrowseAfter, BrowseEntry } from '../zone-browse/store.ts';
 import { readPublicHubCards } from '../hub/public-card.ts';
 import { compileQuery, QueryRejected } from '../query/compile.ts';
@@ -334,20 +334,20 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
     ...counts.concept.map(item => item.value)])].slice(0, ZONE_BROWSE_COST.batchRows);
-  const [serial, conceptNames] = await Promise.all([readSerialSummaries(session, page.flatMap(item => {
+  const [serial, conceptNames, credits] = await Promise.all([readSerialSummaries(session, page.flatMap(item => {
     const summary = summaries.get(item.work);
     return summary?.status === 'available' && summary.type === 'work' ? [item.work] : [];
-  })), session.summaries(conceptIds)]);
-  const hydrated = await Promise.all(page.map(async item => {
+  })), session.summaries(conceptIds), primaryDiscoveryCreditBatch(session, pageIds)]);
+  const hydrated = page.map(item => {
     const row = rows.get(item.work)!, summary = summaries.get(item.work)!;
     if (summary.status !== 'available') throw new WorkReadUnavailable('Zone browse summary moved');
     const facts = serial.get(item.work);
     if (!facts) throw new WorkReadUnavailable('Zone browse Work metadata is incomplete');
     return { id: item.work, revision: row.head!.value, mainVersion: row.main!.value, title: summary.name,
       cover: summary.avatar, types: item.types, ...facts,
-      primaryCredits: await primaryDiscoveryCredits(session, item.work), evidence: row.evidence!.value,
+      primaryCredits: credits.get(item.work)!, evidence: row.evidence!.value,
       dataEpoch: row.revisionEpoch!.value, sequence: row.sequence!.value };
-  }));
+  });
   const [hub, names, fenced] = await Promise.all([
     session.deps.hub && session.deps.content ? readPublicHubCards(session, pageIds) : new Map(),
     zoneCreditNames(session, hydrated.flatMap(item => item.primaryCredits)),
