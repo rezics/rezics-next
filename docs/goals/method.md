@@ -148,7 +148,7 @@ in the same files goes to one worker as an ordered list, not to several.
 | Measure | Reading |
 | --- | --- |
 | Rows proved of rows in scope | The only progress figure |
-| First-attempt share of attempts | Below half: stop dispatching and find out why |
+| First-attempt share of attempts | Below half: class the day's fix rounds by cause and remove the commonest; dispatch goes on |
 | Attempts for each landed task | Median two or fewer; three is the cap |
 | Tokens for each proved row | Compared between Goals and weeks |
 | Findings that blocked, by kind | Anything but the three kinds above is a tool defect |

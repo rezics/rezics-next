@@ -55,19 +55,22 @@ describe('Goal method measures', () => {
     } finally { f.cleanup(); }
   });
 
-  test('STOP uses first plus fixes, excludes retries and steps, and requires ten attempts below half', async () => {
+  test('the repeats line uses first plus fixes, excludes retries and steps, requires ten attempts below half and tells nobody to stop', async () => {
     const f = fixture();
     try {
       const t = f.task('row');
       for (let n = 0; n < 9; n++) f.attempt(t);
-      expect((await f.report()).api!.stop).toBe(false);
+      expect((await f.report()).api!.repeatsDominate).toBe(false);
       f.attempt(t);
       const m = (await f.report()).api!;
-      expect(m.stop).toBe(true);
-      expect(measureLines('api', m).at(-1)).toStartWith('STOP api:');
+      expect(m.repeatsDominate).toBe(true);
+      expect(measureLines('api', m).at(-1)).toStartWith('REPEATS api:');
+      // Holding first attempts can only lower the share it reads, so the line never asks for that.
+      expect(measureLines('api', m).at(-1)).toContain('keep dispatching');
+      expect(measureLines('api', m).join('\n')).not.toMatch(/stop/i);
       for (let n = 0; n < 8; n++) f.attempt(f.task(`fresh-${n}`));
       expect((await f.report()).api!.firstAttemptShare.today.share).toBe(0.5);
-      expect((await f.report()).api!.stop).toBe(false);
+      expect((await f.report()).api!.repeatsDominate).toBe(false);
     } finally { f.cleanup(); }
   });
 

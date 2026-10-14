@@ -14,7 +14,8 @@ export interface GoalMeasures {
   attemptsPerLanded: { tasks: Record<string, number>; median: number | null; largest: { task: string; attempts: number } | null };
   tokens: Tokens & { missingSessions: number; perProvedRow: 'n/a' };
   landingsRefused: Refusals;
-  stop: boolean;
+  /** Today's first attempts are under half of ten or more: the fix rounds have a common cause to find. Never a reason to hold a new brief. */
+  repeatsDominate: boolean;
 }
 type Share = { first: number; attempts: number; share: number | null };
 interface AttemptLog { session?: string; handoff?: string; cumulative?: Tokens; incremental: Tokens }
@@ -128,7 +129,7 @@ export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {})
       firstAttemptShare: { run: share(counts()), today: share(counts()) },
       attemptsPerLanded: { tasks: {}, median: null, largest: null },
       tokens: { ...zero(), missingSessions: 0, perProvedRow: 'n/a' },
-      landingsRefused: { outcomeTest: 0, gate: 0, failingTestFinding: 0, other: 0 }, stop: false };
+      landingsRefused: { outcomeTest: 0, gate: 0, failingTestFinding: 0, other: 0 }, repeatsDominate: false };
     const sessions = new Map<string, { attempts: Attempt[]; cumulative?: Tokens; incremental: Tokens }>();
     for (const task of Object.values(ledger.tasks).filter(t => t.goal === goal)) {
       let prior: AttemptLog | undefined;
@@ -171,7 +172,7 @@ export async function goalMeasures(ledger: Ledger, options: MeasureOptions = {})
       measure.attemptsPerLanded.largest = { task: largest[0], attempts: largest[1] };
     }
     measure.firstAttemptShare = { run: share(measure.attempts.run), today: share(measure.attempts.today) };
-    measure.stop = measure.firstAttemptShare.today.attempts >= 10 && (measure.firstAttemptShare.today.share ?? 1) < 0.5;
+    measure.repeatsDominate = measure.firstAttemptShare.today.attempts >= 10 && (measure.firstAttemptShare.today.share ?? 1) < 0.5;
     report[goal] = measure;
     if (options.print) for (const line of measureLines(goal, measure)) options.print(line);
   }
@@ -189,5 +190,5 @@ export function measureLines(goal: string, m: GoalMeasures): string[] {
     + `attempts ${a.first} first, ${a.stepResume} step, ${a.fixRound} fix, ${a.capacityRetry} capacity, ${a.transportRetry} transport, ${a.handoffRetry} handoff; `
     + (m.attempts.inferredFixRounds ? `${m.attempts.inferredFixRounds} fixes inferred from unavailable handoffs; ` : '')
     + `refused ${r.outcomeTest} outcome, ${r.gate} gate, ${r.failingTestFinding} failing-test finding, ${r.other} other (retained reports)`;
-  return [line, ...m.stop ? [`STOP ${goal}: first-attempt share today ${percent(m.firstAttemptShare.today)} (${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); stop dispatching and find out why`] : []];
+  return [line, ...m.repeatsDominate ? [`REPEATS ${goal}: first-attempt share today ${percent(m.firstAttemptShare.today)} (${m.firstAttemptShare.today.first} of ${m.firstAttemptShare.today.attempts}); class today's fix rounds by cause and remove the commonest; keep dispatching every brief whose inputs are on main`] : []];
 }

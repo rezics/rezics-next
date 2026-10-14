@@ -62,8 +62,13 @@ wording and directions that later ones replaced are in this file's history.
 3. **Efficiency is tokens for each proved row** (2026-10-11, 2026-10-12). Not
    the price of a model and not the number of workers. The run of 2026-10-12
    was stopped as unacceptable: seven percent of worker output was first-attempt
-   work. A manager reads the method's measures at every checkpoint and stops
-   dispatching when they turn.
+   work. A manager reads the method's measures at every checkpoint. When
+   repeated attempts dominate, the manager finds their common cause (a brief
+   that left a decision open, a ruling awaited, a gate that refused on main's
+   own state) and removes it. Dispatch does not stop for it (2026-10-13): a
+   brief whose inputs are on main starts, because an idle account with work
+   ready is the larger waste and holding first attempts can only lower the
+   share that prompted it.
 4. **Code over documents** (2026-09-30). Express in code (types, schemas, tests,
    lint rules, generators, stories, comments) whatever code can express. Keep
    documents for intent, decisions with their reasons and operating procedures.
