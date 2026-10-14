@@ -98,13 +98,20 @@ test('thousand-episodes: an Anime reader reaches the inventory end by keyboard a
   test.setTimeout(600_000);
   const found: Findings = [];
   const page = await device(browser, info, phone, seeded.episodes.work);
+  const visit = async (path: string) => {
+    try { await page.goto(path); }
+    catch (error) {
+      if (!(error instanceof Error) || !error.message.includes('net::ERR_NETWORK_CHANGED')) throw error;
+      await page.goto(path);
+    }
+  };
   try {
     for (const locale of ['en', 'ja'] as const) {
       const t = copyOf(locale);
-      await page.goto(localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
+      await visit(localizedPath(resourceHref('/w/', seeded.episodes.work.slice(-36)), locale));
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await expect(page.getByRole('link', { name: 'Anime', exact: true })).toBeVisible();
-      await page.goto(localizedPath(`${resourceHref('/w/', seeded.episodes.work.slice(-36))}/connections`, locale));
+      await visit(localizedPath(`${resourceHref('/w/', seeded.episodes.work.slice(-36))}/connections`, locale));
       await loaded(page, '[data-episode-progress]', 180_000);
       const panel = page.locator('[data-episode-progress]');
       const jump = async (number: number) => {

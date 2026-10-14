@@ -475,6 +475,7 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
       for (const endpoint of [
         `zones/${uuidOf(zoneSpace.zone!)}/routes?${new URLSearchParams({ path, actingSubject })}`,
         `resources/${uuidOf(about)}/page?${new URLSearchParams({ actingSubject })}`,
+        `works/${uuidOf(about)}?${new URLSearchParams({ actingSubject })}`,
         `realms/${uuidOf(realmSpace.realm!)}/about-thread?${new URLSearchParams({ about, actingSubject })}`,
         `realms/${uuidOf(realmSpace.realm!)}?${new URLSearchParams({ actingSubject })}`,
         `realms/${uuidOf(realmSpace.realm!)}/joining?${new URLSearchParams({ actingSubject })}`,
