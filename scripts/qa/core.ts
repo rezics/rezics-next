@@ -22,7 +22,7 @@ import {
   settleReap, startOrphanSweep,
 } from './container-reaper.ts';
 import { isolatedIntegrationFileList } from './isolated-integration-files.ts';
-import { waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
+import { isLocalQaRun, waitForMemory, type MemoryNeed, type MemoryWaitOptions } from './memory-admission.ts';
 import { destroyHeldQaStacks, trackHeldQaStackStartup } from './stack-pool.ts';
 import { createCommandOutputRedactor, redactCommandOutput } from '../fixture/command-output.ts';
 import { PINNED_FIXTURE_IDS } from '../fixture/stack.ts';
@@ -773,6 +773,8 @@ export function concurrencyGate(limit: number, options: { runDeadline?: QaRunDea
 
 export async function withQaMemory<T>(need: MemoryNeed, options: MemoryWaitOptions,
   work: () => Promise<T>, runDeadline?: QaRunDeadline): Promise<T> {
+  // A run that admission does not govern, such as a saved dev restore, never consults the admission clock.
+  if (!await isLocalQaRun(options.root, options.env)) return work();
   const now = options.now ?? Date.now;
   const started = now();
   const resume = runDeadline?.wait();
