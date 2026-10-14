@@ -11,6 +11,7 @@ import { messages as shellMessages } from '../shell/messages.ts';
 import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneMessagesFor } from './fixtures.ts';
 import { ZoneHomeRecordedPage } from './zone-home-recorded-page-view.tsx';
+import { zoneSitePrefix } from './zone-site-recorded-page.ts';
 
 const record = homeRendering as AnswerRecord;
 const persona = 'visitor';
@@ -96,8 +97,8 @@ function privateDraftText() {
 }
 
 function siteAddress(address: ZonePresentationRead['address']) {
-  if (address.prefix !== '/z/') throw new Error(`Recorded site address prefix is ${address.prefix}`);
-  return { prefix: '/z/' as const, key: address.key, suffixSource: address.suffixSource };
+  if (address.prefix !== zoneSitePrefix) throw new Error(`Recorded site address prefix is ${address.prefix}`);
+  return { prefix: zoneSitePrefix, key: address.key, suffixSource: address.suffixSource };
 }
 
 const homePath = (address: ZonePresentationRead['address'], path: readonly string[] = []) =>

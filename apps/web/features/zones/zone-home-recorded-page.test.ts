@@ -11,7 +11,7 @@ import type { RealmHeader, ZonePresentationRead } from '../realm/types.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import { zoneHomeProse } from '../zone-editor/home-document.tsx';
 import { messages } from './messages.ts';
-import { mapZoneSiteHome } from './zone-site-recorded-page.ts';
+import { mapZoneSiteHome, zoneSitePrefix } from './zone-site-recorded-page.ts';
 import { loadZoneHomeFrame, loadZoneHomeModules, recordedZoneHomeClient, zoneHomeFrameModel } from './zone-home-recorded-page.tsx';
 
 const record = homeRendering as AnswerRecord;
@@ -92,8 +92,8 @@ test('recorded published home keeps its slide, document, rights and continuation
   const mount = model.links[1];
   expect(mount?.href).toContain(data.navigation[0]?.segment);
   expect(mount?.href ?? '').not.toContain('cursor');
-  if (data.address.prefix !== '/z/') throw new Error(`Recorded site address prefix is ${data.address.prefix}`);
-  expect(model.links[0]?.href).toBe(siteHref('en', addressKey({ ...data.address, prefix: '/z/' }), []));
+  if (data.address.prefix !== zoneSitePrefix) throw new Error(`Recorded site address prefix is ${data.address.prefix}`);
+  expect(model.links[0]?.href).toBe(siteHref('en', addressKey({ ...data.address, prefix: zoneSitePrefix }), []));
 
   const modules = await loadZoneHomeModules(page, data.presentation, {
     moduleData: data.moduleData, slideMedia: data.slideMedia,
