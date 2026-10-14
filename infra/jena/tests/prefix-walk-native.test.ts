@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { nativeModuleTestInvocation } from '../../../scripts/dev/fuseki-image.ts';
@@ -47,10 +48,15 @@ test(focused ? `the image Maven invocation verifies ${focused}`
       'mvn', ...invocation.split(' '), '-Dmaven.repo.local=/maven-cache',
       ...(focused ? [`-Dtest=${focused}`] : []), 'package',
     ], { cwd: root, encoding: 'utf8', timeout: 1_200_000, maxBuffer: 8 * 1024 * 1024 });
-    const evidence = join(root, '.temp/goal/prefix-walk-native', focused ? `focused-${focused}` : '');
+    // A resumed suite can select enough classes to exceed a filesystem's
+    // component bound. Keep the complete selection beside a bounded label.
+    const label = focused && (focused.length <= 128 ? focused : createHash('sha256').update(focused).digest('hex'));
+    const evidence = join(root, '.temp/goal/prefix-walk-native', label ? `focused-${label}` : '');
     mkdirSync(evidence, { recursive: true });
+    writeFileSync(join(evidence, 'selection.json'), `${JSON.stringify({ classes: focused?.split(',') ?? null })}\n`);
     writeFileSync(join(evidence, 'maven.log'), `${result.stdout ?? ''}\n${result.stderr ?? ''}`);
     const reports = join(build, 'target/surefire-reports');
+    rmSync(join(evidence, 'surefire-reports'), { recursive: true, force: true });
     try { cpSync(reports, join(evidence, 'surefire-reports'), { recursive: true }); } catch { /* Compilation may fail before tests. */ }
     if (result.status !== 0)
       throw new Error(`native suite failed (${result.status}); see ${evidence.slice(root.length + 1)}/maven.log\n`
