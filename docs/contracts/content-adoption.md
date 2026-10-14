@@ -1,6 +1,6 @@
 # Content instruction adoption, references and derivation
 
-This is the decided, **unimplemented** API boundary for the Recipe vertical
+This is the decided API boundary for the Recipe vertical
 slice, before [public opening](recipes.md). The executable producer and consumer
 examples are the [outcome test](../../tests/qa/integration/outcomes/recipes/instructions-in-any-form.test.ts).
 Content owns documents and immutable revisions; Structure orders exact
@@ -100,12 +100,13 @@ publication; an interrupted sequence stays partial, not an atomic replacement.
 
 | Operation | Request | Response |
 | --- | --- | --- |
-| **New** `POST /v1/posts` | `authored-post-v1`, title `{value,language}`, language, document, actor | 201 (200 replay) `{ post, variantId, revisionId, byteDigest, author, replayed }`: native Post custody and private Content draft, not a Work or public publication |
+| Existing `POST /v1/works/{id}/chapters`, then `POST /v1/content-drafts` | `book-chapter-create-v1`, title, language, direction, parent, position, expected composition head, actor; then the Content draft request below | Chapter command returns 200 `{ post, variantId, revision, occurrence, compositionRevision, replayed }`, allocating native Post custody; Content returns its exact private draft receipt. The parent Book remains distinct from the Post. |
 | Existing `POST /v1/content-drafts` | `content-text-v1`, resource/variant, language descriptor, direction, expected head, document, actor | Existing exact draft result `{ resourceId, variantId, revisionId, predecessor, byteDigest, sourcePosition, replayed }`; extended validation for procedure/reference payloads |
 | Existing `POST /v1/media/uploads`, new admitted profile | `media-recording-upload-v1`, asset UUID or null, media type, byte length, SHA-256, private disclosure, actor | 201 reservation `{ asset, upload, stateHead, uploadUrl }`; validated WAV audio/MP4 video under existing upload capacity |
 | Existing `PUT /v1/media/uploads/{upload}/bytes` | Reserved raw bytes with content type and length | Existing 201 activation `{ asset, upload, status, representation, revision, clearance, clearanceReason, reason, replayed }`; invalid/different bytes cannot activate |
 | **New** `POST /v1/content-derivations` | `content-derivation-v1`, exact output, exact inputs, activity `{kind}`, responsible Agent, `expectedOutputHead`, actor | 201 (200 replay) record above plus `replayed`; exact membership, output head, readable inputs and responsible Agent representation are checked |
 | **New** `GET /v1/content-revisions/{revision}/derivations` | Optional actor, limit 1–20, opaque cursor | 200 `{ revision, items: [record], nextCursor: string or null }`; revision-bound continuation and input disclosure |
+| **New** `POST /v1/resource-reference-resolutions` | 1–16 `references`, optional actor | 200 `{ items }`, preserving request order; each answer is available with the exact reference and selected Content document/text, or `{status:"unavailable"}` without concealed identities. This is a read-family operation with no effects or idempotency key. |
 | Existing `POST /v1/compositions/{structure}/changes` | Recipe profile, expected head, actor, 1–16 existing operations; insert/update `instruction` target with selection `{mode:"fixed-revision",revision,selector}` | Existing 200 revision/occurrence receipt; selector above must agree with selection revision; ordering remains Structure's |
 | Existing `POST /v1/work-publications` | Exact Work/Structure heads, expected publication head, original-contribution basis, public disclosure, actor | Existing immutable decision plus exact dependency selections; extended admission checks Content/Media custody, rights and every adopted dependency |
 | Existing `GET /v1/recipes/works/{work}` | Optional actor, servings, cursor; **new optional `revision`** for exact selection | Existing bounded page plus `instructions: [{occurrence,reference,status,document?,mediaUse?}]`; available procedures retain their block/document, recordings retain representation and exact Media Use; unavailable dependencies are explicit |

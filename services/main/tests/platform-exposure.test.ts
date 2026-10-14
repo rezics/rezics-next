@@ -231,7 +231,14 @@ test('every served Main route, including transports, has a reviewed exposure', (
   expect(publicOperations).toContain('postV1Work-publications');
   expect(matrix.find(entry => entry.path === '/v1/work-publications' && entry.method === 'post'))
     .toMatchObject({ exposure: 'public', rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
-  expect(publicOperations).toHaveLength(530);
+  for (const path of ['/v1/content-derivations', '/v1/content-revisions/{revision}/derivations', '/v1/resource-reference-resolutions']) {
+    expect(matrix.find(entry => entry.path === path)).toMatchObject({ exposure: 'public' });
+  }
+  expect(matrix.find(entry => entry.path === '/v1/content-derivations'))
+    .toMatchObject({ rateLimitFamily: 'write', bearer: true, idempotencyKey: true });
+  expect(matrix.find(entry => entry.path === '/v1/resource-reference-resolutions'))
+    .toMatchObject({ rateLimitFamily: 'read', bearer: 'optional' });
+  expect(publicOperations).toHaveLength(533);
   expect(publicOperations.filter((id) => libraryCopiesAndLoans.includes(id)).sort()).toEqual(
     libraryCopiesAndLoans,
   );

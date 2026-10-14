@@ -10,6 +10,7 @@ import { appendContentEvent, contentEventPosition, sequenceContentEvents,
 import { retainedDocumentBody, retainedPostNotes, POST_CONTENT_MODEL, CONTENT_TEXT_COST, checkedContentText } from './document-body.ts';
 import { documentImageUses, guardDocumentImageUses, DocumentMediaInvalid } from './document-media.ts';
 import { hasDocumentContent } from '@rezics/document';
+import { ContentDerivations } from './derivation.ts';
 
 export { ContentConflict, ContentLimitExceeded, ContentPositionPending, ContentUnavailable } from './errors.ts';
 export { appendContentEvent, contentEventPosition, sequenceContentEvents, type ContentEvent } from './event-sequencer.ts';
@@ -489,7 +490,8 @@ async function readReference(client: PoolClient, revisionId: string): Promise<Ex
 }
 
 export class ContentCore {
-  constructor(private readonly pool: Pool) {}
+  readonly derivations: ContentDerivations;
+  constructor(private readonly pool: Pool) { this.derivations = new ContentDerivations(pool); }
 
   /** Historical active pin superseded by the retained erasure and graph receipt. */
   async readPublicationErasureSupersession(operationId: string): Promise<{

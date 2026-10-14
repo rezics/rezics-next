@@ -23,6 +23,7 @@ import { openApiOperations as owner20 } from '../../routes/concepts.ts';
 import { openApiOperations as owner21 } from '../../routes/connected-apps.ts';
 import { openApiOperations as owner22 } from '../../routes/content-private-search.ts';
 import { openApiOperations as owner23 } from '../../routes/content.ts';
+import { openApiOperations as contentAdoptionOperations } from '../../routes/content-adoption.ts';
 import { openApiOperations as owner24 } from '../../routes/contexts.ts';
 import { openApiOperations as owner25 } from '../../routes/continue.ts';
 import { openApiOperations as owner26 } from '../../routes/contributions.ts';
@@ -160,6 +161,7 @@ export const exposureDeclarations: readonly ExposureDeclarations[] = [
   owner21,
   owner22,
   owner23,
+  contentAdoptionOperations,
   owner24,
   owner25,
   owner26,

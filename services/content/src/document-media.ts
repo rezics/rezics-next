@@ -1,5 +1,6 @@
 import type { PoolClient } from 'pg';
 import type { DocumentNode, DocumentSnapshot } from '@rezics/document';
+import { contentDocumentNodes } from './adoption.ts';
 
 export class DocumentMediaInvalid extends Error {}
 interface ImageUse { use: string; representation: string; occurrence: string; conceal: boolean }
@@ -17,7 +18,7 @@ function managedUrl(value: unknown): boolean {
 export function documentImageUses(document: DocumentSnapshot | undefined): ImageUse[] {
   if (!document) return [];
   const uses: ImageUse[] = [];
-  const pending: DocumentNode[] = [document.doc];
+  const pending: DocumentNode[] = contentDocumentNodes(document);
   while (pending.length) {
     const node = pending.pop()!;
     if (node.type === 'image') {
@@ -29,7 +30,6 @@ export function documentImageUses(document: DocumentSnapshot | undefined): Image
           occurrence: attrs.id as string, conceal: attrs.conceal === true });
       }
     }
-    pending.push(...node.content ?? []);
   }
   return uses;
 }

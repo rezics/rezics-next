@@ -1,4 +1,5 @@
 import { documentText, parseDocument, serializeDocument, type DocumentSnapshot } from '@rezics/document';
+import { validateContentExtensions } from './adoption.ts';
 
 /** One Content body remains one unit; UTF-16 is the author's API budget. */
 export const CONTENT_TEXT_COST = { textUnits: 65_536, textBytes: 196_608, languageUnits: 100 } as const;
@@ -74,6 +75,7 @@ export function authoredDocumentBody(input: AuthoredBodyInput, maxTextBytes = 65
   }
   const document = input.document === undefined ? undefined
     : parseDocument(JSON.parse(serializeDocument(parseDocument(input.document))));
+  if (document) validateContentExtensions(document);
   const body = document ? documentText(document) : input.body!;
   if (typeof body !== 'string' || body.includes('\0')
     || Buffer.byteLength(body, 'utf8') > maxTextBytes

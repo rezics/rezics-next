@@ -1144,6 +1144,19 @@ export class MediaStore {
         mediaType: string; width: number; height: number; byteLength: number }> };
   }
 
+  /** Exact retained membership, independent of the asset's moving draft head. */
+  async referenceSelection(asset: string, revision: string, representation: string): Promise<{ duration?: number } | null> {
+    if (![asset, revision, representation].every(value => uuid.test(value))) throw new MediaInvalid('invalid Media selection');
+    const row = (await this.pool.query<{ duration: unknown }>(`SELECT item->'duration' AS duration
+      FROM media.asset a JOIN content.revision r ON r.variant_id=a.variant_id AND r.id=$2
+      JOIN media.representation p ON p.asset_id=a.id AND p.id=$3
+      CROSS JOIN LATERAL jsonb_array_elements(r.body->'representations') item
+      WHERE a.id=$1 AND r.availability='available' AND p.availability='available'
+        AND p.clearance='cleared' AND NOT media.digest_suppressed(p.byte_digest,a.cover_only)
+        AND item->>'id'=p.id::text LIMIT 1`, [asset, revision, representation])).rows[0];
+    return row ? { ...(typeof row.duration === 'number' ? { duration: row.duration } : {}) } : null;
+  }
+
   /** Disclosure/lifecycle CAS. Deletion and erasure advance the erasure epoch;
    * erasure also marks every representation erased in the same transaction. */
   async changeState(admission: MediaAdmission, input: AssetStateChangeInput,

@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import instructions, { document, paragraph, resourceReference,
-  type AuthoredPostRequest, type AuthoredPostResponse, type BlocksDocument,
+  type AuthoredPostResponse, type BlocksDocument,
   type ContentDerivationRecord, type ContentDerivationRequest, type ExactContentReference,
   type InstructionPage, type NativeRecipeExport, type ProcedureItem, type ResourceReference,
 } from '../../../../../scripts/qa/cases/outcomes/recipes/instructions-in-any-form.ts';
@@ -52,16 +52,28 @@ beforeAll(async () => {
 afterAll(async () => { await sessions?.close(); });
 
 async function authoredPost(title: string, value: BlocksDocument): Promise<AuthoredPostResponse> {
-  const body: AuthoredPostRequest = { profile: 'authored-post-v1',
-    title: { value: title, language: 'en' }, language: 'en', document: value,
-    actingSubject: sessions.owner.actingSubject! };
+  const owner = sessions.owner, actingSubject = owner.actingSubject!;
+  const book = await answer<{ work: string; mainVersion: string }>(owner.main('POST', '/v1/works', {
+    profile: 'metadata-only-v1', title: `${title} notebook`, language: 'en',
+    semanticTypes: ['https://schema.org/Book'], authoring: 'own-work', actingSubject,
+  }), 201);
+  const composition = await answer<{ structure: string; revision: string }>(owner.main('POST', '/v1/compositions', {
+    profile: 'book-composition', work: book.work, mainVersion: book.mainVersion, actingSubject,
+  }), 201);
+  const body = { profile: 'book-chapter-create-v1', title, language: 'en', direction: 'ltr',
+    parent: composition.structure, position: 'last', expectedCompositionHead: composition.revision, actingSubject };
   const key = randomUUID();
-  const created = await answer<AuthoredPostResponse>(sessions.owner.main('POST', '/v1/posts', body, key),
-    201, 'Content adoption: POST /v1/posts must allocate native Post custody and an exact private Content draft');
-  expect(created.author).toBe(sessions.owner.actingSubject);
-  expect(await answer(sessions.owner.main('POST', '/v1/posts', body, key), 200))
-    .toMatchObject({ ...created, replayed: true });
-  return created;
+  const path = `/v1/works/${short(book.work)}/chapters`;
+  const created = await answer<{ post: string; variantId: string; replayed: boolean }>(owner.main('POST', path, body, key),
+    200, 'The chapter authoring operation allocates a native Post and variant, separately from Content');
+  expect(await answer(owner.main('POST', path, body, key), 200)).toMatchObject({ ...created, replayed: true });
+  const draftBody = { profile: 'content-text-v1', resourceId: created.post, variantId: created.variantId,
+    language: { kind: 'tag', tag: 'en', originalTag: 'en' }, direction: 'ltr', expectedHead: null,
+    document: value, actingSubject };
+  const draftKey = randomUUID();
+  const draft = await answer<{ revisionId: string; byteDigest: string }>(owner.main('POST', '/v1/content-drafts', draftBody, draftKey), 201);
+  expect(await answer(owner.main('POST', '/v1/content-drafts', draftBody, draftKey), 200)).toMatchObject({ ...draft, replayed: true });
+  return { post: created.post, variantId: created.variantId, ...draft, author: actingSubject, replayed: false };
 }
 
 // Original instruction wording, synthesized once with espeak-ng. Tests retain
@@ -72,8 +84,7 @@ function originalRecording(): Uint8Array {
 
 async function prepareSlice(): Promise<Slice> {
   const owner = sessions.owner, actor = owner.actingSubject!;
-  // This is today's first missing boundary: native Post authoring is absent.
-  // Do not replace the 201 assertion with acceptance of an arbitrary refusal.
+  // Post authoring and exact Content admission use their existing public owners.
   const post = await authoredPost('Original tomato method', document([paragraph('method', 'Stir the tomatoes into the stock.')]));
   await grantPersonaFixtureAuthority(owner, [
     { scope: 'semantic:create:root', action: 'semantic.change' },
