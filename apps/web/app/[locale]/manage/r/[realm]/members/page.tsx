@@ -30,7 +30,7 @@ export default async function RealmMembersRoute({ params, searchParams }: { para
 
 /** The members route after its manager admits the acting Person. */
 export async function realmMembersBody({ main, anonymous, principal, realm, address = realm, actingSubject, role = null,
-  locale, signInHref, api, refresh, now = Date.now() }: {
+  locale, signInHref, api, refresh, now }: {
   main: MainClient; anonymous: MainClient; principal: string; realm: string; address?: string; actingSubject: string;
   role?: string | null; locale: UiLocale; signInHref: string; api?: AdminApi; refresh?: () => void; now?: number;
 }) {
@@ -46,5 +46,5 @@ export async function realmMembersBody({ main, anonymous, principal, realm, addr
   return <MembersView key={`${principal}:${realm}:${actingSubject}`} principal={principal} realm={realm} address={address} actingSubject={actingSubject} first={page.data} agents={agents}
     invitations={invitations} roles={roles.ok ? roles.data.roles : null}
     roleFilter={role ? { id: role, name: named } : null}
-    now={now} locale={locale} messages={messages} api={api} refresh={refresh} />;
+    now={now ?? Date.now()} locale={locale} messages={messages} api={api} refresh={refresh} />;
 }

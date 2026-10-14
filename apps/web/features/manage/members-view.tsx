@@ -111,7 +111,8 @@ export function MembersView({ principal: givenPrincipal, realm, address = realm,
   async function done(message: string) {
     setOpen(null);
     setStatus(message);
-    (refresh ?? router.refresh)();
+    if (refresh) refresh();
+    else router.refresh();
     await load(memberReads.current.search);
     const refreshed = await api.invitations(null);
     setInvitations(refreshed);
