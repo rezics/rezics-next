@@ -21,7 +21,7 @@ export const parkedResult = (text: string): boolean => /^RESULT:[ \t]*parked[ \t
  * handed off a final RESULT. A Grok session can end mid-step with prose only. */
 export function parkedOnJob(task: Task, attempt: number, text: string): boolean {
   if (parkedResult(text)) return true;
-  if (/^RESULT:[ \t]*\w+/m.test(text)) return false;
+  if (/^RESULT:[ \t]*\w+/m.test(text) || !task.worktree) return false;
   const directory = jobDirectory(task.worktree);
   if (!existsSync(join(directory, 'jobs.sqlite'))) return false;
   const store = new JobStore(directory);
