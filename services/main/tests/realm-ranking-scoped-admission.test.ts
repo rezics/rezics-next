@@ -774,6 +774,25 @@ for (const [source, removal] of [
   });
 }
 
+test('board ranking replay preserves its revision and clearing removes only the selected board keys', async () => {
+  const realm = native(), root = await reference(realm), concept = native();
+  const setBoards = (concepts: string[]) => access.query(`UPDATE access.realm_thread_reference SET concepts=$4
+    WHERE data_epoch=$1 AND realm=$2 AND reply=$3`, [epoch, realm, root.reply, concepts]);
+  const revision = async () => (await access.query<{ revision: string }>(
+    `SELECT revision::text FROM access.realm_thread_state WHERE data_epoch=$1 AND realm=$2`, [epoch, realm])).rows[0]!.revision;
+  const keys = async () => (await access.query(`SELECT sort,period,concept,placement,rank_key,time_key,expires_at
+    FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 ORDER BY concept,sort,period`, [epoch, realm])).rows;
+  await setBoards([concept]);
+  const before = await keys(), selectedRevision = await revision();
+  expect(before.filter(row => row.concept === concept)).toHaveLength(5);
+  await setBoards([concept]);
+  expect(await keys()).toEqual(before);
+  expect(await revision()).toBe(selectedRevision);
+  await setBoards([]);
+  expect(await keys()).toEqual(before.filter(row => row.concept === ''));
+  expect(BigInt(await revision())).toBeGreaterThan(BigInt(selectedRevision));
+});
+
 test('acknowledged placement publishes its exact index, aggregate, order and revision with bounded work', async () => {
   const unrelated = native();
   const costs: { statements: number; graphRequests: number }[] = [];
