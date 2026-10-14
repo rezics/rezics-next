@@ -103,12 +103,40 @@ done' sh {} +`], docker, 60_000);
   return inventory;
 }
 
-function postgresControl(volume: string, docker: NodeJS.ProcessEnv): string {
-  const output = run('docker', ['run', '--rm', '--network', 'none',
+export function readRetainedPostgresControl(volume: string, docker: NodeJS.ProcessEnv): string {
+  return run('docker', ['run', '--rm', '--network', 'none',
     '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
     '--entrypoint', 'pg_controldata', postgresImage(), '/backup/18/docker'], docker, 30_000);
-  if (!/Database cluster state:\s+shut down\s*$/m.test(output)) throw new Error('retained PostgreSQL cluster was not stopped consistently');
+}
+
+function postgresControl(volume: string, docker: NodeJS.ProcessEnv): string {
+  const output = readRetainedPostgresControl(volume, docker);
+  if (!/Database cluster state:\s+shut down\s*$/m.test(output)) throw new Error(`retained PostgreSQL cluster was not stopped consistently\n${output}`);
   return output;
+}
+
+/** The copy starts only after this producer's writer stop boundary. */
+export async function retainStoppedContentWriters(stack: QaStack, copy: () => Promise<void>): Promise<void> {
+  const at = Date.now();
+  const stopped = stack.compose(['stop', 'fuseki', 'postgres', 'rustfs']) as ReturnType<QaStack['compose']> & {
+    signal?: NodeJS.Signals | null; error?: NodeJS.ErrnoException | null;
+  };
+  const stopMs = Date.now() - at;
+  let control: string | null = null, controlError: string | null = null;
+  try { control = readRetainedPostgresControl(`${stack.project}_postgres_data`, stack.dockerEnv); }
+  catch (error) { controlError = error instanceof Error ? error.message : String(error); }
+  const evidence = { project: stack.project, stopMs, clientDeadlineMs: 180_000,
+    status: stopped.status, signal: stopped.signal, error: stopped.error?.code ?? null,
+    output: stopped.output.slice(-4000), postgresControl: control, controlError, copyStarted: false, copyMs: 0 };
+  try {
+    if (stopped.status !== 0) throw new Error(`Content producer stop failed: ${stopped.output.slice(-2000)}`);
+    evidence.copyStarted = true;
+    const copyAt = Date.now();
+    try { await copy(); } finally { evidence.copyMs = Date.now() - copyAt; }
+  } finally {
+    writeFileSync(join(requireFaultTier().artifacts, `retained-content-source-stop-${stack.options.runId}.json`),
+      `${JSON.stringify(evidence, null, 2)}\n`, { mode: 0o600 });
+  }
 }
 
 export interface RetainedContentCandidate {
@@ -202,14 +230,14 @@ SELECT ?g ?s ?p ?o WHERE {
         await phase('stopped-custody', async () => {
           await Promise.all(pools.map(pool => pool.end()));
           pools.length = 0;
-          const stopped = stack.compose(['stop', 'fuseki', 'postgres', 'rustfs']);
-          if (stopped.status !== 0) throw new Error(`Content producer stop failed: ${stopped.output.slice(-2000)}`);
-          cpSync(env.objectDirectory, join(context.backup, 'objects'), { recursive: true });
-          savePrivate(join(context.backup, 'compose.env'), stack.composeEnv);
-          writeFileSync(join(context.backup, 'rdf.json'), stable(populated.rdf), { mode: 0o600 });
-          await copyVolume(stack.stateVolume, resources.graph, docker);
-          await copyVolume(`${stack.project}_postgres_data`, resources.postgres, docker);
-          await copyVolume(`${stack.project}_rustfs_data`, resources.rustfs, docker);
+          await retainStoppedContentWriters(stack, async () => {
+            cpSync(env.objectDirectory, join(context.backup, 'objects'), { recursive: true });
+            savePrivate(join(context.backup, 'compose.env'), stack.composeEnv);
+            writeFileSync(join(context.backup, 'rdf.json'), stable(populated.rdf), { mode: 0o600 });
+            await copyVolume(stack.stateVolume, resources.graph, docker);
+            await copyVolume(`${stack.project}_postgres_data`, resources.postgres, docker);
+            await copyVolume(`${stack.project}_rustfs_data`, resources.rustfs, docker);
+          });
         });
         const inventories = await phase('physical-manifests', async () => ({
           graph: volumeInventory(resources.graph, docker), postgres: volumeInventory(resources.postgres, docker),
