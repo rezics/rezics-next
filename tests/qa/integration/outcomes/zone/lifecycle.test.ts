@@ -3,9 +3,8 @@ import { randomUUID } from 'node:crypto';
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { browserZoneLifecycle } from '../../../../../apps/web/features/zone-editor/api.ts';
-import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
-import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
-import { settle } from '../../../../../apps/web/features/manage/read.ts';
+import { readManagementAddress, readZoneRecoveryReturnAddress, suppliedManagementSite,
+  zoneAuthoringFromAddress, zoneLifecycleFromAddress, zoneManagementFrameFromReads } from '../../../../../apps/web/features/zone-editor/authoring-reads.ts';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import lifecycle from '../../../../../scripts/qa/cases/outcomes/zone/lifecycle.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
@@ -216,8 +215,7 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
   if (!person.actingSubject) return;
   const actingSubject = person.actingSubject, zoneId = site.zone.slice(-36);
   const recorded = recording.session(name, person);
-  const anonymous = recording.session(name, sessions.visitor);
-  const client = (publicRead = false) => browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+  const client = () => browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
     const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
     const method = init?.method ?? 'GET';
@@ -225,12 +223,11 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
     if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
     const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
     const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
-    return (publicRead ? anonymous : recorded)(label, method, path, body, key);
+    return recorded(label, method, path, body, key);
   }) as typeof fetch });
-  const main = client(), publicMain = client(true);
+  const main = client();
   const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
   const lifecycleClient = browserZoneLifecycle(main);
-  const frame = realmFrameReads({ main: publicMain, personal: main, actingSubject, keepProblem: false });
 
   async function sessionReads(prefix: string) {
     // readSession starts discovery, the language-specific Agent list and selection together.
@@ -244,27 +241,28 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
   }
   async function render(prefix: string, key = zoneId) {
     await sessionReads(prefix);
-    // The layout and page share the management binding, authoring and lifecycle readers.
+    // The production frame shares address admission and starts authoring and
+    // lifecycle reads together, including the retained frame after retirement.
     const address = await requestLabels.run((_method, path) => {
-      if (path.includes('/configuration')) return `${prefix}-configuration`;
       if (path.startsWith('/v1/addresses/resolve')) return `${prefix}-address`;
-      if (path.includes('/presentation')) return `${prefix}-site-presentation`;
-      throw new Error(`Unlabelled management resolution: ${path}`);
-    }, () => resolveZoneManagementAddress(key, 'en', {
-      configuration: id => settle(() => main.v1.zones({ id }).configuration.get({ query: { actingSubject } }), { management: true }),
-      site: (space, locale) => frame.resolveSite(space, locale),
-    }));
-    if (address.kind === 'missing' || address.kind === 'failure') return null;
-    if (address.kind === 'lifecycle') return address.binding;
-    await Promise.all([
-      named(`${prefix}-editor`, () => settle(() => main.v1.zones({ id: address.site.zone })['showcase-editor'].get({ query: { actingSubject } }), { management: true })),
-      named(`${prefix}-zone`, () => settle(() => main.v1.zones({ id: address.site.zone }).get({ query: { actingSubject } }), { management: true })),
-      address.binding ? Promise.resolve({ ok: true as const, data: address.binding })
-        : named(`${prefix}-lifecycle-configuration`, () => settle(() => main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject } }), { management: true })),
+      if (path.includes('/configuration')) return `${prefix}-binding-configuration`;
+      throw new Error(`Unlabelled management admission: ${path}`);
+    }, () => readManagementAddress(main, key, 'en', actingSubject, suppliedManagementSite(main, actingSubject)));
+    const [authoring, lifecycleRead] = await Promise.all([
+      requestLabels.run((_method, path) => {
+        if (path.includes('/showcase-editor')) return `${prefix}-editor`;
+        if (path.startsWith(`/v1/zones/${zoneId}?`)) return `${prefix}-zone`;
+        throw new Error(`Unlabelled authoring read: ${path}`);
+      }, () => zoneAuthoringFromAddress(main, key, actingSubject, address)),
+      named(`${prefix}-lifecycle-configuration`, () => zoneLifecycleFromAddress(main, key, actingSubject, address)),
     ]);
-    // Lifecycle uses its authorized binding even if the parallel authoring
-    // read is refused. Without that binding the page stops before any command.
-    return address.binding;
+    const loaded = await zoneManagementFrameFromReads(main, key, actingSubject, authoring, lifecycleRead, null);
+    if (loaded.lifecycle.kind !== 'ready') return null;
+    const lifecycle = loaded.lifecycle;
+    // The lifecycle page validates its return address after the shared frame.
+    if (prefix !== 'recovered') await named(`${prefix}-return-address`, () => readZoneRecoveryReturnAddress(main,
+      lifecycle.returnAddress, lifecycle, actingSubject));
+    return lifecycle;
   }
   const opened = await render('lifecycle');
   if (!opened) return;
@@ -278,7 +276,7 @@ async function productionVisit(name: PersonaName, site: Site, person: PersonaSes
     { expectedHead: retained.revision, actingSubject }, randomUUID()));
   if (!recovered.ok) return;
   // Recovery replaces the page with the bound Space's home editor.
-  await render('recovered', retained.spaceId);
+  await render('recovered', retained.returnAddress);
 }
 
 outcomeTest(lifecycle, 'visitor', () => qualify('visitor', () => reader('visitor')), recording);
