@@ -104,7 +104,8 @@ export async function stream(command: string, args: string[], env: NodeJS.Proces
 }
 
 export function composeArgs(project: string, envFile: string, command: string[]): string[] {
-  const args = ['compose', '--env-file', envFile, '-f', composeFile, '--project-name', project, ...command];
+  const args = ['compose', '--env-file', envFile, '-f', composeFile,
+    '-f', join(root, 'infra/dev/compose.qa-resources.yaml'), '--project-name', project, ...command];
   if (command[0] === 'up') prepareComposeFileMounts(root, args,
     composeProcessEnvironment(dockerEnvironment(), readEnv(envFile)));
   return args;

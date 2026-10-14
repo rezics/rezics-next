@@ -210,7 +210,7 @@ test('saved dev restores bypass all admission entry points even with Goal metada
     expect(existsSync(lockFile)).toBe(false);
 
     mkdirSync(join(dir, 'infra', 'dev'), { recursive: true });
-    writeFileSync(join(dir, 'infra', 'dev', 'compose.qa.yaml'), readFileSync(join(root, 'infra', 'dev', 'compose.qa.yaml')));
+    writeFileSync(join(dir, 'infra', 'dev', 'compose.qa-resources.yaml'), readFileSync(join(root, 'infra', 'dev', 'compose.qa-resources.yaml')));
     let now = 0, reads = 0, started = false;
     await expect(withQaStackStartup(dir, { ...qaEnv, REZICS_FUSEKI_MEMORY_LIMIT: '2g' }, 10,
       () => { started = true; }, { lockFile, now: () => now, pollMs: 10,

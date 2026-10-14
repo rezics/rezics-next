@@ -49,7 +49,7 @@ export function qaMemoryNeed(root: string, kind: 'other' | 'browser', resourceCl
       if (bytes === 0) throw new Error('Memory admission requires finite, positive QA container caps');
       return bytes;
     };
-    const compose = readFileSync(join(root, 'infra/dev/compose.qa.yaml'), 'utf8');
+    const compose = readFileSync(join(root, 'infra/dev/compose.qa-resources.yaml'), 'utf8');
     for (const service of ['POSTGRES', 'RUSTFS', 'TOXIPROXY', 'MAILPIT']) {
       if (!services.includes(service.toLowerCase() as QaMemoryService)) continue;
       const key = `REZICS_${service}_MEMORY_LIMIT`;

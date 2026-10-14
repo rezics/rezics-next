@@ -24,7 +24,7 @@ test('QA saves the measured lock allocation for disposable and restored PostgreS
   expect(stackMemorySettings({ profile: 'dev' }, env).REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION).toBeUndefined();
   const compose = readFileSync(join(import.meta.dir, '../../infra/dev/compose.yaml'), 'utf8');
   expect(compose).toContain('max_locks_per_transaction=${REZICS_POSTGRES_MAX_LOCKS_PER_TRANSACTION:-64}');
-  const qa = readFileSync(join(import.meta.dir, '../../infra/dev/compose.qa.yaml'), 'utf8');
+  const qa = readFileSync(join(import.meta.dir, '../../infra/dev/compose.qa-resources.yaml'), 'utf8');
   expect(qa).toContain('mem_limit: ${REZICS_POSTGRES_MEMORY_LIMIT:-2g}');
 });
 

@@ -28,6 +28,7 @@ import { prepareComposeFileMounts } from './compose-mounts.ts';
 
 const root = resolve(import.meta.dir, '../..');
 const composeFile = join(root, 'infra/dev/compose.yaml');
+const qaResourcesFile = join(root, 'infra/dev/compose.qa-resources.yaml');
 const qaComposeFile = join(root, 'infra/dev/compose.qa.yaml');
 const qaRawUpdateComposeFile = join(root, 'infra/dev/compose.qa-raw-update.yaml');
 
@@ -68,6 +69,7 @@ function runtimeEnv(): NodeJS.ProcessEnv {
 
 function composeArgs(options: StackOptions, envFile: string, command: string[]): string[] {
   return ['compose', '--env-file', envFile, '-f', composeFile,
+    ...(options.profile === 'qa' ? ['-f', qaResourcesFile] : []),
     ...(options.profile === 'qa' && !options.persistent ? ['-f', qaComposeFile] : []),
     ...(options.rawUpdate ? ['-f', qaRawUpdateComposeFile] : []),
     '--project-name', projectName(options), ...command];
