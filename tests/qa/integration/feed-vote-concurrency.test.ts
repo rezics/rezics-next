@@ -96,6 +96,23 @@ beforeAll(async () => {
 
 afterAll(async () => { await home?.stop(); });
 
+test('replaying a ranked root preserves its order rows and open continuation', async () => {
+  const threads = `/v1/realms/${seed.realm.realm.slice(-36)}/threads?sort=best&limit=1`;
+  const page = await home.json<Page>(await home.call('GET', threads));
+  expect(page.nextCursor).toBeTruthy();
+  const revision = await realmRevision();
+  const orders = () => home.stack.accessPool.query(`SELECT sort,period,concept,reply,placement,rank_key,time_key,expires_at
+    FROM access.realm_thread_order WHERE data_epoch=$1 AND realm=$2 ORDER BY sort,period,concept,reply`,
+  [epoch, seed.realm.realm]);
+  const before = (await orders()).rows;
+  // Exercise the same owner function the projection's reference trigger calls.
+  await home.stack.accessPool.query('SELECT access.refresh_realm_thread_order($1,$2,$3)',
+    [epoch, seed.realm.realm, seed.discussion.reply]);
+  expect((await orders()).rows).toEqual(before);
+  expect(await realmRevision()).toBe(revision);
+  expect((await home.call('GET', `${threads}&cursor=${encodeURIComponent(page.nextCursor!)}`)).status).toBe(200);
+}, SETUP_MS);
+
 test('with one vote held open before commit, a vote on another post and a feed watermark PUT complete', async () => {
   const revision = (await home.deps.feed.checkpoint(epoch)).revision;
   const sequence = (await home.deps.feed.checkpoint(epoch)).sequence;

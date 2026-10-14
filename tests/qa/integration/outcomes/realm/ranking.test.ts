@@ -7,7 +7,7 @@ import { publishClosureOriginals, type ClosureOriginal } from './closure-origina
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-type Work = { work: string; workRevision: string };
+type Work = { work: string; workRevision: string; mainVersion: string };
 type Draft = { revisionId: string; revisionDigest: string };
 type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
@@ -52,6 +52,19 @@ async function seed(sessions: PersonaSessions, size: number, label: string) {
   const target = await answer<Work>(person.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title: `Original ${label} ranking garden`, language: 'en',
     authoring: 'own-work', actingSubject: author }), 201);
+  // Ranking readers need a public root; Realm membership governs its discussion separately.
+  const contribution = await answer<{ contribution: string; draftRevision: string }>(person.main('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work: target.work, language: 'en',
+    body: `An original essay about the ${label} discussion garden.`, actingSubject: author }), 201);
+  const publication = await answer<{ publicationDecision: string }>(person.main('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: contribution.contribution,
+    expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: author }), 201);
+  await answer(person.main('POST', '/v1/publication-selections', {
+    profile: 'main-default-selection-v1', work: target.work, contribution: contribution.contribution,
+    publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
+    context: { kind: 'main-version-default', id: target.mainVersion }, selectionBasis: 'main-maintainer',
+    actingSubject: author }), 201);
   const replies: string[] = [];
   const create = async (index: number) => {
     const reply = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
