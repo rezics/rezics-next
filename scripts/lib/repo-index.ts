@@ -35,6 +35,7 @@ export interface IndexedFile {
   text: string;
   ast: AstNode;
   runtimeAst?: AstNode;
+  sqlAst?: AstNode;
   imports: IndexedImport[];
   namedImports?: { local: string; imported: string; source: string }[];
   directCallNames?: string[];
@@ -89,6 +90,7 @@ export interface IndexedFile {
   comments?: { start: number; end: number }[];
   astDeflate?: string;
   runtimeAstDeflate?: string;
+  sqlAstDeflate?: string;
   graphDeflate?: string;
   syntax?: {
     hasFunctions: boolean;
@@ -116,6 +118,7 @@ const digest = (value: string) => createHash('sha256').update(value).digest('hex
 
 type PayloadFile = IndexedFile & {
   contentHash?: string;
+  sqlHashes?: [string, number][];
   payloads?: Record<string, [number, number]>;
 };
 const payloadFiles = new FinalizationRegistry<number>((descriptor) => closeSync(descriptor));
@@ -245,8 +248,8 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
           },
         });
     }
-    for (const field of ['ast', 'runtimeAst'] as const) {
-      const encodedField = field === 'ast' ? 'astDeflate' : 'runtimeAstDeflate';
+    for (const field of ['ast', 'runtimeAst', 'sqlAst'] as const) {
+      const encodedField = `${field}Deflate` as const;
       if (!has(encodedField)) continue;
       Object.defineProperty(facts, field, {
         configurable: true,
@@ -284,6 +287,13 @@ function run(root: string, key: string, args: string[], input?: string): RepoInd
       rememberSqlRecord(facts);
       rememberCandidates(facts.sqlCandidates);
     }
+    for (const [hash, candidate] of payload.sqlHashes ?? [])
+      sqlByHash.set(hash, () => {
+        const record = facts.sqlCandidates?.[candidate];
+        if (!record?.sql)
+          throw new Error(`Repository index SQL candidate is missing: ${file}:${candidate}`);
+        return record.sql;
+      });
   }
   return index;
 }

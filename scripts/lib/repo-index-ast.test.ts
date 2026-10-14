@@ -284,3 +284,30 @@ test('standalone interpolated SQL retains verbs assembled from lexical constants
     ['singleton-write', 'probe.singleton'],
   ]);
 });
+
+test('serialization keeps interpolated templates as one SQL value', () => {
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'probe.ts',
+          text: "db.query(`${db.query('SELECT pg_advisory_lock(12)')}`)",
+        },
+      ],
+      [],
+    ),
+  ).toEqual([]);
+  expect(
+    serializationFindings(
+      [],
+      [
+        {
+          file: 'probe.ts',
+          text: "const sql=`${['SELECT pg_advisory_lock(12)'].join('')}`;",
+        },
+      ],
+      [],
+    ),
+  ).toEqual([]);
+});

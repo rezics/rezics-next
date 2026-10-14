@@ -514,7 +514,10 @@ function selectIndexedNodes(
                     typeof raw.value === 'string' &&
                     sqlOperation.test(raw.value));
     if (selected) result.push(nodeForPath());
-    if ((mode === 'relations' || mode === 'templates') && raw.type === 'TemplateLiteral') {
+    if (
+      (mode === 'relations' || mode === 'templates' || mode === 'sql') &&
+      raw.type === 'TemplateLiteral'
+    ) {
       path.pop();
       return;
     }

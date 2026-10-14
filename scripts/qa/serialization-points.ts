@@ -844,6 +844,7 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
       for (const candidate of candidates)
         if (
           !candidate.interpolated &&
+          candidate.enclosingTemplateStart == null &&
           !candidate.firstCallArgument &&
           sqlOperationLiteral.test(candidate.text)
         )
@@ -879,7 +880,7 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
     }
   }
   const treeStart = fragmentTimings ? performance.now() : 0;
-  const ast = indexedSourceFile(source);
+  const ast = indexedSourceFile(source, indexed.sqlAst);
   if (fragmentTimings) {
     fragmentTimings.tree += performance.now() - treeStart;
     fragmentTimings.files++;
@@ -929,7 +930,7 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
     }
   };
   const nodeStart = fragmentTimings ? performance.now() : 0;
-  const nodes = indexedSqlNodes(source);
+  const nodes = indexedSqlNodes(source, indexed.sqlAst);
   if (fragmentTimings) fragmentTimings.nodes += performance.now() - nodeStart;
   const visitStart = fragmentTimings ? performance.now() : 0;
   for (const node of nodes) visit(node);
@@ -946,7 +947,15 @@ interface Effect {
   conditions?: Condition[];
   lock?: 'FOR SHARE' | 'FOR KEY SHARE';
 }
+const sqlEffectValues = new WeakMap<SqlFragment, Effect[]>();
 function sqlEffects(fragment: SqlFragment): Effect[] {
+  const previous = sqlEffectValues.get(fragment);
+  if (previous) return previous;
+  const result = computeSqlEffects(fragment);
+  sqlEffectValues.set(fragment, result);
+  return result;
+}
+function computeSqlEffects(fragment: SqlFragment): Effect[] {
   const input = lex(fragment.text);
   const effects: Effect[] = [];
   let start = 0;
@@ -1409,7 +1418,7 @@ function databaseEffects(migrations: SqlSource[]): (fragment: SqlFragment) => Ef
       }
       return result;
     }
-    const result = sqlEffects(fragment);
+    const result = [...sqlEffects(fragment)];
     const before: Effect[] = [];
     const invoke = (name: string, arguments_: Token[][] = []): Effect[] => {
       if (chain.has(name)) return [];
@@ -1494,20 +1503,26 @@ function compactReference(
 function nativeFunctionSelection(
   sources: SqlSource[],
   seeds: Set<string>,
+  profile?: (phase: string) => void,
 ): NativeFunctionSelection | undefined {
-  if (new Set(sources.map((source) => source.file)).size !== sources.length) return;
+  if (new Set(sources.map((source) => source.file)).size !== sources.length) {
+    profile?.('native-graph-fallback:duplicate-file');
+    return;
+  }
   const records = sources.map((source) => ({
     source,
     facts: indexedSource(source),
     offset: indexedOffsets(source.text),
   }));
-  if (
-    records.some(
-      ({ facts }) =>
-        !facts.functionFacts || !facts.callFacts || !facts.aliases || !facts.namedImports,
-    )
-  )
+  const missing = records.find(
+    ({ facts }) =>
+      !facts.functionFacts || !facts.callFacts || !facts.aliases || !facts.namedImports,
+  );
+  if (missing) {
+    profile?.(`native-graph-fallback:missing-facts:${missing.source.file}`);
     return;
+  }
+  profile?.('native-graph-facts');
   if (
     lastNativeGraph &&
     records.length === lastNativeGraph.files.length &&
@@ -1517,6 +1532,7 @@ function nativeFunctionSelection(
         record.facts === lastNativeGraph!.facts[index],
     )
   ) {
+    profile?.('native-graph-cached');
     return selectNativeFunctions(lastNativeGraph, seeds);
   }
   const names = new Map<string, string>();
@@ -1553,7 +1569,11 @@ function nativeFunctionSelection(
     }
     aliases.set(source.file, declarations);
   }
-  if ([...seeds].some((id) => !definitions.has(id))) return;
+  const missingSeed = [...seeds].find((id) => !definitions.has(id));
+  if (missingSeed) {
+    profile?.(`native-graph-fallback:missing-seed:${missingSeed}`);
+    return;
+  }
   const functionInitializers = new Map(
     records.map(({ source, facts }) => [
       source.file,
@@ -1640,7 +1660,10 @@ function nativeFunctionSelection(
         call.functionStart === undefined
           ? `${source.file}:module`
           : `${source.file}:${offset(call.functionStart)}`;
-      if (!definitions.has(ownerId)) return;
+      if (!definitions.has(ownerId)) {
+        profile?.(`native-graph-fallback:missing-owner:${ownerId}:call-${call.start}`);
+        return;
+      }
       const callee =
         call.calleeKind === 'this-member'
           ? `${call.className ?? ''}.${call.calleeName}`
@@ -1761,8 +1784,9 @@ function gateUpgrades(
       if (fn)
         functionSeeds.add(ts.isSourceFile(fn) ? `${file}:module` : `${file}:${fn.getStart()}`);
     }
+  profile?.('gate-seeds');
   if (!seeds.size) return [];
-  const selection = nativeFunctionSelection(sources, functionSeeds);
+  const selection = nativeFunctionSelection(sources, functionSeeds, profile);
   const outgoing = new Map<string, Set<string>>();
   const incoming = new Map<string, Set<string>>();
   let completeGraph = !selection;
@@ -1859,7 +1883,7 @@ function gateUpgrades(
       ? indexedTraceNodes(source, selection.functions.get(source.file)!)
       : indexedSourceNodes(source);
     const fragments = byFile.get(source.file) ?? [];
-    const ast = fragments[0]?.ast ?? indexedSourceFile(source);
+    const ast = indexedSourceFile(source);
     const moduleId = `${source.file}:module`;
     functionNodes.set(ast, moduleId);
     traces.set(moduleId, {
@@ -1920,8 +1944,10 @@ function gateUpgrades(
         fragment.node.parent.arguments[0] !== fragment.node
       )
         continue;
-      const id = functionNodes.get(owner(fragment.node)!);
-      if (!id) continue;
+      const fn = owner(fragment.node);
+      const id =
+        fn && (ts.isSourceFile(fn) ? `${source.file}:module` : `${source.file}:${fn.getStart()}`);
+      if (!id || !traces.has(id)) continue;
       for (const effect of expandedEffects(fragment)) {
         if (effect.kind !== 'boundary' && !/(?:^|[._])gate$/.test(effect.relation)) continue;
         traces.get(id)!.events.push({
@@ -2001,7 +2027,7 @@ function gateUpgrades(
       constants.set(key, value);
       return value;
     }
-    const ast = byFile.get(file)?.[0]?.ast ?? (provider && indexedSourceFile(provider));
+    const ast = provider && indexedSourceFile(provider);
     if (!ast) return;
     let declarations = moduleDeclarations.get(file);
     if (!declarations) {

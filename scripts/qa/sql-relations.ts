@@ -550,13 +550,17 @@ function sourceRelationFacts(
       return low + 1;
     };
     const schemaNames = [...schemas].map((schema) => schema.toLowerCase());
+    const quotedSchema = new RegExp(
+      `(['"])(?:${schemaNames.map((schema) => schema.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')})\\1`,
+      'i',
+    );
     const templates = new Set<number>();
     for (const candidate of candidates)
       if (candidate.interpolated && candidate.enclosingTemplateStart === candidate.start) {
         const text = source.text
           .slice(offset(candidate.start), offset(candidate.end))
           .toLowerCase();
-        if (text.includes('\\') || schemaNames.some((schema) => text.includes(schema)))
+        if (text.includes('\\') || mayReference(text) || quotedSchema.test(text))
           templates.add(candidate.start);
       }
     const projected = new Map<number, ts.Node>();
