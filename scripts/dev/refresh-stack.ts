@@ -1,4 +1,4 @@
-import { spawn, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { createHash, randomBytes } from 'node:crypto';
 import { closeSync, existsSync, fchmodSync, openSync, readFileSync, readlinkSync, writeSync,
   realpathSync,
@@ -11,6 +11,8 @@ import { acquireSharedLifecycle, inheritedSharedLifecycleOwnership, markSharedLi
 import { migrationDirectories, migrationRecords, type SchemaOwner } from '../ops/migrate.ts';
 import { sqlMigration } from '../lib/concurrent-index.ts';
 import { fusekiImageFromCompose } from '../load/image.ts';
+import { ensureFusekiImage, imageBuildBudgetMs } from './fuseki-image-build.ts';
+export { imageBuildBudgetMs } from './fuseki-image-build.ts';
 import { BUILD_ADMISSION_GIB } from '../qa/host-admission.ts';
 import { FusekiClient } from '../../services/main/src/infrastructure/fuseki.ts';
 import { readActiveModelGeneration } from '../../services/main/src/modules/semantic/generation-guard.ts';
@@ -32,10 +34,8 @@ import { AppHostResourceLost, appHostRestartInstruction, type RefreshInputs, ass
   readPendingRefresh,
   type PendingRefresh,
   refreshResources, type RefreshResource } from './refresh.ts';
-import { runHostAdmission } from '../qa/host-admission.ts';
 import { processAlive } from '../qa/process/identity.ts';
 import { directoryLeaseHeld, readDirectoryLease } from '../qa/process/lease.ts';
-import { terminateProcessGroup } from '../qa/process/terminate.ts';
 import { inspectOfficialZoneApprovals } from './seed/official-zones-step.ts';
 import { officialSourceDigest } from './seed/official-theme-step.ts';
 
@@ -121,12 +121,6 @@ function compose(root: string, args: string[], timeout = 180_000, stackRoot = ro
     '--project-name', 'rezics-dev', ...args], composeProcessEnvironment(process.env, readEnv(file)), timeout);
 }
 
-/** `infra/jena/Dockerfile` runs `mvn package` with the native unit tests; the
- * cold build measured 1090 s with 346 native tests (an earlier run took 656 s). Forty-five
- * minutes is about two and a half times the cold run. Host
- * admission already bounds memory and the build runs before any writer stops,
- * so a long budget costs nothing but waiting. */
-export const imageBuildBudgetMs = 45 * 60_000;
 const imageBuildLog = 'image-build.log';
 
 /** Build the Jena image with its output streamed to a private log beside the
@@ -134,40 +128,19 @@ const imageBuildLog = 'image-build.log';
  * unlike other Compose and describe output, and a file has no buffer limit. */
 export async function buildRefreshImage(root: string, stackRoot = root,
   options: { budgetMs?: number; executable?: string } = {}): Promise<void> {
-  const budgetMs = options.budgetMs ?? imageBuildBudgetMs;
   const dir = stackDirectory(stackRoot, { profile: 'dev' });
   const file = join(dir, 'compose.env');
   const log = join(dir, imageBuildLog);
-  const executable = options.executable ?? 'docker';
-  const args = ['compose', '--env-file', file, '-f', join(root, 'infra/dev/compose.yaml'),
-    '--project-name', 'rezics-dev', 'build', 'fuseki'];
   const fd = openSync(log, 'w', 0o600);
   try {
     fchmodSync(fd, 0o600);
-    const child = spawn(executable, args, {
-      cwd: root, env: composeProcessEnvironment(process.env, readEnv(file)),
-      stdio: ['ignore', fd, fd], detached: true,
-    });
-    let timedOut = false;
-    let stopping: Promise<void> | undefined;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      if (child.pid) stopping = terminateProcessGroup(child.pid, { graceMs: 10_000 });
-    }, budgetMs);
-    const outcome = await new Promise<{ code: number | null; error?: Error }>(done => {
-      child.once('error', error => done({ code: null, error }));
-      child.once('close', code => done({ code }));
-    }).finally(() => { clearTimeout(timer); });
-    if (stopping) await stopping;
-    const failure = { step: 'image build', command: [executable, ...args], log };
-    if (timedOut) throw new Error(refreshCommandFailure({
-      ...failure, status: null,
-      timeoutLimit: budgetMs >= 60_000 ? `${budgetMs / 60_000} min` : `${budgetMs / 1000} s`,
-    }));
-    if (outcome.error || outcome.code !== 0)
-      throw new Error(refreshCommandFailure({
-        ...failure, status: outcome.code, unresolved: 'signal/error', error: outcome.error,
-      }));
+    try {
+      await ensureFusekiImage(root, { docker: options.executable,
+        budgetMs: options.budgetMs ?? imageBuildBudgetMs, output: fd,
+        env: composeProcessEnvironment(process.env, readEnv(file)) });
+    } catch (error) {
+      throw new Error(`image build task jena:image failed; output in ${log}: ${error instanceof Error ? error.message : String(error)}`);
+    }
   } finally { closeSync(fd); }
 }
 
@@ -759,14 +732,7 @@ async function maintainStagedStack(root: string, candidate: string, revision: st
   await executeRefresh(
     snapshot.plan,
     {
-      buildImage: async () => {
-        await runHostAdmission(4, ['docker', 'compose', 'build', 'fuseki'], {
-          root: candidate, run: async () => {
-            await buildRefreshImage(candidate, root);
-            return 0;
-          },
-        });
-      },
+      buildImage: () => buildRefreshImage(candidate, root),
       rehearseMigrations: async () => {
         await rehearseRefreshMigrations(
           candidate,

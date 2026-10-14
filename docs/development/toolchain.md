@@ -31,6 +31,26 @@ use exact direct pins; Compose and Dockerfiles pin external images by digest.
 The locally built Fuseki image has a content-addressed tag derived by
 `scripts/dev/fuseki-image.ts` and checked by `task gen:check`.
 
+`task jena:image` obtains that tag: an existing image returns immediately;
+otherwise callers share a host-wide lock keyed by tag and inspect again before
+building. Generation, stack startup, toolchain installation and dev refresh use
+the same implementation. Linux `flock` (util-linux 2.41.5 on the development host)
+holds the lock across its builder process and releases it when the descriptors
+close; lock files under `/tmp/rezics-fuseki-images` must not be deleted while a
+build is running. See the [flock manual](https://man7.org/linux/man-pages/man1/flock.1.html).
+
+The module packages with `-DskipTests`; `task jena:test` builds the separate
+`module-test` target with the original Maven options and locked fixture cache.
+The affected merge gate selects this native proof for every `infra/jena/**`
+change and module COPY input, including generated model files; wave regression
+runs it once per pinned tip. ExternalFixture cases retain their focused wrappers.
+[BuildKit](https://docs.docker.com/build/building/multi-stage/#differences-between-legacy-builder-and-buildkit)
+skips the test stage when building the runtime image. Jena downloads try
+`dlcdn.apache.org` before `archive.apache.org` and always verify the pinned SHA-512.
+This split removes the 16–40 minute native suite and slow archive download from
+ordinary image preparation without weakening the gate; simultaneous image
+builds previously repeated the suite while waiting on its fixture cache lock.
+
 Type checks run `bun check`, Bun's built-in checker (the same errors as `tsc` from
 TypeScript 7, in seconds instead of minutes), so the host needs Bun 1.4.3 or newer and
 `task <workspace>:typecheck` refuses an older one. `tsc` stays installed for the Eden gate

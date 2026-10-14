@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { resolve } from 'node:path';
 import { generate } from '../model/compiler/generate.ts';
 import { stampFusekiImage } from './dev/fuseki-image.ts';
+import { ensureFusekiImage } from './dev/fuseki-image-build.ts';
 import { generateDocumentSchemas } from '../packages/document/scripts/schema.ts';
 
 const args = process.argv.slice(2);
@@ -22,3 +23,4 @@ await generateMainOpenApi(root, check);
 const inventory = spawnSync('python3', ['scripts/documentation/toolchain_inventory.py', check ? '--check' : '--write'],
   { cwd: root, encoding: 'utf8' });
 if (inventory.status !== 0) throw new Error(`toolchain inventory: ${(inventory.stderr || inventory.stdout).trim()}`);
+if (!check) await ensureFusekiImage(root);
