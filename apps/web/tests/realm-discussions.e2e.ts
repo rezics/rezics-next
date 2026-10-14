@@ -59,10 +59,11 @@ function recordApiFailures(page: Page) {
   });
   page.on('response', async (response) => {
     const url = new URL(response.url());
-    if (!url.pathname.startsWith('/api/main/') || (response.status() < 400
-      && !url.pathname.endsWith('/suitability/reads'))) return;
+    if (!url.pathname.startsWith('/api/main/') || response.status() < 400) return;
+    // Navigation can discard the browser's response body; diagnostics must not interrupt the journey.
+    const body = await response.text().catch(() => '[response body unavailable after navigation]');
     console.log(
-      `Realm journey API response: ${response.request().method()} ${url.pathname}${url.search} ${response.request().postData() ?? ''} HTTP ${response.status()} ${await response.text()}`,
+      `Realm journey API response: ${response.request().method()} ${url.pathname}${url.search} ${response.request().postData() ?? ''} HTTP ${response.status()} ${body}`,
     );
   });
 }
