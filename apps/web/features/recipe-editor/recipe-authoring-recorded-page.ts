@@ -21,10 +21,10 @@ export type RecipeVisitFrame = { ok: true; registry: TypeRegistry } | { ok: fals
 
 /**
  * Root and locale layout reads for an English visit, then the shell's community lists.
- * Official Zones are a public page. An empty page does not continue into Realm reads.
- * A later page is a record gap: this visit does not invent the next request.
- * Account's signed-in content preferences stay on LocaleLayout's `readMediaViewer`.
- * This mapping does not issue that read and does not substitute a Main answer.
+ * Official Zones are a public page. The shell names the Realms on that one page of six
+ * and does not ask for a later page. Account's signed-in content preferences stay on
+ * LocaleLayout's `readMediaViewer`. This mapping does not issue that read and does not
+ * substitute a Main answer.
  */
 export async function readRecipeVisitFrame(
   main: MainClient,
@@ -50,20 +50,11 @@ export async function readRecipeVisitFrame(
   const officialZones = { official: 'true' as const, limit: 6 };
   const anonymous = browserMainApi(input.origin, { anonymous: true, fetcher });
   const zones = await anonymous.v1.zones.get({ query: officialZones });
-  if (zones.error || !zones.data) {
-    return {
-      ok: false,
-      detail: `GET /v1/zones failed (${zones.error?.status ?? 'empty'}${problemTitle(zones.error?.value) ? `: ${problemTitle(zones.error?.value)}` : ''})`,
-    };
-  }
-  if (zones.data.next != null) {
-    return {
-      ok: false,
-      detail: `Record gap: GET /v1/zones left continuation ${String(zones.data.next)}`,
-    };
-  }
-  for (const zone of zones.data.items.slice(0, 6)) {
-    await anonymous.v1.realms({ realm: idOf(zone.realm) }).get();
+  // A refused or empty Zone page names no Realms. The shell still continues.
+  if (!zones.error && zones.data) {
+    for (const zone of zones.data.items.slice(0, 6)) {
+      await anonymous.v1.realms({ realm: idOf(zone.realm) }).get();
+    }
   }
   const actingSubject = input.actingSubject;
   if (!actingSubject) return { ok: true, registry: types.data };
