@@ -225,9 +225,6 @@ struct FileHeader {
     content_hash: String,
     imports: Vec<Import>,
     syntax: SyntaxFacts,
-    comments: Vec<Value>,
-    named_imports: Vec<NamedImport>,
-    direct_call_names: BTreeSet<String>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     parse_errors: Vec<String>,
     payloads: BTreeMap<&'static str, [u64; 2]>,
@@ -286,13 +283,19 @@ fn file_header(
         "sqlCandidates",
         payload(&facts.sql_candidates, writer, position)?,
     );
+    payloads.insert("comments", payload(&facts.comments, writer, position)?);
+    payloads.insert(
+        "namedImports",
+        payload(&facts.named_imports, writer, position)?,
+    );
+    payloads.insert(
+        "directCallNames",
+        payload(&facts.direct_call_names, writer, position)?,
+    );
     Ok(FileHeader {
         content_hash,
         imports: facts.imports,
         syntax: facts.syntax,
-        comments: facts.comments,
-        named_imports: facts.named_imports,
-        direct_call_names: facts.direct_call_names,
         parse_errors: facts.parse_errors,
         payloads,
         sql_hashes,
@@ -1199,6 +1202,13 @@ mod tests {
         );
         assert!(get("astDeflate").is_string());
         assert!(get("graphDeflate").is_string());
+        assert!(get("comments").is_array());
+        assert!(get("namedImports").is_array());
+        assert!(get("directCallNames").is_array());
+        let header_wire = serde_json::to_value(&header).unwrap();
+        for field in ["comments", "namedImports", "directCallNames"] {
+            assert!(header_wire.get(field).is_none());
+        }
         assert!(
             get("sqlCandidates")
                 .as_array()
