@@ -281,15 +281,25 @@ async function recordedTrack(name: PersonaName) {
   const started = performance.now();
   // The existing API proof has its own 60 s deadline, before the production visit's 120 s.
   const collectionProof = await within(60_000, () => track(name));
-  const proof = performance.now() - started;
-  const visitStarted = performance.now();
+  let proof = performance.now() - started;
+  let visit = 0;
   try {
-    if (name !== 'visitor') await within(120_000, async () => {
-      await libraryVisit(name, sessions[name], recording.session(name, sessions[name]));
-      await collectionProof?.();
-    });
+    if (name !== 'visitor') {
+      const visitStarted = performance.now();
+      try {
+        await within(120_000, () => libraryVisit(name, sessions[name], recording.session(name, sessions[name])));
+      } finally { visit = performance.now() - visitStarted; }
+      // Keep the duplicate-occurrence visit before its removal, but charge all
+      // original collection refusal/replay/stale assertions to the same proof budget.
+      if (collectionProof) {
+        const remaining = Math.max(0, 60_000 - proof);
+        const proofStarted = performance.now();
+        try { await within(remaining, collectionProof); }
+        finally { proof += performance.now() - proofStarted; }
+      }
+    }
   } finally {
-    console.info(`${name}: proof ${(proof / 1000).toFixed(3)}s; visit ${((performance.now() - visitStarted) / 1000).toFixed(3)}s`);
+    console.info(`${name}: proof ${(proof / 1000).toFixed(3)}s; visit ${(visit / 1000).toFixed(3)}s`);
   }
 }
 
