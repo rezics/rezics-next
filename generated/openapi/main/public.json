@@ -135675,6 +135675,12 @@
                       ],
                       "type": "object"
                     },
+                    "projection": {
+                      "patternProperties": {
+                        "^.*$": {}
+                      },
+                      "type": "object"
+                    },
                     "replayed": {
                       "type": "boolean"
                     },
@@ -135950,6 +135956,12 @@
                         "target",
                         "selector"
                       ],
+                      "type": "object"
+                    },
+                    "projection": {
+                      "patternProperties": {
+                        "^.*$": {}
+                      },
                       "type": "object"
                     },
                     "replayed": {
@@ -143625,6 +143637,10 @@
                             },
                             "type": "object"
                           },
+                          "replayed": {
+                            "const": false,
+                            "type": "boolean"
+                          },
                           "responsibleAgent": {
                             "anyOf": [
                               {
@@ -143660,7 +143676,8 @@
                           "inputs",
                           "activity",
                           "responsibleAgent",
-                          "responsibleAgentType"
+                          "responsibleAgentType",
+                          "replayed"
                         ],
                         "type": "object"
                       },
@@ -325441,698 +325458,866 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "asset": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "byteLength": {
-                    "maximum": 8388608,
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "disclosure": {
-                    "enum": [
-                      "private",
-                      "public"
-                    ],
-                    "type": "string"
-                  },
-                  "importedCover": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "format": {
-                        "const": "media-imported-cover-v1",
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "holderEvidence": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "name": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "fieldLocator"
-                        ],
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                         "type": [
-                          "object",
+                          "string",
                           "null"
                         ]
                       },
-                      "image": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "byteLength": {
-                            "maximum": 8388608,
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          "captureDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "captureUrl": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "mediaType": {
-                            "enum": [
-                              "image/png",
-                              "image/jpeg",
-                              "image/webp",
-                              "image/gif"
-                            ],
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "captureUrl",
-                          "captureDigest",
-                          "byteLength",
-                          "mediaType"
-                        ],
-                        "type": "object"
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
                       },
-                      "originalDigest": {
-                        "pattern": "^[0-9a-f]{64}$",
+                      "disclosure": {
+                        "enum": [
+                          "private",
+                          "public"
+                        ],
                         "type": "string"
                       },
-                      "source": {
+                      "importedCover": {
                         "additionalProperties": false,
                         "properties": {
-                          "component": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "format": {
+                            "const": "media-imported-cover-v1",
+                            "type": "string"
+                          },
+                          "holderEvidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "fieldLocator"
+                            ],
                             "type": [
-                              "string",
+                              "object",
                               "null"
                             ]
                           },
-                          "datasetSnapshotDigest": {
+                          "image": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteLength": {
+                                "maximum": 8388608,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "captureDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "captureUrl": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "mediaType": {
+                                "enum": [
+                                  "image/png",
+                                  "image/jpeg",
+                                  "image/webp",
+                                  "image/gif"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "captureUrl",
+                              "captureDigest",
+                              "byteLength",
+                              "mediaType"
+                            ],
+                            "type": "object"
+                          },
+                          "originalDigest": {
                             "pattern": "^[0-9a-f]{64}$",
                             "type": "string"
                           },
-                          "displayName": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
+                          "source": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "component": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "datasetSnapshotDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "externalId": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "href": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "observation": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "observationDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "provider": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "record": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "recordDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "sourceRevision": {
+                                "~elyTyp": 7,
+                                "maxLength": 200,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "record",
+                              "component",
+                              "observation",
+                              "provider",
+                              "namespace",
+                              "externalId",
+                              "sourceRevision",
+                              "observationDigest",
+                              "datasetSnapshotDigest",
+                              "recordDigest",
+                              "fieldLocator",
+                              "displayName",
+                              "href"
+                            ],
+                            "type": "object"
                           },
-                          "externalId": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "href": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "namespace": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "observation": {
+                          "targetWork": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
-                          },
-                          "observationDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "provider": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "record": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          },
-                          "recordDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "sourceRevision": {
-                            "~elyTyp": 7,
-                            "maxLength": 200,
-                            "nullable": true,
-                            "type": [
-                              "string",
-                              "null"
-                            ]
                           }
                         },
                         "required": [
-                          "record",
-                          "component",
-                          "observation",
-                          "provider",
-                          "namespace",
-                          "externalId",
-                          "sourceRevision",
-                          "observationDigest",
-                          "datasetSnapshotDigest",
-                          "recordDigest",
-                          "fieldLocator",
-                          "displayName",
-                          "href"
+                          "format",
+                          "targetWork",
+                          "source",
+                          "image",
+                          "originalDigest",
+                          "holderEvidence"
                         ],
                         "type": "object"
                       },
-                      "targetWork": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "mediaType": {
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp",
+                          "image/gif"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-image-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "format",
-                      "targetWork",
-                      "source",
-                      "image",
-                      "originalDigest",
-                      "holderEvidence"
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "mediaType": {
-                    "enum": [
-                      "image/png",
-                      "image/jpeg",
-                      "image/webp",
-                      "image/gif"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "disclosure": {
+                        "const": "private",
+                        "type": "string"
+                      },
+                      "mediaType": {
+                        "enum": [
+                          "audio/wav",
+                          "video/mp4"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-recording-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "media-image-upload-v1",
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "asset",
-                  "mediaType",
-                  "byteLength",
-                  "sha256",
-                  "disclosure",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "asset": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "byteLength": {
-                    "maximum": 8388608,
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "disclosure": {
-                    "enum": [
-                      "private",
-                      "public"
-                    ],
-                    "type": "string"
-                  },
-                  "importedCover": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "format": {
-                        "const": "media-imported-cover-v1",
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "holderEvidence": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "name": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "fieldLocator"
-                        ],
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                         "type": [
-                          "object",
+                          "string",
                           "null"
                         ]
                       },
-                      "image": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "byteLength": {
-                            "maximum": 8388608,
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          "captureDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "captureUrl": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "mediaType": {
-                            "enum": [
-                              "image/png",
-                              "image/jpeg",
-                              "image/webp",
-                              "image/gif"
-                            ],
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "captureUrl",
-                          "captureDigest",
-                          "byteLength",
-                          "mediaType"
-                        ],
-                        "type": "object"
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
                       },
-                      "originalDigest": {
-                        "pattern": "^[0-9a-f]{64}$",
+                      "disclosure": {
+                        "enum": [
+                          "private",
+                          "public"
+                        ],
                         "type": "string"
                       },
-                      "source": {
+                      "importedCover": {
                         "additionalProperties": false,
                         "properties": {
-                          "component": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "format": {
+                            "const": "media-imported-cover-v1",
+                            "type": "string"
+                          },
+                          "holderEvidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "fieldLocator"
+                            ],
                             "type": [
-                              "string",
+                              "object",
                               "null"
                             ]
                           },
-                          "datasetSnapshotDigest": {
+                          "image": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteLength": {
+                                "maximum": 8388608,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "captureDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "captureUrl": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "mediaType": {
+                                "enum": [
+                                  "image/png",
+                                  "image/jpeg",
+                                  "image/webp",
+                                  "image/gif"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "captureUrl",
+                              "captureDigest",
+                              "byteLength",
+                              "mediaType"
+                            ],
+                            "type": "object"
+                          },
+                          "originalDigest": {
                             "pattern": "^[0-9a-f]{64}$",
                             "type": "string"
                           },
-                          "displayName": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
+                          "source": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "component": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "datasetSnapshotDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "externalId": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "href": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "observation": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "observationDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "provider": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "record": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "recordDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "sourceRevision": {
+                                "~elyTyp": 7,
+                                "maxLength": 200,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "record",
+                              "component",
+                              "observation",
+                              "provider",
+                              "namespace",
+                              "externalId",
+                              "sourceRevision",
+                              "observationDigest",
+                              "datasetSnapshotDigest",
+                              "recordDigest",
+                              "fieldLocator",
+                              "displayName",
+                              "href"
+                            ],
+                            "type": "object"
                           },
-                          "externalId": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "href": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "namespace": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "observation": {
+                          "targetWork": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
-                          },
-                          "observationDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "provider": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "record": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          },
-                          "recordDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "sourceRevision": {
-                            "~elyTyp": 7,
-                            "maxLength": 200,
-                            "nullable": true,
-                            "type": [
-                              "string",
-                              "null"
-                            ]
                           }
                         },
                         "required": [
-                          "record",
-                          "component",
-                          "observation",
-                          "provider",
-                          "namespace",
-                          "externalId",
-                          "sourceRevision",
-                          "observationDigest",
-                          "datasetSnapshotDigest",
-                          "recordDigest",
-                          "fieldLocator",
-                          "displayName",
-                          "href"
+                          "format",
+                          "targetWork",
+                          "source",
+                          "image",
+                          "originalDigest",
+                          "holderEvidence"
                         ],
                         "type": "object"
                       },
-                      "targetWork": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "mediaType": {
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp",
+                          "image/gif"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-image-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "format",
-                      "targetWork",
-                      "source",
-                      "image",
-                      "originalDigest",
-                      "holderEvidence"
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "mediaType": {
-                    "enum": [
-                      "image/png",
-                      "image/jpeg",
-                      "image/webp",
-                      "image/gif"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "disclosure": {
+                        "const": "private",
+                        "type": "string"
+                      },
+                      "mediaType": {
+                        "enum": [
+                          "audio/wav",
+                          "video/mp4"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-recording-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "media-image-upload-v1",
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "asset",
-                  "mediaType",
-                  "byteLength",
-                  "sha256",
-                  "disclosure",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "asset": {
-                    "~elyTyp": 7,
-                    "nullable": true,
-                    "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
-                    "type": [
-                      "string",
-                      "null"
-                    ]
-                  },
-                  "byteLength": {
-                    "maximum": 8388608,
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "disclosure": {
-                    "enum": [
-                      "private",
-                      "public"
-                    ],
-                    "type": "string"
-                  },
-                  "importedCover": {
+                "anyOf": [
+                  {
                     "additionalProperties": false,
                     "properties": {
-                      "format": {
-                        "const": "media-imported-cover-v1",
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "holderEvidence": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "name": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "name",
-                          "fieldLocator"
-                        ],
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
                         "type": [
-                          "object",
+                          "string",
                           "null"
                         ]
                       },
-                      "image": {
-                        "additionalProperties": false,
-                        "properties": {
-                          "byteLength": {
-                            "maximum": 8388608,
-                            "minimum": 1,
-                            "type": "integer"
-                          },
-                          "captureDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "captureUrl": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "mediaType": {
-                            "enum": [
-                              "image/png",
-                              "image/jpeg",
-                              "image/webp",
-                              "image/gif"
-                            ],
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "captureUrl",
-                          "captureDigest",
-                          "byteLength",
-                          "mediaType"
-                        ],
-                        "type": "object"
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
                       },
-                      "originalDigest": {
-                        "pattern": "^[0-9a-f]{64}$",
+                      "disclosure": {
+                        "enum": [
+                          "private",
+                          "public"
+                        ],
                         "type": "string"
                       },
-                      "source": {
+                      "importedCover": {
                         "additionalProperties": false,
                         "properties": {
-                          "component": {
-                            "~elyTyp": 7,
-                            "nullable": true,
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "format": {
+                            "const": "media-imported-cover-v1",
+                            "type": "string"
+                          },
+                          "holderEvidence": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "name": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "name",
+                              "fieldLocator"
+                            ],
                             "type": [
-                              "string",
+                              "object",
                               "null"
                             ]
                           },
-                          "datasetSnapshotDigest": {
+                          "image": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "byteLength": {
+                                "maximum": 8388608,
+                                "minimum": 1,
+                                "type": "integer"
+                              },
+                              "captureDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "captureUrl": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "mediaType": {
+                                "enum": [
+                                  "image/png",
+                                  "image/jpeg",
+                                  "image/webp",
+                                  "image/gif"
+                                ],
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "captureUrl",
+                              "captureDigest",
+                              "byteLength",
+                              "mediaType"
+                            ],
+                            "type": "object"
+                          },
+                          "originalDigest": {
                             "pattern": "^[0-9a-f]{64}$",
                             "type": "string"
                           },
-                          "displayName": {
-                            "maxLength": 200,
-                            "minLength": 1,
-                            "type": "string"
+                          "source": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "component": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "datasetSnapshotDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "displayName": {
+                                "maxLength": 200,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "externalId": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "fieldLocator": {
+                                "maxLength": 500,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "href": {
+                                "format": "uri",
+                                "maxLength": 2048,
+                                "type": "string"
+                              },
+                              "namespace": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "observation": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "observationDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "provider": {
+                                "maxLength": 100,
+                                "minLength": 1,
+                                "type": "string"
+                              },
+                              "record": {
+                                "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                                "type": "string"
+                              },
+                              "recordDigest": {
+                                "pattern": "^[0-9a-f]{64}$",
+                                "type": "string"
+                              },
+                              "sourceRevision": {
+                                "~elyTyp": 7,
+                                "maxLength": 200,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "record",
+                              "component",
+                              "observation",
+                              "provider",
+                              "namespace",
+                              "externalId",
+                              "sourceRevision",
+                              "observationDigest",
+                              "datasetSnapshotDigest",
+                              "recordDigest",
+                              "fieldLocator",
+                              "displayName",
+                              "href"
+                            ],
+                            "type": "object"
                           },
-                          "externalId": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "fieldLocator": {
-                            "maxLength": 500,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "href": {
-                            "format": "uri",
-                            "maxLength": 2048,
-                            "type": "string"
-                          },
-                          "namespace": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "observation": {
+                          "targetWork": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
-                          },
-                          "observationDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "provider": {
-                            "maxLength": 100,
-                            "minLength": 1,
-                            "type": "string"
-                          },
-                          "record": {
-                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                            "type": "string"
-                          },
-                          "recordDigest": {
-                            "pattern": "^[0-9a-f]{64}$",
-                            "type": "string"
-                          },
-                          "sourceRevision": {
-                            "~elyTyp": 7,
-                            "maxLength": 200,
-                            "nullable": true,
-                            "type": [
-                              "string",
-                              "null"
-                            ]
                           }
                         },
                         "required": [
-                          "record",
-                          "component",
-                          "observation",
-                          "provider",
-                          "namespace",
-                          "externalId",
-                          "sourceRevision",
-                          "observationDigest",
-                          "datasetSnapshotDigest",
-                          "recordDigest",
-                          "fieldLocator",
-                          "displayName",
-                          "href"
+                          "format",
+                          "targetWork",
+                          "source",
+                          "image",
+                          "originalDigest",
+                          "holderEvidence"
                         ],
                         "type": "object"
                       },
-                      "targetWork": {
-                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "mediaType": {
+                        "enum": [
+                          "image/png",
+                          "image/jpeg",
+                          "image/webp",
+                          "image/gif"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-image-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "format",
-                      "targetWork",
-                      "source",
-                      "image",
-                      "originalDigest",
-                      "holderEvidence"
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
                     "type": "object"
                   },
-                  "mediaType": {
-                    "enum": [
-                      "image/png",
-                      "image/jpeg",
-                      "image/webp",
-                      "image/gif"
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
+                        "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "asset": {
+                        "~elyTyp": 7,
+                        "nullable": true,
+                        "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$",
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      },
+                      "byteLength": {
+                        "maximum": 8388608,
+                        "minimum": 1,
+                        "type": "integer"
+                      },
+                      "disclosure": {
+                        "const": "private",
+                        "type": "string"
+                      },
+                      "mediaType": {
+                        "enum": [
+                          "audio/wav",
+                          "video/mp4"
+                        ],
+                        "type": "string"
+                      },
+                      "profile": {
+                        "const": "media-recording-upload-v1",
+                        "type": "string"
+                      },
+                      "sha256": {
+                        "pattern": "^[0-9a-f]{64}$",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "asset",
+                      "mediaType",
+                      "byteLength",
+                      "sha256",
+                      "disclosure",
+                      "actingSubject"
                     ],
-                    "type": "string"
-                  },
-                  "profile": {
-                    "const": "media-image-upload-v1",
-                    "type": "string"
-                  },
-                  "sha256": {
-                    "pattern": "^[0-9a-f]{64}$",
-                    "type": "string"
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "asset",
-                  "mediaType",
-                  "byteLength",
-                  "sha256",
-                  "disclosure",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
@@ -438184,6 +438369,776 @@
             "description": "Response for status 503"
           }
         },
+        "x-rezics-exposure": "public"
+      }
+    },
+    "/v1/posts": {
+      "post": {
+        "operationId": "postV1Posts",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "pattern": "^[A-Za-z0-9:_./-]{1,128}$",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "document": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "doc": {
+                        "patternProperties": {
+                          "^.*$": {}
+                        },
+                        "type": "object"
+                      },
+                      "profile": {
+                        "enum": [
+                          "text",
+                          "blocks"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "const": "rezics-document-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "profile",
+                      "doc"
+                    ],
+                    "type": "object"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "authored-post-v1",
+                    "type": "string"
+                  },
+                  "title": {
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "title",
+                  "language",
+                  "document",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "document": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "doc": {
+                        "patternProperties": {
+                          "^.*$": {}
+                        },
+                        "type": "object"
+                      },
+                      "profile": {
+                        "enum": [
+                          "text",
+                          "blocks"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "const": "rezics-document-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "profile",
+                      "doc"
+                    ],
+                    "type": "object"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "authored-post-v1",
+                    "type": "string"
+                  },
+                  "title": {
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "title",
+                  "language",
+                  "document",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "actingSubject": {
+                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                    "type": "string"
+                  },
+                  "document": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "doc": {
+                        "patternProperties": {
+                          "^.*$": {}
+                        },
+                        "type": "object"
+                      },
+                      "profile": {
+                        "enum": [
+                          "text",
+                          "blocks"
+                        ],
+                        "type": "string"
+                      },
+                      "version": {
+                        "const": "rezics-document-v1",
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "version",
+                      "profile",
+                      "doc"
+                    ],
+                    "type": "object"
+                  },
+                  "language": {
+                    "maxLength": 35,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "profile": {
+                    "const": "authored-post-v1",
+                    "type": "string"
+                  },
+                  "title": {
+                    "properties": {
+                      "language": {
+                        "maxLength": 35,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "value": {
+                        "maxLength": 200,
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "value",
+                      "language"
+                    ],
+                    "type": "object"
+                  }
+                },
+                "required": [
+                  "profile",
+                  "title",
+                  "language",
+                  "document",
+                  "actingSubject"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "author": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "byteDigest": {
+                      "type": "string"
+                    },
+                    "post": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revisionId": {
+                      "type": "string"
+                    },
+                    "variantId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "post",
+                    "variantId",
+                    "revisionId",
+                    "byteDigest",
+                    "author",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 200"
+          },
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "author": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "byteDigest": {
+                      "type": "string"
+                    },
+                    "post": {
+                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                      "type": "string"
+                    },
+                    "replayed": {
+                      "type": "boolean"
+                    },
+                    "revisionId": {
+                      "type": "string"
+                    },
+                    "variantId": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "post",
+                    "variantId",
+                    "revisionId",
+                    "byteDigest",
+                    "author",
+                    "replayed"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 201"
+          },
+          "400": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 400,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 400"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 401,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 401"
+          },
+          "403": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 403,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 403"
+          },
+          "409": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 409,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 409"
+          },
+          "500": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 500,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 500"
+          },
+          "503": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "currentHead": {
+                      "~elyTyp": 7,
+                      "nullable": true,
+                      "type": [
+                        "string",
+                        "null"
+                      ]
+                    },
+                    "detail": {
+                      "maxLength": 512,
+                      "type": "string"
+                    },
+                    "status": {
+                      "const": 503,
+                      "type": "number"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "type": {
+                      "type": "string"
+                    },
+                    "validation": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "constraint": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        },
+                        "path": {
+                          "~elyTyp": 7,
+                          "maxLength": 180,
+                          "nullable": true,
+                          "type": [
+                            "string",
+                            "null"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "path",
+                        "constraint"
+                      ],
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Response for status 503"
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "x-rezics-exposure": "public"
       }
     },

@@ -591,6 +591,7 @@ export const operationExposures = {
   "postV1PollsByPollProxies": "platform:institutional-voting",
   "postV1PollsByPollRepresentative-policies": "platform:institutional-voting",
   "postV1PollsByPollResolutions": "platform:institutional-voting",
+  "postV1Posts": "public",
   "postV1PostsByIdIdentifications": "public",
   "postV1Private-content-queries": "public",
   "postV1Private-queries": "public",
