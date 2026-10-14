@@ -35,7 +35,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     error?: string;
   }
   interface GraphStatement {
-    method: 'query' | 'command'; input: unknown; started: number;
+    method: 'query' | 'command' | 'other'; input: unknown; started: number;
     originSpanId: string;
     // Driver-local budget state is not exposed at the HTTP observation boundary.
     status?: number; rawBody?: string;
@@ -68,18 +68,25 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
       (error: unknown) => { complete(error); throw error; });
   } as typeof originalQuery;
   const originalFetch = globalThis.fetch;
-  const fusekiBase = new URL(process.env.FUSEKI_URL!);
+  const fusekiBase = new URL(`${process.env.FUSEKI_URL!.replace(/\/$/, '')}/`);
   const queryUrl = new URL('query', fusekiBase).href;
   const commandUrl = new URL('command', fusekiBase).href;
   // Observe the actual wire exchange without importing a product client or
   // replacing its result, response-byte enforcement or error handling.
   globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const url = input instanceof Request ? input.url : String(input);
-    if (!selected() || (url !== queryUrl && url !== commandUrl)) return originalFetch(input, init);
+    const destination = new URL(url);
+    if (!selected() || destination.origin !== fusekiBase.origin
+      || !destination.pathname.startsWith(fusekiBase.pathname)) return originalFetch(input, init);
+    const method = init?.method ?? (input instanceof Request ? input.method : 'GET');
+    const operation = method === 'POST' && url === queryUrl ? 'query'
+      : method === 'POST' && url === commandUrl ? 'command' : 'other';
     const body = init?.body ?? (input instanceof Request ? await input.clone().text() : undefined);
-    if (typeof body !== 'string') throw new Error('Observed Fuseki request body must be exact text');
-    const record: GraphStatement = { method: url === queryUrl ? 'query' : 'command',
-      input: url === queryUrl ? body : JSON.parse(body), started: performance.now(),
+    if (operation !== 'other' && typeof body !== 'string')
+      throw new Error('Observed Fuseki request body must be exact text');
+    const record: GraphStatement = { method: operation,
+      input: operation === 'query' ? body : operation === 'command' ? JSON.parse(body as string)
+        : { url, method, body: body ?? null }, started: performance.now(),
       originSpanId: trace.getSpan(context.active())!.spanContext().spanId };
     graph.push(record);
     try {
@@ -88,10 +95,12 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
       Object.assign(record, { elapsedMs: performance.now() - record.started,
         status: response.status, rawBody });
       if (!response.ok) record.error = `HTTP ${response.status}: ${rawBody}`;
-      const result = JSON.parse(rawBody) as SparqlResult;
-      Object.assign(record, { result,
-        ...(result.results?.bindings ? { rowsReturned: result.results.bindings.length }
-          : typeof result.boolean === 'boolean' ? { rowsReturned: 0 } : {}) });
+      if (operation !== 'other' || response.headers.get('content-type')?.includes('json')) {
+        const result = JSON.parse(rawBody) as SparqlResult;
+        Object.assign(record, { result,
+          ...(result.results?.bindings ? { rowsReturned: result.results.bindings.length }
+            : typeof result.boolean === 'boolean' ? { rowsReturned: 0 } : {}) });
+      }
       return response;
     } catch (error) {
       Object.assign(record, { elapsedMs: performance.now() - record.started,
