@@ -10,6 +10,7 @@ import { SELECTION_POLICY } from '../space/create.ts';
 import { InvalidSearchContinuation, SearchContinuationRestart, SEARCH_PAGE_TTL_MS } from '../work/search-continuation.ts';
 import { decodeReadCursor, encodeReadCursor, WorkReadExpired, WorkReadInvalid } from '../work/read-session.ts';
 import { FusekiReadBudgetExceeded, FusekiQueryResponseTooLarge, type SparqlResult } from '../../infrastructure/fuseki.ts';
+import { observeSearchPhase } from './operation-evidence.ts';
 
 /** Ranked retrieval has O(P) retained rows; refills consume at most 512
  * candidates, 8 native rank reads and 8 RDF joins, under the existing 72-call,
@@ -31,7 +32,8 @@ const unitId = (value: unknown): value is string => typeof value === 'string' &&
   && /^[a-z][a-z0-9+.-]*:/iu.test(value) && !/[\s<>"{}|\\^`]/u.test(value);
 
 async function rankQuery(env: WorkActivationEnvironment, sparql: string): Promise<SparqlResult> {
-  try { return await env.fuseki.query(sparql, RANKED_CATALOGUE_COST.responseBytes); }
+  try { return await observeSearchPhase('catalogue-native-rank-read',
+    () => env.fuseki.query(sparql, RANKED_CATALOGUE_COST.responseBytes)); }
   catch (cause) {
     if (cause instanceof FusekiReadBudgetExceeded || cause instanceof FusekiQueryResponseTooLarge) throw cause;
     throw new PublicQueryUnavailable('native ranked retrieval is unavailable', { cause });
@@ -123,7 +125,8 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
     }
     if (!page.hits.length) { more = false; break; }
     const candidates = page.hits.filter(hit => hit.key !== null);
-    const matched = candidates.length ? (await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+    const matched = candidates.length ? (await observeSearchPhase('catalogue-candidate-identity-read',
+      () => env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
       SELECT ?unit ?work ?main ?contribution ?revision ?selection ?language WHERE {
         VALUES ?unit { ${candidates.map(hit => iri(hit.unit ?? hit.id)).join(' ')} }
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} { ?unit a rv:MatchUnit ; rv:disclosure rv:Public ;
@@ -140,7 +143,7 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
           ${unerased('?sourceWork')}
           FILTER(!BOUND(?resultWork) || EXISTS { ${publicWork('?resultWork', '?resultMain')} })`
           : `FILTER EXISTS { ${publicWork('?work', '?main')} }`}
-      } LIMIT ${candidates.length + 1}`, RANKED_CATALOGUE_COST.responseBytes)).results?.bindings ?? [] : [];
+      } LIMIT ${candidates.length + 1}`, RANKED_CATALOGUE_COST.responseBytes))).results?.bindings ?? [] : [];
     if (matched.length > page.hits.length || new Set(matched.map(row => row.unit?.value)).size !== matched.length) {
       throw new PublicQueryUnavailable('ranked result identity is ambiguous');
     }

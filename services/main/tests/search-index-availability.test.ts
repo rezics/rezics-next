@@ -5,6 +5,7 @@ import { assertPublicTextReady, MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable,
 import { readRankedCatalogue } from '../src/modules/search/ranked.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
 import { withSearchGraphSnapshot } from '../src/modules/search/snapshot.ts';
+import { searchOperationEvidence } from '../src/modules/search/operation-evidence.ts';
 
 const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
@@ -86,6 +87,77 @@ test('one delivered catalogue slot admits only one initial index candidate to au
     expect(page.results.map(row => row.work)).toEqual([id(0)]);
     expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
     expect(page.next).not.toBeNull();
+  }
+});
+
+// These controls measure Main's submitted candidates and joins. They cannot
+// measure the native function's term rewrites or prove its population cost.
+test('ranked continuations keep Main candidate work bound to the page across unrelated growth', async () => {
+  const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+  const expected = Array.from({ length: 3 }, (_, n) => ({ matchUnit: `urn:rezics:unit:${n}`, work: id(100 + n),
+    mainVersion: id(n), contribution: id(200 + n), revision: id(300 + n), selection: id(400 + n), language: 'en' }));
+  const hits = expected.map((row, document) => ({ id: `urn:rezics:search:name:work:${document}`,
+    unit: row.matchUnit, key: row.mainVersion, score: '2000000', document }));
+  const ranked = [...hits, { id: expected[0]!.matchUnit, key: null, score: '1', document: 3 }];
+  for (const phrase of ['needle', 'needle story']) {
+    for (const realm of [undefined, id(900)]) {
+      let baseline: string[] | undefined;
+      for (const population of [6, 22, 70, 196]) {
+        const fixture = indexed('25'), client = fixture.client;
+        const requests: string[] = [], submitted: number[] = [], disclosed: number[] = [];
+        client.query = async sparql => {
+          requests.push(sparql);
+          if (sparql.includes('SELECT ?space')) return { results: { bindings: [{ space: term(id(901)) }] } };
+          if (sparql.includes('rv:rankedText')) {
+            const args = /rv:rankedText\(rv:searchBody, ("(?:[^"\\]|\\.)*"), (\d+), ("(?:[^"\\]|\\.)*"),\s*("(?:[^"\\]|\\.)*")\)/u.exec(sparql)!;
+            expect(JSON.parse(args[1]!)).toBe(phrase);
+            expect(JSON.parse(JSON.parse(args[4]!) as string)).toEqual({ catalogue: true, ...(realm ? { realm } : {}) });
+            const after = JSON.parse(args[3]!) as string;
+            const offset = after ? ranked.findIndex(hit => hit.id === (JSON.parse(after) as { id: string }).id) + 1 : 0;
+            const size = Number(args[2]);
+            expect(searchOperationEvidence.getStore()!.phases.filter(phase => phase.state === 'active').map(phase => phase.phase))
+              .toContain('catalogue-native-rank-read');
+            submitted.push(size);
+            return { results: { bindings: [{ epoch: term('epoch'), sequence: term('25'), generation: term(generation),
+              page: term(JSON.stringify({ hits: ranked.slice(offset, offset + size), commit: '7', more: offset + size < ranked.length })) }] } };
+          }
+          const values = /VALUES \?unit \{([^}]+)\}/u.exec(sparql)!;
+          expect(searchOperationEvidence.getStore()!.phases.filter(phase => phase.state === 'active').map(phase => phase.phase))
+            .toContain('catalogue-candidate-identity-read');
+          const units = [...values[1]!.matchAll(/<(urn:rezics:unit:\d+)>/gu)].map(match => match[1]!);
+          expect(units).toHaveLength(1);
+          return { results: { bindings: expected.filter(row => units.includes(row.matchUnit)).map(row => ({
+            unit: term(row.matchUnit), work: term(row.work), main: term(row.mainVersion), contribution: term(row.contribution),
+            revision: term(row.revision), selection: term(row.selection), language: term(row.language),
+          })) } };
+        };
+        const env = { fuseki: client, lineage, objectDirectory: '.temp/search-availability-owner' };
+        const position = { dataEpoch: lineage.dataEpoch, sequence: '25', generation, population,
+          serverInstanceId: '11111111-1111-4111-8111-111111111111', publicSearchWriteEpoch: '2' };
+        let continuation: string | undefined;
+        const delivered: typeof expected = [];
+        await searchOperationEvidence.run({ phases: [] }, () => searchGraphSnapshot.run({ clients: new Set([client]), lineage, position }, async () => {
+          for (let n = 0; n <= expected.length; n++) {
+            const page = await readRankedCatalogue(env, { phrase, realm, language: null, pageSize: 1, continuation }, async rows => {
+              disclosed.push(rows.length);
+              return rows;
+            });
+            expect(page.results).toEqual(n === 3 ? [] : [{ ...expected[n], score: 2000000, ...(realm ? { reason: 'realm-adoption' } : {}) }]);
+            delivered.push(...page.results);
+            expect(page.count).toEqual({ value: delivered.length, precision: n === 3 ? 'exact' : 'lower-bound' });
+            expect(page.population).toBe(population);
+            if (n === 3) expect(page.next).toBeNull();
+            else expect(page.next).not.toBeNull();
+            continuation = page.next ?? undefined;
+          }
+        }));
+        expect(delivered.map(row => row.work)).toEqual(expected.map(row => row.work));
+        expect(submitted).toEqual([1, 1, 1, 1]);
+        expect(disclosed).toEqual([1, 1, 1, 0]);
+        baseline ??= requests;
+        expect(requests).toEqual(baseline);
+      }
+    }
   }
 });
 

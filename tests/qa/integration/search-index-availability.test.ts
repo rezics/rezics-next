@@ -34,7 +34,8 @@ test('public search retains exact Realm membership and bounded work across four 
   const source = sourceIdentity(resolve('.')), startedPreparation = performance.now();
   const stack = await startMediaStack('search-index-availability', { profileCredits: true });
   const preparation: unknown[] = [], evidence: unknown[] = [], rawAnswers: unknown[] = [], refusals: unknown[] = [];
-  const profiles: { caller: string; pageIndex: number; size: number; profile: WorkProfile }[] = [];
+  type RankSubmission = { nativeReads: number; identityReads: number; identityCandidates: number };
+  const profiles: { caller: string; pageIndex: number; size: number; profile: WorkProfile; rankSubmission: RankSubmission }[] = [];
   const expected: Identity[] = [], unrelated: string[] = [];
   const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
   const query = stack.fuseki.query.bind(stack.fuseki), health = stack.fuseki.commandHealth.bind(stack.fuseki);
@@ -153,14 +154,21 @@ test('public search retains exact Realm membership and bounded work across four 
             return { status: response.status, body, headers: Object.fromEntries(response.headers) };
           }, { service: 'search-index-availability', flush: flushTelemetryTraces, peers: { fuseki: Bun.env.FUSEKI_URL } });
           active = undefined;
+          // Submitted Main work is distinct from Jena's touched bindings or
+          // Lucene's term rewrites. Constant counts do not prove either flat.
+          const nativeReads = sample.calls.filter(call => call.phases?.includes('catalogue-native-rank-read'));
+          const identityReads = sample.calls.filter(call => call.phases?.includes('catalogue-candidate-identity-read'));
+          const rankSubmission = { nativeReads: nativeReads.length, identityReads: identityReads.length,
+            identityCandidates: identityReads.reduce((sum, call) => sum
+              + [...(/VALUES \?unit \{([^}]+)\}/u.exec(call.request ?? '')?.[1] ?? '').matchAll(/<[^>]+>/gu)].length, 0) };
           const completion = { health: await health(), checkpoint: await delta('-1') };
           const now = performance.now();
           evidence.push({ size: expected.length + unrelated.length, unrelated: unrelated.length, caller,
             pageIndex, requestedAt, answeredAt, httpMs, atAnswer, request: { method: 'GET', path }, answer: result,
             arrival: sample.calls.find(call => call.family === 'delta-proof'), completion,
             phases: sample.phases.map(phase => ({ ...phase, elapsedMs: phase.elapsedMs ?? now - phase.startedMs })),
-            calls: sample.calls, returnedRows: sample.calls.reduce((sum, call) => sum + (call.rows ?? 0), 0), profile });
-          profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile });
+            calls: sample.calls, returnedRows: sample.calls.reduce((sum, call) => sum + (call.rows ?? 0), 0), rankSubmission, profile });
+          profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile, rankSubmission });
           retain();
           expect(sample.calls.find(call => call.rankHits !== undefined)?.rankHits).toBeLessThanOrEqual(1);
           if (result.status !== 200) {
@@ -171,6 +179,9 @@ test('public search retains exact Realm membership and bounded work across four 
             break;
           }
           const page = JSON.parse(result.body) as Page;
+          expect(nativeReads.length).toBeGreaterThan(0);
+          expect(identityReads.length).toBeLessThanOrEqual(nativeReads.length);
+          expect(rankSubmission.identityCandidates).toBeLessThanOrEqual(512);
           for (const item of page.results ?? page.items ?? []) {
             const work = item.work ?? item.id!;
             expect(expected.map(row => row.work)).toContain(work);
@@ -199,6 +210,10 @@ test('public search retains exact Realm membership and bounded work across four 
       for (let pageIndex = 0; pageIndex < 3; pageIndex++) {
         const measured = profiles.filter(row => row.caller === caller && row.pageIndex === pageIndex);
         expect(new Set(measured.map(row => row.size)).size).toBe(4);
+        const small = measured.find(row => row.size === expected.length + base + 16)!;
+        const large = measured.find(row => row.size === expected.length + base + 190)!;
+        expect(large.rankSubmission, `${caller} page ${pageIndex}: submitted Main work, excluding native operators`)
+          .toEqual(small.rankSubmission);
         assertWorkCostAtScales(measured.map(row => row.profile), {
           fusekiRequests: 72, fusekiReceivedBytes: 8_388_608, postgresStatements: 160,
           minimumObserved: { fusekiRequests: 1, postgresStatements: 1 },
