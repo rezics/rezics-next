@@ -13,9 +13,9 @@ async function navigateJourney(page: Page, path: string, reload: boolean) {
   for (let attempt = 0; ; attempt++) {
     try {
       const response = reload && attempt === 0 ? await page.reload() : await page.goto(path);
-      if (response?.status() !== 503 || attempt === 2) return;
-      const seconds = Number(response.headers()['retry-after']);
-      console.log(`[journey navigation] ${response.url()}: 503; retry ${attempt + 1}`);
+      if ((response !== null && response.status() !== 503) || attempt === 2) return;
+      const seconds = Number(response?.headers()['retry-after']);
+      console.log(`[journey navigation] ${response?.url() ?? page.url()}: ${response?.status() ?? 'no document response'}; retry ${attempt + 1}`);
       await page.waitForTimeout(Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds, 10) * 1000 : 1000);
     }
     catch (error) {

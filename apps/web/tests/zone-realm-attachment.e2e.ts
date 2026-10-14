@@ -459,6 +459,9 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
   const context = await browser.newContext({ baseURL: info.project.use.baseURL, viewport: phone, reducedMotion: 'reduce' });
   const other = await context.newPage();
   try {
+    for (const tab of [page, other]) tab.on('requestfailed', request => {
+      if (request.isNavigationRequest()) console.log(`[attached discussion document failed] ${request.url()}: ${request.failure()?.errorText}`);
+    });
     await signInAtAccounts(other, '/en/manage', member);
     const sessionKey = (await context.cookies()).find(cookie => cookie.name === 'rezics_session_key')!.value;
     const session = await other.request.get('/api/main/v1/me/session-agent', { headers: { 'x-session-key': sessionKey } });
