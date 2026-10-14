@@ -3,8 +3,9 @@ import type { MainClient } from '../discover/types.ts';
 import { releaseChoiceName } from '../tracking/display.ts';
 import { copyOf } from '../tracking/messages.ts';
 import type { EditionPreference, ProgressSummary } from '../tracking/types.ts';
-import { iriOf } from './route.ts';
-import type { AgentCreditPage, CreditPage, Loaded, WorkHeader } from './types.ts';
+import type { FacetList } from '../concept/types.ts';
+import { iriOf, mainScope, type WorkScope } from './route.ts';
+import type { AdoptionPage, AgentCreditPage, AlsoEnjoyedPage, ClassificationPage, CreditPage, Loaded, WorkHeader } from './types.ts';
 import { failureOf } from './failure.ts';
 
 export type Answer<T> = { data: T | null; error: { status: number; value?: unknown } | null };
@@ -68,6 +69,24 @@ export function booksEditionReads({ main, actingSubject }: { main: MainClient; a
         error: result.error,
         data: result.data?.result.profile === 'template-result-v1'
           && result.data.result.query === 'https://rezics.com/query/work-credits'
+          ? result.data.result : null,
+      };
+    }),
+    readClassifications: (id: string, scope: WorkScope): Promise<BooksRead<ClassificationPage>> =>
+      settle(() => main.v1.works({ id }).classifications.get({
+        query: { actingSubject, ...mainScope(scope) } })),
+    readFacets: (): Promise<BooksRead<FacetList>> => settle(() => main.v1.facets.get()),
+    readAlsoEnjoyed: (id: string): Promise<BooksRead<AlsoEnjoyedPage>> =>
+      settle(() => main.v1.works({ id })['also-enjoyed'].get({ query: { actingSubject, limit: 12 } })),
+    readAdoptions: (id: string): Promise<BooksRead<AdoptionPage>> => settle(async () => {
+      const result = await main.v1.query.post({
+        profile: 'template-query-v1', query: 'https://rezics.com/query/work-adoptions', revision: 1,
+        parameters: { roots: [iriOf(id)] }, presentation: { actingSubject },
+      });
+      return {
+        error: result.error,
+        data: result.data?.result.profile === 'template-result-v1'
+          && result.data.result.query === 'https://rezics.com/query/work-adoptions'
           ? result.data.result : null,
       };
     }),

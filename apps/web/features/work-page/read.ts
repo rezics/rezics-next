@@ -211,11 +211,7 @@ export const readCredits = cache(async (id: string): Promise<Loaded<CreditPage>>
 
 export const readAdoptions = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AdoptionPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(async () => {
-    const result=await main.v1.query.post({profile:'template-query-v1',query:'https://rezics.com/query/work-adoptions',revision:1,
-      parameters:{roots:[iriOf(id)]},presentation:{actingSubject}});
-    return {error:result.error,data:result.data?.result.profile==='template-result-v1' && result.data.result.query==='https://rezics.com/query/work-adoptions' ? result.data.result:null};
-  });
+  return booksEditionReads({ main, actingSubject }).readAdoptions(id);
 });
 
 export const readRealm = cache(async (realm: string, _locale: UiLocale): Promise<Loaded<RealmHeader>> => {
@@ -233,8 +229,7 @@ async function scopeReader(scope: WorkScope) {
 export const readClassifications = cache(async (id: string, _locale: UiLocale, scope: WorkScope):
   Promise<Loaded<ClassificationPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id }).classifications.get({
-    query: { actingSubject, ...mainScope(scope) } }));
+  return booksEditionReads({ main, actingSubject }).readClassifications(id, scope);
 });
 
 /**
@@ -304,8 +299,7 @@ export const readWorkStats = cache(async (id: string, context: string | undefine
  */
 export const readAlsoEnjoyed = cache(async (id: string, _locale: UiLocale): Promise<Loaded<AlsoEnjoyedPage>> => {
   const { main, actingSubject } = await reader();
-  return settle(() => main.v1.works({ id })['also-enjoyed'].get({ query: { actingSubject,
-    limit: 12 } }));
+  return booksEditionReads({ main, actingSubject }).readAlsoEnjoyed(id);
 });
 
 /** A page of this Work's reviews for one rating Context; the reader's own comes first on page one. */

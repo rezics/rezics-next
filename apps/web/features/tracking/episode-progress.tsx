@@ -6,13 +6,15 @@ import { Field, FieldLabel } from '@rezics/ui/field';
 import { Input } from '@rezics/ui/input';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
-import { type Episode, type Standing, markPosition, reach, standingOf } from './episodes.ts';
+import { ProgressConflict } from './conflict-panel.tsx';
+import { type Episode, type Standing, reach, standingOf } from './episodes.ts';
 import type { Copy } from './messages.ts';
 
 const nameOf = (episode: Episode, t: Copy) =>
   episode.label ?? (episode.special ? t.specialLabel : t.episodeLabel)({ number: String(episode.number) });
 
 type Selected = { episode: Episode; mark: Mark | 'loading' | 'failed' };
+type Conflict = { episode: Episode; current: Mark; submitted: { completed: boolean; position: string | null } };
 type Scope = { api: EpisodeApi; work: string; request: number; busy: boolean };
 
 /** Without an occurrence-count summary, only the name in Main's resume response is known. */
@@ -39,6 +41,7 @@ export function EpisodeProgress({ work, api, t, className, region }: {
   const [selected, setSelected] = useState<Selected | null>(null);
   const [saving, setSaving] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [conflict, setConflict] = useState<Conflict | null>(null);
   const [typed, setTyped] = useState('');
   const [missing, setMissing] = useState<number | null>(null);
   const [finding, setFinding] = useState<number | null>(null);
@@ -51,6 +54,7 @@ export function EpisodeProgress({ work, api, t, className, region }: {
     setSelected(null);
     setSaving(false);
     setFailed(false);
+    setConflict(null);
     setTyped('');
     setMissing(null);
     setFinding(null);
@@ -93,6 +97,7 @@ export function EpisodeProgress({ work, api, t, className, region }: {
     setFinding(null);
     setMissing(null);
     setFailed(false);
+    setConflict(null);
     const state = await api.progress(episode);
     // The same occurrence can have a newer selection or write while this read is pending.
     if (active.current !== scope || request !== scope.request) return;
@@ -113,11 +118,21 @@ export function EpisodeProgress({ work, api, t, className, region }: {
     const request = ++scope.request;
     setSaving(true);
     setFailed(false);
-    const written = await api.mark(episode, { completed, ...(completed ? { position: markPosition(episode) } : {}) });
+    // Recorded watched writes carry a null position. The occurrence already names the episode.
+    // A stale answer opens the conflict panel; retrying it would hide the other device's write.
+    const written = await api.mark(episode, { completed, position: null }, { conflict: true });
     if (active.current !== scope || request !== scope.request) return;
     scope.busy = false;
     setSaving(false);
+    if (!written.ok && written.failure === 'stale') {
+      setConflict({ episode, current: written.current, submitted: written.submitted });
+      setSelected({ episode, mark: written.current });
+      setStanding(null);
+      setReload(count => count + 1);
+      return;
+    }
     if (!written.ok) { setFailed(true); return; }
+    setConflict(null);
     setSelected(now => (now?.episode.occurrence === episode.occurrence ? { episode, mark: written.data } : now));
     // A successful write invalidates the old Main response before refresh can start.
     setStanding(null);
@@ -131,6 +146,7 @@ export function EpisodeProgress({ work, api, t, className, region }: {
     const request = ++scope.request;
     setMissing(null);
     setFailed(false);
+    setConflict(null);
     setFinding(typedNumber);
     let found: Episode | null = null;
     try { found = await reach(api, read!.mains, typedNumber, () => active.current === scope && request === scope.request); } catch {
@@ -176,6 +192,19 @@ export function EpisodeProgress({ work, api, t, className, region }: {
         </li>)}
       </ul>
     </div> : null}
+
+    {conflict ? <ProgressConflict label={t.status} mine={conflict.submitted.completed ? t.watched : t.notWatched}
+      theirs={conflict.current.completed ? t.watched : t.notWatched} t={t} busy={saving} failed={failed}
+      onKeep={() => void write(conflict.episode, conflict.submitted.completed)}
+      onUse={() => {
+        const scope = active.current;
+        if (!scope || scope.api !== api || scope.work !== work || scope.busy) return;
+        ++scope.request;
+        setSelected({ episode: conflict.episode, mark: conflict.current });
+        setConflict(null);
+        setStanding(null);
+        setReload(count => count + 1);
+      }} /> : null}
 
     {selected ? <div className="grid gap-2 rounded-xl bg-muted/40 p-3" data-selected={selected.episode.special ? 'special' : 'main'}
       aria-live="polite">

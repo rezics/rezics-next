@@ -7,6 +7,7 @@ import { sessionAgentState } from '../auth/session.ts';
 import { readRealm } from '../discover/read.ts';
 import type { ConceptState } from './state.ts';
 import type { ConceptFollowState, ConceptRead, FacetList, Loaded } from './types.ts';
+import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import { readConceptWorks, settle } from './works-read.ts';
 
 // Reads for `/concepts/{id}`. Each returns a `Loaded` result instead of
@@ -41,8 +42,14 @@ export const readConceptFollow = cache(async (id: string, _locale: UiLocale): Pr
 });
 
 /** Main's Facets, whose labels name each kind of value; the same for every reader until a deploy. */
-export const readFacets = cache((): Promise<Loaded<FacetList>> =>
-  settle(() => mainApiWithToken(undefined).v1.facets.get()));
+export const readFacets = cache(async (): Promise<Loaded<FacetList>> => {
+  // Anonymous for every reader: a signed-in Work page still asks for Facets with no acting subject.
+  const read = await booksEditionReads({ main: mainApiWithToken(undefined) }).readFacets();
+  if (read.ok) return { ok: true, data: read.data };
+  const failure = read.failure === 'missing' || read.failure === 'moved' || read.failure === 'invalid'
+    ? read.failure : 'unavailable';
+  return { ok: false, failure };
+});
 
 /** The name of the community whose accepted values a page lists. */
 export const readScopeRealm = cache(async (realm: string, locale: UiLocale) => {

@@ -4,14 +4,13 @@ import record from '../../../../tests/qa/fixtures/outcomes/anime/continue-progre
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { markPosition, standingOf } from './episodes.ts';
+import { standingOf } from './episodes.ts';
 import {
   animeTwoDeviceClient,
   animeTwoDeviceEpisodes,
   animeTwoDeviceHeaderSelections,
   animeTwoDeviceSelections,
-  readAnimeTwoDeviceCredits,
-  readAnimeTwoDeviceHeader,
+  readAnimeTwoDeviceFrame,
   recordedActingSubject,
   recordedSample,
   recordedWorkId,
@@ -85,10 +84,10 @@ function episodeOf(path: string) {
 test('visitor header and author are the recorded public Work', async () => {
   const main = open('visitor', animeTwoDeviceHeaderSelections(), true);
   const id = recordedWorkId('visitor');
-  const header = await readAnimeTwoDeviceHeader(main, id);
+  const [header, agentCredits, , classifications, facets, alsoEnjoyed, adoptions] =
+    await readAnimeTwoDeviceFrame(main, id);
   const titled = recordedSample('visitor', 'work-header').answer as Titled;
   expect(header.ok && header.data.title.value).toBe(titled.title.value);
-  const [agentCredits] = await readAnimeTwoDeviceCredits(main, id);
   const author = recordedSample('visitor', 'agent-credits').answer as Credits;
   expect(agentCredits.ok && agentCredits.data.items[0]).toMatchObject({
     role: author.items[0]!.role,
@@ -96,6 +95,11 @@ test('visitor header and author are the recorded public Work', async () => {
     agent: author.items[0]!.agent,
   });
   expect(recordedActingSubject('visitor')).toBeUndefined();
+  expect(new URL(recordedSample('visitor', 'classification-facets').path, origin).search).toBe('');
+  expect(classifications.ok && classifications.data.items).toEqual([]);
+  expect(facets.ok).toBe(true);
+  expect(alsoEnjoyed.ok && alsoEnjoyed.data.items).toEqual([]);
+  expect(adoptions.ok && adoptions.data.items).toEqual([]);
 });
 
 test('visitor private progress stays the recorded sign-in refusal', async () => {
@@ -119,14 +123,13 @@ test('visitor private progress stays the recorded sign-in refusal', async () => 
   expect(write.answer).toMatchObject({ status: 401, code: 'account_assertion_denied' });
 });
 
-test('a watched write records a null position and the episode control names episode 1', () => {
+test('a watched write records a null position', () => {
   const body = recordedSample('stranger', 'first-device-watched').body as WriteBody;
   const replay = recordedSample('stranger', 'second-device-watched-replay').body as WriteBody;
   expect(body.position).toBeNull();
   expect(replay.position).toBeNull();
   expect(body.completed).toBe(true);
   expect(body.expectedVersion).toBe(0);
-  expect(markPosition({ number: 1, special: false })).toBe('episode:1');
 });
 
 test('second-device replay keeps the recorded watched progress when the position is null', async () => {
@@ -184,16 +187,21 @@ for (const persona of signedIn) {
 
     const id = recordedWorkId(persona);
     const headerMain = open(persona, animeTwoDeviceHeaderSelections());
-    const header = await readAnimeTwoDeviceHeader(headerMain, id, actingSubject);
+    const [header, agentCredits, , classifications, facets, alsoEnjoyed, adoptions] =
+      await readAnimeTwoDeviceFrame(headerMain, id, actingSubject);
     const titled = recordedSample(persona, 'work-header').answer as Titled;
     expect(header.ok && header.data.title.value).toBe(titled.title.value);
-    const [agentCredits] = await readAnimeTwoDeviceCredits(headerMain, id, actingSubject);
     const author = (recordedSample(persona, 'agent-credits').answer as Credits).items[0]!;
     expect(agentCredits.ok && agentCredits.data.items[0]).toMatchObject({
       role: author.role,
       displayName: author.displayName,
       agent: author.agent,
     });
+    expect(new URL(recordedSample(persona, 'classification-facets').path, origin).search).toBe('');
+    expect(classifications.ok && classifications.data.items).toEqual([]);
+    expect(facets.ok).toBe(true);
+    expect(alsoEnjoyed.ok && alsoEnjoyed.data.items).toEqual([]);
+    expect(adoptions.ok && adoptions.data.items).toEqual([]);
 
     const labels = (
       recordedSample(persona, 'episode-structure').answer as StructureAnswer
@@ -212,7 +220,15 @@ for (const persona of signedIn) {
     const episode =
       firstStanding.ok && firstStanding.data ? firstStanding.data.mains.items[0] : null;
     expect(episode).not.toBeNull();
-    const later = await firstApi.progress(episode!);
+    const empty = await firstApi.progress(episode!);
+    const emptyAnswer = recordedSample(persona, 'episode-progress-empty').answer as ProgressAnswer;
+    expect(empty.ok && empty.data).toMatchObject({
+      completed: emptyAnswer.completed,
+      position: emptyAnswer.position,
+      version: emptyAnswer.version,
+    });
+    const laterMain = open(persona, [{ label: 'first-device-next-version', state: 'populated' }]);
+    const later = await animeTwoDeviceEpisodes(actingSubject, laterMain).progress(episode!);
     const laterAnswer = recordedSample(persona, 'first-device-next-version')
       .answer as ProgressAnswer;
     expect(later.ok && later.data).toMatchObject({
@@ -268,6 +284,17 @@ for (const persona of signedIn) {
       expect(race.answer).toMatchObject({
         code: 'stale_progress',
         title: 'progress version changed',
+      });
+      const stale = await secondApi.mark(
+        episode!,
+        { completed: false, position: null },
+        { conflict: true },
+      );
+      expect(stale).toMatchObject({
+        ok: false,
+        failure: 'stale',
+        submitted: { completed: false, position: null },
+        current: { completed: true, version: 1, position: null },
       });
     }
   });

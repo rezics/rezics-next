@@ -1,7 +1,9 @@
+import { materializeData } from 'native-i18n';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
 import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
+import { messages as workMessages } from '../work-page/messages.ts';
 import { copyOf } from './messages.ts';
 import { AnimeTwoDeviceRecordedPage } from './anime-two-device-recorded-page.tsx';
 import { recordedSample } from './anime-two-device-recorded-page.ts';
@@ -74,16 +76,27 @@ async function playVisitor({ canvasElement, args }: { canvasElement: HTMLElement
   const author = (
     recordedSample('visitor', 'agent-credits').answer as { items: { displayName: string }[] }
   ).items[0]!.displayName;
+  const page = materializeData(workMessages[args.locale ?? 'en'], { locale: args.locale ?? 'en' });
   await expect(canvas.findByRole('heading', { level: 1, name: title })).resolves.toBeVisible();
   await expect(canvas.findByRole('link', { name: author })).resolves.toBeVisible();
   await expect(canvas.findByText('Visitor')).resolves.toBeVisible();
+  await expect(canvas.findByRole('region', { name: page.adoption })).resolves.toBeVisible();
+  await expect(canvas.findByText(page.notAdopted)).resolves.toBeVisible();
   await expect(canvas.queryByRole('heading', { name: 'Episodes' })).not.toBeInTheDocument();
   await expect(canvas.queryByText('First device')).not.toBeInTheDocument();
   await expectNoOverflow(canvasElement);
   await expect(args.persona).toBe('visitor');
 }
 
-async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement; args: Props }) {
+async function playDevices({
+  canvasElement,
+  args,
+  parameters,
+}: {
+  canvasElement: HTMLElement;
+  args: Props;
+  parameters: { until?: 'conflict' };
+}) {
   const canvas = within(canvasElement);
   const locale = args.locale ?? 'en';
   const copy = copyOf(locale);
@@ -103,19 +116,24 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
   await expect(canvas.findByText(actingSubject)).resolves.toBeVisible();
   const personaLabel = persona[0]!.toUpperCase() + persona.slice(1);
   await expect(canvas.findByText(personaLabel)).resolves.toBeVisible();
+  const page = materializeData(workMessages[locale], { locale });
+  await expect(canvas.findByRole('region', { name: page.adoption })).resolves.toBeVisible();
+  await expect(canvas.findByText(page.notAdopted)).resolves.toBeVisible();
 
   const first = await canvas.findByRole('region', { name: 'First device' });
   const firstCanvas = within(first);
   await firstCanvas.findByRole('textbox', { name: copy.jumpTo });
   await expect(firstCanvas.getByText(copy.unknown)).toBeVisible();
-  const later = recordedSample(persona, 'first-device-next-version').answer as ProgressAnswer;
+  const empty = recordedSample(persona, 'episode-progress-empty').answer as ProgressAnswer;
   await jump(first, locale, '1');
   await expectSelected(
     first,
     labelAt(persona, 0),
-    later.completed ? 'done' : 'open',
-    later.completed ? copy.watched : copy.notWatched,
+    empty.completed ? 'done' : 'open',
+    empty.completed ? copy.watched : copy.notWatched,
   );
+  await userEvent.click(firstCanvas.getByRole('button', { name: copy.markWatched }));
+  await expectSelected(first, labelAt(persona, 0), 'done', copy.watched);
 
   const second = await canvas.findByRole('region', { name: 'Second device' });
   const secondCanvas = within(second);
@@ -141,7 +159,20 @@ async function playDevices({ canvasElement, args }: { canvasElement: HTMLElement
   if (race.status === 200)
     await expectSelected(second, labelAt(persona, 0), 'open', copy.notWatched);
   else {
-    await expect(secondCanvas.findByText(copy.saveFailed)).resolves.toBeVisible();
+    const alert = await secondCanvas.findByRole('alert');
+    const conflict = within(alert);
+    await expect(conflict.getByText(copy.conflictTitle)).toBeVisible();
+    await expect(conflict.getByText(copy.notWatched)).toBeVisible();
+    await expect(conflict.getByText(copy.watched)).toBeVisible();
+    await expect(conflict.getByRole('button', { name: copy.keepMine })).toBeVisible();
+    await expect(conflict.getByRole('button', { name: copy.useTheirs })).toBeVisible();
+    if (parameters.until === 'conflict') {
+      alert.scrollIntoView({ block: 'center' });
+      await expectNoOverflow(canvasElement);
+      return;
+    }
+    await userEvent.click(secondCanvas.getByRole('button', { name: copy.useTheirs }));
+    await expect(secondCanvas.queryByRole('alert')).not.toBeInTheDocument();
     await expectSelected(second, labelAt(persona, 0), 'done', copy.watched);
   }
   await jump(second, locale, '3');
@@ -168,9 +199,27 @@ export const OwnerPhone: Story = { ...Owner, globals: { viewport: { value: 'phon
 
 export const Moderator: Story = { args: { persona: 'moderator' }, play: playDevices };
 export const ModeratorPhone: Story = { ...Moderator, globals: { viewport: { value: 'phone' } } };
+export const ModeratorConflict: Story = {
+  args: { persona: 'moderator' },
+  parameters: { until: 'conflict' },
+  play: playDevices,
+};
+export const ModeratorConflictPhone: Story = {
+  ...ModeratorConflict,
+  globals: { viewport: { value: 'phone' } },
+};
 
 export const Operator: Story = { args: { persona: 'operator' }, play: playDevices };
 export const OperatorPhone: Story = { ...Operator, globals: { viewport: { value: 'phone' } } };
+export const OperatorConflict: Story = {
+  args: { persona: 'operator' },
+  parameters: { until: 'conflict' },
+  play: playDevices,
+};
+export const OperatorConflictPhone: Story = {
+  ...OperatorConflict,
+  globals: { viewport: { value: 'phone' } },
+};
 
 export const SecondDeviceLoading: Story = { args: { hold: true }, play: playDevices };
 export const SecondDeviceLoadingPhone: Story = {

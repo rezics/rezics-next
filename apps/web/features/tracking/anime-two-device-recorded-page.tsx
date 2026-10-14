@@ -4,25 +4,37 @@ import { useEffect, useState } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import progressRecord from '../../../../tests/qa/fixtures/outcomes/anime/continue-progress-across-devices-two-device-progress.json';
 import type { UiLocale } from '../../i18n/define.ts';
+import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { signInPath } from '../auth/paths.ts';
+import { coverKindOf } from '../catalogue/work.ts';
+import { classificationFacet, facetLabel } from '../concept/facets.ts';
+import type { FacetList } from '../concept/types.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
+import { AdoptionRegion } from '../work-page/adoption.tsx';
+import { AlsoEnjoyedSection } from '../work-page/also-enjoyed.tsx';
+import { ClassificationRegion } from '../work-page/classification.tsx';
 import { WorkCredits } from '../work-page/credits.tsx';
 import { messages as workMessages } from '../work-page/messages.ts';
-import { WorkHeader } from '../work-page/work-header.tsx';
+import { idOf, workHref } from '../work-page/route.ts';
+import type { ScopeRealm, ScopeView } from '../work-page/scope-bar.tsx';
 import type {
+  AdoptionPage,
   AgentCreditPage,
+  AlsoEnjoyedPage,
+  ClassificationPage,
   CreditPage,
   Loaded,
   WorkHeader as Header,
 } from '../work-page/types.ts';
+import { WorkFrame } from '../work-page/work-frame.tsx';
 import {
   animeTwoDeviceClient,
   animeTwoDeviceEpisodes,
   animeTwoDeviceHeaderSelections,
   animeTwoDeviceSelections,
   isSignedInPersona,
-  readAnimeTwoDeviceCredits,
-  readAnimeTwoDeviceHeader,
+  readAnimeTwoDeviceFrame,
   recordedActingSubject,
   recordedWorkId,
 } from './anime-two-device-recorded-page.ts';
@@ -46,10 +58,22 @@ interface Ready {
   actingSubject?: string;
   agentCredits: Loaded<AgentCreditPage>;
   credits: Loaded<CreditPage>;
+  classifications: Loaded<ClassificationPage>;
+  facets: Loaded<FacetList>;
+  alsoEnjoyed: Loaded<AlsoEnjoyedPage>;
+  adoptions: Loaded<AdoptionPage>;
   devices: { name: (typeof deviceName)[keyof typeof deviceName]; api: EpisodeApi }[];
 }
 
-/** The recorded Work, its author, and the two devices' episode controls. */
+function realmsOf(adoptions: Loaded<AdoptionPage>): ScopeRealm[] {
+  if (!adoptions.ok) return [];
+  return adoptions.data.items.flatMap((item) => {
+    const realm = idOf(item.realm);
+    return realm ? [{ id: realm, name: item.name }] : [];
+  });
+}
+
+/** The recorded Work page, opened through its production frame, and each own-device episode control. */
 export function AnimeTwoDeviceRecordedPage({
   persona,
   locale = 'en',
@@ -88,14 +112,13 @@ export function AnimeTwoDeviceRecordedPage({
       window.location.origin,
     );
     void (async () => {
-      const header = await readAnimeTwoDeviceHeader(main, id, actingSubject);
+      const [header, agentCredits, credits, classifications, facets, alsoEnjoyed, adoptions] =
+        await readAnimeTwoDeviceFrame(main, id, actingSubject);
       if (!mounted) return;
       if (!header.ok) {
         fail(new Error(`Work header: ${header.failure}`));
         return;
       }
-      const [agentCredits, credits] = await readAnimeTwoDeviceCredits(main, id, actingSubject);
-      if (!mounted) return;
       const devices =
         isSignedInPersona(persona) && actingSubject
           ? (['first', 'second'] as const).map((device) => {
@@ -110,7 +133,17 @@ export function AnimeTwoDeviceRecordedPage({
               };
             })
           : [];
-      setReady({ header: header.data, actingSubject, agentCredits, credits, devices });
+      setReady({
+        header: header.data,
+        actingSubject,
+        agentCredits,
+        credits,
+        classifications,
+        facets,
+        alsoEnjoyed,
+        adoptions,
+        devices,
+      });
     })().catch(fail);
     return () => {
       mounted = false;
@@ -120,32 +153,55 @@ export function AnimeTwoDeviceRecordedPage({
 
   const page = workMessages[locale];
   const episodes = copyOf(locale);
+  const view: ScopeView | null = ready
+    ? { workRef: recordedWorkId(persona), scope: { kind: 'global' }, realms: realmsOf(ready.adoptions) }
+    : null;
+  const facet = ready?.facets.ok ? classificationFacet(ready.facets.data) : null;
   return (
-    <main className="mx-auto grid min-w-0 max-w-5xl gap-6 px-4 py-6" lang={locale}>
+    <div className="grid min-w-0 gap-3" lang={locale}>
       {fault ? (
         <pre role="alert" className="whitespace-pre-wrap break-words">
           {fault}
         </pre>
       ) : null}
-      <p className="text-sm">{personaName[persona]}</p>
-      {ready?.actingSubject ? (
-        <p className="break-all font-mono text-xs">{ready.actingSubject}</p>
-      ) : null}
-      {ready ? (
-        <>
-          <WorkHeader
-            work={ready.header}
+      <div className="px-4 pt-4 sm:px-6">
+        <p className="text-sm">{personaName[persona]}</p>
+        {ready?.actingSubject ? (
+          <p className="break-all font-mono text-xs">{ready.actingSubject}</p>
+        ) : null}
+      </div>
+      {ready && view ? (
+        <WorkFrame
+          workRef={view.workRef}
+          work={ready.header}
+          locale={locale}
+          messages={page}
+          signedIn={Boolean(ready.actingSubject)}
+          signInHref={signInPath(localizedPath(workHref(view.workRef), locale))}
+          credits={
+            <WorkCredits
+              agentCredits={ready.agentCredits}
+              credits={ready.credits}
+              locale={locale}
+              messages={page}
+            />
+          }
+        >
+          <ClassificationRegion
+            classifications={ready.classifications}
+            view={view}
+            facet={facet ? { id: facet.id, label: facetLabel(facet, locale) } : null}
             locale={locale}
             messages={page}
-            credits={
-              <WorkCredits
-                agentCredits={ready.agentCredits}
-                credits={ready.credits}
-                locale={locale}
-                messages={page}
-              />
-            }
           />
+          <AlsoEnjoyedSection
+            alsoEnjoyed={ready.alsoEnjoyed}
+            book={coverKindOf(ready.header.types) === 'book'}
+            realms={view.realms}
+            locale={locale}
+            messages={page}
+          />
+          <AdoptionRegion adoptions={ready.adoptions} view={view} locale={locale} messages={page} />
           {ready.devices.length ? (
             <div className="grid min-w-0 gap-6 lg:grid-cols-2">
               {ready.devices.map((device) => (
@@ -161,10 +217,10 @@ export function AnimeTwoDeviceRecordedPage({
               ))}
             </div>
           ) : null}
-        </>
-      ) : (
-        <p role="status">{page.loading}</p>
+        </WorkFrame>
+      ) : fault ? null : (
+        <p role="status" className="px-4 sm:px-6">{page.loading}</p>
       )}
-    </main>
+    </div>
   );
 }

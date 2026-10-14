@@ -10,8 +10,8 @@ import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import { mainEpisodeApi } from './episode-api.ts';
 
-// The Work page's episode controls, header and credits, with the client supplied
-// at the boundary the server reader otherwise builds for itself.
+// The Work page frame and episode controls, with the client supplied where the
+// server reader otherwise builds one for itself.
 
 const answers = record as AnswerRecord;
 const signedIn = [
@@ -57,19 +57,27 @@ export function isSignedInPersona(persona: AnswerPersona): persona is SignedInPe
   return (signedIn as readonly AnswerPersona[]).includes(persona);
 }
 
-/** Header, native author credit and the work-credits query. One client replays all three. */
+/**
+ * Header, credits, anonymous Facets, classifications, Also enjoyed and work adoptions.
+ * One client replays the opening. Facets stay anonymous even when the other reads name a Person.
+ */
 export function animeTwoDeviceHeaderSelections(): RecordedSelection[] {
   return [
     { label: 'work-header', state: 'populated' },
     { label: 'agent-credits', state: 'populated' },
     { label: 'work-credits-template', state: 'populated' },
+    { label: 'classification-facets', state: 'populated' },
+    { label: 'classifications-empty', state: 'populated' },
+    { label: 'also-enjoyed-empty', state: 'populated' },
+    { label: 'work-adoptions-template', state: 'populated' },
   ];
 }
 
 /**
  * The two own-device grants share one acting Person. The first device's resume is the
- * positions window recorded before a saved place; its progress read is the later version.
- * The second device reopens the watched place. Holding its resume leaves that panel unanswered.
+ * positions window recorded before a saved place, and its progress read is the empty
+ * version the watched button writes. The second device reopens the watched place.
+ * Holding its resume leaves that panel unanswered.
  */
 export function animeTwoDeviceSelections(
   persona: SignedInPersona,
@@ -84,7 +92,8 @@ export function animeTwoDeviceSelections(
     return [
       ...structure,
       { label: 'episode-resume', state: 'populated' },
-      { label: 'first-device-next-version', state: 'populated' },
+      { label: 'episode-progress-empty', state: 'populated' },
+      { label: 'first-device-watched', state: 'populated' },
     ];
   }
   const race = recordedSample(persona, 'first-device-race');
@@ -109,6 +118,20 @@ export function readAnimeTwoDeviceHeader(main: MainClient, id: string, actingSub
 export function readAnimeTwoDeviceCredits(main: MainClient, id: string, actingSubject?: string) {
   const reads = booksEditionReads({ main, actingSubject });
   return Promise.all([reads.readAgentCredits(id), reads.readCredits(id)]);
+}
+
+/** Header, credits and the opening regions the Work page reads for every persona. */
+export function readAnimeTwoDeviceFrame(main: MainClient, id: string, actingSubject?: string) {
+  const reads = booksEditionReads({ main, actingSubject });
+  return Promise.all([
+    reads.readWorkHeader(id),
+    reads.readAgentCredits(id),
+    reads.readCredits(id),
+    reads.readClassifications(id, { kind: 'global' }),
+    reads.readFacets(),
+    reads.readAlsoEnjoyed(id),
+    reads.readAdoptions(id),
+  ]);
 }
 
 export function animeTwoDeviceEpisodes(actingSubject: string, main: MainClient) {
