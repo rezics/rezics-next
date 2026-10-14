@@ -4,6 +4,7 @@ import { assertPublicTextReady, MAX_SEARCH_REQUEST_MS, SearchIndexUnavailable,
   SearchRequestTimedOut, withStableSearchSnapshot } from '../src/modules/work/search-readiness.ts';
 import { readRankedCatalogue } from '../src/modules/search/ranked.ts';
 import { searchGraphSnapshot } from '../src/modules/search/snapshot-state.ts';
+import { withSearchGraphSnapshot } from '../src/modules/search/snapshot.ts';
 
 const lineage = { dataEpoch: 'epoch', routingEpoch: 'routing' };
 const generation = 'urn:rezics:text-index-generation:11111111-1111-4111-8111-111111111111';
@@ -86,4 +87,25 @@ test('one delivered catalogue slot admits only one initial index candidate to au
     expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
     expect(page.next).not.toBeNull();
   }
+});
+
+// The HTTP capture reached its final health call after the wall deadline while
+// the event-loop timer was still pending. No new fence read may start there.
+test('the search owner starts no graph fence after its deadline even before the abort timer runs', async () => {
+  const fixture = indexed('25');
+  let fences = 0;
+  const original = fixture.client.query.bind(fixture.client);
+  fixture.client.query = async (...args) => {
+    if (args[0].includes('LIMIT 2')) fences++;
+    return original(...args);
+  };
+  const controller = new AbortController();
+  const budget = { signal: controller.signal, callsLeft: 72, bytesLeft: 8_388_608, deadline: Infinity };
+  await expect(fusekiReadBudget.run(budget, () => withSearchGraphSnapshot(
+    { fuseki: fixture.client, lineage, objectDirectory: '.temp/search-availability-owner' }, async () => {
+      budget.deadline = performance.now() - 1;
+      return { results: [] };
+    }))).rejects.toBeInstanceOf(SearchRequestTimedOut);
+  expect(controller.signal.aborted).toBe(false);
+  expect(fences).toBe(0);
 });
