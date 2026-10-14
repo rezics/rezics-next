@@ -1,15 +1,29 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
-import { resolve } from 'node:path';
-import { authorize, exchangeCode, LocalOAuthSession, type LocalOAuthClient } from '../../../../../scripts/lib/oauth-client.ts';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { BFF_PREFIX, browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { booksEditionReads } from '../../../../../apps/web/features/work-page/books-edition-page.read.ts';
+import { readResourcePage, readLinkedStatements, readAnimeAgentCredits, readAnimeReaderState,
+  readWorkRealizations, readWorkParts, availabilityShown } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
+import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
 import { Pool } from 'pg';
 import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-corpus.ts';
-import { OutcomeRecorder, outcomeResponse, outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(90_000);
+setDefaultTimeout(215_000);
+const fileWall = setTimeout(() => { throw new Error('Anime work hub file exceeded 480 s'); }, 480_000);
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 let sessions: PersonaSessions;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
@@ -52,7 +66,7 @@ async function publish(title: string): Promise<Work> {
   return work;
 }
 afterAll(async () => {
-  try { await recording.publish(); } finally { await sessions?.close(); }
+  try { await recording.publish(); } finally { clearTimeout(fileWall); await sessions?.close(); }
 });
 
 import hub from '../../../../../scripts/qa/cases/outcomes/anime/work-hub-and-edition-choice.ts';
@@ -143,177 +157,119 @@ function samplesFor(name: PersonaName, person: PersonaSession) {
   });
 }
 
-// One English visit to /w/{UUID}: keep the server readers' queries, including preview limits.
-// Session-cookie reads and anonymous shared decoration are described in the handoff.
-async function recordHubVisit(name: PersonaName, person: PersonaSession) {
+// /w/{ref}: server readers share their cache; browser controls use the same typed command client.
+async function recordHubVisit(name: PersonaName, person: PersonaSession, target: Work) {
+  const labels = new AsyncLocalStorage<string | ((path: string) => string)>();
   const sample = samplesFor(name, person);
-  const reads: Promise<unknown>[] = [];
-  const faults: unknown[] = [];
-  const queue = (pending: Promise<unknown>) => reads.push(pending.catch(error => { faults.push(error); }));
-  const id = short(dated.work), root = `/v1/works/${id}`, resource = `/v1/resources/${id}`;
-  const viewer = (path: string, fields: Record<string, string> = {}) => {
-    const [pathname, existing] = path.split('?');
-    const query = new URLSearchParams(existing);
-    for (const [key, value] of Object.entries(fields)) query.set(key, value);
-    if (person.actingSubject) query.set('actingSubject', person.actingSubject);
-    return `${pathname}${query.size ? `?${query}` : ''}`;
-  };
-  async function read<T>(label: string, path: string, fields: Record<string, string> = {}): Promise<T> {
-    const request = viewer(path, fields);
-    const response = await sample(label, 'GET', request);
-    const raw = await response.text();
-    if (response.status >= 500) throw new Error(`Hub API fault GET ${request}: ${response.status} ${raw}`);
-    return JSON.parse(raw) as T;
-  }
-  type Page = { nextCursor?: string | null; next?: string | null };
-  async function page<T extends Page>(label: string, path: string, fields: Record<string, string> = {}, cursor = 'cursor') {
-    const first = await read<T>(label, path, fields);
-    const next = first.nextCursor ?? first.next;
-    if (next) await read(`${label}-continuation`, path, { ...fields, [cursor]: next });
-    return first;
-  }
-  try {
-    const platform = await sample('hub-platform-access', 'GET', '/v1/me/platform-access');
-    await platform.body?.cancel();
-    queue(read('hub-work-header', root));
-    const [projection, contexts, credits] = await Promise.all([
-      read<{ sections: { id: string; href: string }[] }>('hub-resource-page', `${resource}/page`),
-      read<{ items: { context: string }[] }>('hub-rating-contexts', `${resource}/rating-contexts`, { scope: 'global' }),
-      page<Page & { items: { role: string; agent: string }[] }>('hub-agent-credits', `${root}/agent-credits`),
-    ]);
-    if (person.actingSubject) queue(read('hub-reader-state', `${root}/reader-state`));
-    const context = contexts.items[0]?.context;
-    queue(read('hub-ratings', `${resource}/ratings`, { scope: 'global', ...(context ? { context } : {}) }));
-    queue(read('hub-reader-stats', `${root}/reader-stats`, context ? { context } : {}));
-    if (credits.items.some(item => item.role === 'author')) {
-      const author = credits.items.find(item => item.role === 'author')!;
-      await page('hub-author-works', `/v1/agents/${short(author.agent)}/works`, { limit: '12' });
+  const publicSample = samplesFor(name, sessions.visitor);
+  const requests = new Map<string, Promise<Response>>();
+  const faults: Error[] = [];
+  const client = (anonymous = false) => browserMainApi('http://record.invalid', { fetcher: (async (input, init) => {
+    const url = new URL(String(input)), method = init?.method ?? 'GET';
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const label = labels.getStore();
+    if (!label) throw new Error(`Unlabelled production request ${method} ${path}`);
+    const baseLabel = typeof label === 'function' ? label(path) : label;
+    const fixed = target === dated ? baseLabel : baseLabel === 'hub-releases'
+      ? 'hub-undated-releases-empty' : `undated-${baseLabel}`;
+    const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
+    const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+    // A repeated server reader shares one answer, as React's request cache does.
+    const cacheKey = JSON.stringify([anonymous, method, path, body, fixed]);
+    let pending = requests.get(cacheKey);
+    if (!pending) {
+      pending = (anonymous ? publicSample : sample)(fixed, method, path, body, key).catch(error => {
+        const fault = new Error(`${name} ${fixed}: ${method} ${path} body=${JSON.stringify(body)}: ${String(error)}`);
+        faults.push(fault);
+        throw fault;
+      });
+      requests.set(cacheKey, pending);
     }
-    for (const query of ['work-credits', 'work-adoptions']) {
-      const body = { profile: 'template-query-v1', query: `https://rezics.com/query/${query}`, revision: 1,
-        parameters: { roots: [dated.work] }, presentation: { actingSubject: person.actingSubject ?? undefined } };
-      const response = await sample(`hub-${query}`, 'POST', '/v1/query', body);
-      const raw = await response.text();
-      if (response.status >= 500) throw new Error(`Hub API fault POST /v1/query ${JSON.stringify(body)}: ${response.status} ${raw}`);
-      const result = JSON.parse(raw) as { result?: Page };
-      if (result.result?.nextCursor) {
-        const continuation = await sample(`hub-${query}-continuation`, 'POST', '/v1/query', { ...body, cursor: result.result.nextCursor });
-        await continuation.body?.cancel();
-      }
-    }
-    queue(page('hub-rating-populations', '/v1/rating-populations', { target: dated.work, limit: '20' }));
-    queue(read('hub-classifications', `${root}/classifications`, { scope: 'global' }));
-    queue(page('hub-also-enjoyed', `${root}/also-enjoyed`, { limit: '12' }));
-    queue(page('hub-realizations', `${root}/realizations`, { limit: '20' }));
-    queue(page('hub-releases', `${root}/releases`, { limit: '20' }));
-    queue(page('hub-undated-releases-empty', `/v1/works/${short(undated.work)}/releases`, { limit: '20' }));
-    queue(read('hub-availability-parts', `${resource}/parts`, { limit: '1' }));
-    queue(page('hub-parts-preview', `${resource}/parts`, { limit: '7' }, 'after'));
-    queue(page('hub-wholes-preview', `${resource}/wholes`, { limit: '3' }, 'after'));
-    queue(page('hub-connections-preview', `${resource}/relations`, { limit: '20' }, 'after'));
-    const statements = projection.sections.find(section => section.id === 'statements');
-    if (statements) {
-      const facts = await page<Page & { groups: { predicate: string; items: {
-        kind: string; value: { kind: string; iri?: string; ref?: string }; qualifiers: { applicability: string[] }
-      }[] }[] }>('hub-facts', statements.href);
-      const definitions = [...new Set((facts.groups ?? []).map(group => group.predicate))]
-        .filter(predicate => /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(predicate));
-      if (definitions.length) await read('hub-fact-labels', '/v1/lexicon/presentations', { definitions: definitions.join(','), languages: 'en' });
-      const resources = [...new Set((facts.groups ?? []).flatMap(group => group.items.flatMap(item => [
-        ...item.value.kind === 'resource' ? [item.value.iri ?? item.value.ref!].filter(Boolean) : [],
-        ...item.qualifiers.applicability,
-      ])))].sort();
-      if (resources.length) {
-        const response = await sample('hub-fact-names', 'POST', '/v1/resources/summaries', {
-          profile: 'resource-summary-batch-v1', resources, ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}),
-        });
-        await response.body?.cancel();
-      }
-    }
-    const discussion = projection.sections.find(section => section.id === 'discussion');
-    if (discussion) await page('hub-discussion', discussion.href);
-    if (context) {
-      await page('hub-reviews', `${resource}/reviews`, { context, sort: 'helpful', limit: '10' });
-      await page('hub-review-target-relations', `${resource}/relations`, { limit: '32' }, 'after');
-    }
-    // These readers deliberately use mainApiWithToken(undefined), even for a signed-in visit.
-    const publicSample = samplesFor(name, sessions.visitor);
-    const facets = await publicSample('hub-facets', 'GET', '/v1/facets');
-    await facets.body?.cancel();
-    const showcase = await publicSample('hub-showcase', 'POST', '/v1/resources/showcase', {
-      profile: 'work-showcase-batch-v1', targets: [dated.work],
-    });
-    await showcase.body?.cancel();
-    // These regions stream independently in the page's server render.
-  } finally { await Promise.all(reads); }
+    return (await pending).clone();
+  }) as typeof fetch });
+  const main = client(), publicMain = client(true);
+  const named = <T,>(label: string | ((path: string) => string), run: () => Promise<T>) => labels.run(label, run);
+  const actingSubject = person.actingSubject ?? undefined, query = { actingSubject };
+  const reads = booksEditionReads({ main, actingSubject });
+  const id = short(target.work), work = main.v1.works({ id }), resource = main.v1.resources({ resource: id });
+  await Promise.all([
+    named('hub-platform-access', () => main.v1.me['platform-access'].get()),
+    actingSubject ? named('hub-session-agent', () => main.v1.me['session-agent'].get()) : null,
+  ]);
+  const header = await named('hub-work-header', () => reads.readWorkHeader(id));
+  if (!header.ok) { if (faults.length) throw faults[0]; return; }
+  const [projection, contexts, credits] = await Promise.all([
+    named('hub-resource-page', () => readResourcePage(main, actingSubject, id)),
+    named('hub-rating-contexts', () => resource['rating-contexts'].get({ query: { ...query, scope: 'global' } })),
+    named('hub-agent-credits', () => readAnimeAgentCredits(main, actingSubject, id)),
+    named('hub-reader-state', () => readAnimeReaderState(main, actingSubject, id)),
+    named('hub-work-credits', () => reads.readCredits(id)),
+    named('hub-work-adoptions', () => reads.readAdoptions(id)),
+    named('hub-showcase', () => publicMain.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [target.work] })),
+    named('hub-facets', () => booksEditionReads({ main: publicMain }).readFacets()),
+    named('hub-rating-populations', () => main.v1['rating-populations'].get({ query: { limit: 20, target: target.work, ...query } })),
+  ]);
+  const context = contexts.data?.items[0]?.context;
+  const plan = hubPlan(projection.ok ? projection.data : null);
+  const tracking = actingSubject ? mainTrackingApi(actingSubject, () => main) : null;
+  const inventories = () => named(path => path.includes('/realizations') ? 'chooser-realizations' : 'chooser-releases',
+    () => tracking!.editions(target.work));
+  const availability = plan.includes('availability') ? Promise.all([
+    named('hub-realizations', () => readWorkRealizations(main, actingSubject, id)),
+    named('hub-releases', () => reads.readReleases(id)),
+    named('hub-availability-parts', () => readWorkParts(main, actingSubject, id, { limit: 1 })),
+  ]) : Promise.resolve(null);
+  const chooser = availability.then(offered => tracking && offered && availabilityShown({
+    realizations: offered[0], releases: offered[1], parts: offered[2],
+  }) ? Promise.all([named('chooser-preference', () => tracking.preference(target.work)), inventories()]) : null);
+  await Promise.all([
+    chooser,
+    !contexts.error ? named('hub-ratings', () => resource.ratings.get({ query: { ...query, scope: 'global', context } })) : null,
+    named('hub-reader-stats', () => work['reader-stats'].get({ query: { ...query, context } })),
+    plan.includes('about') ? named('hub-classifications', () => reads.readClassifications(id, { kind: 'global' })) : null,
+    plan.includes('lists') ? named('hub-also-enjoyed', () => reads.readAlsoEnjoyed(id)) : null,
+    availability,
+    ...plan.includes('parts') ? [
+      named('hub-parts-preview', () => readWorkParts(main, actingSubject, id, { limit: 7 })),
+      named('hub-wholes-preview', () => resource.wholes.get({ query: { ...query, limit: 3 } })),
+      named('hub-connections-preview', () => resource.relations.get({ query: { ...query, limit: 20 } })),
+      tracking ? Promise.all([
+        named('panel-preference', () => tracking.preference(target.work)),
+        named(path => path.includes('/realizations') ? 'panel-realizations' : 'panel-releases', () => tracking.editions(target.work)),
+        named('panel-relations', () => tracking.relations(target.work)),
+        named('panel-correspondence-definition', () => tracking.definition('correspondence-equivalent')),
+      ]).then(([preference]) => named('panel-series-progress', () => tracking.series(target.work,
+        preference.ok ? preference.data?.language ?? 'en' : 'en'))) : null,
+    ] : [],
+    ...projection.ok ? projection.data.sections.flatMap(section => {
+      if (section.id === 'statements') return [named('hub-facts', () => readLinkedStatements(main, actingSubject, section.href))];
+      if (section.id === 'discussion') return [named('hub-discussion', followHref(main, section.href, query))];
+      return [];
+    }) : [],
+    context && plan.includes('ratings') ? named('hub-reviews', () => resource.reviews.get({
+      query: { context, sort: 'helpful', limit: 10, ...query } })).then(() =>
+      named('hub-review-target-relations', () => resource.relations.get({ query: { ...query, limit: 32 } }))) : null,
+    ...credits.ok ? credits.data.items.filter(item => item.role === 'author').slice(0, 1).map(author =>
+      named('hub-author-works', () => main.v1.agents({ id: short(author.agent) }).works.get({ query: { ...query, limit: 12 } }))) : [],
+  ]);
+  if (faults.length) throw faults[0];
+  const setup = await chooser;
+  // Signed out, YourEdition links to sign-in. A refused preference stops before the form.
+  if (!tracking || !setup || !setup[0].ok || !setup[1].ok || target === undated) return;
+  const offered = setup[1].data.releases.find(release => release.id === releases[0]!.id);
+  if (!offered) throw new Error('Production edition chooser did not offer the broadcast release');
+  const saved = await named('chooser-broadcast-save', () => tracking.setPreference(target.work,
+    setup[0].data?.version ?? 0, { language: 'en', edition: { kind: 'release', resource: offered.id, revision: offered.revision } }));
+  if (faults.length) throw faults[0];
+  if (!saved.ok) return;
+  // YourEdition refreshes the server and notifies the series panel after the command succeeds.
+  await named('chooser-saved-progress', () => tracking.series(target.work, saved.data?.language ?? 'en'));
   if (faults.length) throw faults[0];
 }
 
-async function readingSession(person: PersonaSession): Promise<PersonaSession> {
-  if (!person.accountId) return person;
-  const stack = resolve('.temp/stack', `rezics-qa-${Bun.env.REZICS_QA_RUN_ID}`);
-  const directory = readdirSync(stack).find((name) => name.startsWith('g-1005-auth-'));
-  if (!directory) throw new Error('Persona OAuth public configuration is unavailable');
-  const config = JSON.parse(readFileSync(resolve(stack, directory, 'public.json'), 'utf8')) as {
-    clientId: string;
-    redirectUris: string[];
-    scope: string;
-  };
-  const client: LocalOAuthClient = {
-    account: Bun.env.ACCOUNT_BASE_URL!,
-    clientId: config.clientId,
-    redirectUri: config.redirectUris[0]!,
-    scope: config.scope,
-    resource: Bun.env.ACCOUNT_MAIN_RESOURCE,
-    fetch: async (input, init) => {
-      const url = new URL(input);
-      // The existing Account transport carries this person's live session cookie.
-      if (url.pathname === '/api/auth/oauth2/authorize')
-        return person.account('GET', `${url.pathname}${url.search}`);
-      if (url.pathname === '/api/account/consent')
-        return person.account(
-          'POST',
-          `${url.pathname}${url.search}`,
-          JSON.parse(String(init?.body)),
-        );
-      return fetch(input, init);
-    },
-  };
-  const authorized = await authorize(client, '');
-  if (!authorized.ok)
-    throw new Error(`Persona authorization returned HTTP ${authorized.response.status}`);
-  const grant = await exchangeCode(client, authorized);
-  const oauth = new LocalOAuthSession(client, grant, Date.now() + (grant.expires_in ?? 300) * 1000);
-  const sessionKey = randomUUID();
-  return {
-    ...person,
-    main: async (method, path, body, key) => {
-      const headers = new Headers({
-        authorization: `Bearer ${await oauth.current(Date.now(), 60_000)}`,
-        'x-session-key': sessionKey,
-      });
-      if (body !== undefined) headers.set('content-type', 'application/json');
-      if (key !== undefined || !['GET', 'HEAD'].includes(method))
-        headers.set('idempotency-key', key ?? randomUUID());
-      const request = (signal: AbortSignal) =>
-        fetch(new URL(path, `http://127.0.0.1:${Bun.env.MAIN_PORT}`), {
-          method,
-          headers,
-          redirect: 'manual',
-          signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
-          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        });
-      return ['GET', 'HEAD'].includes(method)
-        ? outcomeResponse(request)
-        : request(AbortSignal.timeout(30_000));
-    },
-  };
-}
-
 async function journey(name: PersonaName) {
-  const person = await readingSession(sessions[name]);
+  const person = sessions[name];
   const sample = samplesFor(name, person);
-  await recordHubVisit(name, person);
   for (const work of [dated, undated]) {
     const label = work === dated ? 'work' : 'undated-work';
     const query = person.actingSubject ? `?${acting(person)}` : '';
@@ -358,10 +314,25 @@ async function journey(name: PersonaName) {
   expect(await answer(sample('chosen-edition-progress', 'GET', `/v1/me/progress-summaries/${short(dated.work)}?${acting(person)}&language=en`)))
     .toMatchObject({ preference: { version: 1, edition: choices[index]!.body.edition } });
 }
-outcomeTest(hub, 'visitor', () => journey('visitor'), recording);
-outcomeTest(hub, 'stranger', () => journey('stranger'), recording);
-outcomeTest(hub, 'member', () => journey('member'), recording);
-outcomeTest(hub, 'owner', () => journey('owner'), recording);
-outcomeTest(hub, 'moderator', () => journey('moderator'), recording);
-outcomeTest(hub, 'operator', () => journey('operator'), recording);
+async function proveAndVisit(name: PersonaName) {
+  const started = performance.now();
+  let proved = started;
+  try {
+    // The unchanged API proof owns its original 90 s deadline.
+    await within(90_000, 'proof', () => journey(name));
+    proved = performance.now();
+    await within(120_000, 'production visit', async () => {
+      await recordHubVisit(name, sessions[name], dated);
+      await recordHubVisit(name, sessions[name], undated);
+    });
+  } finally {
+    console.info(`[anime-hub] ${name} proof=${Math.round(proved - started)}ms visit=${Math.round(performance.now() - proved)}ms`);
+  }
+}
+outcomeTest(hub, 'visitor', () => proveAndVisit('visitor'), recording);
+outcomeTest(hub, 'stranger', () => proveAndVisit('stranger'), recording);
+outcomeTest(hub, 'member', () => proveAndVisit('member'), recording);
+outcomeTest(hub, 'owner', () => proveAndVisit('owner'), recording);
+outcomeTest(hub, 'moderator', () => proveAndVisit('moderator'), recording);
+outcomeTest(hub, 'operator', () => proveAndVisit('operator'), recording);
 
