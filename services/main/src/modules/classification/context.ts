@@ -3,6 +3,8 @@ import { profileValidations } from '../../infrastructure/profile.ts';
 import { assertNotInvalidProfileReceipt, finalizeInvalidProfile } from '../../infrastructure/invalid-receipt.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
 import { readRealmPolicy } from '../space/policy.ts';
+import { discloseInventory, hasDisclosure, DisclosureUnavailable } from '../disclosure/read.ts';
+import { ANONYMOUS_VIEWER } from '../suitability/policy.ts';
 import type { RegisteredAdmission } from '../access/admission.ts';
 import { DATASET, GRAPHS, ID, RV, hash, iri, lit, prepareComponent,
   IdempotencyConflict, PendingActivation, CancelledActivation,
@@ -161,6 +163,23 @@ export async function readRealmClassificationContext(env: WorkActivationEnvironm
   return { realm, context: rows[0].context.value, contextRevision: rows[0].revision.value,
     role: 'realm-classification' as const, fallbackContext: GLOBAL_CLASSIFICATION_CONTEXT,
     inheritancePolicy: CLASSIFICATION_INHERIT_POLICY, scheme: rows[0].scheme?.value ?? null };
+}
+
+/** Public metadata consumes the live Realm record, including Access closure.
+ * The configuration/restore owner lookup above does not establish disclosure. */
+export async function readPublicRealmClassificationContext(env: WorkActivationEnvironment, realm: string) {
+  if (!nativeId.test(realm)) throw new InvalidClassificationContextInput('invalid Realm identity');
+  await assertGraphAdmissionOpen(env.fuseki, env.lineage);
+  if (!hasDisclosure(env)) throw new DisclosureUnavailable('Realm disclosure is unavailable');
+  const visible = async () => {
+    const decisions = await discloseInventory(env, [{ owner: 'graph', resource: realm,
+      component: 'record' }], ANONYMOUS_VIEWER, 'read');
+    if (decisions.length !== 1) throw new DisclosureUnavailable('Realm disclosure is incomplete');
+    return decisions[0] === 'visible';
+  };
+  if (!await visible()) return null;
+  const context = await readRealmClassificationContext(env, realm);
+  return await visible() ? context : null;
 }
 
 async function assertSelectedScheme(env: WorkActivationEnvironment,

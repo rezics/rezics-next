@@ -5,7 +5,7 @@ import { assertGraphAdmissionOpen } from '../modules/work/restore-lineage.ts';
 import { iri } from '../modules/work/activate.ts';
 import { createAdmittedClassificationContext } from '../modules/classification/context-admitted.ts';
 import { GLOBAL_CLASSIFICATION_CONTEXT, CLASSIFICATION_INHERIT_POLICY,
-  readRealmClassificationContext, ClassificationSchemeUnavailable,
+  readPublicRealmClassificationContext, ClassificationSchemeUnavailable,
   StaleClassificationContext } from '../modules/classification/context.ts';
 import { createAdmittedClassificationProposition }
   from '../modules/classification/proposition-admitted.ts';
@@ -264,7 +264,7 @@ export function classificationRoutes(fuseki: FusekiClient, work: MainWorkDepende
     }, async ({ params }) => {
       try {
         const realm = `https://rezics.com/id/${params.realm}`;
-        const result = await readRealmClassificationContext(work.environment, realm);
+        const result = await readPublicRealmClassificationContext(work.environment, realm);
         if (!result) {
           return problem(404, 'classification_context_unavailable',
             'Realm classification context is unavailable');
