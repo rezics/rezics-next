@@ -186,6 +186,11 @@ export const inputRules: Rule[] = [
     reason: 'agent, editor or CI configuration',
   },
   {
+    match: /^tools\/repo-index\//,
+    effect: 'ignore',
+    reason: 'native repository parser; its repository guards declare these inputs',
+  },
+  {
     match: /^scripts\/documentation\//,
     effect: 'ignore',
     reason: 'documentation checker; run task docs:check',

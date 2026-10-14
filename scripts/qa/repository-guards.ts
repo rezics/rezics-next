@@ -68,6 +68,7 @@ const mainContractReads = ['services/main/src/**', 'packages/{model,document,obs
 const generatedContractReads = ['generated/openapi/main/public.json'];
 const migrationReads = ['services/*/migrations/**/*.sql'];
 const webSourcePattern = 'apps/web/**/*.{ts,tsx,js,jsx,mts,cts}';
+const repositoryIndexReads = ['tools/repo-index/**', 'scripts/lib/repo-index*.ts'];
 
 /** Inventory guards read beyond their import graph. Gate selection uses these
  * inventories; main-wide runs retain the complete registry. */
@@ -110,7 +111,7 @@ export const repositoryGuards = [
   },
   {
     file: 'tests/qa/unit/g-1046-sql-relations.test.ts',
-    reads: ['{services,scripts,tests}/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', ...migrationReads, 'tests/qa/unit/g-1046-parent-frame.ts.txt'],
+    reads: ['{services,scripts,tests}/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', ...migrationReads, ...repositoryIndexReads, 'tests/qa/unit/g-1046-parent-frame.ts.txt'],
     reason: 'Every SQL source relation must exist in the complete migrated relation inventory.',
   },
   {
@@ -135,7 +136,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/web-acting-identity.test.ts',
-    reads: ['apps/web/**/*.{ts,tsx}', ...mainContractReads, 'scripts/static/web-acting-identity*'],
+    reads: ['apps/web/**/*.{ts,tsx}', ...mainContractReads, ...repositoryIndexReads, 'scripts/static/web-acting-identity*'],
     reason: 'Identity-required web reads carry the selected acting identity.',
   },
   {
@@ -170,7 +171,7 @@ export const repositoryGuards = [
   },
   {
     file: 'tests/qa/unit/serialization-points.test.ts',
-    reads: ['services/*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', 'services/*/migrations/**/*.sql', 'scripts/qa/serialization-points.ts', 'scripts/qa/sql-relations.ts', 'scripts/lib/migration-order.ts'],
+    reads: ['services/*/src/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}', 'services/*/migrations/**/*.sql', ...repositoryIndexReads, 'scripts/qa/serialization-points.ts', 'scripts/qa/sql-relations.ts', 'scripts/lib/migration-order.ts'],
     reason:
       'All service migrations and write sources must avoid unapproved serialization and gate upgrades.',
   },
@@ -250,7 +251,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/mechanism-dependencies.test.ts',
-    reads: ['{services,apps,packages,model,scripts}/**', '.dependency-cruiser.json', 'tsconfig.json'],
+    reads: ['{services,apps,packages,model,scripts}/**', ...repositoryIndexReads, '.dependency-cruiser.json', 'tsconfig.json'],
     reason:
       "Code outside a mechanism owner may import only that owner's entry points and named adapter files.",
   },
