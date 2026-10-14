@@ -7,6 +7,7 @@ import { VOCABULARY_COST } from '../../../services/main/src/modules/classificati
 
 interface Vocabulary { scheme: string; schemeHead: string; concept: string; conceptHead: string;
   path: string; expression: string; sense: string; definitionRevision: string; replayed: boolean }
+type StatementRead = Record<string, unknown> & { sourcePosition: { dataEpoch: string; sequence: string } };
 const short = (id: string) => id.slice(-36);
 
 test('Concept steward retires the exact current head without changing retained references', async () => {
@@ -54,7 +55,7 @@ test('Concept steward retires the exact current head without changing retained r
     const statement = await home.json<{ statement: string; revision: string; meaningKey: string }>(
       await call('/v1/statements', statementInput, author.token, statementKey), 201);
     const referencePath = `/v1/statements/${short(statement.statement)}`;
-    const before = await home.json<object>(await call(referencePath), 200);
+    const before = await home.json<StatementRead>(await call(referencePath), 200);
     const retire = { ...input, scheme: { id: created.scheme, expectedHead: created.schemeHead },
       concept: { id: created.concept, expectedHead: created.conceptHead }, state: 'retired',
       labels: [{ language: 'en', value: 'This retirement must not rename the Concept' }] };
@@ -92,7 +93,11 @@ test('Concept steward retires the exact current head without changing retained r
     expect((await call('/v1/classification-vocabulary', { ...retire,
       labels: [{ language: 'en', value: 'Conflicting payload' }] }, author.token, key)).status).toBe(409);
     expect((await call('/v1/classification-vocabulary', retire)).status).toBe(409);
-    expect(await home.json<object>(await call(referencePath), 200)).toEqual(before);
+    const after = await home.json<StatementRead>(await call(referencePath), 200);
+    // The read observation advances; the pinned Statement and its meaning do not.
+    expect(after).toEqual({ ...before, sourcePosition: after.sourcePosition });
+    expect(after.sourcePosition.dataEpoch).toBe(before.sourcePosition.dataEpoch);
+    expect(BigInt(after.sourcePosition.sequence)).toBeGreaterThan(BigInt(before.sourcePosition.sequence));
     expect(await home.json<object>(await call('/v1/statements', statementInput, author.token, statementKey), 200))
       .toMatchObject({ ...statement, replayed: true });
     expect((await call('/v1/statements', statementInput)).status).toBe(409);
