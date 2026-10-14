@@ -35,9 +35,10 @@ export async function recordContentDerivation(deps: MainWorkDependencies, reques
       const types = new Set(rows.map(row => row.type?.value));
       if (types.size !== 1) throw new AdmissionDenied('responsible public Agent is unavailable');
       const agentType = types.has('https://rezics.com/vocab/PersonAgent') ? 'human' as const : 'software' as const;
-      const recorded = await store.record(operation, input, agentType, () => workRead(deps, request,
+      const recorded = await store.record(operation, input, agentType, client => workRead(deps, request,
         { actingSubject: input.actingSubject }, async session => {
-          const owners = contentReferenceOwners(session);
+          // Exact Content reads share the transaction that pins these revisions.
+          const owners = contentReferenceOwners(session, client);
           // Recheck under both authority locks immediately before the Content commit.
           for (const reference of [input.output, ...input.inputs]) {
             if ((await resolveResourceReference(reference, owners)).status !== 'available')

@@ -1,13 +1,17 @@
 import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { Pool } from 'pg';
+import type { PoolClient } from 'pg';
+import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode }
+  from '../../main/src/infrastructure/pg-pool.ts';
 import { startPostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { ContentCore, ContentConflict } from '../src/core.ts';
 import { migrateContent } from '../src/migrate.ts';
 import { ContentDerivationStale, type ContentDerivationInput } from '../src/derivation.ts';
 
 test('Content derivation custody refuses denied/stale writes, pins revisions, preserves bytes and replays exactly', async () => {
-  const cluster = await startPostgresCluster(); const pool = new Pool({ ...cluster.connection, max: 4 });
+  const cluster = await startPostgresCluster();
+  const previousMode = nestedPoolCheckoutMode(); setNestedPoolCheckoutMode('throw');
+  const pool = boundedPool({ ...cluster.connection, max: 1, connectionTimeoutMillis: 1_000 });
   try {
     await migrateContent(pool); const core = new ContentCore(pool);
     const target = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
@@ -19,7 +23,14 @@ test('Content derivation custody refuses denied/stale writes, pins revisions, pr
     const input: ContentDerivationInput = { output: { target, selector: { grain: 'content', variantId, revision: output.revisionId! } },
       inputs: [{ target, selector: { grain: 'content', variantId, revision: first.revisionId! } }],
       expectedOutputHead: output.revisionId!, activity: { kind: 'transformation' }, responsibleAgent: `https://rezics.com/id/${randomUUID()}` };
-    let proofs = 0; const prove = async () => { proofs++; };
+    let proofs = 0; const prove = async (client: PoolClient) => {
+      expect(await core.owningResourceForRevision(output.revisionId!, client)).toBe(target);
+      expect(await core.readExactBatch([output.revisionId!], async ids => new Set(ids), client)).toEqual([exactBefore!]);
+      proofs++;
+    };
+    await expect(core.derivations.record('nested-checkout', input, 'software', async () => {
+      await core.owningResourceForRevision(output.revisionId!);
+    })).rejects.toBeInstanceOf(NestedPoolCheckoutError);
     await expect(core.derivations.record('denied', input, 'software', async () => { throw new Error('authority denied'); })).rejects.toThrow('authority denied');
     expect(await core.derivations.page(output.revisionId!, 20, null)).toEqual([]);
     const saved = await core.derivations.record('one', input, 'software', prove);
@@ -39,5 +50,5 @@ test('Content derivation custody refuses denied/stale writes, pins revisions, pr
     await expect(pool.query('UPDATE content.derivation SET request_digest=$1 WHERE id=$2', ['0'.repeat(64), saved.derivation])).rejects.toThrow('immutable Content record');
     const record = (await core.derivations.page(output.revisionId!, 20, null))[0]!;
     expect(JSON.stringify(record)).not.toContain('operation_id'); expect(JSON.stringify(record)).not.toContain('principal');
-  } finally { await pool.end(); cluster.remove(); }
+  } finally { await pool.end(); cluster.remove(); setNestedPoolCheckoutMode(previousMode); }
 }, 60_000);

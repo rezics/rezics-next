@@ -8,7 +8,8 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { FusekiClient } from '../src/infrastructure/fuseki.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
-import { ensureFixtureScopeGate } from '../src/modules/access/fixture-authority.ts';
+import { ensureFixtureScopeGate, provisionFixturePerson, registerFixtureIdentity } from '../src/modules/access/fixture-authority.ts';
+import { PersonPreferencesStore } from '../src/modules/preferences/store.ts';
 import { accessClient, controlRead, controlTransaction, withAccessClient } from '../src/modules/access/topology-control.ts';
 import { configureDisclosure, configureDisclosureAncestrySource, DISCLOSURE_COST, discloseInventory, discloseInventoryWithAnonymousNames, resolveDisclosureSelections,
   DisclosureStore, DisclosureUnavailable, type DisclosureAncestryEvidence, type DisclosureDecision, type DisclosureTarget } from '../src/modules/disclosure/read.ts';
@@ -85,6 +86,23 @@ afterAll(async () => {
   cluster?.remove();
   setNestedPoolCheckoutMode(previousMode);
 }, 60_000);
+
+test('reader language and public profile reads reuse the held Access client and see its current writes', async () => {
+  const preferences = new PersonPreferencesStore(pool);
+  const principal = { issuer: 'https://account.test', subject: randomUUID(), emailVerified: true };
+  const principalId = randomUUID(), actor = native();
+  await controlTransaction(pool, async client => {
+    await registerFixtureIdentity(client, { principalId, issuer: principal.issuer, subject: principal.subject, actor });
+    await provisionFixturePerson(client, { principalId, actor, dataEpoch: environment.lineage.dataEpoch });
+    await client.query(`INSERT INTO access.person_preferences(agent_id,content_languages,version)
+      VALUES ($1,$2,1)`, [actor, ['ja', 'en']]);
+    expect(await preferences.languagesForReader(principal)).toEqual(['ja', 'en']);
+    expect(await preferences.publicDiscoveryProfiles([actor, inactiveAgent])).toEqual(new Set([actor]));
+    await expect(pool.connect()).rejects.toBeInstanceOf(NestedPoolCheckoutError);
+  });
+  expect(await preferences.languagesForReader(principal)).toEqual(['ja', 'en']);
+  expect(await preferences.publicDiscoveryProfiles([actor, inactiveAgent])).toEqual(new Set([actor]));
+});
 
 test('held topology reads disclose every inventory batch with unchanged visible, tombstone and hidden decisions', async () => {
   const targets = [...Array.from({ length: DISCLOSURE_COST.batch }, () => body), restricted, ...names];

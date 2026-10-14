@@ -72,7 +72,7 @@ export class PersonPreferencesStore {
    * fenced statement and one bounded language array; it grants no target authority. */
   async languagesForReader(principal: VerifiedPrincipal): Promise<string[]> {
     const person = PRIMARY_READING_PERSON_SQL.replace('a.principal_id = $1', 'a.principal_id = owner.id');
-    const row = (await this.pool.query<{ open: boolean; id: string | null; content_languages: string[] | null }>(`
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ open: boolean; id: string | null; content_languages: string[] | null }>(`
       WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id FOR SHARE)
       SELECT fence.open, owner.id, p.content_languages FROM fence
       LEFT JOIN access.principal owner ON owner.account_issuer = $1 AND owner.account_subject = $2 AND owner.active
@@ -229,7 +229,7 @@ export class PersonPreferencesStore {
     }
     if (!agents.length) return new Set();
     const rows = (
-      await this.pool.query<{ agent: string; open: boolean; visible: boolean }>(
+      await (accessClient(this.pool) ?? this.pool).query<{ agent: string; open: boolean; visible: boolean }>(
         `
       WITH fence AS MATERIALIZED (SELECT open FROM access.recovery_fence WHERE id LIMIT 1 FOR SHARE)
       SELECT wanted.agent, fence.open, (s.id IS NOT NULL

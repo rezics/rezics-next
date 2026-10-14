@@ -1,3 +1,4 @@
+import type { PoolClient } from 'pg';
 import { resolveResourceReference, type ReferenceOwners, type ReferenceResolution } from '../../../../content/src/reference.ts';
 import { type ResourceReference } from '../../../../content/src/adoption.ts';
 import { retainedDocumentBody } from '../../../../content/src/document-body.ts';
@@ -50,7 +51,7 @@ async function mediaSelection(session: WorkReadSession, target: string, revision
 }
 
 /** Main connects Content's closed selectors to existing Semantic, Structure and Media owners. */
-export function contentReferenceOwners(session: WorkReadSession): ReferenceOwners {
+export function contentReferenceOwners(session: WorkReadSession, contentClient?: PoolClient): ReferenceOwners {
   const deps = session.deps, env = deps.environment, principal = session.principal;
   const actingSubject = session.options.actingSubject;
   const viewer = disclosureViewer(principal, actingSubject);
@@ -99,7 +100,7 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
     occurrence: (target, id, revision, occurrence) => structure(target, id, revision, occurrence),
     content: async (target, variant, revision) => {
       if (!deps.content) throw new WorkReadUnavailable('Content owner is unavailable');
-      if (await deps.content.owningResourceForRevision(revision) !== target) return null;
+      if (await deps.content.owningResourceForRevision(revision, contentClient) !== target) return null;
       let privateReadable = false;
       if (principal && actingSubject) {
         try { privateReadable = await canReadContentTarget(env, deps.access, principal, actingSubject,
@@ -113,7 +114,7 @@ export function contentReferenceOwners(session: WorkReadSession): ReferenceOwner
       };
       if (!privateReadable && !await published()) return null;
       const read = async () => (await discloseContent(env,
-        await deps.content!.readExactBatch([revision], async ids => new Set(ids)), viewer))[0];
+        await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer))[0];
       const result = await read(); session.observeDependency(`content-reference:${revision}`, result, read);
       if (result?.status !== 'available' || result.reference.resourceId !== target
         || result.reference.variantId !== variant || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store)) return null;

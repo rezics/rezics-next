@@ -549,9 +549,9 @@ export class ContentCore {
   }
 
   /** Internal ownership lookup for current disclosure, independent of byte health. */
-  async owningResourceForRevision(revisionId: string): Promise<string | null> {
+  async owningResourceForRevision(revisionId: string, client?: PoolClient): Promise<string | null> {
     checkUuid(revisionId, 'revision id');
-    const result = await this.pool.query<{ resource_id: string }>(
+    const result = await (client ?? this.pool).query<{ resource_id: string }>(
       `SELECT v.resource_id FROM content.revision r
        JOIN content.variant v ON v.id = r.variant_id WHERE r.id = $1`, [revisionId]);
     return result.rows[0]?.resource_id ?? null;
@@ -969,7 +969,8 @@ export class ContentCore {
     return { ...settled, position: recorded ? await contentEventPosition(this.pool, operationId) : null };
   }
 
-  async readExactBatch(revisionIds: string[], authorize: (revisionIds: readonly string[]) => Promise<ReadonlySet<string>>): Promise<ExactReadResult[]> {
+  async readExactBatch(revisionIds: string[], authorize: (revisionIds: readonly string[]) => Promise<ReadonlySet<string>>,
+    client?: PoolClient): Promise<ExactReadResult[]> {
     if (revisionIds.length > MAX_READ_ITEMS || new Set(revisionIds).size !== revisionIds.length) {
       throw new ContentLimitExceeded('exact read requires at most 64 distinct revisions');
     }
@@ -977,7 +978,7 @@ export class ContentCore {
     const allowed = await authorize(revisionIds);
     const admitted = revisionIds.filter((id) => allowed.has(id));
     if (!admitted.length) return revisionIds.map((revisionId) => ({ revisionId, status: 'denied' }));
-    const result = await this.pool.query(`WITH picked AS (
+    const result = await (client ?? this.pool).query(`WITH picked AS (
       SELECT r.*, v.language_kind, v.language_tag, v.original_language_tag, v.direction, v.resource_id,
         sum(CASE WHEN r.availability = 'available' THEN r.byte_length ELSE 0 END) OVER () AS total_bytes
       FROM content.revision r JOIN content.variant v ON v.id = r.variant_id WHERE r.id = ANY($1::uuid[])

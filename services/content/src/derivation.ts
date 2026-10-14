@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { checkedResourceReference, ContentAdoptionInvalid, resourceReferenceProjection, type ContentSelection, type ResourceReference } from './adoption.ts';
 import { ContentConflict } from './errors.ts';
 
@@ -35,7 +35,7 @@ function digest(value: unknown): string {
 export class ContentDerivations {
   constructor(private readonly pool: Pool) {}
   async record(operation: string, input: ContentDerivationInput, agentType: 'human' | 'software',
-    prove: () => Promise<void>): Promise<ContentDerivationRecord & { replayed: boolean }> {
+    prove: (client: PoolClient) => Promise<void>): Promise<ContentDerivationRecord & { replayed: boolean }> {
     checkedDerivation(input); const requestDigest = digest(input); const client = await this.pool.connect();
     try {
       await client.query('BEGIN');
@@ -45,7 +45,7 @@ export class ContentDerivations {
         'SELECT request_digest,record FROM content.derivation WHERE operation_id=$1', [operation])).rows[0];
       if (old) {
         if (old.request_digest !== requestDigest) throw new ContentConflict('derivation retry payload differs');
-        await prove(); await client.query('COMMIT'); return { ...old.record, replayed: true };
+        await prove(client); await client.query('COMMIT'); return { ...old.record, replayed: true };
       }
       const s = input.output.selector;
       const output = (await client.query<{ draft_head: string; availability: string }>(`SELECT v.draft_head,r.availability
@@ -65,7 +65,7 @@ export class ContentDerivations {
           FOR SHARE OF r`, [selector.revision, selector.variantId, reference.target]);
         if (selected.rowCount !== 1) throw new ContentConflict('input revision is unavailable');
       }
-      await prove();
+      await prove(client);
       const record: ContentDerivationRecord = { derivation: `urn:rezics:content:derivation:${randomUUID()}`,
         output: input.output, inputs: input.inputs, activity: { id: `urn:rezics:activity:${randomUUID()}`, kind: input.activity.kind },
         responsibleAgent: input.responsibleAgent, responsibleAgentType: agentType };
