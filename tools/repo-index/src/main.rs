@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     env,
@@ -209,6 +210,75 @@ struct GraphFacts<'g> {
     function_facts: &'g [FunctionFact],
     call_facts: &'g [CallFact],
     aliases: &'g [AliasFact],
+}
+#[derive(Serialize)]
+struct IndexHeader {
+    version: u8,
+    digest: String,
+    files: BTreeMap<String, FileHeader>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct FileHeader {
+    content_hash: String,
+    imports: Vec<Import>,
+    syntax: SyntaxFacts,
+    comments: Vec<Value>,
+    named_imports: Vec<NamedImport>,
+    direct_call_names: BTreeSet<String>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    parse_errors: Vec<String>,
+    payloads: BTreeMap<&'static str, [u64; 2]>,
+}
+fn payload(
+    value: &impl Serialize,
+    writer: &mut impl Write,
+    position: &mut u64,
+) -> Result<[u64; 2]> {
+    if *position != 0 {
+        writer.write_all(b",\n")?;
+        *position += 2;
+    }
+    let bytes = serde_json::to_vec(value)?;
+    let range = [*position, bytes.len() as u64];
+    writer.write_all(&bytes)?;
+    *position += bytes.len() as u64;
+    Ok(range)
+}
+fn file_header(
+    facts: IndexedFile,
+    writer: &mut impl Write,
+    position: &mut u64,
+) -> Result<FileHeader> {
+    let mut payloads = BTreeMap::new();
+    let content_hash = format!("{:x}", Sha256::digest(facts.text.as_bytes()));
+    payloads.insert("text", payload(&facts.text, writer, position)?);
+    for (name, value) in [
+        ("astDeflate", facts.ast_deflate),
+        ("runtimeAstDeflate", facts.runtime_ast_deflate),
+        ("graphDeflate", facts.graph_deflate),
+        ("sqlDeflate", facts.sql_deflate),
+    ] {
+        if let Some(value) = value {
+            payloads.insert(name, payload(&value, writer, position)?);
+        }
+    }
+    // Empty arrays are cheap to materialize lazily and preserve facts for
+    // explicit fixtures without forcing every guard to read literal payloads.
+    payloads.insert(
+        "sqlCandidates",
+        payload(&facts.sql_candidates, writer, position)?,
+    );
+    Ok(FileHeader {
+        content_hash,
+        imports: facts.imports,
+        syntax: facts.syntax,
+        comments: facts.comments,
+        named_imports: facts.named_imports,
+        direct_call_names: facts.direct_call_names,
+        parse_errors: facts.parse_errors,
+        payloads,
+    })
 }
 #[derive(Serialize)]
 struct NamedImport {
@@ -829,11 +899,10 @@ fn run() -> Result<()> {
         fs::create_dir_all(parent)?;
     }
     let temporary = output.with_extension(format!("{}.tmp", std::process::id()));
-    let mut writer = BufWriter::new(File::create(&temporary)?);
-    write!(
-        writer,
-        "{{\"version\":1,\"digest\":\"{digest}\",\"files\":{{"
-    )?;
+    let payload_temporary = output.with_extension(format!("{}.payload.tmp", std::process::id()));
+    let mut payload_writer = BufWriter::new(File::create(&payload_temporary)?);
+    let mut payload_position = 0;
+    let mut files = BTreeMap::new();
     let queue = Mutex::new(sources.into_iter().enumerate().collect::<VecDeque<_>>());
     let threads = std::thread::available_parallelism().map_or(1, |count| count.get().min(8));
     let (sender, receiver) = mpsc::sync_channel(threads * 2);
@@ -878,21 +947,34 @@ fn run() -> Result<()> {
         for (number, file, facts) in receiver {
             pending.insert(number, (file, facts));
             while let Some((file, facts)) = pending.remove(&next) {
-                if next > 0 {
-                    writer.write_all(b",")?;
-                }
-                serde_json::to_writer(&mut writer, &file)?;
-                writer.write_all(b":")?;
-                serde_json::to_writer(&mut writer, &facts?)?;
+                files.insert(
+                    file,
+                    file_header(facts?, &mut payload_writer, &mut payload_position)?,
+                );
                 next += 1;
             }
         }
         Ok(())
     })?;
-    writer.write_all(b"}}\n")?;
+    payload_writer.flush()?;
+    drop(payload_writer);
+    let mut writer = BufWriter::new(File::create(&temporary)?);
+    writer.write_all(b"{\"header\":")?;
+    serde_json::to_writer(
+        &mut writer,
+        &IndexHeader {
+            version: 2,
+            digest: digest.clone(),
+            files,
+        },
+    )?;
+    writer.write_all(b",\"payloads\":[\n")?;
+    io::copy(&mut File::open(&payload_temporary)?, &mut writer)?;
+    writer.write_all(b"\n]}\n")?;
     writer.flush()?;
     writer.get_ref().sync_all()?;
     fs::rename(&temporary, &output)?;
+    fs::remove_file(&payload_temporary)?;
     println!(
         "{}",
         json!({"digest":digest,"output":output,"reused":false,"totalMs":started.elapsed().as_secs_f64()*1000.0,"timingsMs":{"typescriptParse":PARSING.load(Ordering::Relaxed) as f64 / 1000.0,"estreeSerialize":ENCODING.load(Ordering::Relaxed) as f64 / 1000.0,"estreeDecode":DECODING.load(Ordering::Relaxed) as f64 / 1000.0,"importResolve":RESOLVING.load(Ordering::Relaxed) as f64 / 1000.0,"sql":SQL.load(Ordering::Relaxed) as f64 / 1000.0}})
@@ -1034,6 +1116,71 @@ fn fallback_tokens(sql: &str) -> Vec<Token> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn lazy_index_header_ranges_address_independent_payloads_in_one_valid_json() {
+        let root = env::current_dir().unwrap();
+        let text = "// UTF-8 😀\nconst sql = `SELECT * FROM owner.records WHERE id=${key}`;";
+        let facts = indexed(
+            Source {
+                file: "services/example/src/file.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let mut payload_bytes = Vec::new();
+        let mut position = 0;
+        let header = file_header(facts, &mut payload_bytes, &mut position).unwrap();
+        assert_eq!(
+            header.content_hash,
+            format!("{:x}", Sha256::digest(text.as_bytes()))
+        );
+        let get = |name: &str| {
+            let [start, length] = header.payloads[name];
+            serde_json::from_slice::<Value>(
+                &payload_bytes[start as usize..(start + length) as usize],
+            )
+            .unwrap()
+        };
+        assert_eq!(get("text"), text);
+        assert!(get("astDeflate").is_string());
+        assert!(get("graphDeflate").is_string());
+        assert!(
+            get("sqlCandidates")
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|candidate| candidate.get("templateAstDeflate").is_some())
+        );
+        let header = IndexHeader {
+            version: 2,
+            digest: "content-digest".into(),
+            files: BTreeMap::from([("services/example/src/file.ts".into(), header)]),
+        };
+        let mut full = b"{\"header\":".to_vec();
+        serde_json::to_writer(&mut full, &header).unwrap();
+        full.extend_from_slice(b",\"payloads\":[\n");
+        let payload_base = full.len();
+        full.extend_from_slice(&payload_bytes);
+        full.extend_from_slice(b"\n]}\n");
+        let parsed: Value = serde_json::from_slice(&full).unwrap();
+        assert_eq!(parsed["header"]["version"], 2);
+        assert_eq!(
+            full.iter().position(|byte| *byte == b'\n').unwrap() + 1,
+            payload_base
+        );
+        for [start, length] in header.files.values().next().unwrap().payloads.values() {
+            assert!(
+                serde_json::from_slice::<Value>(
+                    &full[payload_base + *start as usize
+                        ..payload_base + (*start + *length) as usize]
+                )
+                .is_ok()
+            );
+        }
+    }
     #[test]
     fn postgres_relations_and_dollar_body_positions() {
         let facts = sql_facts("SELECT * FROM \"owner\".\"records\";");
