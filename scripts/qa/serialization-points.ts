@@ -15,6 +15,7 @@ import {
   prepareSql,
   indexedSql,
   indexedSource,
+  type IndexedFile,
 } from '../lib/repo-index.ts';
 import { compareMigrationPaths } from '../lib/migration-order.ts';
 import type { SqlSource } from './sql-relations.ts';
@@ -769,33 +770,35 @@ function computeSqlVariants(
 }
 const sqlOperationLiteral =
   /\b(?:select|update|insert|delete|begin|commit|rollback|perform|create|alter|drop|for)\b|pg_advisory_/i;
-function requiresSqlInitializer(node: ts.Expression): boolean {
-  if (ts.isIdentifier(node)) return true;
+function requiresSqlInitializer(node: ts.Expression, names?: ReadonlySet<string>): boolean {
+  if (ts.isIdentifier(node)) return !names || names.has(node.text);
   if (ts.isConditionalExpression(node))
-    return requiresSqlInitializer(node.whenTrue) || requiresSqlInitializer(node.whenFalse);
+    return (
+      requiresSqlInitializer(node.whenTrue, names) || requiresSqlInitializer(node.whenFalse, names)
+    );
   if (
     ts.isParenthesizedExpression(node) ||
     ts.isAsExpression(node) ||
     ts.isSatisfiesExpression(node)
   )
-    return requiresSqlInitializer(node.expression);
+    return requiresSqlInitializer(node.expression, names);
   if (ts.isTemplateExpression(node))
-    return node.templateSpans.some((span) => requiresSqlInitializer(span.expression));
+    return node.templateSpans.some((span) => requiresSqlInitializer(span.expression, names));
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken)
-    return requiresSqlInitializer(node.left) || requiresSqlInitializer(node.right);
+    return requiresSqlInitializer(node.left, names) || requiresSqlInitializer(node.right, names);
   if (ts.isArrayLiteralExpression(node))
-    return node.elements.some((element) => requiresSqlInitializer(element as ts.Expression));
+    return node.elements.some((element) => requiresSqlInitializer(element as ts.Expression, names));
   if (
     ts.isPrefixUnaryExpression(node) &&
     (node.operator === ts.SyntaxKind.MinusToken || node.operator === ts.SyntaxKind.PlusToken)
   )
-    return requiresSqlInitializer(node.operand);
+    return requiresSqlInitializer(node.operand, names);
   if (
     ts.isCallExpression(node) &&
     /^(JSON\.stringify|String|Number|BigInt)$/.test(node.expression.getText()) &&
     node.arguments.length === 1
   )
-    return requiresSqlInitializer(node.arguments[0]);
+    return requiresSqlInitializer(node.arguments[0], names);
   return false;
 }
 function sourceFragments(source: SqlSource): SqlFragment[] {
@@ -803,7 +806,13 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
   const syntax = indexed.syntax;
   // Pure type/constant providers cannot contribute SQL or call effects. Their
   // declarations and relative imports are loaded only when a traced key uses them.
-  if (syntax && !syntax.hasSqlQueries && !syntax.hasSqlOperationLiterals) return [];
+  if (
+    syntax &&
+    !syntax.hasSqlQueries &&
+    !syntax.hasSqlOperationLiterals &&
+    !syntax.hasInterpolatedTemplates
+  )
+    return [];
   const candidates = indexed.sqlCandidates;
   if (syntax && !syntax.hasSqlQueries && candidates?.every((candidate) => candidate.literalKind)) {
     const offset = indexedOffsets(source.text);
@@ -827,7 +836,8 @@ function sourceFragments(source: SqlSource): SqlFragment[] {
         );
       }
     }
-    if (projected && !templates.some(requiresSqlInitializer)) {
+    const bindings = indexed.aliases && new Set(indexed.aliases.map((alias) => alias.name));
+    if (projected && !templates.some((node) => requiresSqlInitializer(node, bindings))) {
       // Unrelated logging templates need no file scope. SQL-value identifiers
       // still use the complete indexed scope to preserve lexical resolution.
       const entries: { start: number; fragment: SqlFragment }[] = [];
@@ -1455,6 +1465,30 @@ type NativeFunctionSelection = {
   functions: Map<string, Set<number | null>>;
   names: Map<string, string>;
 };
+type NativeCallGraph = {
+  files: string[];
+  facts: IndexedFile[];
+  names: Map<string, string>;
+  definitions: Map<string, { file: string; start: number | null; parameters: string[] }>;
+  incoming: Map<string, Set<string>>;
+  outgoing: Map<string, Set<string>>;
+};
+let lastNativeGraph: NativeCallGraph | undefined;
+function compactReference(
+  text: string,
+  start: number,
+  end: number,
+  maximum: number,
+): string | undefined {
+  let result = '';
+  for (let at = start; at < end; at++)
+    if (!/\s/.test(text[at])) {
+      if (result.length === maximum) return;
+      result += text[at];
+    }
+  return result;
+}
+
 /** Build the call graph from parser facts before decoding source trees. Defaults
  * and aliases widen the graph; actual expansion still evaluates the TS rules. */
 function nativeFunctionSelection(
@@ -1474,6 +1508,17 @@ function nativeFunctionSelection(
     )
   )
     return;
+  if (
+    lastNativeGraph &&
+    records.length === lastNativeGraph.files.length &&
+    records.every(
+      (record, index) =>
+        record.source.file === lastNativeGraph!.files[index] &&
+        record.facts === lastNativeGraph!.facts[index],
+    )
+  ) {
+    return selectNativeFunctions(lastNativeGraph, seeds);
+  }
   const names = new Map<string, string>();
   const definitions = new Map<
     string,
@@ -1515,7 +1560,20 @@ function nativeFunctionSelection(
       new Set(facts.functionFacts!.map((fn) => `${fn.start}:${fn.end}`)),
     ]),
   );
-  const aliasText = new WeakMap<object, string>();
+  const maximumKeys = new Map(
+    records.map(({ source, facts }) => [
+      source.file,
+      Math.max(
+        0,
+        ...facts
+          .functionFacts!.filter((fn) => fn.name)
+          .map((fn) => `${fn.className ? fn.className + '.' : ''}${fn.name}`.length),
+        ...facts.namedImports!.map((binding) => binding.local.length),
+        ...facts.aliases!.map((alias) => alias.name.length),
+      ),
+    ]),
+  );
+  const aliasText = new WeakMap<object, string | undefined>();
   const resolvedNames = new Map<string, Set<string>>();
   const targets = (file: string, inputs: string[]): Set<string> => {
     const result = new Set<string>();
@@ -1543,11 +1601,14 @@ function nativeFunctionSelection(
               continue;
             pending.push(...alias.references);
             let text = aliasText.get(alias);
-            if (text === undefined) {
+            if (!aliasText.has(alias)) {
               const record = recordsByFile.get(file)!;
-              text = record.source.text
-                .slice(record.offset(alias.initializerStart), record.offset(alias.initializerEnd))
-                .replace(/\s+/g, '');
+              text = compactReference(
+                record.source.text,
+                record.offset(alias.initializerStart),
+                record.offset(alias.initializerEnd),
+                maximumKeys.get(file)!,
+              );
               aliasText.set(alias, text);
             }
             if (text) pending.push(text);
@@ -1599,9 +1660,13 @@ function nativeFunctionSelection(
       for (const span of call.argumentSpans) {
         if (call.inlineFunctionSpans.some((fn) => fn.start === span.start && fn.end === span.end))
           continue;
-        callbackNames.push(
-          source.text.slice(offset(span.start), offset(span.end)).replace(/\s+/g, ''),
+        const text = compactReference(
+          source.text,
+          offset(span.start),
+          offset(span.end),
+          maximumKeys.get(source.file)!,
         );
+        if (text) callbackNames.push(text);
       }
       for (const target of targets(source.file, callbackNames)) edge(ownerId, target);
       for (const fn of call.inlineFunctionSpans) {
@@ -1610,6 +1675,22 @@ function nativeFunctionSelection(
       }
     }
   }
+  lastNativeGraph = {
+    files: records.map((record) => record.source.file),
+    facts: records.map((record) => record.facts),
+    names,
+    definitions,
+    incoming,
+    outgoing,
+  };
+  return selectNativeFunctions(lastNativeGraph, seeds);
+}
+function selectNativeFunctions(
+  graph: NativeCallGraph,
+  seeds: Set<string>,
+): NativeFunctionSelection | undefined {
+  const { definitions, incoming, outgoing, names } = graph;
+  if ([...seeds].some((id) => !definitions.has(id))) return;
   const relevant = new Set(seeds),
     callers = [...seeds];
   for (let at = 0; at < callers.length; at++)

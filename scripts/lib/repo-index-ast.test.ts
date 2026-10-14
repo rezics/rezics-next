@@ -261,3 +261,26 @@ test('standalone SQL templates resolve lexical values beside logging templates',
     [2, '12'],
   ]);
 });
+
+test('standalone interpolated SQL retains verbs assembled from lexical constants', () => {
+  expect(
+    serializationFindings(
+      [
+        {
+          file: '001.sql',
+          text: 'CREATE TABLE probe.singleton(id boolean PRIMARY KEY CHECK(id));',
+        },
+      ],
+      [
+        {
+          file: 'probe.ts',
+          text: "const verb='UP'+'DATE'; const table='probe.singleton'; const sql=`${verb} ${table} SET id=true`;",
+        },
+      ],
+      [],
+    ).map((finding) => [finding.rule, finding.target]),
+  ).toEqual([
+    ['singleton-table', 'probe.singleton'],
+    ['singleton-write', 'probe.singleton'],
+  ]);
+});
