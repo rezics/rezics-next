@@ -28,7 +28,11 @@ export default defineConfig({
     ] },
     // Interaction stories type and wait like a person; on a host shared with other stacks the 5 s default
     // failed whole stories that pass alone (Give Role With Impact took 5.08 s in a loaded QA run).
-    test: { name: 'storybook', ...screenshotSetup, testTimeout: 15_000, browser: { enabled: true, headless: true,
+    test: { name: 'storybook', ...screenshotSetup, testTimeout: 15_000,
+      // Vitest's iframe readiness timer is separate from testTimeout and browser.connectTimeout.
+      // Cold transforms on a host running other QA stacks can exceed its 60 s default.
+      env: { VITEST_BROWSER_IFRAME_TIMEOUT: '180000' },
+      browser: { enabled: true, headless: true,
       ...screenshotCommands,
       provider: playwright({}), instances: [{ browser: 'chromium' }] } },
   }] },
