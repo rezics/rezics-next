@@ -1,9 +1,11 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { mainBrowseQuery, parseBrowseState } from '../../../../../apps/web/features/zones/browse-state.ts';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/recipes/catalogue-browse-and-search-in-its-zone.ts';
 import { recipeCatalogue, short } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { recordFrameReads } from '../../../support/frame-reads.ts';
 import { personaSessions, type PersonaName, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(120_000);
@@ -69,6 +71,9 @@ afterAll(async () => {
 
 async function browse(name: PersonaName) {
   const person = sessions[name];
+  await recordFrameReads(recording, name, person, sessions.visitor, sessions.realm, sessions.zone,
+    'space', short(sessions.zone), 'browse');
+  await pageReads(name);
   const sample = recording.session(name, person);
   const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   const refused = await answer<{ code: string }>(sample('unsupported-query-shape', 'GET', `${path}?sort=relevance&type=https%3A%2F%2Fschema.org%2FRecipe`), 400);
@@ -98,6 +103,47 @@ async function browse(name: PersonaName) {
   expect(none.nextCursor).toBeNull();
   expect(none.matches).toEqual({ value: 0, kind: 'exact' });
   if (name === 'owner') await supportingReads(sample);
+}
+async function pageReads(name: PersonaName) {
+  const publicRead = recording.session(name, sessions.visitor);
+  const realmRoot = `/v1/realms/${short(sessions.realm)}`;
+  if (name !== 'visitor') {
+    const personalRead = recording.session(name, sessions[name]);
+    const discard = async (pending: Promise<Response>, path: string) => {
+      const response = await pending;
+      if (response.status >= 500) throw new Error(`Page read ${path}: HTTP ${response.status}: ${await response.text()}`);
+      await response.body?.cancel();
+    };
+    await discard(personalRead('frame-personal-realm-header', 'GET', realmRoot), realmRoot);
+    const addressPath = `/v1/addresses/resolve?${new URLSearchParams({
+      scope: 'space', key: short(sessions.space),
+    })}`;
+    await discard(personalRead('frame-personal-space-address', 'GET', addressPath), addressPath);
+  }
+  const addresses: [string, Record<string, string>][] = [
+    ['page-browse-default', {}],
+    ['page-browse-newest', { sort: 'newest' }],
+    ['page-browse-updated', { sort: 'updated' }],
+    ['page-search-default', { q: phrase }],
+    ['page-search-relevance', { q: phrase, sort: 'relevance' }],
+    ['page-search-newest', { q: phrase, sort: 'newest' }],
+    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-search-no-match', { q: `${phrase}Missing` }],
+    ['page-search-no-match-relevance', { q: `${phrase}Missing`, sort: 'relevance' }],
+  ];
+  for (const [label, address] of addresses) {
+    let cursor: string | null = null;
+    let continuation = 0;
+    do {
+      // Recipes adds no year filter, so catalogueBrowseQuery is exactly mainBrowseQuery here.
+      const query = mainBrowseQuery(parseBrowseState({ ...address, ...(cursor ? { cursor } : {}) }));
+      const params = new URLSearchParams(query as Record<string, string>);
+      const path = `${realmRoot}/modules/browse${params.size ? `?${params}` : ''}`;
+      const page = await answer<Page>(publicRead(continuation ? `${label}-continuation-${continuation}` : label, 'GET', path));
+      cursor = page.nextCursor;
+      continuation++;
+    } while (cursor);
+  }
 }
 // The browse route reads its frame, facet labels and the state of its cards separately.
 async function supportingReads(sample: ReturnType<typeof recording.session>) {
