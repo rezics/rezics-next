@@ -201,7 +201,7 @@ test('post-disposal custody refusal survives lease failure and cannot be reporte
   f.adapter.dispose = async candidate => { await dispose(candidate); f.adapter.verify = async () => ['source changed during disposal']; };
   // The holder already exists; inject at its release through the stream method instead of acquiring a new lease.
   const cancel = ReadableStream.prototype.cancel;
-  const release = spyOn(ReadableStream.prototype, 'cancel').mockImplementation(async function(reason) {
+  const release = spyOn(ReadableStream.prototype, 'cancel').mockImplementation(async function(this: ReadableStream, reason) {
     await cancel.call(this, reason);
     throw cleanup;
   });
