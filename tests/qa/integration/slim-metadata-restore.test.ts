@@ -1318,7 +1318,11 @@ test('OPS12: post-erasure Content pins capture and restore exact historical owne
       expect(await captureContentRecoveryCoverage(contentPool!, references, context)).toEqual(signedCut.content);
       for (const outcome of outcomes) {
         const captured = outcome.accepted ? Promise.resolve(outcome.evidence) : Promise.reject(outcome.evidence);
-        await expect(captured).rejects.toThrow(`retained graph Content pin ${outcome.field} conflicts`);
+        await expect(captured).rejects.toBeInstanceOf(ContentRecoveryConflict);
+        const expectedMessage = outcome.field === 'preparationId'
+          ? `Content publication erasure supersession differs: ${revisionId}`
+          : `Content outbox position is unavailable: ${outcome.pin!.ownerSequence}`;
+        await expect(captured).rejects.toHaveProperty('message', expectedMessage);
       }
     });
     expect(await facts(fuseki)).toEqual(sourceFacts);
