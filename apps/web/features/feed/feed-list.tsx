@@ -463,9 +463,9 @@ function FeedPages({
           </Button>
         </div>
       ) : null}
-      {catchingUp ? (
+      {catchingUp && !state.failure ? (
         <FeedEnd caughtUp={state.caughtUp} catchingUp allHref={allHref} />
-      ) : finished && items.length ? (
+      ) : finished && items.length && !state.failure ? (
         <FeedEnd caughtUp={state.caughtUp} allHref={allHref} />
       ) : null}
     </div>
