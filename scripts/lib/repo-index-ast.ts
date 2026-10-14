@@ -736,7 +736,7 @@ function sqlSourceView(source: { file: string; text: string }, facts: IndexedFil
     end: Buffer.byteLength(source.text),
     body: [],
   });
-  const context = (ast as IndexedNode).sourceContext;
+  const context = (ast as unknown as IndexedNode).sourceContext;
   attachDeclarations(context, facts);
   const view = { ast, context, ancestors: new Map<string, ts.Node>([['Program', ast]]) };
   sqlSourceViews.set(facts, view);
@@ -794,7 +794,7 @@ function sqlFactNodes(source: { file: string; text: string }, facts: IndexedFile
     selected.push(node);
     // Real selected calls retain their complete value arguments. Ancestor
     // skeletons supply only parent identity and structural branch membership.
-    view.ancestors.set(scopeKey((node as IndexedNode).rawSyntax), node);
+    view.ancestors.set(scopeKey((node as unknown as IndexedNode).rawSyntax), node);
     let child: ts.Node = node;
     for (const span of fact.ancestors) {
       const parent = sqlAncestor(view, span);
@@ -844,7 +844,7 @@ export function indexedFragmentSourceFile(source: { file: string; text: string }
   if ('sqlNodeFacts' in facts) return sqlSourceView(source, facts).ast;
   const ast = indexedSourceFile(source, facts.fragmentAst ?? facts.sqlAst);
   if (facts.fragmentAst && 'variableFacts' in facts)
-    attachDeclarations((ast as IndexedNode).sourceContext, facts);
+    attachDeclarations((ast as unknown as IndexedNode).sourceContext, facts);
   return ast;
 }
 
@@ -876,7 +876,7 @@ export function indexedTraceSourceFile(source: { file: string; text: string }): 
   const facts = indexedSource(source);
   const ast = indexedSourceFile(source, facts.traceAst ?? facts.runtimeAst ?? facts.ast);
   if (facts.traceAst && 'variableFacts' in facts)
-    attachDeclarations((ast as IndexedNode).sourceContext, facts);
+    attachDeclarations((ast as unknown as IndexedNode).sourceContext, facts);
   return ast;
 }
 

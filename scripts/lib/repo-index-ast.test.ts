@@ -380,7 +380,7 @@ test('quoted transaction words and comments cannot separate gate effects', () =>
         ],
         [],
       ).map((finding) => finding.rule),
-    ).toEqual(expected);
+    ).toEqual([...expected]);
 });
 
 test('wrapped callees retain the original named-call analysis boundary', () => {
