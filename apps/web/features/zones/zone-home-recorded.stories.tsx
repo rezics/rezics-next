@@ -1,31 +1,16 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useEffect, useState, type ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
 import { surfaceText } from '../address/messages.ts';
-import { spaceHref } from '../address/path.ts';
-import { BFF_PREFIX } from '../api/browser.ts';
-import { ReaderActionsProvider } from '../catalogue/reader-actions.tsx';
-import { localizedPath } from '../../i18n/locale.ts';
-import { zoneText } from '../realm/adapt.ts';
-import { RealmMembership } from '../realm/membership.tsx';
+import { addressKey } from '../address/path.ts';
+import type { RealmHeader, ZonePresentationRead } from '../realm/types.ts';
+import { siteHref } from '../realm/route.ts';
 import { realmMessagesFor } from '../realm/story-page.tsx';
-import { realmHref, siteHref } from '../realm/route.ts';
-import type { ZonePresentationRead } from '../realm/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
-import LocalizedLink from '../shell/localized-link.tsx';
-import { PageContainer } from '../shell/page.tsx';
-import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
-import { LookMenu } from './look-menu.tsx';
+import type { RecordedSelection } from '../stories/recorded-fetch.ts';
 import { zoneMessagesFor } from './fixtures.ts';
-import { ZonePageMissing } from './page-missing.tsx';
-import { MemberList } from './site-pages.tsx';
-import type { SiteLink } from './site-navigation.tsx';
-import { zoneTheme } from './theme.ts';
-import { ZoneFrame, ZoneMasthead } from './zone-frame.tsx';
-import { loadZoneHomeModules, readCompleteZonePresentation, readZoneRouteAnswer, zoneHomeIdentity,
-  zoneHomePage, ZonePublishedHome } from './zone-home-recorded-page.tsx';
+import { ZoneHomeRecordedPage } from './zone-home-recorded-page-view.tsx';
 
 const record = homeRendering as AnswerRecord;
 const persona = 'visitor';
@@ -37,10 +22,6 @@ function sample(label: string) {
   const found = record.personas[persona].find(answer => answer.label === label);
   if (!found) throw new Error(`Missing recorded zone home answer: ${label}`);
   return found;
-}
-
-function pathId(label: string) {
-  return new URL(sample(label).path, 'https://recorded.invalid').pathname.split('/')[3]!;
 }
 
 function queryValue(label: string, name: string) {
@@ -59,6 +40,12 @@ function recordedName(label: string) {
   return name;
 }
 
+function headerName() {
+  const name = (sample('frame-published-realm-header').answer as RealmHeader).name.value;
+  if (!name) throw new Error('Recorded realm header has no name');
+  return name;
+}
+
 function nodes(value: unknown): Record<string, unknown>[] {
   if (!value || typeof value !== 'object') return [];
   const node = value as Record<string, unknown>;
@@ -70,11 +57,10 @@ function documentTexts(document: unknown): string[] {
   return nodes(document).flatMap(node => typeof node.text === 'string' ? [node.text] : []);
 }
 
-const published = presentationOf('published-presentation');
+const published = presentationOf('frame-published-presentation');
 const publishedHome = published.home;
 if (!publishedHome) throw new Error('Recorded published presentation has no home');
-const publishedKey = published.address.key;
-const emptyKey = presentationOf('empty-home-presentation').address.key;
+const emptyPresentation = presentationOf('frame-empty-presentation');
 const ownerText = documentTexts(publishedHome.document)[0];
 const placeholder = publishedHome.blocks.find(block => block.status === 'placeholder');
 const resolvedBlock = publishedHome.blocks.find(block => block.status === 'resolved');
@@ -87,6 +73,14 @@ const slide = { title: recordedSlide.title, href: recordedSlide.href };
 const mount = published.navigation[0];
 if (!mount) throw new Error('Recorded home is missing its mount');
 const draftPath = queryValue('unpublished-route-refused', 'path');
+const publishedSpace = queryValue('frame-published-space-address', 'key');
+const emptySpace = queryValue('frame-empty-space-address', 'key');
+const publishedSelections = [
+  { label: 'frame-published-space-address', state: 'populated' },
+  { label: 'frame-published-presentation', state: 'populated' },
+  { label: 'frame-published-realm-header', state: 'populated' },
+] as const satisfies readonly RecordedSelection[];
+
 function refusalTitle(): string {
   const title = (sample('unpublished-route-refused').answer as { title?: string }).title;
   if (typeof title !== 'string') throw new Error('Recorded route refusal has no title');
@@ -101,91 +95,27 @@ function privateDraftText() {
   return extra[0];
 }
 
-const homePath = (key: string, path: readonly string[] = []) => localizedPath(spaceHref(key, 'site', path), locale);
+function siteAddress(address: ZonePresentationRead['address']) {
+  if (address.prefix !== '/z/') throw new Error(`Recorded site address prefix is ${address.prefix}`);
+  return { prefix: '/z/' as const, key: address.key, suffixSource: address.suffixSource };
+}
+
+const homePath = (address: ZonePresentationRead['address'], path: readonly string[] = []) =>
+  siteHref(locale, addressKey(siteAddress(address)), path);
 const desktop = { locale, viewport: { value: 'desktop' } };
 const phone = { locale, viewport: { value: 'phone' } };
 
-function ZoneHomeFrame({ identity, links, children }: {
-  identity: ReturnType<typeof zoneHomeIdentity>; links: readonly SiteLink[]; children: ReactNode;
+function RecordedZoneHome({ space, selections, routePath }: {
+  space: string; selections: readonly RecordedSelection[]; routePath?: string;
 }) {
-  const { zone } = identity;
-  const theme = zoneTheme(zone.tokens, { reader: 'light', enabled: true });
-  const actions = <>
-    {zone.realm ? <RealmMembership realm={zone.realm} realmName={zone.name.value} initial={null} signedIn={false}
-      signInHref="/auth/start" rulesHref={zone.links.about}
-      actions={{ kind: 'signed-out', signInHref: '/auth/start' }} locale={locale} messages={realmMessages} /> : null}
-    {zone.realm ? <LocalizedLink href={realmHref(locale, identity.context.ref)}
-      className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
-      {surfaceText.community[locale]}
-    </LocalizedLink> : null}
-    {zone.realm ? <LookMenu enabled labels={{ menu: messages.lookLabel, zone: messages.lookZone,
-      standard: messages.lookStandard, help: messages.lookHelp, saveFailed: messages.lookSaveFailed }} /> : null}
-  </>;
-  return <ZoneFrame zone={zone} dataZone={zone.slug ?? identity.context.zone ?? identity.context.ref} theme={theme}
-    pkg={null} actions={actions} members={null} masthead={<ZoneMasthead zone={zone} members={null} actions={actions} />}
-    tabs={null} site={{ label: zone.realm ? surfaceText.site[locale] : zone.name.value, links }}>
-    <ReaderActionsProvider signedIn={false} signInHref="/auth/start">{children}</ReaderActionsProvider>
-  </ZoneFrame>;
-}
-
-/** The published Zone home a visitor reads, from the recorded answers for that state. */
-function RecordedZoneHome({ label, state }: { label: string; state: RecordedState }) {
-  const [shown, setShown] = useState<ReactNode>(null);
-  const [error, setError] = useState<Error | null>(null);
-  useEffect(() => {
-    let active = true;
-    const selected = sample(label);
-    const selections = selected.operationId === 'getV1ZonesByIdRoutes'
-      ? [{ label: 'published-presentation', state: 'populated' as const }, { label, state }]
-      : [{ label, state }];
-    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
-    async function load() {
-      const zone = pathId(selected.operationId === 'getV1ZonesByIdRoutes' ? 'published-presentation' : label);
-      const presentation = await readCompleteZonePresentation(replay.fetcher, zone);
-      if (!presentation.ok) throw new Error(`Recorded zone presentation failed: ${presentation.failure}`);
-      const identity = zoneHomeIdentity(presentation.data, locale, realmMessages.home);
-      if (selected.operationId === 'getV1ZonesByIdRoutes') {
-        const route = await readZoneRouteAnswer(replay.fetcher, zone, queryValue(label, 'path'));
-        if (route.ok) throw new Error('Recorded route refusal resolved as a page');
-        if (route.failure !== 'missing') throw new Error(`Recorded route failed as ${route.failure}`);
-        if (!active) return;
-        setShown(<ZoneHomeFrame identity={identity} links={identity.links}>
-          <ZonePageMissing title={messages.pageMissingTitle} body={messages.pageMissingBody}
-            back={messages.pageMissingBack} href={spaceHref(identity.context.ref, 'site', [])} />
-        </ZoneHomeFrame>);
-        return;
-      }
-      const page = zoneHomePage(presentation.data.home);
-      const loaded = await loadZoneHomeModules(page, presentation.data.presentation, {
-        moduleData: presentation.data.moduleData, slideMedia: presentation.data.slideMedia,
-      }, identity.context, messages.moduleHeroCarousel);
-      const empty = <PageContainer>
-        <MemberList members={presentation.data.navigation.map(item => ({
-          id: item.target, href: siteHref(locale, identity.context.ref, [item.segment]),
-          name: zoneText(item.name), kind: null,
-        }))} />
-      </PageContainer>;
-      if (!active) return;
-      setShown(<ZoneHomeFrame identity={identity} links={identity.links}>
-        <ZonePublishedHome page={page} modules={loaded.modules} images={loaded.images}
-          representedShowcases={loaded.representedShowcases} zone={identity.zone} pkg={null} locale={locale}
-          messages={messages} empty={empty} />
-      </ZoneHomeFrame>);
-    }
-    void load().catch((reason: unknown) => {
-      if (active) setError(reason instanceof Error ? reason : new Error(String(reason)));
-    });
-    return () => { active = false; replay.dispose(); };
-  }, [label, state]);
-  if (error) throw error;
-  if (!shown) return <PageContainer><p role="status" aria-busy="true">{shellMessages.loading}</p></PageContainer>;
-  return shown;
+  return <ZoneHomeRecordedPage record={record} persona={persona} locale={locale} space={space}
+    selections={selections} routePath={routePath} />;
 }
 
 const meta = {
   title: 'Zones/Zone home',
   component: RecordedZoneHome,
-  parameters: { route: { pathname: homePath(publishedKey) } },
+  parameters: { route: { pathname: homePath(published.address) } },
   globals: { locale },
 } satisfies Meta<typeof RecordedZoneHome>;
 export default meta;
@@ -203,7 +133,8 @@ async function expectPopulated(canvasElement: HTMLElement) {
   await expect(prose.compareDocumentPosition(unavailable) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   await expect(canvas.queryByText(resolvedBlock!.fallback)).toBeNull();
   await expect(canvas.queryByText(privateDraftText())).toBeNull();
-  await expect(canvas.getByRole('heading', { name: recordedName('published-presentation') })).toBeVisible();
+  await expect(canvas.getByRole('heading', { name: headerName() })).toBeVisible();
+  await expect(canvas.queryByRole('heading', { name: recordedName('frame-published-presentation') })).toBeNull();
   const navigation = within(canvas.getByRole('navigation', { name: surfaceText.site[locale] }));
   const links = navigation.getAllByRole('link');
   await expect(links.map(link => link.textContent)).toEqual([realmMessages.home, mount!.name.value]);
@@ -215,11 +146,12 @@ async function expectPopulated(canvasElement: HTMLElement) {
 
 async function expectEmpty(canvasElement: HTMLElement) {
   const canvas = within(canvasElement);
-  await expect(await canvas.findByRole('heading', { name: recordedName('empty-home-presentation') })).toBeVisible();
-  const navigation = within(canvas.getByRole('navigation', { name: recordedName('empty-home-presentation') }));
+  await expect(await canvas.findByRole('heading', { name: recordedName('frame-empty-presentation') })).toBeVisible();
+  const navigation = within(canvas.getByRole('navigation', { name: recordedName('frame-empty-presentation') }));
   await expect(navigation.getByRole('link', { name: realmMessages.home })).toHaveAttribute('aria-current', 'page');
   await expect(navigation.queryByRole('link', { name: mount!.name.value })).toBeNull();
-  await expect(canvas.queryByRole('heading', { name: recordedName('published-presentation') })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: recordedName('frame-published-presentation') })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: headerName() })).toBeNull();
   await expect(canvas.queryByText(ownerText!)).toBeNull();
   await expect(canvas.queryByText(placeholder!.fallback)).toBeNull();
   await expect(canvas.queryByText(realmMessages.emptyHomeTitle)).toBeNull();
@@ -230,7 +162,8 @@ async function expectRefusal(canvasElement: HTMLElement) {
   await expect(await canvas.findByRole('heading', { name: messages.pageMissingTitle })).toBeVisible();
   await expect(canvas.getByText(messages.pageMissingBody)).toBeVisible();
   await expect(canvas.getByRole('link', { name: messages.pageMissingBack })).toBeVisible();
-  await expect(canvas.getByRole('heading', { name: recordedName('published-presentation') })).toBeVisible();
+  await expect(canvas.getByRole('heading', { name: headerName() })).toBeVisible();
+  await expect(canvas.queryByRole('heading', { name: recordedName('frame-published-presentation') })).toBeNull();
   const navigation = within(canvas.getByRole('navigation', { name: surfaceText.site[locale] }));
   const reference = navigation.getByRole('link', { name: mount!.name.value });
   await expect(reference.getAttribute('href') ?? '').toContain(mount!.segment);
@@ -247,13 +180,14 @@ async function expectLoading(canvasElement: HTMLElement) {
   const status = await canvas.findByRole('status');
   await expect(status).toHaveTextContent(shellMessages.loading);
   await expect(status).toHaveAttribute('aria-busy', 'true');
-  await expect(canvas.queryByRole('heading', { name: recordedName('published-presentation') })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: headerName() })).toBeNull();
+  await expect(canvas.queryByRole('heading', { name: recordedName('frame-published-presentation') })).toBeNull();
   await expect(canvas.queryByText(ownerText!)).toBeNull();
   await expect(canvas.queryByText(placeholder!.fallback)).toBeNull();
 }
 
 export const PopulatedVisitor: Story = {
-  args: { label: 'published-presentation', state: 'populated' },
+  args: { space: publishedSpace, selections: publishedSelections },
   globals: desktop,
   play: async ({ canvasElement }) => { await expectPopulated(canvasElement); },
 };
@@ -261,25 +195,42 @@ export const PopulatedVisitor: Story = {
 export const PopulatedVisitorPhone: Story = { ...PopulatedVisitor, globals: phone };
 
 export const EmptyVisitor: Story = {
-  args: { label: 'empty-home-presentation', state: 'empty' },
+  args: {
+    space: emptySpace,
+    selections: [
+      { label: 'frame-empty-space-address', state: 'populated' },
+      { label: 'frame-empty-presentation', state: 'empty' },
+    ],
+  },
   globals: desktop,
-  parameters: { route: { pathname: homePath(emptyKey) } },
+  parameters: { route: { pathname: homePath(emptyPresentation.address) } },
   play: async ({ canvasElement }) => { await expectEmpty(canvasElement); },
 };
 
 export const EmptyVisitorPhone: Story = { ...EmptyVisitor, globals: phone };
 
 export const ErrorVisitor: Story = {
-  args: { label: 'unpublished-route-refused', state: 'error' },
+  args: {
+    space: publishedSpace,
+    selections: [...publishedSelections, { label: 'unpublished-route-refused', state: 'error' }],
+    routePath: draftPath,
+  },
   globals: desktop,
-  parameters: { route: { pathname: homePath(publishedKey, draftPath.split('/').filter(Boolean)) } },
+  parameters: { route: { pathname: homePath(published.address, draftPath.split('/').filter(Boolean)) } },
   play: async ({ canvasElement }) => { await expectRefusal(canvasElement); },
 };
 
 export const ErrorVisitorPhone: Story = { ...ErrorVisitor, globals: phone };
 
 export const LoadingVisitor: Story = {
-  args: { label: 'published-presentation', state: 'loading' },
+  args: {
+    space: publishedSpace,
+    selections: [
+      { label: 'frame-published-space-address', state: 'loading' },
+      { label: 'frame-published-presentation', state: 'populated' },
+      { label: 'frame-published-realm-header', state: 'populated' },
+    ],
+  },
   globals: desktop,
   play: async ({ canvasElement }) => { await expectLoading(canvasElement); },
 };

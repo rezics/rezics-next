@@ -1,13 +1,18 @@
 import { afterEach, expect, test } from 'bun:test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import homeRendering from '../../../../tests/qa/fixtures/outcomes/zone/home-rendering.json';
+import { addressKey } from '../address/path.ts';
 import { BFF_PREFIX } from '../api/browser.ts';
+import { settleRealmRead } from '../realm/browse-page-read.ts';
 import { messages as realmMessages } from '../realm/messages.ts';
+import { siteHref } from '../realm/route.ts';
+import { realmFrameReads } from '../realm/zone-presentation-read.ts';
+import type { RealmHeader, ZonePresentationRead } from '../realm/types.ts';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
 import { zoneHomeProse } from '../zone-editor/home-document.tsx';
 import { messages } from './messages.ts';
-import { loadZoneHomeModules, readCompleteZonePresentation, readContentRevisionAnswer, readZoneRouteAnswer,
-  zoneHomeIdentity, zoneHomePage } from './zone-home-recorded-page.tsx';
+import { mapZoneSiteHome } from './zone-site-recorded-page.ts';
+import { loadZoneHomeFrame, loadZoneHomeModules, recordedZoneHomeClient, zoneHomeFrameModel } from './zone-home-recorded-page.tsx';
 
 const record = homeRendering as AnswerRecord;
 const persona = 'visitor';
@@ -30,10 +35,10 @@ function queryValue(label: string, name: string) {
   return value;
 }
 
-function recorded(labels: readonly { label: string; state: RecordedState }[]) {
+function client(labels: readonly { label: string; state: RecordedState }[]) {
   const replay = recordedFetch(record, persona, labels, { pathPrefix: BFF_PREFIX });
   disposals.push(replay.dispose);
-  return replay.fetcher;
+  return recordedZoneHomeClient(replay.fetcher);
 }
 
 function nodes(value: unknown): Record<string, unknown>[] {
@@ -56,36 +61,46 @@ function extensionBlocks(value: unknown) {
 }
 
 test('recorded published home keeps its slide, document, rights and continuation', async () => {
-  const fetcher = recorded([
-    { label: 'published-presentation', state: 'populated' },
+  const main = client([
+    { label: 'frame-published-space-address', state: 'populated' },
+    { label: 'frame-published-presentation', state: 'populated' },
+    { label: 'frame-published-realm-header', state: 'populated' },
     { label: 'published-home-route', state: 'populated' },
     { label: 'published-content-revision', state: 'populated' },
   ]);
-  const zone = pathId('published-presentation');
-  const presentation = await readCompleteZonePresentation(fetcher, zone);
-  expect(presentation.ok).toBe(true);
-  if (!presentation.ok) throw new Error('The recorded presentation did not load');
-  const data = presentation.data;
+  const header = sample('frame-published-realm-header').answer as RealmHeader;
+  const published = sample('frame-published-presentation').answer as ZonePresentationRead;
+  const loaded = await loadZoneHomeFrame(main, queryValue('frame-published-space-address', 'key'), 'en');
+  expect(loaded.kind).toBe('attached');
+  if (loaded.kind !== 'attached') throw new Error('The recorded published home did not attach its Realm');
+  const data = loaded.presentation;
   expect(data.navigationNext).toBeNull();
   expect(data.navigationComplete).toBe(true);
-  const page = zoneHomePage(data.home);
-  if (!page || data.home == null || data.name === null) throw new Error('The recorded home document was dropped');
-  expect(page).toBe(data.home);
-  const identity = zoneHomeIdentity(data, 'en', realmMessages.home);
-  expect(identity.zone.name.value).toBe(data.name);
-  expect(identity.links.map(link => link.label.value)).toEqual([
+  expect(data.name).toBe(published.name);
+  expect(data.realm).toBe(header.id);
+  const mapped = mapZoneSiteHome(data);
+  if (mapped.kind !== 'published' || data.home == null || data.name === null) throw new Error('The recorded home document was dropped');
+  expect(mapped.page).toBe(data.home);
+  const page = mapped.page;
+  const model = zoneHomeFrameModel(loaded, 'en', realmMessages.home);
+  if (model.kind !== 'attached') throw new Error('The recorded published home did not attach its Realm');
+  expect(model.zone.name.value).toBe(header.name.value);
+  expect(model.zone.realm).toBe(header.id);
+  expect(model.links.map(link => link.label.value)).toEqual([
     realmMessages.home, ...data.navigation.map(mount => mount.name.value),
   ]);
-  const mount = identity.links[1];
+  const mount = model.links[1];
   expect(mount?.href).toContain(data.navigation[0]?.segment);
   expect(mount?.href ?? '').not.toContain('cursor');
+  if (data.address.prefix !== '/z/') throw new Error(`Recorded site address prefix is ${data.address.prefix}`);
+  expect(model.links[0]?.href).toBe(siteHref('en', addressKey({ ...data.address, prefix: '/z/' }), []));
 
-  const loaded = await loadZoneHomeModules(page, data.presentation, {
+  const modules = await loadZoneHomeModules(page, data.presentation, {
     moduleData: data.moduleData, slideMedia: data.slideMedia,
-  }, identity.context, messages.moduleHeroCarousel);
-  expect(loaded.modules.map(module => module.module.id)).toEqual(['$default']);
-  expect(loaded.representedShowcases).toContain('$default');
-  const hero = loaded.modules[0];
+  }, model.context, messages.moduleHeroCarousel);
+  expect(modules.modules.map(module => module.module.id)).toEqual(['$default']);
+  expect(modules.representedShowcases).toContain('$default');
+  const hero = modules.modules[0];
   if (!hero || hero.state.state !== 'ready' || !('slides' in hero.state.data)) throw new Error('The recorded hero did not load');
   const slides = (data.home.showcaseData?.slides ?? []).map(slide => {
     if (typeof slide.title !== 'string' || !('href' in slide)) throw new Error('Recorded showcase slide has no title and href');
@@ -94,7 +109,7 @@ test('recorded published home keeps its slide, document, rights and continuation
   expect(hero.state.data.slides.map(slide => slide.title.value)).toEqual(slides.map(slide => slide.title));
   expect(hero.state.data.slides.map(slide => slide.href)).toEqual(slides.map(slide => slide.href));
 
-  const prose = zoneHomeProse(page.document, page.blocks, loaded.representedShowcases);
+  const prose = zoneHomeProse(page.document, page.blocks, modules.representedShowcases);
   const sourceBlocks = extensionBlocks(page.document);
   const resolved = sourceBlocks.filter(block => page.blocks.some(item => item.id === block.id && item.status === 'resolved'));
   const proseBlocks = extensionBlocks(prose);
@@ -107,12 +122,13 @@ test('recorded published home keeps its slide, document, rights and continuation
     resolved.some(item => item.id === block.id) ? [] : [block.payload]));
   expect(JSON.stringify(page.document)).not.toContain(privateDraftText());
 
-  const route = await readZoneRouteAnswer(fetcher, zone, queryValue('published-home-route', 'path'));
+  const route = await realmFrameReads({ main, personal: main, keepProblem: false }).readZoneRoute(
+    loaded.site.zone, queryValue('published-home-route', 'path'));
   expect(route.ok).toBe(true);
   if (!route.ok || route.data.kind !== 'home' || !route.data.page) throw new Error('The recorded home route was not a home');
   expect(route.data.page.document).toEqual(page.document);
 
-  const revision = await readContentRevisionAnswer(fetcher, pathId('published-content-revision'));
+  const revision = await settleRealmRead(() => main.v1['content-revisions']({ revision: pathId('published-content-revision') }).get());
   expect(revision.ok).toBe(true);
   if (!revision.ok) throw new Error('The recorded content revision did not load');
   expect(revision.data.body.document).toEqual(page.document);
@@ -124,41 +140,52 @@ test('recorded published home keeps its slide, document, rights and continuation
 test('a recorded route refusal stays missing rather than an empty home', async () => {
   const routeSample = sample('unpublished-route-refused');
   const draftSample = sample('draft-content-revision');
-  const fetcher = recorded([
+  const main = client([
+    { label: 'frame-published-space-address', state: 'populated' },
+    { label: 'frame-published-presentation', state: 'populated' },
+    { label: 'frame-published-realm-header', state: 'populated' },
     { label: 'unpublished-route-refused', state: 'error' },
     { label: 'draft-content-revision', state: 'error' },
   ]);
-  const route = await readZoneRouteAnswer(fetcher, pathId('unpublished-route-refused'), queryValue('unpublished-route-refused', 'path'));
+  const loaded = await loadZoneHomeFrame(main, queryValue('frame-published-space-address', 'key'), 'en',
+    queryValue('unpublished-route-refused', 'path'));
   expect(routeSample.status).toBe(404);
   expect(routeSample.answer).toMatchObject({ code: 'route_missing' });
-  expect(route).toEqual({ ok: false, failure: 'missing' });
-  const draft = await readContentRevisionAnswer(fetcher, pathId('draft-content-revision'));
+  expect(loaded.kind).toBe('missing');
+  if (loaded.kind !== 'missing') throw new Error('The recorded route refusal became a page');
+  expect(loaded.route).toEqual({ ok: false, failure: 'missing', status: 404, problem: routeSample.answer });
+  const draft = await settleRealmRead(() => main.v1['content-revisions']({ revision: pathId('draft-content-revision') }).get());
   expect(draftSample.status).toBe(404);
   expect(draftSample.answer).toMatchObject({ code: 'revision_unavailable' });
   expect(draft).toEqual({ ok: false, failure: 'missing' });
 });
 
 test('an empty published home and an empty mount keep their recorded continuation', async () => {
-  const fetcher = recorded([
-    { label: 'empty-home-presentation', state: 'empty' },
+  const main = client([
+    { label: 'frame-empty-space-address', state: 'populated' },
+    { label: 'frame-empty-presentation', state: 'empty' },
     { label: 'published-index-empty', state: 'empty' },
   ]);
-  const presentation = await readCompleteZonePresentation(fetcher, pathId('empty-home-presentation'));
-  expect(presentation.ok).toBe(true);
-  if (!presentation.ok) throw new Error('The recorded empty presentation did not load');
-  expect(zoneHomePage(presentation.data.home)).toBeNull();
-  const identity = zoneHomeIdentity(presentation.data, 'en', realmMessages.home);
-  const loaded = await loadZoneHomeModules(null, presentation.data.presentation, {
-    moduleData: presentation.data.moduleData, slideMedia: presentation.data.slideMedia,
-  }, identity.context, messages.moduleHeroCarousel);
-  expect(loaded.modules).toEqual([]);
-  if (presentation.data.name === null) throw new Error('The recorded empty presentation has no name');
-  expect(identity.zone.name.value).toBe(presentation.data.name);
-  expect(identity.links.map(link => link.label.value)).toEqual([realmMessages.home]);
-  expect(presentation.data.navigationNext).toBeNull();
-  expect(presentation.data.navigationComplete).toBe(true);
+  const loaded = await loadZoneHomeFrame(main, queryValue('frame-empty-space-address', 'key'), 'en');
+  expect(loaded.kind).toBe('standalone');
+  if (loaded.kind !== 'standalone') throw new Error('The recorded empty home attached a Realm');
+  expect(loaded.presentation.realm).toBeNull();
+  expect(mapZoneSiteHome(loaded.presentation).kind).toBe('empty');
+  const model = zoneHomeFrameModel(loaded, 'en', realmMessages.home);
+  if (model.kind !== 'standalone') throw new Error('The recorded empty home attached a Realm');
+  const modules = await loadZoneHomeModules(null, loaded.presentation.presentation, {
+    moduleData: loaded.presentation.moduleData, slideMedia: loaded.presentation.slideMedia,
+  }, model.context, messages.moduleHeroCarousel);
+  expect(modules.modules).toEqual([]);
+  if (loaded.presentation.name === null) throw new Error('The recorded empty presentation has no name');
+  expect(model.zone.name.value).toBe(loaded.presentation.name);
+  expect(model.zone.realm).toBeNull();
+  expect(model.links.map(link => link.label.value)).toEqual([realmMessages.home]);
+  expect(loaded.presentation.navigationNext).toBeNull();
+  expect(loaded.presentation.navigationComplete).toBe(true);
 
-  const index = await readZoneRouteAnswer(fetcher, pathId('published-index-empty'), queryValue('published-index-empty', 'path'));
+  const index = await realmFrameReads({ main, personal: main }).readZoneRoute(
+    pathId('published-index-empty'), queryValue('published-index-empty', 'path'));
   expect(index.ok).toBe(true);
   if (!index.ok || index.data.kind !== 'index') throw new Error('The recorded index was not an index');
   expect(index.data.items).toEqual([]);
@@ -167,7 +194,7 @@ test('an empty published home and an empty mount keep their recorded continuatio
 
 function privateDraftText() {
   const draft = record.personas.owner?.find(item => item.label === 'draft-content-revision');
-  const published = texts((sample('published-presentation').answer as { home?: { document?: unknown } }).home?.document);
+  const published = texts((sample('frame-published-presentation').answer as { home?: { document?: unknown } }).home?.document);
   const extra = texts((draft?.answer as { body?: { document?: unknown } } | undefined)?.body?.document)
     .filter(text => !published.includes(text));
   if (!extra.length) throw new Error('The recorded owner draft has no text beyond the published home');

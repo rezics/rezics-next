@@ -2,102 +2,217 @@ import { ResolvedMediaImages } from '@rezics/ui/media-image';
 import type { ZoneContext, ZonePackage } from '@rezics/zone-sdk';
 import type { ReactNode } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
+import { surfaceText } from '../address/messages.ts';
+import { addressKey, spaceHref } from '../address/path.ts';
 import { browserMainApi } from '../api/browser.ts';
 import { readShowcaseWorks } from '../api/showcase.ts';
 import { zoneContentText } from '../language/untagged.ts';
-import { zoneText, type AdaptContext } from '../realm/adapt.ts';
-import { settleRealmRead } from '../realm/browse-page-read.ts';
-import { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext,
-  summaryWork } from '../realm/modules.ts';
-import { completePublicNavigation } from '../realm/public-navigation.ts';
-import { idOf, realmHref, siteHref } from '../realm/route.ts';
-import type { Loaded, ZonePresentationRead, ZoneRouteRead } from '../realm/types.ts';
-import { savedSiteCuts } from './site-cuts.ts';
+import { zoneImage, zoneText, type AdaptContext } from '../realm/adapt.ts';
+import { realmHref, siteHref } from '../realm/route.ts';
+import type { MainClient } from '../discover/types.ts';
+import type { ZonePresentationRead, ZoneRouteRead } from '../realm/types.ts';
+import { publishedFrameModel, realmFrameReads, type RealmFrameRead, type RealmResolution, type SiteResolution } from '../realm/zone-presentation-read.ts';
+import { parseTheme } from '../shell/preferences.ts';
+import type { ZoneHomePage } from '../zone-editor/home-document.tsx';
+import { loadDocumentHomeModules, localizedHomePresentation, type HomeSourceSelection } from '../zone-editor/home-modules.ts';
+import { zoneLookEnabled } from './execution.ts';
+import { enrichShowcaseModules, loadModules, moduleMoreHref, readHeroImages, showcaseContext, summaryWork } from '../realm/modules.ts';
 import type { SiteLink } from './site-navigation.tsx';
+import { savedSiteCuts } from './site-cuts.ts';
 import { ZoneDocumentHome } from './site-pages.tsx';
 import type { ZoneMessages } from './messages.ts';
+import { zoneTheme, type ZoneTheme } from './theme.ts';
 import { ZoneHome } from './zone-home.tsx';
-import { zoneHomeDocument, type ZoneHomePage } from '../zone-editor/home-document.tsx';
-import { loadDocumentHomeModules, localizedHomePresentation, type HomeSourceSelection } from '../zone-editor/home-modules.ts';
+import { mapZoneSiteHome, type ZoneSiteCredit } from './zone-site-recorded-page.ts';
 
-/** Public recorded reader. No eligible Agent, so the client stays anonymous and sends no acting Subject. */
 const recordedOrigin = 'https://recorded.invalid';
+type Site = Extract<SiteResolution, { kind: 'site' }>;
+type Realm = Extract<RealmResolution, { kind: 'realm' }>;
 
-/** Visitor reads omit an empty query: the recorded path has none, and an empty query object does not match it. */
-export function readZonePresentationAnswer(fetcher: typeof fetch, zone: string, actingSubject?: string, after?: string): Promise<Loaded<ZonePresentationRead>> {
-  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
-  return settleRealmRead(() => {
-    if (!actingSubject && !after) return main.v1.zones({ id: zone }).presentation.get();
-    return main.v1.zones({ id: zone }).presentation.get({
-      query: { ...(actingSubject ? { actingSubject } : {}), ...(after ? { after } : {}) },
-    });
-  }, after);
+/** Anonymous host client. A replaying fetcher strips the browser prefix this client adds. */
+export function recordedZoneHomeClient(fetcher: typeof fetch) {
+  return browserMainApi(recordedOrigin, { anonymous: true, fetcher });
 }
 
-/** The same continuation walk the public frame uses, over the typed presentation read. */
-export function readCompleteZonePresentation(fetcher: typeof fetch, zone: string, actingSubject?: string): Promise<Loaded<ZonePresentationRead>> {
-  return completePublicNavigation(after => readZonePresentationAnswer(fetcher, zone, actingSubject, after));
-}
+export type ZoneHomeFrameLoad =
+  | { kind: 'attached'; site: Site; realm: Realm; presentation: ZonePresentationRead }
+  | { kind: 'standalone'; site: Site; presentation: ZonePresentationRead }
+  | { kind: 'missing'; site: Site; realm: Realm; presentation: ZonePresentationRead; route: RealmFrameRead<ZoneRouteRead> }
+  | { kind: 'missing-standalone'; site: Site; route: RealmFrameRead<ZoneRouteRead> };
 
-/** A path under the Zone, with the same failure mapping as the public route read. */
-export function readZoneRouteAnswer(fetcher: typeof fetch, zone: string, path: string, actingSubject?: string, cursor?: string): Promise<Loaded<ZoneRouteRead>> {
-  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
-  return settleRealmRead(() => main.v1.zones({ id: zone }).routes.get({
-    query: { path, ...(actingSubject ? { actingSubject } : {}), ...(cursor ? { cursor } : {}) },
-  }), cursor);
-}
-
-/** The published document's content revision. A visitor read has no acting subject. */
-export function readContentRevisionAnswer(fetcher: typeof fetch, revision: string, actingSubject?: string) {
-  const main = browserMainApi(recordedOrigin, { anonymous: true, fetcher });
-  return settleRealmRead(() => actingSubject
-    ? main.v1['content-revisions']({ revision }).get({ query: { actingSubject } })
-    : main.v1['content-revisions']({ revision }).get());
-}
-
-/** The home document the publication carried, or none when that read has no document. */
-export function zoneHomePage(home: ZonePresentationRead['home'] | null | undefined): ZoneHomePage | null {
-  if (!home || !zoneHomeDocument(home)) return null;
-  return home;
+function failed(kind: string, failure?: string): never {
+  throw new Error(`Recorded zone home read failed: ${failure ?? kind}`);
 }
 
 /**
- * Navigation, address and the published Zone name. A Realm-backed masthead
- * still takes its community name from the Realm header, which this read does not include.
+ * The visitor home, in the order `ZoneSiteRoute` reads it. A named Realm is the
+ * attached frame; a null Realm is the standalone home. A missing path re-reads
+ * the frame the not-found page shows.
  */
-export function zoneHomeIdentity(presentation: ZonePresentationRead, locale: UiLocale, homeName: string): {
-  zone: ZoneContext; links: SiteLink[]; context: AdaptContext;
-} {
-  const ref = presentation.address.key;
-  const zoneId = idOf(presentation.zone) ?? presentation.zone;
-  const mounts = new Map(presentation.navigation.map(mount => [mount.target, mount.segment]));
-  const realm = presentation.realm;
+export async function loadZoneHomeFrame(main: MainClient, space: string, locale: UiLocale, routePath?: string): Promise<ZoneHomeFrameLoad> {
+  const reads = realmFrameReads({ main, personal: main, keepProblem: false });
+  const resolved = await reads.resolveSite(space, locale);
+  if (resolved.kind !== 'site') failed(resolved.kind, resolved.kind === 'unavailable' ? resolved.failure : undefined);
+  if (routePath) {
+    const route = await reads.readZoneRoute(resolved.zone, routePath);
+    if (route.ok || route.failure !== 'missing') {
+      throw new Error(route.ok ? 'Recorded zone route resolved as a page' : `Recorded zone route failed: ${route.failure}`);
+    }
+    if (!resolved.realm) return { kind: 'missing-standalone', site: resolved, route };
+    const again = await reads.resolveSite(space, locale);
+    if (again.kind !== 'site' || !again.realm) throw new Error('Recorded missing page lost its Realm');
+    const realm = await reads.resolveRealm(space, locale, 'site');
+    if (realm.kind !== 'realm') failed(realm.kind, realm.kind === 'unavailable' ? realm.failure : undefined);
+    const publication = await reads.readCompletePresentation(realm.zone?.id ?? again.zone);
+    if (!publication.ok) failed(publication.failure, publication.reference);
+    return { kind: 'missing', site: again, realm, presentation: publication.data, route };
+  }
+  if (!resolved.realm) {
+    const publication = await reads.readCompletePresentation(resolved.zone);
+    if (!publication.ok) failed(publication.failure, publication.reference);
+    return { kind: 'standalone', site: resolved, presentation: publication.data };
+  }
+  const realm = await reads.resolveRealm(space, locale, 'site');
+  if (realm.kind !== 'realm') failed(realm.kind, realm.kind === 'unavailable' ? realm.failure : undefined);
+  const publication = await reads.readCompletePresentation(realm.zone?.id ?? resolved.zone);
+  if (!publication.ok) failed(publication.failure, publication.reference);
+  return { kind: 'attached', site: resolved, realm, presentation: publication.data };
+}
+
+interface ZoneHomeFrame {
+  kind: 'attached' | 'standalone' | 'missing';
+  zone: ZoneContext;
+  dataZone: string;
+  theme: ZoneTheme;
+  links: SiteLink[];
+  siteLabel: string;
+  context: AdaptContext;
+  presentation: ZonePresentationRead;
+  page: ZoneHomePage | null;
+  credit: ZoneSiteCredit | null;
+  realmId: string | null;
+  realmRef: string | null;
+  backHref: string | null;
+}
+
+export type ZoneHomeShown = ZoneHomeFrame | { kind: 'missing-standalone'; backHref: string };
+
+function visitorTheme(tokens: ZoneContext['tokens']): ZoneTheme {
+  return zoneTheme(tokens, { reader: parseTheme(undefined), enabled: zoneLookEnabled(undefined) });
+}
+
+function homeOf(presentation: ZonePresentationRead, attached: boolean): { page: ZoneHomePage | null; credit: ZoneSiteCredit | null } {
+  const mapped = mapZoneSiteHome(presentation);
+  if (attached && mapped.kind !== 'published') throw new Error('Recorded attached Zone home has no published document');
+  return mapped.kind === 'published' ? { page: mapped.page, credit: mapped.credit } : { page: null, credit: null };
+}
+
+function attachedFrame(realm: Realm, presentation: ZonePresentationRead, locale: UiLocale, homeName: string, requireDocument: boolean): ZoneHomeFrame {
+  const siteRef = realm.siteRef ?? (realm.zone ? realm.ref : null);
+  const ref = siteRef ?? realm.ref;
+  const { page, credit } = homeOf(presentation, requireDocument);
+  const zone: ZoneContext = {
+    slug: presentation.official,
+    realm: realm.header.id,
+    name: zoneText(realm.header.name),
+    description: zoneText(realm.header.description),
+    icon: zoneImage(realm.header.icon, ''),
+    hero: zoneImage(realm.header.banner, ''),
+    tokens: presentation.presentation.tokens,
+    locale,
+    links: {
+      home: siteRef ? siteHref(locale, siteRef, []) : '',
+      browse: siteRef ? siteHref(locale, siteRef, ['browse']) : '',
+      works: siteRef ? siteHref(locale, siteRef, ['browse']) : '',
+      discussions: realmHref(locale, realm.ref, 'discussions'),
+      decisions: realmHref(locale, realm.ref, 'decisions'),
+      about: realmHref(locale, realm.ref, 'about'),
+    },
+  };
   const cuts = savedSiteCuts(
-    { tokens: presentation.presentation.tokens, navigation: presentation.presentation.navigation },
+    { tokens: zone.tokens, navigation: presentation.presentation.navigation },
     presentation.navigation.map(mount => ({ segment: mount.segment, name: zoneText(mount.name) })),
     ref, locale, homeName);
   return {
-    zone: {
-      slug: presentation.official,
-      realm,
-      name: zoneContentText(presentation.name ?? presentation.address.suffixSource, presentation.language),
-      description: null,
-      icon: null,
-      hero: null,
-      tokens: cuts.tokens,
-      locale,
-      links: {
-        home: siteHref(locale, ref, []),
-        browse: siteHref(locale, ref, ['browse']),
-        works: siteHref(locale, ref, ['browse']),
-        discussions: realm ? realmHref(locale, ref, 'discussions') : '',
-        decisions: realm ? realmHref(locale, ref, 'decisions') : '',
-        about: realm ? realmHref(locale, ref, 'about') : '',
-      },
-    },
+    kind: 'attached',
+    zone,
+    dataZone: zone.slug ?? realm.realm,
+    theme: visitorTheme(cuts.tokens),
     links: cuts.navigation,
-    context: { locale, ref, realm: realm ?? presentation.zone, zone: zoneId, mounts },
+    siteLabel: surfaceText.site[locale],
+    context: {
+      locale,
+      ref,
+      realm: realm.realm,
+      avatarQuery: '',
+      ...(realm.zone
+        ? { zone: realm.zone.id, mounts: new Map(presentation.navigation.map(mount => [mount.target, mount.segment])) }
+        : { unrouted: true }),
+    },
+    presentation,
+    page,
+    credit,
+    realmId: realm.header.id,
+    realmRef: realm.ref,
+    backHref: null,
   };
+}
+
+function standaloneFrame(site: Site, presentation: ZonePresentationRead, locale: UiLocale, homeName: string): ZoneHomeFrame {
+  const ref = addressKey(site.address.canonical);
+  const { page, credit } = homeOf(presentation, false);
+  const zone: ZoneContext = {
+    slug: presentation.official,
+    realm: null,
+    name: zoneContentText(presentation.name ?? site.address.canonical.suffixSource, presentation.language),
+    description: null,
+    icon: null,
+    hero: null,
+    tokens: presentation.presentation.tokens,
+    locale,
+    links: {
+      home: siteHref(locale, ref, []),
+      browse: siteHref(locale, ref, ['browse']),
+      works: siteHref(locale, ref, ['browse']),
+      discussions: '',
+      decisions: '',
+      about: '',
+    },
+  };
+  const model = publishedFrameModel(presentation, site.zone, locale, homeName, '', {
+    reader: parseTheme(undefined), ref, zone,
+  });
+  return {
+    kind: 'standalone',
+    zone: model.zone,
+    dataZone: site.zone,
+    theme: model.theme,
+    links: model.cuts.navigation,
+    siteLabel: model.zone.name.value,
+    context: {
+      locale,
+      ref,
+      realm: site.zone,
+      zone: site.zone,
+      mounts: new Map(presentation.navigation.map(mount => [mount.target, mount.segment])),
+    },
+    presentation,
+    page,
+    credit,
+    realmId: null,
+    realmRef: null,
+    backHref: null,
+  };
+}
+
+/** The frame `RealmFrame` or `StandaloneZoneSiteFrame` builds for a visitor with no theme cookie. */
+export function zoneHomeFrameModel(loaded: ZoneHomeFrameLoad, locale: UiLocale, homeName: string): ZoneHomeShown {
+  if (loaded.kind === 'missing-standalone') return { kind: 'missing-standalone', backHref: spaceHref(loaded.site.address.canonical, 'site') };
+  const frame = loaded.kind === 'standalone'
+    ? standaloneFrame(loaded.site, loaded.presentation, locale, homeName)
+    : attachedFrame(loaded.realm, loaded.presentation, locale, homeName, loaded.kind === 'attached');
+  if (loaded.kind === 'attached') return frame;
+  return { ...frame, kind: loaded.kind, backHref: loaded.kind === 'missing' ? spaceHref(loaded.site.address.canonical, 'site') : null };
 }
 
 /** Public and saved homes assemble modules through the same production readers. */
