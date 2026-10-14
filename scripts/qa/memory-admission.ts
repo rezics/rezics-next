@@ -263,6 +263,15 @@ function hostCpuPressure(env: NodeJS.ProcessEnv): number | undefined {
   return value;
 }
 
+/** A caller that supplies its own memory reading simulates a host, and the real
+ * kernel's processor signals are no part of that host: pressure is then read
+ * only from a file the caller's environment names, and load only as injected.
+ * Otherwise a simulated admission waits whenever the machine running it is busy. */
+export function admissionCpuPressure(options: Pick<MemoryWaitOptions, 'read' | 'env'>): number | undefined {
+  const env = options.env ?? process.env;
+  return options.read !== undefined && env.REZICS_QA_CPU_PRESSURE_FILE === undefined ? undefined : hostCpuPressure(env);
+}
+
 function hostLoad(env: NodeJS.ProcessEnv): number {
   const value = Number(readFileSync(env.REZICS_QA_LOADAVG_FILE ?? '/proc/loadavg', 'utf8').trim().split(/\s+/)[0]);
   if (!Number.isFinite(value) || value < 0) throw new Error('Cannot read host one-minute load');
@@ -386,7 +395,9 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
   const loadEnabled = need.vm > 0;
   const processors = options.processors ?? cpus().length;
   if (!Number.isSafeInteger(processors) || processors < 1) { mutex.close(); throw new Error('Invalid QA processor count'); }
-  const readLoad = options.readLoad ?? (() => hostLoad(options.env ?? process.env));
+  // The same rule as for pressure: a simulated host has the load its caller injects or names in a file, never this machine's.
+  const simulatedLoad = options.read !== undefined && (options.env ?? process.env).REZICS_QA_LOADAVG_FILE === undefined;
+  const readLoad = options.readLoad ?? (simulatedLoad ? () => 0 : () => hostLoad(options.env ?? process.env));
   const slotReady = waitForStartupSlot(options);
   const read = options.read ?? (need.vm + need.vmReserve > 0
     ? remaining => readMemory(remaining, options.env ?? process.env) : async () => readHostMemory());
@@ -466,7 +477,7 @@ export async function withMemoryStartup<T>(need: MemoryNeed, options: StartupMem
         // Keep starts in the existing promises for 30 seconds, even after readiness:
         // their processor cost has not yet appeared in the signal. This prevents a
         // low reading from admitting a burst through the existing arrival queue.
-        const pressure = loadEnabled ? hostCpuPressure(options.env ?? process.env) : undefined;
+        const pressure = loadEnabled ? admissionCpuPressure(options) : undefined;
         const limit = loadEnabled ? await loadLimit(options, pressure !== undefined) : 1;
         mutex.exec('BEGIN IMMEDIATE');
         held = true;

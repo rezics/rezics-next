@@ -10,7 +10,7 @@ import type { FixtureRestoreEvidence } from '../../../scripts/fixture/restore.ts
 import type { FixtureManifest } from '../../../scripts/fixture/manifest.ts';
 import { assertPhaseDRestore, PHASE_D_FIXTURE } from '../load/fixture-phase-d.ts';
 import { processStartTime } from '../../../scripts/qa/process/identity.ts';
-import { GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
+import { admissionCpuPressure, GiB, measuredAdmissionMessage, memoryBytes, parseMemoryReading, qaMemoryNeed, waitForMemory as waitForMemoryImpl,
   isLocalQaRun, qaMemoryDeadline, withMemoryStartup as withMemoryStartupImpl, withQaStackStartup,
   type MemoryReading, type MemoryWaitOptions, type StartupMemoryOptions } from '../../../scripts/qa/memory-admission.ts';
 
@@ -1038,4 +1038,17 @@ test('load deadline admission rechecks memory instead of starting from a stale a
   }, () => { started = true; })).rejects.toThrow('Memory admission deadline reached');
   expect(started).toBe(false);
   expect(readdirSync(scenario.waiters)).toEqual([]);
+});
+
+test('a simulated host takes processor pressure only from a file its environment names', () => {
+  const directory = mkdtempSync(join(scratch, 'pressure-source-'));
+  try {
+    const file = join(directory, 'cpu');
+    writeFileSync(file, 'some avg10=37.50 avg60=20.00 avg300=10.00 total=1\nfull avg10=0.00 avg60=0.00 avg300=0.00 total=0\n');
+    const read = async () => ({ vmTotal: 24 * GiB, vmUsed: 0, hostAvailable: 20 * GiB });
+    // No file named: the kernel of the machine running this test is not this host.
+    expect(admissionCpuPressure({ read, env: { REZICS_STACK_PROFILE: 'qa' } })).toBeUndefined();
+    expect(admissionCpuPressure({ read, env: { REZICS_QA_CPU_PRESSURE_FILE: file } })).toBe(37.5);
+    expect(admissionCpuPressure({ env: { REZICS_QA_CPU_PRESSURE_FILE: file } })).toBe(37.5);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
 });
