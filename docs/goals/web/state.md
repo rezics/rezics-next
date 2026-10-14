@@ -1,19 +1,17 @@
 # State
 
-Checkpoint 0d3305f1-edd2-4b14-b3a3-80e82cd61d37 consolidates handled events
-task:G-2487:1, task:G-2490:1 and
-mail:c667743c-1684-490c-b3e6-a7929add70fe.
-Carry forward unaffected decisions from checkpoint ffc5c8ba. These events
-accept Library and Recipe Studio build delivery on wave/1; all eleven rows
-and both tasks remain open for wave proof and landing. Saved handoffs report
-RESULT: done despite missing parsed results, so no build retry follows.
-Library's handoff inventory belongs to the single record run; constructed
-contract states supply no API evidence. Program confirms G-2490's
-prove-states.ts on the record list and both outcomes, publication-head
-integration, affected units and listed stories on prove. Preserve whole
-persona-bound identities, editor-only publication heads, original Person
-credits and the Account frame seam. Pending requires reached HTTP 202.
-Neither handoff proves a row or authorizes an individual landing or closure.
+Checkpoint 25386beb-41e8-4c15-96c2-b393c646cad0 consolidates handled event
+mail:ff1fc3c0-ef92-461d-9981-6a0f507c0593.
+Carry forward unaffected decisions from checkpoint 0d3305f1. Program confirms
+G-2236's authoring-frame and destination-editor requests and seven prove
+files on the record and prove lists. Decision `9ea62b6c7` settles the
+stale-import criterion: an authorized editor saves an import, the source
+changes, and the same editor submits again. A reached HTTP 409 must be
+recorded and shown in the production-boundary story. If no production path
+reaches it, retain the unit test's 409 coverage without a page-state story.
+Program decides reachability from the record run. Both rows and G-2236
+remain open for wave proof and landing; this ruling accepts no run result
+and authorizes no worker restart, individual landing or closure.
 
 All open work uses wave build/prove. Stopped pre-wave record, coverage and
 verification tasks stay stopped. The fourteen replacement briefs were
@@ -49,9 +47,9 @@ It supplies no current tokens-per-proved-row reading.
 | Web tool measures | 70% first share, daily 56% (27 of 48); 66 first, 36 step, 28 fix, 3 capacity; 11 fixes inferred from unavailable handoffs; landed-task median 2, maximum 7 (G-2232) |
 | Web tokens | 1542M input, 10M output, 2 unavailable sessions; tokens per proved row unavailable |
 | Web recorded refusals | 0 outcome, 8 gate, 0 failing-test finding, 16 other in retained reports; Program owns the classified tool/main/host faults below |
-| Program measures | 61% first attempts, today 55% (63 of 115); landed-task median 1, maximum 9 (G-1427); 1561.9M input, 6.8M output, 75 unavailable sessions; tokens per proved row unavailable |
-| Program refusals | 0 outcome, 9 gate, 0 failing-test finding, 4 other in retained reports |
-| Accounts | Concurrent status: codex 54%, codex-1 70% of weekly windows |
+| Program measures | 61% first attempts, today 55% (64 of 117); landed-task median 1, maximum 9 (G-1427); 1589.7M input, 6.9M output, 75 unavailable sessions; tokens per proved row unavailable |
+| Program refusals | 0 outcome, 9 gate, 0 failing-test finding, 5 other in retained reports |
+| Accounts | Concurrent status: codex 55%, codex-1 70% of weekly windows |
 | Audit 5 web interval | 21:50–00:48 UTC: 22 starts for 7 landings (3.14 per landing); 13 of 16 ended handoffs not done, 12 without handoff text; exit-to-command median 56 minutes, maximum over 155, first mention after 3 minutes |
 
 The concurrent API reading is 50 of 67; this handled event closes no task
@@ -179,7 +177,7 @@ replacement builds supersede their earlier instructions.
 | G-2369 | Task:G-2369:1 decision `3a2d1fe2d` classifies the reader-only cut as implementation and retains all 25 regression/consumer tests. Resumed attempt 2 for standard `task goal -- check`; supplemental passes do not replace it. Delivered `read.ts` extraction stays under its loan; routes/page unchanged, G-2234 hunks preserved. `loadRealmView` resolve/presentation delegation remains page-owner follow-up after G-2232, with continuation/private-resolution record gaps separate. No whole-row/frame proof. The later verified/archive disposition is concurrent measurement, not acceptance or closure by this checkpoint; start no duplicate worker or landing. |
 | G-2377 | Creation inputs are on main from G-2303 at `e9d814f478ad` (122 samples, six proofs); G-2333 started automatically. Mail:41ba0806 holds G-2379 attachment recording on API's two-Zone/one-Realm 503 defect: Program ruled official Zone, else inventory's first, never 5xx. Keep queued until API repair, the complete recording and Program's landing mail; no duplicate queue/start or five-persona substitute. Reuse G-2333 publication and G-2381 routing; own missing creation/transition only with exact claims. Preserve authority/bodies/keys/receipts/problems/canonical addresses, phone/desktop and full gate. |
 | G-2381 | Mail:7c2d45c2 confirms the shared home/frame correction on main at `430f062575`; `frame-reads.test.ts` is green. This replaces the prior unlanded-mechanism status, with no surface-row proof (`rows: []`). Preserve the installed Realm-from-published-presentation resolution, null standalone selection, address capabilities, shared reader/route wiring, current fixture-derived identities and other holders' hunks. Start no duplicate worker or landing. Catalogue/page consumers retain their independently decided production records, claims and continuation prerequisites; G-2410 Manga browse recording started on this correction. |
-| G-2236 | Task:G-2236:3 accepts build `4a0566f988` on wave/1 after removal of borrowed registry/visitor-frame substitutions. Decision `6fab25cc5` retains both rows and production editor assertions: prove `loadRecipeAuthoring` through whole persona visits with visible title, head/structure, mapped continuation, steps, ingredient amounts/lines and notes; exchange retains mapped notes/continuation. Direct reader, summary, contributions and fixture-next assertions are supplemental. Program mail:0cdd820c has all six authoring frame visits and reached stranger/member/owner file/observation destination editors, plus stale-import reachability from the authorized destination editor. Refresh identities together, preserve exact requests/authority/revision/keys/credit/rights; Account viewer uses the existing frame seam outside Main records. Prove both unchanged outcomes, recorded-page/authored-language/import/export units, recorded stories, phone/desktop, eight locales, answer-records guard and complete wave gate. Missing records authorize no fabricated or borrowed state; unreachable stale-import stays API-only. No restart, individual landing or closure. |
+| G-2236 | Task:G-2236:3 accepts build `4a0566f988` on wave/1 after removal of borrowed registry/visitor-frame substitutions. Decision `6fab25cc5` retains both rows and production editor assertions: prove `loadRecipeAuthoring` through whole persona visits with visible title, head/structure, mapped continuation, steps, ingredient amounts/lines and notes; exchange retains mapped notes/continuation. Direct reader, summary, contributions and fixture-next assertions are supplemental. Mail:ff1fc3c0 confirms mail:0cdd820c's authoring-frame/destination-editor requests and seven prove files on Program's lists; decision `9ea62b6c7` settles stale-import acceptance. An authorized editor saves an import, the source changes, and the same editor submits again: if that production path reaches HTTP 409, retain the answer in the record and show it in the story. If no production path reaches it, the unit test preserving 409 is sufficient and no page-state story is required. Program decides reachability from the record run; no run result is accepted here. Refresh identities together, preserve exact requests/authority/revision/keys/credit/rights; Account viewer uses the existing frame seam outside Main records. Prove both unchanged outcomes, recorded-page/authored-language/import/export units, recorded stories, phone/desktop, eight locales, answer-records guard and complete wave gate. Missing records authorize no fabricated or borrowed state; unreachable stale-import stays API-only. No restart, individual landing or closure. |
 | G-2390 | Task:G-2390:1 accepted the bounded empty-member follow-up at `56226061e540` on complete `run-PkU3rn`, with story test declared by `573e636e1`. Mail:3b0c4850 reports the stale `tests: []` conflict refusal; its turn mailed Program recovery. Mail:f272e819 reports reclaim/recovery running once; mail:da5abac9 confirms merge at `d9a12a9f10ee` and a 28.5-second stories gate. The deciding turn found nothing left and closed verified at 01:04:58 UTC; brief archived and claims released. Select paperback by format and preserve the production seam/records. No worker or repeat landing; this closes the bounded slice, not an entire additional Books row. |
 | G-2435 | Task:G-2435:6 retains eight repairs through `c1e9a8cab` on wave/1. Program mail:21c70108 settles the game-progress question; decision `95c6cc62c` accepts the retained build for quiet-host prove and supersedes the speculative repair/both-causes-tests hold. Host scheduling cannot be repaired in code; change no timeout or assertion. If unchanged game-progress still times out on a quiet host, create a moving-geometry fix task with that run's trace. Keep handed off without resume or individual landing. Retain ten web units, two integration provenance files, all original traces and Program's first-page follows 409, unread-count 503 and management BFF POST 503 questions. Historical counts and stack-free types establish no green wave gate or row proof. Join/Leave refresh stays G-2498; G-2232's first cut stays unchanged. |
 | G-2416 | Program's shared Bun module-cleanup repair is on main at `e7c3d203f`, verified by the mail:31f41691 deciding turn. One helper delegates module replacements to a table reset in cleanup; the guard and fifteen converted files retain assertions. G-2234's Hub and G-2233's appeal tests convert in their next independently authorized continuations and are the shrinking exceptions. This tooling proves no web surface row and starts no worker or landing here. |
@@ -378,7 +376,8 @@ or refusal and do not decide its result mail.
 Program's exact browse records remain prerequisites: G-2334 needs G-2337,
 G-2226 G-2341 after API G-2271, G-2229 G-2342/canonical-key refresh plus
 G-2319 (G-2381 is installed), G-2224 G-2413 after API G-2323/G-2355 and row promotion,
-G-2236 G-2418/G-2419 and Program reachability ruling, G-2237 G-2344 for pagination (G-2343 releases browse/search), G-2239 G-2293/G-2294. G-2411/G-2412 are landed inputs
+G-2236 G-2418/G-2419 and Program's record-run reachability disposition under
+the settled stale-import criterion, G-2237 G-2344 for pagination (G-2343 releases browse/search), G-2239 G-2293/G-2294. G-2411/G-2412 are landed inputs
 for the separately decided G-2329/G-2240 continuations. G-2399 and G-2309 are
 landed inputs for the already-resumed G-2328/G-2235 corrections; G-2336 is
 landed input for G-2234's independent second cut after its step result.
@@ -420,8 +419,8 @@ G-2267; keep the owner's correct record unchanged.
 
 ## Acknowledgements
 
-The deciding turn acknowledged mail:c667743c-1684-490c-b3e6-a7929add70fe
-at 11:24:02 UTC; this checkpoint confirmed that durable acknowledgement.
+The deciding turn acknowledged mail:ff1fc3c0-ef92-461d-9981-6a0f507c0593
+at 11:27:26 UTC; this checkpoint confirmed that durable acknowledgement.
 Earlier acknowledgements remain in mail history; this checkpoint supplies
 no new mail delivery or duplicate ack.
 This checkpoint edits no brief, starts no worker or landing, waits for no
