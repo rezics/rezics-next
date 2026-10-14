@@ -1,4 +1,4 @@
-import { pending, proved, rowOutcomes } from '../../outcome-cells.ts';
+import { proved, rowOutcomes } from '../../outcome-cells.ts';
 
 export default rowOutcomes('zone/list-attached-zones', {
   visitor: proved(
@@ -12,7 +12,7 @@ export default rowOutcomes('zone/list-attached-zones', {
   moderator: proved(
     'moderation alone conceals inventory; delegated stewardship lists until revoked',
   ),
-  operator: pending(
-    'exact Realm mandate is assigned; attachment inventory returns dependency_unavailable',
+  operator: proved(
+    'exact live Realm mandate traverses the attachment inventory with withdrawal coordinates',
   ),
 });
