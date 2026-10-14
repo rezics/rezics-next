@@ -1,12 +1,12 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use flate2::{Compression, write::DeflateEncoder};
-use oxc_allocator::Allocator;
-use oxc_ast::AstKind;
+use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::*;
-use oxc_ast_visit::{Visit, walk};
+use oxc_ast::{AstKind, builder::AstBuilder};
+use oxc_ast_visit::{Visit, VisitMut, walk, walk_mut};
 use oxc_parser::Parser;
 use oxc_resolver::{ResolveOptions, Resolver, TsconfigDiscovery};
-use oxc_span::SourceType;
+use oxc_span::{GetSpan, SourceType};
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serde_json::value::RawValue;
@@ -106,6 +106,8 @@ struct IndexedFile {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    runtime_ast_deflate: Option<String>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -114,6 +116,14 @@ struct IndexedFile {
     parse_errors: Vec<String>,
     comments: Vec<Value>,
     syntax: SyntaxFacts,
+    named_imports: Vec<NamedImport>,
+    direct_call_names: BTreeSet<String>,
+}
+#[derive(Serialize)]
+struct NamedImport {
+    local: String,
+    imported: String,
+    source: String,
 }
 #[derive(Default, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -434,22 +444,35 @@ fn indexed(
     resolver: &Resolver,
     sql_only: bool,
 ) -> Result<IndexedFile> {
+    indexed_mode(source, root, resolver, sql_only, false, true)
+}
+fn indexed_mode(
+    source: Source,
+    root: &Path,
+    resolver: &Resolver,
+    sql_only: bool,
+    compact_only: bool,
+    keep_runtime: bool,
+) -> Result<IndexedFile> {
     if sql_only || source.file.ends_with(".sql") {
         let sql = sql_facts(&source.text);
         return Ok(IndexedFile {
             text: source.text,
             ast_deflate: None,
+            runtime_ast_deflate: None,
             imports: vec![],
             sql_candidates: vec![],
             sql_deflate: Some(compressed_sql(&sql)?),
             parse_errors: vec![],
             comments: vec![],
             syntax: SyntaxFacts::default(),
+            named_imports: vec![],
+            direct_call_names: BTreeSet::new(),
         });
     }
     let allocator = Allocator::default();
     let timing = Instant::now();
-    let parsed = Parser::new(
+    let mut parsed = Parser::new(
         &allocator,
         &source.text,
         SourceType::from_path(&source.file)?,
@@ -457,7 +480,11 @@ fn indexed(
     .parse();
     elapsed(&PARSING, timing);
     let timing = Instant::now();
-    let ast_json = parsed.program.to_estree_json(true, false);
+    let ast_json = if compact_only {
+        None
+    } else {
+        Some(parsed.program.to_estree_json(true, false))
+    };
     elapsed(&ENCODING, timing);
     let comments = parsed
         .program
@@ -473,11 +500,27 @@ fn indexed(
         imports: Vec::new(),
         candidates: Vec::new(),
         syntax: SyntaxFacts::default(),
+        named_imports: Vec::new(),
+        direct_call_names: BTreeSet::new(),
     };
     facts.visit_program(&parsed.program);
     let imports = facts.imports;
     let candidates = facts.candidates;
     let syntax = facts.syntax;
+    let named_imports = facts.named_imports;
+    let direct_call_names = facts.direct_call_names;
+    let runtime = if compact_only || keep_runtime {
+        RuntimeProjection {
+            allocator: &allocator,
+            pending: Vec::new(),
+        }
+        .visit_program(&mut parsed.program);
+        Some(compressed_ast(
+            &parsed.program.to_estree_json(false, false),
+        )?)
+    } else {
+        None
+    };
     let parse_errors = parsed
         .diagnostics
         .into_iter()
@@ -485,13 +528,19 @@ fn indexed(
         .collect();
     Ok(IndexedFile {
         text: source.text,
-        ast_deflate: Some(compressed_ast(&ast_json)?),
+        ast_deflate: Some(match ast_json {
+            Some(ast) => compressed_ast(&ast)?,
+            None => runtime.as_ref().unwrap().clone(),
+        }),
+        runtime_ast_deflate: if compact_only { None } else { runtime },
         imports,
         sql_candidates: candidates,
         sql_deflate: None,
         parse_errors,
         comments,
         syntax,
+        named_imports,
+        direct_call_names,
     })
 }
 fn main() {
@@ -652,8 +701,23 @@ fn run() -> Result<()> {
                     let Some((number, (file, source))) = queue.lock().unwrap().pop_front() else {
                         break;
                     };
+                    let compact_only = !stdin
+                        && !explicit_files
+                        && !file.starts_with("apps/")
+                        && !file.starts_with("packages/ui/");
                     if sender
-                        .send((number, file, indexed(source, root, resolver, sql_only)))
+                        .send((
+                            number,
+                            file,
+                            indexed_mode(
+                                source,
+                                root,
+                                resolver,
+                                sql_only,
+                                compact_only,
+                                stdin || explicit_files,
+                            ),
+                        ))
                         .is_err()
                     {
                         break;
@@ -1051,6 +1115,81 @@ mod tests {
         }
         assert!(!sql_operation_literal("selectivity for_a_field"));
     }
+    #[test]
+    fn runtime_projection_preserves_expressions_imports_and_typed_sql_literal_spans() {
+        let root = env::current_dir().unwrap();
+        let text = "import { helper as invoke } from './helpers.ts'; import callback from './callback.ts';\ntype Query =\n 'SELECT * FROM access.missing';\ninterface Shape { query: 'SELECT * FROM access.other'; }\nconst key = ('scope' as { realm: string });\nfunction run() { const query: 'SELECT * FROM access.annotated' = 'okay'; invoke(callback); db.query('SELECT 1'); }";
+        let facts = indexed(
+            Source {
+                file: "runtime.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        assert_eq!(facts.named_imports[0].local, "invoke");
+        assert_eq!(facts.named_imports[0].imported, "helper");
+        assert_eq!(facts.named_imports[0].source, "./helpers.ts");
+        assert!(facts.direct_call_names.contains("invoke"));
+        assert!(facts.direct_call_names.contains("callback"));
+        let bytes = STANDARD.decode(facts.runtime_ast_deflate.unwrap()).unwrap();
+        let runtime: Value =
+            serde_json::from_reader(flate2::read::DeflateDecoder::new(bytes.as_slice())).unwrap();
+        let mut strings = Vec::new();
+        let mut wrappers = 0;
+        visit(&runtime, &mut |node| {
+            assert_ne!(node["type"], "TSInterfaceDeclaration");
+            assert_ne!(node["type"], "TSTypeAliasDeclaration");
+            if node["type"] == "TSAsExpression" {
+                wrappers += 1;
+                assert_eq!(node["typeAnnotation"]["type"], "TSAnyKeyword");
+            }
+            if node["type"] == "Literal" {
+                if let Some(value) = node["value"].as_str() {
+                    strings.push((value.to_string(), node["start"].as_u64().unwrap() as usize));
+                }
+            }
+        });
+        assert_eq!(wrappers, 1);
+        for literal in [
+            "SELECT * FROM access.missing",
+            "SELECT * FROM access.other",
+            "SELECT * FROM access.annotated",
+        ] {
+            assert_eq!(
+                strings.iter().filter(|(value, _)| value == literal).count(),
+                1
+            );
+            assert!(strings.contains(&(literal.to_string(), text.find(literal).unwrap() - 1)));
+        }
+    }
+    #[test]
+    fn runtime_projection_preserves_template_delimiter_spans() {
+        let root = env::current_dir().unwrap();
+        let facts = indexed(Source { file: "template.ts".into(), text: "const q = db.query(`SELECT ${key /* } */ }FROM owner.records WHERE id = ${id}`);".into() }, &root, &resolver(&root), false).unwrap();
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let full = decode(facts.ast_deflate.as_ref().unwrap());
+        let runtime = decode(facts.runtime_ast_deflate.as_ref().unwrap());
+        let mut full_spans = Vec::new();
+        let mut runtime_spans = Vec::new();
+        visit(&full, &mut |node| {
+            if node["type"] == "TemplateElement" {
+                full_spans.push((node["start"].clone(), node["end"].clone()));
+            }
+        });
+        visit(&runtime, &mut |node| {
+            if node["type"] == "TemplateElement" {
+                runtime_spans.push((node["start"].clone(), node["end"].clone()));
+            }
+        });
+        assert_eq!(full_spans, runtime_spans);
+    }
 }
 
 struct Facts<'r> {
@@ -1061,6 +1200,8 @@ struct Facts<'r> {
     imports: Vec<Import>,
     candidates: Vec<SqlCandidate>,
     syntax: SyntaxFacts,
+    named_imports: Vec<NamedImport>,
+    direct_call_names: BTreeSet<String>,
 }
 impl Facts<'_> {
     fn import(&mut self, source: &str, type_only: bool) {
@@ -1108,6 +1249,27 @@ impl<'a> Visit<'a> for Facts<'_> {
         }
     }
     fn visit_import_declaration(&mut self, node: &ImportDeclaration<'a>) {
+        if let Some(specifiers) = &node.specifiers {
+            for specifier in specifiers {
+                let (local, imported) = match specifier {
+                    ImportDeclarationSpecifier::ImportSpecifier(item) => (
+                        item.local.name.to_string(),
+                        item.imported.name().to_string(),
+                    ),
+                    ImportDeclarationSpecifier::ImportDefaultSpecifier(item) => {
+                        (item.local.name.to_string(), "default".to_string())
+                    }
+                    ImportDeclarationSpecifier::ImportNamespaceSpecifier(item) => {
+                        (item.local.name.to_string(), "*".to_string())
+                    }
+                };
+                self.named_imports.push(NamedImport {
+                    local,
+                    imported,
+                    source: node.source.value.to_string(),
+                });
+            }
+        }
         let type_only = node.import_kind == ImportOrExportKind::Type || node.specifiers.as_ref().is_some_and(|items| !items.is_empty() && items.iter().all(|item| matches!(item,ImportDeclarationSpecifier::ImportSpecifier(specifier) if specifier.import_kind == ImportOrExportKind::Type)));
         self.import(&node.source.value, type_only);
         walk::walk_import_declaration(self, node);
@@ -1149,6 +1311,13 @@ impl<'a> Visit<'a> for Facts<'_> {
         walk::walk_ts_import_equals_declaration(self, node);
     }
     fn visit_call_expression(&mut self, node: &CallExpression<'a>) {
+        if let Expression::Identifier(name) = &node.callee {
+            self.direct_call_names.insert(name.name.to_string());
+        }
+        let mut references = ReferencedNames(&mut self.direct_call_names);
+        for argument in &node.arguments {
+            references.visit_argument(argument);
+        }
         // Named calls and this.method calls are the helper-effect analyzer's
         // executable call surfaces; member factories still leave SQL facts.
         self.syntax.has_direct_calls |= match &node.callee {
@@ -1220,4 +1389,79 @@ fn compressed_sql(sql: &SqlFacts) -> Result<String> {
     let mut encoder = DeflateEncoder::new(Vec::new(), Compression::fast());
     encoder.write_all(&serde_json::to_vec(sql)?)?;
     Ok(STANDARD.encode(encoder.finish()?))
+}
+
+struct ReferencedNames<'r>(&'r mut BTreeSet<String>);
+impl<'a> Visit<'a> for ReferencedNames<'_> {
+    fn visit_identifier_reference(&mut self, node: &IdentifierReference<'a>) {
+        self.0.insert(node.name.to_string());
+    }
+}
+
+struct TypeLiterals<'a> {
+    allocator: &'a Allocator,
+    values: Vec<Expression<'a>>,
+}
+impl<'a> Visit<'a> for TypeLiterals<'a> {
+    fn visit_string_literal(&mut self, node: &StringLiteral<'a>) {
+        self.values
+            .push(Expression::StringLiteral(oxc_allocator::Box::new_in(
+                node.clone_in(self.allocator),
+                &self.allocator,
+            )));
+    }
+}
+struct RuntimeProjection<'a> {
+    allocator: &'a Allocator,
+    pending: Vec<Vec<Expression<'a>>>,
+}
+fn erased_type_statement(statement: &Statement<'_>) -> bool {
+    matches!(
+        statement,
+        Statement::TSTypeAliasDeclaration(_) | Statement::TSInterfaceDeclaration(_)
+    ) || matches!(statement, Statement::ExportDeclaration(export) if matches!(export.declaration, Declaration::TSTypeAliasDeclaration(_) | Declaration::TSInterfaceDeclaration(_)))
+}
+impl<'a> VisitMut<'a> for RuntimeProjection<'a> {
+    fn visit_template_element(&mut self, node: &mut TemplateElement<'a>) {
+        // JS-mode omits types but its quasis exclude delimiters. Guard source
+        // positions use TS-ESTree's delimiter-inclusive spans.
+        node.span.start -= 1;
+        node.span.end += if node.tail { 1 } else { 2 };
+    }
+    fn visit_statements(&mut self, statements: &mut oxc_allocator::Vec<'a, Statement<'a>>) {
+        self.pending.push(Vec::new());
+        statements.retain(|statement| {
+            if !erased_type_statement(statement) {
+                return true;
+            }
+            let mut literals = TypeLiterals {
+                allocator: self.allocator,
+                values: Vec::new(),
+            };
+            literals.visit_statement(statement);
+            self.pending.last_mut().unwrap().extend(literals.values);
+            false
+        });
+        walk_mut::walk_statements(self, statements);
+        let builder = AstBuilder::new(self.allocator);
+        for expression in self.pending.pop().unwrap() {
+            statements.push(Statement::new_expression_statement(
+                expression.span(),
+                expression,
+                &builder,
+            ));
+        }
+        statements.sort_by_key(|statement| statement.span().start);
+    }
+    fn visit_ts_type(&mut self, node: &mut TSType<'a>) {
+        let mut literals = TypeLiterals {
+            allocator: self.allocator,
+            values: Vec::new(),
+        };
+        literals.visit_ts_type(node);
+        if let Some(pending) = self.pending.last_mut() {
+            pending.extend(literals.values);
+        }
+        *node = TSType::new_ts_any_keyword(node.span(), &AstBuilder::new(self.allocator));
+    }
 }
