@@ -83,8 +83,9 @@ for (const persona of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'o
         query: { scope: 'space', key: siteKey }, authorization: null })),
       { path: `/v1/realms/${realm}`, query: {}, authorization: null },
     ]);
+    const presentationQuery: Record<string, string> = actor ? { actingSubject: actor } : {};
     expect(personal.requests).toEqual([
-      ...Array.from({ length: 3 }, () => ({ path: `/v1/zones/${zone}/presentation`, query: actor ? { actingSubject: actor } : {},
+      ...Array.from({ length: 3 }, () => ({ path: `/v1/zones/${zone}/presentation`, query: presentationQuery,
         authorization: actor ? `Bearer recorded-${persona}` : null })),
       { path: `/v1/zones/${zone}/routes`, query: { ...(actor ? { actingSubject: actor } : {}), path: 'browse' },
         authorization: actor ? `Bearer recorded-${persona}` : null },

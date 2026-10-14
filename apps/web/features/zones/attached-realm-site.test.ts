@@ -135,7 +135,7 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
   });
 
   for (const branch of ['published', 'empty'] as const) {
-    test(`${who}: the published ${branch} home selects its recorded Realm or standalone frame`, async () => {
+    test(`${who}: the ${branch} presentation selects its recorded Realm or standalone home frame`, async () => {
       persona = who;
       record = homes as AnswerRecord;
       const prefix = `frame-${branch}`;
@@ -159,14 +159,14 @@ for (const who of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'opera
         const realm = new URL(sample(`${prefix}-realm-header`).path, 'https://recorded.invalid').pathname.split('/')[3]!;
         expect(presentation.realm).toBe(`https://rezics.com/id/${realm}`);
         expect(frame.type).toBe(RealmFrame);
-        expect(frame.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
+        expect<unknown>(frame.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
         expect(frame.props.view.context.realm).toBe(realm);
         expect(frame.props.view.publication).toEqual(presentation);
         expect(find(frame.props.children, ZoneHomeContent)?.props.page).toEqual(presentation.home);
         const home = await SiteHomeRoute({ params: Promise.resolve({ locale: 'en', realm: siteKey }),
           searchParams: Promise.resolve({}) }) as ReactElement<{ view: RealmView; children: ReactNode }>;
         expect(home.type).toBe(RealmFrame);
-        expect(home.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
+        expect<unknown>(home.props.view.realm.header).toEqual(sample(`${prefix}-realm-header`).answer);
         expect(find(home.props.children, ZoneHome)).not.toBeNull();
         // The two Zone presentations share this Realm; its existing recorded count read is exact.
         expect(requests.filter(request => request.path.endsWith('/modules/browse'))).toEqual([
