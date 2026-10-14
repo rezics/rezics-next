@@ -13,6 +13,8 @@ test('SUB06: reply placement has one generated canonical route and bound exact r
     expect(shape).toContain(`sh:path rv:${path} ; sh:minCount 1 ; sh:maxCount 1`);
   }
   expect(shape).toContain('sh:or (');
+  expect(shape).toContain('sh:path rv:concept ; sh:maxCount 8 ; sh:nodeKind sh:IRI');
+  expect(shape).toContain('sh:path rv:primaryConcept ; sh:maxCount 1 ; sh:nodeKind sh:IRI');
   expect(shape).toContain('rv:Rejected');
   expect(shape).toContain('rv:Revoked');
   expect(shape).toContain('rv:RealmReplySlot');

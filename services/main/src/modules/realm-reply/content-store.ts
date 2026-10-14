@@ -36,6 +36,7 @@ export interface ReviewInput {
 export interface PlacementInput {
   realm: string; reply: string; revisionId: string; revisionDigest: string;
   reviewDecisionId: string | null; expectedHead: string | null;
+  concepts?: string[]; primaryConcept?: string | null;
 }
 export interface CurrentPlacementEvidenceInput {
   realm: string; reply: string; revisionId: string; reviewDecisionId: string; preparationId: string;

@@ -20,6 +20,7 @@ import { realmHistoryOriginFilter } from '../realm-admin/history.ts';
 import { RealmRankingsIncomplete, type RealmRankKey, type RealmRankPage } from '../rankings/realm-threads.ts';
 import { retainedMembershipBasis } from '../read-basis/membership.ts';
 import type { ExactReadResult } from '../../../../content/src/core.ts';
+import { readBoard } from './boards.ts';
 
 type Sort = Static<typeof threadSort>;
 type Window = Static<typeof threadWindow>;
@@ -303,8 +304,9 @@ async function realmHasNoThreads(session: WorkReadSession, realm: string): Promi
  * votes keep their keyset position. Only the selected page crosses live disclosure.
  */
 export async function readRealmThreads(session: WorkReadSession, realm: string,
-  query: { sort?: Sort; window?: Window; cursor?: string; limit?: number; now?: number }) {
+  query: { sort?: Sort; window?: Window; cursor?: string; limit?: number; now?: number; concept?: string }) {
   const basis = await readRealmBasis(session, realm);
+  if (query.concept) await readBoard(session, realm, query.concept);
   const threads = store(session);
   const sort = query.sort ?? 'best', window = query.window ?? 'week';
   let population: string | undefined;
@@ -332,6 +334,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
       ? await realmHistoryOriginFilter(session, realm, 'placement', '?slot') : '';
   const limit = query.limit ?? REALM_THREAD_COST.pageSize;
   const binding = ['realm-threads-v1', realm, sort, sort === 'top' ? window : null,
+    ...(query.concept ? [{ concept: query.concept }] : []),
     ...(population ? [population] : []),
     ...(session.principal ? [{ issuer: session.principal.issuer, subject: session.principal.subject,
       actingSubject: session.options.actingSubject }] : []),
@@ -379,6 +382,7 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
     ?rootRevision ?revisionEpoch ?sequence ?epochOrder WHERE {
     ${selected ? `VALUES (?slot ?id) { ${selected.map((row) => `(${iri(replySlotIri(realm, row.reply))} ${iri(row.placement)})`).join(' ')} }` : ''}
     ${epochs} ${headPattern(realm)} ${history}
+    ${query.concept ? `GRAPH ${iri(GRAPHS.revisions)} { ?id rv:concept ${iri(query.concept)} }` : ''}
     FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.revisions)} { ?id rv:parentReply ?parent } }
     ${sort === 'new' && cursor && order ? `FILTER(?epochOrder > ${order[0]} || (?epochOrder = ${order[0]}
       && (?sequence < ${order[1]} || (?sequence = ${order[1]} && STR(?id) > ${lit(cursor.after)}))))` : ''}

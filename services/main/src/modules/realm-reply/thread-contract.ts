@@ -49,6 +49,7 @@ export const realmThreadSummary = t.Object({ reply: readId, placement: readId,
   spoiler: t.Optional(t.Boolean()),
   vote: threadVote, replies: count });
 export const realmThreadsQuery = t.Object({ sort: t.Optional(threadSort), window: t.Optional(threadWindow),
+  concept: t.Optional(readId),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: REALM_THREAD_COST.pageSize })),
   cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
   language: t.Optional(t.String({ pattern: '^[a-z]{2,3}(-[A-Za-z0-9]{1,8})*$', maxLength: 35 })),

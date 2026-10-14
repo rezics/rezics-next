@@ -8,6 +8,7 @@ import { RealmReplyStale, RealmReplyUnavailable,
   type PlacementPreparation } from './content-store.ts';
 import { receiptFamilies } from './receipt-family.ts';
 import { unerased } from '../work/public-patterns.ts';
+import { readReplyBoards, replyBoardsGuard, type ReplyBoards } from './boards.ts';
 
 const PROFILE = 'https://rezics.com/definition/realm-reply-placement-v1';
 const NONE = 'urn:rezics:none';
@@ -233,7 +234,7 @@ export async function readPlacementHead(env: WorkActivationEnvironment,
 export async function placeReply(env: WorkActivationEnvironment,
   admission: RegisteredAdmission, preparation: PlacementPreparation,
   expectedHead: string | null, observed?: ReplyGraphReceipt | null,
-  basis?: RealmReplyDispatchBasis): Promise<ReplyGraphReceipt> {
+  basis?: RealmReplyDispatchBasis, selection?: ReplyBoards): Promise<ReplyGraphReceipt> {
   if (observed) return checked(observed, admission);
   if (observed === undefined) {
     const prior = await readReplyGraphReceipt(env, admission);
@@ -247,6 +248,10 @@ export async function placeReply(env: WorkActivationEnvironment,
   if ((current?.placement ?? null) !== expectedHead) {
     throw new RealmReplyStale('Realm reply placement head moved');
   }
+  const boards = selection ?? (current ? await readReplyBoards(env, current.placement)
+    : { concepts: [], primaryConcept: null });
+  const boardProperties = boards.concepts.map(concept => `rv:concept ${iri(concept)} ;`).join('\n')
+    + (boards.primaryConcept ? `rv:primaryConcept ${iri(boards.primaryConcept)} ;` : '');
   const placement = ID + Bun.randomUUIDv7();
   const receipt = replyReceiptIri(admission);
   const batch = `urn:rezics:outbox:${hash(receipt)}`;
@@ -303,6 +308,7 @@ export async function placeReply(env: WorkActivationEnvironment,
             rv:rootRevision ${lit(preparation.rootRevision)} ;
             rv:author ${iri(preparation.author)} ;
             ${optionalParent}${optionalContext}
+            ${boardProperties}
             rv:contentRevision ${iri(CONTENT_REVISION + preparation.revisionId)} ;
             rv:contentDigest ${lit(preparation.revisionDigest)} ;
             rv:byteDigest ${lit(preparation.revisionDigest)} ;
@@ -354,6 +360,7 @@ export async function placeReply(env: WorkActivationEnvironment,
             ? 'rv:realmPolicyHead' : 'rv:publicProfileHead'} ${iri(preparation.directPolicyRevision)} }` : ''}
         ${parentGuard}
         ${zoneGuard}
+        ${selection ? replyBoardsGuard(preparation.realm, boards) : ''}
         FILTER(COALESCE(?prior, ${iri(NONE)}) = ${iri(expectedHead ?? NONE)})
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:restoreHold true } }
         FILTER NOT EXISTS { GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} ?p ?o } }

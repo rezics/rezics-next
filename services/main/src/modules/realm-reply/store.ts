@@ -23,6 +23,7 @@ import { RatingTargetNotAccepted } from '../rating/acceptance.ts';
 import { RatingTargetGrainMismatch } from '../rating/release.ts';
 import { fenceRealmThreadRemoval, finishRealmThreadRemoval, settleRealmThreadPlacement } from '../rankings/realm-threads.ts';
 import { ControlUnavailable, controlTransaction } from '../access/topology-control.ts';
+import { assertReplyBoardAuthority, readReplyBoards, replyBoards } from './boards.ts';
 
 export type { RealmReplyDispatchBasis } from './graph.ts';
 
@@ -335,6 +336,7 @@ export class RealmReplyStore {
 
   async place(principal: VerifiedPrincipal, actingSubject: string, input: PlacementInput,
     key: string, digest: string, basis?: RealmReplyDispatchBasis) {
+    replyBoards(input);
     const opened = await this.admission(principal, actingSubject, 'reply.place',
       `reply:place:${input.realm}`, key, digest);
     const admission = opened.registered;
@@ -387,13 +389,33 @@ export class RealmReplyStore {
       throw new RealmReplyDenied('Realm membership is required');
     }
     const existing = observed;
+    const boards = replyBoards(input);
     let prepared = await this.content.readPlacement(admission.id);
     if (existing?.outcome === 'cancelled' && !prepared) throw new RealmReplyStale('Realm reply placement was cancelled');
+    let publicationInput = input;
+    if (boards && !existing) {
+      if (!client || !permit) throw new RealmReplyUnavailable('Board authority owner is unavailable');
+      const current = await readPlacementHead(this.env, input.realm, input.reply);
+      if ((current?.placement ?? null) !== input.expectedHead || current && current.revisionId !== input.revisionId) {
+        throw new RealmReplyStale('Board edit requires the current placed reply revision');
+      }
+      const content = current ? null : await this.content.readCurrent(input.reply);
+      if (!current && (!content || content.revisionId !== input.revisionId))
+        throw new RealmReplyStale('Board placement requires the current reply revision');
+      const previous = current ? await readReplyBoards(this.env, current.placement)
+        : { concepts: [], primaryConcept: null };
+      await assertReplyBoardAuthority(client, principal, input.realm, admission.actingSubject,
+        current?.author ?? content!.author, permit.member || unified?.reviewMode === 'open', previous, boards);
+      // Classification never manufactures approval or changes the accepted bytes.
+      if (current && input.reviewDecisionId !== null && input.reviewDecisionId !== current.reviewDecisionId)
+        throw new RealmReplyInvalid('Board edit must retain the placement review');
+      if (current) publicationInput = { ...input, reviewDecisionId: current.reviewDecisionId };
+    }
     if (!prepared && !existing) {
       await this.fence(admission, principal, client);
       let directPolicyRevision: string | undefined;
       let directPolicy: string | undefined;
-      if (input.reviewDecisionId === null) {
+      if (publicationInput.reviewDecisionId === null) {
         if (unified?.revision) {
           if (unified.revision !== permit?.revision || unified.reviewMode === 'mandatory'
             || unified.reviewMode === 'trusted-members' && !permit.member) {
@@ -410,7 +432,7 @@ export class RealmReplyStore {
           directPolicyRevision = policy.revision;
         }
       }
-      prepared = await this.content.preparePlacement(admission, input, directPolicyRevision, directPolicy);
+      prepared = await this.content.preparePlacement(admission, publicationInput, directPolicyRevision, directPolicy);
     }
     if (!prepared) throw new RealmReplyUnavailable('Realm placement lost its Content preparation');
     let terminal = existing;
@@ -419,7 +441,7 @@ export class RealmReplyStore {
       // A previous attempt can leave the pin while its graph result is unknown.
       // The immutable receipt resolves that ambiguity before another dispatch.
       // The caller already observed that this receipt was absent.
-      terminal = await placeReply(this.env, admission, prepared, input.expectedHead, null, basis);
+      terminal = await placeReply(this.env, admission, prepared, input.expectedHead, null, basis, boards);
     }
     if (terminal.outcome === 'cancelled') {
       await this.contentCore.settlePublication(`${admission.id}:settle`, admission.id, {

@@ -24,6 +24,8 @@
     sh:property [ sh:path rv:parentReply ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:parentRevision ; sh:maxCount 1 ; sh:datatype xsd:string ] ;
     sh:property [ sh:path rv:contextRevision ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:concept ; sh:maxCount 8 ; sh:nodeKind sh:IRI ] ;
+    sh:property [ sh:path rv:primaryConcept ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:contentRevision ; sh:minCount 1 ; sh:maxCount 1 ; sh:nodeKind sh:IRI ] ;
     sh:property [ sh:path rv:contentDigest ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{64}$" ] ;
     sh:property [ sh:path rv:contentPreparation ; sh:minCount 1 ; sh:maxCount 1 ; sh:datatype xsd:string ; sh:pattern "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$" ] ;
