@@ -249,3 +249,21 @@ test('wait for a late timed-out proof', () => Bun.sleep(70), 200);
     }
   } finally { rmSync(directory, { recursive: true, force: true }); }
 });
+
+
+test('a proved sign-in redirect publishes an empty visit without inventing a request', async () => {
+  const directory = scratch();
+  try {
+    const recorder = new OutcomeRecorder(declaration, { directory, contract });
+    for (const persona of answerPersonas) {
+      await recorder.prove(persona, async () => {
+        if (persona !== 'visitor') await recorder.session(persona, session)('page', 'GET', '/v1/browse?limit=10');
+      });
+    }
+    await recorder.publish();
+    const record = new AnswerRecordValidator(contract).validate(JSON.parse(readFileSync(join(directory, 'books/browse.json'), 'utf8')));
+    expect(record.personas.visitor).toEqual([]);
+    expect(record.personas.owner).toHaveLength(1);
+    expect(() => new AnswerRecordValidator(contract).validate({ ...record, personas: { ...record.personas, visitor: undefined } })).toThrow();
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});

@@ -1,11 +1,20 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { browserZoneLifecycle } from '../../../../../apps/web/features/zone-editor/api.ts';
+import { resolveZoneManagementAddress } from '../../../../../apps/web/features/zone-editor/management-address.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { settle } from '../../../../../apps/web/features/manage/read.ts';
 import { fromPlainText, type DocumentSnapshot } from '@rezics/document';
 import lifecycle from '../../../../../scripts/qa/cases/outcomes/zone/lifecycle.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
+const recording = new OutcomeRecorder(lifecycle);
+const fileWall = setTimeout(() => { throw new Error('Zone lifecycle file exceeded 480 s'); }, 480_000);
+const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
 let sessions: PersonaSessions;
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
 interface Saved { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } }
@@ -20,12 +29,16 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 const fixtures = new Map<PersonaName, { sessions: PersonaSessions; site: Site }>();
 beforeAll(async () => {
+  await recording.prepare();
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     sessions = await personaSessions('public');
     fixtures.set(name, { sessions, site: await createSite() });
   }
 }, 240_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
+});
 function fixture(name: PersonaName) {
   const context = fixtures.get(name)!;
   sessions = context.sessions;
@@ -176,9 +189,101 @@ async function steward(name: 'owner' | 'operator') {
   expect(editor.preview.navigation.mounts).toHaveLength(2);
 }
 
-outcomeTest(lifecycle, 'visitor', () => reader('visitor'));
-outcomeTest(lifecycle, 'stranger', () => reader('stranger'));
-outcomeTest(lifecycle, 'member', () => reader('member'));
-outcomeTest(lifecycle, 'owner', () => steward('owner'));
-outcomeTest(lifecycle, 'moderator', () => reader('moderator'));
-outcomeTest(lifecycle, 'operator', () => steward('operator'));
+async function within<T>(milliseconds: number, phase: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${phase} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+async function qualify(name: PersonaName, proof: () => Promise<void>) {
+  const started = Date.now();
+  let proofMs = 0, visitStarted = 0;
+  try {
+    // The existing API proof owns 60 s; recording the production visit owns another 120 s.
+    await within(60_000, 'API proof', proof);
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, 'production visit', () => productionVisit(name, fixtures.get(name)!.site, sessions[name]));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+
+async function productionVisit(name: PersonaName, site: Site, person: PersonaSession) {
+  // manager sends the signed-out visitor to sign-in before any Main read.
+  if (!person.actingSubject) return;
+  const actingSubject = person.actingSubject, zoneId = site.zone.slice(-36);
+  const recorded = recording.session(name, person);
+  const anonymous = recording.session(name, sessions.visitor);
+  const client = (publicRead = false) => browserMainApi('https://record.invalid', { fetcher: (async (input, init) => {
+    const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url);
+    const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+    const method = init?.method ?? 'GET';
+    const label = requestLabels.getStore()?.(method, path);
+    if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
+    const body = typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined;
+    const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+    return (publicRead ? anonymous : recorded)(label, method, path, body, key);
+  }) as typeof fetch });
+  const main = client(), publicMain = client(true);
+  const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run(() => label, run);
+  const lifecycleClient = browserZoneLifecycle(main);
+  const frame = realmFrameReads({ main: publicMain, personal: main, actingSubject, keepProblem: false });
+
+  async function sessionReads(prefix: string) {
+    // readSession starts discovery, the language-specific Agent list and selection together.
+    await Promise.all([
+      named(`${prefix}-acting-contexts`, () => main.v1.me['acting-contexts'].get({ query: { task: 'work.create' } })),
+      named(`${prefix}-agents`, () => main.v1.me.agents.get({ query: { languages: 'en' } })),
+      named(`${prefix}-session-agent`, () => main.v1.me['session-agent'].get()).then(() =>
+        named(`${prefix}-language-preferences`, () => main.v1.me['person-preferences'].get({ query: { actingSubject } }))),
+    ]);
+    await named(`${prefix}-agent-profile`, () => main.v1.agents({ id: actingSubject.slice(-36) }).get({ query: { actingSubject } }));
+  }
+  async function render(prefix: string, key = zoneId) {
+    await sessionReads(prefix);
+    // The layout and page share the management binding, authoring and lifecycle readers.
+    const address = await requestLabels.run((_method, path) => {
+      if (path.includes('/configuration')) return `${prefix}-configuration`;
+      if (path.startsWith('/v1/addresses/resolve')) return `${prefix}-address`;
+      if (path.includes('/presentation')) return `${prefix}-site-presentation`;
+      throw new Error(`Unlabelled management resolution: ${path}`);
+    }, () => resolveZoneManagementAddress(key, 'en', {
+      configuration: id => settle(() => main.v1.zones({ id }).configuration.get({ query: { actingSubject } }), { management: true }),
+      site: (space, locale) => frame.resolveSite(space, locale),
+    }));
+    if (address.kind === 'missing' || address.kind === 'failure') return null;
+    if (address.kind === 'lifecycle') return address.binding;
+    await Promise.all([
+      named(`${prefix}-editor`, () => settle(() => main.v1.zones({ id: address.site.zone })['showcase-editor'].get({ query: { actingSubject } }), { management: true })),
+      named(`${prefix}-zone`, () => settle(() => main.v1.zones({ id: address.site.zone }).get({ query: { actingSubject } }), { management: true })),
+      address.binding ? Promise.resolve({ ok: true as const, data: address.binding })
+        : named(`${prefix}-lifecycle-configuration`, () => settle(() => main.v1.zones({ id: address.site.zone }).configuration.get({ query: { actingSubject } }), { management: true })),
+    ]);
+    // Lifecycle uses its authorized binding even if the parallel authoring
+    // read is refused. Without that binding the page stops before any command.
+    return address.binding;
+  }
+  const opened = await render('lifecycle');
+  if (!opened) return;
+  const retired = await named('lifecycle-retire', () => lifecycleClient.retire(zoneId,
+    { expectedHead: opened.revision, actingSubject }, randomUUID()));
+  if (!retired.ok) return;
+  // Retirement replaces the page with the stable UUID lifecycle entry.
+  const retained = await render('retired');
+  if (!retained) return;
+  const recovered = await named('lifecycle-recover', () => lifecycleClient.recover(zoneId,
+    { expectedHead: retained.revision, actingSubject }, randomUUID()));
+  if (!recovered.ok) return;
+  // Recovery replaces the page with the bound Space's home editor.
+  await render('recovered', retained.spaceId);
+}
+
+outcomeTest(lifecycle, 'visitor', () => qualify('visitor', () => reader('visitor')), recording);
+outcomeTest(lifecycle, 'stranger', () => qualify('stranger', () => reader('stranger')), recording);
+outcomeTest(lifecycle, 'member', () => qualify('member', () => reader('member')), recording);
+outcomeTest(lifecycle, 'owner', () => qualify('owner', () => steward('owner')), recording);
+outcomeTest(lifecycle, 'moderator', () => qualify('moderator', () => reader('moderator')), recording);
+outcomeTest(lifecycle, 'operator', () => qualify('operator', () => steward('operator')), recording);
