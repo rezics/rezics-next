@@ -1,10 +1,16 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { mainLibraryApi } from '../../../../../apps/web/features/library/api.ts';
+import { loadBooksLibrary } from '../../../../../apps/web/features/library/books-library-recorded-page.ts';
+import { parseLibraryState } from '../../../../../apps/web/features/library/state.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { pinnedCommunities, spaceCommunities } from '../../../../../apps/web/features/shell/communities-relationships.ts';
 import tracking from '../../../../../scripts/qa/cases/outcomes/recipes/collection-tracking-and-progress.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
-setDefaultTimeout(60_000);
+setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(tracking);
 let work: { work: string; mainVersion: string };
@@ -109,23 +115,22 @@ async function track(name: PersonaName) {
   }), 403);
   await answer(sample('peer-shelves-denied', 'GET', `/v1/me/shelves${query(peer)}`), 403);
   await answer(sample('peer-progress-summary-denied', 'GET', `/v1/me/progress-summaries/${short(work.work)}${query(peer)}`), 403);
-  if (name !== 'owner') {
-    await answer(sample('private-collection-concealed', 'GET', `/v1/collections/${short(privateCollection.collection)}${query(person)}`), 404);
-    await answer(sample('collection-change-denied', 'POST', `/v1/collections/${short(publicCollection.collection)}/changes`, {
-      actingSubject: person.actingSubject, expectedHead: publicCollection.revision,
-      operations: [{ op: 'remove', occurrence: publicCollection.occurrences![0] }],
-    }), 403);
-  } else {
-    const privatePage = await answer<{ occurrences: unknown[] }>(sample('private-collection', 'GET', `/v1/collections/${short(privateCollection.collection)}${query(person)}`));
-    expect(privatePage.occurrences).toHaveLength(2);
-    const change = { actingSubject: person.actingSubject, expectedHead: privateCollection.revision,
-      operations: [{ op: 'remove', occurrence: privateCollection.occurrences![0] }] };
-    const changeKey = randomUUID();
-    const changed = await answer<{ revision: string }>(sample('collection-changed', 'POST', `/v1/collections/${short(privateCollection.collection)}/changes`, change, changeKey));
-    expect(await answer(sample('collection-change-replay', 'POST', `/v1/collections/${short(privateCollection.collection)}/changes`, change, changeKey)))
-      .toMatchObject({ revision: changed.revision, replayed: true });
-    await answer(sample('collection-change-stale', 'POST', `/v1/collections/${short(privateCollection.collection)}/changes`, change), 409);
-  }
+  return async () => {
+    if (name !== 'owner') {
+      await answer(sample('private-collection-concealed', 'GET', `/v1/collections/${short(privateCollection.collection)}${query(person)}`), 404);
+      await answer(collectionCommand(person, sample, publicCollection, 'collection-change-denied'), 403);
+    } else {
+      const privatePage = await answer<{ occurrences: unknown[] }>(sample('private-collection', 'GET', `/v1/collections/${short(privateCollection.collection)}${query(person)}`));
+      expect(privatePage.occurrences).toHaveLength(2);
+      const change = { actingSubject: person.actingSubject, expectedHead: privateCollection.revision,
+        operations: [{ op: 'remove', occurrence: privateCollection.occurrences![0] }] };
+      const changeKey = randomUUID();
+      const changed = await answer<{ revision: string }>(collectionCommand(person, sample, privateCollection, 'collection-changed', changeKey));
+      expect(await answer(sample('collection-change-replay', 'POST', `/v1/collections/${short(privateCollection.collection)}/changes`, change, changeKey)))
+        .toMatchObject({ revision: changed.revision, replayed: true });
+      await answer(sample('collection-change-stale', 'POST', `/v1/collections/${short(privateCollection.collection)}/changes`, change), 409);
+    }
+  };
 }
 
 // The Library's custom and status shelves render these reads alongside Collection and reader state.
@@ -146,9 +151,151 @@ async function libraryReads(sample: ReturnType<typeof recording.session>) {
   await answer(sample('progress-summary-empty', 'GET', viewer(`/v1/me/progress-summaries/${short(work.work)}?language=en`)));
 }
 
-outcomeTest(tracking, 'visitor', () => track('visitor'), recording);
-outcomeTest(tracking, 'stranger', () => track('stranger'), recording);
-outcomeTest(tracking, 'member', () => track('member'), recording);
-outcomeTest(tracking, 'owner', () => track('owner'), recording);
-outcomeTest(tracking, 'moderator', () => track('moderator'), recording);
-outcomeTest(tracking, 'operator', () => track('operator'), recording);
+type Sample = ReturnType<typeof recording.session>;
+
+/** Transport only; Library owns the requests and the dependency order. */
+async function libraryVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
+  const render = async (region: string, shelf?: string) => {
+    // React's request cache shares overview, Work and resume reads during a server render.
+    const reads = new Map<string, Promise<Response>>();
+    // Main can refuse a duplicate-Work batch; production then reads both fixture occurrences separately.
+    const occurrenceStates = ['work-state-primary-occurrence', 'work-state-repeated-occurrence'];
+    let failure: unknown;
+    const client = (anonymous = false) => browserMainApi('http://record.invalid', { fetcher: async (input, init) => {
+      const url = new URL(String(input));
+      const path = url.pathname.slice(BFF_PREFIX.length);
+      const names: Record<string, string> = {
+        '/v1/me/shelves': 'directory',
+        [`/v1/agents/${short(person.actingSubject!)}/library-visibility`]: 'visibility',
+        '/v1/rating-contexts': 'rating-contexts',
+        '/v1/me/shelves/status/reading/works': 'reading-preview',
+        '/v1/me/shelves/status/read/works': 'read-shelf',
+        '/v1/me/work-states': 'work-states',
+        [`/v1/works/${short(work.work)}`]: 'work-header',
+        [`/v1/me/continue/${short(work.work)}`]: 'continue',
+        '/v1/me/follows/authors': 'followed-authors',
+        '/v1/me/reading-goal': 'reading-goal',
+        '/v1/me/reading-stats': 'reading-stats',
+        [`/v1/collections/${short(publicCollection.collection)}`]: 'public-collection',
+        [`/v1/collections/${short(privateCollection.collection)}`]: 'private-collection',
+      };
+      const singleState = path === '/v1/me/work-states' && !url.searchParams.get('works')?.includes(',');
+      const customState = singleState && (region === 'library-public-view' || region === 'library-private-view');
+      const label = customState ? occurrenceStates.shift() : singleState ? 'work-state' : names[path];
+      if (!label) throw new Error(`Unlabelled Library request: ${path}${url.search}`);
+      const request = path + url.search;
+      let read = customState ? undefined : reads.get(request);
+      if (!read) {
+        read = (anonymous ? recording.session(name, sessions.visitor) : sample)(
+          `${region}-${label}`, init?.method ?? 'GET', request).catch(error => {
+            failure = error;
+            throw error;
+          });
+        if (!customState) reads.set(request, read);
+      }
+      return (await read).clone();
+    } });
+    const main = client();
+    await loadBooksLibrary({ main, anonymous: client(true), actingSubject: person.actingSubject! }, {
+      state: parseLibraryState(shelf ? { shelf } : {}), locale: 'en',
+      year: new Date().getUTCFullYear(), first: shelf === undefined,
+    });
+    if (failure) throw failure;
+  };
+  await Promise.all([frameVisit(name, person, sample), render('library-visit')]);
+  await render('library-read-view', 'read');
+  await render('library-public-view', short(publicCollection.collection));
+  await render('library-private-view', short(privateCollection.collection));
+}
+
+/** The shell reads beside the page; dependent community names follow their directory. */
+async function frameVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
+  let failure: unknown;
+  const transport = (label: string, anonymous = false): typeof fetch => async (input, init) => {
+    const url = new URL(String(input));
+    try {
+      return await (anonymous ? recording.session(name, sessions.visitor) : sample)(label,
+        init?.method ?? 'GET', url.pathname.replace(BFF_PREFIX, '') + url.search, undefined, undefined,
+        { headers: Object.fromEntries(new Headers(init?.headers).entries()) });
+    } catch (error) { failure = error; throw error; }
+  };
+  const main = (label: string, anonymous = false) => browserMainApi('http://record.invalid', {
+    fetcher: transport(label, anonymous),
+  });
+  const relationships = (label: string) => mainRelationships(person.actingSubject!, {
+    origin: 'http://record.invalid', fetch: transport(label),
+  });
+  const official = main('frame-official-zones', true).v1.zones.get({ query: { official: 'true', limit: 6 } })
+    .then(page => Promise.all((page.data?.items.slice(0, 6) ?? []).map(zone =>
+      main(`frame-official-realm-${short(zone.realm)}`, true).v1.realms({ realm: short(zone.realm) }).get())));
+  await Promise.all([
+    main('frame-platform-access').v1.me['platform-access'].get(),
+    main('frame-type-registry', true).v1.types.get(),
+    official,
+    main('frame-person-preferences').v1.me['person-preferences'].get({ query: { actingSubject: person.actingSubject! } }),
+    pinnedCommunities(relationships('frame-pinned-follows'), '', null).catch(() => null),
+    spaceCommunities(relationships('frame-space-follows'), '', null).catch(() => null),
+    relationships('frame-follow-inventory').follows().catch(() => null),
+    main('frame-managed-realms').v1.me['managed-realms'].get({ query: { actingSubject: person.actingSubject! } }),
+    main('frame-notification-unread-count').v1.me.notifications['unread-count'].get(),
+  ]);
+  if (failure) throw failure;
+}
+
+async function collectionCommand(person: PersonaSession, sample: Sample, collection: Collection,
+  label: string, replayKey?: string): Promise<Response> {
+  let command: Response | undefined;
+  let prerequisite: Response | undefined;
+  let failure: unknown;
+  const main = browserMainApi('http://record.invalid', { fetcher: async (input, init) => {
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    const body: unknown = init?.body === undefined ? undefined : JSON.parse(String(init.body));
+    const key = method === 'POST' ? replayKey ?? new Headers(init?.headers).get('idempotency-key') ?? undefined : undefined;
+    try {
+      const response = await sample(method === 'GET' ? `${label}-prerequisite` : label,
+        method, url.pathname.slice(BFF_PREFIX.length) + url.search, body, key);
+      if (method === 'POST') command = response.clone();
+      else prerequisite = response.clone();
+      return response;
+    } catch (error) { failure = error; throw error; }
+  } });
+  await mainLibraryApi(person.actingSubject!, () => main).removeFromShelf(collection.collection, [collection.occurrences![0]!]);
+  if (failure) throw failure;
+  if (!command) {
+    throw new Error(`Collection command stopped at prerequisite: ${prerequisite?.status} ${await prerequisite?.text()}`);
+  }
+  return command;
+}
+
+async function within<T>(milliseconds: number, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`Phase exceeded ${milliseconds}ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function recordedTrack(name: PersonaName) {
+  const started = performance.now();
+  // The existing API proof has its own 60 s deadline, before the production visit's 120 s.
+  const collectionProof = await within(60_000, () => track(name));
+  const proof = performance.now() - started;
+  const visitStarted = performance.now();
+  try {
+    if (name !== 'visitor') await within(120_000, async () => {
+      await libraryVisit(name, sessions[name], recording.session(name, sessions[name]));
+      await collectionProof?.();
+    });
+  } finally {
+    console.info(`${name}: proof ${(proof / 1000).toFixed(3)}s; visit ${((performance.now() - visitStarted) / 1000).toFixed(3)}s`);
+  }
+}
+
+outcomeTest(tracking, 'visitor', () => recordedTrack('visitor'), recording);
+outcomeTest(tracking, 'stranger', () => recordedTrack('stranger'), recording);
+outcomeTest(tracking, 'member', () => recordedTrack('member'), recording);
+outcomeTest(tracking, 'owner', () => recordedTrack('owner'), recording);
+outcomeTest(tracking, 'moderator', () => recordedTrack('moderator'), recording);
+outcomeTest(tracking, 'operator', () => recordedTrack('operator'), recording);
