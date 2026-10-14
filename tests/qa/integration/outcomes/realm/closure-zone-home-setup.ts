@@ -7,6 +7,12 @@ const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
   person.actingSubject ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
 
+/** Keep the same reader for delivery and absence controls without replacing their query. */
+export function closureZoneReadPath(path: string, person: Pick<PersonaSession, 'actingSubject'>): string {
+  if (!person.actingSubject) return path;
+  return `${path}${path.includes('?') ? '&' : '?'}actingSubject=${encodeURIComponent(person.actingSubject)}`;
+}
+
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
   const raw = await response.text();

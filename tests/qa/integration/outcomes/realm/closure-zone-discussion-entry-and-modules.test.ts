@@ -2,7 +2,7 @@ import { outcomeTest } from '../../../support/outcome-test.ts';
 import { closureSetup, closureCell, effectClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-zone-discussion-entry-and-modules.ts';
 import { publishClosureOriginals } from './closure-original-credit-setup.ts';
-import { prepareClosureZoneHome } from './closure-zone-home-setup.ts';
+import { closureZoneReadPath, prepareClosureZoneHome } from './closure-zone-home-setup.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import {
@@ -20,8 +20,6 @@ const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
-const acting = (person: PersonaSession) =>
-  person.actingSubject ? `actingSubject=${encodeURIComponent(person.actingSubject)}` : '';
 
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
@@ -31,8 +29,8 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 }
 
 async function missing(person: PersonaSession, path: string, absent: string) {
-  const unavailable = await person.main('GET', path);
-  const ordinary = await person.main('GET', absent);
+  const unavailable = await person.main('GET', closureZoneReadPath(path, person));
+  const ordinary = await person.main('GET', closureZoneReadPath(absent, person));
   expect(ordinary.status, absent).toBe(404);
   expect(unavailable.status, path).toBe(ordinary.status);
   expect(await unavailable.json(), path).toEqual(await ordinary.json());
@@ -42,16 +40,16 @@ async function requireClosure(person: PersonaSession) {
   // A refused prerequisite is not an observed delivery defect. Each person
   // confirms the still-open public Realm through their own HTTP session.
   if (closureUnavailable) {
-    await answer(person.main('GET', `/v1/realms/${short(sessions.realm)}?${acting(person)}`));
+    await answer(person.main('GET', closureZoneReadPath(`/v1/realms/${short(sessions.realm)}`, person)));
     throw new Error(closureUnavailable);
   }
 }
 
 async function independent(person: PersonaSession) {
   for (const publication of publications) {
-    await answer(person.main('GET', `/v1/works/${short(publication.work)}`));
+    await answer(person.main('GET', closureZoneReadPath(`/v1/works/${short(publication.work)}`, person)));
     const credits = await answer<{ items: { agent: string; role: string }[] }>(
-      person.main('GET', `/v1/works/${short(publication.work)}/agent-credits`),
+      person.main('GET', closureZoneReadPath(`/v1/works/${short(publication.work)}/agent-credits`, person)),
     );
     expect(credits.items).toContainEqual(
       expect.objectContaining({ agent: sessions.owner.actingSubject, role: 'author' }),
@@ -99,17 +97,17 @@ async function delivered(name: PersonaName) {
       'discussions', 'reader-quotes', 'editor-lists', 'browse'].map(module => `/modules/${module}`),
   ]) await missing(person, `${root}${suffix}`, `${absent}${suffix}`);
   const zone = `/v1/zones/${short(sessions.zone)}`;
-  const route = await answer<{ realm: string | null; page: unknown }>(person.main('GET', `${zone}/routes?path=/`));
+  const route = await answer<{ realm: string | null; page: unknown }>(person.main('GET', closureZoneReadPath(`${zone}/routes?path=/`, person)));
   expect(route.realm).toBeNull();
   expect(JSON.stringify(route.page)).toContain('Independent original Zone home document');
   const presentation = await answer<{ realm: string | null; moduleData: { id: string; sources: { state: string }[] }[] }>(
-    person.main('GET', `${zone}/presentation`),
+    person.main('GET', closureZoneReadPath(`${zone}/presentation`, person)),
   );
   expect(presentation.realm).toBeNull();
   expect(presentation.moduleData.find(module => module.id === 'latest')!.sources[0]!.state).toBe('unavailable');
-  const mounted = await answer<{ resource: { id: string } }>(person.main('GET', `${zone}/routes?path=/original`));
+  const mounted = await answer<{ resource: { id: string } }>(person.main('GET', closureZoneReadPath(`${zone}/routes?path=/original`, person)));
   expect(mounted.resource.id).toBe(publications[0]!.work);
-  const home = await answer<unknown>(person.main('GET', `/v1/content-revisions/${homeRevision}`));
+  const home = await answer<unknown>(person.main('GET', closureZoneReadPath(`/v1/content-revisions/${homeRevision}`, person)));
   expect(JSON.stringify(home)).toContain('Independent original Zone home document');
   await independent(person);
 }
