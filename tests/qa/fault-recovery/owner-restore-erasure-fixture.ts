@@ -126,7 +126,7 @@ import { stable } from '../../../scripts/fixture/corpus.ts';
 import { copyVolume, currentEngines, fixtureProject, postgresImage, removeVolumes, run, volumeExists } from '../../../scripts/fixture/stack.ts';
 import { isRetainedJson, migrationInventory, type RetainedFileIntegrity, type RetainedJson, type RetainedOwnerState } from '../../../scripts/fixture/manifest.ts';
 import { fixtureModel } from '../../../scripts/fixture/model.ts';
-import { RetainedSourceRefusal, RetainedSources, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest } from '../../../scripts/qa/retained-source.ts';
+import { RetainedSourceRefusal, RetainedSources, SOURCE_PREPARATION_MS, sourceFileDigests, sourceKey, type RetainedSourceAdapter, type SourceContext, type RetainedSourceManifest } from '../../../scripts/qa/retained-source.ts';
 import { createAdmittedMetadataWork } from '../../../services/main/src/modules/work/create-admitted.ts';
 import { ContentProjectionCursor } from '../../../services/content/src/projection-cursor.ts';
 import { deliverRetainedContentEligibilityOnce } from '../../../services/main/src/modules/content-publication/eligibility-delivery.ts';
@@ -393,9 +393,91 @@ export function rebindRetainedRecoveryAttachment<T>(attachment: EncryptedRecover
   return { ...attachment, path };
 }
 
+type OwnerErasureBuildResult = Awaited<ReturnType<RetainedSourceAdapter<RetainedOwnerState, unknown>['build']>>;
+type OwnerErasureSourceCandidate = {
+  retain(context: SourceContext): Promise<OwnerErasureBuildResult>;
+  close(): Promise<void>;
+  timing: { durations(): Record<string, number> };
+};
+export interface OwnerErasureProducerPhase {
+  context: SourceContext;
+  registerCleanup(close: () => Promise<void>): void;
+  physicalCut(): Promise<SourceContext>;
+}
+type PendingOwnerErasureSource = {
+  key: string;
+  cut: ReturnType<typeof Promise.withResolvers<SourceContext>>;
+  fixture: Promise<OwnerErasureSourceCandidate>;
+  close?: () => Promise<void>;
+  cancelled: Error;
+  atCut: boolean;
+};
+
+/** Suspend the existing fixture at the cut; RetainedSources owns both budgets,
+ * leases, sealing and failure cleanup. Never start another fixture to make the cut. */
+export function ownerErasureSourceBuild(produce: (phase: OwnerErasureProducerPhase) => Promise<OwnerErasureSourceCandidate>) {
+  let pending: PendingOwnerErasureSource | undefined;
+  return {
+    producerBuild: {
+      deadlineMs: SOURCE_PREPARATION_MS,
+      evidence: 'Owner database cloning, migration, native readiness and authored API population retain the existing 600-second fixture bound. Recovery fencing, coverage capture, physical backup, sealing and verification use the separate 600-second preparation bound.',
+      async run(context: SourceContext) {
+        if (pending) throw new Error('owner-erasure producer is already staged');
+        const ready = Promise.withResolvers<void>();
+        const current: PendingOwnerErasureSource = {
+          key: context.key, cut: Promise.withResolvers<SourceContext>(),
+          cancelled: new Error('owner-erasure staged producer disposed before physical cut'),
+          atCut: false,
+          fixture: Promise.resolve().then(() => produce({
+            context,
+            registerCleanup: close => {
+              if (current.close) throw new Error('owner-erasure producer cleanup is already registered');
+              current.close = close;
+            },
+            physicalCut: async () => {
+              if (current.atCut) throw new Error('owner-erasure producer reached the physical cut twice');
+              context.budget.remaining();
+              current.atCut = true;
+              ready.resolve();
+              return current.cut.promise;
+            },
+          })),
+        };
+        pending = current;
+        await Promise.race([ready.promise, current.fixture.then(() => {
+          throw new Error('owner-erasure producer finished without a physical-cut boundary');
+        })]);
+      },
+    },
+    async build(context: SourceContext): Promise<OwnerErasureBuildResult> {
+      const current = pending;
+      if (!current || current.key !== context.key) throw new Error('owner-erasure physical cut requires its staged producer');
+      context.budget.remaining();
+      current.cut.resolve(context);
+      const fixture = await current.fixture;
+      const result = await fixture.retain(context);
+      context.budget.remaining();
+      await fixture.close();
+      pending = undefined;
+      return { ...result, phases: fixture.timing.durations() };
+    },
+    async remove(key: string) {
+      const current = pending;
+      if (!current || current.key !== key) return;
+      if (current.atCut) current.cut.reject(current.cancelled);
+      // The original fixture error belongs to prepare's primary failure. Its
+      // existing retryable close reports any remaining cleanup failure here.
+      await current.fixture.then(fixture => { current.close ??= () => fixture.close(); }, () => undefined);
+      await current.close?.();
+      pending = undefined;
+    },
+  };
+}
+
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
-async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixtureOptions = {}, retained?: { context: SourceContext; manifest: RetainedSourceManifest<RetainedOwnerState> }) {
+async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixtureOptions = {}, retained?: { context: SourceContext; manifest: RetainedSourceManifest<RetainedOwnerState> }, producerPhase?: OwnerErasureProducerPhase) {
   const preparationStarted = Date.now();
+  let preparationBudget = producerPhase?.context.budget ?? retained?.context.budget;
   const { runId, artifacts } = requireFaultTier();
   const timing = createRestoreFixtureTiming({ artifactDirectory: artifacts });
   const root = resolve(import.meta.dir, '../../..');
@@ -588,6 +670,7 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
     });
   let sourceApiPhase: RestoreFixturePhaseHandle | undefined;
   let sourceProofPhase: RestoreFixturePhaseHandle | undefined;
+  producerPhase?.registerCleanup(close);
   try {
     const produce = async () => {
     let nativeAccessAttachment: EncryptedRecoveryAttachment<AccessErasureRecoverySummary> | undefined;
@@ -1010,6 +1093,12 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     if (options.laterApiAdmission) {
       await grant(`erasure:${created.work}`, 'erasure.request');
     }
+    timing.finish(sourceApiPhase!);
+    sourceApiPhase = undefined;
+    // Everything from the recovery fence through immutable publication belongs
+    // to physical preparation, including signed coverage and both backups.
+    if (producerPhase) preparationBudget = (await producerPhase.physicalCut()).budget;
+    preparationBudget?.remaining();
     const generation = await engageAccessRecoveryFence(source.access);
     const baseAccountRows = options.laterApiAdmission ? await accountRows(source.account) : undefined;
     let coverage: RecoveryCoverage | undefined;
@@ -1086,8 +1175,6 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
       ),
       hmacKey: restoreKey,
     };
-    timing.finish(sourceApiPhase);
-    sourceApiPhase = undefined;
     const rdfCut = await native.query('SELECT ?g ?s ?p ?o WHERE { GRAPH ?g { ?s ?p ?o } } ORDER BY ?g ?s ?p ?o');
     await timing.phase('source.cut-stop-copy-restart', async () => {
       cpSync(objects.directory, backupObjects, { recursive: true });
@@ -1866,9 +1953,10 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         producerRevision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
         qaIdentity: runId, phases: timing.durations() };
     };
-    const preparationElapsedMs = Date.now() - preparationStarted;
+    const preparationElapsedMs = preparationBudget?.elapsed() ?? Date.now() - preparationStarted;
     console.info('owner restore erasure cut ready', { elapsedMs: preparationElapsedMs });
-    expect(preparationElapsedMs).toBeLessThan(600_000);
+    if (preparationBudget) preparationBudget.remaining();
+    else expect(preparationElapsedMs).toBeLessThan(SOURCE_PREPARATION_MS);
     return {
       retain,
       source,
@@ -1923,6 +2011,9 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     try {
       await close();
     } catch (cleanupError) {
+      // The declared source remains staged; RetainedSources.remove retries its
+      // registered close and records cleanup without replacing this failure.
+      if (producerPhase) throw error;
       throw new AggregateError(
         [error, cleanupError],
         'restore fixture creation failed and final disposal was incomplete',
@@ -2011,14 +2102,11 @@ export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOpt
     compatibility: JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
       modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
   };
+  const sourceBuild = ownerErasureSourceBuild(phase => runOwnerRestoreErasureFixture(options, undefined, phase));
   return {
     specification,
-    build: async context => {
-      const fixture = await runOwnerRestoreErasureFixture(options);
-      let result: Awaited<ReturnType<typeof fixture.retain>>;
-      try { result = await fixture.retain(context); } finally { await fixture.close(); }
-      return { ...result, phases: fixture.timing.durations() };
-    },
+    producerBuild: sourceBuild.producerBuild,
+    build: context => sourceBuild.build(context),
     verify: async (context, manifest) => {
       const evidence: string[] = [];
       if (manifest.metadata.contract !== 'owner-erasure-source-v1') evidence.push('owner source contract differs');
@@ -2045,8 +2133,14 @@ export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOpt
     dispose: fixture => fixture.close(),
     remove: async key => {
       if (!key.startsWith('rs-owner-erasure-source-')) throw new Error('source removal belongs to another producer');
-      const volumes = Object.values(retainedSourceVolumes(key)).filter(name => volumeExists(name, docker));
-      if (volumes.length) removeVolumes(volumes, docker);
+      const failures = await attemptRestoreCleanup([
+        { resource: 'staged owner-erasure fixture', run: () => sourceBuild.remove(key) },
+        { resource: 'retained owner-erasure graph volumes', run: () => {
+          const volumes = Object.values(retainedSourceVolumes(key)).filter(name => volumeExists(name, docker));
+          if (volumes.length) removeVolumes(volumes, docker);
+        } },
+      ]);
+      if (failures.length) throw restoreCleanupError(failures, 'owner-erasure staged removal failed');
     },
   };
 }
