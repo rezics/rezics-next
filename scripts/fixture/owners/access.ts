@@ -1,6 +1,6 @@
 import { BACKGROUND_GRANTS_UNTIL, type Corpus, RecordDigest, agentAt, corpusWorks, fixtureUuid,
   stable } from '../corpus.ts';
-import { countRows, countRowsByIds, insertColumns, ownerTransaction } from './postgres.ts';
+import { countRows, countRowsByIds, insertColumns } from './postgres.ts';
 import type { FixtureOwner } from './types.ts';
 
 /**
@@ -37,7 +37,11 @@ export const accessOwner: FixtureOwner = {
   },
   async load(corpus, target) {
     const started = performance.now();
-    const rows = await ownerTransaction(target.pools.access, async client => ({
+    // Pool queries commit each batch: scope-gate triggers take one transaction
+    // advisory lock per Work. A corpus-wide transaction exhausts default PostgreSQL.
+    // Build failures discard the entire target; verification still checks every key.
+    const client = target.pools.access;
+    const rows = {
       agents: await insertColumns(client, `INSERT INTO access.authority_subject (id, kind)
         SELECT * FROM unnest($1::text[], $2::text[])`, agents(corpus), 2),
       gates: await insertColumns(client, `INSERT INTO access.scope_gate (id)
@@ -46,7 +50,7 @@ export const accessOwner: FixtureOwner = {
         (id, issuer_subject, recipient_subject, scope_id, action, valid_until)
         SELECT * FROM unnest($1::uuid[], $2::text[], $3::text[], $4::text[], $5::text[],
           $6::timestamptz[])`, grants(corpus), 6),
-    }));
+    };
     return { elapsedMs: performance.now() - started, detail: rows };
   },
   async verify(corpus, target) {
