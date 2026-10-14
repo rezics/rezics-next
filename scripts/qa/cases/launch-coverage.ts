@@ -75,7 +75,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
       'Exports imported Goodreads book statements through Main under one snapshot, re-imports into another reader and compares restored library state.'),
     browser: journeyBrowser('apps/web/tests/books-catalogue-export.e2e.ts', 'books-library-export',
       'books-library-export: a reader downloads an identified Book after reloading its saved Library shelf (en)',
-      'Shelves a typed Book by keyboard, reloads its Library shelf, downloads the bundle and checks its exact Work identity and saved status; repeated in Japanese without skipping a closed Library.'),
+      'Starts with two typed Books saved through the public API, reloads their Library shelf, downloads the bundle by keyboard and checks both exact Work identities and saved statuses; repeated in Japanese without skipping a closed Library.'),
   },
   {
     kind: 'books',

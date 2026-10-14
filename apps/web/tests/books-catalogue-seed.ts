@@ -18,7 +18,7 @@ if (existsSync(cache)) {
   console.log(readFileSync(cache, 'utf8'));
 } else {
   const session = await platformAdministratorSession(process.env,
-    'openid access:grant agent:create work:create work:edit work:read space:create zone:edit realm:adopt');
+    'openid access:grant agent:create work:create work:edit work:read space:create zone:edit realm:adopt library:write');
   const short = (iri: string) => iri.slice(-36);
   async function request<T>(method: string, path: string, body?: object): Promise<T> {
     const key = randomUUID();
@@ -99,6 +99,9 @@ if (existsSync(cache)) {
   }
   const books = [await book('The Lighthouse Keeper’s Almanac', true), await book('Letters from the Harbour', true)];
   const outside = await book('The Lighthouse Keeper’s Unlisted Diary', false);
+  for (const saved of books) await request('PUT', `/v1/works/${short(saved.work)}/reader-status`, {
+    actingSubject: session.actingSubject, expectedVersion: 0, status: 'want-to-read',
+  });
   const seed: BooksCatalogue = { handle, realm: space.realm, books, outside };
   mkdirSync('.temp', { recursive: true });
   writeFileSync(cache, JSON.stringify(seed));

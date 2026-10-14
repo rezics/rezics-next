@@ -4,7 +4,6 @@ import { expect, type Page, test } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import type { CanonicalRow } from '../../../services/main/src/modules/library-import/formats/contract.ts';
 import { resourceHref, spaceHref, zoneMemberHref } from '../features/address/path.ts';
-import { messages as catalogueMessages } from '../features/catalogue/messages.ts';
 import { messages as libraryMessages } from '../features/library/messages.ts';
 import libraryJa from '../features/library/messages/ja.ts';
 import { localizedPath } from '../i18n/locale.ts';
@@ -89,31 +88,13 @@ for (const locale of ['en', 'ja'] as const) {
     const found: Findings = [];
     const book = seed.books[locale === 'en' ? 0 : 1]!;
     const t = materializeData(locale === 'ja' ? { ...libraryMessages, ...libraryJa } : libraryMessages, { locale });
-    const c = materializeData(catalogueMessages[locale], { locale });
     const page = await visitor(browser, info, { reducedMotion: true });
     try {
-      await signInAtAccounts(page, localizedPath(resourceHref('/w/', uuid(book.work)), locale), credentials().member);
-      await expect(page.getByRole('heading', { level: 1, name: book.title, exact: true })).toBeVisible({ timeout: 30_000 });
-      await page.waitForLoadState('load');
-      const savedName = `${c.wantToRead} — ${c.shelve({ title: book.title })}`;
-      const saved = page.getByRole('button', { name: savedName, exact: true });
-      // Other engine projects share this QA reader. An already saved choice is
-      // read as such; a closed Library is a failure, never a skipped journey.
-      const add = page.getByRole('button', { name: c.wantToRead, exact: true });
-      await expect(saved.or(add)).toBeVisible();
-      if (await add.isVisible()) {
-        const path = `/api/main/v1/works/${uuid(book.work)}/reader-status`;
-        const written = page.waitForResponse(response => new URL(response.url()).pathname === path
-          && response.request().method() === 'PUT', { timeout: 60_000 });
-        await pressByKeyboard(page, add, found, c.wantToRead);
-        const response = await written;
-        expect(response.status(), `PUT ${path}\n${response.request().postData()}\n${await response.text()}`).toBe(200);
-      }
-      await expect(saved).toBeVisible();
-      await expect(saved).not.toHaveAttribute('aria-busy', 'true', { timeout: 30_000 });
-
-      await page.goto(`${localizedPath('/library', locale)}?shelf=want-to-read`);
-      await expect(page.getByRole('heading', { level: 1, name: t.title, exact: true })).toBeVisible();
+      // The public API prepares two typed Books on this reader's shelf. This
+      // journey proves exporting that existing Library, without a retained-row
+      // substitute or a skip when Library is closed.
+      await signInAtAccounts(page, `${localizedPath('/library', locale)}?shelf=want-to-read`, credentials().member);
+      await expect(page.getByRole('heading', { level: 1, name: t.title, exact: true })).toBeVisible({ timeout: 30_000 });
       await expect(page.getByRole('heading', { level: 3, name: book.title, exact: true })).toBeVisible();
       await page.waitForLoadState('load');
       await page.reload();
@@ -132,9 +113,11 @@ for (const locale of ['en', 'ja'] as const) {
         profile: string; rows: CanonicalRow[];
       };
       expect(bundle.profile).toBe('rezics-library-export-v1');
-      const entries = bundle.rows.filter(row => row.kind === 'entry' && row.work === book.work && row.status !== null);
-      expect(entries).toHaveLength(1);
-      expect(entries[0]).toMatchObject({ kind: 'entry', work: book.work, status: 'want-to-read' });
+      for (const saved of seed.books) {
+        const entries = bundle.rows.filter(row => row.kind === 'entry' && row.work === saved.work && row.status !== null);
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({ kind: 'entry', work: saved.work, status: 'want-to-read' });
+      }
       await expect(page.getByText(t.backupReady(bundle.rows.length), { exact: true })).toBeVisible();
       await page.screenshot({ path: info.outputPath(`books-export-${locale}.png`), fullPage: true });
       expectClean(found);
