@@ -7,17 +7,20 @@ import browseFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalo
 import paginationFixture from '../../../../tests/qa/fixtures/outcomes/recipes/catalogue-pagination-in-its-zone.json';
 import { localizedPath } from '../../i18n/locale.ts';
 import { spaceHref } from '../address/path.ts';
+import { BFF_PREFIX } from '../api/browser.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import type { RealmReadClient } from '../realm/read.ts';
 import type { ZoneBrowsePage } from '../realm/types.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
+import { messages as relationshipMessages } from '../relationships/messages.ts';
 import { recordedFetch, type RecordedSelection, type RecordedState } from '../stories/recorded-fetch.ts';
 import { zoneMessagesFor } from './fixtures.ts';
 import { ZoneSiteRoute } from './site-route.tsx';
 
 const locale = 'en';
 const messages = zoneMessagesFor(locale);
+const relationshipCopy = materializeData(relationshipMessages, { locale });
 const browseRecord = browseFixture as AnswerRecord;
 const paginationRecord = paginationFixture as AnswerRecord;
 const personas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
@@ -113,7 +116,9 @@ function ProductionVisit({ source, persona, label, routeLabel, state }: {
     let active = true;
     const record = recordOf(source);
     const addressLabel = source === 'pagination' ? 'site-address' : 'frame-address';
-    const replay = recordedFetch(record, persona, selections(record, persona, label, routeLabel, addressLabel, state));
+    const replay = recordedFetch(record, persona, selections(record, persona, label, routeLabel, addressLabel, state), {
+      pathPrefix: BFF_PREFIX,
+    });
     const main = mainApiWithToken(undefined, { fetcher: replay.fetcher });
     const client: RealmReadClient = {
       main,
@@ -162,6 +167,11 @@ function at(base: Story, viewport: 'phone' | 'desktop'): Story {
   return { ...base, globals: { viewport: { value: viewport }, locale } };
 }
 
+/** The header refresh settles after the catalogue. A missing follow-state answer draws this notice. */
+async function expectNoRelationshipNotice(canvas: ReturnType<typeof within>) {
+  await expect.poll(() => canvas.queryByText(relationshipCopy.unavailable)).toBeNull();
+}
+
 const playPopulated: Play = async ({ canvasElement, args }) => {
   const canvas = within(canvasElement);
   const persona = args.persona ?? 'visitor';
@@ -182,6 +192,7 @@ const playPopulated: Play = async ({ canvasElement, args }) => {
   await expect(new URL(next.getAttribute('href')!, 'https://recorded.invalid').searchParams.get('cursor'))
     .toBe(answer.nextCursor);
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectNoRelationshipNotice(canvas);
 };
 
 const playSearch: Play = async ({ canvasElement, args }) => {
@@ -203,6 +214,7 @@ const playSearch: Play = async ({ canvasElement, args }) => {
   const next = canvas.getByRole('link', { name: messages.next });
   await expect(new URL(next.getAttribute('href')!, 'https://recorded.invalid').searchParams.get('cursor'))
     .toBe(answer.nextCursor);
+  await expectNoRelationshipNotice(canvas);
 };
 
 const playEmpty: Play = async ({ canvasElement, args }) => {
@@ -218,6 +230,7 @@ const playEmpty: Play = async ({ canvasElement, args }) => {
   await expect(sorts.getByRole('link', { name: messages.sortRelevance })).toHaveAttribute('aria-current', 'true');
   await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
   await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectNoRelationshipNotice(canvas);
 };
 
 const playLoading: Play = async ({ canvasElement }) => {
@@ -267,6 +280,7 @@ const playReached: Play = async ({ canvasElement, args }) => {
   } else await expect(canvas.queryByRole('link', { name: messages.next })).toBeNull();
   if (requested) await expect(canvas.getByRole('link', { name: messages.previous })).toBeVisible();
   else await expect(canvas.queryByRole('link', { name: messages.previous })).toBeNull();
+  await expectNoRelationshipNotice(canvas);
 };
 
 function productionStory(persona: Persona, label: string, state: RecordedState, play: Play,
