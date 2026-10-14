@@ -105,6 +105,14 @@ says" is.
 A row is proved when its outcome tests pass on the shared stack. The surface
 follows a proved row and never leads it.
 
+From 2026-10-14 06:05 UTC, open work runs in [waves](wave.md). A build phase
+implements on one shared branch and starts no stack. A prove phase runs the
+whole suite and fixes what fails. The order above still holds inside a wave:
+each row's outcome test is the specification. What changes is that the tests
+run once per wave, not once per task. Measured since launch: 43% of worker
+input was spent waiting, against 10% editing, and record tasks took a third of
+all attempts.
+
 ## What blocks a landing
 
 The tool decides, not the reviewer and not a mail:
