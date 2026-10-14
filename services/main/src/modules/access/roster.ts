@@ -4,6 +4,7 @@ import { realmActor, realmIdPattern, realmManager, realmTransaction } from './re
 import { RealmAdminDenied, RealmAdminInvalid, RealmAdminStale } from '../realm-admin/contract.ts';
 import { visibleNames } from '../disclosure/name-policy.ts';
 import { disclosureViewer } from '../disclosure/viewer.ts';
+import { DisclosureStore, disclosurePoolReader } from '../disclosure/read.ts';
 import { PersonPreferencesStore } from '../preferences/store.ts';
 import { readRealmPolicy } from '../space/policy.ts';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
@@ -13,7 +14,10 @@ import type { WorkActivationEnvironment } from '../work/activate.ts';
 // are public roster data.
 export const REALM_ROSTER_COST = { page: 50, graphCalls: 2, graphBytes: 8192, sqlStatements: 10 } as const;
 export class AccessRealmRoster {
-  constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment) {}
+  private readonly disclosure: DisclosureStore;
+  constructor(private readonly pool: Pool, private readonly env: WorkActivationEnvironment) {
+    this.disclosure = disclosurePoolReader(pool) ?? new DisclosureStore(pool);
+  }
 
   read(realm: string, options: { after?: string; limit?: number; featured?: boolean },
     principal: VerifiedPrincipal | null = null) {
@@ -50,6 +54,12 @@ export class AccessRealmRoster {
       // while the member remains. A controller still sees their own name.
       const visible = page.length ? await visibleNames(new PersonPreferencesStore(this.pool),
         page.map(row => row.member), disclosureViewer(principal)) : new Set<string>();
+      // Publication and listing consent do not override a completed closure.
+      // Reuse the exact Realm head already read within the two-graph-read cap.
+      const decisions = await this.disclosure.read([{ owner: 'graph', resource: realm,
+        component: 'record', revision: end.realmRevision, context: realm }], disclosureViewer(principal), 'read', client);
+      if (decisions.length !== 1) throw new Error('Realm disclosure is incomplete');
+      if (decisions[0] !== 'visible') throw new RealmAdminDenied('Realm is unavailable');
       return { items: page.map(row => ({ agent: row.member,
         displayName: visible.has(row.member) ? row.display_name : null, featured: row.featured })),
         nextCursor: candidates.length > limit ? candidates[limit - 1]!.member : null };

@@ -20,7 +20,7 @@ const session = (member: Member): PersonaSession => ({ actingSubject: member.act
     key ?? (['GET', 'HEAD'].includes(method) ? undefined : randomUUID())) }),
   account: async () => { throw new Error('This owner fixture serves Main'); } });
 
-test('completed closure conceals empty and populated discussion reads and consented roster while credited originals stay public', async () => {
+test('completed closure conceals discussion reads and consented roster while credited originals stay public', async () => {
   const stack = await startMediaStack('realm-closure-readers', { profileCredits: true });
   const evidence: unknown[] = [];
   let phase = 'preparation';
@@ -93,6 +93,8 @@ test('completed closure conceals empty and populated discussion reads and consen
     };
     const closed = await createRealm('Closed reader control');
     const live = await createRealm('Independent live reader control');
+    const empty = await createRealm('Empty closed reader control');
+    expect((await command<{ items: unknown[] }>(owner, 'GET', `/v1/realms/${short(empty.realm)}/threads?sort=new`)).items).toEqual([]);
     const original = await closureOriginal(session(owner), `Credited original ${randomUUID()}`);
     const place = async (realm: Realm, body: string, parent?: Reply): Promise<Reply> => {
       const reply = native(), variantId = `urn:rezics:variant:${randomUUID()}`;
@@ -131,14 +133,15 @@ test('completed closure conceals empty and populated discussion reads and consen
     expect(roster.nextCursor).not.toBeNull();
     expect(threads.nextCursor).not.toBeNull();
     expect(threads.items).toHaveLength(1);
-    const header = await command<{ revision: string }>(owner, 'GET', root);
     const governance = stack.composition.dependencies.governance!;
     const rule = await governance.rules!.publish(operator.principal, {
       ref: `urn:rezics:rule:${randomUUID()}`, scopeId: 'governance:platform', actingSubject: operator.actor,
       expectedRevision: null, document: { purpose: 'Close only the reviewed Realm record' }, idempotencyKey: randomUUID(),
     });
+    const close = async (realm: Realm) => {
+    const header = await command<{ revision: string }>(owner, 'GET', `/v1/realms/${short(realm.realm)}`);
     const report = await command<{ reportId: string; caseId: string }>(owner, 'POST', '/v1/public-reports', {
-      profile: 'public-report-v1', target: closed.realm, actingSubject: owner.actor,
+      profile: 'public-report-v1', target: realm.realm, actingSubject: owner.actor,
       category: 'spam_or_manipulation', statement: 'Review this Realm record.', contentLanguage: 'en',
     }, 201);
     const basis = (await stack.accessPool.query<{ generation: string; evidence_digest: string }>(
@@ -146,7 +149,7 @@ test('completed closure conceals empty and populated discussion reads and consen
        JOIN access.governance_report r ON r.case_id=c.id WHERE r.id=$1`, [report.reportId])).rows[0]!;
     await governance.store.safety.claim(operator.principal, operator.actor, report.caseId);
     const input: DecisionInput = { caseId: report.caseId, expectedGeneration: basis.generation,
-      actingSubject: operator.actor, outcome: 'restrict', targets: [{ owner: 'graph', resource: closed.realm,
+      actingSubject: operator.actor, outcome: 'restrict', targets: [{ owner: 'graph', resource: realm.realm,
         component: 'record', locator: null, revision: null, scopeKind: 'component', expectedHead: header.revision, effect: 'disclosure' }],
       rule, evidenceDigest: basis.evidence_digest, reversesDecisionId: null, answersStepId: null,
       rationale: null, disclosure: 'parties', idempotencyKey: randomUUID(), reasons: {
@@ -156,6 +159,9 @@ test('completed closure conceals empty and populated discussion reads and consen
     const decision = await governance.store.decide(operator.principal, input);
     evidence.push({ phase: 'closure', input, decision });
     expect(decision.operation.status).toBe('completed');
+    };
+    await close(closed);
+    await close(empty);
     expect((await call(undefined, 'GET', root))).toEqual(await call(undefined, 'GET', absentRoot));
     phase = 'delivery';
     const failures: unknown[] = [];
@@ -170,15 +176,28 @@ test('completed closure conceals empty and populated discussion reads and consen
         const missing = await call(person, 'GET', absentRoot + suffix);
         if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ caller: person?.actor ?? null, suffix, current, missing });
       }
+      for (const suffix of suffixes.slice(0, 3)) {
+        const current = await call(person, 'GET', `/v1/realms/${short(empty.realm)}` + suffix);
+        const missing = await call(person, 'GET', absentRoot + suffix);
+        if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ empty: true, caller: person?.actor ?? null, suffix, current, missing });
+      }
       const actor = encodeURIComponent(person?.actor ?? absent);
       for (const suffix of [`replies/${encodeURIComponent(child.reply)}`, `reply-roots/${encodeURIComponent(original.work)}/count`]) {
         const current = await call(person, 'GET', `/v1/realms/${encodeURIComponent(closed.realm)}/${suffix}?actingSubject=${actor}`);
         const missing = await call(person, 'GET', `/v1/realms/${encodeURIComponent(absent)}/${suffix}?actingSubject=${actor}`);
         if (JSON.stringify(current) !== JSON.stringify(missing)) failures.push({ caller: person?.actor ?? null, suffix, current, missing });
       }
-      await call(person, 'GET', `${liveRoot}/roster`, undefined, 200);
+      const listed = (await call(person, 'GET', `${liveRoot}/roster`, undefined, 200)).body as { items: { agent: string; displayName: string; featured: boolean }[] };
+      expect(listed.items).toContainEqual({ agent: member.actor, displayName: 'closure-member', featured: true });
       const liveThreads = (await call(person, 'GET', `${liveRoot}/threads?sort=new`, undefined, 200)).body as { items: { reply: string }[] };
       expect(liveThreads.items).toContainEqual(expect.objectContaining({ reply: liveOpener.reply }));
+      if (person) {
+        await call(person, 'GET', `/v1/realms/${encodeURIComponent(live.realm)}/replies/${encodeURIComponent(liveOpener.reply)}`, undefined, 200);
+        const count = (await call(person, 'GET', `/v1/realms/${encodeURIComponent(live.realm)}/reply-roots/${encodeURIComponent(original.work)}/count`, undefined, 200)).body as { count: number };
+        expect(count.count).toBe(1);
+      }
+      expect((await call(person, 'GET', `${liveRoot}/about-thread?about=${encodeURIComponent(original.work)}`, undefined, 200)).body)
+        .toEqual({ realm: live.realm, about: original.work, thread: null });
       await call(person, 'GET', `/v1/works/${short(original.work)}`, undefined, 200);
       const publication = (await call(person, 'GET', `/v1/main-versions/${short(original.mainVersion)}/selection`, undefined, 200)).body as { body: string };
       expect(publication.body).toContain('Original fixture by its credited author Person:');
@@ -186,6 +205,26 @@ test('completed closure conceals empty and populated discussion reads and consen
       expect(credits.items).toHaveLength(1);
       expect(credits.items[0]).toMatchObject({ agent: owner.actor, role: 'author' });
     }
+    // Let the real graph read finish, close the Realm through governance, then
+    // release hydration. No owner result is mocked or replaced.
+    phase = 'closure-during-read';
+    const reached = Promise.withResolvers<void>(), resume = Promise.withResolvers<void>();
+    const graphQuery = stack.fuseki.query.bind(stack.fuseki);
+    let armed = true;
+    stack.fuseki.query = async (query, maximum) => {
+      const result = await graphQuery(query, maximum);
+      if (armed && query.includes('SELECT DISTINCT ?id ?reply ?work ?author ?revision ?review ?preparation')) {
+        armed = false;
+        reached.resolve();
+        await resume.promise;
+      }
+      return result;
+    };
+    const reading = call(undefined, 'GET', `${liveRoot}/threads?sort=new`);
+    try { await reached.promise; await close(live); }
+    finally { resume.resolve(); stack.fuseki.query = graphQuery; }
+    const raced = await reading, missing = await call(undefined, 'GET', `${absentRoot}/threads?sort=new`);
+    if (JSON.stringify(raced) !== JSON.stringify(missing)) failures.push({ phase, raced, missing });
     expect(failures, JSON.stringify(failures)).toEqual([]);
   } finally {
     writeFileSync(`.temp/goal/owner-closure-${Bun.env.REZICS_QA_RUN_ID}.json`, JSON.stringify({ phase, evidence }, null, 2));

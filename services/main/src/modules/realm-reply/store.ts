@@ -74,6 +74,18 @@ async function realmReplyReadState(access: RealmReadAuthority, env: WorkActivati
   realm: string, principal?: VerifiedPrincipal, actor?: string) {
   const policy = await readRealmPolicy(env, realm);
   if (!policy) return null;
+  let decisions: Awaited<ReturnType<typeof discloseInventory>>;
+  try {
+    decisions = await discloseInventory(env, [{ owner: 'graph', resource: realm,
+      component: 'record', revision: policy.realmRevision, context: realm }],
+    disclosureViewer(principal ?? null), 'thread');
+  } catch (error) {
+    throw new RealmReplyUnavailable('Realm disclosure is unavailable', { cause: error });
+  }
+  if (decisions.length !== 1 || decisions.some(value => !['visible', 'hidden', 'tombstone'].includes(value))) {
+    throw new RealmReplyUnavailable('Realm disclosure is incomplete');
+  }
+  if (decisions[0] !== 'visible') return null;
   const member = policy.visibility === 'private'
     ? principal && actor ? await access.realmReadProof?.(principal, actor, realm) : null : 'public';
   return member ? { policy, proof: JSON.stringify([policy, member]) } : null;
