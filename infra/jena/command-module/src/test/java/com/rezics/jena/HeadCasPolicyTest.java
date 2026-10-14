@@ -158,6 +158,45 @@ public class HeadCasPolicyTest {
         assertEquals("Work-owned component head differs from its receipt or owner", component(false, false, true, false, false));
     }
 
+    private static String conceptRetirement(String scope, boolean expectedHead, boolean retired, boolean wrongConcept) {
+        DatasetGraph data = DatasetFactory.createTxnMem().asDatasetGraph();
+        data.begin(org.apache.jena.query.ReadWrite.WRITE);
+        try {
+            String model = "https://rezics.com/definition/classification-proposition-v2";
+            UpdateAction.parseExecute("PREFIX rv: <" + RV + "> INSERT DATA { GRAPH " + iri(CommandPolicy.CURRENT)
+                + " { " + iri(COMPONENT) + " a <http://www.w3.org/2004/02/skos/core#Concept> ; rv:head "
+                + iri(OLD_MAIN) + " ; rv:definitionProfile " + iri(model) + " ; rv:conceptState rv:Active } }", DatasetFactory.wrap(data));
+            String state = retired ? "Retired" : "Active";
+            String text = "PREFIX rv: <" + RV + "> DELETE { GRAPH " + iri(CommandPolicy.CURRENT) + " { "
+                + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " ; rv:conceptState rv:Active } } INSERT { GRAPH "
+                + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT) + " rv:head " + iri(NEW_MAIN)
+                + " ; rv:conceptState rv:" + state + " } GRAPH " + iri(CommandPolicy.REVISIONS) + " { "
+                + iri(NEW_MAIN) + " a rv:RevisionAnchor ; rv:component " + iri(COMPONENT) + " ; rv:predecessor "
+                + iri(OLD_MAIN) + " ; rv:modelRevision " + iri(model) + " ; rv:conceptState rv:" + state
+                + " } GRAPH " + iri(CommandPolicy.RECEIPTS) + " { " + iri(RECEIPT)
+                + " rv:outcome rv:Succeeded ; rv:admissionId \"" + ADMISSION + "\" ; rv:authorityEpoch \"0\" ; rv:admittedScope \""
+                + scope + "\" ; rv:action \"classification.proposition.define\" ; rv:concept " + iri(wrongConcept ? MAIN : COMPONENT)
+                + " ; rv:conceptRevision " + iri(NEW_MAIN) + (expectedHead ? " ; rv:expectedHead " + iri(OLD_MAIN) : "")
+                + " } } WHERE { GRAPH " + iri(CommandPolicy.CURRENT) + " { " + iri(COMPONENT) + " rv:head " + iri(OLD_MAIN) + " } }";
+            CommandPolicy.Plan plan = CommandPolicy.parse(text, RECEIPT);
+            HeadCasPolicy.Snapshot before = HeadCasPolicy.capture(data, plan, RECEIPT);
+            UpdateAction.execute(plan.request(), DatasetFactory.wrap(data));
+            return HeadCasPolicy.check(data, RECEIPT, before);
+        } finally { data.abort(); data.end(); data.close(); }
+    }
+
+    @Test public void conceptRetirementConsumesOnlyAnExactVocabularyHeadReceipt() {
+        assertNull(conceptRetirement("classification:define:global", true, true, false));
+        assertEquals("receipt expected head differs from transaction prestate",
+            conceptRetirement("classification:define:global", false, true, false));
+        assertEquals("head transition Access scope differs from target",
+            conceptRetirement("work:edit:" + COMPONENT, true, true, false));
+        assertEquals("Concept retirement differs from its vocabulary receipt",
+            conceptRetirement("classification:define:global", true, false, false));
+        assertEquals("Concept retirement differs from its vocabulary receipt",
+            conceptRetirement("classification:define:global", true, true, true));
+    }
+
     @Test public void workEditCannotMoveAMainVersionHeadWithoutItsSelection() {
         assertEquals("Main Version head moves only with its selection", component(false, false, false, true, false));
         assertEquals("Main Version head moves only with its selection", component(false, false, false, true, true));

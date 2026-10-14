@@ -258,6 +258,7 @@ export async function retireVocabularyConcept(env: WorkActivationEnvironment, ad
         rv:predecessor ${iri(value.concept.expectedHead)} ; rv:conceptState rv:Retired ;
         rv:datasetId ${iri(DATASET)} ; rv:dataEpoch ${lit(env.lineage.dataEpoch)} ; rv:sequence ?next . }
       GRAPH ${iri(GRAPHS.receipts)} { ${iri(receipt)} a rv:OperationReceipt ; rv:operation ${iri(operation)} ;
+        rv:expectedHead ${iri(value.concept.expectedHead)} ; rv:action "classification.proposition.define" ;
         rv:requestDigest ${lit(digest)} ; rv:admissionId ${lit(admission.id)} ; rv:authorityEpoch ${lit(admission.authorityEpoch)} ;
         rv:admittedScope ${lit(admission.scope)} ; rv:outcome rv:Succeeded ;
         rv:scheme ${iri(definitions.scheme)} ; rv:concept ${iri(definitions.concept)} ; rv:path ${iri(definitions.path)} ;

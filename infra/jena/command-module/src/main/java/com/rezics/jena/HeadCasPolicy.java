@@ -25,6 +25,7 @@ final class HeadCasPolicy {
     private static final Node WORK_STRUCTURE_PUBLICATION_HEAD = rv("workStructurePublicationHead");
     private static final Node STATEMENT = RDF.Statement.asNode();
     private static final Node CONTEXT = rv("SemanticContext");
+    private static final Node CONCEPT = uri("http://www.w3.org/2004/02/skos/core#Concept");
 
     private record Key(Node subject, Node predicate) {}
     private record Transition(Key key, Node before, Node next, Node ownerType,
@@ -100,9 +101,14 @@ final class HeadCasPolicy {
                 return new Snapshot(List.of(), "absent head requires an optional predecessor binding");
             boolean statement = data.contains(CURRENT, key.subject(), RDF.type.asNode(), STATEMENT);
             boolean context = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONTEXT);
-            if (statement && context) return new Snapshot(List.of(), "head target has ambiguous owner profile");
+            boolean concept = data.contains(CURRENT, key.subject(), RDF.type.asNode(), CONCEPT);
+            if (statement && context || concept && (statement || context))
+                return new Snapshot(List.of(), "head target has ambiguous owner profile");
+            if (concept && (!data.contains(CURRENT, key.subject(), rv("conceptState"), rv("Active"))
+                || data.contains(CURRENT, key.subject(), rv("conceptState"), rv("Retired"))))
+                return new Snapshot(List.of(), "Concept retirement requires an active predecessor");
             transitions.add(new Transition(key, before, nextValues.getFirst(),
-                statement ? STATEMENT : context ? CONTEXT : null, preserved, language,
+                statement ? STATEMENT : context ? CONTEXT : concept ? CONCEPT : null, preserved, language,
                 one(data, CURRENT, key.subject(), rv("work")),
                 data.contains(CURRENT, Node.ANY, rv("mainVersion"), key.subject())
                     || data.contains(CURRENT, key.subject(), RDF.type.asNode(), rv("MainVersion"))));
@@ -197,8 +203,10 @@ final class HeadCasPolicy {
         } else if (HEAD.equals(transition.key().predicate())) {
             boolean statement = STATEMENT.equals(transition.ownerType());
             boolean context = CONTEXT.equals(transition.ownerType());
+            boolean concept = CONCEPT.equals(transition.ownerType());
             if (statement != data.contains(CURRENT, subject, RDF.type.asNode(), STATEMENT)
-                || context != data.contains(CURRENT, subject, RDF.type.asNode(), CONTEXT))
+                || context != data.contains(CURRENT, subject, RDF.type.asNode(), CONTEXT)
+                || concept != data.contains(CURRENT, subject, RDF.type.asNode(), CONCEPT))
                 return "head target owner profile changed";
             if (statement || context) {
                 String family = statement ? "statement-withdraw-v1" : "context-revise-v1";
@@ -221,6 +229,21 @@ final class HeadCasPolicy {
                         return "Statement head lacks a withdrawn source revision";
                     requiredScope = "statement:speak:" + speaker.getURI();
                 } else requiredScope = "context:change:" + subject.getURI();
+            } else if (concept) {
+                // This is the existing vocabulary admission, checked against
+                // its exact Concept successor, never a Work-edit receipt.
+                Node model = uri("https://rezics.com/definition/classification-proposition-v2");
+                if (before == null || !same(data, RECEIPTS, own, "concept", subject)
+                    || !same(data, RECEIPTS, own, "conceptRevision", next)
+                    || !same(data, CURRENT, subject, "definitionProfile", model)
+                    || !same(data, REVISIONS, next, "modelRevision", model)
+                    || !data.contains(RECEIPTS, own, rv("action"),
+                        NodeFactory.createLiteralString("classification.proposition.define"))
+                    || !data.contains(CURRENT, subject, rv("conceptState"), rv("Retired"))
+                    || data.contains(CURRENT, subject, rv("conceptState"), rv("Active"))
+                    || !data.contains(REVISIONS, next, rv("conceptState"), rv("Retired")))
+                    return "Concept retirement differs from its vocabulary receipt";
+                requiredScope = "classification:define:global";
             } else if (transition.work() != null) {
                 // Work-owned Versioned components use the same registry and Access
                 // scope. Their identities and exact revisions remain their own.
