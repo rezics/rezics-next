@@ -1,0 +1,45 @@
+// Preserve these executed witnesses when later areas add coverage.
+export const coveredBaseline = {
+  "operations": [
+    "POST /v1/works",
+    "PUT /v1/agents/{}/profile",
+    "POST /v1/reports",
+    "POST /v1/sources/proposals/{}/adoption/native-work",
+    "POST /v1/works/{}/source-title-applications/{}",
+    "POST /v1/agents/control",
+    "POST /v1/governance/rules",
+    "POST /v1/rights/complaints"
+  ],
+  "cases": [
+    "shared Access admissions / represented Work creation / expired: original, binding, fresh refusal and preservation controls",
+    "shared Access admissions / represented Work creation / expired: exact replay requires current authority",
+    "shared Access admissions / represented Work creation / revoked: original, binding, fresh refusal and preservation controls",
+    "shared Access admissions / represented Work creation / revoked: exact replay requires current authority",
+    "Agent profile changes / public profile v1 / expired: original, binding, fresh refusal and preservation controls",
+    "Agent profile changes / public profile v1 / expired: exact replay requires current authority",
+    "Agent profile changes / public profile v1 / revoked: original, binding, fresh refusal and preservation controls",
+    "Agent profile changes / public profile v1 / revoked: exact replay requires current authority",
+    "report and rights complaint submission / content_report / expired: original, binding, fresh refusal and preservation controls",
+    "report and rights complaint submission / content_report / expired: exact replay requires current authority",
+    "report and rights complaint submission / content_report / revoked: original, binding, fresh refusal and preservation controls",
+    "report and rights complaint submission / content_report / revoked: exact replay requires current authority",
+    "report and rights complaint submission / rights_complaint / expired: original, binding, fresh refusal and preservation controls",
+    "report and rights complaint submission / rights_complaint / expired: exact replay requires current authority",
+    "report and rights complaint submission / rights_complaint / revoked: original, binding, fresh refusal and preservation controls",
+    "report and rights complaint submission / rights_complaint / revoked: exact replay requires current authority",
+    "native source Work adoption / represented-agent / expired: original, binding, fresh refusal and preservation controls",
+    "native source Work adoption / represented-agent / expired: exact replay requires current authority",
+    "native source Work adoption / represented-agent / revoked: original, binding, fresh refusal and preservation controls",
+    "native source Work adoption / represented-agent / revoked: exact replay requires current authority",
+    "source title application / represented-agent / expired: original, binding, fresh refusal and preservation controls",
+    "source title application / represented-agent / expired: exact replay requires current authority",
+    "source title application / represented-agent / revoked: original, binding, fresh refusal and preservation controls",
+    "source title application / represented-agent / revoked: exact replay requires current authority",
+    "Agent control policy (authorized before shared receipted helper) / controller policy / revoked: original, binding, fresh refusal and preservation controls",
+    "Agent control policy (authorized before shared receipted helper) / controller policy / revoked: exact replay requires current authority",
+    "governance rule publication / rule revision / expired: original, binding, fresh refusal and preservation controls",
+    "governance rule publication / rule revision / expired: exact replay requires current authority",
+    "governance rule publication / rule revision / revoked: original, binding, fresh refusal and preservation controls",
+    "governance rule publication / rule revision / revoked: exact replay requires current authority"
+  ]
+} as const;
