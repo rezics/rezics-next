@@ -1,7 +1,8 @@
 import { expect, setDefaultTimeout, test } from 'bun:test';
 import { browserMainApi } from '../api/browser.ts';
 import { mainMediaApi } from './media-api.ts';
-import type { EpisodeProgress } from './episode-api.ts';
+import { mainEpisodeApi, type EpisodeProgress } from './episode-api.ts';
+import { progressControl } from './medium-progress.tsx';
 import { settle } from './failure.ts';
 
 setDefaultTimeout(15_000);
@@ -16,6 +17,21 @@ function transport(handler: (request: Request) => Promise<Response> | Response):
   return Object.assign((input: RequestInfo | URL, init?: RequestInit) => Promise.resolve(handler(new Request(input, init))),
     { preconnect: fetch.preconnect });
 }
+
+test('semantic episodes select episode controls while child Works keep chapter controls', async () => {
+  for (const targetWork of [null, iri(5)]) {
+    const main = browserMainApi('https://recorded.invalid', { fetcher: transport(request => {
+      expect(new URL(request.url).pathname).toBe(`/api/main/v1/resources/${work.slice(-36)}/parts`);
+      return response({ structure: part.structure, parts: [
+        { occurrence: part.occurrence, role: 'part', work: targetWork, displayLabel: 'Episode 1002' },
+      ] });
+    }) });
+    const episodes = mainEpisodeApi(actor, () => main);
+    expect(await progressControl({ workParts: async () => ({ ok: true, data: true }),
+      routes: async () => ({ ok: true, data: { items: [], next: null } }) }, episodes, work, 'media'))
+      .toEqual({ kind: targetWork ? 'chapters' : 'episodes' });
+  }
+});
 
 for (const [status, failure] of [[400, 'invalid'], [401, 'sign-in'], [403, 'sign-in'], [404, 'missing'],
   [409, 'moved'], [422, 'budget'], [429, 'unavailable'], [503, 'unavailable']] as const) {

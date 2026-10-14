@@ -104,7 +104,8 @@ export async function ZoneWorkPage({
   const facts = read;
   const discussionAddress = aboutDiscussionAddress(base.path);
   const discussion = discussionAddress
-    ? <ZoneAboutDiscussion {...discussionAddress} href={base.path} locale={locale} /> : null;
+    ? <ZoneAboutDiscussion spaceRef={discussionAddress.spaceRef} path={discussionAddress.path}
+      href={base.path} locale={locale} /> : null;
   return (
     <WorkFrameView {...common} work={work.header} lead={lead}>
       {tab === 'overview' ? (

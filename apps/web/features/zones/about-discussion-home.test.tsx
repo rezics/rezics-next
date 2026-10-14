@@ -24,7 +24,7 @@ let attached = true;
 let currentView: RealmView;
 let publication: ZonePresentationRead;
 let pageKind: 'work' | 'resource' | 'document';
-const discussionAddresses: Array<{ zone?: string; ref?: string; path: string; href: string }> = [];
+const discussionAddresses: Array<{ zone?: string; spaceRef?: string; path: string; href: string }> = [];
 
 const originalHeaders = { ...(await import('next/headers')) };
 const i18n = { ...(await import('../../i18n/server.ts')) };
@@ -228,5 +228,8 @@ for (const kind of ['work', 'resource', 'document'] as const) {
     expect(discussionAddresses).toEqual([expect.objectContaining({
       path: '/guide/harbor-field-guide', href: spaceHref(currentView.context.ref, 'site', path),
     })]);
+    // React rejects a server boundary carrying its reserved ref, before the helper runs.
+    expect(discussionAddresses[0]).not.toHaveProperty('ref');
+    if (kind === 'work') expect(discussionAddresses[0]!.spaceRef).toBe(currentView.context.ref);
   });
 }

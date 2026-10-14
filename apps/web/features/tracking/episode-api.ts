@@ -87,7 +87,8 @@ export function mainEpisodeApi(actingSubject: string, main: () => MainClient = b
         query: { actingSubject, limit: EPISODE_PAGE } })));
       // A Work with no series Structure is no failure: it simply has no episodes to track.
       if (!parts.ok) return parts.failure === 'missing' ? { ok: true, data: null } : parts;
-      return { ok: true, data: { structure: parts.data.structure, placesWorks: parts.data.parts.some(part => part.role === 'part') } };
+      return { ok: true, data: { structure: parts.data.structure,
+        placesWorks: parts.data.parts.some(part => part.role === 'part' && part.work !== null && part.work !== undefined) } };
     },
     async page(structure, { parent, after } = {}) {
       const page = await restarted(() => settle(() => main().v1.compositions({ id: uuidOf(structure) }).get({
