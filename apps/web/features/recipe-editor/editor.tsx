@@ -22,7 +22,8 @@ import { readRecipe } from './api.ts';
 import { Preview } from './preview.tsx';
 import { missingBeforePublishing, PublishBar } from './publish.tsx';
 import { publishWhenSettled } from './publish-settled.ts';
-import { mainRecipeExportApi } from './export-api.ts';
+import { mainRecipeExportApi, type RecipeExport } from './export-api.ts';
+import type { RecipeImportApi } from './import-api.ts';
 import { RecipeExchange } from './recipe-exchange.tsx';
 import { createDetailsSaver, createNotesWriter, entryOf, type NotesState } from './saves.ts';
 import { createRecipeStore } from './store.ts';
@@ -43,9 +44,14 @@ export interface RecipeEditorProps {
   messages: RecipeEditorMessages;
   /** Stories pass a stand-in Main; the app uses the browser client through the BFF. */
   main?: () => MainClient;
+  /** When set, file import uses this client. Production keeps the browser fetch. */
+  importApi?: RecipeImportApi;
+  /** When set, replaces the browser download after the export reader succeeds. */
+  saveExport?: (exported: RecipeExport, contentLanguage?: string, recipeName?: string) => void;
 }
 
-export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main }: RecipeEditorProps) {
+export function RecipeEditor({ work, mainVersion, language, actingSubject, workHref, initial, locale, messages: catalog, main,
+  importApi, saveExport }: RecipeEditorProps) {
   const t = useMemo(() => materializeData(catalog, { locale }), [catalog, locale]);
   const client = main ?? browserMain;
   const [store] = useState(() => createRecipeStore({ work, mainVersion, actingSubject, initial: initial.recipe, main: client,
@@ -112,6 +118,7 @@ export function RecipeEditor({ work, mainVersion, language, actingSubject, workH
         <div className="flex min-w-0 flex-wrap items-center justify-end gap-x-3 gap-y-2">
           <RecipeExchange structure={state.structure} revision={state.head} actingSubject={actingSubject} locale={locale}
             messages={catalog} disabled={saving || recipe.loading || accessRemoved} api={exportApi}
+            importApi={importApi} save={saveExport}
             contentLanguage={language} recipeName={entry.title}
             onImportBusyChange={setImporting}
             onStaleRefresh={async () => await store.reload() ? store.snapshot().state.head : null}

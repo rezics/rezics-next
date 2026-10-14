@@ -6,6 +6,7 @@ import { emptyRecipe } from './model.ts';
 import { recipeLanguage } from './authored-language.ts';
 
 const page = () => readFileSync(new URL('./edit-page.tsx', import.meta.url), 'utf8');
+const mapping = () => readFileSync(new URL('./recipe-authoring-recorded-page.ts', import.meta.url), 'utf8');
 
 test('a Japanese recipe with an English display title is written in Japanese', () => {
   // The header title is the one chosen for the reader. The label language is the Work's own.
@@ -30,8 +31,11 @@ test('a new Work with no metadata title uses the label language the header still
 });
 
 test('the editor page does not take its language from the display title', () => {
-  const source = page();
+  const source = mapping();
+  expect(page()).toContain('loadRecipeAuthoring(');
   expect(source).toContain('recipeLanguage(');
   expect(source).not.toMatch(/canonicalLanguage\(work\.title\.language\)/);
   expect(source).not.toContain('selectedLanguage');
+  expect(page()).not.toMatch(/canonicalLanguage\(work\.title\.language\)/);
+  expect(page()).not.toContain('selectedLanguage');
 });

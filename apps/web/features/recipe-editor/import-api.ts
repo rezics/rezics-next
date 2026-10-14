@@ -57,7 +57,7 @@ function refusal(status: number, value: unknown): RecipeImportError {
     return new RecipeImportError('stale', detail);
   }
   if (status === 409) return new RecipeImportError('conflict', detail);
-  if (status === 401 || status === 403 || status === 404) return new RecipeImportError('denied');
+  if (status === 401 || status === 403 || status === 404) return new RecipeImportError('denied', detail);
   if (status === 400 || status === 422) return new RecipeImportError('invalid', detail);
   return new RecipeImportError('unavailable', detail);
 }

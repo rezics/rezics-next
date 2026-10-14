@@ -47,7 +47,7 @@ function exportFailure(status: number, value: unknown): RecipeExportError {
   if (status === 413 && problemCode(value) === 'recipe_export_too_large') {
     return new RecipeExportError('too-large', problemMessage(value));
   }
-  if (status === 401 || status === 403 || status === 404) return new RecipeExportError('denied');
+  if (status === 401 || status === 403 || status === 404) return new RecipeExportError('denied', problemMessage(value));
   return new RecipeExportError('unavailable');
 }
 

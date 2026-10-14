@@ -150,7 +150,10 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
       </Button>
       {exportStage.kind === 'done' ? <p role="status" className="max-w-72 text-left text-xs text-muted-foreground sm:text-right">
         {t.exportedRevision({ revision: revisionName(exportStage.revision) })}</p> : null}
-      {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">{exportFailureText}</p> : null}
+      {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">
+        {exportFailureText}{exportStage.kind === 'failed' && exportStage.detail && exportStage.failure !== 'too-large'
+          ? <span> {t.mainSays}: {exportStage.detail}</span> : null}
+      </p> : null}
     </div>
 
     <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
