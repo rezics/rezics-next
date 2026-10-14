@@ -728,10 +728,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 51, missingRows: 17, missingProofs: 19 });
+    .toEqual({ rows: 68, provedPairs: 53, missingRows: 15, missingProofs: 17 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 2, L26: 0, gap: 13, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 2, L26: 0, gap: 11, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
@@ -770,7 +770,7 @@ test('literal loops and registered journeys retain all eleven browser citations'
   }
 });
 
-test('every Realm closure surface records its API proof while browser coverage remains missing', () => {
+test('every Realm closure surface records its API proof and observed browser journeys', () => {
   const outcomeFiles = [
     ['direct routes', 'closure-direct-routes'],
     ['threads and replies', 'closure-threads-and-replies'],
@@ -796,8 +796,14 @@ test('every Realm closure surface records its API proof while browser coverage r
     file: 'services/main/tests/realm-platform-closure-reads.test.ts',
     test: 'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
   });
-  for (const row of closureRows.filter(row => row.capability !== 'Closure: notifications'))
+  for (const row of closureRows.filter(row => !['Closure: notifications', 'Closure: feed', 'Closure: rankings'].includes(row.capability)))
     expect(row.browser, row.capability).toMatchObject({ missing: 'gap' });
+  for (const capability of ['Closure: feed', 'Closure: rankings']) {
+    expect(closureRows.find(row => row.capability === capability)!.browser).toMatchObject({
+      file: 'apps/web/tests/realm-closure-discovery.e2e.ts',
+      journey: 'apps/web/tests/journeys/realm-closure-discovery.ts',
+    });
+  }
   expect(closureRows.find(row => row.capability === 'Closure: notifications')!.browser)
     .toMatchObject({ file: 'apps/web/tests/realm-closure.e2e.ts', journey: 'apps/web/tests/journeys/realm-closure.ts' });
 });

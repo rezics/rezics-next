@@ -53,7 +53,8 @@ export const barAction = 'relative z-10 inline-flex h-8 items-center gap-1.5 rou
   + 'focus-visible:ring-2 focus-visible:ring-ring [&_svg]:size-4.5';
 
 /** Links inside a row sit above its stretched title link, so they keep their own target. */
-export const rowLink = 'relative z-10 outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring';
+export const rowLink = 'relative z-10 inline-block max-w-full align-bottom outline-none hover:underline '
+  + 'focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring';
 
 /** "3 h ago", with the full date on hover. */
 export function PostTime({ time }: { time: string }) {
@@ -69,7 +70,7 @@ export interface MetaPart { node: ReactNode; keep?: boolean; name?: boolean }
 export function MetaLine({ icon, parts, end }: { icon: ReactNode; parts: readonly (MetaPart | null | false)[];
   end?: ReactNode }) {
   const shown = parts.filter((part): part is MetaPart => Boolean(part));
-  return <div className={cn('flex min-w-0 items-center gap-2 text-muted-foreground', postRhythm.meta)}>
+  return <div className={cn('relative z-10 flex min-w-0 items-center gap-2 text-muted-foreground', postRhythm.meta)}>
     {icon}
     <p className="flex min-w-0 flex-1 items-center gap-x-1 overflow-hidden whitespace-nowrap">
       {shown.map((part, index) => <span key={index} className={cn('flex min-w-0 items-center gap-x-1',
@@ -181,7 +182,7 @@ export function PostRow({ kind, href, report, reportKind = 'post', meta, title, 
   const heading = title ?? label;
   const link = (children: ReactNode, className?: string) => href
     ? <LocalizedLink href={href} className={cn('outline-none after:absolute after:inset-0 after:content-[""]',
-      'focus-visible:underline', className)}>{children}</LocalizedLink> : children;
+      'focus-visible:underline focus-visible:after:ring-2 focus-visible:after:ring-inset focus-visible:after:ring-ring', className)}>{children}</LocalizedLink> : children;
   return <article aria-labelledby={titleId} aria-posinset={position} aria-setsize={position ? total ?? -1 : undefined}
     data-kind={kind} className={cn('group/post relative border-border/60 border-b transition-colors',
       'hover:bg-foreground/[0.03] has-[:focus-visible]:bg-foreground/[0.03]', postRhythm.row)}>

@@ -390,7 +390,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-feed.test.ts',
       'realm/closure-feed / visitor: omits closed Realm feed occurrences and head counts while credited independent originals remain traversable',
       'Traverses feed pages after Realm closure and checks closed occurrences and head counts disappear while independent original publications remain readable with author credit.'),
-    browser: missing('gap', 'No feed Realm closure browser journey is cited.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure-discovery.e2e.ts',
+      'apps/web/tests/journeys/realm-closure-discovery.ts',
+      'realm-closure-feed: a returning member loses closed Realm results after reload and keeps the original',
+      'Reads populated Realm activity, closes its Realm through public moderation commands, reloads scoped, global and Following feeds, and keyboard-opens the independent original in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -398,7 +401,10 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-rankings.test.ts',
       'realm/closure-rankings / visitor: gets ordinary missing Realm rankings and no closed occurrences in broader rankings while independent author credits survive',
       'Compares closed Realm Best, Top, ranking modules and scoped trending with absent routes, excludes closed selections from broader rankings and preserves independent originals and credits.'),
-    browser: missing('gap', 'No ranking Realm closure browser journey is cited.'),
+    browser: journeyBrowser('apps/web/tests/realm-closure-discovery.e2e.ts',
+      'apps/web/tests/journeys/realm-closure-discovery.ts',
+      'realm-closure-rankings: a returning member loses closed Realm results after reload and keeps the original',
+      'Reads a populated Best discussion ranking, closes its Realm, reloads Best and every Top period into the ordinary missing page, and keyboard-opens the independent original in English and Japanese.'),
   },
   {
     kind: 'realm',
@@ -406,7 +412,7 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('tests/qa/integration/outcomes/realm/closure-search.test.ts',
       'realm/closure-search / visitor: gets ordinary unavailable Realm searches and continuations while independently published originals stay globally searchable and credited',
       'Reads scoped search and retained continuations after closure, checks the Realm is unavailable and independently published original Works remain globally searchable with author credits.'),
-    browser: missing('gap', 'No search Realm closure browser journey is cited.'),
+    browser: missing('gap', 'The realm-closure-search browser journey is blocked before closure: POST /v1/query with {"profile":"resource-list-v1","context":"global","scope":{"kind":"all"},"sort":"relevance","limit":20,"q":"Closuregardenc300f524c8b7"} repeatedly returned HTTP 503 work_read_unavailable after the original Work basis settled. Main reports WorkReadUnavailable caused by WorkReadMoved. See QA 20261014t202845-0892a9 logs/e2e-playwright.log and .temp/realm-closure-evidence/20261014t202845-0892a9-e-search-8e94d2a2-db59-4254-b662-433d402f8f47.json.'),
   },
   {
     kind: 'realm',
