@@ -20,6 +20,7 @@ import { BooksEditionPage } from './books-edition-page.tsx';
 import { messages } from './messages.ts';
 import { IdentityStatus } from './primary-action.tsx';
 import { editionsHref, releaseHref } from '../work-levels/route.ts';
+import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import type { WorkHeader } from './types.ts';
 
 type Row = 'hub' | 'ambiguous' | 'formats';
@@ -30,7 +31,7 @@ const sample = (row: Row, persona: AnswerPersona, label: string) => {
   if (!found) throw new Error(`Missing Books answer: ${row}/${persona}/${label}`);
   return found;
 };
-interface Props { row: Row; persona: 'visitor' | 'member'; state: 'populated' | 'loading' | 'stale';
+interface Props { row: Row; persona: 'visitor' | 'member'; state: 'populated' | 'empty' | 'loading' | 'stale';
   saved: boolean; locale: UiLocale }
 type View = Awaited<ReturnType<typeof readBooksEditionPage>> & { actions?: ReaderActions };
 
@@ -41,27 +42,31 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
   useEffect(() => {
     setView(null);
     setFault(null);
-    const headerLabel = 'work-header';
+    const empty = state === 'empty';
+    const headerLabel = empty ? 'work-without-editions' : 'work-header';
     const headerSample = sample(row, persona, headerLabel);
     const actingSubject = new URL(headerSample.path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined;
     const id = new URL(headerSample.path, 'https://recorded.invalid').pathname.split('/').at(-1)!;
-    const releaseLabel = row === 'hub' ? 'availability-releases' : 'release-choices';
-    const preferenceLabel = saved ? row === 'ambiguous' ? 'own-preference-audiobook'
+    const releaseLabel = empty ? 'release-choices-empty' : row === 'hub' ? 'availability-releases' : 'release-choices';
+    const preferenceLabel = empty ? 'edition-preference-empty' : saved ? row === 'ambiguous' ? 'own-preference-audiobook'
       : row === 'hub' ? 'own-preference-paperback' : 'own-preference-ebook'
       : 'own-preference-before';
     const selections: RecordedSelection[] = [
       { label: headerLabel, state: state === 'loading' ? 'loading' : 'populated' },
-      { label: releaseLabel, state: 'populated' },
+      { label: releaseLabel, state: empty ? 'empty' : 'populated' },
     ];
     if (persona === 'member') selections.push(
-      { label: 'realization-choices', state: 'populated' },
-      { label: preferenceLabel, state: saved ? 'populated' : 'empty' },
+      { label: empty ? 'realization-choices-empty' : 'realization-choices', state: empty ? 'empty' : 'populated' },
+      { label: preferenceLabel, state: !empty && saved ? 'populated' : 'empty' },
+    );
+    if (persona === 'member' && !empty) selections.push(
       { label: row === 'hub' ? 'release-detail-paperback' : 'selected-release-ebook', state: 'populated' },
       { label: state === 'stale' ? 'save-preference-stale'
         : row === 'hub' ? 'save-preference-paperback' : 'save-preference-ebook',
         state: state === 'stale' ? 'error' : 'populated' },
     );
-    if (persona === 'member') selections.push({ label: 'progress-in-language', state: 'populated' });
+    if (persona === 'member') selections.push({ label: empty ? 'progress-summary-empty' : 'progress-in-language',
+      state: empty ? 'empty' : 'populated' });
     if (row === 'ambiguous' && saved) selections.push({ label: 'selected-release-audiobook', state: 'populated' });
     const replay = recordedFetch(records[row], persona, selections, { pathPrefix: BFF_PREFIX });
     let mounted = true;
@@ -115,10 +120,10 @@ type Story = StoryObj<typeof meta>;
 
 async function compare(canvasElement: HTMLElement, args: Props) {
   const canvas = within(canvasElement);
-  const header = sample(args.row, args.persona, 'work-header').answer as WorkHeader;
+  const header = sample(args.row, args.persona, args.state === 'empty' ? 'work-without-editions' : 'work-header').answer as WorkHeader;
   await expect(canvas.findByRole('heading', { level: 1, name: header.title.value })).resolves.toBeVisible();
   await document.fonts.ready;
-  const label = args.row === 'hub' ? 'availability-releases' : 'release-choices';
+  const label = args.state === 'empty' ? 'release-choices-empty' : args.row === 'hub' ? 'availability-releases' : 'release-choices';
   const releases = sample(args.row, args.persona, label).answer as BooksReleasePage;
   for (const release of releases.items) {
     const link = canvas.getAllByRole('link', { name: release.title.value })
@@ -195,6 +200,28 @@ export const HubSaveProgress: Story = { async play({ canvasElement, args }) {
 } };
 export const SavedHubChinesePhone: Story = { ...SavedHubProgress, args: { saved: true, locale: 'zh-Hans' },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
+
+export const EmptyInventory: Story = { args: { state: 'empty' }, async play({ canvasElement, args }) {
+  await compare(canvasElement, args);
+  const canvas = within(canvasElement);
+  const t = copyOf(args.locale);
+  await expect(canvas.getByText(levelsCopy(args.locale).noReleasesBody)).toBeVisible();
+  await expect(canvas.queryByRole('article')).not.toBeInTheDocument();
+  const status = canvas.getByRole('list', { name: messages[args.locale].yourEdition });
+  await expect(within(status).getAllByRole('listitem')).toHaveLength(1);
+  await expect(status).toHaveTextContent(t.notStarted);
+  const select = await canvas.findByRole('combobox', { name: t.edition });
+  await expect(select).toHaveTextContent(t.anyEdition);
+  await expect(canvas.getByRole('button', { name: t.savePreference })).toBeVisible();
+  await userEvent.click(select);
+  await expect(canvas.getAllByRole('option')).toHaveLength(1);
+  await waitFor(() => expect(canvas.getByRole('option', { name: t.anyEdition })).toBeVisible());
+  await userEvent.keyboard('{Escape}');
+  await expect(canvas.queryByRole('alert')).not.toBeInTheDocument();
+  await expect(canvas.queryByRole('status')).not.toBeInTheDocument();
+  await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
+} };
+export const EmptyInventoryPhone: Story = { ...EmptyInventory, globals: { viewport: { value: 'phone' } } };
 
 export const Loading: Story = { args: { state: 'loading' }, async play({ canvasElement }) {
   await expect(within(canvasElement).getByRole('status')).toHaveTextContent(messages.en.loading);
