@@ -135,6 +135,25 @@ test('the explicit preparation entry imports outside the Bun test runner without
   expect(code, stderr).toBe(0);
 });
 
+test('Account diagnostics omit verification credentials without changing the actual public request', async () => {
+  const script = String.raw`
+    const { personaSession } = await import('./tests/qa/support/personas.ts');
+    let sent, event;
+    globalThis.fetch = async input => { sent = String(input); return Response.json({}); };
+    const person = personaSession('http://main.test', 'http://account.test', 'fixture-account',
+      undefined, undefined, undefined, undefined, undefined, async answer => { event = answer; });
+    await person.account('GET', '/api/auth/verify-email?token=fixture-verification-secret');
+    if (!sent.includes('token=fixture-verification-secret')) throw new Error('Verification request was changed');
+    if (JSON.stringify(event).includes('fixture-verification-secret')) throw new Error('Credential entered diagnostics');
+    if (event.request.path !== '/api/auth/verify-email' || event.request.body !== null || event.response.body !== '')
+      throw new Error('Account diagnostics must contain timing and identity only');
+  `;
+  const child = Bun.spawn(['bun', '-e', script], { cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+});
+
 test('complete builder uses 552 public draft/identity/placement commands with exact nested and episode bindings', async () => {
   const f = fixture(), directory = mkdtempSync(join(import.meta.dir, '../../../.temp/realm-corpus-unit-'));
   mkdirSync(join(directory, 'backup'));

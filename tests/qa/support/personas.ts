@@ -145,7 +145,8 @@ export function personaSession(
             const observe = base === main ? observeMain : observeAccount;
             try {
               if (observe) await observe({ caller: person,
-                request: { method, url: url.href, path: url.pathname + url.search,
+                request: { method, url: base === main ? url.href : url.origin + url.pathname,
+                  path: url.pathname + (base === main ? url.search : ''),
                   body: base === main ? body ?? null : null, key: commandKey ?? null },
                 // Zero denotes no HTTP answer, never a terminal product refusal.
                 response: { status: 0, body: JSON.stringify({ transportFailure: error instanceof Error ? error.name : 'unknown' }) },
@@ -158,7 +159,8 @@ export function personaSession(
             const raw = await response.clone().text(), answeredAt = Date.now();
             // Setup diagnostics never retain credentials, cookies or headers.
             await observe({ caller: person,
-              request: { method, url: url.href, path: url.pathname + url.search,
+              request: { method, url: base === main ? url.href : url.origin + url.pathname,
+                path: url.pathname + (base === main ? url.search : ''),
                 body: base === main ? body ?? null : null, key: commandKey ?? null },
               response: { status: response.status, body: base === main ? raw : '' }, requestStartedAt, answeredAt });
           }
@@ -391,7 +393,7 @@ async function applications(options: PersonaOptions) {
           await response.clone().arrayBuffer();
           const url = new URL(input);
           await options.observeAccount({ caller: anonymous,
-            request: { method: init?.method ?? 'GET', url: url.href, path: url.pathname + url.search, body: null, key: null },
+            request: { method: init?.method ?? 'GET', url: url.origin + url.pathname, path: url.pathname, body: null, key: null },
             response: { status: response.status, body: '' }, requestStartedAt: started, answeredAt: Date.now() });
         }
         return response;
