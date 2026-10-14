@@ -30,7 +30,7 @@ export async function realmConceptGrantProof(client: PoolClient, principal: Veri
 /** A board replacement affects removals as well as additions. Hold every
  * selected grant through the caller's existing Realm decision transaction. */
 export async function hasRealmConceptPermission(client: PoolClient, principal: VerifiedPrincipal,
-  realm: string, actor: string, concepts: readonly string[], action: 'publication.adopt') {
+  realm: string, actor: string, concepts: readonly string[], action: 'publication.adopt' | 'governance.moderate') {
   if (concepts.length > 16 || ![realm, actor, ...concepts].every(value => realmIdPattern.test(value)))
     throw new RealmAdminInvalid('Invalid Realm Concept jurisdiction');
   if (!concepts.length) return !!await representedGrantProof(client, principal, actor,

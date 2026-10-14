@@ -53,7 +53,8 @@ export async function assertReplyBoardAuthority(client: PoolClient, principal: V
   realm: string, actor: string, author: string, member: boolean, previous: ReplyBoards, next: ReplyBoards) {
   if (actor === author && member) return;
   const affected = [...new Set([...previous.concepts, ...next.concepts])];
-  if (await hasRealmConceptPermission(client, principal, realm, actor, affected, 'publication.adopt')) return;
+  if (await hasRealmConceptPermission(client, principal, realm, actor, affected, 'publication.adopt')
+    || await hasRealmConceptPermission(client, principal, realm, actor, affected, 'governance.moderate')) return;
   throw new RealmReplyDenied('Reply board management authority is required');
 }
 

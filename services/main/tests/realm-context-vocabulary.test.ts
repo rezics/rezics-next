@@ -9,9 +9,26 @@ import { ANONYMOUS_VIEWER } from '../src/modules/suitability/policy.ts';
 import { classificationContextV2Profile } from '../../../model/definitions/classification-context-v2.ts';
 import { buildCommandRegistry, selectCommandProfile } from '../../../model/compiler/registry.ts';
 import { classificationContextProfile } from '../../../model/definitions/classification-context-v1.ts';
+import { createMainApp } from '../src/app.ts';
+import { FusekiClient } from '../src/infrastructure/fuseki.ts';
+import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 const uri = (value: string) => ({ type: 'uri', value });
+
+test('Realm vocabulary HTTP reads accept a native Context with a bounded page', async () => {
+  let reads = 0;
+  const graph = new FusekiClient('http://main.invalid/fuseki');
+  graph.query = async () => { reads++; throw new WorkReadUnavailable('Graph is offline'); };
+  const app = createMainApp(graph, { access: {}, account: {}, environment: {
+    lineage: { dataEpoch: 'vocabulary-http', routingEpoch: 'routing' },
+    fuseki: graph,
+  } } as unknown as MainWorkDependencies);
+  const response = await app.handle(new Request(`http://main.invalid/v1/classification-vocabulary?${
+    new URLSearchParams({ context: native(), limit: '1' })}`));
+  expect(response.status, await response.clone().text()).toBe(503);
+  expect(reads).toBeGreaterThan(0);
+});
 
 test('Classification Context v2 intent binds selection and both compare-and-replace heads', () => {
   const input: CreateClassificationContextInput = { profile: 'classification-context-v2',

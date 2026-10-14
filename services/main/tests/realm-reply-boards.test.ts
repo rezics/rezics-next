@@ -100,6 +100,18 @@ test('Realm managers can edit boards; Concept mandates must cover additions and 
     noBoards, noBoards)).rejects.toBeInstanceOf(RealmReplyDenied);
 });
 
+test('Realm moderation grants manage boards only within their assigned Concept jurisdiction', async () => {
+  const scope = `governance:realm:${realm}`;
+  const previous = { concepts: [empty], primaryConcept: null }, next = { concepts: [news], primaryConcept: news };
+  await assertReplyBoardAuthority(grants([scope]).client, principal, realm, actor, author, true, previous, next);
+  const newsOnly = grants([`${scope}:concept:${news}`]);
+  await expect(assertReplyBoardAuthority(newsOnly.client, principal, realm, actor, author, true, previous, next))
+    .rejects.toBeInstanceOf(RealmReplyDenied);
+  expect(newsOnly.seen).toContain(`${scope}:concept:${empty}`);
+  await assertReplyBoardAuthority(grants([`${scope}:concept:${news}`, `${scope}:concept:${empty}`]).client,
+    principal, realm, actor, author, true, previous, next);
+});
+
 function boardWorld(options: { retired?: boolean; hidden?: boolean } = {}) {
   const fixture = world([{ id: 1, author: 1 }, { id: 2, author: 1, approved: false },
     { id: 3, author: 1 }, { id: 4, author: 1 }]);
