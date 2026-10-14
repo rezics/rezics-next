@@ -721,10 +721,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 42, missingRows: 26, missingProofs: 41 });
+    .toEqual({ rows: 68, provedPairs: 47, missingRows: 21, missingProofs: 23 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 2, L13: 0, L17: 0, L19: 0, L20: 0, L21: 8, L26: 0, gap: 13, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 5, L26: 0, gap: 14, 'content-adoption': 1 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
@@ -763,29 +763,26 @@ test('literal loops and registered journeys retain all eleven browser citations'
   }
 });
 
-test('every Realm closure surface records passing directory evidence or its missing owner adapter', () => {
-  const missingAdapters = [
-    ['direct routes', 'realm-reads/read-realm.ts', '${state}-${surface}-${reader}'],
-    ['threads and replies', 'realm-reply/thread-read.ts', 'closure-during-${surface}-content-hydration'],
-    ['Zone discussion entry and modules', 'zone-modules/read.ts', 'closure-during-zone-module-hydration'],
-    ['feed', 'feed/read.ts', 'closure-during-feed-source-hydration'],
-    ['rankings', 'rankings/read.ts', 'closure-during-read-rankings-${order}-hydration'],
-    ['search', 'work/search-public.ts', 'closure-during-search-hydration'],
-    ['notifications', 'notification/subjects.ts', 'closed-notifications-${channel}'],
-    ['media', 'routes/media.ts', '${state}-reply-media-${surface}-${reader}'],
-    ['roster', 'access/roster.ts', '${state}-${surface}-${reader}'],
+test('every Realm closure surface records its API proof while browser coverage remains missing', () => {
+  const outcomeFiles = [
+    ['direct routes', 'closure-direct-routes'],
+    ['threads and replies', 'closure-threads-and-replies'],
+    ['Zone discussion entry and modules', 'closure-zone-discussion-entry-and-modules'],
+    ['feed', 'closure-feed'],
+    ['rankings', 'closure-rankings'],
+    ['search', 'closure-search'],
+    ['notifications', 'closure-notifications'],
+    ['media', 'closure-media'],
+    ['roster', 'closure-roster'],
   ];
   const closureRows = launchCoverage.filter(row => row.kind === 'realm' && row.capability.startsWith('Closure: '));
   expect(closureRows).toHaveLength(10);
-  for (const [surface, adapter, title] of missingAdapters) {
+  for (const [surface, file] of outcomeFiles) {
     const rows = closureRows.filter(row => row.capability === `Closure: ${surface}`);
     expect(rows, surface).toHaveLength(1);
-    expect(rows[0]!.api, surface).toMatchObject({ missing: 'gap' });
-    if (proofMissing(rows[0]!.api)) {
-      expect(rows[0]!.api.reason, surface).toContain(adapter!);
-      expect(rows[0]!.api.reason, surface).toContain(title!);
-      expect(rows[0]!.api.reason, surface).toContain('expected failure');
-    }
+    expect(rows[0]!.api, surface).toMatchObject({
+      file: `tests/qa/integration/outcomes/realm/${file}.test.ts`,
+    });
   }
   const directory = closureRows.find(row => row.capability === 'Closure: directory');
   expect(directory!.api).toMatchObject({
