@@ -61,7 +61,10 @@ export function BooksLibraryRecorded({ record, persona, selections, actingSubjec
     || loaded.state !== state || loaded.locale !== locale || loaded.year !== year || loaded.record !== record
     || loaded.persona !== persona || loaded.selections !== selections) return <p role="status">{t.loading}</p>;
   const page = loaded.page;
-  return <LibraryPage key={`${actingSubject}:${persona}`} state={state} {...page} now={0} locale={locale} messages={messages}
+  // Reader stores retain their client for a visit; a different replay must start a fresh visit.
+  const visit = [actingSubject, persona, record.row, year, locale,
+    ...selections.map(selection => `${selection.label}:${selection.state}`)].join('|');
+  return <LibraryPage key={visit} state={state} {...page} now={0} locale={locale} messages={messages}
     api={mainLibraryApi(actingSubject, () => client)}
     saveGoal={(agent, year, target, version) => saveYearlyGoal(agent, year, target, version, () => client)}
     copiesApi={mainCopiesApi(actingSubject, () => client)}
