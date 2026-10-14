@@ -74,6 +74,27 @@ type Selection = Awaited<ReturnType<typeof publish>>;
 type Page = { items: { id: string }[]; nextCursor: string | null; matches: { value: number; kind: string };
   query: { appliedSort: string }; window: { complete: boolean };
   sourcePosition: { dataEpoch: string; sequence: string } };
+// This wait stays inside each persona's 60-second budget. A graph read position
+// alone cannot prove delivery: lagging pages already report the committed cut.
+async function caughtUpBrowse(sample: ReturnType<typeof recording.session>, label: string, path: string,
+  committed?: Page['sourcePosition']): Promise<Page> {
+  const deadline = performance.now() + 20_000;
+  let attempt = 0;
+  let observed: Page;
+  do {
+    observed = await answer<Page>(sample(`${label}-readiness-${attempt++}`, 'GET', path));
+    if (observed.window.complete && observed.matches.kind === 'exact'
+      && (!committed || observed.sourcePosition.dataEpoch === committed.dataEpoch
+        && BigInt(observed.sourcePosition.sequence) >= BigInt(committed.sequence))) return observed;
+    const remaining = deadline - performance.now();
+    if (remaining <= 0) break;
+    await Bun.sleep(Math.min(200, remaining));
+  } while (performance.now() < deadline);
+  throw new Error(`Zone browse did not catch up within 20s: ${JSON.stringify({
+    committed, sourcePosition: observed.sourcePosition, matches: observed.matches,
+    window: observed.window, nextCursor: observed.nextCursor,
+  })}`);
+}
 const games: Work[] = [];
 const phrase = `Gamegarden${randomUUID().replaceAll('-', '')}`;
 let unadopted: Work;
@@ -159,8 +180,11 @@ beforeAll(async () => {
 
 async function catalogue(name: PersonaName) {
   const person = sessions[name];
-  await recordCatalogueStoryReads(recording, name, person, sessions.realm, 'games');
   const sample = recording.session(name, person);
+  await caughtUpBrowse(sample, 'catalogue', `/v1/realms/${short(sessions.realm)}/modules/browse?${new URLSearchParams({
+    sort: 'newest', limit: '10', type: 'https://schema.org/VideoGame',
+  })}&${acting(person)}`);
+  await recordCatalogueStoryReads(recording, name, person, sessions.realm, 'games');
   const sampledCards = new Set<string>();
   const home = await answer<{ kind: string; realm: string }>(sample('zone-home-route', 'GET',
     `/v1/zones/${short(sessions.zone)}/routes?path=%2F&${acting(person)}`));
@@ -205,8 +229,9 @@ async function catalogue(name: PersonaName) {
     expect(adopted).toMatchObject({ work: unadopted.work, realm: sessions.realm,
       publicationDecision: unadoptedSelection.publicationDecision });
     games.push(unadopted);
-    const curated = await answer<Page>(sample('curated-search', 'GET',
-      `${root}?${new URLSearchParams({ q: 'published but not adopted', type: 'https://schema.org/VideoGame' })}`));
+    const curated = await caughtUpBrowse(sample, 'curated-search',
+      `${root}?${new URLSearchParams({ q: 'published but not adopted', type: 'https://schema.org/VideoGame' })}`,
+      adopted.sourcePosition);
     expect(curated.items.every(item => item.id === unadopted.work)).toBe(true);
     expect(curated.matches.value).toBe(curated.items.length);
     expect(curated.sourcePosition.dataEpoch).toBe(adopted.sourcePosition.dataEpoch);
