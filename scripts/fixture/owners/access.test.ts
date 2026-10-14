@@ -21,7 +21,7 @@ test('medium Access fixture preserves every key with default PostgreSQL advisory
     expect(await accessOwner.verify(corpus, target)).toEqual(planned);
     expect((await pool.query(`SELECT count(*)::int AS n FROM pg_locks
       WHERE pid = pg_backend_pid() AND locktype = 'advisory'`)).rows[0].n).toBe(0);
-    const expanded = { ...corpus, works: corpus.works + 1 };
+    const expanded = { ...corpus, works: corpus.works + 1, agents: corpus.agents + 1 };
     expect(await accessOwner.verify(expanded, target)).not.toEqual(accessOwner.summarize(expanded).counts);
   } finally {
     await pool.end();
