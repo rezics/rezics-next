@@ -139,6 +139,7 @@ async function publishedWorkPage(page: Page, zone: string, actor: string, princi
   const mounted = await command<{ revision: string }>(page, `${zonePath}/mounts`, {
     expectedHead: head.revision, target: collection, routeSegment: 'guide', disclosure: 'public', actingSubject: actor,
   });
+  // Site publication names its allocated home Document, which is distinct from the Zone.
   const before = await page.request.get(`/api/main/v1/${zonePath}/configuration?actingSubject=${encodeURIComponent(actor)}`);
   expect(before.ok(), await before.text()).toBe(true);
   await command(page, `${zonePath}/configuration`, {
@@ -467,6 +468,22 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     expect(visitor.agent).not.toBe(actingSubject);
     await Promise.all([page.goto(zoneUrl), other.goto(zoneUrl)]);
     const bodies = ['The harbor guide helped me find the pier.', '港の案内について話し合いましょう。'];
+    try {
+      await expect(discussion(page).getByText(aboutDiscussionMessages.en.empty)).toBeVisible({ timeout: 30_000 });
+    } catch (error) {
+      const path = `/${addressPath(new URL(page.url()).pathname)!.tail.join('/')}`;
+      for (const endpoint of [
+        `zones/${uuidOf(zoneSpace.zone!)}/routes?${new URLSearchParams({ path, actingSubject })}`,
+        `resources/${uuidOf(about)}/page?${new URLSearchParams({ actingSubject })}`,
+        `realms/${uuidOf(realmSpace.realm!)}/about-thread?${new URLSearchParams({ about, actingSubject })}`,
+        `realms/${uuidOf(realmSpace.realm!)}?${new URLSearchParams({ actingSubject })}`,
+        `realms/${uuidOf(realmSpace.realm!)}/joining?${new URLSearchParams({ actingSubject })}`,
+      ]) {
+        const answer = await page.request.get(`/api/main/v1/${endpoint}`);
+        console.log(`[attached discussion diagnostic] GET /v1/${endpoint}: ${answer.status()} ${(await answer.text()).slice(0, 1500)}`);
+      }
+      throw error;
+    }
     await Promise.all([compose(page, bodies[0]!, 'en', false), compose(other, bodies[1]!, 'ja', false)]);
     // Both real browser commands leave together; no route interception or invented receipt.
     const writes: Array<{ url: string; request: string; status: number; body: string }> = [];
@@ -496,6 +513,10 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
       expect(await retained(tab), JSON.stringify(writes)).toEqual([]);
     }
     await Promise.all([page.reload(), other.reload()]);
+    for (const actor of [actingSubject, visitor.agent]) {
+      expect(writes.some(write => [200, 201].includes(write.status)
+        && (JSON.parse(write.request) as { actingSubject: string }).actingSubject === actor), JSON.stringify(writes)).toBe(true);
+    }
     for (const tab of [page, other]) {
       const area = discussion(tab);
       await expect(area.locator('article'), JSON.stringify(writes)).toHaveCount(2, { timeout: 30_000 });
