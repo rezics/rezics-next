@@ -23,8 +23,9 @@ const session = (member: Member): PersonaSession => ({ actingSubject: member.act
 
 test('completed closure conceals discussion reads and consented roster while credited originals stay public', async () => {
   const stack = await startMediaStack('realm-closure-readers', { profileCredits: true });
-  const verify = stack.composition.account.verify.bind(stack.composition.account);
-  stack.composition.account.verify = (request, scopes) => {
+  const account = stack.composition.dependencies.account;
+  const verify = account.verify.bind(account);
+  account.verify = (request, scopes) => {
     if (!request.headers.has('authorization')) throw new AccountAssertionDenied('Authentication is required');
     return verify(request, scopes);
   };
