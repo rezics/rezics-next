@@ -67,6 +67,8 @@ final class ModelMutationPolicy {
                 mutationBasis = Map.of("chapterOwner", values(data, graph, node, NodeFactory.createURI(RV + "work")),
                     "hostingPolicy", values(data, graph, node, NodeFactory.createURI(RV + "hostingPolicy")));
             }
+            if (!revision && selected != null && selected.type().equals(RV + "ClassificationContext"))
+                mutationBasis = Map.of("contextHead", values(data, graph, node, NodeFactory.createURI(RV + "head")));
             result.put(name, new Subject(graph, selected, Map.copyOf(selectors),
                 values(data, graph, node, RDF.type.asNode()), mutationBasis));
         }
@@ -177,6 +179,8 @@ final class ModelMutationPolicy {
         boolean changed = before.selectors().entrySet().stream().anyMatch(entry ->
             !entry.getValue().equals(values(data, before.graph(), node, NodeFactory.createURI(entry.getKey()))));
         if (changed) {
+            if (classificationContextSelectionUpgrade(data, receipt, name, before))
+                return CanonicalPolicy.validate(profiles, data, name, false);
             if (agentAddressProfileUpgrade(data, receipt, name, before))
                 return CanonicalPolicy.validate(profiles, data, name, false);
             if (agentNameUpgrade(data, receipt, name, before))
@@ -190,6 +194,30 @@ final class ModelMutationPolicy {
         if(membershipLists!=null && before.graph().equals(CURRENT) && selected.type().equals("https://schema.org/ItemList"))
             return MembershipNormalFormPolicy.validateList(data,profiles,name,membershipLists);
         return CanonicalPolicy.validateSelected(profiles, data, name, selected);
+    }
+
+    /** HeadCasPolicy already proves the configuration receipt, predecessor and Realm.
+     * Only that head advance may add the v2 selector to a legacy Realm Context;
+     * other selectors and later downgrades remain frozen. */
+    static boolean classificationContextSelectionUpgrade(DatasetGraph data, String receipt, String name, Subject before) {
+        if (!before.graph().equals(CURRENT) || before.selection() == null
+            || !before.selection().type().equals(RV + "ClassificationContext")
+            || !before.selection().route().profile().equals("classification-context-v1")
+            || !before.selectors().getOrDefault(RV + "definitionProfile", Set.of()).isEmpty()) return false;
+        Node context = NodeFactory.createURI(name), own = NodeFactory.createURI(receipt);
+        Node profile = NodeFactory.createURI("https://rezics.com/definition/classification-context-v2");
+        if (!values(data, CURRENT, context, NodeFactory.createURI(RV + "definitionProfile")).equals(Set.of(profile))) return false;
+        for (var entry : before.selectors().entrySet())
+            if (!entry.getKey().equals(RV + "definitionProfile")
+                && !entry.getValue().equals(values(data, CURRENT, context, NodeFactory.createURI(entry.getKey())))) return false;
+        Set<Node> prior = before.mutationBasis().getOrDefault("contextHead", Set.of());
+        Set<Node> next = values(data, CURRENT, context, NodeFactory.createURI(RV + "head"));
+        return prior.size() == 1 && prior.iterator().next().isURI() && next.size() == 1
+            && next.iterator().next().isURI() && !prior.equals(next)
+            && values(data, RECEIPTS, own, NodeFactory.createURI(RV + "contextRevision")).equals(next)
+            && values(data, RECEIPTS, own, NodeFactory.createURI(RV + "classificationContext")).equals(Set.of(context))
+            && values(data, RECEIPTS, own, NodeFactory.createURI(RV + "commandFamily"))
+                .equals(Set.of(NodeFactory.createLiteralString("classification-context-v2")));
     }
 
     /** One maintenance-only decommission after Access imports the name. The
