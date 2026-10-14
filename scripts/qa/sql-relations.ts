@@ -496,7 +496,7 @@ export function sourceSqlLiterals(source: SqlSource): SqlSource[] {
 export function repositorySqlSources(root: string): SqlSource[] {
   return ['services', 'scripts', 'tests'].flatMap((directory) =>
     [
-      ...repositoryGlob(root, `${directory}/**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}`).map(file => file.slice(`${directory}/`.length)),
+      ...repositoryGlob(join(root, directory), '**/*.{ts,tsx,js,jsx,mts,cts,mjs,cjs}'),
     ]
       .filter(
         (file) => !file.split('/').some((part) => ['node_modules', '.temp', 'dist'].includes(part)),

@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { expect, test } from 'bun:test';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -14,6 +15,7 @@ const scratch = join(root, '.temp');
 
 test('owner defaults and Goal expansion share one selector for the supplied root', () => {
   const fixture = mkdtempSync(join(scratch, 'owner-selection-'));
+  expect(spawnSync('git', ['init', '-q', fixture]).status).toBe(0);
   const owner = 'scripts/ops/selected.test.ts';
   try {
     for (const directory of ['services', 'model', 'scripts', 'packages', 'apps/web', 'apps/accounts',
