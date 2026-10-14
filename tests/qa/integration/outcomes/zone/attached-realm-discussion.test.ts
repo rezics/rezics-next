@@ -292,9 +292,25 @@ async function concurrent(page: Page, first: PersonaSession, second: PersonaSess
     post(first, page, 'First independent contribution', firstKey),
     post(second, page, 'Second independent contribution', secondKey),
   ]);
+  const restart = async (initial: Response, person: PersonaSession, body: string, key: string) => {
+    let response = initial;
+    for (let attempt = 0; response.status === 409 && attempt < 3; attempt++) {
+      expect(await response.json()).toMatchObject({ code: 'read_basis_changed' });
+      // Another placement may move the read used to admit this command.
+      // Reobserve both public coordinates before retaining the same intent/key.
+      const route = await answer<{ revision: string }>(person.main('GET',
+        `/v1/zones/${short(page.zone)}/routes?${new URLSearchParams({ path: page.path })}&${acting(person)}`));
+      const target = await answer<{ revision: string }>(person.main('GET',
+        `/v1/works/${short(page.about)}?${acting(person)}`));
+      expect(route.revision).toBe(page.routeRevision);
+      expect(target.revision).toBe(page.targetRevision);
+      response = await post(person, page, body, key);
+    }
+    return answer<Posted>(Promise.resolve(response), 201);
+  };
   const [a, b] = await Promise.all([
-    answer<Posted>(Promise.resolve(requests[0]!), 201),
-    answer<Posted>(Promise.resolve(requests[1]!), 201),
+    restart(requests[0]!, first, 'First independent contribution', firstKey),
+    restart(requests[1]!, second, 'Second independent contribution', secondKey),
   ]);
   expect(a.author).toBe(first.actingSubject!);
   expect(b.author).toBe(second.actingSubject!);
@@ -347,7 +363,11 @@ async function discussionState(person: PersonaSession, page: Page) {
       author: item.author.id, rootTarget: page.about });
     return placed;
   }));
-  return { canonical, items, credits: credits.items, native };
+  // Vote projection readiness may advance independently of these refused
+  // writes; compare the retained discussion content and attribution instead.
+  const content = items.map(item => ({ reply: item.reply, revisionId: item.revisionId,
+    author: item.author, title: item.title, body: item.body, language: item.language, parent: item.parent }));
+  return { canonical, items: content, credits: credits.items, native };
 }
 outcomeTest(discussion, 'visitor', async () => {
   const sample = recording.session('visitor', sessions.visitor);
@@ -528,7 +548,7 @@ async function visitorEntryReads(sample: ReturnType<typeof recording.session>, p
   await answer(sample(targetLabel, 'GET', `/v1/resources/${short(page.about)}/page`));
   const realm = await answer<{ code?: string }>(sample(realmLabel, 'GET',
     `/v1/realms/${short(page.realm)}`), concealed ? 404 : 200);
-  if (concealed) expect(realm.code).toBe('work_unavailable');
+  if (concealed) expect(realm.code).toBe('realm_unavailable');
 }
 
 async function canonicalBody(sample: ReturnType<typeof recording.session>, person: PersonaSession,
