@@ -11,7 +11,7 @@ import type { OnboardingMessages } from './messages.ts';
 export type HandleAvailability = 'available' | 'taken' | 'reserved' | 'held';
 
 async function checkHandle(handle: string, signal: AbortSignal): Promise<HandleAvailability> {
-  const response = await browserMainApi().v1.addresses.availability.get({
+  const response = await browserMainApi(undefined, { anonymous: true }).v1.addresses.availability.get({
     query: { scope: 'agent', alias: handle }, fetch: { signal, cache: 'no-store' },
   });
   if (response.error || !response.data) throw new Error('Handle availability is unavailable');
