@@ -8,8 +8,7 @@ import type { EditionChoice } from '../tracking/types.ts';
 import { workExperience } from '../entity-page/experience.ts';
 import { readWorkParts, readWorkRealizations } from './anime-hub-recorded-page.ts';
 import { booksEditionReads, readBooksEditionStatus } from './books-edition-page.read.ts';
-import { readGamesHub } from './games-hub-recorded-page.ts';
-import { readStart } from './read.ts';
+import { gamesAnswerLabel, readGamesHub, readSuppliedStart, recordedGamesSelections } from './games-hub-recorded-page.ts';
 import { textHref } from './route.ts';
 
 // Production availability asks for releases and realizations with limit=20, and parts with limit=1.
@@ -21,9 +20,13 @@ const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 
 function sample(persona: AnswerPersona, label: string) {
-  const answer = record.personas[persona].find(item => item.label === label);
-  if (!answer) throw new Error(`Missing recorded answer: ${record.row}/${persona}/${label}`);
-  return answer;
+  const found = record.personas[persona].filter(item => item.label === label);
+  if (found.length !== 1) throw new Error(`Expected one recorded answer: ${record.row}/${persona}/${label}`);
+  return found[0]!;
+}
+
+function answerLabel(persona: AnswerPersona, labels: readonly string[]) {
+  return gamesAnswerLabel(record, persona, labels);
 }
 
 function transport(persona: AnswerPersona, selections: RecordedSelection[]) {
@@ -56,7 +59,6 @@ test('every persona reads the recorded game', async () => {
     const actingSubject = subjectOf(persona) ?? undefined;
     const reads = booksEditionReads({ main, actingSubject });
     expect<unknown>(await reads.readWorkHeader(workId(persona))).toEqual({ ok: true, data: header.answer });
-    expect((header.answer as { title: { value: string } }).title.value).toBe('Original garden game');
   }
 });
 
@@ -103,7 +105,6 @@ test('the member status names the recorded release and keeps the recorded progre
   expect(preference.edition).toEqual({ kind: 'release', resource: detail.id, revision: detail.revision });
   expect(status.editionName).toContain(detail.title.value);
   expect(status.editionName).toContain(detail.editionStatement);
-  expect(detail.title.value).toBe('Garden game desktop release');
 });
 
 test('a signed-in reader saves only the recorded release on their own Person', async () => {
@@ -138,8 +139,8 @@ test('a visitor is refused the preference, and an unpublished game stays withhel
   const publicMain = transport('visitor', [{ label: missing.label, state: 'error' }]);
   expect<unknown>(await booksEditionReads({ main: publicMain }).readWorkHeader(hidden.pathname.split('/').at(-1)!))
     .toEqual({ ok: false, failure: 'missing', status: missing.status, problem: missing.answer });
-  expect((refused.answer as { title: string }).title).toBe('Account assertion is invalid or inactive');
-  expect((missing.answer as { title: string }).title).toBe('Resource is unavailable');
+  expect((refused.answer as { code: string }).code).toBe('account_assertion_denied');
+  expect((missing.answer as { code: string }).code).toBe('work_unavailable');
 });
 
 test('visitors cannot save, and every signed-in persona is refused another Person’s choice', async () => {
@@ -171,15 +172,16 @@ test('every persona reads the recorded release list', async () => {
     const main = transport(persona, [{ label: releases.label, state: 'populated' }]);
     const reads = booksEditionReads({ main, actingSubject: subjectOf(persona) ?? undefined });
     expect<unknown>(await reads.readReleases(workId(persona))).toEqual({ ok: true, data: releases.answer });
-    const title = (releases.answer as { items: { title: { value: string }; editionStatement: string }[] }).items[0]!;
-    expect(title.title.value).toBe('Garden game desktop release');
-    expect(title.editionStatement).toBe('Desktop PC; version 1.0; digital format');
+    const listed = releases.answer as { items: { id: string; title: { value: string } }[] };
+    const detail = sample(persona, 'release-details').answer as { id: string; title: { value: string } };
+    expect(listed.items.filter(item => item.id === detail.id)).toHaveLength(1);
+    expect(listed.items.find(item => item.id === detail.id)?.title.value).toBe(detail.title.value);
   }
 });
 
 test('the chooser reads each persona’s recorded realizations and the availability parts probe', async () => {
   for (const persona of ['visitor', ...signedIn] as const) {
-    const realizations = sample(persona, persona === 'member' ? 'realizations-empty' : 'hub-realizations-empty');
+    const realizations = sample(persona, answerLabel(persona, ['realizations-empty', 'hub-realizations-empty']));
     const parts = sample(persona, 'hub-partless-parts');
     const actingSubject = subjectOf(persona) ?? undefined;
     const main = transport(persona, [
@@ -189,16 +191,16 @@ test('the chooser reads each persona’s recorded realizations and the availabil
     expect<unknown>(await readWorkRealizations(main, actingSubject, id)).toEqual({ ok: true, data: realizations.answer });
     expect((realizations.answer as { items: unknown[] }).items).toHaveLength(0);
     expect<unknown>(await readWorkParts(main, actingSubject, id, { limit: 1 })).toEqual({ ok: false, failure: 'missing' });
-    expect((parts.answer as { code: string; title: string }).code).toBe('work_unavailable');
+    expect((parts.answer as { code: string }).code).toBe('work_unavailable');
   }
 });
 
 test('the primary action starts from the recorded continue list and missing contents', async () => {
   for (const persona of ['visitor', ...signedIn] as const) {
-    const contents = sample(persona, persona === 'member' ? 'contents-unavailable' : 'hub-contents-unavailable');
+    const contents = sample(persona, answerLabel(persona, ['contents-unavailable', 'hub-contents-unavailable']));
     const selections = persona === 'visitor'
       ? [{ label: contents.label, state: 'error' as const }]
-      : [{ label: persona === 'member' ? 'continue-reading' : 'hub-continue-reading', state: 'populated' as const },
+      : [{ label: answerLabel(persona, ['continue-reading', 'hub-continue-reading']), state: 'populated' as const },
         { label: contents.label, state: 'error' as const }];
     let calls = 0;
     const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
@@ -210,8 +212,8 @@ test('the primary action starts from the recorded continue list and missing cont
     const main = browserMainApi('https://recorded.invalid', { anonymous: persona === 'visitor', fetcher });
     const actingSubject = subjectOf(persona) ?? undefined;
     const id = workId(persona);
-    const work = (sample(persona, 'work-header').answer as { id: string }).id;
-    expect(await readStart(id, work, 'en', 'en', { main, actingSubject })).toEqual({
+    const header = sample(persona, 'work-header').answer as { id: string; selectedLanguage: string | null };
+    expect(await readSuppliedStart({ main, actingSubject }, id, header.id, async () => header.selectedLanguage)).toEqual({
       kind: 'start', href: textHref(id), chapter: null,
     });
     expect(calls).toBe(persona === 'visitor' ? 1 : 2);
@@ -220,7 +222,7 @@ test('the primary action starts from the recorded continue list and missing cont
 
 test('each signed-in reader’s progress summary is their own recorded answer', async () => {
   for (const persona of signedIn) {
-    const progress = sample(persona, persona === 'member' ? 'progress-summary' : 'hub-progress-summary');
+    const progress = sample(persona, answerLabel(persona, ['progress-summary', 'hub-progress-summary']));
     const main = transport(persona, [{ label: progress.label, state: 'populated' }]);
     const reads = booksEditionReads({ main, actingSubject: subjectOf(persona) ?? undefined });
     expect<unknown>(await reads.readProgressSummary(workId(persona), 'en')).toEqual({ ok: true, data: progress.answer });
@@ -229,27 +231,31 @@ test('each signed-in reader’s progress summary is their own recorded answer', 
   }
 });
 
-test('the member projection is a game, so availability is the non-book list and chooser', async () => {
-  const persona = 'member' as const;
-  const projection = sample(persona, 'hub-projection');
-  const releases = sample(persona, 'hub-releases');
-  const main = transport(persona, [
-    { label: 'work-header', state: 'populated' }, { label: projection.label, state: 'populated' },
-    { label: releases.label, state: 'populated' }, { label: 'realizations-empty', state: 'populated' },
-    { label: 'hub-partless-parts', state: 'error' }, { label: 'continue-reading', state: 'populated' },
-    { label: 'contents-unavailable', state: 'error' }, { label: 'preference-empty', state: 'empty' },
-    { label: 'progress-summary', state: 'populated' },
-  ]);
-  const hub = await readGamesHub({ main, actingSubject: subjectOf(persona)! }, workId(persona), 'en');
-  if (!hub.header.ok || hub.book !== false) throw new Error('The recorded game was read as a book');
-  if (!hub.projection.ok) throw new Error('The recorded game projection did not load');
-  expect<unknown>(hub.projection.data).toEqual(projection.answer);
-  expect(hub.experience).toMatchObject({ kind: 'plain', presentation: 'game', primaryAction: 'visit' });
-  expect(workExperience(hub.projection.data, hub.header.data.types).kind).not.toBe('book');
-  expect<unknown>(hub.releases).toEqual({ ok: true, data: releases.answer });
-  expect(hub.shown).toBe(true);
-  expect(hub.preference).toEqual({ ok: true, data: null });
-  expect(hub.action).toEqual({ kind: 'read', start: { kind: 'start', href: textHref(workId(persona)), chapter: null } });
+test('every persona’s projection is a game, so availability is the non-book list and chooser', async () => {
+  for (const persona of ['visitor', ...signedIn] as const) {
+    const projection = sample(persona, 'hub-projection');
+    const releases = sample(persona, 'hub-releases');
+    const registry = (projection.answer as { registry?: { presentation?: string; primaryAction?: string } }).registry;
+    const main = transport(persona, recordedGamesSelections(record, persona, 'populated'));
+    const hub = await readGamesHub({ main, actingSubject: subjectOf(persona) ?? undefined }, workId(persona), 'en');
+    if (!hub.header.ok || hub.book !== false) throw new Error(`The recorded game was read as a book for ${persona}`);
+    if (!hub.projection.ok) throw new Error(`The recorded game projection did not load for ${persona}`);
+    expect<unknown>(hub.projection.data).toEqual(projection.answer);
+    expect(hub.experience.presentation).toBe(registry?.presentation);
+    expect(hub.experience.primaryAction).toBe(registry?.primaryAction);
+    expect(workExperience(hub.projection.data, hub.header.data.types).kind).not.toBe('book');
+    expect<unknown>(hub.releases).toEqual({ ok: true, data: releases.answer });
+    expect(hub.shown).toBe(true);
+    expect(hub.action).toEqual({ kind: 'read', start: { kind: 'start', href: textHref(workId(persona)), chapter: null } });
+    if (persona === 'visitor') {
+      expect(hub.preference).toEqual({ ok: false, failure: 'sign-in' });
+      expect(hub.progress).toEqual({ ok: false, failure: 'sign-in' });
+    } else {
+      expect(hub.preference).toEqual({ ok: true, data: null });
+      const progress = sample(persona, answerLabel(persona, ['progress-summary', 'hub-progress-summary']));
+      expect<unknown>(hub.progress).toEqual({ ok: true, data: progress.answer });
+    }
+  }
 });
 
 test('the owner reads the recorded unpublished draft', async () => {
@@ -258,5 +264,5 @@ test('the owner reads the recorded unpublished draft', async () => {
   const main = transport('owner', [{ label: draft.label, state: 'populated' }]);
   const reads = booksEditionReads({ main, actingSubject: url.searchParams.get('actingSubject')! });
   expect<unknown>(await reads.readWorkHeader(url.pathname.split('/').at(-1)!)).toEqual({ ok: true, data: draft.answer });
-  expect((draft.answer as { title: { value: string } }).title.value).toBe('Unpublished garden draft');
+  expect((draft.answer as { id: string }).id).not.toBe((sample('owner', 'work-header').answer as { id: string }).id);
 });

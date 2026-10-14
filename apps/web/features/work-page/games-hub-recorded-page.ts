@@ -1,4 +1,4 @@
-import type { AnswerPersona } from '../../../../scripts/api/answer-record.ts';
+import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { MainClient } from '../discover/types.ts';
 import { workExperience } from '../entity-page/experience.ts';
@@ -55,31 +55,42 @@ const absent = (read: { ok: true; data: { items?: readonly unknown[]; parts?: re
   read.ok ? !(read.data.items ?? read.data.parts)?.length
     : read.failure === 'missing' || read.failure === 'sign-in' || read.failure === 'identity';
 
+/** The one sample with this label. Two names are the same production read when this row kept an earlier label. */
+export function gamesAnswerLabel(record: AnswerRecord, persona: AnswerPersona, labels: readonly string[]): string {
+  const counts = labels.map(label => ({ label,
+    count: record.personas[persona].filter(item => item.label === label).length }));
+  const repeated = counts.find(item => item.count > 1);
+  if (repeated) throw new Error(`Expected one recorded sample: ${record.row}/${persona}/${repeated.label}`);
+  const found = counts.filter(item => item.count === 1);
+  if (found.length !== 1) throw new Error(`Expected one Games sample for ${record.row}/${persona} among ${labels.join(', ')}`);
+  return found[0]!.label;
+}
+
 /**
- * The samples a Games hub story replays. Labels follow this row: the member's chooser,
- * continue and progress keep their earlier names and the same production queries.
- * A projection page is recorded for the member; other personas' page read fails closed,
- * and the header types still take the non-book availability branch.
+ * The samples a Games hub story replays. Each production read takes the one recorded
+ * label for that request. Every persona has a projection, and a non-book projection
+ * draws the availability list and the chooser.
  */
-export function recordedGamesSelections(persona: AnswerPersona, mode: 'populated' | 'saved' | 'loading'): RecordedSelection[] {
-  if (mode === 'loading') return [{ label: 'work-header', state: 'loading' }];
-  const member = persona === 'member';
+export function recordedGamesSelections(record: AnswerRecord, persona: AnswerPersona,
+  mode: 'populated' | 'saved' | 'loading'): RecordedSelection[] {
+  if (mode === 'loading') return [{ label: gamesAnswerLabel(record, persona, ['work-header']), state: 'loading' }];
+  const label = (...names: string[]) => gamesAnswerLabel(record, persona, names);
   const selections: RecordedSelection[] = [
-    { label: 'work-header', state: 'populated' },
-    { label: 'hub-releases', state: 'populated' },
-    { label: member ? 'realizations-empty' : 'hub-realizations-empty', state: 'populated' },
-    { label: 'hub-partless-parts', state: 'error' },
-    { label: member ? 'contents-unavailable' : 'hub-contents-unavailable', state: 'error' },
+    { label: label('work-header'), state: 'populated' },
+    { label: label('hub-projection'), state: 'populated' },
+    { label: label('hub-releases'), state: 'populated' },
+    { label: label('realizations-empty', 'hub-realizations-empty'), state: 'populated' },
+    { label: label('hub-partless-parts'), state: 'error' },
+    { label: label('contents-unavailable', 'hub-contents-unavailable'), state: 'error' },
   ];
-  if (member) selections.push({ label: 'hub-projection', state: 'populated' });
   if (persona === 'visitor') return selections;
   selections.push(
-    { label: member ? 'continue-reading' : 'hub-continue-reading', state: 'populated' },
-    { label: mode === 'saved' ? 'preference-saved' : 'preference-empty', state: mode === 'saved' ? 'populated' : 'empty' },
-    { label: 'release-details', state: 'populated' },
-    { label: member ? 'progress-summary' : 'hub-progress-summary', state: 'populated' },
+    { label: label('continue-reading', 'hub-continue-reading'), state: 'populated' },
+    { label: label(mode === 'saved' ? 'preference-saved' : 'preference-empty'), state: mode === 'saved' ? 'populated' : 'empty' },
+    { label: label('release-details'), state: 'populated' },
+    { label: label('progress-summary', 'hub-progress-summary'), state: 'populated' },
   );
-  if (mode === 'populated') selections.push({ label: 'choose-edition', state: 'populated' });
+  if (mode === 'populated') selections.push({ label: label('choose-edition'), state: 'populated' });
   return selections;
 }
 

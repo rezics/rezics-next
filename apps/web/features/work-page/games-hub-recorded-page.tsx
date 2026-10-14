@@ -10,7 +10,7 @@ import { createReaderStore } from '../catalogue/reader-store.ts';
 import { copyOf as levelsCopy } from '../work-levels/messages.ts';
 import { EditionsPreviewView } from '../work-levels/previews.tsx';
 import { booksEditionReads } from './books-edition-page.read.ts';
-import { readGamesHub, recordedGamesSelections } from './games-hub-recorded-page.ts';
+import { gamesAnswerLabel, readGamesHub, recordedGamesSelections } from './games-hub-recorded-page.ts';
 import { messages } from './messages.ts';
 import { NextActionView } from './primary-action.tsx';
 import { Region } from './region.tsx';
@@ -29,12 +29,17 @@ export function GamesHubRecordedPage({ record, persona, mode, locale }: {
   useEffect(() => {
     setShown(null);
     setFault(null);
-    const header = record.personas[persona].find(item => item.label === 'work-header');
-    if (!header) { setFault(`Missing Games answer: ${persona}/work-header`); return; }
+    let headerLabel: string;
+    let selections;
+    try {
+      headerLabel = gamesAnswerLabel(record, persona, ['work-header']);
+      selections = recordedGamesSelections(record, persona, mode);
+    } catch (error) { setFault(String(error)); return; }
+    const header = record.personas[persona].find(item => item.label === headerLabel)!;
     const url = new URL(header.path, 'https://recorded.invalid');
     const actingSubject = url.searchParams.get('actingSubject') ?? undefined;
     const id = url.pathname.split('/').at(-1)!;
-    const replay = recordedFetch(record, persona, recordedGamesSelections(persona, mode), { pathPrefix: BFF_PREFIX });
+    const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
     let mounted = true;
     const main = browserMainApi(window.location.origin, { anonymous: persona === 'visitor', fetcher: replay.fetcher });
     const client = { main, actingSubject };

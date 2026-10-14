@@ -14,9 +14,9 @@ import { messages } from './messages.ts';
 const record = games as AnswerRecord;
 
 const sample = (persona: AnswerPersona, label: string) => {
-  const found = record.personas[persona].find(item => item.label === label);
-  if (!found) throw new Error(`Missing Games answer: ${persona}/${label}`);
-  return found;
+  const found = record.personas[persona].filter(item => item.label === label);
+  if (found.length !== 1) throw new Error(`Expected one Games answer: ${persona}/${label}`);
+  return found[0]!;
 };
 
 const meta = { title: 'Work page/Games hub recorded', component: GamesHubRecordedPage,
