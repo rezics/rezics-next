@@ -77,7 +77,7 @@ export const RetryOnlyTheDiscussion: Story = {
   play: async ({ canvasElement }) => {
     const canvas = within(canvasElement);
     await expect(canvas.getByRole('status')).toHaveTextContent(t.unavailable);
-    await userEvent.click(canvas.getByRole('button', { name: t.retry, exact: true }));
+    await userEvent.click(canvas.getByRole('button', { name: t.retry }));
     await expect(await canvas.findByRole('link', { name: t.continueThread })).toBeVisible();
     await expect(canvas.getAllByRole('article')).toHaveLength(1);
     await expect(readAgain).toHaveBeenCalledWith({ zone: ready.basis.zone, path: ready.basis.path,
