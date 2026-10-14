@@ -284,6 +284,30 @@ test('equivalent admitted 8, 16 and 32 page publications complete with exact rec
     // Retain a completed refusal at every scale before asserting the entire bound.
     expect([201, 422], measured.rawBody).toContain(measured.status);
     if (measured.status === 201) {
+      // The measured 32-page command is linear. These operation-specific
+      // ceilings catch repeated whole-receipt/owner reads without widening any
+      // production budget. They include cold first-publication overhead.
+      expect(totals.sqlDriverCalls).toBeLessThanOrEqual(150 + 76 * count);
+      expect(totals.sqlStatements).not.toBeNull();
+      expect(totals.sqlStatements!).toBeLessThanOrEqual(150 + 80 * count);
+      expect(totals.sqlRowsReturned).not.toBeNull();
+      expect(totals.sqlRowsReturned!).toBeLessThanOrEqual(85 + 46 * count);
+      expect(totals.sqlRowsWritten).not.toBeNull();
+      expect(totals.sqlRowsWritten!).toBeLessThanOrEqual(16 + 5 * count);
+      expect(totals.graphReadAttempts).toBe(totals.graphReads);
+      expect(totals.graphReads).toBeLessThanOrEqual(12 + 5 * count);
+      expect(totals.graphRowsReturned).not.toBeNull();
+      expect(totals.graphRowsReturned!).toBeLessThanOrEqual(6 + 5 * count);
+      expect(measured.profile.nativeVisits.durable_commits).toBe(1);
+      expect(measured.profile.nativeVisits.revisions_adds).toBeLessThanOrEqual(27 + 10 * count);
+      const receipts = measured.graph.filter(statement => statement.method === 'query'
+        && typeof statement.input === 'string' && statement.input.includes('SELECT ?zone ?revision'));
+      const pins = receipts.filter(statement => typeof statement.input === 'string' && statement.input.includes('FILTER(?page ='));
+      expect(pins).toHaveLength(count);
+      expect(pins.every(statement => statement.rowsReturned === 1)).toBe(true);
+      const bundles = receipts.filter(statement => !pins.includes(statement));
+      expect(bundles).toHaveLength(1);
+      expect(bundles[0]?.rowsReturned).toBe(count);
       expect(responseBody.pages).toHaveLength(count);
       expect(responseBody.pages).toEqual(expect.arrayContaining(pages.map(({ contentEpoch: _epoch, ...page }) => ({
         ...page, language: 'en' }))));
