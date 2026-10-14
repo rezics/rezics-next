@@ -9,7 +9,7 @@ import { inboxEntries } from './regress.ts';
 import { join } from 'node:path';
 import { existsSync, readdirSync } from 'node:fs';
 import { validGoalSlug } from './briefs.ts';
-import { MAX_TRANSPORT_CONTINUATIONS, engineOf } from './types.ts';
+import { MAX_TRANSPORT_CONTINUATIONS, engineOf, isCodex } from './types.ts';
 import { settlementReason } from './settle.ts';
 import { termspacesSession, termspacesTarget, windowTurns, workerWindowName, turnWindowName } from './windows.ts';
 import { listQueue, type QueueLedger } from './queue.ts';
@@ -78,7 +78,9 @@ export async function status(): Promise<void> {
     const continuations = transportContinuations(task);
     const repeated = task.state === 'exited' && transportDrop(attempt) && continuations >= MAX_TRANSPORT_CONTINUATIONS;
     const reason = settlementReason(task);
-    const missingHandoff = task.state === 'exited' && !task.waitingResume && !reason && !hasHandoff(readResult(attempt).text);
+    const missingHandoff = task.state === 'exited' && !task.waitingResume && !reason
+      && ((isCodex(engineOf(attempt)) && (!attempt.lastMessage || !existsSync(attempt.lastMessage)))
+        || !hasHandoff(readResult(attempt).text));
     console.log(`${task.id} ${(task.waitingResume ? 'waiting' : task.state).padEnd(8)} ${task.goal ?? '-'} ${engineOf(attempt)}/${attempt.effort} #${attempt.n} `
       + `${elapsed(attempt.startedAt)} [${task.cases.join(' ')}] ${task.title}`
       + (running(task) ? `; window ${workerWindowName(task)}` : '')

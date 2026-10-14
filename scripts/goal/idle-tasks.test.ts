@@ -57,6 +57,7 @@ test('status names missing handoffs without replacing waiting or settlement reas
   const repo = repository();
   try {
     repo.task('G-001', 7);
+    writeFileSync(repo.ledger.tasks['G-001']!.attempts[0]!.output.replace('.json', '.err'), 'RESULT: partial\n');
     const malformed = repo.task('G-002', 6);
     writeFileSync(malformed.attempts[0]!.lastMessage!, 'I was still working.\n');
     const handedOff = repo.task('G-003', 5);
@@ -146,9 +147,12 @@ test('Decision dates and remedies may be in the heading or body', () => {
       `## Decision\n2026-10-14 00:40 UTC: ${word}\n`,
       `## Decision — ${word}\n2026-10-14T00:40:00Z\n`,
       `## Decision — 2026-10-14 00:40 UTC\n${word}\n`,
+      `## Decision — 2026-10-14 00:40 UTC: ${word}`,
     ]) expect(resumeDecisionError(attempts, section)).toBeUndefined();
   }
   expect(resumeDecisionError(attempts, '## Decision\n2026-10-14 00:40 UTC: split\n\n## Decision\nNo decision yet.\n'))
     .toContain('looked at "## Decision"');
+  expect(resumeDecisionError(attempts, '## Decision\n2026-10-14 00:40 UTC: split\n\n## Decision — pending'))
+    .toContain('looked at "## Decision — pending"');
   expect(resumeDecisionError(attempts, '## Decision\n2026-10-14 00:40 UTC\n\n## Other\nsplit\n')).toBeDefined();
 });

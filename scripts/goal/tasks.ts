@@ -442,7 +442,7 @@ export function resumeDecisionError(attempts: readonly Attempt[], markdown: stri
   const fixes = attempts.filter((attempt, index) => !attempt.continuedFor
     && (attempt.round === 'fix' || (attempt.round === undefined && index > 0))).length;
   if (fixes < 2) return undefined;
-  const decision = [...markdown.matchAll(/^## Decision\b[^\r\n]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/gm)].at(-1);
+  const decision = [...markdown.matchAll(/^## Decision\b[^\r\n]*(?:\r?\n|$)([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/gm)].at(-1);
   const heading = decision?.[0].split(/\r?\n/)[0];
   const section = decision?.[0] ?? '';
   const lastStart = Date.parse(attempts.at(-1)?.startedAt ?? '');
