@@ -25,13 +25,16 @@ export function closureQuery(persona: AnswerPersona, realmOnly = false): FeedQue
     ...(realmOnly ? { realms: [closedRealm] } : {}) };
 }
 
-export const independentOriginals = [1, 2].map(n => post(920 + n, {
-  actor: closureOwner, realm: null, authors: [onRezics(closureOwner)],
-  reason: { kind: 'recommended', basis: 'all' },
-  reasons: [{ kind: 'new-work', actor: closureOwner.id }],
-  target: { title: { value: `Closure garden original ${n}`, language: 'en', direction: 'ltr', basis: 'requested' },
-    excerpt: `An independently published garden story, part ${n}.` },
-}));
+export const independentOriginals = [1, 2].map(n => {
+  const original = post(920 + n, {
+    actor: closureOwner, realm: null, authors: [onRezics(closureOwner)],
+    reason: { kind: 'recommended', basis: 'all' },
+    reasons: [{ kind: 'new-work', actor: closureOwner.id }],
+    target: { excerpt: `An independently published garden story, part ${n}.` },
+  });
+  return { ...original, target: { ...original.target,
+    title: { ...original.target.title, value: `Closure garden original ${n}` } } };
+});
 
 export function closurePage(query: FeedQuery, cursor?: string): FeedPage {
   const empty = Boolean(query.realms?.length);

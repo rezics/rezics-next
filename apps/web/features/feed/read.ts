@@ -19,7 +19,7 @@ export async function settleFeedRead<T>(call: () => Promise<{
 
 /** Only a first-page 409 can restart once. A successor belongs to its exact cursor chain. */
 export async function readFeedPage(main: MainClient, query: FeedQuery): Promise<Loaded<FeedPage>> {
-  const read = () => settleFeedRead(() => main.v1.feed.get({ query }));
+  const read = () => settleFeedRead(() => main.v1.feed.get({ query: { ...query, actingSubject: query.actingSubject } }));
   const first = await read();
   return !query.cursor && !first.ok && first.failure === 'moved' ? read() : first;
 }
