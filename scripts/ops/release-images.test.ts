@@ -112,7 +112,7 @@ function fixture() {
     runtimes: { yarn: 'test-pin' }, applicationBase: 'test-base', images: { fuseki: 'test-fuseki' }
   }; export const releaseDigest = () => 'test-release';`,
   );
-  for (const entry of runtimeEntries) {
+  for (const entry of [...runtimeEntries, ...runtimeArtifacts]) {
     if (!existsSync(join(repository, entry))) write(repository, entry, 'export {};');
   }
   const corepackHome = join(repository, '.temp/corepack');
@@ -152,25 +152,25 @@ test.each(runtimeEntries)('image runtime closure follows pinned transitive impor
     import { readFileSync } from 'node:fs';
     import { Glob } from 'bun';
   `);
-  write(options.repository, 'runtime-adapters/lazy.ts', "export const value = require('./value.json');");
-  write(options.repository, 'runtime-adapters/value.json', '{"pinned":true}');
+  write(options.repository, 'runtime-adapters/lazy.ts', "export const value = require('./runtime-package.json');");
+  write(options.repository, 'runtime-adapters/runtime-package.json', '{"pinned":true}');
   write(options.repository, 'packages/imported/package.json', JSON.stringify({
     name: '@test/imported',
     exports: { './runtime': './src/runtime.ts' },
     dependencies: { '@test/leaf': 'workspace:*' },
   }));
-  write(options.repository, 'packages/imported/src/runtime.ts', "export { value } from '../../../runtime-adapters/value.json';");
+  write(options.repository, 'packages/imported/src/runtime.ts', "export { value } from '../../../runtime-adapters/runtime-package.json';");
   git(options.repository, 'add', '--all');
   git(options.repository, 'commit', '--quiet', '-m', 'New runtime import');
   const revision = git(options.repository, 'rev-parse', 'HEAD');
-  write(options.repository, 'runtime-adapters/value.json', '{"live":true}');
+  write(options.repository, 'runtime-adapters/runtime-package.json', '{"live":true}');
   write(options.repository, entry, "import './missing-live.ts';");
   await prepareImageContext(options.context, { ...options, revision });
   for (const path of ['runtime-adapters/bridge.ts', 'runtime-adapters/lazy.ts',
-    'runtime-adapters/value.json', 'packages/imported/src/runtime.ts']) {
+    'runtime-adapters/runtime-package.json', 'packages/imported/src/runtime.ts']) {
     expect(existsSync(join(options.context, path)), path).toBe(true);
   }
-  expect(readFileSync(join(options.context, 'runtime-adapters/value.json'), 'utf8')).toBe('{"pinned":true}');
+  expect(readFileSync(join(options.context, 'runtime-adapters/runtime-package.json'), 'utf8')).toBe('{"pinned":true}');
   expect(readFileSync(join(options.context, 'runtime-workspaces.txt'), 'utf8')).toContain('@test/imported');
 });
 
@@ -208,5 +208,7 @@ test('image runtime closure prepares the repository snapshot without installing 
   }
   expect(readFileSync(join(context, 'infra/release/Dockerfile'), 'utf8'))
     .toContain('COPY --from=dependencies --chown=bun:bun /app/ ./');
+  expect(readFileSync(join(context, 'infra/release/Dockerfile'), 'utf8'))
+    .toContain('releaseRuntimeFiles(process.cwd(), entry)');
+  expect(JSON.parse(readFileSync(join(context, 'runtime-entrypoints.json'), 'utf8'))).toEqual(runtimeEntries);
 });
-

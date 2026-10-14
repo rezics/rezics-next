@@ -4,7 +4,8 @@ WORKDIR /app
 COPY . .
 ENV YARN_ENABLE_SCRIPTS=false YARN_ENABLE_IMMUTABLE_INSTALLS=true
 RUN bun yarn.cjs workspaces focus $(cat runtime-workspaces.txt) --production \
-    && rm yarn.cjs runtime-workspaces.txt
+    && bun -e 'import { releaseRuntimeFiles } from "./scripts/ops/release-payload.ts"; for (const entry of await Bun.file("runtime-entrypoints.json").json()) releaseRuntimeFiles(process.cwd(), entry);' \
+    && rm yarn.cjs runtime-workspaces.txt runtime-entrypoints.json
 
 FROM ${BUN_IMAGE} AS runtime
 ARG ROLE=main

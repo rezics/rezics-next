@@ -115,7 +115,7 @@ function fixture() {
     runtimes: { yarn: 'test-pin' }, applicationBase: 'test-base', images: { fuseki: 'test-fuseki' }
   }; export const releaseDigest = () => 'test-release';`,
   );
-  for (const entry of runtimeEntries) {
+  for (const entry of [...runtimeEntries, ...runtimeArtifacts]) {
     if (!existsSync(join(repository, entry))) write(repository, entry, 'export {};');
   }
   const corepackHome = join(repository, '.temp/corepack');

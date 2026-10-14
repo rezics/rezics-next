@@ -69,6 +69,7 @@ export const runtimeArtifacts = [
   'scripts/ops/migrate.ts',
   'scripts/ops/postgres-preflight.ts',
   'scripts/ops/production-env.ts',
+  'scripts/ops/release-payload.ts',
   'scripts/lib/migration-order.ts',
   'scripts/lib/concurrent-index.ts',
   'scripts/dev/release-manifest.ts',
@@ -264,7 +265,7 @@ export async function prepareImageContext(
     for (const file of resolverFiles) {
       const target = join(snapshot, file.path);
       mkdirSync(dirname(target), { recursive: true });
-      writeFileSync(target, file.path.endsWith('package.json')
+      writeFileSync(target, (file.path === 'package.json' || file.path.endsWith('/package.json'))
         ? codeBlobs.get(file.path)! : '');
     }
     for (const [name, workspace] of workspaces) {
@@ -395,6 +396,7 @@ export async function prepareImageContext(
     join(destination, 'runtime-workspaces.txt'),
     `${[...production].sort().join(' ')}\n`,
   );
+  writeFileSync(join(destination, 'runtime-entrypoints.json'), JSON.stringify(runtimeEntries));
   const metadata = {
     sourceCommit,
     base: pins.releaseManifest.applicationBase,
