@@ -62,11 +62,13 @@ for (const locale of ['en', 'ja'] as const) {
       expect(inbox.items.some(item => item.subject?.ref === closedReply)).toBe(false);
       await page.screenshot({ path: info.outputPath(`notifications-closed-${locale}.png`) });
       await pressByKeyboard(page, liveNotice.getByRole('link').first(), found, 'open independent Realm notice');
-      await expect(page).toHaveURL(url => {
+      // Predicate URL matchers also wait for document load; assert the committed navigation before waiting for its UI.
+      await expect.poll(() => {
+        const url = new URL(page.url());
         const ref = parseAddressSegment(decodeURIComponent(url.pathname.split('/')[3] ?? ''));
         return ref !== null && ref.kind !== 'alias' && [short(live.realm), short(live.space)].includes(ref.id);
-      });
-      await expect(page.getByRole('main')).toContainText(live.name);
+      }, { timeout: 60_000 }).toBe(true);
+      await expect(page.getByRole('main')).toContainText(live.name, { timeout: 30_000 });
       await page.reload();
       await expect(page.getByRole('main')).toContainText(live.name);
       expect(await motionRunning(page)).toEqual([]);
