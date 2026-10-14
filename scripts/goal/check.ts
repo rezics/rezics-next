@@ -1,11 +1,12 @@
 import { spawn, spawnSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, relative, isAbsolute } from 'node:path';
+import { join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief } from './briefs.ts';
-import { typecheckWorkspaces } from '../qa/affected.ts';
+import { workerTypeCommands } from '../qa/worker-types.ts';
 import { typecheckDiagnostics } from './typecheck-gate.ts';
 import { mergeUnitFiles, timeoutOnlyTestFiles, failingTestFiles, unitFileErrorDetails, recoveredSlowTests, rememberSlowTests, slowTestLine, timeoutRetryArg, UNIT_JUNIT_MARKER } from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
+import * as repositoryGuardRunner from '../qa/repository-guards.ts';
 import { parseJUnit, isQaOwnerPath, isQaIntegrationPath, isQaFaultPath, isQaModelPath, isQaE2ePath, isQaLoadPath } from '../qa/acceptance.ts';
 import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
@@ -153,7 +154,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
       for (const line of refusal.split('\n')) (options.print ?? console.log)(line);
       return { code: 1, log, checks: [{ name: 'selection', code: 1, seconds: 0 }] };
     }
-    return runSurfaceGate(cwd, selected.selection, options);
+    return runSurfaceGate(cwd, selected.selection, { ...options, workerStatic: true });
   }
   for (const file of tests) {
     const path = relative(cwd, resolve(cwd, file));
@@ -162,9 +163,8 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     }
   }
   const only = options.only ?? GROUPS;
-  const workspaces = typecheckWorkspaces(changed, cwd);
   const files = changed.filter(file => existsSync(join(cwd, file)) && statSync(join(cwd, file)).isFile());
-  const directories = [...new Set(files.filter(file => /\.[cm]?[jt]sx?$/.test(file)).map(dirname))].sort();
+  const lintFiles = files.filter(file => /\.[cm]?[jt]sx?$/.test(file));
   const root = join(cwd, '.temp/goal/check');
   mkdirSync(root, { recursive: true });
   const directory = mkdtempSync(join(root, 'run-'));
@@ -241,11 +241,13 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
 
   // The gate owns workspace and guard selection. Heavy compiler/lint processes share one serial lane.
   const staticLane = async () => {
-    if (only.includes('types')) await check('types', workspaces.map(workspace => ['task', `${workspace}:typecheck`]),
-      workspaces.length ? undefined : 'no TypeScript workspace changed');
+    if (only.includes('types')) {
+      const commands = workerTypeCommands(cwd, changed);
+      await check('types', commands, commands.length ? undefined : 'no TypeScript workspace changed');
+    }
     if (only.includes('lint')) {
-      await check('lint', directories.length ? [['node_modules/.bin/oxlint', '--type-aware', ...directories]] : [],
-        directories.length ? undefined : 'no source directory changed');
+      await check('lint', lintFiles.length ? [['node_modules/.bin/oxlint', ...lintFiles]] : [],
+        lintFiles.length ? undefined : 'no source file changed');
       await check('ast', files.length ? [['task', 'ast-grep', '--', 'scan', ...files]] : [],
         files.length ? undefined : 'no existing file changed');
     }
@@ -258,7 +260,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
       if (only.includes('tests')) await check('tests', tests.length ? [['bun', 'scripts/qa/test.ts', ...tests]] : [],
         tests.length ? undefined : 'no test files named in brief', tests);
       if (only.includes('guards')) await check('guards', guardFiles.length
-        ? [['task', 'goal:unit-files', '--', ...tierBunTestArgs('unit', guardFiles).slice(1)]] : [],
+        ? [['task', 'runRepositoryGuardFiles' in repositoryGuardRunner ? 'guards' : 'goal:unit-files', '--', ...tierBunTestArgs('unit', guardFiles).slice(1)]] : [],
         guardFiles.length ? undefined : 'no repository guard files present', guardFiles);
       return checks.some(check => (check.name === 'tests' || check.name === 'guards') && check.code !== 0) ? 1 : 0;
     };

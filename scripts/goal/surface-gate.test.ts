@@ -179,7 +179,7 @@ test.each(['contract', 'types', 'lint', 'ast', 'tests', 'guards', 'stories'])('a
   expect(check.code).toBe(1); expect(check.checks.at(-1)?.name).toBe(failed);
   const checkCommands = [...f.commands]; f.commands.length = 0;
   expect(await preMergeSurfaceGate(f.cwd, 'main', f.brief, f.changed, new Set(), { ...f, runner })).toContain('surface gate failed');
-  const stableCommands = (commands: string[][]) => commands.map(command => command.filter(arg => !arg.startsWith('--reporter-outfile=')));
+  const stableCommands = (commands: string[][]) => commands.filter(command => command[0] !== 'node_modules/.bin/oxlint' && command[1] !== 'ast-grep').map(command => command.filter(arg => !arg.startsWith('--reporter-outfile=')));
   expect(stableCommands(f.commands)).toEqual(stableCommands(checkCommands));
   expect(f.commands.filter(commands[failed]!)).toHaveLength(1);
 });
@@ -350,4 +350,17 @@ test('a file absent from pinned main cannot gain a baseline allowance', async ()
   expect(result.code).toBe(1);
   expect(result.excused).toEqual([]);
   expect(f.attempts.filter(attempt => attempt.command.includes(file))).toHaveLength(1);
+});
+
+test('surface workers narrow static tools while landing keeps full workspace types and type-aware lint', async () => {
+  const f = fixture();
+  f.write('apps/web/tsconfig.json', JSON.stringify({ compilerOptions: { noLib: true, types: [] }, include: ['features/**/*.ts', 'features/**/*.tsx'] }));
+  f.write('apps/web/features/unrelated.ts', 'export {};');
+  expect((await workerCheck(f)).code).toBe(0);
+  expect(f.commands).toContainEqual(['task', 'goal:type-files', '--', '--project', 'apps/web/tsconfig.json', 'apps/web/features/zones/catalogue.ts']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', 'apps/web/features/zones/catalogue.ts']);
+  f.commands.length = 0;
+  expect(await preMergeSurfaceGate(f.cwd, 'main', f.brief, f.changed, new Set(), f)).toBeUndefined();
+  expect(f.commands).toContainEqual(['task', 'web:typecheck']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'apps/web/features/zones']);
 });

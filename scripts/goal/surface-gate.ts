@@ -12,6 +12,8 @@ import {
   ownerArtifactFiles, unitArtifactReport, timeoutRetryArg, unitGateBudgetMs, type UnitShardRunner,
 } from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
+import * as repositoryGuardRunner from '../qa/repository-guards.ts';
+import { workerTypeCommands } from '../qa/worker-types.ts';
 import { withGateLane, withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { type loadOutcomes, personas, type RowOutcomes } from '../qa/cases/outcomes.ts';
 import { isQaE2ePath, isQaFaultPath, isQaIntegrationPath, isQaLoadPath, isQaModelPath, isQaOwnerPath } from '../qa/acceptance.ts';
@@ -136,6 +138,8 @@ export interface SurfaceExcusedTest {
   originalSeconds?: number; retrySeconds?: number;
 }
 export interface SurfaceRunOptions {
+  /** Worker checks narrow static tools; landing retains its full gate. */
+  workerStatic?: boolean;
   runner?: CheckRunner;
   print?: (line: string) => void;
   now?: () => number;
@@ -176,7 +180,8 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
       const report = join(artifacts, 'unit.xml');
       const direct = name === 'guards' || selected.every(file => !isQaOwnerPath(file));
       const started = now();
-      const command = name === 'guards' ? ['task', 'goal:unit-files', '--'] : ['bun', 'scripts/qa/test.ts'];
+      const command = name === 'guards' ? ['task', options.workerStatic && 'runRepositoryGuardFiles' in repositoryGuardRunner
+        ? 'guards' : 'goal:unit-files', '--'] : ['bun', 'scripts/qa/test.ts'];
       const result = await run([...command, ...selected,
         ...retryOptions?.testTimeoutMultiplier ? [timeoutRetryArg(direct ? 'unit' : 'owner')] : [],
         ...direct ? ['--reporter=junit', `--reporter-outfile=${report}`] : []], root, join(directory, `${label}.log`),
@@ -288,15 +293,18 @@ export async function runSurfaceGate(cwd: string, selection: SurfaceSelection, o
   };
   if (!await part('contract', [['task', 'gen'], ['task', 'gen:check']])) return finish();
   const staticParts: [SurfacePart, string[][]][] = [
-    ...(only.includes('types') ? [['types', [['task', 'web:typecheck']]] as [SurfacePart, string[][]]] : []),
+    ...(only.includes('types') ? [['types', options.workerStatic ? workerTypeCommands(cwd, selection.changed) : [['task', 'web:typecheck']]] as [SurfacePart, string[][]]] : []),
     ...(only.includes('lint') ? [
-      ['lint', directories.length ? [['node_modules/.bin/oxlint', '--type-aware', ...directories]] : []],
-      ['ast', directories.length ? [['task', 'ast-grep', '--', 'scan', ...directories]] : []],
+      ['lint', directories.length ? [options.workerStatic
+        ? ['node_modules/.bin/oxlint', ...existing.filter(file => /\.[cm]?[jt]sx?$/.test(file))]
+        : ['node_modules/.bin/oxlint', '--type-aware', ...directories]] : []],
+      ['ast', directories.length ? [['task', 'ast-grep', '--', 'scan', ...(options.workerStatic ? existing : directories)]] : []],
     ] as [SurfacePart, string[][]][] : []),
   ];
   for (const [name, commands] of staticParts) {
     const waiting = now();
-    const ok = await withGateLane(() => part(name, commands, (now() - waiting) / 1000), { ...options.gateLaneOptions, command: `surface ${name}` });
+    const ok = options.workerStatic ? await part(name, commands)
+      : await withGateLane(() => part(name, commands, (now() - waiting) / 1000), { ...options.gateLaneOptions, command: `surface ${name}` });
     if (!ok) return finish();
   }
   const waiting = now();

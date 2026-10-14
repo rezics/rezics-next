@@ -184,6 +184,12 @@ tasks:
     cmds:
       - bun scripts/goal/admission.ts -- node_modules/.bin/playwright test --config apps/web/playwright.config.ts {{.CLI_ARGS}}
 
+  goal:type-files:
+    desc: Type-check selected files and their imports without whole-workspace memory admission.
+    deps: [toolchain:bun-check]
+    cmds:
+      - bun check --no-pretty --threads 8 {{.CLI_ARGS}}
+
   web:typecheck:
     deps: [toolchain:bun-check]
     desc: Type-check the web workspace.
@@ -319,7 +325,7 @@ tasks:
     dir: '{{.ROOT_DIR}}'
     silent: true
     cmds:
-      - bun scripts/qa/repository-guards.ts
+      - bun scripts/qa/repository-guards.ts {{.CLI_ARGS}}
 
   # Checks and tests
 

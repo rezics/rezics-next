@@ -75,7 +75,7 @@ test('worker check selects the changed worktree project for an imported support 
     slotOptions: { slotDirectory: join(p.root, '.temp/slots'), slots: 1, reap: () => {}, announce: () => {} },
   });
   expect(result.code).toBe(0);
-  expect(commands).toEqual([['task', 'scripts:typecheck']]);
+  expect(commands).toEqual([['task', 'goal:type-files', '--', '--project', 'scripts/tsconfig.json', 'scripts/entry.ts']]);
 });
 
 test('affected planning selects the scripts task from the worktree import graph', () => {

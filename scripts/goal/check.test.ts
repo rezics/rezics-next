@@ -46,7 +46,7 @@ test('one passing invocation prints five ok lines and retains every command outp
   expect(result.log.startsWith(join(f.cwd, '.temp/goal/check/'))).toBe(true);
   expect(f.lines.at(-1)).toBe(`Full output: ${result.log}`);
   expect(f.commands).toContainEqual(['task', 'scripts:typecheck']);
-  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', '--type-aware', 'scripts']);
+  expect(f.commands).toContainEqual(['node_modules/.bin/oxlint', 'scripts/example.ts']);
   expect(f.commands).toContainEqual(['task', 'ast-grep', '--', 'scan', 'scripts/example.ts']);
   expect(f.commands.find(command => command[1] === 'scripts/qa/test.ts')?.slice(0, 3))
     .toEqual(['bun', 'scripts/qa/test.ts', 'scripts/example.test.ts']);

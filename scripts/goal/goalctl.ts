@@ -189,6 +189,11 @@ async function main(argv: string[]): Promise<number> {
       return withSlot(command[0] === '--' ? command.slice(1) : command, heavy);
     }
     case 'check': {
+      if (rest[0] === '--branch') {
+        if (rest.length !== 2 || !rest[1]) throw new Error('check --branch requires one ref');
+        const { branchCheck } = await import('./branch-check.ts');
+        return (await branchCheck(rest[1])).code;
+      }
       const { parseCheckArgs } = await import('./check.ts');
       const only = parseCheckArgs(rest);
       const prepared = process.env.GOAL_CHECK_PREPARED_TREE;
