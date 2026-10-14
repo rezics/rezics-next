@@ -175,6 +175,23 @@ struct AliasFact {
     initializer_start: u32,
     initializer_end: u32,
 }
+#[derive(Clone, Serialize)]
+struct SyntaxScope {
+    #[serde(rename = "type")]
+    kind: &'static str,
+    start: u32,
+    end: u32,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct VariableFact {
+    name: String,
+    start: u32,
+    end: u32,
+    scopes: Vec<SyntaxScope>,
+    initializer_ancestors: Vec<SyntaxScope>,
+    initializer_ast_deflate: String,
+}
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct IndexedFile {
@@ -185,6 +202,10 @@ struct IndexedFile {
     runtime_ast_deflate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sql_ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fragment_ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    variable_facts: Option<Vec<VariableFact>>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -271,12 +292,16 @@ fn file_header(
         ("astDeflate", facts.ast_deflate),
         ("runtimeAstDeflate", facts.runtime_ast_deflate),
         ("sqlAstDeflate", facts.sql_ast_deflate),
+        ("fragmentAstDeflate", facts.fragment_ast_deflate),
         ("graphDeflate", facts.graph_deflate),
         ("sqlDeflate", facts.sql_deflate),
     ] {
         if let Some(value) = value {
             payloads.insert(name, payload(&value, writer, position)?);
         }
+    }
+    if let Some(variables) = facts.variable_facts {
+        payloads.insert("variableFacts", payload(&variables, writer, position)?);
     }
     // Empty arrays are cheap to materialize lazily and preserve facts for
     // explicit fixtures without forcing every guard to read literal payloads.
@@ -655,6 +680,8 @@ fn indexed_mode(
             ast_deflate: None,
             runtime_ast_deflate: None,
             sql_ast_deflate: None,
+            fragment_ast_deflate: None,
+            variable_facts: None,
             imports: vec![],
             sql_candidates: vec![],
             sql_deflate: Some(compressed_sql(&sql)?),
@@ -738,9 +765,14 @@ fn indexed_mode(
     } else {
         None
     };
-    let sql_ast_deflate = if keep_runtime || service_graph_domain(&source.file) {
+    // Explicit fixtures retain the older combined view for compatibility.
+    // Repository service consumers use fragment and initializer payloads instead.
+    let sql_ast_deflate = if keep_runtime {
         let mut sql_program = parsed.program.clone_in(&allocator);
-        let mut selection = SqlSyntaxSelection::default();
+        let mut selection = SqlSyntaxSelection {
+            include_variables: true,
+            ..SqlSyntaxSelection::default()
+        };
         selection.visit_program(&sql_program);
         SqlSyntaxProjection {
             marked: selection.marked,
@@ -750,6 +782,30 @@ fn indexed_mode(
     } else {
         None
     };
+    let (fragment_ast_deflate, variable_facts) =
+        if keep_runtime || service_graph_domain(&source.file) {
+            let mut variables = VariableSyntax {
+                text: &source.text,
+                frames: Vec::new(),
+                facts: Vec::new(),
+            };
+            variables.visit_program(&parsed.program);
+            let mut fragment_program = parsed.program.clone_in(&allocator);
+            let mut selection = SqlSyntaxSelection::default();
+            selection.visit_program(&fragment_program);
+            SqlSyntaxProjection {
+                marked: selection.marked,
+            }
+            .visit_program(&mut fragment_program);
+            (
+                Some(compressed_ast(
+                    &fragment_program.to_estree_json(true, false),
+                )?),
+                Some(variables.facts),
+            )
+        } else {
+            (None, None)
+        };
     let runtime = if compact_only || keep_runtime {
         RuntimeProjection {
             allocator: &allocator,
@@ -775,6 +831,8 @@ fn indexed_mode(
         }),
         runtime_ast_deflate: if compact_only { None } else { runtime },
         sql_ast_deflate,
+        fragment_ast_deflate,
+        variable_facts,
         imports,
         sql_candidates: candidates,
         sql_deflate: None,
@@ -1761,6 +1819,134 @@ class Owner { write(){ debug('ignored'); db.query('UPDATE owner.records SET valu
         );
     }
     #[test]
+    fn fragment_and_initializer_views_preserve_scope_identity_without_unrelated_variables() {
+        let root = env::current_dir().unwrap();
+        let text = r#"// source starts before the first statement
+const table: string = 'owner.records';
+const { sql: alias } = values;
+const assembled = 'UP' + 'DATE owner.records SET value=1';
+function write() {
+  if (flag) { const sibling = assembled; }
+  if (other) db.query(sibling);
+  function nested() { const local = sibling; db.query(local); }
+}
+class Owner { method(){ const methodValue = assembled; db.execute(methodValue); } }
+const object = { method(){ const objectValue = assembled; db.query(objectValue); } };
+namespace Inventory { const namespaceValue = table; }
+"#;
+        let facts = indexed_mode(
+            Source {
+                file: "services/probe/src/scope.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        assert!(facts.sql_ast_deflate.is_none());
+        let variables = facts.variable_facts.as_ref().unwrap();
+        let variable = |name: &str| variables.iter().find(|fact| fact.name == name).unwrap();
+        assert_eq!(variable("table").name, "table");
+        assert!(variables.iter().any(|fact| fact.name == "{ sql: alias }"));
+        assert_eq!(variable("table").scopes.last().unwrap().kind, "Program");
+        assert_eq!(variable("table").scopes.last().unwrap().start, 0);
+        let sibling = variable("sibling");
+        assert_eq!(sibling.scopes.first().unwrap().kind, "VariableDeclarator");
+        assert_eq!(sibling.scopes.last().unwrap().kind, "FunctionDeclaration");
+        assert_eq!(
+            sibling.scopes.last().unwrap().start as usize,
+            text.find("function write").unwrap()
+        );
+        assert_eq!(
+            sibling.initializer_ancestors.last().unwrap().kind,
+            "Program"
+        );
+        let local = variable("local");
+        assert_eq!(
+            local.scopes.last().unwrap().start as usize,
+            text.find("function nested").unwrap()
+        );
+        assert!(
+            !local
+                .scopes
+                .iter()
+                .any(|scope| scope.start as usize == text.find("function write").unwrap())
+        );
+        for (name, kind, prefix) in [
+            (
+                "methodValue",
+                "MethodDefinition",
+                "method(){ const methodValue",
+            ),
+            ("objectValue", "Property", "method(){ const objectValue"),
+        ] {
+            let fact = variable(name);
+            assert_eq!(fact.scopes.last().unwrap().kind, kind);
+            assert_eq!(
+                fact.scopes.last().unwrap().start as usize,
+                text.find(prefix).unwrap()
+            );
+            assert!(
+                !fact
+                    .initializer_ancestors
+                    .iter()
+                    .any(|scope| matches!(scope.kind, "FunctionExpression" | "ClassBody"))
+            );
+        }
+        assert!(
+            variable("namespaceValue")
+                .scopes
+                .iter()
+                .any(|scope| scope.kind == "TSModuleDeclaration")
+        );
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let initializer = decode(&variable("assembled").initializer_ast_deflate);
+        assert_eq!(
+            initializer["body"][0]["expression"]["type"],
+            "BinaryExpression"
+        );
+        assert_eq!(initializer["body"][0]["expression"]["operator"], "+");
+        assert_eq!(
+            initializer["body"][0]["expression"]["start"],
+            text.find("'UP' +").unwrap()
+        );
+        let fragment = decode(facts.fragment_ast_deflate.as_ref().unwrap());
+        let mut names = Vec::new();
+        let mut queries = Vec::new();
+        visit(&fragment, &mut |node| {
+            if node["type"] == "VariableDeclarator" {
+                names.push(node["id"]["name"].as_str().unwrap_or("").to_string());
+            }
+            if node["type"] == "CallExpression" {
+                queries.push(node["start"].as_u64().unwrap() as usize);
+            }
+        });
+        assert!(!names.iter().any(|name| matches!(
+            name.as_str(),
+            "table" | "assembled" | "sibling" | "local" | "namespaceValue"
+        )));
+        for prefix in [
+            "db.query(sibling)",
+            "db.query(local)",
+            "db.execute(methodValue)",
+            "db.query(objectValue)",
+        ] {
+            assert!(queries.contains(&text.find(prefix).unwrap()));
+        }
+        let mut bytes = Vec::new();
+        let header = file_header(facts, &mut bytes, &mut 0).unwrap();
+        assert!(header.payloads.contains_key("fragmentAstDeflate"));
+        assert!(header.payloads.contains_key("variableFacts"));
+        assert!(!header.payloads.contains_key("sqlAstDeflate"));
+    }
+    #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
         let root = env::current_dir().unwrap();
         let resolver = resolver(&root);
@@ -2657,17 +2843,25 @@ impl<'a> Visit<'a> for Facts<'_> {
 
 fn template_ast(node: &TemplateLiteral<'_>) -> Result<String> {
     let allocator = &Allocator::default();
-    let builder = AstBuilder::new(allocator);
     let expression = Expression::TemplateLiteral(oxc_allocator::Box::new_in(
         node.clone_in(allocator),
         &allocator,
     ));
+    expression_ast_in(expression, allocator)
+}
+fn expression_ast(node: &Expression<'_>) -> Result<String> {
+    let allocator = &Allocator::default();
+    expression_ast_in(node.clone_in(allocator), allocator)
+}
+fn expression_ast_in(expression: Expression<'_>, allocator: &Allocator) -> Result<String> {
+    let builder = AstBuilder::new(allocator);
+    let span = expression.span();
     let mut body = oxc_allocator::Vec::new_in(&allocator);
     body.push(Statement::new_expression_statement(
-        node.span, expression, &builder,
+        span, expression, &builder,
     ));
     let program = Program::new(
-        node.span,
+        span,
         SourceType::ts().with_module(true),
         "",
         oxc_allocator::Vec::new_in(&allocator),
@@ -2738,6 +2932,150 @@ fn function_node(kind: AstKind<'_>) -> bool {
         AstKind::Function(_) | AstKind::ArrowFunctionExpression(_)
     )
 }
+struct VariableScopeFrame {
+    scope: Option<SyntaxScope>,
+    function: bool,
+    method: bool,
+}
+struct VariableSyntax<'s> {
+    text: &'s str,
+    frames: Vec<VariableScopeFrame>,
+    facts: Vec<VariableFact>,
+}
+// Oxc's visitor has a few internal nodes which ESTree flattens. Only serialized
+// parent identities are needed for lookup; actual method functions and class
+// bodies are flattened again by the TypeScript guard view.
+fn scope_kind(kind: AstKind<'_>) -> Option<&'static str> {
+    Some(match kind {
+        AstKind::Program(_) => "Program",
+        AstKind::Function(node) => match node.r#type {
+            FunctionType::FunctionDeclaration => "FunctionDeclaration",
+            FunctionType::FunctionExpression => "FunctionExpression",
+            FunctionType::TSDeclareFunction => "TSDeclareFunction",
+            FunctionType::TSEmptyBodyFunctionExpression => "TSEmptyBodyFunctionExpression",
+        },
+        AstKind::Class(node) => match node.r#type {
+            ClassType::ClassDeclaration => "ClassDeclaration",
+            ClassType::ClassExpression => "ClassExpression",
+        },
+        AstKind::FunctionBody(_) | AstKind::BlockStatement(_) => "BlockStatement",
+        AstKind::ObjectProperty(_) | AstKind::BindingProperty(_) => "Property",
+        AstKind::StaticMemberExpression(_)
+        | AstKind::ComputedMemberExpression(_)
+        | AstKind::PrivateFieldExpression(_) => "MemberExpression",
+        AstKind::VariableDeclarator(_) => "VariableDeclarator",
+        AstKind::VariableDeclaration(_) => "VariableDeclaration",
+        AstKind::ArrowFunctionExpression(_) => "ArrowFunctionExpression",
+        AstKind::MethodDefinition(_) => "MethodDefinition",
+        AstKind::ArrayExpression(_) => "ArrayExpression",
+        AstKind::ObjectExpression(_) => "ObjectExpression",
+        AstKind::CallExpression(_) => "CallExpression",
+        AstKind::NewExpression(_) => "NewExpression",
+        AstKind::ImportExpression(_) => "ImportExpression",
+        AstKind::SpreadElement(_) => "SpreadElement",
+        AstKind::UnaryExpression(_) => "UnaryExpression",
+        AstKind::BinaryExpression(_) => "BinaryExpression",
+        AstKind::LogicalExpression(_) => "LogicalExpression",
+        AstKind::AssignmentExpression(_) => "AssignmentExpression",
+        AstKind::ConditionalExpression(_) => "ConditionalExpression",
+        AstKind::SequenceExpression(_) => "SequenceExpression",
+        AstKind::AwaitExpression(_) => "AwaitExpression",
+        AstKind::ChainExpression(_) => "ChainExpression",
+        AstKind::ParenthesizedExpression(_) => "ParenthesizedExpression",
+        AstKind::TemplateLiteral(_) => "TemplateLiteral",
+        AstKind::TaggedTemplateExpression(_) => "TaggedTemplateExpression",
+        AstKind::ExpressionStatement(_) => "ExpressionStatement",
+        AstKind::IfStatement(_) => "IfStatement",
+        AstKind::DoWhileStatement(_) => "DoWhileStatement",
+        AstKind::WhileStatement(_) => "WhileStatement",
+        AstKind::ForStatement(_) => "ForStatement",
+        AstKind::ForInStatement(_) => "ForInStatement",
+        AstKind::ForOfStatement(_) => "ForOfStatement",
+        AstKind::ReturnStatement(_) => "ReturnStatement",
+        AstKind::ThrowStatement(_) => "ThrowStatement",
+        AstKind::WithStatement(_) => "WithStatement",
+        AstKind::SwitchStatement(_) => "SwitchStatement",
+        AstKind::SwitchCase(_) => "SwitchCase",
+        AstKind::LabeledStatement(_) => "LabeledStatement",
+        AstKind::TryStatement(_) => "TryStatement",
+        AstKind::CatchClause(_) => "CatchClause",
+        AstKind::PropertyDefinition(_) => "PropertyDefinition",
+        AstKind::StaticBlock(_) => "StaticBlock",
+        AstKind::AccessorProperty(_) => "AccessorProperty",
+        AstKind::ExportDeclaration(_) | AstKind::ExportNamedDeclaration(_) => {
+            "ExportNamedDeclaration"
+        }
+        AstKind::ExportDefaultDeclaration(_) => "ExportDefaultDeclaration",
+        AstKind::TSAsExpression(_) => "TSAsExpression",
+        AstKind::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
+        AstKind::TSNonNullExpression(_) => "TSNonNullExpression",
+        AstKind::TSTypeAssertion(_) => "TSTypeAssertion",
+        AstKind::TSInstantiationExpression(_) => "TSInstantiationExpression",
+        AstKind::TSNamespaceDeclaration(_)
+        | AstKind::TSExternalModuleDeclaration(_)
+        | AstKind::TSGlobalDeclaration(_) => "TSModuleDeclaration",
+        AstKind::TSModuleBlock(_) => "TSModuleBlock",
+        AstKind::TSEnumDeclaration(_) => "TSEnumDeclaration",
+        AstKind::TSEnumBody(_) => "TSEnumBody",
+        AstKind::TSEnumMember(_) => "TSEnumMember",
+        AstKind::TSExportAssignment(_) => "TSExportAssignment",
+        // Identifier/type/parameter wrappers cannot be ancestors of initialized
+        // declarations, and are not scopes in the emitted expression view.
+        _ => return None,
+    })
+}
+impl<'a> Visit<'a> for VariableSyntax<'_> {
+    fn enter_node(&mut self, kind: AstKind<'a>) {
+        let method = matches!(kind, AstKind::MethodDefinition(_))
+            || matches!(kind, AstKind::ObjectProperty(node) if node.method || node.kind != PropertyKind::Init);
+        let hidden_function = matches!(kind, AstKind::Function(_))
+            && self.frames.last().is_some_and(|frame| frame.method);
+        let span = kind.span();
+        self.frames.push(VariableScopeFrame {
+            scope: if hidden_function {
+                None
+            } else {
+                scope_kind(kind).map(|name| SyntaxScope {
+                    kind: name,
+                    start: if name == "Program" { 0 } else { span.start },
+                    end: span.end,
+                })
+            },
+            function: method || (!hidden_function && function_node(kind)),
+            method,
+        });
+        if let AstKind::VariableDeclarator(node) = kind
+            && let Some(initializer) = &node.init
+        {
+            let ancestors = self.frames.iter().rev();
+            let initializer_ancestors = ancestors
+                .clone()
+                .filter_map(|frame| frame.scope.clone())
+                .collect();
+            let mut scopes = Vec::new();
+            for frame in ancestors {
+                if let Some(scope) = &frame.scope {
+                    scopes.push(scope.clone());
+                }
+                if frame.function {
+                    break;
+                }
+            }
+            let binding = node.id.span();
+            self.facts.push(VariableFact {
+                name: self.text[binding.start as usize..binding.end as usize].to_string(),
+                start: node.span.start,
+                end: node.span.end,
+                scopes,
+                initializer_ancestors,
+                initializer_ast_deflate: expression_ast(initializer).unwrap(),
+            });
+        }
+    }
+    fn leave_node(&mut self, _: AstKind<'a>) {
+        self.frames.pop();
+    }
+}
 #[derive(Default)]
 struct SqlSyntaxSelection {
     ancestors: Vec<oxc_span::Span>,
@@ -2745,6 +3083,7 @@ struct SqlSyntaxSelection {
     variable_depth: usize,
     hard_depth: usize,
     function_variables: Vec<usize>,
+    include_variables: bool,
 }
 impl<'a> Visit<'a> for SqlSyntaxSelection {
     fn visit_statement(&mut self, statement: &Statement<'a>) {
@@ -2763,7 +3102,7 @@ impl<'a> Visit<'a> for SqlSyntaxSelection {
             self.function_variables.push(self.variable_depth);
             self.variable_depth = 0;
         }
-        let variable = matches!(kind, AstKind::VariableDeclaration(_));
+        let variable = self.include_variables && matches!(kind, AstKind::VariableDeclaration(_));
         let hard = sql_hard_anchor(kind);
         if variable {
             self.variable_depth += 1;
@@ -2780,7 +3119,7 @@ impl<'a> Visit<'a> for SqlSyntaxSelection {
         }
     }
     fn leave_node(&mut self, kind: AstKind<'a>) {
-        if matches!(kind, AstKind::VariableDeclaration(_)) {
+        if self.include_variables && matches!(kind, AstKind::VariableDeclaration(_)) {
             self.variable_depth -= 1;
         }
         if sql_hard_anchor(kind) {
