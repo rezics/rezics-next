@@ -6,7 +6,7 @@ import type {
 import record from '../../../../tests/qa/fixtures/outcomes/anime/continue-progress-across-devices-two-device-progress.json';
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
-import type { RecordedSelection } from '../stories/recorded-fetch.ts';
+import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { booksEditionReads } from '../work-page/books-edition-page.read.ts';
 import { mainEpisodeApi } from './episode-api.ts';
 
@@ -104,6 +104,98 @@ export function animeTwoDeviceSelections(
     { label: 'own-unwatched-episode', state: 'populated' },
     { label: 'first-device-race', state: race.status >= 400 ? 'error' : 'populated' },
   ];
+}
+
+/** Header reads plus the signed-in relationship read. A visitor has no acting Person and no follow-state sample. */
+export function animeTwoDeviceFrameSelections(persona: AnswerPersona): RecordedSelection[] {
+  const selections = animeTwoDeviceHeaderSelections();
+  if (persona !== 'visitor') selections.push({ label: 'work-follow-state', state: 'populated' });
+  return selections;
+}
+
+export type AnimeChain = 'mark' | 'clear';
+
+/** One recorded answer, kept for a later identical request when `repeat` is set. */
+export interface AnimeChainSelection extends RecordedSelection {
+  repeat?: boolean;
+}
+
+/**
+ * The control's own order for one device of one reachable chain.
+ * Progress and resume reads share a URL and differ by answer, which one replaying list cannot hold,
+ * so the caller walks these in order. Parts and the composition page are the same answer on every refresh.
+ * Marking opens on the positions window from before a saved place; clearing opens on the place the mark left.
+ */
+export function animeTwoDeviceChainSelections(
+  device: AnimeDevice,
+  chain: AnimeChain,
+  holdResume = false,
+): AnimeChainSelection[] {
+  const label = (kind: string) => `reachable-${chain}-${device}-device-${kind}`;
+  const before = chain === 'mark' ? 'episode-resume' : `reachable-mark-${device}-device-resume-1`;
+  const progress = (index: number, repeat = false): AnimeChainSelection => ({
+    label: label(`progress-${index}`),
+    state: 'populated',
+    ...(repeat ? { repeat: true } : {}),
+  });
+  const write = (index: number, error: boolean): AnimeChainSelection => ({
+    label: label(`write-${index}`),
+    state: error ? 'error' : 'populated',
+  });
+  const standing: AnimeChainSelection[] = [
+    { label: label('structure-1'), state: 'populated', repeat: true },
+    { label: label('page-1'), state: 'populated', repeat: true },
+    { label: before, state: holdResume ? 'loading' : 'populated' },
+    { label: label('resume-1'), state: 'populated', repeat: true },
+  ];
+  return device === 'first'
+    ? [...standing, progress(1), progress(2), write(1, false)]
+    : [...standing, progress(1), progress(2), progress(3, true), write(1, true), write(2, false)];
+}
+
+/**
+ * Serves the next unused sample whose request matches. `recordedFetch` keeps the first match and
+ * refuses two samples with one request, so each probe is a single sample.
+ * A loading sample that matches stays unanswered.
+ */
+export function sequencedRecordedFetch(
+  persona: AnswerPersona,
+  selections: readonly AnimeChainSelection[],
+  options?: { pathPrefix?: string },
+): { fetcher: typeof fetch; dispose: () => void } {
+  const pending = selections.map((selection) => ({ ...selection, used: false }));
+  const disposals: (() => void)[] = [];
+  let disposed = false;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    if (disposed) throw new DOMException('Recorded story ended', 'AbortError');
+    const source = new Request(input, init);
+    let last: unknown;
+    for (const selection of pending) {
+      if (selection.used) continue;
+      const replay = recordedFetch(answers, persona, [{ label: selection.label, state: selection.state }], options);
+      disposals.push(replay.dispose);
+      try {
+        const response = await replay.fetcher(source.clone());
+        if (!selection.repeat) selection.used = true;
+        return response;
+      } catch (error) {
+        if (error instanceof Error && error.message.startsWith('Unmatched recorded request')) {
+          last = error;
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw last instanceof Error ? last : new Error(`Unmatched recorded request (${answers.row}/${persona})`);
+  }) as typeof fetch;
+  return {
+    fetcher,
+    dispose() {
+      disposed = true;
+      for (const dispose of disposals) dispose();
+      disposals.length = 0;
+    },
+  };
 }
 
 export function animeTwoDeviceClient(fetcher: typeof fetch, anonymous: boolean, origin: string) {

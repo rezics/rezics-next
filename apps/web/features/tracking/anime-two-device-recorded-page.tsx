@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import progressRecord from '../../../../tests/qa/fixtures/outcomes/anime/continue-progress-across-devices-two-device-progress.json';
 import type { UiLocale } from '../../i18n/define.ts';
@@ -10,6 +10,7 @@ import { signInPath } from '../auth/paths.ts';
 import { coverKindOf } from '../catalogue/work.ts';
 import { classificationFacet, facetLabel } from '../concept/facets.ts';
 import type { FacetList } from '../concept/types.ts';
+import { mainRelationships } from '../relationships/api.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { AdoptionRegion } from '../work-page/adoption.tsx';
 import { AlsoEnjoyedSection } from '../work-page/also-enjoyed.tsx';
@@ -29,14 +30,17 @@ import type {
 } from '../work-page/types.ts';
 import { WorkFrame } from '../work-page/work-frame.tsx';
 import {
+  animeTwoDeviceChainSelections,
   animeTwoDeviceClient,
   animeTwoDeviceEpisodes,
-  animeTwoDeviceHeaderSelections,
-  animeTwoDeviceSelections,
+  animeTwoDeviceFrameSelections,
   isSignedInPersona,
   readAnimeTwoDeviceFrame,
   recordedActingSubject,
   recordedWorkId,
+  sequencedRecordedFetch,
+  type AnimeChain,
+  type AnimeChainSelection,
 } from './anime-two-device-recorded-page.ts';
 import type { EpisodeApi } from './episode-api.ts';
 import { EpisodeProgress } from './episode-progress.tsx';
@@ -63,6 +67,7 @@ interface Ready {
   alsoEnjoyed: Loaded<AlsoEnjoyedPage>;
   adoptions: Loaded<AdoptionPage>;
   devices: { name: (typeof deviceName)[keyof typeof deviceName]; api: EpisodeApi }[];
+  frameFetcher: typeof fetch;
 }
 
 function realmsOf(adoptions: Loaded<AdoptionPage>): ScopeRealm[] {
@@ -78,10 +83,13 @@ export function AnimeTwoDeviceRecordedPage({
   persona,
   locale = 'en',
   hold = false,
+  direction = 'mark',
 }: {
   persona: AnswerPersona;
   locale?: UiLocale;
   hold?: boolean;
+  /** Which recorded chain the two devices replay. Mark completes; clear removes that completion. */
+  direction?: AnimeChain;
 }) {
   const [ready, setReady] = useState<Ready | null>(null);
   const [fault, setFault] = useState<string | null>(null);
@@ -92,8 +100,10 @@ export function AnimeTwoDeviceRecordedPage({
       if (!mounted || (error instanceof DOMException && error.name === 'AbortError')) return;
       setFault(error instanceof Error ? error.message : String(error));
     };
-    const fetcherFor = (selections: readonly RecordedSelection[]) => {
-      const replay = recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
+    const fetcherFor = (selections: readonly RecordedSelection[], sequenced = false) => {
+      const replay = sequenced
+        ? sequencedRecordedFetch(persona, selections as readonly AnimeChainSelection[], { pathPrefix: BFF_PREFIX })
+        : recordedFetch(record, persona, selections, { pathPrefix: BFF_PREFIX });
       disposals.push(replay.dispose);
       return (async (input: RequestInfo | URL, init?: RequestInit) => {
         try {
@@ -106,11 +116,8 @@ export function AnimeTwoDeviceRecordedPage({
     };
     const actingSubject = recordedActingSubject(persona);
     const id = recordedWorkId(persona);
-    const main = animeTwoDeviceClient(
-      fetcherFor(animeTwoDeviceHeaderSelections()),
-      persona === 'visitor',
-      window.location.origin,
-    );
+    const frameFetcher = fetcherFor(animeTwoDeviceFrameSelections(persona));
+    const main = animeTwoDeviceClient(frameFetcher, persona === 'visitor', window.location.origin);
     void (async () => {
       const [header, agentCredits, credits, classifications, facets, alsoEnjoyed, adoptions] =
         await readAnimeTwoDeviceFrame(main, id, actingSubject);
@@ -123,7 +130,10 @@ export function AnimeTwoDeviceRecordedPage({
         isSignedInPersona(persona) && actingSubject
           ? (['first', 'second'] as const).map((device) => {
               const deviceMain = animeTwoDeviceClient(
-                fetcherFor(animeTwoDeviceSelections(persona, device, hold && device === 'second')),
+                fetcherFor(
+                  animeTwoDeviceChainSelections(device, direction, hold && device === 'second'),
+                  true,
+                ),
                 false,
                 window.location.origin,
               );
@@ -143,14 +153,21 @@ export function AnimeTwoDeviceRecordedPage({
         alsoEnjoyed,
         adoptions,
         devices,
+        frameFetcher,
       });
     })().catch(fail);
     return () => {
       mounted = false;
       for (const dispose of disposals) dispose();
     };
-  }, [persona, hold]);
+  }, [persona, hold, direction]);
 
+  const relationships = useMemo(
+    () => ready?.actingSubject
+      ? mainRelationships(ready.actingSubject, { origin: window.location.origin, fetch: ready.frameFetcher })
+      : undefined,
+    [ready],
+  );
   const page = workMessages[locale];
   const episodes = copyOf(locale);
   const view: ScopeView | null = ready
@@ -177,6 +194,9 @@ export function AnimeTwoDeviceRecordedPage({
           locale={locale}
           messages={page}
           signedIn={Boolean(ready.actingSubject)}
+          actingSubject={ready.actingSubject}
+          relationships={relationships}
+          readerActions={ready.actingSubject ? { kind: 'unavailable' } : undefined}
           signInHref={signInPath(localizedPath(workHref(view.workRef), locale))}
           credits={
             <WorkCredits

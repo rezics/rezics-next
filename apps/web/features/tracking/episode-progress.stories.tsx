@@ -239,7 +239,7 @@ export const CancelledPageJump: Story = {
     await view.findByText('Last watched: Episode 41');
     await waitFor(() => expect(canvasElement.querySelector('[data-selected="main"] [data-state="done"]')).not.toBeNull());
     const occurrence = episodeSeries({ mains: 60, specials: 2 }).mains[40]!.occurrence;
-    await expect(args.marked?.()).toEqual([`${occurrence}:null`]);
+    await expect(args.marked?.()).toEqual([`${occurrence}:episode:41`]);
   },
 };
 

@@ -46,7 +46,7 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
  */
 export function WorkFrame({ workRef, work, experience = workExperience(null, work.types), credits, authors = [], cover,
   ratingLine, showcase, readAction, status, shortcuts, sections = [],
-  signedIn = false, signInHref, actingSubject,
+  signedIn = false, signInHref, actingSubject, relationships,
   readerSeed, ratingTarget, readerActions, avatarQuery, locale, messages, children }: {
   workRef: WorkAt; work: Header; credits: ReactNode; authors?: readonly CatalogueAuthor[];
   /** The page the Work's projection names; the registry's entry for its types when left out. */
@@ -70,6 +70,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
   signInHref?: string;
   /** The Agent a signed-in reader acts as, their state for this Work, and what the stars rate. */
   actingSubject?: string | null; readerSeed?: ReaderSeed; ratingTarget?: RatingTarget | null;
+  /** Stories replay the frame's relationship read; the page builds one from the session. */
+  relationships?: React.ComponentProps<typeof RelationshipControl>['api'];
   /** Stories supply reader actions; pages derive them from the session. */
   readerActions?: ReaderActions;
   avatarQuery?: string;
@@ -106,7 +108,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
             {status}
             <RateWork work={work.id} locale={locale} className="sm:mt-2" />
             <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
-              signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
+              signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'}
+              api={relationships} />
             <ReportAction target={work.id} kind="work" />
           </div>
         </div>
@@ -136,7 +139,8 @@ export function WorkFrame({ workRef, work, experience = workExperience(null, wor
         <ShelfButton work={work.id} title={work.title.value} locale={locale} size="lg" variant="outline" />
         <RateWork work={work.id} locale={locale} className="mt-1" />
         <RelationshipControl target={work.id} kind="work" name={work.title.value} locale={locale}
-          signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'} />
+          signedIn={signedIn} actingSubject={actingSubject} signInHref={signInHref ?? '/auth/start'}
+          api={relationships} />
         <ReportAction target={work.id} kind="work" />
       </div>
     </div>

@@ -7,7 +7,7 @@ import { Input } from '@rezics/ui/input';
 import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import type { EpisodeApi, EpisodeProgress as Mark } from './episode-api.ts';
 import { ProgressConflict } from './conflict-panel.tsx';
-import { type Episode, type Standing, reach, standingOf } from './episodes.ts';
+import { type Episode, type Standing, markPosition, reach, standingOf } from './episodes.ts';
 import type { Copy } from './messages.ts';
 
 const nameOf = (episode: Episode, t: Copy) =>
@@ -118,17 +118,17 @@ export function EpisodeProgress({ work, api, t, className, region }: {
     const request = ++scope.request;
     setSaving(true);
     setFailed(false);
-    // Recorded watched writes carry a null position. The occurrence already names the episode.
-    // A stale answer opens the conflict panel; retrying it would hide the other device's write.
-    const written = await api.mark(episode, { completed, position: null }, { conflict: true });
+    // Completing names the episode. Clearing leaves the position Main already stored.
+    // A stale write stays on screen until the reader keeps it or takes the other device's.
+    const written = await api.mark(episode, {
+      completed, ...(completed ? { position: markPosition(episode) } : {}),
+    }, { conflict: true });
     if (active.current !== scope || request !== scope.request) return;
     scope.busy = false;
     setSaving(false);
     if (!written.ok && written.failure === 'stale') {
       setConflict({ episode, current: written.current, submitted: written.submitted });
       setSelected({ episode, mark: written.current });
-      setStanding(null);
-      setReload(count => count + 1);
       return;
     }
     if (!written.ok) { setFailed(true); return; }

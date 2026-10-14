@@ -3,17 +3,23 @@ import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer
 import record from '../../../../tests/qa/fixtures/outcomes/anime/continue-progress-across-devices-two-device-progress.json';
 import { BFF_PREFIX } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
+import { mainRelationships } from '../relationships/api.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
-import { standingOf } from './episodes.ts';
+import { markPosition, standingOf } from './episodes.ts';
 import {
+  animeTwoDeviceChainSelections,
   animeTwoDeviceClient,
   animeTwoDeviceEpisodes,
+  animeTwoDeviceFrameSelections,
   animeTwoDeviceHeaderSelections,
   animeTwoDeviceSelections,
   readAnimeTwoDeviceFrame,
   recordedActingSubject,
   recordedSample,
   recordedWorkId,
+  sequencedRecordedFetch,
+  type AnimeChain,
+  type AnimeDevice,
 } from './anime-two-device-recorded-page.ts';
 
 const origin = 'https://recorded.invalid';
@@ -44,6 +50,8 @@ interface StructureAnswer {
   occurrences: { qualifier?: { displayLabel?: string } }[];
 }
 interface ResumeAnswer {
+  scope?: string;
+  complete?: boolean;
   items?: { occurrence?: string; displayLabel?: string }[];
 }
 interface ProgressAnswer {
@@ -74,6 +82,28 @@ function open(
   });
   disposals.push(transport.dispose);
   return animeTwoDeviceClient(transport.fetcher, anonymous, origin);
+}
+
+function openChain(persona: AnswerPersona, device: AnimeDevice, chain: AnimeChain): {
+  main: MainClient;
+  missed: () => unknown;
+} {
+  const transport = sequencedRecordedFetch(
+    persona,
+    animeTwoDeviceChainSelections(device, chain),
+    { pathPrefix: BFF_PREFIX },
+  );
+  disposals.push(transport.dispose);
+  let missed: unknown;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    try {
+      return await transport.fetcher(input, init);
+    } catch (error) {
+      missed = error;
+      throw error;
+    }
+  }) as typeof fetch;
+  return { main: animeTwoDeviceClient(fetcher, false, origin), missed: () => missed };
 }
 
 function episodeOf(path: string) {
@@ -296,6 +326,87 @@ for (const persona of signedIn) {
         submitted: { completed: false, position: null },
         current: { completed: true, version: 1, position: null },
       });
+    }
+  });
+
+  test(`${persona} follows the Work and both devices recover each recorded chain`, async () => {
+    const actingSubject = recordedActingSubject(persona)!;
+    const id = recordedWorkId(persona);
+    const frame = open(persona, animeTwoDeviceFrameSelections(persona));
+    const [header] = await readAnimeTwoDeviceFrame(frame, id, actingSubject);
+    if (!header.ok) throw new Error(`Work header: ${header.failure}`);
+    const followed = recordedSample(persona, 'work-follow-state').answer as { following: boolean };
+    const follow = recordedFetch(record as AnswerRecord, persona, animeTwoDeviceFrameSelections(persona), {
+      pathPrefix: BFF_PREFIX,
+    });
+    disposals.push(follow.dispose);
+    const state = await mainRelationships(actingSubject, { origin, fetch: follow.fetcher }).state(header.data.id);
+    expect(state.following).toBe(followed.following);
+    expect(new URL(recordedSample(persona, 'work-follow-state').path, origin).searchParams.get('target'))
+      .toBe(header.data.id);
+
+    for (const chain of ['mark', 'clear'] as const) {
+      for (const device of ['first', 'second'] as const) {
+        const opened = openChain(persona, device, chain);
+        const api = animeTwoDeviceEpisodes(actingSubject, opened.main);
+        const standing = await standingOf(api, id);
+        if (!standing.ok || !standing.data) throw opened.missed() ?? new Error(`${chain} ${device} standing`);
+        const write = recordedSample(persona, `reachable-${chain}-${device}-device-write-1`);
+        const episodeId = new URL(write.path, origin).pathname.split('/')[5]!;
+        const episode = standing.data.mains.items.find((item) => item.occurrence.endsWith(episodeId));
+        if (!episode) throw new Error(`Recorded ${chain} episode is not on the page`);
+        const beforeLabel = chain === 'mark' ? 'episode-resume' : `reachable-mark-${device}-device-resume-1`;
+        const before = recordedSample(persona, beforeLabel).answer as ResumeAnswer;
+        if (before.scope === 'resume' && before.complete === true) {
+          expect(standing.data.furthest?.label).toBe(before.items?.[0]?.displayLabel);
+        } else expect(standing.data.furthest).toBeNull();
+        const progress = recordedSample(persona, `reachable-${chain}-${device}-device-progress-1`).answer as ProgressAnswer;
+        const read = await api.progress(episode);
+        expect(read.ok && read.data).toMatchObject({
+          completed: progress.completed,
+          position: progress.position,
+          version: progress.version,
+        });
+        const body = write.body as WriteBody;
+        const change = body.completed
+          ? { completed: true as const, position: markPosition(episode) }
+          : { completed: false as const };
+        expect(body.position).toBe(body.completed ? markPosition(episode) : progress.position);
+        const written = await api.mark(episode, change, { conflict: true });
+        if (!('ok' in written) || (!written.ok && written.failure === 'unavailable')) throw opened.missed() ?? written;
+        if (device === 'first') {
+          const answer = write.answer as ProgressAnswer;
+          expect(written.ok && written.data).toMatchObject({
+            completed: answer.completed,
+            position: answer.position,
+            version: answer.version,
+            replayed: false,
+          });
+        } else {
+          const current = recordedSample(persona, `reachable-${chain}-second-device-progress-3`).answer as ProgressAnswer;
+          expect(written).toMatchObject({
+            ok: false,
+            failure: 'stale',
+            submitted: { completed: body.completed, position: body.position },
+            current: { completed: current.completed, version: current.version, position: current.position },
+          });
+          const again = await api.mark(episode, change, { conflict: true });
+          if (!again.ok && again.failure === 'unavailable') throw opened.missed() ?? again;
+          const saved = recordedSample(persona, `reachable-${chain}-second-device-write-2`).answer as ProgressAnswer;
+          expect(again.ok && again.data).toMatchObject({
+            completed: saved.completed,
+            position: saved.position,
+            version: saved.version,
+            replayed: false,
+          });
+        }
+        const refreshed = await standingOf(api, id);
+        if (!refreshed.ok || !refreshed.data) throw opened.missed() ?? new Error(`${chain} ${device} refresh`);
+        const after = recordedSample(persona, `reachable-${chain}-${device}-device-resume-1`).answer as ResumeAnswer;
+        if (after.scope === 'resume' && after.complete === true) {
+          expect(refreshed.data.furthest?.label).toBe(after.items?.[0]?.displayLabel);
+        } else expect(refreshed.data.furthest).toBeNull();
+      }
     }
   });
 }
