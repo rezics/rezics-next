@@ -26,6 +26,20 @@ export async function realmConceptGrantProof(client: PoolClient, principal: Veri
   return await representedGrantProof(client, principal, actor, realmActionScope(realm, action, concept), action, { lock: true })
     ?? await representedGrantProof(client, principal, actor, realmActionScope(realm, action), action, { lock: true });
 }
+
+/** A board replacement affects removals as well as additions. Hold every
+ * selected grant through the caller's existing Realm decision transaction. */
+export async function hasRealmConceptPermission(client: PoolClient, principal: VerifiedPrincipal,
+  realm: string, actor: string, concepts: readonly string[], action: 'publication.adopt') {
+  if (concepts.length > 16 || ![realm, actor, ...concepts].every(value => realmIdPattern.test(value)))
+    throw new RealmAdminInvalid('Invalid Realm Concept jurisdiction');
+  if (!concepts.length) return !!await representedGrantProof(client, principal, actor,
+    realmActionScope(realm, action), action, { lock: true });
+  let allowed = true;
+  for (const concept of new Set(concepts))
+    if (!await realmConceptGrantProof(client, principal, realm, actor, concept, action)) allowed = false;
+  return allowed;
+}
 export interface RealmActor { id: string; epoch: string; representation: string;
   representationGeneration: string; subjectGeneration: string; validUntil: Date }
 export interface RealmManager extends RealmActor { grant: string; grantGeneration: string }

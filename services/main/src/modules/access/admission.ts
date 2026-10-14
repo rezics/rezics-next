@@ -51,6 +51,7 @@ import { RealmAdminDenied,RealmAdminUnavailable } from '../realm-admin/contract.
 import { realmRatingProof, savedRealmRatingProof, saveRealmRatingProof, ratingConfigurationAction } from './realm-roles-rating.ts';
 
 export { AccountHasOwnedAgents, type AccountOwnedAgent, type AccountDeletionOptions } from './account-deletion-agents.ts';
+export { hasRealmConceptPermission } from './realm-management-authority.ts';
 
 /** Populated only by Account assertion verification, never from a request body. */
 export interface VerifiedPrincipal {

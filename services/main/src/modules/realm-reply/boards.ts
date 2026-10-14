@@ -1,7 +1,5 @@
 import type { PoolClient } from 'pg';
-import type { VerifiedPrincipal } from '../access/admission.ts';
-import { realmConceptGrantProof, realmActionScope } from '../access/realm-management-authority.ts';
-import { representedGrantProof } from '../access/represented-work-proof.ts';
+import { hasRealmConceptPermission, type VerifiedPrincipal } from '../access/admission.ts';
 import { GRAPHS, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { WorkReadMissing, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { RealmReplyDenied, RealmReplyInvalid, RealmReplyUnavailable, type PlacementInput } from './content-store.ts';
@@ -55,16 +53,7 @@ export async function assertReplyBoardAuthority(client: PoolClient, principal: V
   realm: string, actor: string, author: string, member: boolean, previous: ReplyBoards, next: ReplyBoards) {
   if (actor === author && member) return;
   const affected = [...new Set([...previous.concepts, ...next.concepts])];
-  if (!affected.length) {
-    if (await representedGrantProof(client, principal, actor, realmActionScope(realm, 'publication.adopt'),
-      'publication.adopt', { lock: true })) return;
-  } else {
-    let allowed = true;
-    for (const concept of affected) {
-      if (!await realmConceptGrantProof(client, principal, realm, actor, concept, 'publication.adopt')) allowed = false;
-    }
-    if (allowed) return;
-  }
+  if (await hasRealmConceptPermission(client, principal, realm, actor, affected, 'publication.adopt')) return;
   throw new RealmReplyDenied('Reply board management authority is required');
 }
 
