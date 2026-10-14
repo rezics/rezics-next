@@ -84,7 +84,11 @@ export async function readRankedCatalogue(env: WorkActivationEnvironment, input:
   const results: RankedCatalogueMatch[] = [];
   let after = prior?.after, scanned = 0, more = false;
   for (let read = 0; read < RANKED_CATALOGUE_COST.rankReads && results.length < input.pageSize; read++) {
-    const size = Math.min(RANKED_CATALOGUE_COST.pageSize,
+    // Audience and field disclosure run before pagination. Starting every
+    // request at 64 made a one-item page assess the whole matching fixture.
+    // Match the first index batch to its page; rejected candidates retain the
+    // existing larger refill, cursor, call and candidate budgets.
+    const size = Math.min(read === 0 ? input.pageSize : RANKED_CATALOGUE_COST.pageSize,
       RANKED_CATALOGUE_COST.candidates - scanned);
     if (size < 1) break;
     const rows = (await rankQuery(env, `PREFIX rv: <${RV}>

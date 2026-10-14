@@ -158,6 +158,9 @@ test('public search retains exact Realm membership and bounded work across three
             calls: sample.calls, returnedRows: sample.calls.reduce((sum, call) => sum + (call.rows ?? 0), 0), profile });
           profiles.push({ caller, pageIndex, size: expected.length + unrelated.length, profile });
           retain();
+          if (caller !== 'browse') {
+            expect(sample.calls.find(call => call.rankHits !== undefined)?.rankHits).toBeLessThanOrEqual(1);
+          }
           if (result.status !== 200) {
             refusals.push({ caller, pageIndex, size: expected.length + unrelated.length, path, answer: result });
             retain();
