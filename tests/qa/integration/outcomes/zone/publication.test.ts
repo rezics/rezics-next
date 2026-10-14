@@ -188,7 +188,39 @@ async function sitePageReads(f: Awaited<ReturnType<typeof site>>, person: Person
   // The operator publishes this shared fixture before the owner's proof runs.
   if (person !== sessions.owner) await answer(sample('empty-home-presentation', 'GET',
     viewer(`/v1/zones/${short(sessions.zone)}/presentation`)));
+  if (person !== sessions.owner) {
+    const emptyPath = `/v1/zones/${short(sessions.zone)}`;
+    const address = await answer<{ capabilities: { zone: string } }>(sample('empty-home-address', 'GET',
+      `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key: short(sessions.zone),
+        ...(person.actingSubject ? { actingSubject: person.actingSubject } : {}) })}`));
+    expect(address.capabilities.zone).toBe(sessions.zone);
+    const home = await answer<{ kind: string; page?: Home['page'] }>(sample('empty-home-route', 'GET',
+      viewer(`${emptyPath}/routes`, { path: '/' })));
+    expect(home.kind).toBe('home');
+    expect(home.page).toBeUndefined();
+    if (person.actingSubject) {
+      const editor = await answer<{ code: string }>(sample('empty-home-editor-access', 'GET',
+        viewer(`${emptyPath}/showcase-editor`)), 404);
+      expect(editor.code).toBe('zone_unavailable');
+    }
+  }
   if (person.actingSubject) {
+    const configuration = await answer<{ code?: string; configuration?: { space: string; presentation: ZonePresentation } }>(
+      sample('manage-configuration', 'GET', viewer(`${f.path}/configuration`)), person === sessions.owner ? 200 : 404);
+    if (person === sessions.owner) {
+      expect(configuration.configuration?.presentation).toEqual(f.draftPresentation);
+      const address = await answer<{ holder: string; capabilities: { zone: string } }>(sample('manage-space-address', 'GET',
+        `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space',
+          key: short(configuration.configuration!.space), actingSubject: person.actingSubject })}`));
+      expect(address).toMatchObject({ holder: configuration.configuration!.space,
+        capabilities: { zone: `https://rezics.com/id/${short(f.path)}` } });
+    } else expect(configuration.code).toBe('zone_unavailable');
+    const navigation = await answer<{ code?: string; zone?: string; mounts?: Array<{ target: string }> }>(
+      sample('manage-zone', 'GET', viewer(f.path)), person === sessions.owner ? 200 : 404);
+    if (person === sessions.owner) {
+      expect(navigation.zone).toBe(`https://rezics.com/id/${short(f.path)}`);
+      expect(navigation.mounts?.map(mount => mount.target)).toEqual([f.collection, f.collection]);
+    } else expect(navigation.code).toBe('zone_unavailable');
     const response = await sample('site-editor-access', 'GET', viewer(`${f.path}/showcase-editor`));
     await response.body?.cancel();
     await answer(sample('site-session-agent', 'GET', '/v1/me/session-agent'));
@@ -240,6 +272,15 @@ async function refuses(name: Exclude<PersonaName, 'owner'>) {
       const published = await answer<Home>(recording.session(name, sessions.visitor)('mandated-public-home', 'GET', `${path}/routes?path=%2F`));
       expect(published.page?.reference).toMatchObject({ revisionId: saved.revisionId,
         provenance: { rightsBasis: 'original-contribution', author: owner.actingSubject } });
+      const address = await answer<{ capabilities: { zone: string } }>(recording.session(name, sessions.visitor)(
+        'mandated-public-address', 'GET', `/v1/addresses/resolve?${new URLSearchParams({
+          scope: 'space', key: short(sessions.zone),
+        })}`));
+      expect(address.capabilities.zone).toBe(sessions.zone);
+      const presentation = await answer<Presentation>(recording.session(name, sessions.visitor)(
+        'mandated-public-presentation', 'GET', `${path}/presentation`));
+      expect(presentation.home).toEqual(published.page);
+      expect(presentation.revision).toBe(committed.revision);
       const exact = await answer<{ reference: Reference }>(recording.session(name, sessions.visitor)('mandated-exact-content', 'GET',
         `/v1/content-revisions/${saved.revisionId}`));
       expect(exact.reference).toEqual(published.page!.reference);
