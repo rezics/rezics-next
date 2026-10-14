@@ -30,7 +30,8 @@ let sessions: PersonaSessions;
 const recording = new OutcomeRecorder(hub);
 let work: { work: string; mainVersion: string };
 let realization: { resource: string; revision: string };
-const releases: Array<{ resource: string; revision: string; title: string }> = [];
+let releases: Array<{ resource: string; revision: string; title: string }> = [];
+let visitFixture: Awaited<ReturnType<typeof seedHub>>;
 const query = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject!)}`;
 async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
   const response = await request;
@@ -56,7 +57,20 @@ beforeAll(async () => {
       }
     };
   }
-  const owner = sessions.owner;
+  ({ work, realization, releases } = await seedHub(sessions.owner));
+  // The proof changes private preferences. A separate fixture lets the later
+  // production visit start empty without undoing any proved state.
+  visitFixture = await seedHub(sessions.owner);
+}, 180_000);
+afterAll(async () => {
+  try { await recording.publish(); }
+  finally { clearTimeout(fileWall); await sessions?.close(); }
+});
+
+async function seedHub(owner: PersonaSession) {
+  let work: { work: string; mainVersion: string };
+  let realization: { resource: string; revision: string };
+  const releases: Array<{ resource: string; revision: string; title: string }> = [];
   const actingSubject = owner.actingSubject;
   work = await answer(owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title: 'Lantern Orchard', language: 'en',
@@ -94,11 +108,8 @@ beforeAll(async () => {
     }));
     releases.push({ resource: id, revision: saved.revision, title });
   }
-}, 180_000);
-afterAll(async () => {
-  try { await recording.publish(); }
-  finally { clearTimeout(fileWall); await sessions?.close(); }
-});
+  return { work, realization, releases };
+}
 
 type Preference = { work: string; language: string; edition: { kind: string; resource: string; revision: string }; version: number; changedAt: string; replayed?: boolean };
 
@@ -236,98 +247,122 @@ async function productionVisit(name: PersonaName) {
   const transport = productionClient(name);
   const { main, read } = transport;
   const actingSubject = sessions[name].actingSubject ?? undefined;
+  const { work, realization, releases } = visitFixture;
   const id = short(work.work);
   const books = booksEditionReads({ main, actingSubject });
   const render = async (phase: string) => {
-    const read = <T,>(label: string, call: () => Promise<T>) => transport.read(`${phase}-${label}`, call);
+    const read = <T,>(label: string, call: () => Promise<T>) => transport.read(phase === 'visit'
+      ? label === 'work-header' ? 'primary-get-works-0'
+        : label === 'releases' || label === 'realizations'
+          ? `${name === 'member' ? 'hub' : 'chooser'}-${label}`
+          : `hub-${label}`
+      : `${phase}-${label}`, call);
     // All empty namesOf calls share the request-cached readNames('') answer.
     let names: Promise<unknown> | undefined;
     const emptyNames = () => names ??= read('empty-names', () => main.v1.resources.summaries.post({
       profile: 'resource-summary-batch-v1', resources: [], actingSubject }));
-  const header = await read('work-header', () => books.readWorkHeader(id));
-  if (!header.ok) return;
-  // /w/[ref]/(work)/layout and overview stream their regions together. The
-  // request-cached header, projection and inventory are shared by those regions.
-  const [projection, credits, contexts] = await Promise.all([
-    read('projection', () => readResourcePage(main, actingSubject, id)),
-    read('agent-credits', () => books.readAgentCredits(id)),
-    read('rating-contexts', () => main.v1.resources({ resource: id })['rating-contexts'].get({ query: { actingSubject, scope: 'global' } })),
-    read('work-credits', () => books.readCredits(id)),
-    read('reader-state', () => readAnimeReaderState(main, actingSubject, id)),
-    read('showcase', () => main.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [work.work] })),
-    read('adoptions', () => books.readAdoptions(id)),
-    read('classifications', () => books.readClassifications(id, { kind: 'global' })),
-    read('facets', () => books.readFacets()),
-    read('rating-populations', () => discoveryApi(main, 'en', actingSubject).populations(work.work, { limit: 20 })),
-    read('also-enjoyed', () => books.readAlsoEnjoyed(id)),
-    read('releases', () => books.readReleases(id)),
-    read('realizations', () => readWorkRealizations(main, actingSubject, id)),
-    read('availability-parts', () => readWorkParts(main, actingSubject, id, { limit: 1 })),
-    read('preview-parts', () => readWorkParts(main, actingSubject, id, { limit: PREVIEW_COUNTS.parts + 1 })).then(() =>
-      emptyNames()),
-    read('preview-wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { actingSubject, limit: PREVIEW_COUNTS.wholes } })).then(() =>
-      emptyNames()),
-    read('preview-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 20 } })),
-    actingSubject ? read('platform-access', () => main.v1.me['platform-access'].get()) : Promise.resolve(null),
-    actingSubject ? read('follow-state', () => main.v1.me['follow-state'].get({ query: { actingSubject, target: work.work, kind: 'work' } })) : Promise.resolve(null),
-  ]);
-  const context = contexts.data?.items[0]?.context;
-  await Promise.all([
-    read('ratings', () => main.v1.resources({ resource: id }).ratings.get({ query: { actingSubject, scope: 'global', context } })),
-    read('reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } })),
-    ...(credits.ok ? [...new Set(credits.data.items.filter(item => item.role === 'author').map(item => item.agent))].map(agent =>
-      Promise.all([
-        read('author-works', () => main.v1.agents({ id: short(agent) }).works.get({ query: { actingSubject, limit: 12 } })),
-      ])) : []),
-    ...(projection.ok ? projection.data.sections.filter(section => ['statements', 'discussion'].includes(section.id)).map(section =>
-      section.id === 'statements'
-        ? Promise.all([read('facts-statements', () => readLinkedStatements(main, actingSubject, section.href)),
-          read('wiki-statements', () => readLinkedStatements(main, actingSubject, section.href))])
-        : read('discussion', () => followHref(main, section.href, { actingSubject })())) : []),
-    ...(context ? [read('review-releases', () => books.readReleases(id)),
-      read('review-realizations', () => readWorkRealizations(main, actingSubject, id)),
-      read('reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, actingSubject } })),
-      read('review-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 32 } })).then(() =>
-        emptyNames())] : []),
-  ]);
+    const header = await read('work-header', () => books.readWorkHeader(id));
+    if (!header.ok) return;
+    // /w/[ref]/(work)/layout and overview stream their regions together. The
+    // request-cached header, projection and inventory are shared by those regions.
+    const [projection, credits, contexts] = await Promise.all([
+      read('projection', () => readResourcePage(main, actingSubject, id)),
+      read('agent-credits', () => books.readAgentCredits(id)),
+      read('rating-contexts', () => main.v1.resources({ resource: id })['rating-contexts'].get({ query: { actingSubject, scope: 'global' } })),
+      read('work-credits', () => books.readCredits(id)),
+      read('reader-state', () => readAnimeReaderState(main, actingSubject, id)),
+      read('showcase', () => main.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [work.work] })),
+      read('adoptions', () => books.readAdoptions(id)),
+      read('classifications', () => books.readClassifications(id, { kind: 'global' })),
+      read('facets', () => books.readFacets()),
+      read('rating-populations', () => discoveryApi(main, 'en', actingSubject).populations(work.work, { limit: 20 })),
+      read('also-enjoyed', () => books.readAlsoEnjoyed(id)),
+      read('releases', () => books.readReleases(id)),
+      read('realizations', () => readWorkRealizations(main, actingSubject, id)),
+      read('availability-parts', () => readWorkParts(main, actingSubject, id, { limit: 1 })),
+      read('preview-parts', () => readWorkParts(main, actingSubject, id, { limit: PREVIEW_COUNTS.parts + 1 })).then(() =>
+        emptyNames()),
+      read('preview-wholes', () => main.v1.resources({ resource: id }).wholes.get({ query: { actingSubject, limit: PREVIEW_COUNTS.wholes } })).then(() =>
+        emptyNames()),
+      read('preview-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 20 } })),
+      actingSubject ? read('platform-access', () => main.v1.me['platform-access'].get()) : Promise.resolve(null),
+      actingSubject ? read('follow-state', () => main.v1.me['follow-state'].get({ query: { actingSubject, target: work.work, kind: 'work' } })) : Promise.resolve(null),
+    ]);
+    const context = contexts.data?.items[0]?.context;
+    await Promise.all([
+      read('ratings', () => main.v1.resources({ resource: id }).ratings.get({ query: { actingSubject, scope: 'global', context } })),
+      read('reader-stats', () => main.v1.works({ id })['reader-stats'].get({ query: { actingSubject, context } })),
+      ...(credits.ok ? [...new Set(credits.data.items.filter(item => item.role === 'author').map(item => item.agent))].map(agent =>
+        Promise.all([
+          read('author-works', () => main.v1.agents({ id: short(agent) }).works.get({ query: { actingSubject, limit: 12 } })),
+        ])) : []),
+      ...(projection.ok ? projection.data.sections.filter(section => ['statements', 'discussion'].includes(section.id)).map(section =>
+        section.id === 'statements'
+          ? Promise.all([read('facts-statements', () => readLinkedStatements(main, actingSubject, section.href)),
+            read('wiki-statements', () => readLinkedStatements(main, actingSubject, section.href))])
+          : read('discussion', () => followHref(main, section.href, { actingSubject })())) : []),
+      ...(context ? [read('review-releases', () => books.readReleases(id)),
+        read('review-realizations', () => readWorkRealizations(main, actingSubject, id)),
+        read('reviews', () => main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, actingSubject } })),
+        read('review-relations', () => main.v1.resources({ resource: id }).relations.get({ query: { actingSubject, limit: 32 } })).then(() =>
+          emptyNames())] : []),
+    ]);
   };
   await render('visit');
   // YourEdition and SeriesProgressPanel use the signed-in reader's own client.
   // There is no foreign-preference form, and signed-out controls link to sign-in.
   if (!actingSubject) return;
   const api = mainTrackingApi(actingSubject, () => main);
+  const preferenceLabel = name === 'stranger' ? 'chooser-preference-empty' : 'primary-get-me-edition-preferences-1';
   const [preference] = await Promise.all([
-    read('visit-chooser-preference', () => api.preference(work.work)),
+    read(preferenceLabel, () => api.preference(work.work)),
     read({ realizations: 'visit-chooser-realizations', releases: 'visit-chooser-releases' }, () => api.editions(work.work)),
     read('visit-series-preference', () => api.preference(work.work)),
     read({ realizations: 'visit-series-realizations', releases: 'visit-series-releases' }, () => api.editions(work.work)),
     read('visit-series-relations', () => api.relations(work.work)),
-    read('visit-correspondence-definition', () => api.definition('correspondence-equivalent')),
+    read('hub-correspondence-definition', () => api.definition('correspondence-equivalent')),
   ]);
   if (!preference.ok) return;
-  await Promise.all([
-    read('visit-series-progress', () => api.series(work.work, preference.data?.language ?? 'en')),
-    preference.data?.edition ? read('visit-selected-detail', () => api.edition(work.work, preference.data!.edition!)) : Promise.resolve(null),
-  ]);
-  // The stranger's proof ends at foreign authority, which no production page exposes.
+  const originalVersion = preference.data?.version ?? 0;
+  await read(name === 'member' ? 'hub-progress-empty' : 'chooser-progress-empty',
+    () => api.series(work.work, preference.data?.language ?? 'en'));
+  if (name === 'member') {
+    // Returning to the same hub in Chinese changes the content-language fallback.
+    await render('locale-zh-Hans');
+    await read('hub-progress-empty-zh-Hans', () => books.readProgressSummary(id, 'zh-Hans'));
+  }
+  // Foreign preferences have no production page: never forge a foreign actor
+  // request to manufacture the proof's denial in the page record.
   if (name === 'stranger') return;
   const release = { kind: 'release' as const, resource: releases[0]!.resource, revision: releases[0]!.revision };
-  const saved = await read('visit-save-release', () => api.setPreference(work.work, preference.data?.version ?? 0, { language: 'en', edition: release }));
+  const saved = await read('primary-put-me-edition-preferences-1', () => api.setPreference(work.work,
+    originalVersion, { language: 'en', edition: release }));
   if (!saved.ok) return;
   await Promise.all([
-    read('visit-release-detail', () => api.edition(work.work, release)),
-    read('visit-release-progress', () => api.series(work.work, 'en')),
+    read('saved-release-detail', () => api.edition(work.work, release)),
+    read('chooser-progress-release', () => api.series(work.work, 'en')),
+    render('release-refresh'),
   ]);
-  // The chooser refreshes the server frame while its mounted controls keep the committed choice.
-  await render('release-refresh');
+  // Return after saving: the chooser reads the committed choice, while a
+  // second already-open chooser retains the version it originally displayed.
+  const returned = await read('primary-get-me-edition-preferences-2', () => api.preference(work.work));
+  if (!returned.ok) return;
   const chosen = { kind: 'realization' as const, ...realization };
-  const changed = await read('visit-save-realization', () => api.setPreference(work.work, saved.data?.version ?? 0, { language: 'en', edition: chosen }));
+  const stale = await read('primary-put-me-edition-preferences-3', () => api.setPreference(work.work,
+    originalVersion, { language: 'en', edition: chosen }));
+  if (stale.ok || stale.failure !== 'stale') return;
+  const changed = await read('primary-put-me-edition-preferences-4', () => api.setPreference(work.work,
+    stale.current?.version ?? 0, { language: 'en', edition: chosen }));
   if (!changed.ok) return;
   await Promise.all([
-    read('visit-realization-detail', () => api.edition(work.work, chosen)),
-    read('visit-realization-progress', () => api.series(work.work, 'en')),
+    read('saved-realization-detail', () => api.edition(work.work, chosen)),
+    read('primary-get-me-progress-summaries-0', () => api.series(work.work, 'en')),
     render('realization-refresh'),
   ]);
+  await read('primary-get-me-edition-preferences-3', () => api.preference(work.work));
+  // mainTrackingApi generates a fresh command key per invocation. It has no
+  // same-key retry entry point, so the proof's replay is not a production sample.
+
 }
 
 async function choice(name: PersonaName) {
