@@ -180,7 +180,11 @@ export function webActingIdentityViolations(root: string, files: string[], contr
         && Object.values(operation.requestBody?.content ?? {}).some(content => content.schema && schemaActor(content.schema)))
     .map(([method, operation]) => ({ path, method, operation })));
   const indexed = indexedFiles(root, files);
-  const perFile = new Map(files.map(file => {
+  // Every path this local analyzer can resolve contains a literal API version.
+  // Other files can carry aliases, but without that local path they cannot
+  // produce a recognized read. Avoid materializing their repository ASTs.
+  const readable = files.filter(file => /\bv\d+\b/.test(withoutComments(indexed[file]!.text)));
+  const perFile = new Map(readable.map(file => {
     const entry = indexed[file]!;
     return [file, inventory(file, entry.text, entry.ast)] as const;
   }));
