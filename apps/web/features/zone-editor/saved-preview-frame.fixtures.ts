@@ -2,8 +2,8 @@ import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
 import type { ZonePackage } from '@rezics/zone-sdk';
 import { spaceHref } from '../address/path.ts';
-import type { ZonePresentationRead } from '../realm/types.ts';
-import { collectionPreview, previewCollection } from './home-modules.fixtures.ts';
+import type { RealmHeader, ZonePresentationRead } from '../realm/types.ts';
+import { collectionPreview, previewCollection, previewSummary } from './home-modules.fixtures.ts';
 import { authoringModel } from './model.ts';
 import type { ZoneAuthoringLoad } from './read.ts';
 import type { SavedPreviewReaders } from './saved-preview-frame.ts';
@@ -14,6 +14,7 @@ const homeDocument = 'https://rezics.com/id/00000000-0000-4000-8000-000000000899
 const zoneHead = 'https://rezics.com/id/00000000-0000-4000-8000-000000000802';
 export const savedPreviewTheme = 'https://rezics.com/id/00000000-0000-4000-8000-000000000803';
 export const savedPreviewDigest = 'cd'.repeat(32);
+export const savedPreviewRealmSpace = 'https://rezics.com/id/00000000-0000-4000-8000-000000000808';
 const packageDigest = `sha256:${savedPreviewDigest}`;
 
 export function savedPreviewAuthoring(realm: boolean): Extract<ZoneAuthoringLoad, { kind: 'ready' }> {
@@ -63,3 +64,14 @@ export function savedPreviewPublicReport(): ZonePresentationRead {
 }
 
 export const savedPreviewPackage: ZonePackage = { slug: 'fiction', css: '', slots: {} };
+
+/** Contract-built GET /v1/realms/{defaultRealm UUID}: the Realm belongs to a different Space from the saved Zone. */
+export function savedPreviewRealmHeader(): RealmHeader {
+  return { profile: 'realm-read-v1', id: previewCollection, space: savedPreviewRealmSpace, revision: zoneHead,
+    name: { ...previewSummary.title, value: 'Tides community' },
+    icon: { kind: 'fallback', policy: 'avatar-fallback-v1', key: previewCollection, resourceType: 'realm' },
+    visibility: 'public', reviewMode: 'mandatory', policyRevision: null, profileRevision: null,
+    description: null, banner: null, rules: null, membership: { count: { kind: 'unknown', value: null }, publicMembers: null },
+    moderators: { kind: 'unknown', items: [] }, sourcePosition: { dataEpoch: '00000000-0000-4000-8000-000000000809', sequence: '1' },
+    links: { works: `/v1/realms/${previewCollection.slice(-36)}/works`, decisions: `/v1/realms/${previewCollection.slice(-36)}/decisions` } };
+}

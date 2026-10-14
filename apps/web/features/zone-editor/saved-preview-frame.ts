@@ -26,6 +26,8 @@ export interface SavedPreviewReaders {
 
 export interface SavedPreviewFrame {
   saved: SavedAuthoring;
+  /** The Realm header's bound Space; a Zone attachment alone cannot supply this route capability. */
+  realmRef: string | null;
   zone: ZoneContext;
   context: AdaptContext;
   cuts: ReturnType<typeof savedSiteCuts>;
@@ -61,6 +63,8 @@ export async function loadSavedPreviewFrame(read: SavedPreviewReaders, {
     selectedTheme ? optional(() => read.presentation(saved.model.zoneId)) : null,
     realm ? optional(() => read.realmHeader(realm)) : null,
   ]);
+  const boundHeader = header?.id === saved.realm ? header : null;
+  const realmRef = boundHeader ? idOf(boundHeader.space) : null;
   // Approval for a previously published package cannot approve a different saved theme.
   const report = publicPresentation?.zone === saved.model.zoneIri
     && publicPresentation.presentation.official?.theme === selectedTheme ? publicPresentation : null;
@@ -82,17 +86,17 @@ export async function loadSavedPreviewFrame(read: SavedPreviewReaders, {
     ref, locale, homeName);
   const zone: ZoneContext = {
     slug, realm: saved.realm, name,
-    description: header ? zoneText(header.description) : null,
-    icon: header ? zoneImage(header.icon) : null,
-    hero: header ? zoneImage(header.banner) : null,
+    description: boundHeader ? zoneText(boundHeader.description) : null,
+    icon: boundHeader ? zoneImage(boundHeader.icon) : null,
+    hero: boundHeader ? zoneImage(boundHeader.banner) : null,
     tokens: cuts.tokens, locale,
     links: { home: siteHref(locale, ref, []), browse: siteHref(locale, ref, ['browse']),
       works: siteHref(locale, ref, ['browse']),
-      discussions: realm ? realmHref(locale, ref, 'discussions') : '',
-      decisions: realm ? realmHref(locale, ref, 'decisions') : '',
-      about: realm ? realmHref(locale, ref, 'about') : '' },
+      discussions: realmRef ? realmHref(locale, realmRef, 'discussions') : '',
+      decisions: realmRef ? realmHref(locale, realmRef, 'decisions') : '',
+      about: realmRef ? realmHref(locale, realmRef, 'about') : '' },
   };
-  return { kind: 'ready', frame: { saved, zone, cuts, execution, pkg,
+  return { kind: 'ready', frame: { saved, realmRef, zone, cuts, execution, pkg,
     context: { locale, ref, realm: realm ?? saved.model.zoneId, zone: saved.model.zoneId,
       mounts: new Map(navigation.data.links.map(mount => [mount.target, mount.segment])) } } };
 }

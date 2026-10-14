@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "Revisiones de páginas",
   realmFailedBody: 'REZICS no respondió. Tu elección de conexión sigue aquí; inténtalo de nuevo.',
   exitTitle: '¿Guardar los cambios antes de salir?',
+  exitPendingBody: "Estos cambios aún necesitan confirmación. Descartar las ediciones locales no cancela un cambio que REZICS ya haya aceptado.",
   exitBody: 'Los cambios sin guardar siguen en el editor. Guárdalos, descártalos o sigue editando.',
   exitSave: 'Guardar cambios y continuar',
   exitDiscard: 'Descartar cambios y continuar',

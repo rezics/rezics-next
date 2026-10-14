@@ -22,6 +22,12 @@ export const contractHead = iri(1108);
 export const contractNextHead = iri(1109);
 export const contractNavigation = iri(1110);
 export const contractCompetingRevision = id(1111);
+export const contractCompetingHead = iri(1128);
+export const contractCompetingDocument = fromPlainText('The competing published garden.', 'blocks');
+export const contractCompetingBasis = { revisionId: contractCompetingRevision, byteDigest: '12'.repeat(32), contentEpoch: id(1129) };
+export function contractStateHead(state: AuthoringContractState): string {
+  return state === 'retired' ? iri(1126) : state === 'recovered' ? iri(1127) : contractHead;
+}
 export const contractPending = { operationId: id(1112), status: 'reconciling', phase: 'projection',
   result: null, retry: { allowed: true, afterMs: 100 } };
 export const contractProvenance = { kind: 'admitted-original-contribution-v1', rightsBasis: 'original-contribution',
@@ -40,6 +46,7 @@ export function contractActor(state: AuthoringContractState): string {
 export function authoringContractRequests(state: AuthoringContractState) {
   const actingSubject = contractActor(state);
   const root = `/v1/zones/${contractZoneId}`;
+  const head = contractStateHead(state);
   const query = `?actingSubject=${encodeURIComponent(actingSubject)}`;
   const selectedPage = { page: contractHome, variantId: contractVariant, ...contractBasis };
   return {
@@ -48,6 +55,9 @@ export function authoringContractRequests(state: AuthoringContractState) {
       : state === 'operator-without-agent' ? { resource: `zone:edit:${iri(1101)}`, agent: null, live: false }
       : { resource: iri(1101), agent: actingSubject, live: !state.startsWith('revoked-') },
     saved: { page: selectedPage, document: contractDocument, provenance: contractProvenance },
+    ...(state === 'replayed-after-competition' ? { afterCompetingPublication: { configurationHead: contractCompetingHead,
+      page: { page: contractHome, variantId: contractVariant, ...contractCompetingBasis }, document: contractCompetingDocument },
+      acknowledgement: 'Original command commits; HTTP acknowledgement is dropped; a competing cut commits; the identical key and body replay the original receipt.' } : {}),
     reads: [
       { method: 'GET', path: `/v1/zones/${contractManagementKey(state)}/configuration${query}` },
       ...(state === 'retired' ? [] : [{ method: 'GET', path: `/v1/addresses/resolve?scope=space&key=${contractSpaceId}&actingSubject=${encodeURIComponent(actingSubject)}` }]),
@@ -60,10 +70,10 @@ export function authoringContractRequests(state: AuthoringContractState) {
       { method: 'POST', path: '/v1/content-drafts', body: { profile: 'content-text-v1', resourceId: contractHome,
         variantId: contractVariant, expectedHead: contractBasis.revisionId, language: { kind: 'tag', tag: 'ja', originalTag: 'ja' },
         direction: direction('ja', documentText(state === 'pending-save' ? contractUnsavedDocument : contractDocument)), document: state === 'pending-save' ? contractUnsavedDocument : contractDocument, actingSubject } },
-      { method: 'POST', path: `${root}/site-publications`, body: { expectedHead: contractHead,
+      { method: 'POST', path: `${root}/site-publications`, body: { expectedHead: head,
         routesRevision: contractNavigation, navigationRevision: contractNavigation, pages: [selectedPage], actingSubject } },
       ...(['retirements', 'recoveries'] as const).map(action => ({ method: 'POST', path: `${root}/${action}`,
-        body: { expectedHead: contractHead, actingSubject } })),
+        body: { expectedHead: head, actingSubject } })),
     ] as const,
   };
 }
@@ -86,14 +96,18 @@ export function authoringContractClient(state: AuthoringContractState) {
   preview.publicationStatus = state === 'empty' ? 'private' : 'behind';
   const configuration = { zone: iri(1101), space: iri(1102), state: state === 'retired' ? 'retired' : 'active',
     homeDocument: contractHome, presentation: preview.presentation };
-  const configured = { zone: iri(1101), revision: contractHead, name: 'Retained Agent garden', language: 'ja', direction: direction('ja', 'Retained Agent garden'),
+  const initialHead = contractStateHead(state);
+  const configured = { zone: iri(1101), revision: initialHead, name: 'Retained Agent garden', language: 'ja', direction: direction('ja', 'Retained Agent garden'),
     configuration, cost: { graphReads: 1, objectReads: 1 } };
   const receipt = { ...manifest.writes[1]!.body, outcome: 'succeeded', zone: iri(1101), revision: contractNextHead,
-    themeRevision: contractHead, homeDocument: contractHome, homeRevision: iri(1118),
+    themeRevision: initialHead, homeDocument: contractHome, homeRevision: iri(1118),
     receipt: id(1119), admissionId: id(1120), requestDigest: 'cd'.repeat(32), authorityEpoch: id(1121),
     scope: `zone:edit:${iri(1101)}`, dataEpoch: id(1117), sequence: '8', replayed: true,
     pages: [{ ...manifest.saved.page, language: 'ja' }] };
   const calls: { method: string; path: string; body: unknown; key: string | null }[] = [];
+  let currentHead = initialHead;
+  let currentPublishedRevision = contractCompetingRevision;
+  let acknowledgedKey: string | null = null;
   let savedBasis = contractBasis;
   let savedDocument = contractDocument;
   let pending = state.startsWith('pending-');
@@ -117,23 +131,38 @@ export function authoringContractClient(state: AuthoringContractState) {
       canonical: { prefix: '/z/', key: 'agent-garden', suffixSource: '' }, capabilities: { zone: iri(1101) } });
     if (denied) return problem(request.method === 'GET' ? 404 : 403, 'zone_unavailable', 'Zone is unavailable');
     if (request.method === 'GET') {
-      if (path.endsWith('/configuration')) return Response.json(configured);
-      if (path.endsWith('/showcase-editor')) return Response.json({ ...configured, preview, slideMedia: [],
+      if (path.endsWith('/configuration')) return Response.json({ ...configured, revision: currentHead });
+      if (path.endsWith('/showcase-editor')) return Response.json({ ...configured, revision: currentHead, preview: { ...preview,
+        page: preview.page ? { ...preview.page, document: savedDocument } : null }, slideMedia: [],
         draft: { variantId: contractVariant, revisionId: state === 'empty' ? null : savedBasis.revisionId,
           document: state === 'empty' ? null : savedDocument, byteDigest: state === 'empty' ? null : savedBasis.byteDigest,
           language: { kind: 'tag', tag: 'ja', originalTag: 'ja' }, direction: direction('ja', documentText(savedDocument)), editable: true,
           sourcePosition: { owner: 'content', dataEpoch: savedBasis.contentEpoch, sequence: '4' } },
         publishedPage: state === 'empty' ? null : { page: contractHome, variantId: contractVariant,
-          revisionId: contractCompetingRevision } });
-      if (path === `/v1/zones/${contractZoneId}`) return Response.json({ ...preview.navigation, ownerRevision: contractHead });
+          revisionId: currentPublishedRevision } });
+      if (path === `/v1/zones/${contractZoneId}`) return Response.json({ ...preview.navigation, ownerRevision: currentHead });
     } else {
       const expected = manifest.writes.find(item => item.path === path);
       if (!expected || !body || typeof body !== 'object' || !calls.at(-1)!.key) throw new Error(`Unknown contract command: ${path}`);
-      if ((body as { expectedHead?: unknown }).expectedHead !== contractHead && path !== '/v1/content-drafts') {
+      const key = calls.at(-1)!.key!;
+      if (path.endsWith('/site-publications') && acknowledgedKey === key) return Response.json(receipt);
+      if ((body as { expectedHead?: unknown }).expectedHead !== currentHead && path !== '/v1/content-drafts') {
         return problem(409, 'stale_zone_head', 'Zone changed');
       }
       if (pending) { pending = false; return Response.json(contractPending, { status: 202 }); }
-      if (path.endsWith('/site-publications')) return Response.json(receipt);
+      if (path.endsWith('/site-publications')) {
+        acknowledgedKey = key;
+        if (state === 'replayed-after-competition') {
+          currentHead = contractCompetingHead;
+          currentPublishedRevision = contractCompetingRevision;
+          savedBasis = contractCompetingBasis;
+          savedDocument = contractCompetingDocument;
+          throw new Error('Original HTTP acknowledgement dropped after competing publication');
+        }
+        currentHead = contractNextHead;
+        currentPublishedRevision = contractBasis.revisionId;
+        return Response.json({ ...receipt, replayed: state === 'pending-publication' });
+      }
       if (path === '/v1/content-drafts') {
         savedBasis = contractSavedAfterEdit;
         savedDocument = (body as { document: typeof contractDocument }).document;

@@ -15,7 +15,7 @@ export function ZoneSavedPreviewFrame({ frame, readerTheme, nonce, children }: {
 }) {
   const { zone, cuts, pkg, saved } = frame;
   const { locale } = frame.context;
-  const actions = saved.realm ? <LocalizedLink href={realmHref(locale, saved.frameMetadata.ref)}
+  const actions = frame.realmRef ? <LocalizedLink href={realmHref(locale, frame.realmRef)}
     className="rounded-md border border-border px-3 py-2 text-sm hover:bg-accent">
     {surfaceText.community[locale]}</LocalizedLink> : null;
   return <ZoneFrame zone={zone} dataZone={zone.slug ?? saved.model.zoneId}

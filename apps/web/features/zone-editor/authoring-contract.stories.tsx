@@ -94,3 +94,22 @@ export const PendingPublicationPhone: Story = scenario('pending-publication', 'p
 export const PendingPublicationDesktop: Story = scenario('pending-publication', 'desktop');
 export const OriginalReceiptAfterCompetitionPhone: Story = scenario('replayed-after-competition', 'phone');
 export const OriginalReceiptAfterCompetitionDesktop: Story = scenario('replayed-after-competition', 'desktop');
+
+/** Leaving an accepted publication distinguishes local discard from cancelling a server change. */
+const pendingExit: Story = {
+  args: { state: 'pending-publication', view: 'manage' },
+  parameters: { contractState: authoringContractRequests('pending-publication') },
+  async play({ canvasElement, globals }) {
+    const copy = messages[(globals.locale as UiLocale | undefined) ?? 'en'];
+    const canvas = within(canvasElement);
+    await userEvent.click(await canvas.findByRole('button', { name: copy.publish }));
+    await expect(await canvas.findByText(copy.commandPending)).toBeVisible();
+    await userEvent.click(canvas.getByRole('link', { name: copy.viewSite }));
+    const dialog = within(await within(document.body).findByRole('dialog'));
+    await expect(dialog.getByText(copy.exitPendingBody)).toBeVisible();
+    await userEvent.click(dialog.getByRole('button', { name: copy.exitCancel }));
+    await expect(canvas.getByRole('button', { name: copy.checkConfirmation })).toBeVisible();
+  },
+};
+export const PendingPublicationExitPhone: Story = { ...pendingExit, globals: { viewport: { value: 'phone' } } };
+export const PendingPublicationExitDesktop: Story = { ...pendingExit, globals: { viewport: { value: 'desktop' } } };

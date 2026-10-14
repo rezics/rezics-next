@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "ページのリビジョン",
   realmFailedBody: 'REZICSから応答がありませんでした。接続の選択はここに残っています。もう一度お試しください。',
   exitTitle: '移動する前に変更を保存しますか？',
+  exitPendingBody: "これらの変更はまだ確認が必要です。ローカルの編集を破棄しても、REZICS がすでに受け付けた変更は取り消されません。",
   exitBody: '未保存の変更はエディターに残っています。保存して移動するか、変更を破棄するか、編集を続けてください。',
   exitSave: '変更を保存して続行',
   exitDiscard: '変更を破棄して続行',

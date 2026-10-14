@@ -18,6 +18,7 @@ const en = {
   receiptPages: "Page revisions",
   realmFailedBody: 'REZICS did not answer. Your attachment choice is still here; try again.',
   exitTitle: 'Save your unsaved work before leaving?',
+  exitPendingBody: "These changes still need confirmation. Discarding local edits does not cancel a change that REZICS has already accepted.",
   exitBody: 'Unsaved changes are still in this editor. Save them before leaving, discard them, or keep editing.',
   exitSave: 'Save changes and continue',
   exitDiscard: 'Discard changes and continue',

@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "页面修订",
   realmFailedBody: 'REZICS 未响应。您的连接选择仍保留在此处；请重试。',
   exitTitle: '离开前保存未保存的修改？',
+  exitPendingBody: "这些更改仍待确认。放弃本地编辑不会取消 REZICS 已受理的更改。",
   exitBody: '未保存的修改仍在编辑器中。离开前可以保存、放弃修改，或继续编辑。',
   exitSave: '保存修改并继续',
   exitDiscard: '放弃修改并继续',

@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "페이지 리비전",
   realmFailedBody: 'REZICS가 응답하지 않았습니다. 연결 선택은 그대로 남아 있습니다. 다시 시도하세요.',
   exitTitle: '이동하기 전에 변경 사항을 저장할까요?',
+  exitPendingBody: "이 변경은 아직 확인이 필요합니다. 로컬 편집을 버려도 REZICS가 이미 접수한 변경은 취소되지 않습니다.",
   exitBody: '저장하지 않은 변경 사항이 편집기에 남아 있습니다. 저장하고 이동하거나 변경 사항을 버리거나 계속 편집하세요.',
   exitSave: '변경 사항 저장 후 계속',
   exitDiscard: '변경 사항 버리고 계속',

@@ -135,11 +135,12 @@ export function ZoneEditorDraftProvider({ zoneId, actingSubject, children }: {
     }
     leave();
   }
+  const awaitingConfirmation = exitSections.some(section => actions.get(zoneEditorDraftKey(zoneId, actingSubject, section))?.pending?.());
   return <DraftContext.Provider value={value}>
     <div className="contents">{children}</div>
     <Dialog open={selectedExit !== null} pending={saving} onOpenChange={({ open }) => { if (!open) setExit(null); }}>
       <DialogContent size="md">
-        <DialogHeader className="pr-14" title={copy.exitTitle} description={copy.exitBody} />
+        <DialogHeader className="pr-14" title={copy.exitTitle} description={awaitingConfirmation ? copy.exitPendingBody : copy.exitBody} />
         {exitFailed ? <DialogBody><p role="alert" className="text-sm text-destructive">{copy.exitFailed}</p></DialogBody> : null}
         <DialogFooter className="sm:flex-wrap">
           <Button size="sm" disabled={saving} isLoading={saving} onClick={() => void saveAndLeave()}>{saving ? copy.exitSaving : copy.exitSave}</Button>

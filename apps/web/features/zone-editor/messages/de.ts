@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "Seitenrevisionen",
   realmFailedBody: 'REZICS hat nicht geantwortet. Ihre Auswahl zur Verknüpfung bleibt erhalten. Versuchen Sie es erneut.',
   exitTitle: 'Änderungen vor dem Verlassen speichern?',
+  exitPendingBody: "Diese Änderungen müssen noch bestätigt werden. Das Verwerfen lokaler Änderungen bricht keine von REZICS bereits angenommene Änderung ab.",
   exitBody: 'Nicht gespeicherte Änderungen sind noch im Editor. Speichere sie, verwirf sie oder bearbeite sie weiter.',
   exitSave: 'Speichern und fortfahren',
   exitDiscard: 'Verwerfen und fortfahren',

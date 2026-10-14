@@ -4,7 +4,7 @@ import { commandLane } from '../api/command.ts';
 import { browserZoneAuthoring, browserZoneRealmAttachment, commitCommand, loadCompleteZoneNavigation, zoneCommandLane,
   type PublishedSite, type SavedDraft, type WriteResult } from './api.ts';
 import { readZoneAuthoring, readZoneManagementFrame } from './authoring-reads.ts';
-import { authoringContractClient, contractActor, contractManagementKey, contractBasis, contractDocument, contractHead, contractHome, contractSavingAgent,
+import { authoringContractClient, contractActor, contractManagementKey, contractStateHead, contractCompetingHead, contractBasis, contractDocument, contractHead, contractHome, contractSavingAgent,
   contractZoneId, type AuthoringContractState } from './authoring-contract.fixtures.ts';
 import { publicationChoice, publicationStatus, reduceEditor, reopenEditorDraft } from './model.ts';
 import { loadSavedPreviewFrame } from './saved-preview-frame.ts';
@@ -14,7 +14,7 @@ for (const state of ['retired', 'recovered', 'restored', 'operator-mandate'] as 
     const fixture = authoringContractClient(state);
     const frame = await readZoneManagementFrame(fixture.main, contractManagementKey(state), 'en', contractActor(state));
     expect(frame.lifecycleOnly).toBe(state === 'retired');
-    expect(frame.lifecycle).toMatchObject({ kind: 'ready', revision: contractHead, status: state === 'retired' ? 'retired' : 'active' });
+    expect(frame.lifecycle).toMatchObject({ kind: 'ready', revision: contractStateHead(state), status: state === 'retired' ? 'retired' : 'active' });
     expect(frame.authoring.kind).toBe('ready');
     if (frame.authoring.kind !== 'ready') throw new Error('Saved cut unavailable');
     expect(frame.authoring.model.state.basis).toEqual(contractBasis);
@@ -74,18 +74,23 @@ test('HTTP 202 retains the exact publication and stable retry key without report
 test('a replayed receipt remains original after refreshing the current competing cut, without replacing saved bytes', async () => {
   const fixture = authoringContractClient('replayed-after-competition');
   const api = browserZoneAuthoring(fixture.main);
-  const current = await api.readDraft(contractZoneId, contractActor('replayed-after-competition'));
   const opened = await readZoneAuthoring(fixture.main, contractZoneId, 'en', contractActor('replayed-after-competition'));
-  if (!current.ok || opened.kind !== 'ready') throw new Error('Missing current cut');
+  if (opened.kind !== 'ready') throw new Error('Missing current cut');
   const choice = publicationChoice(opened.model.state)!;
-  const answer = await api.publish(choice, contractActor('replayed-after-competition'), 'original-receipt-key', contractZoneId);
+  const answer = await commitCommand({ key: 'original-receipt-key', seq: 1, superseded: () => false, confirm: () => {}, afterConfirmed: false },
+    key => api.publish(choice, contractActor('replayed-after-competition'), key, contractZoneId));
+  const current = await api.readDraft(contractZoneId, contractActor('replayed-after-competition'));
+  if (!current.ok) throw new Error('Current competing cut unavailable');
+  const writes = fixture.calls.filter(call => call.method === 'POST');
+  expect(writes).toHaveLength(2);
+  expect(writes[1]).toEqual(writes[0]);
   if (!answer.ok) throw new Error('Missing receipt');
   const acknowledged = reduceEditor(opened.model.state, { type: 'published', ...answer.data, revisionId: choice.revisionId });
   expect(publicationStatus(acknowledged)).toBe('unknown');
   const refreshed = reduceEditor(acknowledged, { type: 'publication-current', ...current.data });
   expect(publicationStatus(refreshed)).toBe('behind');
   expect(refreshed.publishedReceipt).toEqual(fixture.receipt);
-  expect(refreshed.zoneHead).toBe(contractHead);
+  expect(refreshed.zoneHead).toBe(contractCompetingHead);
   expect(refreshed.value).toBe(opened.model.state.value);
   expect(refreshed.basis).toEqual(contractBasis);
 });

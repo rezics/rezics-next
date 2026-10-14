@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "頁面修訂",
   realmFailedBody: 'REZICS 未回應。您的連結選擇仍保留在此處；請重試。',
   exitTitle: '離開前儲存尚未儲存的修改？',
+  exitPendingBody: "這些變更仍待確認。捨棄本機編輯不會取消 REZICS 已受理的變更。",
   exitBody: '尚未儲存的修改仍在編輯器中。離開前可以儲存、捨棄修改，或繼續編輯。',
   exitSave: '儲存修改並繼續',
   exitDiscard: '捨棄修改並繼續',

@@ -10,6 +10,7 @@ const messages: ZoneEditorMessages = {
   receiptPages: "Révisions des pages",
   realmFailedBody: 'REZICS n’a pas répondu. Votre choix de rattachement est conservé ; réessayez.',
   exitTitle: 'Enregistrer les modifications avant de quitter ?',
+  exitPendingBody: "Ces modifications attendent encore une confirmation. Abandonner les modifications locales n’annule pas une modification déjà acceptée par REZICS.",
   exitBody: 'Les modifications non enregistrées sont encore dans l’éditeur. Enregistrez-les, abandonnez-les ou continuez à modifier.',
   exitSave: 'Enregistrer et continuer',
   exitDiscard: 'Abandonner et continuer',

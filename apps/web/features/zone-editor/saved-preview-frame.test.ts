@@ -1,8 +1,9 @@
 import { describe, expect, test, vi } from 'vitest';
 import { direction } from '@rezics/main/language';
 import { previewCollection } from './home-modules.fixtures.ts';
+import { idOf, realmHref } from '../realm/route.ts';
 import { savedPreviewAuthoring, savedPreviewPackage, savedPreviewPublicReport,
-  savedPreviewReaders } from './saved-preview-frame.fixtures.ts';
+  savedPreviewReaders, savedPreviewRealmHeader, savedPreviewRealmSpace } from './saved-preview-frame.fixtures.ts';
 import { loadSavedPreviewFrame } from './saved-preview-frame.ts';
 
 const options = { locale: 'en' as const, homeName: 'Home', lookEnabled: true };
@@ -28,8 +29,33 @@ describe('authorized saved preview frame', () => {
       expect(loaded.frame.saved.model.document?.doc.content?.[0]?.content?.[0]?.text)
         .toBe('This saved page survives an unavailable public home.');
       expect(loaded.frame.pkg).toBeNull();
+      expect(loaded.frame.realmRef).toBeNull();
+      expect(loaded.frame.zone.links.discussions).toBe('');
       expect(loaded.frame.context.mounts?.get(previewCollection)).toBe('charts');
     }
+  });
+
+  test('an attached Realm uses its own admitted Space for community navigation', async () => {
+    const readers = savedPreviewReaders(true);
+    readers.realmHeader = async () => ({ ok: true, data: savedPreviewRealmHeader() });
+    const loaded = await loadSavedPreviewFrame(readers, options);
+    if (loaded.kind !== 'ready') throw new Error('Saved frame unavailable');
+    const ref = idOf(savedPreviewRealmSpace)!;
+    expect(loaded.frame.realmRef).toBe(ref);
+    expect(loaded.frame.zone.links.discussions).toBe(realmHref('en', ref, 'discussions'));
+    expect(loaded.frame.zone.links.decisions).toBe(realmHref('en', ref, 'decisions'));
+    expect(loaded.frame.zone.links.about).toBe(realmHref('en', ref, 'about'));
+    expect(loaded.frame.zone.links.discussions).not.toBe(realmHref('en', loaded.frame.saved.frameMetadata.ref, 'discussions'));
+  });
+
+  test('an unrelated Realm header cannot supply navigation or presentation metadata', async () => {
+    const readers = savedPreviewReaders(true);
+    readers.realmHeader = async () => ({ ok: true, data: { ...savedPreviewRealmHeader(), id: savedPreviewRealmSpace } });
+    const loaded = await loadSavedPreviewFrame(readers, options);
+    if (loaded.kind !== 'ready') throw new Error('Saved frame unavailable');
+    expect(loaded.frame.realmRef).toBeNull();
+    expect(loaded.frame.zone.links.discussions).toBe('');
+    expect(loaded.frame.zone.icon).toBeNull();
   });
 
   test.each([false, true])('denied authoring remains fatal without reading public data (Realm: %s)', async realm => {

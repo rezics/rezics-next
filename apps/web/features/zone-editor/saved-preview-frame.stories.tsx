@@ -4,18 +4,21 @@ import { expect, within } from 'storybook/test';
 import { PageContainer } from '../shell/page.tsx';
 import { messages } from './messages.ts';
 import { ZoneDraftPreview } from './preview.tsx';
-import { savedPreviewReaders } from './saved-preview-frame.fixtures.ts';
+import { savedPreviewReaders, savedPreviewRealmHeader, savedPreviewRealmSpace } from './saved-preview-frame.fixtures.ts';
+import { idOf, realmHref } from '../realm/route.ts';
 import { loadSavedPreviewFrame, type SavedPreviewFrameLoad } from './saved-preview-frame.ts';
 import { ZoneSavedPreviewFrame } from './saved-preview-frame.tsx';
 import { ZoneAuthoringFailure } from './states.tsx';
 
-function SavedFrame({ realm }: { realm: boolean }) {
+function SavedFrame({ realm, realmHeaderAvailable = false }: { realm: boolean; realmHeaderAvailable?: boolean }) {
   const [loaded, setLoaded] = useState<SavedPreviewFrameLoad | null>(null);
   useEffect(() => {
-    void loadSavedPreviewFrame(savedPreviewReaders(realm), {
+    const readers = savedPreviewReaders(realm);
+    if (realmHeaderAvailable) readers.realmHeader = async () => ({ ok: true, data: savedPreviewRealmHeader() });
+    void loadSavedPreviewFrame(readers, {
       locale: 'en', homeName: 'Home', lookEnabled: true,
     }).then(setLoaded);
-  }, [realm]);
+  }, [realm, realmHeaderAvailable]);
   if (!loaded || loaded.kind === 'missing') return null;
   if (loaded.kind === 'failure') return <ZoneAuthoringFailure copy={messages.en} failure={loaded.failure} />;
   if (Boolean(loaded.frame.saved.realm) !== realm) return null;
@@ -33,7 +36,7 @@ const meta = { title: 'Zone editor/Saved frame', component: SavedFrame,
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-async function checkSavedFrame(canvasElement: HTMLElement, realm: boolean) {
+async function checkSavedFrame(canvasElement: HTMLElement, _realm: boolean, realmHeaderAvailable = false) {
   const canvas = within(canvasElement);
   await expect(await canvas.findByRole('heading', { name: 'Saved harbor notes' })).toBeVisible();
   await expect(canvas.getByRole('heading', { name: 'Draft preview' })).toBeVisible();
@@ -43,8 +46,11 @@ async function checkSavedFrame(canvasElement: HTMLElement, realm: boolean) {
   await expect(navigation.getAllByRole('link').map(link => link.textContent))
     .toEqual(['Home', 'Saved visitor guide', 'Harbor charts']);
   await expect(canvas.queryByText('Private records')).not.toBeInTheDocument();
-  if (realm) await expect(canvas.getByRole('link', { name: 'Community' })).toBeVisible();
-  else await expect(canvas.queryByRole('link', { name: 'Community' })).not.toBeInTheDocument();
+  if (realmHeaderAvailable) {
+    for (const link of canvas.getAllByRole('link', { name: 'Community' })) {
+      await expect(link).toHaveAttribute('href', realmHref('en', idOf(savedPreviewRealmSpace)!));
+    }
+  } else await expect(canvas.queryByRole('link', { name: 'Community' })).not.toBeInTheDocument();
   const frame = canvasElement.querySelector<HTMLElement>('[data-zone]')!;
   await expect(frame.dataset.zoneMode).toBe('fallback');
   await expect(frame.style.getPropertyValue('--zone-tiles')).toBe('6');
@@ -60,3 +66,11 @@ export const SavedStandaloneWithUnavailablePublicHome: Story = {
   async play({ canvasElement }) { await checkSavedFrame(canvasElement, false); } };
 export const SavedRealmPhone: Story = { ...SavedRealmWithUnavailablePublicHome,
   globals: { viewport: { value: 'phone' } } };
+export const SavedRealmDesktop: Story = { ...SavedRealmWithUnavailablePublicHome,
+  globals: { viewport: { value: 'desktop' } } };
+const crossSpaceRealm: Story = { args: { realm: true, realmHeaderAvailable: true },
+  parameters: { contractState: { source: 'contract-built; not recorded',
+    method: 'GET', path: `/v1/realms/${savedPreviewRealmHeader().id.slice(-36)}`, state: savedPreviewRealmHeader() } },
+  async play({ canvasElement }) { await checkSavedFrame(canvasElement, true, true); } };
+export const CrossSpaceRealmPhone: Story = { ...crossSpaceRealm, globals: { viewport: { value: 'phone' } } };
+export const CrossSpaceRealmDesktop: Story = { ...crossSpaceRealm, globals: { viewport: { value: 'desktop' } } };
