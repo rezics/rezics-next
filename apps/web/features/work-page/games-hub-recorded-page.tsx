@@ -51,8 +51,8 @@ export function GamesHubRecordedPage({ record, persona, mode, locale }: {
   if (fault) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{fault}</pre>;
   if (!shown) return <p role="status" aria-busy="true" className="p-6">{pageMessages.loading}</p>;
   const { hub, actions } = shown;
-  if (!hub.header.ok) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">Work header: {hub.header.failure}</pre>;
-  if (hub.book) return <pre role="alert" className="p-6">This recorded Work is a book. The Games page does not draw book status.</pre>;
+  if (!hub.header.ok) return <pre role="alert" className="whitespace-pre-wrap break-words p-6">{hub.header.failure}</pre>;
+  if (hub.book) return <pre role="alert" className="p-6">{pageMessages.unavailableBody}</pre>;
   const work = hub.header.data;
   const id = work.id.slice(-36);
   return <ReaderActionsProvider signedIn={persona !== 'visitor'} signInHref="/auth/start" actions={actions}>
