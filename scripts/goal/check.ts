@@ -138,9 +138,11 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   }
   const changed = options.changed ?? checkChangedFiles(cwd);
   const briefPath = join(cwd, '.temp/goal/brief.md');
-  const brief = existsSync(briefPath) ? parseBrief(readFileSync(briefPath, 'utf8')) : undefined;
+  const briefText = existsSync(briefPath) ? readFileSync(briefPath, 'utf8') : undefined;
+  const brief = briefText === undefined ? undefined : parseBrief(briefText);
   const tests = options.tests ?? brief?.tests ?? [];
-  if (brief?.kind === 'surface') {
+  // A wave build task's rows are proved once for the whole wave, in its prove phase (docs/goals/wave.md).
+  if (brief?.kind === 'surface' && !/^## Wave[ \t]*$/m.test(briefText ?? '')) {
     const selected = await selectSurface(cwd, { ...brief, tests: [...tests] }, changed);
     if (!selected?.selection) {
       const root = join(cwd, '.temp/goal/check');

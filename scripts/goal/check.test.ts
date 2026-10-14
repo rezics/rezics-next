@@ -144,6 +144,16 @@ test('a surface cannot hide missing rows and stories behind a types-only check',
   }
 });
 
+test('a wave build surface runs only the requested stack-free groups', async () => {
+  const f = fixture();
+  const brief = join(f.cwd, '.temp/goal/brief.md');
+  mkdirSync(join(brief, '..'), { recursive: true });
+  writeFileSync(brief, '---\nkind: surface\nrows: []\ntests: []\n---\n\n## Wave\n\nBuild task of wave/1.\n');
+  const result = await workerCheck({ ...f, tests: undefined, changed: [], only: ['types'] });
+  expect(result.checks.map(check => check.name)).not.toContain('selection');
+  expect(f.lines.join('\n')).not.toContain('surface requires rows:');
+});
+
 test('failed diagnostics are bounded to sixty lines per check while the disk log remains complete', async () => {
   const f = fixture();
   const output = Array.from({ length: 100 }, (_, i) => `error: diagnostic ${i}`).join('\n');
