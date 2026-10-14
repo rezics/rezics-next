@@ -88,32 +88,53 @@ async function renderRead(name: PersonaName, label: string, path: string, anonym
   return { status: response.status, data: JSON.parse(raw) as { zone?: string; routeSegment?: string | null } };
 }
 
-async function frameSite(name: PersonaName) {
+async function frameSite(name: PersonaName, zoneLabel = 'frame-site', editor = true) {
   const person = sessions[name];
-  const zone = await renderRead(name, 'frame-site', `${root()}/zone?${acting(person)}`);
-  if (zone.status === 200 && zone.data.zone)
-    await renderRead(name, 'frame-site-editor', `/v1/zones/${zone.data.zone.slice(-36)}/showcase-editor?${acting(person)}`);
-  // UUID management addresses need no resolution. A returned official segment does.
-  if (zone.status === 200 && zone.data.routeSegment)
-    await renderRead(name, 'official-address', `/v1/addresses/resolve?scope=space&key=${encodeURIComponent(zone.data.routeSegment)}`, true);
+  const query = name === 'visitor' ? '' : `?${acting(person)}`;
+  const zone = await renderRead(name, zoneLabel, `${root()}/zone${query}`);
+  if (zone.status === 200 && zone.data.zone) {
+    const zoneId = zone.data.zone.slice(-36);
+    await Promise.all([
+      renderRead(name, 'frame-site-presentation', `/v1/zones/${zoneId}/presentation${query}`),
+      ...(editor && name !== 'visitor'
+        ? [renderRead(name, 'frame-site-editor', `/v1/zones/${zoneId}/showcase-editor?${acting(person)}`)] : []),
+    ]);
+  }
+}
+
+async function pageSession(name: Exclude<PersonaName, 'visitor'>) {
+  const person = sessions[name];
+  await Promise.all([
+    renderRead(name, 'session-agent', '/v1/me/session-agent'),
+    renderRead(name, 'agent-choices', '/v1/me/agents?languages=en'),
+    renderRead(name, 'acting-contexts', '/v1/me/acting-contexts?task=work.create'),
+    renderRead(name, 'reading-preferences', `/v1/me/person-preferences?${acting(person)}`),
+  ]);
+  await renderRead(name, 'acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`);
 }
 
 async function refused(name: PersonaName) {
   const person = sessions[name],
     status = name === 'visitor' ? 401 : 403;
   const sample = recording.session(name, person);
-  if (name !== 'visitor') {
-    for (const [label, path] of [
-      ['session-agent', '/v1/me/session-agent'],
-      ['agent-choices', '/v1/me/agents?languages=en'],
-      ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
-      ['acting-agent-profile', `/v1/agents/${person.actingSubject!.slice(-36)}?${acting(person)}`],
-    ] as const) await renderRead(name, label, path);
-    await frameSite(name);
-    await renderRead(name, 'members-role-filter', `${root()}/members?${acting(person)}&role=${initialRole}`);
-  }
-  for (const path of ['roles', 'members'])
-    await answer(sample(`${path}-denied`, 'GET', `${root()}/${path}?${acting(person)}`), status);
+  if (name !== 'visitor') await pageSession(name);
+  await Promise.all([
+    frameSite(name),
+    renderRead(name, 'official-address', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`, true),
+    ...(name !== 'visitor'
+      ? [renderRead(name, 'members-role-filter', `${root()}/members?${acting(person)}&role=${initialRole}`)] : []),
+    answer(sample('roles-denied', 'GET', `${root()}/roles?${acting(person)}`), status),
+    answer(sample('members-denied', 'GET', `${root()}/members?${acting(person)}`), status),
+    answer(
+      sample('realm-header', 'GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
+      ['member', 'moderator'].includes(name) ? 200 : 404,
+    ),
+    answer(
+      sample('frame-realm', 'GET', `${root()}?${acting(person)}&language=en`),
+      name === 'visitor' ? 401 : ['member', 'moderator'].includes(name) ? 200 : 404,
+    ),
+    answer(sample('members-invitations', 'GET', `${root()}/invitations?${acting(person)}`), status),
+  ]);
   const command = {
     actingSubject: person.actingSubject ?? sessions.owner.actingSubject,
     expectedGeneration: '0',
@@ -130,15 +151,6 @@ async function refused(name: PersonaName) {
     person.main('POST', `${root()}/role-changes`, { ...command, impactDigest: '0'.repeat(64) }),
     status,
   );
-  await answer(
-    sample('realm-header', 'GET', name === 'visitor' ? root() : `${root()}?${acting(person)}`),
-    ['member', 'moderator'].includes(name) ? 200 : 404,
-  );
-  await answer(
-    sample('frame-realm', 'GET', `${root()}?${acting(person)}&language=en`),
-    name === 'visitor' ? 401 : ['member', 'moderator'].includes(name) ? 200 : 404,
-  );
-  await answer(sample('members-invitations', 'GET', `${root()}/invitations?${acting(person)}`), status);
 }
 outcomeTest(team, 'visitor', () => refused('visitor'), recording);
 outcomeTest(team, 'stranger', () => refused('stranger'), recording);
@@ -149,24 +161,21 @@ outcomeTest(team, 'owner', async () => {
     stranger = sessions.stranger,
     moderator = sessions.moderator;
   const sample = recording.session('owner', owner);
-  for (const [label, path] of [
-    ['session-agent', '/v1/me/session-agent'],
-    ['agent-choices', '/v1/me/agents?languages=en'],
-    ['acting-contexts', '/v1/me/acting-contexts?task=work.create'],
-    ['acting-agent-profile', `/v1/agents/${owner.actingSubject!.slice(-36)}?${acting(owner)}`],
-  ] as const) await (await sample(label, 'GET', path)).body?.cancel();
-  await answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`));
-  await answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`));
-  await renderRead('owner', 'members-role-filter', `${root()}/members?${acting(owner)}&role=${initialRole}`);
-  await answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`));
-  await answer(recording.session('owner', sessions.visitor)('member-profile', 'GET', `/v1/agents/${sessions.member.actingSubject!.slice(-36)}`));
-  await answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`));
-  await answer(sample('outgoing-invitations-empty', 'GET', `${root()}/invitations?${acting(owner)}`));
-  // The frame can render without a site link; retain the API's refusal too.
-  await (await sample('management-site', 'GET', `${root()}/zone?${acting(owner)}`)).body?.cancel();
-  await (await sample('site-editor-access', 'GET', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor?${acting(owner)}`)).body?.cancel();
-  for (const name of ['owner', 'moderator'] as const)
-    await answer(recording.session('owner', sessions.visitor)(`holder-name-${name}`, 'GET', `/v1/agents/${sessions[name].actingSubject!.slice(-36)}`));
+  await pageSession('owner');
+  await Promise.all([
+    answer(sample('management-realm-header', 'GET', `${root()}?${acting(owner)}&language=en`)),
+    answer(sample('roles-initial', 'GET', `${root()}/roles?${acting(owner)}`)),
+    renderRead('owner', 'members-role-filter', `${root()}/members?${acting(owner)}&role=${initialRole}`),
+    renderRead('owner', 'official-address', `/v1/addresses/resolve?scope=space&key=${sessions.realm.slice(-36)}`, true),
+    answer(sample('member-roster', 'GET', `${root()}/members?${acting(owner)}`)),
+    answer(recording.session('owner', sessions.visitor)('member-profile', 'GET', `/v1/agents/${sessions.member.actingSubject!.slice(-36)}`)),
+    answer(sample('member-search-empty', 'GET', `${root()}/members?${acting(owner)}&search=nomatch${randomUUID().replaceAll('-', '')}`)),
+    answer(sample('outgoing-invitations-empty', 'GET', `${root()}/invitations?${acting(owner)}`)),
+    frameSite('owner', 'management-site', false),
+    renderRead('owner', 'site-editor-access', `/v1/zones/${sessions.zone.slice(-36)}/showcase-editor?${acting(owner)}`),
+    answer(recording.session('owner', sessions.visitor)('holder-name-owner', 'GET', `/v1/agents/${owner.actingSubject!.slice(-36)}`)),
+    answer(recording.session('owner', sessions.visitor)('holder-name-moderator', 'GET', `/v1/agents/${moderator.actingSubject!.slice(-36)}`)),
+  ]);
   const roleId = randomUUID();
   const created = await change({
     kind: 'role',
