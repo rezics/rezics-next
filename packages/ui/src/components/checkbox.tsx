@@ -53,7 +53,7 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
   return (
     <ArkCheckbox.Root
       className={cn(
-        'group/checkbox',
+        'relative group/checkbox',
         children ? 'inline-flex items-center gap-2' : checkboxVariants(),
         className,
       )}
@@ -61,7 +61,7 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
       {...rest}
     >
       <ArkCheckbox.Control
-        className={children ? checkboxVariants() : undefined}
+        className={children ? checkboxVariants() : 'relative size-full'}
         data-slot="checkbox-control"
       >
         <CheckboxIndicator>
@@ -71,11 +71,11 @@ export const Checkbox = (props: React.ComponentProps<typeof ArkCheckbox.Root>) =
         <CheckboxIndicator indeterminate>
           <MinusIcon />
         </CheckboxIndicator>
+        <CheckboxHiddenInput tabIndex={tabIndex} />
       </ArkCheckbox.Control>
 
       {children ? <ArkCheckbox.Label>{children}</ArkCheckbox.Label> : null}
 
-      <CheckboxHiddenInput tabIndex={tabIndex} />
     </ArkCheckbox.Root>
   );
 };
@@ -101,7 +101,8 @@ const CheckboxHiddenInput = (props: React.ComponentProps<typeof ArkCheckbox.Hidd
     }
   }, [indeterminate]);
 
-  return <ArkCheckbox.HiddenInput ref={ref} style={nativeControl} {...props} />;
+  return <ArkCheckbox.HiddenInput ref={ref} style={nativeControl}
+    className="outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" {...props} />;
 };
 
 // The native input is what pointers and automation reach: unpainted and the size of the control, at the
@@ -114,8 +115,10 @@ const nativeControl = {
   outline: 'none',
   clip: 'auto',
   margin: 0,
-  width: '1.25rem',
-  height: '1.25rem',
+  position: 'absolute',
+  inset: 0,
+  width: '100%',
+  height: '100%',
   overflow: 'visible',
   cursor: 'inherit',
 } satisfies React.CSSProperties;

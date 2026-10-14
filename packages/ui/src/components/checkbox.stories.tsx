@@ -68,6 +68,29 @@ export const PointerReachesInput: Story = {
   },
 };
 
+export const KeyboardFocusAndPlacement: Story = {
+  render: () => <form className="grid gap-3">
+    <Checkbox>Contains spoilers</Checkbox>
+    <button type="submit">Post message</button>
+  </form>,
+  async play({ canvasElement }) {
+    const canvas = within(canvasElement);
+    const input = canvas.getByRole('checkbox', { name: 'Contains spoilers' });
+    await userEvent.tab();
+    await expect(input).toHaveFocus();
+    await expect(getComputedStyle(input).boxShadow).not.toBe('none');
+    const box = input.getBoundingClientRect();
+    const control = canvasElement.querySelector('[data-slot="checkbox-control"]')!.getBoundingClientRect();
+    await expect(Math.abs(box.x + box.width / 2 - control.x - control.width / 2)).toBeLessThan(1);
+    await expect(Math.abs(box.y + box.height / 2 - control.y - control.height / 2)).toBeLessThan(1);
+    await expect(canvasElement.ownerDocument.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2)).toBe(input);
+    await userEvent.keyboard(' ');
+    await expect(input).toBeChecked();
+    await userEvent.tab();
+    await expect(canvas.getByRole('button', { name: 'Post message' })).toHaveFocus();
+  },
+};
+
 export const CallerRole: Story = {
   render: () => (
     <Field orientation="horizontal">
