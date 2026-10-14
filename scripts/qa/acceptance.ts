@@ -261,6 +261,7 @@ export const nativeProofDeclarations: readonly NativeProofDeclaration[] = [
   { file: heldReplayNativeTest, deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
   { file: 'infra/jena/tests/command-module-startup.test.ts', deadlineMs: 610_000, imageInputs: 'module', preparedImage: null },
   { file: 'infra/jena/tests/native-visit-profile.test.ts', deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
+  { file: 'infra/jena/tests/media-summary-label-growth.test.ts', deadlineMs: 310_000, imageInputs: 'module', preparedImage: null },
   { file: 'infra/jena/tests/occurrence-label-growth.test.ts', deadlineMs: 1_960_000, imageInputs: 'module', preparedImage: null },
   { file: 'infra/jena/tests/prefix-walk-native.test.ts', deadlineMs: 1_240_000, imageInputs: 'module', preparedImage: null },
   { file: 'infra/jena/tests/search-journal-restart.test.ts', deadlineMs: 3 * 240_000, imageInputs: 'fuseki', preparedImage: 'fuseki' },

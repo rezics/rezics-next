@@ -254,13 +254,13 @@ function avatar(type: ResourceType, reference: string, row: AvatarRow | undefine
     basis: { policy: AVATAR_POLICY, context: row.context! } };
 }
 
-/** One bounded graph query resolves type, labels and public disclosure for the batch. */
-async function graphRows(env: WorkActivationEnvironment, resources: readonly string[], localBasis = false,
-  proveAbsence = false) {
+/** The batch is repeated inside independent OPTIONAL inputs: an outer VALUES
+ * does not constrain an optimized UNION's right-hand scan. */
+export function resourceSummaryGraphQuery(resources: readonly string[], proveAbsence = false): string {
   // Test the owner branch, not BOUND(?work): an OPTIONAL can bind an initially
   // absent Work from its own label/head pattern and attach an unrelated owner.
   const workType = '?type IN ("work", "main-version", "release", "occurrence", "realization")';
-  const result = await env.fuseki.query(`PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
+  return `PREFIX rv: <${RV}> PREFIX schema: <https://schema.org/>
     PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> PREFIX skos: <http://www.w3.org/2004/02/skos/core#>
     SELECT ?epoch ?sequence ?hold ?r ?type ?work ?head ?homeZone ?public ?label ?erased ?nameHead ?namePayload ?mergedInto ?profileAvatarSelection ?projectionSubject ?projectionFrame ?post ${proveAbsence ? '?hasCurrentIdentity' : ''} WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:sequence ?sequence .
@@ -332,8 +332,8 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           GRAPH ${iri(GRAPHS.current)} { ?work rv:head ?head } }
         OPTIONAL { FILTER(?type = "space") GRAPH ${iri(GRAPHS.current)} { ?r rdfs:label ?label } }
         OPTIONAL { FILTER(?type IN ("agent","zone")) GRAPH ${iri(GRAPHS.current)} {
-          { ?r rdfs:label ?label }
-          UNION { ?r a rv:Zone ; rv:space ?zoneSpace . FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
+          { VALUES ?r { ${resources.map(iri).join(' ')} } ?r rdfs:label ?label }
+          UNION { VALUES ?r { ${resources.map(iri).join(' ')} } ?r a rv:Zone ; rv:space ?zoneSpace . FILTER NOT EXISTS { ?r rdfs:label ?zoneLabel }
             ?zoneSpace rdfs:label ?label }
         } }
         OPTIONAL { FILTER(?type = "agent") GRAPH ${iri(GRAPHS.current)} {
@@ -372,7 +372,13 @@ async function graphRows(env: WorkActivationEnvironment, resources: readonly str
           IF(${workType} && BOUND(?work), EXISTS { ${publicWork('?work', '?pm')} }, false)))))))
           AS ?public)
       }
-    }`);
+    }`;
+}
+
+/** One bounded graph query resolves type, labels and public disclosure for the batch. */
+async function graphRows(env: WorkActivationEnvironment, resources: readonly string[], localBasis = false,
+  proveAbsence = false) {
+  const result = await env.fuseki.query(resourceSummaryGraphQuery(resources, proveAbsence));
   const bindings = result.results?.bindings ?? [];
   const control = bindings[0];
   if (!control?.epoch || control.epoch.value !== env.lineage.dataEpoch || control.hold) {
