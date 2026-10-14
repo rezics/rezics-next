@@ -1,3 +1,4 @@
+import { afterAll, afterEach } from 'bun:test';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { readFileSync, rmSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
@@ -20,6 +21,13 @@ import { outcomeResponse } from './outcome-test.ts';
 import { provisionedAgent } from './provisioned-agent.ts';
 import { personaProofActive } from './proof-phase.ts';
 import { settledWrite } from './settled-write.ts';
+import { RequestWatch } from './request-watch.ts';
+
+const personaRequests = new RequestWatch();
+// Bun runs teardown hooks on assertion failures and timeouts, too. A successful
+// test with no outstanding request emits nothing; setup failures reach afterAll.
+afterEach(() => personaRequests.reportPending());
+afterAll(() => personaRequests.reportPending());
 
 export const personaNames = [
   'visitor',
@@ -69,6 +77,8 @@ export function personaSession(
   cookie?: string,
   oauth?: LocalOAuthSession,
   observeMain?: PersonaOptions['observeMain'],
+  persona = accountId ?? 'visitor',
+  watch = personaRequests,
 ): PersonaSession {
   const sessionKey = randomUUID();
   const expiry = (token: string) => {
@@ -100,12 +110,20 @@ export function personaSession(
           if (body !== undefined) headers.set('content-type', 'application/json');
           if (commandKey !== undefined) headers.set('idempotency-key', commandKey);
           const requestStartedAt = Date.now();
-          const response = await fetch(url, {
+          const finish = watch.start({ persona, service: base === main ? 'Main' : 'Account', method, url });
+          let response: Response;
+          try {
+            response = await fetch(url, {
             method, headers, redirect: 'manual',
             signal: AbortSignal.any([signal, AbortSignal.timeout(30_000)]),
             ...(options?.bytes ? { body: new Blob([new Uint8Array(options.bytes)]) }
               : body === undefined ? {} : { body: JSON.stringify(body) }),
-          });
+            });
+          } catch (error) {
+            finish();
+            throw error;
+          }
+          finish(response);
           if (base === main && observeMain) {
             const raw = await response.clone().text(), answeredAt = Date.now();
             // Setup diagnostics never retain credentials, cookies or headers.
@@ -324,7 +342,7 @@ async function applications(options: PersonaOptions) {
         name === 'operator' && firstOperator?.runId === runId ? firstOperator : undefined;
       const emailAddress = previous?.email ?? `persona-${name}-${randomUUID()}@example.test`;
       const password = previous?.password ?? randomBytes(24).toString('base64url');
-      const anonymous = personaSession(mainBase, accountBase, null);
+      const anonymous = personaSession(mainBase, accountBase, null, undefined, undefined, undefined, name);
       if (!previous) {
         await json(
           anonymous.account('POST', '/api/auth/sign-up/email', {
@@ -370,7 +388,7 @@ async function applications(options: PersonaOptions) {
         },
         cookie,
       );
-      const person = personaSession(mainBase, accountBase, user.user.id, cookie, oauth, options.observeMain);
+      const person = personaSession(mainBase, accountBase, user.user.id, cookie, oauth, options.observeMain, name);
       person.actingSubject =
         previous?.actingSubject ?? (await provisionedAgent(person.main, `Outcome ${name}`));
       await json(
