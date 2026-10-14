@@ -1,7 +1,7 @@
 import type { Pool, PoolClient } from 'pg';
 import { controlRead, controlTransaction } from '../access/topology-control.ts';
 import { GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadExpired, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { replySlotIri } from '../realm-reply/graph.ts';
 import { activityTime } from '../feed/ranking.ts';
 import type { FeedCheckpoint } from '../feed/store.ts';
@@ -219,7 +219,7 @@ export async function realmRankPage(
   }) : await access.query<Cut>(sql, values);
   const row = result.rows[0];
   if (!row?.open) throw new WorkReadUnavailable('Realm rankings are projecting');
-  if (after && after.revision !== row.revision) throw new WorkReadMoved('Thread ranking changed');
+  if (after && after.revision !== row.revision) throw new WorkReadExpired('Thread ranking changed');
   if (!row.complete) throw new RealmRankingsIncomplete();
   return { revision: row.revision, rows: row.rows };
 }

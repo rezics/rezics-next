@@ -176,10 +176,14 @@ async function answerPage(fixture: PersonaSessions, segment: string): Promise<Pa
     201,
   );
   const route = await answer<{ revision: string; realm: string; resource: { id: string } }>(
-    owner.main('GET', `${zoneRoot}/routes?path=%2F${segment}`),
+    owner.main('GET', `${zoneRoot}/routes?path=%2F${segment}&${acting(owner)}`),
   );
   expect(route.realm).toBe(fixture.realm);
   expect(route.resource.id).toBe(work.work);
+  const anonymous = await answer<{ realm: string | null }>(
+    fixture.visitor.main('GET', `${zoneRoot}/routes?path=%2F${segment}`),
+  );
+  expect(anonymous.realm).toBe(fixture.visibility === 'private' ? null : fixture.realm);
   const header = await answer<{ revision: string }>(
     owner.main('GET', `/v1/works/${short(work.work)}?${acting(owner)}`),
   );

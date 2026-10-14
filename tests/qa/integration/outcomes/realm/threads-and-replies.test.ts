@@ -71,6 +71,7 @@ async function publish(person: PersonaSession, target: Work, realm: string, body
   return { reply, input, placement: placement.placement };
 }
 beforeAll(async () => {
+  await recording.prepare();
   publicRealm = await personaSessions('public');
   privateRealm = await personaSessions('private');
   emptyRealm = (await answer<{ realm: string }>(publicRealm.owner.main('POST', '/v1/spaces', {
@@ -87,9 +88,7 @@ beforeAll(async () => {
     profile: 'metadata-only-v1', title: 'Private discussion garden', language: 'en',
     authoring: 'own-work', actingSubject: privateRealm.owner.actingSubject }), 201);
 }, 180_000);
-// The sessions and Realm bootstrap must succeed. Bulk population is part of
-// the pending proof: the current HTTP persona client loses its bearer window
-// before it can finish this inventory. Share its exact refusal across cells.
+// Populate once through public commands; every persona traverses the same cut.
 async function prepare() {
   for (let start = 0; start < 21; start += 8) {
     const prepared = await batch(Array.from({ length: Math.min(8, 21 - start) }, (_, offset) =>
@@ -133,24 +132,18 @@ async function productionDiscussion(name: PersonaName) {
     await reads(`thread-${sort}-language`).thread(opener.reply, sort, 'en');
     await reads(`thread-${sort}-empty`).thread(roots.at(-1)!.reply, sort);
     if (first.ok) {
-      const pending = [...first.data.continuations];
-      let page = 0;
-      while (pending.length && page < 20) {
-        const next = pending.shift()!;
-        const branch = await reads(`thread-${sort}-${next.kind}-${++page}`)
+      // Record each continuation shape once. The assertion traversal below
+      // proves exhaustive delivery without repeating it for every view.
+      for (const next of first.data.continuations) {
+        await reads(`thread-${sort}-${next.kind}`)
           .thread(next.reply, sort, undefined, next.kind === 'siblings' ? next.cursor : undefined);
-        if (branch.ok) pending.push(...branch.data.continuations.filter(item => item.kind !== 'ancestors'));
       }
     }
   }
   const deepest = await reads('thread-ancestors').thread(descendants.at(-1)!.reply, 'best');
   if (deepest.ok) {
-    let next = deepest.data.continuations.find(item => item.kind === 'ancestors');
-    let page = 0;
-    while (next && page < 20) {
-      const branch = await reads(`thread-ancestors-${++page}`).thread(next.reply, 'best');
-      next = branch.ok ? branch.data.continuations.find(item => item.kind === 'ancestors') : undefined;
-    }
+    const next = deepest.data.continuations.find(item => item.kind === 'ancestors');
+    if (next) await reads('thread-ancestors-continuation').thread(next.reply, 'best');
   }
   await recordRealmDiscussion(recording, name, person, emptyRealm)('threads-empty')
     .threads({ sort: 'best', window: 'week' });
@@ -161,7 +154,8 @@ async function productionDiscussion(name: PersonaName) {
   const before = await reads('threads-before-move').threads({ sort: 'new', window: 'week' });
   if (before.ok && before.data.nextCursor) {
     await publish(publicRealm.owner, work, publicRealm.realm, 'Original insertion moves the discussion population.');
-    await reads('threads-moved-cursor').threads({ sort: 'new', window: 'week', cursor: before.data.nextCursor });
+    const moved = await reads('threads-moved-cursor').threads({ sort: 'new', window: 'week', cursor: before.data.nextCursor });
+    expect(moved).toMatchObject({ ok: false, failure: 'moved', status: 409 });
   }
 }
 

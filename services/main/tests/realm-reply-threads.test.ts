@@ -11,7 +11,7 @@ import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modul
 import { RV } from '../src/modules/work/activate.ts';
 import { configureDisclosure } from '../src/modules/disclosure/read.ts';
 import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
-import { decodeReadCursor, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
+import { decodeReadCursor, WorkReadExpired, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../src/modules/work/read-session.ts';
 
 // Realm threads over an in-memory graph, Content and vote projection: the
 // fakes answer the reads' batches, so the tests pin which replies a Realm
@@ -413,6 +413,14 @@ test('a Realm lists its discussions newest first, a page at a time, with their r
   expect(first.nextCursor).not.toBeNull();
   expect(decodeReadCursor(first.nextCursor!, ['realm-threads-v1', realm, 'new', null], session.position)?.after)
     .toBe(placement(3, 60 * 24 * 3));
+});
+
+test('New population changes expire the continuation instead of retrying its retained basis', async () => {
+  const { session } = world(discussions);
+  const first = await readRealmThreads(session, realm, { sort: 'new', limit: 2, now });
+  const moved = world(discussions, { votes: { 1: { score: 1 } } });
+  await expect(readRealmThreads(moved.session, realm, { sort: 'new', limit: 2, now,
+    cursor: first.nextCursor! })).rejects.toBeInstanceOf(WorkReadExpired);
 });
 
 test('Best weighs votes against age, Top counts votes in the period, and a reordered ranking restarts the next page', async () => {

@@ -6,7 +6,7 @@ import {
   realmRankPage,
 } from '../src/modules/rankings/realm-threads.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
-import { WorkReadUnavailable } from '../src/modules/work/read-session.ts';
+import { WorkReadExpired, WorkReadUnavailable } from '../src/modules/work/read-session.ts';
 import type { WorkReadSession } from '../src/modules/work/read-session.ts';
 import type { FeedCheckpoint } from '../src/modules/feed/store.ts';
 
@@ -76,6 +76,13 @@ test('A8: completed Realm ranking at Main stream 3 survives graph diagnostic pos
     20,
   );
   expect(result).toEqual({ revision: '2', rows: [] });
+});
+
+test('a changed retained ranking expires the cursor without a retryable read failure', async () => {
+  await expect(realmRankPage(rankingAccess({ mainSequence: '3', contentSequence: '7' }),
+    session(), realm, 'top', 'all', 20,
+    { rank: 0, time: '0', placement: realm, revision: '1' }))
+    .rejects.toBeInstanceOf(WorkReadExpired);
 });
 
 test('A8: foreign Main stream scope or epoch refuses Realm ranking admission', async () => {

@@ -351,8 +351,10 @@ export async function readRealmThreads(session: WorkReadSession, realm: string,
   // Its private admission filter is also membership, never a retained grant.
   const newRevision = !maintained ? await threads.rankingRevision(session.position.dataEpoch, realm) : null;
   if (newRevision === 'unavailable') throw new WorkReadUnavailable('Thread population is unavailable');
-  if (order && order[2] !== newRevision) throw new WorkReadMoved('Thread population changed');
-  if (order && order[3] !== hash(history)) throw new WorkReadMoved('Thread history admission changed');
+  // A continuation retains its old membership. Retrying that same cursor
+  // cannot repair a changed population; the reader must restart the list.
+  if (order && order[2] !== newRevision) throw new WorkReadExpired('Thread population changed');
+  if (order && order[3] !== hash(history)) throw new WorkReadExpired('Thread history admission changed');
   let after: (RealmRankKey & { revision: string }) | undefined;
   if (maintained && cursor) {
     try {
