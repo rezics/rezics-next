@@ -60,39 +60,47 @@ async function controllerOwner(member: Member, loss: Loss, administrator: boolea
     await grantFixtureAuthority(client, { scope: 'work:create:root', requireDispatch: true,
       representations: [{ principalId: member.principalId, actor: member.actor, action: 'agent.control',
         lifetime: 'infinity' },
-      { principalId: spare.principalId, actor: member.actor, action: 'agent.control', lifetime: 'infinity' }],
+      { principalId: spare.principalId, actor: administrator ? spare.actor : member.actor,
+        action: 'agent.control', lifetime: 'infinity' }],
       grant: { actor: member.actor, action: 'agent.control', lifetime: 'infinity' } });
     await client.query('COMMIT');
   } finally { client.release(); }
-  if (administrator) await new AccessPlatformAdministrators(pool).designateFirst(
-    member.principal.issuer, member.principal.subject, () => {});
-  else await provisionFixturePerson(pool, { principalId: member.principalId,
+  const issueResource = async (action: string, validUntil: Date | null, scope = 'platform:access') => {
+    const epoch = (await pool.query<{ authority_epoch: string }>(`SELECT authority_epoch::text
+      FROM access.scope_gate WHERE id = 'platform:access'`)).rows[0]!.authority_epoch;
+    return new AccessPlatformGrants(pool).create({ principal: await principal(spare),
+      issuerSubject: spare.actor, expectedAuthorityEpoch: epoch }, randomUUID(), action,
+    { principalId: member.principalId }, validUntil,
+    { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }, scope);
+  };
+  const resourceDeadline = loss === 'expired' ? new Date(Date.now() + 30_000) : null;
+  let resourceGrant: string | null = null;
+  if (administrator) {
+    await new AccessPlatformAdministrators(pool).designateFirst(
+      spare.principal.issuer, spare.principal.subject, () => {});
+    await issueResource('platform:use:platform-admin', null);
+    resourceGrant = (await issueResource('platform:resource:work.create', resourceDeadline, 'work:create:root')).grant.id;
+  } else await provisionFixturePerson(pool, { principalId: member.principalId,
     actor: member.actor, dataEpoch: stack.env.lineage.dataEpoch });
   const control = (await pool.query<{ id: string }>(`SELECT id FROM access.representation
     WHERE principal_id = $1 AND subject_id = $2 AND action = 'agent.control'`,
   [member.principalId, member.actor])).rows[0]!.id;
   const access = new AccessAdmissionRegistry(pool);
   access.configureBaseline(stack.fuseki);
-  const resourceGrant = administrator ? (await pool.query<{ id: string }>(`SELECT id
-    FROM access.principal_permission_grant WHERE principal_id = $1 AND action = 'platform:resource:work.create'
-      AND scope_id = 'work:create:root'`, [member.principalId])).rows[0]!.id : null;
   return { access, pool, lose: async () => {
-    if (resourceGrant) await reduceFixtureGrant(pool, resourceGrant, loss === 'expired'
-      ? { validUntil: new Date(Date.now() - 1000) } : { active: false });
+    if (resourceDeadline && resourceGrant) {
+      // Platform episodes retain their issued deadline. Wait for this real,
+      // finite owner grant to expire rather than changing an immutable episode.
+      await pool.query(`SELECT pg_sleep(GREATEST(0,
+        EXTRACT(EPOCH FROM ($1::timestamptz - clock_timestamp()))) + 0.01)`, [resourceDeadline]);
+    } else if (resourceGrant) await reduceFixtureGrant(pool, resourceGrant, { active: false });
     else await deactivateFixtureController(pool, control);
   }, restore: async () => {
     await grantFixtureAuthority(pool, { scope: 'work:create:root', requireDispatch: true,
       representations: [{ principalId: member.principalId, actor: member.actor,
         action: 'agent.control', lifetime: 'infinity' }],
       grant: { actor: member.actor, action: 'agent.control', lifetime: 'infinity' } });
-    if (administrator) {
-      const epoch = (await pool.query<{ authority_epoch: string }>(`SELECT authority_epoch::text
-        FROM access.scope_gate WHERE id = 'platform:access'`)).rows[0]!.authority_epoch;
-      await new AccessPlatformGrants(pool).create({ principal: await principal(member),
-        issuerSubject: member.actor, expectedAuthorityEpoch: epoch }, randomUUID(),
-      'platform:resource:work.create', { principalId: member.principalId }, null,
-      { idempotencyKey: randomUUID(), requestDigest: 'a'.repeat(64) }, 'work:create:root');
-    }
+    if (administrator) await issueResource('platform:resource:work.create', null, 'work:create:root');
   } };
 }
 
@@ -274,15 +282,20 @@ const sharedPathQualifications: ReplayEntry[] = [
       await owner.create(await principal(member), identity, randomUUID(), realmReplyDigest(identity));
       const manager = await stack.member(randomUUID());
       await manager.grant(`governance:realm:${realm}`, 'realm.members.manage');
+      await manager.grant(`governance:realm:${realm}`, 'realm.settings.manage');
       const input = { realm, reply, revisionId: revision.revisionId, revisionDigest: revision.revisionDigest,
         reviewDecisionId: null, expectedHead: null };
       const key = randomUUID();
       const manage = async (action: 'ban' | 'unban') => {
-        const generation = (await stack.accessPool.query<{ authority_epoch: string }>(`SELECT authority_epoch::text
-          FROM access.scope_gate WHERE id = $1`, [`governance:realm:${realm}`])).rows[0]!.authority_epoch;
+        const { generation } = await stack.composition.dependencies.realmAdmin!.settings(
+          await principal(manager), realm, manager.actor, stack.env);
+        const membership = (await stack.accessPool.query<{ generation: string }>(`SELECT generation::text
+          FROM access.membership WHERE kind = 'realm' AND owner_subject = $1 AND member_subject = $2`,
+        [realm, member.actor])).rows[0];
         await stack.composition.dependencies.realmAdmin!.changeMember(await principal(manager), realm, {
           actingSubject: manager.actor, member: member.actor, action, expectedGeneration: generation,
-          expectedMembershipGeneration: '0', reason: 'Replay authority qualification', consent: null, durationSeconds: null,
+          expectedMembershipGeneration: membership?.generation ?? '0',
+          reason: 'Replay authority qualification', consent: null, durationSeconds: null,
         }, randomUUID(), stack.env);
       };
       return { command: async (fresh, changed) => {
