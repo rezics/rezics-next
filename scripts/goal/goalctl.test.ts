@@ -338,6 +338,17 @@ describe('goalctl claims', () => {
       parsed.paths)).toEqual(['services/main/src/app.ts']);
   });
 
+  test('a claimed Next.js dynamic route folder is a directory name, not a character class', () => {
+    const route = 'apps/web/app/[locale]/manage/r/[realm]/requests/page.tsx';
+    expect(outOfScope([route, 'apps/web/app/[locale]/library/page.tsx', 'apps/web/app/l/library/page.tsx'],
+      [route, 'apps/web/app/[locale]/library/**'])).toEqual(['apps/web/app/l/library/page.tsx']);
+    expect(outOfScope(['apps/web/app/[...path]/page.tsx', 'apps/web/app/[[...path]]/page.tsx'],
+      ['apps/web/app/[...path]/*', 'apps/web/app/[[...path]]/page.tsx'])).toEqual([]);
+    // The escaped spellings keep working, and a class inside a longer segment stays a class.
+    expect(outOfScope(['apps/web/app/[locale]/page.tsx', 'docs/a1.md', 'docs/b1.md'],
+      ['apps/web/app/[[]locale]/page.tsx', 'docs/[a]1.md'])).toEqual(['docs/b1.md']);
+  });
+
   test('a generated file is not a claim and does not block land', () => {
     const generated = 'generated/openapi/main/public.json';
     const holder = held({ paths: [generated, 'services/main/src/modules/poll/**'] });

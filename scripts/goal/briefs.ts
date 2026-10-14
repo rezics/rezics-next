@@ -218,8 +218,15 @@ export function claimConflicts(brief: Brief, tasks: Task[]): string[] {
   return conflicts;
 }
 
+/** A claim's glob. A whole Next.js dynamic folder (`[locale]`, `[...path]`, `[[...path]]`) is a directory
+ * name, as it is for `pathsOverlap`: read as a character class, a claimed route would not match itself. */
+export function claimGlob(pattern: string): Bun.Glob {
+  return new Bun.Glob(pattern.split('/').map(segment =>
+    /^\[\[?(?:\.\.\.)?[A-Za-z][\w-]*\]\]?$/.test(segment) ? segment.replace(/[[\]]/g, '\\$&') : segment).join('/'));
+}
+
 export function outOfScope(files: string[], patterns: string[]): string[] {
-  const globs = patterns.map(pattern => new Bun.Glob(pattern));
+  const globs = patterns.map(claimGlob);
   return files.filter(file => !globs.some(glob => glob.match(file)));
 }
 
