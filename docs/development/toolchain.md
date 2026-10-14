@@ -101,6 +101,9 @@ unchanged JSON index under `.temp/`. `Cargo.lock` pins transitive crates.
 The index is one JSON file with a small header and byte ranges for independently
 read payloads. ASTs and SQL facts use compressed JSON strings so each guard
 materializes only the syntax trees and query facts it inspects.
+The pinned `oxc_estree` serializer preserves JavaScript string escapes while
+writing compact initializer syntax; opaque expressions retain their original
+kind and source range for the TypeScript rules to read.
 [`sha2`](https://docs.rs/sha2/0.10.9/sha2/) provides per-file SHA-256 content keys
 that let the reader register source identities without loading source payloads.
 Task keeps Cargo's registry and build output in this worktree's `.temp/`.
@@ -457,6 +460,7 @@ Exact direct pins from `tools/repo-index/Cargo.toml`; its Cargo.lock records the
 | oxc_allocator | 0.152.0 |
 | oxc_ast | 0.152.0 |
 | oxc_ast_visit | 0.152.0 |
+| oxc_estree | 0.152.0 |
 | oxc_parser | 0.152.0 |
 | oxc_resolver | 11.24.3 |
 | oxc_span | 0.152.0 |

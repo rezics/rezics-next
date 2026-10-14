@@ -4,6 +4,7 @@ use oxc_allocator::{Allocator, CloneIn};
 use oxc_ast::ast::*;
 use oxc_ast::{AstKind, builder::AstBuilder};
 use oxc_ast_visit::{Visit, VisitMut, walk, walk_mut};
+use oxc_estree::{CompactSerializer, ESTree, SequenceSerializer, Serializer, StructSerializer};
 use oxc_parser::Parser;
 use oxc_resolver::{ResolveOptions, Resolver, TsconfigDiscovery};
 use oxc_span::{GetSpan, SourceType};
@@ -205,6 +206,8 @@ struct IndexedFile {
     #[serde(skip_serializing_if = "Option::is_none")]
     fragment_ast_deflate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    trace_ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     variable_facts: Option<Vec<VariableFact>>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
@@ -293,6 +296,7 @@ fn file_header(
         ("runtimeAstDeflate", facts.runtime_ast_deflate),
         ("sqlAstDeflate", facts.sql_ast_deflate),
         ("fragmentAstDeflate", facts.fragment_ast_deflate),
+        ("traceAstDeflate", facts.trace_ast_deflate),
         ("graphDeflate", facts.graph_deflate),
         ("sqlDeflate", facts.sql_deflate),
     ] {
@@ -681,6 +685,7 @@ fn indexed_mode(
             runtime_ast_deflate: None,
             sql_ast_deflate: None,
             fragment_ast_deflate: None,
+            trace_ast_deflate: None,
             variable_facts: None,
             imports: vec![],
             sql_candidates: vec![],
@@ -806,6 +811,26 @@ fn indexed_mode(
         } else {
             (None, None)
         };
+    let trace_ast_deflate = if keep_runtime || service_graph_domain(&source.file) {
+        let mut trace_program = parsed.program.clone_in(&allocator);
+        let mut selection = SqlSyntaxSelection {
+            trace: true,
+            ..SqlSyntaxSelection::default()
+        };
+        selection.visit_program(&trace_program);
+        SqlSyntaxProjection {
+            marked: selection.marked,
+        }
+        .visit_program(&mut trace_program);
+        RuntimeProjection {
+            allocator: &allocator,
+            pending: Vec::new(),
+        }
+        .visit_program(&mut trace_program);
+        Some(compressed_ast(&trace_program.to_estree_json(false, false))?)
+    } else {
+        None
+    };
     let runtime = if compact_only || keep_runtime {
         RuntimeProjection {
             allocator: &allocator,
@@ -832,6 +857,7 @@ fn indexed_mode(
         runtime_ast_deflate: if compact_only { None } else { runtime },
         sql_ast_deflate,
         fragment_ast_deflate,
+        trace_ast_deflate,
         variable_facts,
         imports,
         sql_candidates: candidates,
@@ -1947,6 +1973,156 @@ namespace Inventory { const namespaceValue = table; }
         assert!(!header.payloads.contains_key("sqlAstDeflate"));
     }
     #[test]
+    fn compact_initializers_preserve_evaluation_grammar_opaque_spans_and_lone_surrogates() {
+        let allocator = Allocator::default();
+        let text = r#"const object = { deeply: { nested: 'ignored' } };
+const callback = () => { return helper('ignored'); };
+const member = receiver[index];
+const nullable = value!;
+const value = (flag ? String(`value=${[key, -12, 'x']}`) : ('a' + other)) as string;
+const surrogate = '\ud800';
+"#;
+        let parsed = Parser::new(&allocator, text, SourceType::ts()).parse();
+        let mut variables = VariableSyntax {
+            text,
+            frames: Vec::new(),
+            facts: Vec::new(),
+        };
+        variables.visit_program(&parsed.program);
+        let decode = |name: &str| {
+            let fact = variables
+                .facts
+                .iter()
+                .find(|fact| fact.name == name)
+                .unwrap();
+            let bytes = STANDARD.decode(&fact.initializer_ast_deflate).unwrap();
+            let mut raw = String::new();
+            flate2::read::DeflateDecoder::new(bytes.as_slice())
+                .read_to_string(&mut raw)
+                .unwrap();
+            raw
+        };
+        for (name, kind, expected) in [
+            ("object", "ObjectExpression", "{ deeply:"),
+            ("callback", "ArrowFunctionExpression", "() =>"),
+            ("member", "MemberExpression", "receiver[index]"),
+            ("nullable", "TSNonNullExpression", "value!"),
+        ] {
+            let node: Value = serde_json::from_str(&decode(name)).unwrap();
+            let expression = &node["body"][0]["expression"];
+            assert_eq!(expression["type"], kind);
+            assert_eq!(expression["start"], text.find(expected).unwrap());
+            assert!(
+                !expression
+                    .as_object()
+                    .unwrap()
+                    .values()
+                    .any(|value| value.is_array() || value.is_object())
+            );
+        }
+        let member: Value = serde_json::from_str(&decode("member")).unwrap();
+        assert_eq!(member["body"][0]["expression"]["computed"], true);
+        let value: Value = serde_json::from_str(&decode("value")).unwrap();
+        let serialized = serde_json::to_string(&value).unwrap();
+        for kind in [
+            "TSAsExpression",
+            "ParenthesizedExpression",
+            "ConditionalExpression",
+            "CallExpression",
+            "TemplateLiteral",
+            "ArrayExpression",
+            "UnaryExpression",
+            "BinaryExpression",
+            "Identifier",
+            "Literal",
+        ] {
+            assert!(serialized.contains(kind));
+        }
+        assert!(serialized.contains("\"operator\":\"+\""));
+        let surrogate = decode("surrogate");
+        let valid: Box<RawValue> = serde_json::from_str(&surrogate).unwrap();
+        assert!(valid.get().to_lowercase().contains("\"value\":\"\\ud800\""));
+    }
+    #[test]
+    fn trace_projection_preserves_headers_defaults_callbacks_conditions_and_original_callees() {
+        let root = env::current_dir().unwrap();
+        let text = r#"import { helper } from './helper';
+const ignored = { unrelated: ['payload'] };
+function write(run = () => db.query('SELECT * FROM owner.default')) {
+  const alias = run;
+  if (flag) helper(alias, () => { db.noop('full-argument'); });
+  (helper)('parenthesized'); (helper as Fn)('cast'); helper!('nonnull');
+  db.query('UPDATE owner.records SET value=1');
+}
+function empty() { db.noop('removed'); }
+class Owner { #run() {} method() { if (flag) this.#run(); this.run(); this['run'](); } }
+const arrow = () => receiver.method('expression-body');
+"#;
+        let facts = indexed(
+            Source {
+                file: "trace.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let trace = decode(facts.trace_ast_deflate.as_ref().unwrap());
+        let raw = serde_json::to_string(&trace).unwrap();
+        assert!(raw.contains("ImportDeclaration"));
+        assert!(raw.contains("owner.default"));
+        assert!(raw.contains("full-argument"));
+        assert!(raw.contains("expression-body"));
+        for omitted in [
+            "unrelated",
+            "parenthesized",
+            "cast",
+            "nonnull",
+            "UPDATE owner.records",
+            "removed",
+        ] {
+            assert!(!raw.contains(omitted), "{omitted}");
+        }
+        let mut calls = Vec::new();
+        let mut functions = Vec::new();
+        visit(&trace, &mut |node| {
+            if node["type"] == "CallExpression" {
+                calls.push(node["start"].as_u64().unwrap() as usize);
+            }
+            if node["type"] == "FunctionDeclaration" {
+                functions.push(node.clone());
+            }
+        });
+        for prefix in ["helper(alias", "this.#run()", "this.run()"] {
+            assert!(calls.contains(&text.find(prefix).unwrap()));
+        }
+        assert!(!calls.contains(&text.find("this['run']()").unwrap()));
+        let empty = functions
+            .iter()
+            .find(|function| function["id"]["name"] == "empty")
+            .unwrap();
+        assert!(empty["body"]["body"].as_array().unwrap().is_empty());
+        assert!(
+            trace["body"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|node| node["type"] == "ClassDeclaration")
+        );
+        assert!(
+            raw.len()
+                < serde_json::to_string(&decode(facts.runtime_ast_deflate.as_ref().unwrap()))
+                    .unwrap()
+                    .len()
+        );
+    }
+    #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
         let root = env::current_dir().unwrap();
         let resolver = resolver(&root);
@@ -2850,8 +3026,172 @@ fn template_ast(node: &TemplateLiteral<'_>) -> Result<String> {
     expression_ast_in(expression, allocator)
 }
 fn expression_ast(node: &Expression<'_>) -> Result<String> {
-    let allocator = &Allocator::default();
-    expression_ast_in(node.clone_in(allocator), allocator)
+    let mut serializer = CompactSerializer::new(true, false);
+    InitializerProgram(node).serialize(&mut serializer);
+    compressed_ast(&serializer.into_string())
+}
+struct InitializerProgram<'n, 'a>(&'n Expression<'a>);
+struct InitializerBody<'n, 'a>(&'n Expression<'a>);
+struct InitializerStatement<'n, 'a>(&'n Expression<'a>);
+struct InitializerExpression<'n, 'a>(&'n Expression<'a>);
+struct InitializerExpressions<'n, 'a>(&'n oxc_allocator::Vec<'a, Expression<'a>>);
+struct InitializerArguments<'n, 'a>(&'n oxc_allocator::Vec<'a, Argument<'a>>);
+struct InitializerElements<'n, 'a>(&'n oxc_allocator::Vec<'a, ArrayExpressionElement<'a>>);
+impl ESTree for InitializerProgram<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "Program");
+        state.serialize_field("body", &InitializerBody(self.0));
+        state.serialize_field("sourceType", "module");
+        state.serialize_span(self.0.span());
+        state.end();
+    }
+}
+impl ESTree for InitializerBody<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_sequence();
+        state.serialize_element(&InitializerStatement(self.0));
+        state.end();
+    }
+}
+impl ESTree for InitializerStatement<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "ExpressionStatement");
+        state.serialize_field("expression", &InitializerExpression(self.0));
+        state.serialize_span(self.0.span());
+        state.end();
+    }
+}
+impl ESTree for InitializerExpressions<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_sequence();
+        for expression in self.0 {
+            state.serialize_element(&InitializerExpression(expression));
+        }
+        state.end();
+    }
+}
+impl ESTree for InitializerArguments<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_sequence();
+        for argument in self.0 {
+            if let Some(expression) = argument.as_expression() {
+                state.serialize_element(&InitializerExpression(expression));
+            } else {
+                state.serialize_element(argument);
+            }
+        }
+        state.end();
+    }
+}
+impl ESTree for InitializerElements<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_sequence();
+        for element in self.0 {
+            if let Some(expression) = element.as_expression() {
+                state.serialize_element(&InitializerExpression(expression));
+            } else {
+                state.serialize_element(element);
+            }
+        }
+        state.end();
+    }
+}
+impl ESTree for InitializerExpression<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let expression = self.0;
+        let kind = match expression {
+            Expression::ObjectExpression(_) => "ObjectExpression",
+            Expression::FunctionExpression(_) => "FunctionExpression",
+            Expression::ArrowFunctionExpression(_) => "ArrowFunctionExpression",
+            Expression::ClassExpression(_) => "ClassExpression",
+            Expression::NewExpression(_) => "NewExpression",
+            Expression::StaticMemberExpression(_)
+            | Expression::ComputedMemberExpression(_)
+            | Expression::PrivateFieldExpression(_) => "MemberExpression",
+            Expression::TSNonNullExpression(_) => "TSNonNullExpression",
+            Expression::TSTypeAssertion(_) => "TSTypeAssertion",
+            Expression::TSInstantiationExpression(_) => "TSInstantiationExpression",
+            Expression::AwaitExpression(_) => "AwaitExpression",
+            Expression::ChainExpression(_) => "ChainExpression",
+            Expression::UpdateExpression(_) => "UpdateExpression",
+            Expression::SequenceExpression(_) => "SequenceExpression",
+            Expression::TaggedTemplateExpression(_) => "TaggedTemplateExpression",
+            Expression::TemplateLiteral(_) => "TemplateLiteral",
+            Expression::ConditionalExpression(_) => "ConditionalExpression",
+            Expression::ArrayExpression(_) => "ArrayExpression",
+            Expression::BinaryExpression(_) => "BinaryExpression",
+            Expression::LogicalExpression(_) => "LogicalExpression",
+            Expression::AssignmentExpression(_) => "AssignmentExpression",
+            Expression::UnaryExpression(_) => "UnaryExpression",
+            Expression::ParenthesizedExpression(_) => "ParenthesizedExpression",
+            Expression::TSAsExpression(_) => "TSAsExpression",
+            Expression::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
+            Expression::CallExpression(_) => "CallExpression",
+            _ => {
+                expression.serialize(serializer);
+                return;
+            }
+        };
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", kind);
+        match expression {
+            Expression::StaticMemberExpression(_) | Expression::PrivateFieldExpression(_) => {
+                state.serialize_field("computed", &false)
+            }
+            Expression::ComputedMemberExpression(_) => state.serialize_field("computed", &true),
+            Expression::TemplateLiteral(node) => {
+                state.serialize_field("quasis", &node.quasis);
+                state.serialize_field("expressions", &InitializerExpressions(&node.expressions));
+            }
+            Expression::ConditionalExpression(node) => {
+                state.serialize_field("test", &InitializerExpression(&node.test));
+                state.serialize_field("consequent", &InitializerExpression(&node.consequent));
+                state.serialize_field("alternate", &InitializerExpression(&node.alternate));
+            }
+            Expression::ArrayExpression(node) => {
+                state.serialize_field("elements", &InitializerElements(&node.elements))
+            }
+            Expression::BinaryExpression(node) => {
+                state.serialize_field("operator", &node.operator);
+                state.serialize_field("left", &InitializerExpression(&node.left));
+                state.serialize_field("right", &InitializerExpression(&node.right));
+            }
+            Expression::LogicalExpression(node) => {
+                state.serialize_field("operator", &node.operator);
+                state.serialize_field("left", &InitializerExpression(&node.left));
+                state.serialize_field("right", &InitializerExpression(&node.right));
+            }
+            Expression::AssignmentExpression(node) => {
+                state.serialize_field("operator", &node.operator);
+                state.serialize_field("left", &node.left);
+                state.serialize_field("right", &InitializerExpression(&node.right));
+            }
+            Expression::UnaryExpression(node) => {
+                state.serialize_field("operator", &node.operator);
+                state.serialize_field("argument", &InitializerExpression(&node.argument));
+                state.serialize_field("prefix", &true);
+            }
+            Expression::ParenthesizedExpression(node) => {
+                state.serialize_field("expression", &InitializerExpression(&node.expression))
+            }
+            Expression::TSAsExpression(node) => {
+                state.serialize_field("expression", &InitializerExpression(&node.expression))
+            }
+            Expression::TSSatisfiesExpression(node) => {
+                state.serialize_field("expression", &InitializerExpression(&node.expression))
+            }
+            Expression::CallExpression(node) => {
+                state.serialize_field("callee", &InitializerExpression(&node.callee));
+                state.serialize_field("arguments", &InitializerArguments(&node.arguments));
+                state.serialize_field("optional", &node.optional);
+            }
+            _ => {}
+        }
+        state.serialize_span(expression.span());
+        state.end();
+    }
 }
 fn expression_ast_in(expression: Expression<'_>, allocator: &Allocator) -> Result<String> {
     let builder = AstBuilder::new(allocator);
@@ -2925,6 +3265,18 @@ fn sql_query_call(node: &CallExpression<'_>) -> bool {
 fn sql_hard_anchor(kind: AstKind<'_>) -> bool {
     matches!(kind, AstKind::TemplateLiteral(_))
         || matches!(kind, AstKind::CallExpression(call) if sql_query_call(call))
+}
+fn trace_call(node: &CallExpression<'_>) -> bool {
+    match &node.callee {
+        Expression::Identifier(_) => true,
+        Expression::StaticMemberExpression(member) => {
+            matches!(member.object, Expression::ThisExpression(_))
+        }
+        Expression::PrivateFieldExpression(member) => {
+            matches!(member.object, Expression::ThisExpression(_))
+        }
+        _ => false,
+    }
 }
 fn function_node(kind: AstKind<'_>) -> bool {
     matches!(
@@ -3084,6 +3436,7 @@ struct SqlSyntaxSelection {
     hard_depth: usize,
     function_variables: Vec<usize>,
     include_variables: bool,
+    trace: bool,
 }
 impl<'a> Visit<'a> for SqlSyntaxSelection {
     fn visit_statement(&mut self, statement: &Statement<'a>) {
@@ -3103,7 +3456,12 @@ impl<'a> Visit<'a> for SqlSyntaxSelection {
             self.variable_depth = 0;
         }
         let variable = self.include_variables && matches!(kind, AstKind::VariableDeclaration(_));
-        let hard = sql_hard_anchor(kind);
+        let hard = if self.trace {
+            matches!(kind, AstKind::CallExpression(call) if trace_call(call))
+                || matches!(kind, AstKind::ImportDeclaration(_))
+        } else {
+            sql_hard_anchor(kind)
+        };
         if variable {
             self.variable_depth += 1;
         }
@@ -3112,7 +3470,9 @@ impl<'a> Visit<'a> for SqlSyntaxSelection {
         }
         if variable
             || hard
-            || matches!(kind, AstKind::StringLiteral(literal) if sql_operation_literal(&literal.value))
+            || (self.trace && function_node(kind))
+            || (!self.trace
+                && matches!(kind, AstKind::StringLiteral(literal) if sql_operation_literal(&literal.value)))
         {
             self.marked
                 .extend(self.ancestors.iter().map(|span| (span.start, span.end)));
@@ -3122,7 +3482,12 @@ impl<'a> Visit<'a> for SqlSyntaxSelection {
         if self.include_variables && matches!(kind, AstKind::VariableDeclaration(_)) {
             self.variable_depth -= 1;
         }
-        if sql_hard_anchor(kind) {
+        if if self.trace {
+            matches!(kind, AstKind::CallExpression(call) if trace_call(call))
+                || matches!(kind, AstKind::ImportDeclaration(_))
+        } else {
+            sql_hard_anchor(kind)
+        } {
             self.hard_depth -= 1;
         }
         if function_node(kind) {
