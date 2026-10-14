@@ -4,8 +4,6 @@ import { execFileSync } from 'node:child_process';
 import { context, ROOT_CONTEXT, trace, TraceFlags } from '@opentelemetry/api';
 import { fromPlainText } from '@rezics/document';
 import type { QueryResult } from 'pg';
-import type { CommandEnvelope, SparqlResult } from '../../../../../services/main/src/infrastructure/fuseki.ts';
-import type { ZoneSitePublicationReceipt } from '../../../../../services/main/src/modules/zone/configuration.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry } from '../../../../../packages/observability/src/runtime.ts';
 import { startWorkProfileSink, summarizeWorkProfile } from '../../../support/work-profile.ts';
 import { runWorkProfileChild } from '../../../support/work-profile-child.ts';
@@ -31,6 +29,8 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
     ACCOUNT_ORIGIN: `http://127.0.0.1:${process.env.ACCOUNT_PORT}` });
   const { Client } = await import('pg');
   const { FusekiClient, fusekiReadBudget } = await import('../../../../../services/main/src/infrastructure/fuseki.ts');
+  type CommandEnvelope = Parameters<typeof FusekiClient.prototype.command>[0];
+  type SparqlResult = Awaited<ReturnType<typeof FusekiClient.prototype.query>>;
   interface Statement {
     text: string; started: number; originSpanId: string; elapsedMs?: number;
     results?: Array<{ command: string; rowsReturned: number; rowsAffected: number | null }>;
@@ -148,6 +148,8 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
   });
 
   type Page = { page: string; variantId: string; revisionId: string; byteDigest: string; contentEpoch: string };
+  // The HTTP fields asserted here belong to the public receipt, not its owner implementation.
+  type Receipt = { revision: string; homeDocument: string; pages: Array<Omit<Page, 'contentEpoch'> & { language: string }> };
   type Draft = { revisionId: string; byteDigest: string; sourcePosition: { dataEpoch: string } };
   type Created = { zone: string; zoneRevision: string; navigationRevision: string };
 
@@ -292,7 +294,7 @@ if (process.env.REZICS_ZONE_COST_CHILD === 'measure') {
         graphRowsReturned: graphReads.every(statement => statement.rowsReturned !== undefined)
           ? graphReads.reduce((n, statement) => n + statement.rowsReturned!, 0) : null,
         nativeWork: measured.profile.nativeVisits };
-      const responseBody = JSON.parse(measured.rawBody) as ZoneSitePublicationReceipt;
+      const responseBody = JSON.parse(measured.rawBody) as Receipt;
       await Bun.write(artifact(String(count)), JSON.stringify({ phase, source, runId: process.env.REZICS_QA_RUN_ID,
         count, preparationMs, sitePreparationMs, priorPageCount,
         setupMs: sessions!.elapsedSeconds * 1000, elapsedMs: measured.elapsedMs,
