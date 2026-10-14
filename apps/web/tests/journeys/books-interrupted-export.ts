@@ -2,7 +2,6 @@ import { readFileSync } from 'node:fs';
 import { expect, test, type Route } from '@playwright/test';
 import { materializeData } from 'native-i18n';
 import type { CanonicalRow } from '../../../../services/main/src/modules/library-import/formats/contract.ts';
-import { LIBRARY_EXPORT_COST } from '../../../../services/main/src/modules/library-export/bundle.ts';
 import { messages } from '../../features/library/messages.ts';
 import ja from '../../features/library/messages/ja.ts';
 import { localizedPath } from '../../i18n/locale.ts';
@@ -44,15 +43,25 @@ export function registerBooksExportJourney() {
         } else await route.continue();
       };
       await page.route(exportRequests, dropContinuation);
+      const firstResponse = page.waitForResponse(response => {
+        const url = new URL(response.url());
+        return url.pathname.endsWith('/v1/me/library-export') && !url.searchParams.has('cursor');
+      });
       await pressByKeyboard(page, section.getByRole('button', { name: t.backupStart, exact: true }), findings, 'Start library download');
-      await expect(section.getByRole('alert')).toHaveText(t.backupPaused(LIBRARY_EXPORT_COST.page), { timeout: 60_000 });
-      expect(interrupted.cursor).toBeTruthy();
-      expect(interrupted.snapshot).toBeTruthy();
+      const response = await firstResponse;
+      expect(response.ok(), await response.text()).toBe(true);
+      const first = await response.json() as { rows: CanonicalRow[]; snapshot: string; nextCursor: string | null };
+      expect(first.rows.length).toBeGreaterThan(0);
+      expect(first.rows.length).toBeLessThan(copies.length);
+      expect(first.nextCursor).toBeTruthy();
+      await expect(section.getByRole('alert')).toHaveText(t.backupPaused(first.rows.length), { timeout: 60_000 });
+      expect(interrupted.cursor).toBe(first.nextCursor);
+      expect(interrupted.snapshot).toBe(first.snapshot);
       await page.unroute(exportRequests, dropContinuation);
       await page.reload();
       await expect(page.locator('html')).toHaveAttribute('lang', locale);
       await pressByKeyboard(page, disclosure, findings, 'Reopen library download');
-      await expect(section.getByRole('alert')).toHaveText(t.backupPaused(LIBRARY_EXPORT_COST.page));
+      await expect(section.getByRole('alert')).toHaveText(t.backupPaused(first.rows.length));
       await page.screenshot({ path: info.outputPath(`book-export-paused-${locale}.png`), fullPage: true });
       const resumed = page.waitForRequest(request => {
         const url = new URL(request.url());
