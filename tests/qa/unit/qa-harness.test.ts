@@ -28,21 +28,22 @@ setDefaultTimeout(PROCESS_HANG_MS * 4);
 function harnessAdmission(env: NodeJS.ProcessEnv, slotDirectory: string) {
   const source = ts.createSourceFile('cli.ts', readFileSync(join(root, 'scripts/qa/cli.ts'), 'utf8'),
     ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
-  const names = new Set(['qaSlotDirectory', 'heavyQaRun', 'releaseDeferredHeavy', 'deferredHeavyUsers']);
+  const names = new Set(['qaSlotDirectory', 'heavyQaRun', 'releaseDeferredHeavy', 'deferredHeavyUsers', 'admissionIntervals']);
   const statements = source.statements.filter(node =>
     ts.isVariableStatement(node) && node.declarationList.declarations.some(declaration =>
       ts.isIdentifier(declaration.name) && names.has(declaration.name.text))
     || ts.isFunctionDeclaration(node) && node.name?.text === 'acquireRunSlots'
     || ts.isIfStatement(node) && node.getText(source).startsWith('if (qaSlotDirectory)')
     || ts.isExpressionStatement(node) && node.getText(source).startsWith('process.env.GOAL_QA_COMMAND ??='));
-  if (statements.length !== 7) throw new Error('Missing QA CLI admission boundary');
+  if (statements.length !== 8) throw new Error('Missing QA CLI admission boundary');
   const boundary = ts.transpileModule(statements.map(node => node.getText(source)).join('\n')
     + '\nacquireRunSlots;', { compilerOptions: { target: ts.ScriptTarget.ESNext, module: ts.ModuleKind.None } }).outputText;
   return new Script(boundary).runInNewContext({
     process: { env, pid: process.pid, argv: ['bun', 'scripts/qa/cli.ts', '--tier', 'model'],
       on: process.on.bind(process), off: process.off.bind(process) },
     goalSlotDirectory: () => slotDirectory, root, join, randomUUID, mkdirSync, renameSync, rmSync, writeFileSync,
-    acquireQaSlots, Date, console,
+    // The run deadline belongs to the tiers this boundary leaves out; ending its initial wait has nothing to end here.
+    acquireQaSlots, Date, console, finishInitialWait: () => undefined,
   }) as (wanted: number, options?: Parameters<typeof acquireQaSlots>[4]) => ReturnType<typeof acquireQaSlots>;
 }
 
