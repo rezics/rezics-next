@@ -210,15 +210,15 @@ test('test-side startup children stop before parent cancellation completes, with
   for (const boundary of ['direct', 'indirect']) {
     for (const mode of ['SIGTERM', 'SIGINT', 'exit', 'timeout', 'forced-timeout']) {
       const dir = mkdtempSync(join(scratch, 'qa-startup-cancellation-'));
-      const ready = join(dir, 'ready'), late = join(dir, 'late-compose');
+      const ready = join(dir, 'ready'), cancelReady = join(dir, 'cancel-ready'), late = join(dir, 'late-compose');
       mkdirSync(join(dir, 'scripts', 'dev'), { recursive: true });
       writeFileSync(join(dir, 'worker.ts'), `
         import { writeFileSync } from 'node:fs';
         writeFileSync(${JSON.stringify(join(dir, 'worker.pid'))}, String(process.pid));
-        writeFileSync(${JSON.stringify(ready)}, 'working');
         process.on('SIGTERM', () => {});
         setTimeout(() => writeFileSync(${JSON.stringify(late)}, 'created after cancellation'), 10000);
         setInterval(() => {}, 1000);
+        writeFileSync(${JSON.stringify(ready)}, 'working');
       `);
       writeFileSync(join(dir, 'scripts', 'dev', 'cli.ts'), `
         import { writeFileSync } from 'node:fs';
@@ -227,22 +227,31 @@ test('test-side startup children stop before parent cancellation completes, with
         await runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['worker.ts'], 30000);
       `);
       writeFileSync(join(dir, 'parent.ts'), `
-        import { existsSync } from 'node:fs';
+        import { existsSync, writeFileSync } from 'node:fs';
         import { runQaAdmissionChildAsync, runQaStartupChildAsync } from ${JSON.stringify(join(root, 'scripts/qa/stack-startup.ts'))};
         const pending = ${boundary === 'direct'
           ? `runQaStartupChildAsync(${JSON.stringify(dir)}, ['stack:up'], 30000)`
           : `runQaAdmissionChildAsync(${JSON.stringify(dir)}, 'bun', ['scripts/dev/cli.ts', 'stack:up'], 30000)`};
         ${mode === 'exit' ? `while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(5); process.exit(0);`
           : mode === 'forced-timeout' ? `while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(5);
-            process.removeAllListeners('SIGTERM'); process.on('SIGTERM', () => {}); await pending;` : 'await pending;'}
+            process.removeAllListeners('SIGTERM'); process.on('SIGTERM', () => {});
+            writeFileSync(${JSON.stringify(cancelReady)}, 'ready'); await pending;`
+          : mode === 'timeout' ? `while (!existsSync(${JSON.stringify(ready)})) await Bun.sleep(5);
+            writeFileSync(${JSON.stringify(cancelReady)}, 'ready'); await pending;` : 'await pending;'}
       `);
       let child: ReturnType<typeof Bun.spawn> | undefined;
       try {
         const env = { ...process.env, REZICS_STACK_PROFILE: 'qa',
           REZICS_QA_MEMORY_DEADLINE: String(Date.now() + 30000), REZICS_QA_MEMORY_EVENTS: '0' };
         if (mode === 'timeout' || mode === 'forced-timeout') {
-          const result = await commandAsync(dir, 'bun', ['parent.ts'], 2000, env);
+          // Cancel work that has actually started, regardless of how long this
+          // loaded host takes to import and launch the nested startup parents.
+          const result = await commandAsync(dir, 'bun', ['parent.ts'], 2000, env, undefined, {
+            now: () => existsSync(cancelReady) ? 2001 : 0,
+            phaseDeadline: () => ({ activeLimitMs: 2000 }),
+          });
           expect(result.timedOut).toBe(true);
+          expect(existsSync(cancelReady)).toBe(true);
         } else {
           child = Bun.spawn(['bun', 'parent.ts'], { cwd: dir, env, stdout: 'pipe', stderr: 'pipe' });
           const deadline = Date.now() + 5000;
