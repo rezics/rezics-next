@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { Elysia } from 'elysia';
+import { Pool } from 'pg';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
 import { ObjectIntegrityError, ObjectUnavailable, S3ImmutableObjects,
   type ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
@@ -12,6 +13,8 @@ import { readCompositionSeal } from '../../../services/main/src/modules/structur
 import { readExportPlan } from '../../../services/main/src/modules/export/readers.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { progressRoutes } from '../../../services/main/src/routes/progress.ts';
+import { provisionFixturePerson } from '../../../services/main/src/modules/access/fixture-authority.ts';
+import { controlTransaction } from '../../../services/main/src/modules/access/topology-control.ts';
 import { assertCommandRace } from '../support/command-race.ts';
 
 type Created = { structure: string; revision: string; receipt: string; replayed: boolean };
@@ -117,6 +120,21 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
     const progressBody = (position: string) => ({ actingSubject: f.actor,
       expectedVersion: 0, completed: false, position });
     const firstProgressKey = `progress-${randomUUID()}`;
+    // Private progress requires verified Account membership and an active controlled Person.
+    const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
+    try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = ANY($1::text[])',
+      [[f.account.a.id, f.account.b.id]]); }
+    finally { await accountPool.end(); }
+    f.account.tokenA = await f.account.tokenFor(f.account.a);
+    f.account.tokenB = await f.account.tokenFor(f.account.b);
+    const otherActor = `https://rezics.com/id/${randomUUID()}`;
+    await controlTransaction(f.accessPool, async client => {
+      await provisionFixturePerson(client, { principalId: f.principalId, actor: f.actor,
+        dataEpoch: f.env.lineage.dataEpoch });
+      await client.query("INSERT INTO access.authority_subject(id,kind) VALUES ($1,'agent')", [otherActor]);
+      await provisionFixturePerson(client, { principalId: f.otherPrincipal, actor: otherActor,
+        dataEpoch: f.env.lineage.dataEpoch });
+    });
     const firstProgress = await f.json<{ position: string; version: number; replayed: boolean }>(
       await progressCall('PUT', progressPaths[0]!, progressBody('page:7'), firstProgressKey), 200);
     expect(firstProgress).toMatchObject({ position: 'page:7', version: 1, replayed: false });
@@ -132,6 +150,8 @@ test('BOOK02/COMP01/COMP02/COMP05/COMP06: admitted Book composition keeps occurr
     expect(await f.json(await progressCall('GET', progressPaths[1]! + progressQuery), 200))
       .toMatchObject({ position: 'page:19', version: 1 });
     expect((await progressCall('GET', progressPaths[0]! + progressQuery, undefined,
+      randomUUID(), f.account.tokenB)).status).toBe(403);
+    expect((await progressCall('GET', progressPaths[0]! + `?actingSubject=${encodeURIComponent(otherActor)}`, undefined,
       randomUUID(), f.account.tokenB)).status).toBe(404);
     const firstPage = await f.json<Page>(await f.call('GET', `${read}&limit=1`), 200);
     expect(firstPage.occurrences).toHaveLength(1);
