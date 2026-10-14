@@ -288,7 +288,7 @@ outcomeTest(moderation, 'owner', recordedProof('owner', async () => {
 outcomeTest(moderation, 'moderator', recordedProof('moderator', async () => {
   const fixture = fixtures.moderator, person = fixture.sessions.moderator;
   const sample = recording.session('moderator', person);
-  await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}&language=en`));
+  await answer(sample('moderator-realm-header', 'GET', `${fixture.root}?${acting(person)}`));
   await cannotImpersonate(fixture, person);
   const { caseId } = await open(fixture), before = await read(fixture);
   expect((await read(fixture, person, sample, 'moderator-appeal-open')).appeal.caseId).toBe(caseId);
