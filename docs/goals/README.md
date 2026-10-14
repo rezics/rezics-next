@@ -70,6 +70,7 @@ A command of the tool that needs no shared state is one file in
 a manager restart; after one, `status` shows them and `wait` is re-armed for each
 live one. The manager does not send instructions into a running worker: to
 change a task, `stop` it and `resume` it with the new instruction.
+A resume registers the brief's claims; `reclaim` remains for changing them without a resume.
 
 ## Briefs and duplicate prevention
 

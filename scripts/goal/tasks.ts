@@ -2,13 +2,14 @@ import { type Brief, DEFAULT_ENGINE, BRIEF_KINDS, HOLDING, type Task, type Ledge
 import { root, withLedger, briefGoal, unlandedChangeConflicts, areasOf, activeGoals, stateDir, git, managerOf, readLedger, pidAlive, claimingTasks, assertOwner, acquireDir, briefPathOf, landScope, archiveClosedBriefs, treeMentions, archiveDirOf, archiveFiles, removeFromTree, ARCHIVE_BRANCH, REGENERATION_COMMIT_SUBJECT } from './ledger.ts';
 import { pathToFileURL } from 'node:url';
 import { join, resolve, basename, relative, dirname, posix } from 'node:path';
-import { readFileSync, existsSync, mkdirSync, writeFileSync, copyFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
+import { readFileSync, existsSync, mkdirSync, writeFileSync, readdirSync, readlinkSync, renameSync } from 'node:fs';
 import { parseBrief, validateBrief, mechanismSectionErrors, claimConflicts, areaConflicts, validGoalSlug, goalFile, GOALS_DIR, HISTORY_EXEMPT, nextTaskId, goalBriefFile } from './briefs.ts';
 import { launchGates, briefFile, launch, workerPrompt, lastAttempt, taskOf, readResult, capacityRefusal, transportDrop, transportContinuations, transportContinuationPrompt, handoffContinuations, hasHandoff, cleanSessionEnd, changedFiles, elapsed, describe, running } from './launch.ts';
 import { postgresSocketRefusal, physicalPath } from './postgres-socket.ts';
 import { describeAccount } from './usage.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { isDeepStrictEqual } from 'node:util';
 import { clearRefusal, mergeTask } from './merge.ts';
 import { cellReading, latestConfirmation, type ConfirmationRecord } from './confirmed.ts';
 import { land, handoffResult, restoreLandingRebase } from './land.ts';
@@ -474,6 +475,8 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     assertPrepared(task);
     if (running(task)) throw new Error(`${task.id} is still running; stop it first or message it`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
+    const source = readClaimBrief(briefPathOf(task) ?? task.brief);
+    const replacement = replacementClaims(task, ledger, source, new Set(), true);
     const previous = lastAttempt(task);
     let round: 'step' | 'fix' = 'fix';
     const result = readResult(previous);
@@ -483,7 +486,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
       if (task.state === 'merged' || (changes.ahead === 0 && changes.dirty.length === 0)) round = 'step';
     }
     if (!result.error && handoffResult(result.text) === 'blocked' && blockedAttemptUnchanged(task, previous)) round = 'step';
-    const refusal = round === 'fix' ? resumeDecisionError(task.attempts, readFileSync(briefPathOf(task) ?? '', 'utf8')) : undefined;
+    const refusal = round === 'fix' ? resumeDecisionError(task.attempts, source.text) : undefined;
     if (refusal) throw new Error(`${task.id}: ${refusal}`);
     const previousEngine = engineOf(previous);
     const nextEngine = engine === 'sol'
@@ -503,6 +506,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
       console.log(`${task.id} resume waiting: ${reason}`);
       return;
     }
+    if (replacement.changed.length) Object.assign(task, replacement.claims);
     const manager = managerOf(ledger, task.goal);
     // A session continues only on its own engine: switching back resumes that engine's latest session,
     // and an engine without one starts fresh on the same worktree.
@@ -511,13 +515,12 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     const previousSession = sameEngine ? sameEngine.session || readResult(sameEngine).session || '' : '';
     const continuing = !fresh && !!previousSession;
     const session = continuing ? previousSession : isClaudeCode(nextEngine) ? randomUUID() : '';
-    const text = readFileSync(briefPathOf(task) ?? task.brief, 'utf8');
-    const handover = await prepareHandover(task, text);
+    const handover = await prepareHandover(task, source.text);
     const sharers = Object.values(ledger.tasks).filter(other => other.id !== task.id
       && resolve(other.worktree) === resolve(task.worktree) && (other.state === 'starting' || running(other)));
     const worktreeUpdate = updateResumeWorktree(task, sharers);
     console.log(worktreeUpdate);
-    copyFileSync(briefPathOf(task) ?? task.brief, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
+    writeFileSync(join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })), source.text);
     stageHandover(task.worktree, handover);
     const prompt = (continuing ? handoverPrompt(handover, task.tests ?? [])
       : await workerPrompt(task, manager, nextEngine, nextEffort, handover))
@@ -528,6 +531,7 @@ export async function resumeTask(id: string, args: string[], waitingToken?: stri
     task.state = 'running';
     delete task.waitingResume;
     clearRefusal(task);
+    if (replacement.changed.length) console.log(`${task.id} claims updated: ${replacement.changed.join(', ')}`);
     console.log(`${task.id} attempt ${task.attempts.length}: ${modelOf(nextEngine)}/${nextEffort}`
       + ` ${continuing ? 'resumed' : 'fresh session'}, ${round === 'step' ? 'next step' : 'fix round'}, pid ${lastAttempt(task).pid}`);
   });
@@ -626,33 +630,53 @@ export interface Lex {
   depth: number; block: boolean; single: boolean; double: boolean; template: boolean;
 }
 
-// Re-read an updated brief for an open task (for example a schema task continuing to its template) and
-// replace its claims after the same conflict checks as dispatch. `--allow-area` skips another Goal's
-// areas the same way; every other conflict still refuses. The new brief is copied into the worktree.
-export async function reclaimTask(id: string, briefPath: string, flags: Set<string>): Promise<void> {
+function readClaimBrief(briefPath: string) {
   const absolute = resolve(briefPath);
   const text = readFileSync(absolute, 'utf8');
   const brief = parseBrief(text);
   const errors = [...validateBrief(brief), ...mechanismSectionErrors(text)];
   if (errors.length) throw new Error(`Invalid brief ${briefPath}:\n  ${errors.join('\n  ')}`);
+  return { brief, text, absolute, briefPath };
+}
+
+function assertClaimIdentity(task: Task, source: ReturnType<typeof readClaimBrief>): void {
+  if (source.brief.id !== task.id) throw new Error(`${source.briefPath} is for ${source.brief.id}, not ${task.id}`);
+}
+
+function replacementClaims(task: Task, ledger: Ledger, source: ReturnType<typeof readClaimBrief>, flags: Set<string>,
+  onlyChanged = false) {
+  const { brief, absolute } = source;
+  assertClaimIdentity(task, source);
+  const claims = { kind: brief.kind, rows: brief.rows, title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
+    tests: brief.tests, refs: brief.refs, operations: brief.operations,
+    migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land };
+  const changed = Object.entries(claims).filter(([key, value]) => !isDeepStrictEqual(task[key as keyof Task], value))
+    .map(([key]) => key);
+  if (onlyChanged && !changed.length) return { claims, changed };
+  // A path this task already holds was claimed before any later change to it, so only added paths can
+  // collide with another task's unlanded change.
+  const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
+  const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
+    ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
+  if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
+  if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
+  return { claims, changed };
+}
+
+// Re-read an updated brief for an open task (for example a schema task continuing to its template) and
+// replace its claims after the same conflict checks as dispatch. `--allow-area` skips another Goal's
+// areas the same way; every other conflict still refuses. The new brief is copied into the worktree.
+export async function reclaimTask(id: string, briefPath: string, flags: Set<string>): Promise<void> {
+  const source = readClaimBrief(briefPath);
   await withLedger(ledger => {
     const task = taskOf(ledger, id);
     assertOwner(task);
     assertPrepared(task);
-    if (brief.id !== task.id) throw new Error(`${briefPath} is for ${brief.id}, not ${task.id}`);
+    assertClaimIdentity(task, source);
     if (running(task)) throw new Error(`${task.id} is still running`);
     if (['verified', 'cancelled'].includes(task.state)) throw new Error(`${task.id} is closed`);
-    // A path this task already holds was claimed before any later change to it, so only added paths can
-    // collide with another task's unlanded change.
-    const added = { ...brief, paths: brief.paths.filter(path => !task.paths.includes(path)) };
-    const conflicts = [...claimConflicts(brief, Object.values(ledger.tasks)),
-      ...unlandedChangeConflicts(added, Object.values(ledger.tasks))];
-    if (!flags.has('--allow-area')) conflicts.push(...areaConflicts(brief.paths, task.goal, areasOf(activeGoals(ledger))));
-    if (conflicts.length) throw new Error(`Claim conflict for ${brief.id}:\n  ${conflicts.join('\n  ')}`);
-    Object.assign(task, { kind: brief.kind, rows: brief.rows, title: brief.title, effort: brief.effort, cases: brief.cases, paths: brief.paths,
-      tests: brief.tests, refs: brief.refs, operations: brief.operations,
-      migrations: brief.migrations, shared: brief.shared, depends: brief.depends, brief: absolute, land: brief.land });
-    if (existsSync(task.worktree)) copyFileSync(absolute, join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })));
+    Object.assign(task, replacementClaims(task, ledger, source, flags).claims);
+    if (existsSync(task.worktree)) writeFileSync(join(task.worktree, briefFile({ ...task, shared: !!task.worktreeName })), source.text);
     console.log(`${task.id} claims replaced from ${briefPath}`);
   });
 }
