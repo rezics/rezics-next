@@ -237,7 +237,8 @@ async function browse(name: PersonaName) {
       selectionBasis: 'realm-manager-review', actingSubject: person.actingSubject }), 403);
   }
 }
-/** The header control refetches when the server follow has no following or no level. */
+/** The header control refetches when the server follow has no following or no level.
+ * That read is follow state for the Realm target; it sends no kind. */
 async function recordFollowHydration(name: PersonaName) {
   const person = sessions[name];
   const actingSubject = person.actingSubject;
@@ -256,7 +257,7 @@ async function recordFollowHydration(name: PersonaName) {
     refresh = follow.following == null || follow.level == null;
   } else await followResponse.body?.cancel();
   if (!refresh) return;
-  const params = new URLSearchParams({ actingSubject, target: header.id, kind: 'realm' });
+  const params = new URLSearchParams({ actingSubject, target: header.id });
   await answer(recording.session(name, person)('frame-follow-state', 'GET', `/v1/me/follow-state?${params}`));
 }
 
