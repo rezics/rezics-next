@@ -446,7 +446,9 @@ public class PublicNameProjectionTest {
         var small=workProjectionCost(1,1);
         assertEquals(small,workProjectionCost(1000,1));
         assertEquals(small,workProjectionCost(1000,2000));
-        assertEquals(Long.valueOf(1),small.get(3));
+        // One publication-head visit qualifies the Work name; the other qualifies
+        // writer-maintained also-enjoyed membership independently of name-copy generations.
+        assertEquals(Long.valueOf(2),small.get(3));
         assertEquals(Long.valueOf(2),small.get(4));
     }
     @Test public void workPublicationOwnerWithdrawalErasureAndRestorationAreImmediateWithoutUnitLinks() {
