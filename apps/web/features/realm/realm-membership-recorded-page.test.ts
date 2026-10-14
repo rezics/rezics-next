@@ -5,8 +5,12 @@ import membershipRecord from '../../../../tests/qa/fixtures/outcomes/realm/membe
 import { readSpacePage } from '../address/space-read.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../discover/types.ts';
-import { readRequestsAtAddress } from '../manage/settings-api.ts';
-import type { JoinPage, RequestPage } from '../manage/settings-api.ts';
+import { invite, newKey } from '../manage/commands.ts';
+import { readOutgoingInvitations } from '../manage/read.ts';
+import { inviteDurations } from '../manage/members-view.tsx';
+import { readRequestsAtAddress, spaceAccessApi } from '../manage/settings-api.ts';
+import type { JoinDecisionReceipt, JoinPage, RequestPage } from '../manage/settings-api.ts';
+import { readCurrentRequest } from '../space-access/request-state.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import type { JoinPolicy } from './membership-state.ts';
 import type { RealmHeader } from './types.ts';
@@ -14,7 +18,7 @@ import type { RealmHeader } from './types.ts';
 // The package reader uses Vite's glob. Load it through the fixture before the Realm page.
 const { loadRealmView } = await import('./realm-page.tsx');
 const {
-  recordedIdentity, recordedManagementAgent, recordedRead, recordedReplay, recordedSample,
+  recordedIdentity, recordedManagementAgent, recordedRead, recordedRealmId, recordedReplay, recordedSample,
 } = await import('./realm-membership-recorded-page.ts');
 
 const record = membershipRecord as AnswerRecord;
@@ -196,8 +200,139 @@ test('the signed-out route does not read the recorded admission basis', () => {
   expect(visitorLanding.some(item => item.label === basis.label)).toBe(false);
 });
 
-test('invitation and a pending acceptance are not recorded', () => {
+function commandOf<T extends Record<string, unknown>>(persona: AnswerPersona, label: string): T {
+  const body = recordedSample(record, persona, label).body;
+  if (!body || typeof body !== 'object' || Array.isArray(body)) throw new Error(`Recorded ${persona}/${label} has no command`);
+  return body as T;
+}
+
+test('the recorded invitation is pending on HTTP 200 and no command is HTTP 202', async () => {
+  const posted = recordedSample(record, 'owner', 'invitation-confirm');
+  expect(posted.status).toBe(200);
+  const body = commandOf<{ actingSubject: string; member: string; expiresInSeconds: number }>('owner', 'invitation-confirm');
+  const duration = inviteDurations.find(([label]) => label === 'duration7d');
+  if (!duration) throw new Error('The invitation list has no one-week duration');
+  expect(body.expiresInSeconds).toBe(duration[1]);
   const samples = Object.values(record.personas).flat();
-  expect(samples.some(sample => sample.path.includes('/invitations'))).toBe(false);
   expect(samples.some(sample => sample.status === 202)).toBe(false);
+  const selections = [
+    { label: 'invitation-confirm', state: 'populated' },
+    { label: 'outgoing-invitations-after-confirm', state: 'populated' },
+  ] as const satisfies readonly RecordedSelection[];
+  const result = await withReplay('owner', selections, async main => {
+    const realm = recordedRealmId(posted.path);
+    if (!realm) throw new Error('Recorded invitation names no Realm');
+    const sent = await invite(main, realm, {
+      actingSubject: body.actingSubject, member: body.member, expiresInSeconds: duration[1],
+    }, newKey());
+    const listed = await readOutgoingInvitations(main, realm, body.actingSubject);
+    return { sent, listed };
+  });
+  expect(result.sent.ok).toBe(true);
+  if (!result.sent.ok) return;
+  const invitation = (posted.answer as { invitation?: { state?: string; id?: string } }).invitation;
+  if (invitation?.state !== 'pending' || !invitation.id) throw new Error('Recorded invitation is not pending');
+  expect(result.sent.data.invitation.state).toBe(invitation.state);
+  expect(result.sent.data.invitation.id).toBe(invitation.id);
+  expect(result.listed.ok).toBe(true);
+  if (!result.listed.ok) return;
+  expect(result.listed.data.items.find(item => item.id === invitation.id)?.state).toBe('pending');
+});
+
+test('a stranger or operator withdraws with the recorded confirm body', async () => {
+  for (const persona of ['stranger', 'operator'] as const) {
+    const landing = answerOf<JoinPage>(persona, 'join-landing');
+    const posted = recordedSample(record, persona, 'withdraw-confirm');
+    expect(posted.status).toBe(201);
+    const body = commandOf<{ actingSubject: string; expectedRequestGeneration: string; reason: string }>(persona, 'withdraw-confirm');
+    const selections = [
+      { label: 'withdraw-confirm-own-request', state: 'populated' },
+      { label: 'withdraw-confirm', state: 'populated' },
+    ] as const satisfies readonly RecordedSelection[];
+    const result = await withReplay(persona, selections, async main => {
+      const api = spaceAccessApi(() => main, landing.space, landing.id, body.actingSubject);
+      const current = await readCurrentRequest(api);
+      if (!current.ok || !current.data.entry || current.data.state !== 'pending') {
+        throw new Error(`Recorded ${persona} request is not pending`);
+      }
+      const command = {
+        actingSubject: body.actingSubject,
+        expectedRequestGeneration: current.data.entry.requestGeneration,
+        reason: body.reason,
+      };
+      expect(command).toEqual(body);
+      return api.withdraw(current.data.entry.id, command, newKey());
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const answer = posted.answer as JoinDecisionReceipt;
+    expect(result.data.state).toBe('withdrawn');
+    expect(result.data.state).toBe(answer.state);
+    expect(result.data.generation).toBe(answer.generation);
+    expect(result.data.requestId).toBe(answer.requestId);
+  }
+});
+
+test('the owner accepts and declines with the recorded confirm bodies', async () => {
+  for (const [inboxLabel, postLabel] of [
+    ['decision-confirm-inbox-declined', 'decision-confirm-declined'],
+    ['decision-confirm-inbox-accepted', 'decision-confirm-accepted'],
+  ] as const) {
+    const posted = recordedSample(record, 'owner', postLabel);
+    expect(posted.status).toBe(201);
+    const body = commandOf<{
+      actingSubject: string; expectedGeneration: string; expectedRequestGeneration: string;
+      decision: 'accepted' | 'declined'; reason: string;
+    }>('owner', postLabel);
+    const selections = [
+      { label: 'request-address-space-missing', state: 'error' },
+      { label: inboxLabel, state: 'populated' },
+      { label: postLabel, state: 'populated' },
+    ] as const satisfies readonly RecordedSelection[];
+    const result = await withReplay('owner', selections, async main => {
+      const identity = recordedIdentity(record, 'owner', selections);
+      const requests = await readRequestsAtAddress(main, identity.realm, body.actingSubject);
+      if (!requests.ok) throw new Error(`Recorded ${inboxLabel} was not read`);
+      const item = requests.data.page.items[0];
+      if (!item) throw new Error(`Recorded ${inboxLabel} has no request`);
+      const command = {
+        actingSubject: body.actingSubject,
+        expectedGeneration: requests.data.page.generation,
+        expectedRequestGeneration: item.requestGeneration,
+        decision: body.decision,
+        reason: body.reason,
+      };
+      expect(command).toEqual(body);
+      return spaceAccessApi(() => main, requests.data.space, requests.data.realm, body.actingSubject)
+        .decide(item.id, command, newKey());
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const answer = posted.answer as JoinDecisionReceipt;
+    expect(result.data.state).toBe(answer.state);
+    expect(result.data.generation).toBe(answer.generation);
+    expect(result.data.requestId).toBe(answer.requestId);
+  }
+});
+
+test('a confirm refresh repeats the request the page just read', () => {
+  for (const persona of ['stranger', 'operator'] as const) {
+    const before = recordedSample(record, persona, 'withdraw-confirm-own-request');
+    const after = recordedSample(record, persona, 'withdraw-confirm-own-request-after');
+    expect(before.method).toBe(after.method);
+    expect(before.path).toBe(after.path);
+    expect(before.body ?? null).toEqual(after.body ?? null);
+    expect(before.answer).not.toEqual(after.answer);
+  }
+  for (const [beforeLabel, afterLabel] of [
+    ['decision-confirm-inbox-declined', 'decision-confirm-inbox-after-declined'],
+    ['decision-confirm-inbox-accepted', 'decision-confirm-inbox-after-accepted'],
+  ] as const) {
+    const before = recordedSample(record, 'owner', beforeLabel);
+    const after = recordedSample(record, 'owner', afterLabel);
+    expect(before.method).toBe(after.method);
+    expect(before.path).toBe(after.path);
+    expect(before.body ?? null).toEqual(after.body ?? null);
+    expect(before.answer).not.toEqual(after.answer);
+  }
 });

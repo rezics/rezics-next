@@ -37,7 +37,7 @@ export function RecordedMembershipPage({ record, persona, selections, surface, l
     const identity = recordedIdentity(record, persona, selections);
     const route = surface === 'requests'
       ? recordedRequestsRoute(recordedReplay(fetcher, true).personal, fetcher, identity.realm, locale)
-      : recordedRealmRoute(recordedReplay(fetcher, surface === 'joined'), identity.realm, locale);
+      : recordedRealmRoute(recordedReplay(fetcher, surface !== 'landing'), identity.realm, locale);
     void route.then(result => {
       if (mounted && !missed) setView(result);
     }).catch((error: unknown) => {

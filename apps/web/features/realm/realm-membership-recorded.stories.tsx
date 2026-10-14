@@ -26,6 +26,14 @@ function text(persona: AnswerPersona, label: string, field: string): string {
   throw new Error(`Recorded ${persona}/${label} ${field} is not text`);
 }
 
+function commandText(persona: AnswerPersona, label: string, field: string): string {
+  const body = recordedSample(record, persona, label).body;
+  if (!body || typeof body !== 'object' || !(field in body)) throw new Error(`Recorded ${persona}/${label} has no ${field}`);
+  const value = (body as Record<string, unknown>)[field];
+  if (typeof value !== 'string') throw new Error(`Recorded ${persona}/${label} ${field} is not text`);
+  return value;
+}
+
 function itemsOf(label: string): { member: string; reason: string; createdAt: string }[] {
   const answer = recordedSample(record, 'owner', label).answer as { items?: { member: string; reason: string; createdAt: string }[] };
   if (!answer.items) throw new Error(`Recorded owner/${label} has no items`);
@@ -75,6 +83,35 @@ const ownerSearch = [
   ...ownerRequests,
   { label: 'request-inbox-search-empty', state: 'empty' },
 ] as const satisfies readonly RecordedSelection[];
+
+/** The signed-in join route. Pending and withdrawn are the same mine read, so one story selects one of them. */
+function joinRead(stateLabel: 'withdraw-confirm-own-request' | 'withdraw-confirm-own-request-after'): readonly RecordedSelection[] {
+  return [
+    { label: 'join-session-agent', state: 'populated' },
+    { label: 'join-agent-choices', state: 'populated' },
+    { label: 'join-acting-contexts', state: 'populated' },
+    { label: 'join-acting-agent-profile', state: 'populated' },
+    { label: 'join-address', state: 'populated' },
+    { label: 'join-public-realm', state: 'error' },
+    { label: 'join-realm', state: 'error' },
+    { label: 'join-landing', state: 'populated' },
+    { label: stateLabel, state: 'populated' },
+  ];
+}
+
+/** One recorded decision inbox, plus the confirm the button sends. The later empty inbox is the same read. */
+function ownerDecision(inbox: 'decision-confirm-inbox-declined' | 'decision-confirm-inbox-accepted',
+  confirm: 'decision-confirm-declined' | 'decision-confirm-accepted'): readonly RecordedSelection[] {
+  return [
+    ...ownerSession,
+    { label: 'request-address-space-missing', state: 'error' },
+    { label: inbox, state: 'populated' },
+    { label: confirm, state: 'populated' },
+    { label: 'management-realm-header', state: 'populated' },
+    { label: 'management-site-absent', state: 'error' },
+    { label: 'requester-name-stranger', state: 'populated' },
+  ];
+}
 
 function Recorded({ persona, selections, surface }: {
   persona: AnswerPersona; selections: readonly RecordedSelection[]; surface: MembershipSurface;
@@ -211,6 +248,103 @@ export const OwnerSearchEmpty: Story = {
   },
 };
 export const OwnerSearchEmptyPhone: Story = { ...OwnerSearchEmpty, globals: phone };
+
+async function expectJoin(canvasElement: HTMLElement, persona: 'stranger' | 'operator', pending: boolean) {
+  const canvas = within(canvasElement);
+  const name = text(persona, 'join-landing', 'name');
+  await expect(canvas.findByRole('heading', { level: 1, name })).resolves.toBeVisible();
+  await expect(canvas.findByText(pending ? access.pending : access.withdrawn)).resolves.toBeVisible();
+  if (pending) {
+    await expect(canvas.getByRole('button', { name: access.withdraw })).toBeVisible();
+    await expect(canvas.queryByRole('button', { name: access.requestJoin })).toBeNull();
+  } else {
+    await expect(canvas.queryByRole('button', { name: access.withdraw })).toBeNull();
+    await expect(canvas.getByRole('button', { name: access.requestJoin })).toBeVisible();
+  }
+  await expect(canvas.queryByRole('link', { name: access.signIn })).toBeNull();
+  await expect(canvas.getByRole('button', { name: access.refreshStatus })).toBeVisible();
+  await expectNoOverflow(canvasElement);
+}
+
+/** Stranger: the recorded pending request and its withdrawal continuation. */
+export const StrangerRequestPending: Story = {
+  args: { persona: 'stranger', selections: joinRead('withdraw-confirm-own-request'), surface: 'join' },
+  play: async ({ canvasElement }) => { await expectJoin(canvasElement, 'stranger', true); },
+};
+export const StrangerRequestPendingPhone: Story = { ...StrangerRequestPending, globals: phone };
+
+/** Stranger: the recorded withdrawn request. This mine answer cannot share a story with the pending one. */
+export const StrangerRequestWithdrawn: Story = {
+  args: { persona: 'stranger', selections: joinRead('withdraw-confirm-own-request-after'), surface: 'join' },
+  play: async ({ canvasElement }) => { await expectJoin(canvasElement, 'stranger', false); },
+};
+export const StrangerRequestWithdrawnPhone: Story = { ...StrangerRequestWithdrawn, globals: phone };
+
+/** Operator: the recorded pending request and its withdrawal continuation. */
+export const OperatorRequestPending: Story = {
+  args: { persona: 'operator', selections: joinRead('withdraw-confirm-own-request'), surface: 'join' },
+  play: async ({ canvasElement }) => { await expectJoin(canvasElement, 'operator', true); },
+};
+export const OperatorRequestPendingPhone: Story = { ...OperatorRequestPending, globals: phone };
+
+/** Operator: the recorded withdrawn request. */
+export const OperatorRequestWithdrawn: Story = {
+  args: { persona: 'operator', selections: joinRead('withdraw-confirm-own-request-after'), surface: 'join' },
+  play: async ({ canvasElement }) => { await expectJoin(canvasElement, 'operator', false); },
+};
+export const OperatorRequestWithdrawnPhone: Story = { ...OperatorRequestWithdrawn, globals: phone };
+
+async function expectDecision(canvasElement: HTMLElement, decline: boolean) {
+  const inbox = decline ? 'decision-confirm-inbox-declined' : 'decision-confirm-inbox-accepted';
+  const confirmLabel = decline ? 'decision-confirm-declined' : 'decision-confirm-accepted';
+  await expectRequests(canvasElement, inbox);
+  const canvas = within(canvasElement);
+  const label = decline ? access.decline : access.approve;
+  const reason = commandText('owner', confirmLabel, 'reason');
+  await waitFor(() => expect(canvas.getByRole('button', { name: label })).toBeEnabled());
+  await userEvent.click(canvas.getByRole('button', { name: label }));
+  const content = await within(canvasElement.ownerDocument.body).findByRole('dialog', { name: label });
+  const dialog = within(content);
+  const input = dialog.getByRole('textbox', { name: access.reason });
+  await waitFor(async () => {
+    await expect(content).toBeVisible();
+    await expect(input).toHaveFocus();
+  });
+  await userEvent.type(input, reason);
+  const confirm = dialog.getByRole('button', { name: label });
+  await waitFor(() => expect(confirm).toBeEnabled());
+  await userEvent.click(confirm);
+  await expect(canvas.findByText(decline ? access.decisionDeclined : access.approved)).resolves.toBeVisible();
+  await waitFor(() => expect(within(canvasElement.ownerDocument.body).queryByRole('dialog')).toBeNull());
+  await waitFor(() => expect(canvas.getByRole('button', { name: label })).toBeEnabled());
+  await expect(canvas.getByText(text('owner', 'requester-name-stranger', 'displayName'))).toBeVisible();
+  await expect(canvas.getByText(itemsOf(inbox)[0]!.reason)).toBeVisible();
+  await expectNoOverflow(canvasElement);
+}
+
+/** Owner: the recorded decline. Its receipt stays visible; refreshing repeats this inbox. */
+export const OwnerDecline: Story = {
+  args: {
+    persona: 'owner',
+    selections: ownerDecision('decision-confirm-inbox-declined', 'decision-confirm-declined'),
+    surface: 'requests',
+  },
+  parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
+  play: async ({ canvasElement }) => { await expectDecision(canvasElement, true); },
+};
+export const OwnerDeclinePhone: Story = { ...OwnerDecline, globals: phone };
+
+/** Owner: the recorded acceptance. Its receipt stays visible; refreshing repeats this inbox. */
+export const OwnerAccept: Story = {
+  args: {
+    persona: 'owner',
+    selections: ownerDecision('decision-confirm-inbox-accepted', 'decision-confirm-accepted'),
+    surface: 'requests',
+  },
+  parameters: { route: { pathname: '/en/manage/r/recorded/requests' } },
+  play: async ({ canvasElement }) => { await expectDecision(canvasElement, false); },
+};
+export const OwnerAcceptPhone: Story = { ...OwnerAccept, globals: phone };
 
 /** Owner: the address read is held unanswered. The session reads name the acting Person before that hold. */
 export const OwnerLoading: Story = {

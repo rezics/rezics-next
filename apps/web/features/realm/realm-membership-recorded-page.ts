@@ -20,7 +20,7 @@ const recordedSessionKey = '00000000-0000-4000-8000-000000000001';
 const recordedToken = 'recorded';
 
 /** Which production route the story reaches. Basis is not one of them. */
-export type MembershipSurface = 'landing' | 'joined' | 'requests';
+export type MembershipSurface = 'landing' | 'joined' | 'join' | 'requests';
 
 export function recordedSample(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const found = record.personas[persona].filter(sample => sample.label === label);
@@ -87,7 +87,7 @@ export async function recordedManagementAgent(fetcher: typeof fetch, locale: UiL
 /** The community route: `loadRealmView`, then its join page or Zone frame. */
 export async function recordedRealmRoute(replay: RealmReplay, realm: string, locale: UiLocale): Promise<ReactNode> {
   // The signed-in shell reads the session before the Realm view. There is no session cookie to replay.
-  if (replay.signedIn) await recordedManagementAgent(replay.fetch, locale);
+  const session = replay.signedIn ? await recordedManagementAgent(replay.fetch, locale) : null;
   const view = await loadRealmView(realm, locale, {}, 'community', replay);
   if (view.kind === 'missing' || view.kind === 'unavailable') {
     throw new Error(`Recorded Realm resolved to ${view.kind}`);
@@ -95,7 +95,11 @@ export async function recordedRealmRoute(replay: RealmReplay, realm: string, loc
   if (view.kind === 'join') {
     // Signed out, this route does not read the session. The server reader builds a process-backed
     // client; the story already knows there is no acting Person.
-    return privateJoinPage(view.page, locale, realmHref(locale, realm), { actingSubject: null });
+    if (!session) return privateJoinPage(view.page, locale, realmHref(locale, realm), { actingSubject: null });
+    return privateJoinPage(view.page, locale, realmHref(locale, realm), {
+      actingSubject: session.actingSubject,
+      api: spaceAccessApi(() => replay.personal, view.page.space, view.page.id, session.actingSubject),
+    });
   }
   // Resolve the server frame here. The story renders its result; it does not host a second reader.
   return RealmFrame({ view, tab: 'discussions', locale, search: {}, children: null });
