@@ -199,8 +199,8 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
         await control.getByRole('button', { name: /^Join ·/ }).click();
         await page.getByRole('dialog').getByRole('button', { name: 'Join', exact: true }).click();
         await visible(control.getByRole('button', { name: /^Joined ·/ })).toBeVisible();
-        // A new membership episode owns its automatic follow; explicit interest can take over afterwards.
-        await visible.poll(async () => (await readState()).source).toBe('join');
+        // Join preserves the explicit interest, bell and pin already chosen.
+        await visible.poll(readState).toMatchObject({ following: true, source: 'explicit', level: 'all', pinPosition: 0 });
         await control.getByRole('button', { name: /^Relationship options/ }).click();
         await page.getByRole('menuitem', { name: 'Follow independently of membership' }).click();
         await visible.poll(async () => (await readState()).source).toBe('explicit');
