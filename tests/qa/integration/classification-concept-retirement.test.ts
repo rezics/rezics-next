@@ -52,10 +52,11 @@ test('Concept steward retires the exact current head without changing retained r
       interpretation: { kind: 'explicit', context: context.context, semanticRevision: context.semanticRevision },
       actingSubject: author.actor };
     const statementKey = randomUUID();
-    const statement = await home.json<{ statement: string; revision: string; meaningKey: string }>(
+    const statement = await home.json<{ statement: string; revision: string; meaningKey: string;
+      meaningBasis: unknown; sourcePosition: unknown }>(
       await call('/v1/statements', statementInput, author.token, statementKey), 201);
     const referencePath = `/v1/statements/${short(statement.statement)}`;
-    const before = await home.json<StatementRead>(await call(referencePath), 200);
+    const before = await home.json<StatementRead>(await call(referencePath, undefined, reader.token), 200);
     const retire = { ...input, scheme: { id: created.scheme, expectedHead: created.schemeHead },
       concept: { id: created.concept, expectedHead: created.conceptHead }, state: 'retired',
       labels: [{ language: 'en', value: 'This retirement must not rename the Concept' }] };
@@ -93,13 +94,15 @@ test('Concept steward retires the exact current head without changing retained r
     expect((await call('/v1/classification-vocabulary', { ...retire,
       labels: [{ language: 'en', value: 'Conflicting payload' }] }, author.token, key)).status).toBe(409);
     expect((await call('/v1/classification-vocabulary', retire)).status).toBe(409);
-    const after = await home.json<StatementRead>(await call(referencePath), 200);
+    const after = await home.json<StatementRead>(await call(referencePath, undefined, reader.token), 200);
     // The read observation advances; the pinned Statement and its meaning do not.
     expect(after).toEqual({ ...before, sourcePosition: after.sourcePosition });
     expect(after.sourcePosition.dataEpoch).toBe(before.sourcePosition.dataEpoch);
     expect(BigInt(after.sourcePosition.sequence)).toBeGreaterThan(BigInt(before.sourcePosition.sequence));
     expect(await home.json<object>(await call('/v1/statements', statementInput, author.token, statementKey), 200))
-      .toMatchObject({ ...statement, replayed: true });
+      .toMatchObject({ statement: statement.statement, revision: statement.revision,
+        meaningKey: statement.meaningKey, meaningBasis: statement.meaningBasis,
+        sourcePosition: statement.sourcePosition, replayed: true });
     expect((await call('/v1/statements', statementInput)).status).toBe(409);
     const tag = { work: work.work, mainVersion: work.mainVersion, actingSubject: author.actor,
       tag: { concept: created.concept }, acceptance: { kind: 'global' } };
