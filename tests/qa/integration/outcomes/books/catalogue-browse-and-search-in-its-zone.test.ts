@@ -1,6 +1,12 @@
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
+import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
+import { readSpacePage } from '../../../../../apps/web/features/address/space-read.ts';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { gateFor, parsePlatformAccess } from '../../../../../apps/web/features/api/platform-access.ts';
+import { realmFrameReads } from '../../../../../apps/web/features/realm/zone-presentation-read.ts';
+import { mainBrowseQuery, parseBrowseState } from '../../../../../apps/web/features/zones/browse-state.ts';
 import catalogue from '../../../../../scripts/qa/cases/outcomes/books/catalogue-browse-and-search-in-its-zone.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import {
@@ -12,7 +18,11 @@ import {
 
 type Work = { work: string; mainVersion: string };
 type Page<T> = { items: T[]; nextCursor: string | null; matches: { value: number; kind: string } };
-setDefaultTimeout(60_000);
+// The proof keeps its 60 s. Recording the production page's reads has its own 120 s.
+setDefaultTimeout(200_000);
+const fileWall = setTimeout(() => {
+  throw new Error('Books catalogue browse file exceeded 1500 s');
+}, 1_500_000);
 let sessions: PersonaSessions;
 const works: Work[] = [];
 const phrase = `Bookgarden${randomUUID().replaceAll('-', '')}`;
@@ -162,6 +172,7 @@ beforeAll(async () => {
   }
 }, 240_000);
 afterAll(async () => {
+  clearTimeout(fileWall);
   try { await recording.publish(); }
   finally { await sessions?.close(); }
 });
@@ -241,6 +252,216 @@ async function browse(name: PersonaName) {
   await supportingReads(name, sample, sampledCards);
 }
 
+async function within(milliseconds: number, part: string, run: () => Promise<void>) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
+async function qualify(name: PersonaName) {
+  const started = Date.now();
+  let proofMs = 0;
+  let visitStarted = 0;
+  try {
+    await within(60_000, `${name} API proof`, () => browse(name));
+    proofMs = Date.now() - started;
+    visitStarted = Date.now();
+    await within(120_000, `${name} production visit`, () => productionVisit(name));
+  } finally {
+    console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
+  }
+}
+
+const requestLabels = new AsyncLocalStorage<(method: string, path: string) => string>();
+const issued = new Map<string, number>();
+const named = <T,>(label: string, run: () => Promise<T>) => requestLabels.run((method, path) => {
+  const stamp = `${label}\0${method}\0${path}`;
+  if (issued.has(stamp)) throw new Error(`Production request repeated under ${label}: ${method} ${path}`);
+  const count = issued.get(label) ?? 0;
+  issued.set(label, count + 1);
+  issued.set(stamp, count);
+  return count === 0 ? label : `${label}-${count}`;
+}, run);
+
+let canonicalKey: string | undefined;
+
+/**
+ * The Books page opens the Zone site. The Realm space is only a community
+ * address, so its canonical key carries no Zone capability. Probe the Zone
+ * identity without recording it, then open that canonical key.
+ */
+async function siteKey(): Promise<string> {
+  if (canonicalKey) return canonicalKey;
+  const path = `/v1/addresses/resolve?${new URLSearchParams({ scope: 'space', key: short(sessions.zone) })}`;
+  const response = await sessions.visitor.main('GET', path, undefined, undefined, {
+    headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' },
+  });
+  const raw = await response.text();
+  if (!response.ok) throw new Error(`Zone address probe failed: HTTP ${response.status}: ${raw}`);
+  const address = JSON.parse(raw) as {
+    status?: string;
+    canonical?: { key?: string };
+    capabilities?: { zone?: string };
+  };
+  if (address.status !== 'resolved' || !address.canonical?.key) throw new Error(`Zone address has no canonical key: ${raw}`);
+  if (!address.capabilities?.zone) throw new Error(`Zone address has no zone capability: ${raw}`);
+  canonicalKey = address.canonical.key;
+  return canonicalKey;
+}
+
+/**
+ * One production browse page. The Books package does not offer a catalogue year,
+ * and this publication leaves the official package unset, so the route sends
+ * `mainBrowseQuery`: no limit, type, language or actingSubject.
+ */
+async function productionVisit(name: PersonaName) {
+  issued.clear();
+  const person = sessions[name];
+  const actingSubject = person.actingSubject ?? undefined;
+  const key = await siteKey();
+  const clientFor = (caller: PersonaSession) => browserMainApi('https://record.invalid', {
+    fetcher: (async (input, init) => {
+      const url = new URL(input instanceof Request ? input.url : String(input));
+      const path = url.pathname.replace(/^\/api\/main/, '') + url.search;
+      const method = init?.method ?? 'GET';
+      const label = requestLabels.getStore()?.(method, path);
+      if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
+      try {
+        return await recording.session(name, caller)(label, method, path,
+          typeof init?.body === 'string' ? JSON.parse(init.body) as unknown : undefined,
+          new Headers(init?.headers).get('idempotency-key') ?? undefined,
+          { headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' } });
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new Error(`Production request ${method} ${path} failed: ${detail}`);
+      }
+    }) as typeof fetch,
+  });
+  const personal = clientFor(person);
+  const anonymous = clientFor(sessions.visitor);
+  const frames = realmFrameReads({ main: anonymous, personal, actingSubject });
+  const addresses = new Map<string, ReturnType<typeof frames.readAddress>>();
+  const presentations = new Map<string, ReturnType<typeof frames.readCompletePresentation>>();
+  let header: ReturnType<typeof frames.readRealmHeader> | undefined;
+  let sessionAgent: ReturnType<typeof personal.v1.me['session-agent']['get']> | undefined;
+  const readSessionAgent = () => {
+    sessionAgent ??= named('frame-session-agent', () => personal.v1.me['session-agent'].get());
+    return sessionAgent;
+  };
+  const recordedResponse = async (caller: PersonaSession, method: string, path: string) => {
+    const label = requestLabels.getStore()?.(method, path);
+    if (!label) throw new Error(`Production request has no label: ${method} ${path}`);
+    try {
+      return await recording.session(name, caller)(label, method, path, undefined, undefined, {
+        headers: { 'accept-language': 'en', 'x-rezics-display-languages': 'en' },
+      });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(`Production request ${method} ${path} failed: ${detail}`);
+    }
+  };
+  const reader = realmFrameReads({
+    main: anonymous, personal, actingSubject,
+    resolution: {
+      resolveAddress: (_scope, addressKey, locale) => {
+        let read = addresses.get(addressKey);
+        if (!read) {
+          read = named('frame-address', () => frames.readAddress(addressKey, locale));
+          addresses.set(addressKey, read);
+        }
+        return read;
+      },
+      // A resolved address without a Zone capability enters this reader. It does not invent a Zone.
+      readPrivateRealm: async (ref, _locale, address) => {
+        if (actingSubject) await readSessionAgent();
+        return readSpacePage(ref, 'en', {
+          address,
+          ...(actingSubject ? { token: 'persona-session', actingSubject } : {}),
+          read: (path, personalRead = false) => named(
+            path.includes('/join-page') ? 'frame-private-join-page' : 'frame-private-header',
+            () => recordedResponse(personalRead ? person : sessions.visitor, 'GET', path),
+          ),
+        });
+      },
+      readCompletePresentation: zone => {
+        let read = presentations.get(zone);
+        if (!read) {
+          read = (async () => {
+            // The server token client reads the session and preferences before the first personal read.
+            if (actingSubject) {
+              await readSessionAgent();
+              await named('frame-person-preferences', () => personal.v1.me['person-preferences'].get({ query: { actingSubject } }));
+            }
+            return named('frame-presentation', () => frames.readCompletePresentation(zone));
+          })();
+          presentations.set(zone, read);
+        }
+        return read;
+      },
+      readRealmHeader: realm => {
+        header ??= named('frame-realm-header', () => frames.readRealmHeader(realm));
+        return header;
+      },
+    },
+  });
+  const resolved = await reader.resolveSite(key, 'en');
+  if (resolved.kind !== 'site' || !resolved.realm) {
+    throw new Error(`Production site did not resolve a Books Zone for ${name} at ${key}: ${resolved.kind}`);
+  }
+  const zone = resolved.zone;
+  const realm = resolved.realm;
+  await named('frame-routes', () => reader.readZoneRoute(zone, 'browse'));
+  const view = await reader.resolveRealm(key, 'en', 'site');
+  if (view.kind !== 'realm') throw new Error(`Production realm did not resolve for ${name}: ${view.kind}`);
+  const realmId = view.header.id.slice(-36);
+  await Promise.all([
+    presentations.get(zone),
+    actingSubject ? named('frame-joining', () => personal.v1.realms({ realm: realmId }).joining.get({ query: { actingSubject } })) : null,
+    actingSubject ? named('frame-follow', () => personal.v1.follows({ id: realmId }).get({ query: { kind: 'realm', actingSubject } })) : null,
+    actingSubject ? (async () => {
+      const access = await named('frame-platform-access', () => personal.v1.me['platform-access'].get());
+      // The page asks for the member's ban only while that operation is open for this viewer.
+      if (gateFor(parsePlatformAccess(access.data))('getV1RealmsByRealmMember-ban')) {
+        await named('frame-member-ban', () => personal.v1.realms({ realm: realmId })['member-ban'].get({ query: { actingSubject } }));
+      }
+    })() : null,
+    named('frame-facets', () => frames.readFacets()),
+  ]);
+  const pages: [string, Record<string, string>][] = [
+    ['page-browse-default', {}],
+    ['page-browse-newest', { sort: 'newest' }],
+    ['page-browse-updated', { sort: 'updated' }],
+    ['page-search-default', { q: phrase }],
+    ['page-search-relevance', { q: phrase, sort: 'relevance' }],
+    ['page-search-newest', { q: phrase, sort: 'newest' }],
+    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-search-no-match', { q: `${phrase}nomatch` }],
+    ['page-search-no-match-relevance', { q: `${phrase}nomatch`, sort: 'relevance' }],
+  ];
+  for (const [label, address] of pages) {
+    let cursor: string | null = null;
+    let continuation = 0;
+    do {
+      if (cursor) await named(`${label}-zone-continuation${continuation > 1 ? `-${continuation}` : ''}`,
+        () => reader.readZoneRoute(zone, 'browse', cursor!));
+      const query = mainBrowseQuery(parseBrowseState({ ...address, ...(cursor ? { cursor } : {}) }));
+      const pageLabel = continuation ? `${label}-continuation-${continuation}` : label;
+      const answer = await named(pageLabel, () => anonymous.v1.realms({ realm }).modules.browse.get({
+        query: { ...query, actingSubject: query.actingSubject },
+      }));
+      if (answer.error || !answer.data) {
+        throw new Error(`Production browse ${pageLabel} for ${name} answered HTTP ${answer.error?.status ?? 0}: ${JSON.stringify(answer.error?.value ?? null)}`);
+      }
+      cursor = (answer.data as Page<{ id: string }>).nextCursor;
+      continuation++;
+      if (cursor && continuation > 8) throw new Error(`Production browse ${label} for ${name} kept a cursor past 8 pages`);
+    } while (cursor);
+  }
+}
+
 async function supportingReads(name: PersonaName, sample: ReturnType<typeof recording.session>, sampledCards: Set<string>) {
   const person = sessions[name];
   const viewer = (path: string) => person.actingSubject ? `${path}${path.includes('?') ? '&' : '?'}${acting(person)}` : path;
@@ -291,9 +512,9 @@ async function supportingReads(name: PersonaName, sample: ReturnType<typeof reco
   }
 }
 
-outcomeTest(catalogue, 'visitor', () => browse('visitor'), recording);
-outcomeTest(catalogue, 'stranger', () => browse('stranger'), recording);
-outcomeTest(catalogue, 'member', () => browse('member'), recording);
-outcomeTest(catalogue, 'owner', () => browse('owner'), recording);
-outcomeTest(catalogue, 'moderator', () => browse('moderator'), recording);
-outcomeTest(catalogue, 'operator', () => browse('operator'), recording);
+outcomeTest(catalogue, 'visitor', () => qualify('visitor'), recording);
+outcomeTest(catalogue, 'stranger', () => qualify('stranger'), recording);
+outcomeTest(catalogue, 'member', () => qualify('member'), recording);
+outcomeTest(catalogue, 'owner', () => qualify('owner'), recording);
+outcomeTest(catalogue, 'moderator', () => qualify('moderator'), recording);
+outcomeTest(catalogue, 'operator', () => qualify('operator'), recording);
