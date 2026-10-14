@@ -109,9 +109,9 @@ async function pageReads(name: PersonaName) {
     'space', short(sessions.space), 'browse');
   if (name !== 'visitor') {
     const personal = recording.session(name, person);
-    await answer(personal('page-realm-context', 'GET', `/v1/realms/${short(sessions.realm)}`));
-    await answer(personal('page-space-address', 'GET',
-      `/v1/addresses/resolve?scope=space&key=${short(sessions.space)}`));
+    await (await personal('page-realm-context', 'GET', `/v1/realms/${short(sessions.realm)}`)).body?.cancel();
+    await (await personal('page-space-address', 'GET',
+      `/v1/addresses/resolve?scope=space&key=${short(sessions.space)}`)).body?.cancel();
   }
   const publicRead = recording.session(name, sessions.visitor);
   const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
