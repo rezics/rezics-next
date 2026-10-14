@@ -1,5 +1,6 @@
 import type { browserMainApi } from '../api/browser.ts';
 import { platformClosed } from '../api/platform-access.ts';
+import { UpstreamResponseError } from '../api/server-fetch.ts';
 
 // Main's home shapes (`services/main/src/modules/feed/contract.ts`, `feed/personal.ts`,
 // `modules/follows`, `modules/continue`, `modules/onboarding`), taken
@@ -148,6 +149,7 @@ export function failedRead<F extends string>(failure: F, body?: unknown, headers
 
 /** The browser or the transport never got a response. A timeout is Main's, not the reader's connection. */
 export function isOfflineError(error: unknown): boolean {
+  if (error instanceof UpstreamResponseError) return false;
   if (error instanceof DOMException) return error.name === 'NetworkError';
   if (!(error instanceof Error)) return false;
   const code = (error as Error & { code?: string }).code;
