@@ -201,7 +201,7 @@ export const profileRegistry = {
     ]
   },
   "classification-proposition-v2": {
-    "sha256": "22b3c0f677296e5c268514d0f87cb0dabdd2ae9900873e28b1540e27a87e01a6",
+    "sha256": "2d36768887e2fc049b85d876f0efc9165211106a4eaa283ee5ece8dbe2594c0d",
     "file": "shapes/classification-proposition-v2.ttl",
     "shapes": [
       "https://rezics.com/definition/classification-proposition-v2/scheme-shape",

@@ -88790,347 +88790,755 @@
           "content": {
             "application/json": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "alternativeLabels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 16,
-                    "type": "array"
-                  },
-                  "broader": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "labels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array"
-                  },
-                  "narrower": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "profile": {
-                    "const": "classification-proposition-v2",
-                    "type": "string"
-                  },
-                  "scheme": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "expectedHead": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "id": {
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "scheme",
+                      "labels",
+                      "alternativeLabels",
+                      "broader",
+                      "narrower",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "concept": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": "object"
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "state": {
+                        "const": "retired",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "id",
-                      "expectedHead"
+                      "profile",
+                      "concept",
+                      "state",
+                      "actingSubject"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "scheme",
-                  "labels",
-                  "alternativeLabels",
-                  "broader",
-                  "narrower",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "alternativeLabels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 16,
-                    "type": "array"
-                  },
-                  "broader": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "labels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array"
-                  },
-                  "narrower": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "profile": {
-                    "const": "classification-proposition-v2",
-                    "type": "string"
-                  },
-                  "scheme": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "expectedHead": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "id": {
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "scheme",
+                      "labels",
+                      "alternativeLabels",
+                      "broader",
+                      "narrower",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "concept": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": "object"
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "state": {
+                        "const": "retired",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "id",
-                      "expectedHead"
+                      "profile",
+                      "concept",
+                      "state",
+                      "actingSubject"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "scheme",
-                  "labels",
-                  "alternativeLabels",
-                  "broader",
-                  "narrower",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             },
             "multipart/form-data": {
               "schema": {
-                "additionalProperties": false,
-                "properties": {
-                  "actingSubject": {
-                    "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                    "type": "string"
-                  },
-                  "alternativeLabels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 16,
-                    "type": "array"
-                  },
-                  "broader": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "labels": {
-                    "items": {
-                      "additionalProperties": false,
-                      "properties": {
-                        "language": {
-                          "maxLength": 40,
-                          "minLength": 2,
-                          "type": "string"
-                        },
-                        "value": {
-                          "maxLength": 120,
-                          "minLength": 1,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "language",
-                        "value"
-                      ],
-                      "type": "object"
-                    },
-                    "maxItems": 8,
-                    "minItems": 1,
-                    "type": "array"
-                  },
-                  "narrower": {
-                    "items": {
-                      "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
-                      "type": "string"
-                    },
-                    "maxItems": 8,
-                    "type": "array",
-                    "uniqueItems": true
-                  },
-                  "profile": {
-                    "const": "classification-proposition-v2",
-                    "type": "string"
-                  },
-                  "scheme": {
-                    "~elyTyp": 7,
+                "anyOf": [
+                  {
                     "additionalProperties": false,
-                    "nullable": true,
                     "properties": {
-                      "expectedHead": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                         "type": "string"
                       },
-                      "id": {
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "profile",
+                      "scheme",
+                      "labels",
+                      "alternativeLabels",
+                      "broader",
+                      "narrower",
+                      "actingSubject"
+                    ],
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "actingSubject": {
                         "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                        "type": "string"
+                      },
+                      "alternativeLabels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 16,
+                        "type": "array"
+                      },
+                      "broader": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "concept": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": "object"
+                      },
+                      "labels": {
+                        "items": {
+                          "additionalProperties": false,
+                          "properties": {
+                            "language": {
+                              "maxLength": 40,
+                              "minLength": 2,
+                              "type": "string"
+                            },
+                            "value": {
+                              "maxLength": 120,
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "language",
+                            "value"
+                          ],
+                          "type": "object"
+                        },
+                        "maxItems": 8,
+                        "minItems": 1,
+                        "type": "array"
+                      },
+                      "narrower": {
+                        "items": {
+                          "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                          "type": "string"
+                        },
+                        "maxItems": 8,
+                        "type": "array",
+                        "uniqueItems": true
+                      },
+                      "profile": {
+                        "const": "classification-proposition-v2",
+                        "type": "string"
+                      },
+                      "scheme": {
+                        "~elyTyp": 7,
+                        "additionalProperties": false,
+                        "nullable": true,
+                        "properties": {
+                          "expectedHead": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          },
+                          "id": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "expectedHead"
+                        ],
+                        "type": [
+                          "object",
+                          "null"
+                        ]
+                      },
+                      "state": {
+                        "const": "retired",
                         "type": "string"
                       }
                     },
                     "required": [
-                      "id",
-                      "expectedHead"
+                      "profile",
+                      "concept",
+                      "state",
+                      "actingSubject"
                     ],
-                    "type": [
-                      "object",
-                      "null"
-                    ]
+                    "type": "object"
                   }
-                },
-                "required": [
-                  "profile",
-                  "scheme",
-                  "labels",
-                  "alternativeLabels",
-                  "broader",
-                  "narrower",
-                  "actingSubject"
-                ],
-                "type": "object"
+                ]
               }
             }
           },
