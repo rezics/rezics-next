@@ -178,6 +178,7 @@ async function delivered(name: PersonaName) {
   const person = sessions[name];
   await requireClosure(person);
   const during = raced.get(name)!;
+  expect(during.status, during.path).toBeLessThan(500);
   const body = JSON.parse(during.body) as { results?: unknown[]; count?: { value: number }; code?: string };
   console.log('Realm search during hydration', JSON.stringify({ persona: name, ...during }));
   expect(JSON.stringify(body), during.path).not.toContain(sessions.realm);
@@ -189,9 +190,9 @@ async function delivered(name: PersonaName) {
     expect(body.results, during.path).toEqual([]);
     expect(body.count?.value, during.path).toBe(0);
   } else if (during.status === 409) expect(body.code, during.path).toBe('read_basis_changed');
-  else if (during.status === 503) expect(body.code, during.path).toBe('work_read_unavailable');
   else {
     const ordinary = await person.main('GET', `/v1/search/catalogue?q=${phrase}&realm=${encodeURIComponent(`https://rezics.com/id/${randomUUID()}`)}`);
+    expect(ordinary.status, during.path).toBeLessThan(500);
     expect(during.status, during.path).toBe(ordinary.status);
     expect(body, during.path).toEqual(await ordinary.json());
   }
