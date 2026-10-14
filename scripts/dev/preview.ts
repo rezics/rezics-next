@@ -21,7 +21,9 @@ export async function runWorkerPreview(preview: WorkerPreview, holderPid = 0): P
     await releaseHeldWebPort(holderPid, Number(preview.port));
   }
   const [serve, ...serveArgs] = command(preview.serveCommand, [join(preview.root, 'node_modules/.bin/wrangler'), 'dev',
-    '--config', 'dist/server/wrangler.json', '--ip', '127.0.0.1', '--port', preview.port]);
+    '--config', 'dist/server/wrangler.json', '--ip', '127.0.0.1', '--port', preview.port,
+    // Parallel QA previews must let the OS bind their own inspector socket.
+    '--inspector-port', '0']);
   const worker = spawn(serve, serveArgs, { cwd: preview.directory, env: preview.env, stdio: 'inherit' });
   const stop = () => worker.kill('SIGTERM');
   process.once('SIGINT', stop); process.once('SIGTERM', stop);
