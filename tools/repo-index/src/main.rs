@@ -9,7 +9,6 @@ use oxc_parser::Parser;
 use oxc_resolver::{ResolveOptions, Resolver, TsconfigDiscovery};
 use oxc_span::{GetSpan, SourceType};
 use serde::{Deserialize, Serialize};
-#[cfg(test)]
 use serde_json::value::RawValue;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -217,6 +216,53 @@ struct SqlNodeAncestor {
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct RawSqlNodeFact {
+    node_ast: Box<RawValue>,
+    ancestors: Vec<RawSqlNodeAncestor>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RawSqlNodeAncestor {
+    #[serde(flatten)]
+    scope: SyntaxScope,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    function_like: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    method_kind: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    branch: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition_ast: Option<Box<RawValue>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first_argument: Option<bool>,
+}
+impl RawSqlNodeFact {
+    fn explicit_wire(&self) -> Result<SqlNodeFact> {
+        Ok(SqlNodeFact {
+            node_ast_deflate: compressed_ast(self.node_ast.get())?,
+            ancestors: self
+                .ancestors
+                .iter()
+                .map(|ancestor| {
+                    Ok(SqlNodeAncestor {
+                        scope: ancestor.scope.clone(),
+                        function_like: ancestor.function_like,
+                        method_kind: ancestor.method_kind,
+                        branch: ancestor.branch,
+                        condition_ast_deflate: ancestor
+                            .condition_ast
+                            .as_ref()
+                            .map(|ast| compressed_ast(ast.get()))
+                            .transpose()?,
+                        first_argument: ancestor.first_argument,
+                    })
+                })
+                .collect::<Result<Vec<_>>>()?,
+        })
+    }
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct IndexedFile {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -233,6 +279,8 @@ struct IndexedFile {
     variable_facts: Option<Vec<VariableFact>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     sql_node_facts: Option<Vec<SqlNodeFact>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sql_node_facts_deflate: Option<String>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -321,6 +369,7 @@ fn file_header(
         ("sqlAstDeflate", facts.sql_ast_deflate),
         ("fragmentAstDeflate", facts.fragment_ast_deflate),
         ("traceAstDeflate", facts.trace_ast_deflate),
+        ("sqlNodeFactsDeflate", facts.sql_node_facts_deflate),
         ("graphDeflate", facts.graph_deflate),
         ("sqlDeflate", facts.sql_deflate),
     ] {
@@ -715,6 +764,7 @@ fn indexed_mode(
             trace_ast_deflate: None,
             variable_facts: None,
             sql_node_facts: None,
+            sql_node_facts_deflate: None,
             imports: vec![],
             sql_candidates: vec![],
             sql_deflate: Some(compressed_sql(&sql)?),
@@ -841,13 +891,27 @@ fn indexed_mode(
         } else {
             (None, None)
         };
-    let sql_node_facts = if keep_runtime || service_graph_domain(&source.file) {
-        let mut nodes = SqlNodes::default();
-        nodes.visit_program(&parsed.program);
-        Some(nodes.facts)
-    } else {
-        None
-    };
+    let (sql_node_facts, sql_node_facts_deflate) =
+        if keep_runtime || service_graph_domain(&source.file) {
+            let mut nodes = SqlNodes::default();
+            nodes.visit_program(&parsed.program);
+            if keep_runtime {
+                (
+                    Some(
+                        nodes
+                            .facts
+                            .iter()
+                            .map(RawSqlNodeFact::explicit_wire)
+                            .collect::<Result<Vec<_>>>()?,
+                    ),
+                    None,
+                )
+            } else {
+                (None, Some(compressed_json(&nodes.facts)?))
+            }
+        } else {
+            (None, None)
+        };
     let trace_ast_deflate = if keep_runtime || service_graph_domain(&source.file) {
         let mut trace_program = parsed.program.clone_in(&allocator);
         let mut selection = SqlSyntaxSelection {
@@ -897,6 +961,7 @@ fn indexed_mode(
         trace_ast_deflate,
         variable_facts,
         sql_node_facts,
+        sql_node_facts_deflate,
         imports,
         sql_candidates: candidates,
         sql_deflate: None,
@@ -1984,8 +2049,10 @@ namespace Inventory { const namespaceValue = table; }
         assert!(facts.fragment_ast_deflate.is_none());
         let mut names = Vec::new();
         let mut queries = Vec::new();
-        for fact in facts.sql_node_facts.as_ref().unwrap() {
-            visit(&decode(&fact.node_ast_deflate), &mut |node| {
+        let nodes = decode(facts.sql_node_facts_deflate.as_ref().unwrap());
+        assert!(facts.sql_node_facts.is_none());
+        for fact in nodes.as_array().unwrap() {
+            visit(&fact["nodeAst"], &mut |node| {
                 if node["type"] == "VariableDeclarator" {
                     names.push(node["id"]["name"].as_str().unwrap_or("").to_string());
                 }
@@ -2009,7 +2076,8 @@ namespace Inventory { const namespaceValue = table; }
         let mut bytes = Vec::new();
         let header = file_header(facts, &mut bytes, &mut 0).unwrap();
         assert!(!header.payloads.contains_key("fragmentAstDeflate"));
-        assert!(header.payloads.contains_key("sqlNodeFacts"));
+        assert!(!header.payloads.contains_key("sqlNodeFacts"));
+        assert!(header.payloads.contains_key("sqlNodeFactsDeflate"));
         assert!(header.payloads.contains_key("variableFacts"));
         assert!(!header.payloads.contains_key("sqlAstDeflate"));
     }
@@ -2373,6 +2441,73 @@ class Owner { method() { db.execute('SELECT * FROM owner.class'); } }
             initializer["body"][0]["expression"]["elements"][0]["start"],
             query["body"][0]["expression"]["arguments"][1]["elements"][0]["start"]
         );
+    }
+    #[test]
+    fn repository_sql_nodes_use_one_raw_group_preserving_lone_surrogates_and_conditions() {
+        let root = env::current_dir().unwrap();
+        let text = r#"// 🧭
+function run(key) { if (flag) db.query('SELECT \ud800 FROM owner.records', [ , key ]); else db.execute('UPDATE owner.records SET value=$1', [key]); }
+"#;
+        let facts = indexed_mode(
+            Source {
+                file: "services/probe/src/group.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+            true,
+            false,
+        )
+        .unwrap();
+        assert!(facts.sql_node_facts.is_none());
+        assert!(facts.fragment_ast_deflate.is_none());
+        let bytes = STANDARD
+            .decode(facts.sql_node_facts_deflate.as_ref().unwrap())
+            .unwrap();
+        let mut json = String::new();
+        flate2::read::DeflateDecoder::new(bytes.as_slice())
+            .read_to_string(&mut json)
+            .unwrap();
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ReadNode {
+            node_ast: Box<RawValue>,
+            ancestors: Vec<ReadAncestor>,
+        }
+        #[derive(Deserialize)]
+        #[serde(rename_all = "camelCase")]
+        struct ReadAncestor {
+            #[serde(rename = "type")]
+            kind: String,
+            branch: Option<String>,
+            condition_ast: Option<Box<RawValue>>,
+            first_argument: Option<bool>,
+        }
+        let nodes: Vec<ReadNode> = serde_json::from_str(&json).unwrap();
+        assert_eq!(nodes.len(), 4);
+        assert!(
+            json.to_lowercase()
+                .contains("\"value\":\"select \\ud800 from owner.records\"")
+        );
+        assert!(nodes[0].node_ast.get().contains("\"type\":\"Program\""));
+        assert!(nodes[0].node_ast.get().contains("OmittedExpression"));
+        let branch = nodes[0]
+            .ancestors
+            .iter()
+            .find(|ancestor| ancestor.kind == "IfStatement")
+            .unwrap();
+        assert_eq!(branch.branch.as_deref(), Some("then"));
+        let condition: Value =
+            serde_json::from_str(branch.condition_ast.as_ref().unwrap().get()).unwrap();
+        assert_eq!(condition["body"][0]["expression"]["name"], "flag");
+        assert_eq!(nodes[1].ancestors[0].first_argument, Some(true));
+        assert!(!json.contains("nodeAstDeflate"));
+        assert!(!json.contains("conditionAstDeflate"));
+        let mut payload = Vec::new();
+        let header = file_header(facts, &mut payload, &mut 0).unwrap();
+        assert!(header.payloads.contains_key("sqlNodeFactsDeflate"));
+        assert!(!header.payloads.contains_key("sqlNodeFacts"));
     }
     #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
@@ -3278,14 +3413,17 @@ fn template_ast(node: &TemplateLiteral<'_>) -> Result<String> {
     expression_ast_in(expression, allocator)
 }
 fn expression_ast(node: &Expression<'_>) -> Result<String> {
+    compressed_ast(&expression_json(node))
+}
+fn expression_json(node: &Expression<'_>) -> String {
     let mut serializer = CompactSerializer::new(true, false);
     InitializerProgram(node).serialize(&mut serializer);
-    compressed_ast(&serializer.into_string())
+    serializer.into_string()
 }
-fn syntax_node_ast(node: &impl ESTree, span: oxc_span::Span) -> Result<String> {
+fn syntax_node_json(node: &impl ESTree, span: oxc_span::Span) -> String {
     let mut serializer = CompactSerializer::new(true, false);
     SyntaxProgram(node, span).serialize(&mut serializer);
-    compressed_ast(&serializer.into_string())
+    serializer.into_string()
 }
 struct SyntaxProgram<'n, N>(&'n N, oxc_span::Span);
 struct SyntaxBody<'n, N>(&'n N, oxc_span::Span);
@@ -3811,8 +3949,8 @@ struct SqlNodeFrame<'a> {
 #[derive(Default)]
 struct SqlNodes<'a> {
     frames: Vec<SqlNodeFrame<'a>>,
-    facts: Vec<SqlNodeFact>,
-    conditions: BTreeMap<(u32, u32), String>,
+    facts: Vec<RawSqlNodeFact>,
+    conditions: BTreeMap<(u32, u32), Box<RawValue>>,
 }
 impl SqlNodes<'_> {
     fn record(&mut self, node: &impl ESTree, span: oxc_span::Span) {
@@ -3827,26 +3965,28 @@ impl SqlNodes<'_> {
                 } else {
                     None
                 };
-                let condition_ast_deflate = branch.and(frame.condition).map(|condition| {
+                let condition_ast = branch.and(frame.condition).map(|condition| {
                     let span = condition.span();
                     self.conditions
                         .entry((span.start, span.end))
-                        .or_insert_with(|| expression_ast(condition).unwrap())
+                        .or_insert_with(|| {
+                            RawValue::from_string(expression_json(condition)).unwrap()
+                        })
                         .clone()
                 });
-                ancestors.push(SqlNodeAncestor {
+                ancestors.push(RawSqlNodeAncestor {
                     scope: scope.clone(),
                     function_like: frame.function_like,
                     method_kind: frame.method_kind,
                     branch,
-                    condition_ast_deflate,
+                    condition_ast,
                     first_argument: frame.call.then_some(frame.first_argument == Some(child)),
                 });
             }
             child = frame.span;
         }
-        self.facts.push(SqlNodeFact {
-            node_ast_deflate: syntax_node_ast(node, span).unwrap(),
+        self.facts.push(RawSqlNodeFact {
+            node_ast: RawValue::from_string(syntax_node_json(node, span)).unwrap(),
             ancestors,
         });
     }
