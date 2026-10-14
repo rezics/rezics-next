@@ -36,7 +36,7 @@ for (const [name, start, readinessMs] of [
           expect(timeout).toBe(readinessMs);
           now += timeout;
           return 'ready';
-        }, { ...idleHost, lockFile: join(dir, 'mutex.sqlite'), now: () => now, pollMs: 400_000,
+        }, { ...idleHost, now: () => now, pollMs: 400_000,
           sleep: async ms => { now += ms; }, announce: () => {},
           read: async remaining => {
             readings.push(remaining);
@@ -53,7 +53,7 @@ for (const [name, start, readinessMs] of [
     let now = 0, starts = 0;
     try {
       await expect(start(root, { ...startupEnvironment(dir), REZICS_QA_MEMORY_DEADLINE: '900000' },
-        'qa', () => { starts++; }, { ...idleHost, lockFile: join(dir, 'mutex.sqlite'), now: () => now,
+        'qa', () => { starts++; }, { ...idleHost, now: () => now,
           pollMs: 400_000, sleep: async ms => { now += ms; }, announce: () => {},
           read: async () => ({ ...plenty, vmUsed: plenty.vmTotal }) })).rejects.toThrow('Memory admission deadline');
       expect(now).toBe(900_000);
@@ -169,7 +169,7 @@ test('a provisional ordinary slot is returned when memory no longer fits before 
   try {
     await withMemoryStartup({ vm: GiB, host: GiB, vmReserve: 0, hostReserve: 8 * GiB }, {
       root, env: { ...startupEnvironment(dir), REZICS_QA_STARTUP_SLOT_GATE: gatePath },
-      ...idleHost, lockFile: join(dir, 'startup.sqlite'), deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
+      ...idleHost, deadline: 100, now: () => now, pollMs: 1, readingMaxAgeMs: 0,
       read: async () => ({ ...plenty, vmUsed: ++reads === 2 ? plenty.vmTotal : 0 }),
       announce: line => {
         const parts = line.split(' ');
