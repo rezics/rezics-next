@@ -8,6 +8,7 @@ import type { MainWorkDependencies } from './dependencies.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import { ReadingContinuityUnsupported, ReadingResumeUnavailable, ReadingSeekUnavailable } from '../modules/reading-position/errors.ts';
 import { problem } from './problems.ts';
+import type { VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 
 export { readingPositionQuery } from '../modules/reading-position/contract.ts';
 export const openApiOperations = { '/v1/reading-positions/{work}': { get: { exposure: 'public', rateLimitFamily: 'read', bearer: false } } } as const;
@@ -65,7 +66,10 @@ export function readingPositionsRoutes(work: MainWorkDependencies) {
           return chapterLookup(boundary, session.position, resource, lookup, (query.around ?? query.firstSeen)!);
         }
         const q = normalizePositionQuery(query.q);
-        const binding = ['reading-position-chooser-v2', resource, session.principal, query.actingSubject, q,
+        // Renewal changes budget attribution, not the verified identity or its
+        // consent/disclosure fences. Each read still verifies the current token.
+        const { accountExpiresAt: _budgetExpiry, ...identity } = (session.principal ?? {}) as VerifiedAccountAssertion;
+        const binding = ['reading-position-chooser-v2', resource, session.principal ? identity : null, query.actingSubject, q,
           await boundary.binding()];
         const cursor = decodeReadCursor(query.cursor, binding, session.position);
         const page = await boundary.chooser(resource, query.limit ?? 50, cursor?.after, query.q);
