@@ -23,6 +23,9 @@ const chosen = requested === 'all' ? Object.keys(available) : requested.split(',
 for (const name of chosen) if (!(name in available)) throw new Error(`Unknown REZICS_E2E_PROJECTS entry: ${name}`);
 
 export default defineConfig({
+  // Every journey gets the shared browser fixture, including manually created contexts.
+  // Resolve the standard test import here so individual journeys cannot omit the transport.
+  tsconfig: './tests/support/tsconfig.playwright.json',
   testDir: './tests',
   testMatch: '*.e2e.ts',
   grep: process.env.REZICS_E2E_GREP ? new RegExp(process.env.REZICS_E2E_GREP) : undefined,
