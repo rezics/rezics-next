@@ -174,7 +174,7 @@ function PersonControls({ agent, locale, t, preview = false, previewLanguages = 
       if (!active) return;
       setCurrent(value); setLanguages(value.contentLanguages);
     }).catch(() => { if (active) setStatus(t.personUnavailable); });
-    void responseData(browserMainApi().v1.onboarding.choices.get({
+    void responseData(browserMainApi(undefined, { anonymous: true }).v1.onboarding.choices.get({
       query: { locale }, fetch: { cache: 'no-store' },
     }))
       .then(value => {

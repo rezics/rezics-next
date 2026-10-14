@@ -165,18 +165,15 @@ async function replaySubject(replay: RealmReplay): Promise<string | null> {
   return sessionReadSubject(await response.json() as MainSessionAgentState);
 }
 
-async function replayBan(realm: string, actingSubject: string, read: RealmReplay['read']): Promise<BanReading | null> {
-  const access = await read('/v1/me/platform-access', true);
+async function replayBan(realm: string, actingSubject: string, replay: RealmReplay): Promise<BanReading | null> {
+  const access = await replay.read('/v1/me/platform-access', true);
   const held = access.ok ? parsePlatformAccess(await access.json()) : null;
   if (!access.ok) await access.body?.cancel();
-  if (!operationOpen('getV1RealmsByRealmMember-ban', held)) return null;
-  const response = await read(
-    `/v1/realms/${realm}/member-ban?actingSubject=${encodeURIComponent(actingSubject)}`, true);
-  if (response.status !== 200) {
-    await response.body?.cancel();
-    return null;
+  if (operationOpen('getV1RealmsByRealmMember-ban', held)) {
+    const response = await replay.personal.v1.realms({ realm })['member-ban'].get({ query: { actingSubject } });
+    return readingFromBanResponse(response.status, response.data);
   }
-  return readingFromBanResponse(response.status, await response.json());
+  return null;
 }
 
 /** The page's resolution, using the same readers production calls. */
@@ -279,7 +276,7 @@ export async function loadRealmView(
         ? readMembership(reader.personal, realm.header.id, reader.actingSubject)
         : null,
     replay
-      ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay.read) : null
+      ? reader.actingSubject ? replayBan(idOf(realm.header.id) ?? realm.realm, reader.actingSubject, replay) : null
       : reader.actingSubject ? readOwnRealmBan(realm.header.id, reader.actingSubject) : null,
   ]);
   if (surface === 'site' && (!read || !read.ok)) {

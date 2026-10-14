@@ -309,6 +309,7 @@ const webSources = {
 type Target =
   | { jsx: string; prop?: string; value?: string; text?: string }
   | { attribute: readonly [string, string] }
+  | { spread: readonly [string, string] }
   | { call: readonly [string, string] }
   | { binding: string }
   | { expression: string }
@@ -326,8 +327,9 @@ const entries: readonly Entry[] = [
     targets: { getV1HubWorksById: [{ call: ['link', 'install'] }, { call: ['link', 'usePrompt'] }] } },
   { file: 'features/showcase/work-action.tsx', function: 'PrimaryAction', operations: ['getV1HubWorksById'],
     targets: { getV1HubWorksById: [{ branch: ["work.hub?.kind === 'skill'", 'action'] }] } },
-  { file: 'zones/official/ai-workshop/slots.tsx', function: 'Actions', operations: ['getV1HubWorksById'],
-    targets: { getV1HubWorksById: [{ branch: ['hub', 'tryIt'] }] } },
+  // The host now grants the Try destination; the package only renders that capability.
+  { file: 'features/zones/zone-home.tsx', function: 'slotCard', operations: ['getV1HubWorksById'],
+    targets: { getV1HubWorksById: [{ spread: ['Slot', 'tryHref'] }] } },
   { file: 'features/realm-appeal/panel.tsx', function: 'RealmBanPanel', operations: [
     'postV1RealmsByRealmMember-receiptsByReceiptIdAppeal', 'getV1RealmsByRealmMember-receiptsByReceiptIdAppeal',
   ], targets: {
@@ -390,6 +392,19 @@ function targetProof(body: ts.Node, operation: string, target: Target): boolean 
       node.arguments.some(item => ts.isPropertyAccessExpression(item) && item.name.text === target.call[1])) proofs.push(uiGuarded(node, operation));
     if (ts.isJsxElement(node) || ts.isJsxSelfClosingElement(node)) {
       const opening = ts.isJsxElement(node) ? node.openingElement : node;
+      if ('spread' in target && opening.tagName.getText() === target.spread[0]) {
+        for (const attr of opening.attributes.properties) {
+          if (!ts.isJsxSpreadAttribute(attr)) continue;
+          let expression = attr.expression;
+          while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+          if (!ts.isConditionalExpression(expression)) continue;
+          const branch = expression;
+          if (!ts.isObjectLiteralExpression(branch.whenTrue) || !branch.whenTrue.properties.some(property =>
+            property.name?.getText().replace(/^['"]|['"]$/g, '') === target.spread[1])) continue;
+          proofs.push(directGate(branch.condition, operation) && ts.isObjectLiteralExpression(branch.whenFalse)
+            && branch.whenFalse.properties.length === 0);
+        }
+      }
       if ('jsx' in target && opening.tagName.getText() === target.jsx) {
         const attr = target.prop ? opening.attributes.properties.find(item => ts.isJsxAttribute(item) && item.name.getText() === target.prop) : null;
         const value = attr && ts.isJsxAttribute(attr) ? attr.initializer : null;
@@ -549,6 +564,19 @@ test('each UI entry loses its proof when a required direct predicate is removed'
   for (const entry of entries) for (const operation of entry.operations) {
     expect(entryViolations({ [entry.file]: webSources[entry.file]!.replaceAll(operation, 'getV1Types') }, [entry]))
       .toContain(`${entry.file}: ${entry.function} must gate its entry on ${operation}`);
+  }
+});
+
+test('host capability props require a direct gate and an empty closed branch', () => {
+  const entry: Entry = { file: 'entry.tsx', function: 'Entry', operations: [savedOperation],
+    targets: { [savedOperation]: [{ spread: ['Slot', 'tryHref'] }] } };
+  const check = (expression: string) => entryViolations({ 'entry.tsx':
+    `function Entry() { return <Slot {...(${expression})} />; }` }, [entry]);
+  expect(check(`${savedGate} ? { tryHref: href } : {}`)).toEqual([]);
+  for (const expression of [`true ? { tryHref: href } : {}`,
+    `${savedGate} ? { tryHref: href } : { tryHref: fallback }`,
+    `${savedGate} ? { tryHref: href } : otherProps`, 'props']) {
+    expect(check(expression)).toHaveLength(1);
   }
 });
 

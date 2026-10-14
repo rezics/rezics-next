@@ -5,6 +5,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statS
 import { dirname, join, resolve } from 'node:path';
 import { Client } from 'pg';
 import { acquireHeavy, withRecovery } from '../../goal/goalctl.ts';
+import { acquireSharedLifecycle } from '../../goal/qa-slots.ts';
 import { startDevCompose } from '../cli.ts';
 import { GiB } from '../../qa/memory-admission.ts';
 import { appEnvironment, readEnv } from '../config.ts';
@@ -702,9 +703,11 @@ describe('refresh storage planning', () => {
 });
 
 describe('shared stack refresh planning', () => {
-  test('shared refresh takes the next heavy turn without preempting the holder', async () => {
+  test('shared refresh takes the next lifecycle turn without preempting the holder', async () => {
     const dir = mkdtempSync(join(root, '.temp/refresh-priority-'));
-    const lockDir = join(dir, 'heavy');
+    // Native Docker refresh owns shared lifecycle admission; isolated browser
+    // QA can keep its separate heavy lease while the shared backend switches.
+    const lockDir = join(dir, 'shared-lifecycle');
     mkdirSync(lockDir);
     writeFileSync(join(lockDir, 'pid'), String(process.pid));
     writeFileSync(join(lockDir, 'marker'), 'current holder');
@@ -713,8 +716,8 @@ describe('shared stack refresh planning', () => {
     const options = { lockDir, bindExit: false, sleep };
     let ordinaryServed = false;
     let refreshServed = false;
-    const ordinary = acquireHeavy(['task', 'qa'], options).then(release => { ordinaryServed = true; return release; });
-    const refresh = acquireHeavy(['task', 'dev:refresh'], options).then(release => { refreshServed = true; return release; });
+    const ordinary = acquireSharedLifecycle(['task', 'stack:up'], options).then(release => { ordinaryServed = true; return release; });
+    const refresh = acquireSharedLifecycle(['task', 'dev:refresh'], options).then(release => { refreshServed = true; return release; });
     try {
       expect(resumes).toHaveLength(2);
       expect(ordinaryServed).toBe(false);
