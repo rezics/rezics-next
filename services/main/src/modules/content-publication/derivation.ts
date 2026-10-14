@@ -35,16 +35,20 @@ export async function recordContentDerivation(deps: MainWorkDependencies, reques
       const types = new Set(rows.map(row => row.type?.value));
       if (types.size !== 1) throw new AdmissionDenied('responsible public Agent is unavailable');
       const agentType = types.has('https://rezics.com/vocab/PersonAgent') ? 'human' as const : 'software' as const;
-      const recorded = await store.record(operation, input, agentType, client => workRead(deps, request,
-        { actingSubject: input.actingSubject }, async session => {
-          // Exact Content reads share the transaction that pins these revisions.
-          const owners = contentReferenceOwners(session, client);
-          // Recheck under both authority locks immediately before the Content commit.
-          for (const reference of [input.output, ...input.inputs]) {
-            if ((await resolveResourceReference(reference, owners)).status !== 'available')
-              throw new ContentAdoptionInvalid('an exact derivation selection is unavailable');
-          }
-        }));
+      const recorded = await store.record(operation, input, agentType, client => {
+        const read = () => workRead(deps, request,
+          { actingSubject: input.actingSubject }, async session => {
+            // Exact Content reads share the transaction that pins these revisions.
+            const owners = contentReferenceOwners(session, client);
+            // Recheck under both authority locks immediately before the Content commit.
+            for (const reference of [input.output, ...input.inputs]) {
+              if ((await resolveResourceReference(reference, owners)).status !== 'available')
+                throw new ContentAdoptionInvalid('an exact derivation selection is unavailable');
+            }
+          });
+        // Media shares Content's pool, including visibility and avatar probes.
+        return deps.media ? deps.media.store.withSummaryClient(client, read) : read();
+      });
       return { ...recorded, projection: derivationProjection(recorded) };
     }));
 }

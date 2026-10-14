@@ -217,12 +217,12 @@ export class RightsStore {
   }
 
   /** One indexed current-head lookup. Historical or withdrawn assessments are never a public basis. */
-  async currentPublicDomainAssessment(work: string, assessmentId: string): Promise<boolean> {
+  async currentPublicDomainAssessment(work: string, assessmentId: string, client?: PoolClient): Promise<boolean> {
     if (!agentPattern.test(work) || !/^[0-9a-f-]{36}$/i.test(assessmentId)) {
       throw new RightsInvalid('invalid public-domain assessment reference');
     }
     try {
-      const result = await this.content.query<{ assessment_head: string; basis: string; outcome: string }>(
+      const result = await (client ?? this.content).query<{ assessment_head: string; basis: string; outcome: string }>(
         publicDomainAssessmentSelection(), [work, assessmentId]);
       return result.rows.some(row => supportedPublicDomainHead(row, assessmentId));
     } catch { throw new RightsUnavailable('current public-domain assessment is unavailable'); }

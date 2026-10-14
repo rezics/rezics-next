@@ -117,7 +117,8 @@ export function contentReferenceOwners(session: WorkReadSession, contentClient?:
         await deps.content!.readExactBatch([revision], async ids => new Set(ids), contentClient), viewer))[0];
       const result = await read(); session.observeDependency(`content-reference:${revision}`, result, read);
       if (result?.status !== 'available' || result.reference.resourceId !== target
-        || result.reference.variantId !== variant || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store)) return null;
+        || result.reference.variantId !== variant
+        || !await publicDomainRevisionCurrent(result.reference, deps.rights?.store, contentClient)) return null;
       if (privateReadable && principal && actingSubject) {
         if (!await canReadContentTarget(env, deps.access, principal, actingSubject, target,
           await resolveContentTarget(env, target))) return null;

@@ -1136,7 +1136,7 @@ export class MediaStore {
 
   async readAsset(asset: string) {
     if (!uuid.test(asset)) throw new MediaInvalid('invalid asset id');
-    const result = await this.pool.query(`SELECT a.id, a.owner, a.state_head, s.disclosure, s.moderation,
+    const result = await this.summaryConnection().query(`SELECT a.id, a.owner, a.state_head, s.disclosure, s.moderation,
       s.lifecycle, s.erasure_epoch::text AS erasure_epoch, v.draft_head, rev.body
       FROM media.asset a JOIN media.asset_state s ON s.id = a.state_head
       LEFT JOIN content.variant v ON v.id = a.variant_id
@@ -1155,7 +1155,7 @@ export class MediaStore {
   /** Exact retained membership, independent of the asset's moving draft head. */
   async referenceSelection(asset: string, revision: string, representation: string): Promise<{ duration?: number } | null> {
     if (![asset, revision, representation].every(value => uuid.test(value))) throw new MediaInvalid('invalid Media selection');
-    const row = (await this.pool.query<{ duration: unknown }>(`SELECT item->'duration' AS duration
+    const row = (await this.summaryConnection().query<{ duration: unknown }>(`SELECT item->'duration' AS duration
       FROM media.asset a JOIN content.revision r ON r.variant_id=a.variant_id AND r.id=$2
       JOIN media.representation p ON p.asset_id=a.id AND p.id=$3
       CROSS JOIN LATERAL jsonb_array_elements(r.body->'representations') item
