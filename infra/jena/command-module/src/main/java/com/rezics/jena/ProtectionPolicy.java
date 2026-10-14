@@ -55,9 +55,9 @@ final class ProtectionPolicy {
             if (REVISIONS.equals(q.getGraph()) && RDF.type.asNode().equals(q.getPredicate())
                 && Set.of(rv("ProtectionRevision"), rv("CorrectionProposal"), rv("CorrectionDecision"),
                     rv("CorrectionApplication")).contains(q.getObject())) touchesProtection = true;
-            if (CURRENT.equals(q.getGraph())
-                && Set.of(rv("head"), LABEL, rv("titleControlHead"), rv("protectionHead"),
-                    rv("fieldValue"), rv("fieldHead"), rv("fieldControlHead")).contains(q.getPredicate())) {
+            // Review-required protection covers every current field, including
+            // non-title edits that do not declare a head transition.
+            if (CURRENT.equals(q.getGraph())) {
                 Node protectionHead = one(data, CURRENT, q.getSubject(), rv("protectionHead"));
                 if (data.contains(CURRENT, q.getSubject(), rv("protectionHead"), Node.ANY)
                     && (protectionHead == null

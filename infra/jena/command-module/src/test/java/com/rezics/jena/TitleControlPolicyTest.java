@@ -246,6 +246,21 @@ public class TitleControlPolicyTest {
         }
     }
 
+    @Test public void nonTitleFieldsRetainProtectionWithoutAHeadTransition() {
+        for (String field : new String[] { "rv:scalarValue false", "a <https://schema.org/Book>" }) {
+            for (String mode : new String[] { "Open", "ReviewRequired", "Unknown" }) try (var fixture = new ControlledWorkFixture(mode)) {
+                String update = "PREFIX rv: <" + RV + "> INSERT { GRAPH " + iri(CommandPolicy.CURRENT)
+                    + " { " + iri(WORK) + " " + field + " . } GRAPH " + iri(CommandPolicy.RECEIPTS)
+                    + " { " + iri(RECEIPT) + " rv:outcome rv:Succeeded . } } WHERE {}";
+                assertNull(fixture.capture(update));
+                var protection = ProtectionPolicy.capture(fixture.data, CommandPolicy.parse(update, RECEIPT), RECEIPT,
+                    "digest", update, null, KEY);
+                if (mode.equals("Open")) assertNull(protection);
+                else assertEquals("protected Work mutation requires a reviewed protection action", protection.error());
+            }
+        }
+    }
+
     private static String hash(String value) throws Exception {
         return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)));
     }
