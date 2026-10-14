@@ -659,12 +659,12 @@ async function runOwnerRestoreErasureFixture(options: OwnerRestoreErasureFixture
       source.access,
       qa.composeEnv.FUSEKI_TITLE_ADMISSION_KEY,
     );
-    const grant = async (scope: string, action: string) => grantFixtureAuthority(source.access, {
+    const grant = async (scope: string, action: string): Promise<void> => { await grantFixtureAuthority(source.access, {
       scope,
       requireDispatch: false,
       representations: [{ principalId, actor, action, lifetime: '8 hours' }],
       grant: { actor, action, lifetime: '8 hours' },
-    });
+    }); };
     await grant('work:create:root', 'work.create');
     const createCustody = () =>
       new ReceiptCustody(

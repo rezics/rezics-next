@@ -63,7 +63,7 @@ export function inventoryDirectory(directory: string): Record<string, RetainedFi
   return files;
 }
 
-export function isRetainedJson(value: unknown, ancestors = new Set<object>()): boolean {
+export function isRetainedJson(value: unknown, ancestors = new Set<object>()): value is RetainedJson {
   if (value === null || typeof value === 'string' || typeof value === 'boolean') return true;
   if (typeof value === 'number') return Number.isFinite(value);
   if (typeof value !== 'object' || ancestors.has(value)) return false;
