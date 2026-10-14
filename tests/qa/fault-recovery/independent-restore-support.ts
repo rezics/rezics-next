@@ -1918,7 +1918,9 @@ export function independentRestoreSourceAdapter(withRecipe: boolean,
     restore: async (context, manifest) => {
       const directory = join(repositoryRoot, '.temp', 'ops', `ind-copy-${randomUUID()}`);
       try {
-        cpSync(context.backup, directory, { recursive: true, errorOnExist: true, force: false });
+        cpSync(context.backup, directory, { recursive: true, errorOnExist: true, force: false,
+          // RDF inventory proves retained custody; it is not a restore input.
+          filter: source => source !== join(context.backup, 'rdf-current.json') });
         const transfer = { ...(manifest.metadata.transfer as unknown as IndependentRestoreTransfer),
           root: relative(repositoryRoot, directory) };
         // A writable copy gets its own target identity; original receipts stay exact.

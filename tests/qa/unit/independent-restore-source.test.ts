@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { createIndependentRestoreChildEnvironment, independentRestoreSourceAdapter, resolveIndependentRestoreInputs,
   type IndependentRestoreTransfer } from '../fault-recovery/independent-restore-support.ts';
@@ -33,6 +33,7 @@ test('the physical adapter copies the complete transfer, assigns private targets
     build: async context => {
       mkdirSync(join(context.backup, 'set'), { recursive: true });
       mkdirSync(join(context.backup, 'keys'));
+      writeFileSync(join(context.backup, 'rdf-current.json'), 'custody audit; never a child input');
       for (const name of [...artifactNames, 'set.json']) writeFileSync(join(context.backup, 'set', name), `immutable ${name}`);
       for (const name of ['frontier', 'authority', 'native.gpg', 'relay.dump', 'hmac', 'signing', 'keys/private'])
         writeFileSync(join(context.backup, name), `retained ${name}`);
@@ -64,6 +65,8 @@ test('the physical adapter copies the complete transfer, assigns private targets
     const second = await sources.restore(adapter);
     copies.push(second);
     expect(first.candidate.directory).not.toBe(second.candidate.directory);
+    expect(existsSync(join(first.candidate.directory, 'rdf-current.json'))).toBe(false);
+    expect(existsSync(join(second.candidate.directory, 'rdf-current.json'))).toBe(false);
     const inputs = copies.map(copy => resolveIndependentRestoreInputs(copy.candidate.transfer));
     const child = createIndependentRestoreChildEnvironment({ PATH: '/usr/bin:/bin', GOAL_IN_SLOT: '1',
       GOAL_QA_SLOT_DIRECTORY: '/qa/slots', REZICS_QA_STARTUP_SLOT_GATE: '/qa/startup',
