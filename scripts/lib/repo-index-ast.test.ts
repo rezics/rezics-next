@@ -607,3 +607,29 @@ test('migration-head gate reachability follows functions, cycles and write trigg
     ),
   ).toEqual([]);
 });
+
+test('shared Boolean expressions retain compatibility across distinct combinations', () => {
+  for (const [condition, expected] of [
+    ['a && b', ['gate-lock-upgrade']],
+    ['!a && !b', []],
+    ['a && !a', []],
+    ['a && !b', ['gate-lock-upgrade']],
+    ['!(a || b)', []],
+    ['a || b', ['gate-lock-upgrade']],
+  ] as const)
+    expect(
+      serializationFindings(
+        [],
+        [
+          {
+            file: 'conditions.ts',
+            text: `function run(db, a, b) {
+              if (a || b) db.query('SELECT id FROM probe.scope_gate WHERE id=1 FOR SHARE');
+              if (${condition}) db.query('UPDATE probe.scope_gate SET revision=2 WHERE id=1');
+            }`,
+          },
+        ],
+        [],
+      ).map((finding) => finding.rule),
+    ).toEqual([...expected]);
+});

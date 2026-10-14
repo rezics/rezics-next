@@ -1257,6 +1257,11 @@ function pathConditions(node: ts.Node): Condition[] {
 // Solve the small boolean formulas used to choose SHARE versus UPDATE. Atomic
 // comparisons stay symbolic; disjoint branches must never invent an upgrade.
 const compatibilityResults = new Map<string, boolean>();
+type BooleanFormula = {
+  test: (values: Map<string, boolean>) => boolean;
+  atoms: string[];
+};
+const booleanFormulas = new Map<string, BooleanFormula>();
 function compatible(conditions: Condition[]): boolean {
   const key = JSON.stringify(
     conditions.map((condition) => [condition.expression, condition.truth]).sort(),
@@ -1267,51 +1272,57 @@ function compatible(conditions: Condition[]): boolean {
   compatibilityResults.set(key, result);
   return result;
 }
+function booleanFormula(expression: string): BooleanFormula {
+  const previous = booleanFormulas.get(expression);
+  if (previous) return previous;
+  const atoms = new Set<string>();
+  const ast = ts.createSourceFile('condition.ts', `(${expression})`, ts.ScriptTarget.Latest, true);
+  const statement = ast.statements[0];
+  const visit = (node: ts.Expression): ((values: Map<string, boolean>) => boolean) => {
+    if (ts.isParenthesizedExpression(node)) return visit(node.expression);
+    if (node.kind === ts.SyntaxKind.TrueKeyword) return () => true;
+    if (node.kind === ts.SyntaxKind.FalseKeyword) return () => false;
+    if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
+      const operand = visit(node.operand);
+      return (values) => !operand(values);
+    }
+    if (
+      ts.isBinaryExpression(node) &&
+      (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
+        node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
+    ) {
+      const left = visit(node.left),
+        right = visit(node.right);
+      return node.operatorToken.kind === ts.SyntaxKind.BarBarToken
+        ? (values) => left(values) || right(values)
+        : (values) => left(values) && right(values);
+    }
+    const atom = node.getText(ast).replace(/\s+/g, '');
+    atoms.add(atom);
+    return (values) => values.get(atom)!;
+  };
+  let test: BooleanFormula['test'];
+  if (statement && ts.isExpressionStatement(statement)) test = visit(statement.expression);
+  else {
+    atoms.add(expression);
+    test = (values) => values.get(expression)!;
+  }
+  const result = { test, atoms: [...atoms] };
+  booleanFormulas.set(expression, result);
+  return result;
+}
 function compatibleFormula(conditions: Condition[]): boolean {
   const atoms = new Set<string>();
-  const formula = (expression: string): ((values: Map<string, boolean>) => boolean) => {
-    const ast = ts.createSourceFile(
-      'condition.ts',
-      `(${expression})`,
-      ts.ScriptTarget.Latest,
-      true,
-    );
-    const statement = ast.statements[0];
-    const visit = (node: ts.Expression): ((values: Map<string, boolean>) => boolean) => {
-      if (ts.isParenthesizedExpression(node)) return visit(node.expression);
-      if (node.kind === ts.SyntaxKind.TrueKeyword) return () => true;
-      if (node.kind === ts.SyntaxKind.FalseKeyword) return () => false;
-      if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken) {
-        const operand = visit(node.operand);
-        return (values) => !operand(values);
-      }
-      if (
-        ts.isBinaryExpression(node) &&
-        (node.operatorToken.kind === ts.SyntaxKind.BarBarToken ||
-          node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken)
-      ) {
-        const left = visit(node.left),
-          right = visit(node.right);
-        return node.operatorToken.kind === ts.SyntaxKind.BarBarToken
-          ? (values) => left(values) || right(values)
-          : (values) => left(values) && right(values);
-      }
-      const atom = node.getText(ast).replace(/\s+/g, '');
-      atoms.add(atom);
-      return (values) => values.get(atom)!;
-    };
-    if (statement && ts.isExpressionStatement(statement)) return visit(statement.expression);
-    atoms.add(expression);
-    return (values) => values.get(expression)!;
-  };
-  const formulas = conditions.map((condition) => ({
-    test: formula(condition.expression),
-    truth: condition.truth,
-  }));
+  const formulas = conditions.map((condition) => {
+    const formula = booleanFormula(condition.expression);
+    for (const atom of formula.atoms) atoms.add(atom);
+    return { test: formula.test, truth: condition.truth };
+  });
   if (atoms.size > 10) return true; // Unknown complexity fails conservatively.
   const names = [...atoms];
+  const values = new Map<string, boolean>();
   for (let bits = 0; bits < 2 ** names.length; bits++) {
-    const values = new Map(names.map((name, i) => [name, !!(bits & (1 << i))]));
+    for (let i = 0; i < names.length; i++) values.set(names[i], !!(bits & (1 << i)));
     if (formulas.every((item) => item.test(values) === item.truth)) return true;
   }
   return false;
