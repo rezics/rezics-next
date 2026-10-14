@@ -4871,6 +4871,23 @@ process.exit(0);
     } finally { r.cleanup(); }
   });
 
+  test('merge accepts a file lent to the task as it accepts a claimed one', async () => {
+    const r = repo();
+    try {
+      await r.start('G-001');
+      const task = await r.start('G-002');
+      expect(r.run(['loan', 'G-002', 'worker-001.ts'], { GOAL_ID: 'program' }).status).toBe(0);
+      writeFileSync(join(task.worktree, 'worker-001.ts'), 'export const lent = 1;\n');
+      expect(spawnSync('git', ['-C', task.worktree, 'add', 'worker-001.ts']).status).toBe(0);
+      expect(spawnSync('git', ['-C', task.worktree, 'commit', '-qm', 'Edit the lent file']).status).toBe(0);
+      await r.stopFixture(task.id);
+      const result = r.run(['merge', task.id, '--skip-unit-gate', '--skip-type-gate']);
+      expect(result.stderr).not.toContain('changed files outside its claim');
+      expect(result.status).toBe(0);
+      expect(r.ledger().tasks[task.id]!.state).toBe('merged');
+    } finally { r.cleanup(); }
+  });
+
   test('a task commit of an unclaimed path stays in the claim check after regeneration rewrites it', async () => {
     const r = repo();
     try {

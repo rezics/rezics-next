@@ -269,7 +269,9 @@ export async function mergeTask(id: string, flags: Set<string>, expectedHead?: s
     // Single-task branches may append to union registries without a claim; shared branches use their full claim union.
     const migrationOrigins = Object.assign({}, ...sharers.map(sharer => sharer.migrationOrigins ?? {})) as Record<string, string>;
     const regenerated = regenerationOnlyFiles(task.worktree);
-    const violations = scopeViolations(committed, task, sharers, regenerated);
+    // A file lent by `loan` lands like a claimed one here too, as it does in `land`.
+    const lent = new Set(sharers.flatMap(sharer => sharer.loans ?? []));
+    const violations = scopeViolations(committed, task, sharers, regenerated).filter(file => !lent.has(file));
     if (landPermittedFiles !== undefined) {
       const refusal = landScopeRefusal(ledger, task, sharers, committed, landPermittedFiles, regenerated);
       if (refusal) throw new Error(refusal);
