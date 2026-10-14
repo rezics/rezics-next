@@ -4,6 +4,7 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, 
 import { join, resolve } from 'node:path';
 import { sha256, stable } from '../fixture/corpus.ts';
 import { retainedIntegrity } from '../fixture/manifest.ts';
+import { rebindRetainedRecoveryAttachment } from '../../tests/qa/fault-recovery/owner-restore-erasure-fixture.ts';
 import { RetainedSources, sourceKey, sourceFileDigests, ownerErasurePreparationOptions, SOURCES_PER_PRODUCER, SOURCE_PREPARATION_MS, SOURCE_RESTORE_MS, type RetainedSourceAdapter, type SourceInputs } from './retained-source.ts';
 
 const directories: string[] = [];
@@ -80,6 +81,23 @@ test('source options are explicit and invalid key data cannot disappear into the
   expect(ownerErasurePreparationOptions('tests/qa/fault-recovery/operator-restore-membership.test.ts')).toBeUndefined();
   expect(() => sourceKey({ ...f.inputs, inputs: { silent: undefined } } as unknown as SourceInputs)).toThrow('complete JSON');
   expect(() => sourceKey({ ...f.inputs, inputs: { value: Number.NaN } })).toThrow('complete JSON');
+});
+
+test('retained attachment consumers reconstruct proof custody after the producer directory is gone', () => {
+  const f = setup(), copy = join(f.directory, 'isolated-attachments');
+  mkdirSync(copy);
+  const ciphertext = Buffer.from('exact retained encrypted owner state');
+  const attachment = { path: join(f.directory, 'former-producer', 'attachment.gpg'),
+    value: { ownerCut: 'original-cut', erasureId: 'original-erasure' },
+    ciphertextDigest: sha256(ciphertext), ciphertextBytes: String(ciphertext.length), recipientFingerprint: 'b'.repeat(40) };
+  writeFileSync(join(copy, 'attachment.gpg'), ciphertext);
+  const restored = rebindRetainedRecoveryAttachment(attachment, copy);
+  expect(existsSync(attachment.path)).toBe(false);
+  expect(restored.path).toBe(join(copy, 'attachment.gpg'));
+  expect(restored).toEqual({ ...attachment, path: restored.path });
+  expect(readFileSync(restored.path)).toEqual(ciphertext);
+  writeFileSync(restored.path, 'corrupt copy');
+  expect(() => rebindRetainedRecoveryAttachment(attachment, copy)).toThrow('differs from retained ciphertext');
 });
 
 function childProducer(directory: string, inputs: SourceInputs, paused = false): string {

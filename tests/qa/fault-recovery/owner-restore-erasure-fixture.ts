@@ -17,7 +17,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { Client, Pool } from 'pg';
 import { ACCOUNT_RECOVERY_USAGE_EXCLUSIONS } from '../../../services/account/src/recovery-coverage.ts';
 import { sealRecoveryPayload } from '../../../services/account/src/recovery-envelope.ts';
@@ -380,6 +380,16 @@ export function createRestoreCopyDisposal(
     });
     return active;
   };
+}
+
+/** Physical paths belong to the isolated copy; ciphertext and proof identities
+ * remain exactly those bound by the retained source manifest. */
+export function rebindRetainedRecoveryAttachment<T>(attachment: EncryptedRecoveryAttachment<T>, directory: string): EncryptedRecoveryAttachment<T> {
+  const path = join(directory, basename(attachment.path));
+  const ciphertext = readFileSync(path);
+  if (hash(ciphertext) !== attachment.ciphertextDigest || String(ciphertext.length) !== attachment.ciphertextBytes)
+    throw new Error('copied recovery attachment differs from retained ciphertext');
+  return { ...attachment, path };
 }
 
 /** One real owner/native cut, one physical backup, isolated writable replay copies. */
@@ -1428,6 +1438,8 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
         execFileSync('gpg', ['--batch', '--import', join(retained!.context.backup, 'attachment-secret.gpg')], { env: attachmentCustody.offhost, timeout: 60_000 });
         execFileSync('gpg', ['--batch', '--import', join(retained!.context.backup, 'attachment-public.gpg')], { env: attachmentCustody.publicOnly, timeout: 60_000 });
         cpSync(join(retained!.context.backup, 'native-access-attachments'), join(directory, 'native-access-attachments'), { recursive: true });
+        saved.nativeAccessAttachment = rebindRetainedRecoveryAttachment(saved.nativeAccessAttachment,
+          join(directory, 'native-access-attachments'));
       }
       // Buffer's JSON encoding is data, not a live custody process.
       const retiredPayload = saved.retired.payload as unknown as { type: string; data: number[] };
