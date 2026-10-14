@@ -41,12 +41,6 @@ function realmId(persona: AnswerPersona, label: string): string {
   return id;
 }
 
-function actingSubject(persona: AnswerPersona, label: string): string {
-  const subject = new URL(sample(persona, label).path, origin).searchParams.get('actingSubject');
-  if (!subject) throw new Error(`Recorded ${label} has no acting Subject`);
-  return subject;
-}
-
 function routeIdentity(persona: AnswerPersona): { realm: string; actingSubject: string } {
   const session = sample(persona, 'session-agent').answer as { sessionAgent: { actingSubject: string } };
   const header = persona === 'owner' ? 'management-realm-header' : 'frame-realm';
