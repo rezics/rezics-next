@@ -1,6 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
+import { AnswerRecordValidator, answerPersonas, answerRecord, type AnswerContract, type AnswerRecord } from '../../../../../scripts/api/answer-record.ts';
 import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
 import { browserZoneAuthoring, loadCompleteZoneNavigation } from '../../../../../apps/web/features/zone-editor/api.ts';
 import { authoringModel, draftChoice, draftWire, publicationChoice } from '../../../../../apps/web/features/zone-editor/model.ts';
@@ -12,10 +14,24 @@ import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(180_000);
-const recording = new OutcomeRecorder(independent);
+// The reopened operator cell records its reached refusal, without certifying it as proved.
+// OutcomeRecorder still validates every request and owns each proof's lifecycle.
+const recording = new OutcomeRecorder(independent, { directory: '.temp/standalone-zone-validation' });
+const captured = Object.fromEntries(answerPersonas.map(name => [name, []])) as AnswerRecord['personas'];
+const completedVisits = new Set<PersonaName>();
+let validator: AnswerRecordValidator;
+let operatorZoneRefused = false;
 let persona: PersonaName;
+async function capture(name: PersonaName, person: PersonaSession, label: string, ...args: Parameters<PersonaSession['main']>) {
+  const response = await recording.session(name, person)(label, ...args);
+  const [method, requestPath, body] = args;
+  captured[name].push({ label, operationId: validator.operationId(method, requestPath), method, path: requestPath,
+    ...(body === undefined ? {} : { body }), status: response.status,
+    answer: await response.clone().json() as unknown, headers: Object.fromEntries(response.headers.entries()) });
+  return response;
+}
 const sample = (person: PersonaSession, label: string, ...args: Parameters<PersonaSession['main']>) =>
-  recording.session(persona, person)(label, ...args);
+  capture(persona, person, label, ...args);
 let sessions: PersonaSessions;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) => `actingSubject=${encodeURIComponent(person.actingSubject ?? sessions.owner.actingSubject!)}`;
@@ -47,6 +63,7 @@ const visitAnswers: { persona: PersonaName; label: string; method: string; path:
 const fixtures = new Map<PersonaName, { sessions: PersonaSessions; site: Site }>();
 beforeAll(async () => {
   await recording.prepare();
+  validator = new AnswerRecordValidator(JSON.parse(await readFile('generated/openapi/main/public.json', 'utf8')) as AnswerContract);
   for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
     sessions = await personaSessions('public');
     fixtures.set(name, { sessions, site: await createSite() });
@@ -56,7 +73,15 @@ afterAll(async () => {
   try {
     await mkdir('.temp/standalone-zone-visit', { recursive: true });
     await writeFile(`.temp/standalone-zone-visit/${process.env.REZICS_QA_RUN_ID ?? 'local'}.json`, JSON.stringify(visitAnswers, null, 2));
-    await recording.publish();
+    if (process.env.OUTCOME_RECORD_DIR && completedVisits.size === answerPersonas.length) {
+      const directory = resolve(process.env.OUTCOME_RECORD_DIR);
+      if (!directory.startsWith(`${resolve('.temp')}/`)) throw new Error('Recording must stay under .temp/');
+      const record = answerRecord(independent.rowId, captured);
+      validator.validate(record);
+      const destination = resolve(directory, `${record.row}.json`);
+      await mkdir(resolve(destination, '..'), { recursive: true });
+      await writeFile(destination, `${JSON.stringify(record, null, 2)}\n`, { flag: 'wx' });
+    }
   } finally { await sessions?.close(); }
 });
 function fixture(name: PersonaName) {
@@ -262,6 +287,9 @@ async function qualify(name: PersonaName, proof: () => Promise<void>) {
     proofMs = Date.now() - started;
     visitStarted = Date.now();
     await within(120_000, 'production visit', () => productionVisit(fixtures.get(name)!.site, sessions[name]));
+    completedVisits.add(name);
+    if (name === 'operator' && independent.cells.operator?.state === 'pending' && operatorZoneRefused)
+      throw new Error('Exact-mandated operator: showcase-editor 200, Zone read 404; production stops before editor authority');
   } finally {
     console.info(`[persona-timing] ${name} proofMs=${proofMs || Date.now() - started} visitMs=${visitStarted ? Date.now() - visitStarted : 0}`);
   }
@@ -273,7 +301,7 @@ async function productionVisit(site: Site, person: PersonaSession) {
   if (!person.actingSubject) return;
   const currentPersona = persona;
   const observe = (caller: PersonaSession) => async (label: string, ...args: Parameters<PersonaSession['main']>) => {
-    const response = await recording.session(currentPersona, caller)(label, ...args);
+    const response = await capture(currentPersona, caller, label, ...args);
     const [method, requestPath, body, key] = args;
     visitAnswers.push({ persona: currentPersona, label, method, path: requestPath,
       ...(body === undefined ? {} : { body }), ...(key === undefined ? {} : { key }),
@@ -314,6 +342,7 @@ async function productionVisit(site: Site, person: PersonaSession) {
       read(`${prefix}-zone`, `${path(site)}?${acting(person)}`),
       ...(configuration.status === 200 ? [] : [read(`${prefix}-lifecycle-configuration`, `${path(site)}/configuration?${acting(person)}`)]),
     ]);
+    if (currentPersona === 'operator' && editor.status === 200 && zone.status === 404) operatorZoneRefused = true;
     if (editor.status !== 200 || zone.status !== 200) return null;
     const model = authoringModel(editor.data, zone.data, short(site.zone), 'Independent original site');
     if (!model) throw new Error('Production authoring model could not open the recorded reads');
@@ -338,7 +367,7 @@ async function productionVisit(site: Site, person: PersonaSession) {
 
   const state = opened.model.state;
   const choice = draftChoice({ ...state, value: JSON.stringify(fromPlainText('Saved production garden', 'blocks')) },
-    opened.model.zoneIri, person.actingSubject);
+    person.actingSubject);
   const saved = await named('editor-save', () => client.saveDraft(draftWire(choice), randomUUID()));
   if (!saved.ok) throw new Error(`Production save failed: ${saved.failure}`);
   const reopened = await requestLabels.run((_method, requestPath) => requestPath.includes('/showcase-editor')
@@ -346,8 +375,8 @@ async function productionVisit(site: Site, person: PersonaSession) {
   if (!reopened.ok) throw new Error(`Production reopen failed: ${reopened.failure}`);
   await named('editor-stale-save', () => client.saveDraft(draftWire(choice), randomUUID()));
   const publication = publicationChoice({ ...state, value: choice.savedValue, savedValue: choice.savedValue,
-    expectedHead: saved.data.revisionId, basis: saved.data }, opened.model.zoneIri);
+    expectedHead: saved.data.revisionId, basis: saved.data });
   if (!publication) throw new Error('Production editor has no publishable saved choice');
-  const published = await named('editor-publication', () => client.publish(publication, person.actingSubject!, randomUUID()));
+  const published = await named('editor-publication', () => client.publish(publication, person.actingSubject!, randomUUID(), short(site.zone)));
   if (!published.ok) throw new Error(`Production publication failed: ${published.failure}`);
 }
