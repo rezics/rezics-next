@@ -1,3 +1,4 @@
+import { verifyCommandAccount, type VerifiedAccountAssertion } from '../modules/account/verify-assertion.ts';
 import { Elysia, t } from 'elysia';
 import { problemResult } from '../api-contract.ts';
 import { copyChanges, copyState, LIBRARY_RECORD_COST, InvalidLibraryRecord, LibraryRecordConflict,
@@ -7,7 +8,6 @@ import { loanDirection, loanState, loanStatus } from '../modules/library/loans.t
 import { libraryParty, libraryTime } from '../modules/library/copies.ts';
 import { readId, readUuid } from '../modules/work/read-contract.ts';
 import { workRead } from '../modules/work/read-session.ts';
-import { verifyCommandAccount } from '../modules/account/verify-assertion.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { problem } from './problems.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
@@ -49,13 +49,25 @@ function failure(error: unknown): Response {
 }
 
 export function libraryCopiesRoutes(deps: MainWorkDependencies) {
-  const own = async (request: Request, agent: string, write = false) => {
-    const principal = write
+  const own = async (request: Request, agent: string, write = false, admitted?: VerifiedAccountAssertion) => {
+    const principal = admitted ?? (write
       ? await verifyCommandAccount(deps.account, request, ['work:read', 'library:write'])
-      : await deps.account.verify(request, ['work:read']);
+      : await deps.account.verify(request, ['work:read']));
     if (!await deps.access.canReadAsBaselineMember?.(principal, agent)) {
       throw new LibraryRecordDenied('Copies and loans are private to your own Person');
     }
+    return principal;
+  };
+  const writeAuthority = async (request: Request, agent: string) => {
+    const principal = await own(request, agent, true);
+    let initial = true;
+    return async () => {
+      // The transaction's first guard shares this request's admission. Its
+      // final guard refreshes Account enforcement before committing the write.
+      const admitted = initial ? principal : undefined;
+      initial = false;
+      await own(request, agent, true, admitted);
+    };
   };
   const unavailable = () => problem(503, 'library_record_unavailable', 'Copies and loans are unavailable');
   const checkParty = (request: Request, agent: string) => async (party: LibraryParty) => {
@@ -79,12 +91,12 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const { actingSubject, expectedVersion, release, ...changes } = body;
         const result = await deps.libraryCopies.write({ agent: actingSubject, expectedVersion, release, changes,
           idempotencyKey: request.headers.get('idempotency-key') ?? '' },
         () => workRead(deps, request, { actingSubject }, session => resolveCopyRelease(session, release)),
-        () => own(request, actingSubject, true), checkParty(request, actingSubject));
+        authorize, checkParty(request, actingSubject));
         return Response.json(result, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -93,11 +105,11 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const { actingSubject, expectedVersion, ...changes } = body;
         const result = await deps.libraryCopies.write({ agent: actingSubject, expectedVersion, changes,
           id: `https://rezics.com/id/${params.id}`, idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, actingSubject, true), checkParty(request, actingSubject));
+        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, authorize, checkParty(request, actingSubject));
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -106,10 +118,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryCopies) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const result = await deps.libraryCopies.write({ agent: body.actingSubject, expectedVersion: body.expectedVersion,
           id: `https://rezics.com/id/${params.id}`, changes: {}, remove: true, idempotencyKey: request.headers.get('idempotency-key') ?? '' },
-        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, () => own(request, body.actingSubject, true));
+        async () => { throw new InvalidLibraryRecord('Copy identity cannot change'); }, authorize);
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -131,10 +143,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const { actingSubject, ...input } = body;
         const result = await deps.libraryLoans.write({ ...input, operation: 'open', agent: actingSubject,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, actingSubject, true), checkParty(request, actingSubject));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, authorize, checkParty(request, actingSubject));
         return Response.json(result, { status: 201, headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -143,10 +155,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const result = await deps.libraryLoans.write({ operation: 'extend', agent: body.actingSubject,
           expectedVersion: body.expectedVersion, dueAt: body.dueAt, id: `https://rezics.com/id/${params.id}`,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject, true));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, authorize);
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     })
@@ -155,10 +167,10 @@ export function libraryCopiesRoutes(deps: MainWorkDependencies) {
     }, async ({ request, params, body }) => {
       if (!deps.libraryLoans) return unavailable();
       try {
-        await own(request, body.actingSubject, true);
+        const authorize = await writeAuthority(request, body.actingSubject);
         const result = await deps.libraryLoans.write({ operation: 'return', agent: body.actingSubject,
           expectedVersion: body.expectedVersion, id: `https://rezics.com/id/${params.id}`,
-          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, () => own(request, body.actingSubject, true));
+          idempotencyKey: request.headers.get('idempotency-key') ?? '' }, authorize);
         return Response.json(result, { headers: privateHeaders });
       } catch (error) { return failure(error); }
     });
