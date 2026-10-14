@@ -1,5 +1,9 @@
 import { expect, test } from 'bun:test';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, rm, writeFile } from 'node:fs/promises';
+import { readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
+import { Pool } from 'pg';
 import { chromium, expect as visible } from '@playwright/test';
 import { signInAtAccounts } from './account-sign-in.ts';
 import { people } from '../../../scripts/dev/seed/plan.ts';
@@ -7,11 +11,92 @@ import { mainRelationships } from '../features/relationships/api.ts';
 import { actor } from '../features/relationships/fixtures.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spaceHref } from '../features/address/path.ts';
+import { readEnv } from '../../../scripts/dev/config.ts';
+import { grantPlatformResource, grantPlatformUse, platformAdministratorSession, revokePlatformUse }
+  from '../../../tests/qa/fixtures/platform-grant.ts';
 import type { FollowState, JoinPolicy } from '../features/relationships/types.ts';
 
 // Run through goalctl against the shared stack. By default create dedicated open test Spaces through Main.
 // REZICS_G944_REALM optionally supplies an unjoined /r route segment; REZICS_G944_MEMBER_ID defaults to daniel.
 // The browser's web origin must serve this change and allow the Accounts redirect.
+
+async function spaceFixtureAuthority(email: string): Promise<() => Promise<void>> {
+  let env = process.env;
+  let sharedRoot: string | undefined;
+  if (!env.REZICS_WEB_AUTH_PUBLIC_PATH && !env.REZICS_WEB_AUTH_PRIVATE_PATH) {
+    const root = resolve(import.meta.dir, '../../..');
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, encoding: 'utf8' }).trim();
+    sharedRoot = dirname(isAbsolute(common) ? common : resolve(root, common));
+    const directory = join(sharedRoot, '.temp/stack/rezics-dev');
+    env = { ...readEnv(join(directory, 'dev.env')), ...env,
+      REZICS_WEB_AUTH_PUBLIC_PATH: join(directory, 'web-auth/public.json'),
+      REZICS_WEB_AUTH_PRIVATE_PATH: join(directory, 'web-auth/private.json') };
+  }
+  const account = new Pool({ connectionString: env.ACCOUNT_DATABASE_URL });
+  const access = new Pool({ connectionString: env.ACCESS_DATABASE_URL });
+  let principalId: string;
+  let privatePath: string | undefined;
+  try {
+    const user = (await account.query<{ id: string }>('SELECT id FROM "user" WHERE email = $1', [email])).rows[0];
+    if (!user) throw new Error('The shared journey member is unavailable');
+    const principal = (await access.query<{ id: string }>(
+      'SELECT id FROM access.principal WHERE account_subject = $1 AND account_issuer = $2 AND active',
+      [user.id, env.ACCOUNT_ISSUER])).rows[0];
+    if (!principal) throw new Error('The shared journey principal is unavailable');
+    principalId = principal.id;
+    if (sharedRoot) {
+      const issuer = (await access.query<{ principalId: string; actingSubject: string; accountSubject: string }>(`
+        SELECT p.id AS "principalId", r.subject_id AS "actingSubject", p.account_subject AS "accountSubject"
+        FROM access.principal_permission_grant g JOIN access.principal p ON p.id = g.principal_id
+        JOIN access.representation r ON r.principal_id = p.id
+        JOIN access.authority_subject s ON s.id = r.subject_id AND s.kind = 'agent' AND s.active
+        WHERE p.account_issuer = $1 AND p.active AND g.action = 'platform:grant'
+          AND g.active AND g.valid_until > clock_timestamp()
+          AND r.action = 'agent.control' AND r.active AND r.valid_until > clock_timestamp()
+        ORDER BY g.id, r.id LIMIT 1`, [env.ACCOUNT_ISSUER])).rows[0];
+      if (!issuer) throw new Error('The shared stack has no live platform grant issuer');
+      const holder = (await account.query<{ email: string }>('SELECT email FROM "user" WHERE id = $1',
+        [issuer.accountSubject])).rows[0];
+      if (!holder) throw new Error('The platform grant issuer account is unavailable');
+      const saved = JSON.parse(readFileSync(env.REZICS_WEB_AUTH_PRIVATE_PATH!, 'utf8')) as {
+        member: { email: string } };
+      // The dataset administrator can hold the first designation before the
+      // web-auth member. Use that recorded identity, as the dev seed does.
+      if (holder.email !== saved.member.email) {
+        const directory = join(sharedRoot, '.temp/datasets');
+        const credentials = readdirSync(directory).filter(name => name.startsWith('administrator-') && name.endsWith('.json'))
+          .map(name => JSON.parse(readFileSync(join(directory, name), 'utf8')) as {
+            name: string; email: string; password: string })
+          .find(item => item.name === 'Local dataset administrator' && item.email === holder.email);
+        if (!credentials?.password) throw new Error('The designated platform administrator fixture is unavailable');
+        await mkdir('.temp/g-944/shared-browser', { recursive: true });
+        privatePath = `.temp/g-944/shared-browser/platform-administrator-${crypto.randomUUID()}.json`;
+        await writeFile(privatePath, JSON.stringify({ member: credentials, ...issuer }), { mode: 0o600 });
+        env = { ...env, REZICS_WEB_AUTH_PRIVATE_PATH: privatePath };
+      }
+    }
+  } finally { await Promise.all([account.end(), access.end()]); }
+  const administrator = await platformAdministratorSession(env).finally(async () => {
+    if (privatePath) await rm(privatePath);
+  });
+  const grants: { grantId: string; generation: string }[] = [];
+  const revoke = async () => {
+    const failures: unknown[] = [];
+    for (const grant of grants.toReversed()) {
+      try { await revokePlatformUse(administrator, grant); } catch (error) { failures.push(error); }
+    }
+    if (failures.length) throw new AggregateError(failures, 'Fixture authority cleanup failed');
+  };
+  try {
+    // Repeated fixture creation has its own exact authority; it must not spend
+    // the shared reader's three ordinary member Spaces each month.
+    const until = new Date(Date.now() + 8 * 60 * 60 * 1_000).toISOString();
+    grants.push(await grantPlatformUse(administrator, principalId, 'platform-admin', until));
+    grants.push(await grantPlatformResource(administrator, principalId, 'space.create', 'space:create:root', until));
+    return revoke;
+  } catch (error) { await revoke(); throw error; }
+}
+
 test('G-944: shared stack browser journey follows, changes level, pins, joins, leaves and bulk-unfollows at desktop and phone widths', async () => {
   const mainOrigin = process.env.MAIN_ORIGIN ?? 'http://127.0.0.1:3001';
   const probe = await fetch(`${mainOrigin}/v1/me/memberships?actingSubject=${encodeURIComponent(actor)}`);
@@ -23,7 +108,9 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
   await mkdir('.temp/g-944/shared-browser', { recursive: true });
   const failures: unknown[] = [];
   let fixtureRoute = process.env.REZICS_G944_REALM;
+  let releaseAuthority = async () => {};
   try {
+    if (!fixtureRoute) releaseAuthority = await spaceFixtureAuthority(person.email);
     for (const width of [1280, 390]) {
       const context = await browser.newContext({ baseURL, viewport: { width, height: 860 } });
       const page = await context.newPage();
@@ -179,6 +266,8 @@ test('G-944: shared stack browser journey follows, changes level, pins, joins, l
         await context.close();
       }
     }
-  } finally { await browser.close(); }
+  } finally {
+    try { await browser.close(); } finally { await releaseAuthority(); }
+  }
   if (failures.length) throw new AggregateError(failures, 'Live relationship journeys failed');
 }, 240_000);
