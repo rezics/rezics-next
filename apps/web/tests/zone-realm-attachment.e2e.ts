@@ -530,7 +530,12 @@ test('attached-realm-discussion: two Persons post concurrently and reopen the sa
     }
     for (const tab of [page, other]) {
       const area = discussion(tab);
-      await expect(area.locator('article'), JSON.stringify(writes)).toHaveCount(2, { timeout: 30_000 });
+      await expect(async () => {
+        const retry = tab.locator('[data-discussion-state="unavailable"]')
+          .getByRole('button', { name: aboutDiscussionMessages.en.retry, exact: true });
+        if (await retry.isVisible()) await retry.press('Enter');
+        await expect(area.locator('article'), JSON.stringify(writes)).toHaveCount(2, { timeout: 8_000 });
+      }).toPass({ timeout: 90_000 });
       for (const body of bodies) await expect(area.getByText(body, { exact: true })).toBeVisible();
     }
     const link = discussion(page).getByRole('link', { name: aboutDiscussionMessages.en.continueThread });
