@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, beforeEach, describe, expect, test } from 'bun:test';
 import { createElement, type ReactNode } from 'react';
 import { renderToReadableStream } from 'react-dom/server';
 import * as fixture from './fixtures.ts';
@@ -38,8 +39,7 @@ const pages = {
   wholes: disclosed(fixture.wholes),
   relations: disclosed(fixture.relations),
 };
-await mock.module('next/headers', () => ({
-  ...originalHeaders,
+const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({
     get: (name: string) => {
       if (!signedIn) return undefined;
@@ -49,11 +49,10 @@ await mock.module('next/headers', () => ({
     },
   }),
   headers: async () => new Headers(),
-}));
+});
 // Keep reader(), sessionAgentState() and Main's Eden client real. Only the HTTP
 // transport answers fixture data, including a rejected expired session lookup.
-await mock.module('../api/server-read.ts', () => ({
-  ...originalTransport,
+const restoreOriginalTransport = replaceModule(import.meta.resolve('../api/server-read.ts'), originalTransport, {
   serverRead: (input: RequestInfo | URL, init?: RequestInit) =>
     serverFetch(input, init, {
       deadlineAt: pageDeadline,
@@ -102,21 +101,19 @@ await mock.module('../api/server-read.ts', () => ({
         return respond(result.error ?? result.data, result.error?.status ?? 200);
       },
     }),
-}));
-await mock.module('../tracking/series-progress-panel.tsx', () => ({
-  ...originalTracking,
+});
+const restoreOriginalTracking = replaceModule(import.meta.resolve('../tracking/series-progress-panel.tsx'), originalTracking, {
   SeriesProgressPanel: () =>
     createElement('aside', { 'data-personal-progress': true }, 'Personal progress'),
-}));
-await mock.module('next/navigation', () => ({
-  ...originalNavigation,
+});
+const restoreOriginalNavigation = replaceModule(import.meta.resolve('next/navigation'), originalNavigation, {
   useRouter: () => ({ refresh() {} }),
-}));
+});
 afterAll(async () => {
-  await mock.module('next/headers', () => originalHeaders);
-  await mock.module('../api/server-read.ts', () => originalTransport);
-  await mock.module('../tracking/series-progress-panel.tsx', () => originalTracking);
-  await mock.module('next/navigation', () => originalNavigation);
+  restoreOriginalHeaders();
+  restoreOriginalTransport();
+  restoreOriginalTracking();
+  restoreOriginalNavigation();
 });
 
 const { readParts, readWholes, readRelations, readCollectionMembers } = await import('./read.ts');

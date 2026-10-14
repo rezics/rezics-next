@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, expect, test } from 'bun:test';
 
 const originalHeaders = { ...(await import('next/headers')) };
 const originalHref = { ...(await import('../entity-page/href.ts')) };
@@ -7,18 +8,16 @@ type Query = Record<string, unknown>;
 type PageAnswer = { data: unknown; error: { status: number } | null };
 let answer: (query: Query) => Promise<PageAnswer> = async () => ({ data: null, error: null });
 
-await mock.module('next/headers', () => ({
-  ...originalHeaders,
+const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers(),
-}));
-await mock.module('../entity-page/href.ts', () => ({
-  ...originalHref,
+});
+const restoreOriginalHref = replaceModule(import.meta.resolve('../entity-page/href.ts'), originalHref, {
   followHref: (_main: unknown, _href: string, query: Query) => () => answer(query),
-}));
+});
 afterAll(async () => {
-  await mock.module('next/headers', () => originalHeaders);
-  await mock.module('../entity-page/href.ts', () => originalHref);
+  restoreOriginalHeaders();
+  restoreOriginalHref();
 });
 
 const { readRecipeWorkPage } = await import('./read.ts');

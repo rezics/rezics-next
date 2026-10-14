@@ -1,4 +1,5 @@
-import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { replaceModule } from './support/module-replacement.ts';
+import { afterAll, afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import type { ZoneWork } from '@rezics/zone-sdk';
 import { fromPlainText, type DocumentSnapshot, type JsonValue } from '@rezics/document';
 import { materializeData } from 'native-i18n';
@@ -398,6 +399,8 @@ describe('the block-local Showcase Content draft', () => {
 
 const workPageRead = { ...(await import('../features/work-page/read.ts')) };
 
+const restoreReader = replaceModule(import.meta.resolve('../features/work-page/read.ts'), workPageRead, { reader: workPageRead.reader });
+
 describe('the writes the editor asks Main for', () => {
   type Call = { path: string; body: Record<string, unknown>; key: string | undefined };
   const calls: Call[] = [];
@@ -412,15 +415,14 @@ describe('the writes the editor asks Main for', () => {
   } }, zones: ({ id }: { id: string }) => ({
     'campaign-art': { post: async (body: Record<string, unknown>, init: { headers: Record<string, string> }) => { calls.push({ path: `${id}/campaign-art`, body, key: init.headers['idempotency-key'] }); return answer; } },
   }) } };
-  // Installed only while these tests run, then put back, so a later file in the same process still reads wiki data.
-  const installReader = () => mock.module('../features/work-page/read.ts', () => ({
-    ...workPageRead,
+  // Change only the delegate table while these tests run, so later files still read wiki data.
+  const installReader = () => restoreReader.set({
     reader: async () => ({ main, actingSubject: acting, signedIn: Boolean(acting) }),
-  }));
-  const restoreReader = () => mock.module('../features/work-page/read.ts', () => workPageRead);
-  beforeEach(() => { void installReader(); });
-  afterEach(() => { void restoreReader(); });
-  afterAll(() => { void restoreReader(); });
+  });
+
+  beforeEach(installReader);
+  afterEach(restoreReader);
+  afterAll(restoreReader);
   const zone = '5a1d0000-0000-4000-8000-000000000001';
   const head = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000e1';
   const realm = 'https://rezics.com/id/5a1d0000-0000-4000-8000-0000000000aa';
@@ -558,8 +560,8 @@ describe('the writes the editor asks Main for', () => {
 });
 
 const navigation = { ...(await import('next/navigation')) };
-void mock.module('next/navigation', () => ({ ...navigation, useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() }));
-afterAll(() => mock.module('next/navigation', () => navigation));
+const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), navigation, { useRouter: () => ({ refresh() {} }), usePathname: () => '/', useSearchParams: () => new URLSearchParams() });
+afterAll(() => restoreNavigation());
 
 describe('the editor on the server', () => {
   const never = async () => { throw new Error('not called while rendering'); };

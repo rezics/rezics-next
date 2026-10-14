@@ -1,5 +1,6 @@
+import { replaceModule } from './support/module-replacement.ts';
 import { uuidToSid } from '@rezics/model/address';
-import { afterAll, describe, expect, mock, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { uiLocales } from '../i18n/define.ts';
@@ -20,13 +21,12 @@ import { copyOf, englishMessages, messages } from '../features/catalogue-intake/
 import { ProvisionalNotice } from '../features/catalogue-intake/provisional-notice.tsx';
 
 const navigation = { ...(await import('next/navigation')) };
-void mock.module('next/navigation', () => ({
-  ...navigation,
+const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), navigation, {
   useRouter: () => ({ push() {}, refresh() {} }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
-}));
-afterAll(() => mock.module('next/navigation', () => navigation));
+});
+afterAll(() => restoreNavigation());
 const { IntakeWizard } = await import('../features/catalogue-intake/intake-wizard.tsx');
 
 const typed: SearchInput = { text: 'Sword Art Online', language: 'en', creator: '' };

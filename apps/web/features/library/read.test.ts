@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import type { MainClient } from '../discover/types.ts';
 import { workHref } from '../work-page/route.ts';
 import { parseLibraryState } from './state.ts';
@@ -41,10 +42,10 @@ const main = { v1: {
   'rating-contexts': { get: () => answer({ items: [] }) },
 } } as unknown as MainClient;
 
-await mock.module('../shell/communities-read.ts', () => ({ ...originalReader,
+const restoreOriginalReader = replaceModule(import.meta.resolve('../shell/communities-read.ts'), originalReader, {
   shellReader: async () => ({ signedIn: true, actingSubject: agent, main, anonymous: main, avatarQuery: '' }),
-}));
-afterAll(async () => { await mock.module('../shell/communities-read.ts', () => originalReader); });
+});
+afterAll(async () => { restoreOriginalReader(); });
 beforeEach(() => {
   requested.length = 0; totals.length = 0; rankedReads = 0;
   unavailable = null; complete = null; lowerBound = null;

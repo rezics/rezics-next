@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import type { Unread } from './unread.ts';
 
 const originalReact = { ...(await import('react')) };
@@ -9,10 +10,10 @@ const cleanup: (() => void)[] = [];
 let focus: (() => void) | undefined;
 let snapshot: () => Unread | null = () => null;
 
-await mock.module('react', () => ({ ...originalReact,
+const restoreOriginalReact = replaceModule(import.meta.resolve('react'), originalReact, {
   useEffect: (effect: () => (() => void) | void) => { const stop = effect(); if (stop) cleanup.push(stop); },
   useSyncExternalStore: (_subscribe: unknown, read: () => Unread | null) => { snapshot = read; return read(); },
-}));
+});
 Object.defineProperty(globalThis, 'document', { configurable: true, value: {
   visibilityState: 'visible', addEventListener() {}, removeEventListener() {},
 } });
@@ -34,7 +35,7 @@ afterAll(async () => {
   else Reflect.deleteProperty(globalThis, 'document');
   if (originalWindow) Object.defineProperty(globalThis, 'window', originalWindow);
   else Reflect.deleteProperty(globalThis, 'window');
-  await mock.module('react', () => originalReact);
+  restoreOriginalReact();
 });
 
 function pendingPoll() {

@@ -1,5 +1,6 @@
+import { replaceModule } from './support/module-replacement.ts';
 import { resourceHref } from '../features/address/path.ts';
-import { describe, expect, mock, test } from 'bun:test';
+import { afterAll, describe, expect, test } from 'bun:test';
 import * as navigation from 'next/navigation';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -21,12 +22,12 @@ import { uiLocales } from '../i18n/define.ts';
 
 // The editors keep their submit state in React hooks and refresh through the App Router.
 // Keep the real exports: a later file in the same run still imports notFound.
-void mock.module('next/navigation', () => ({
-  ...navigation,
+const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), { ...navigation }, {
   useRouter: () => ({ refresh() {} }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
-}));
+});
+afterAll(restoreNavigation);
 const { PartsEditor } = await import('../features/work-levels-edit/parts-editor.tsx');
 const { RelationEditor } = await import('../features/work-levels-edit/relation-editor.tsx');
 const { RealizationEditor, ReleaseEditor } =

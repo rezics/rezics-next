@@ -1,4 +1,5 @@
-import { afterAll, afterEach, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, afterEach, expect, spyOn, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
 import '../../tests/support/official-package-fixture.ts';
 import { isValidElement, type ReactElement, type ReactNode } from 'react';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
@@ -15,17 +16,17 @@ import { idOf } from '../realm/route.ts';
 let record = manga as AnswerRecord;
 let persona: AnswerPersona = 'visitor';
 const host = { ...(await import('next/headers')) };
-void mock.module('next/headers', () => ({ ...host,
+const restoreHost = replaceModule(import.meta.resolve('next/headers'), host, {
   cookies: async () => ({ get: (name: string) => persona === 'visitor' ? undefined
     : name === ACCESS_COOKIE ? { value: `recorded-${persona}` }
       : name === SESSION_KEY_COOKIE ? { value: '00000000-0000-4000-8000-000000000001' } : undefined }),
   headers: async () => new Headers(),
-}));
+});
 const api = { ...(await import('../api/main.ts')) };
 let fetcher: typeof fetch;
-void mock.module('../api/main.ts', () => ({ ...api,
+const restoreApi = replaceModule(import.meta.resolve('../api/main.ts'), api, {
   mainApiWithToken: (token: string | undefined) => api.mainApiWithToken(token, { fetcher }),
-}));
+});
 const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
 const { SiteHomeRoute } = await import('../realm/routes.tsx');
 const { ZoneHome } = await import('./zone-home.tsx');
@@ -35,9 +36,9 @@ const { ZoneBrowse } = await import('./browse.tsx');
 const { ZoneFrame } = await import('./zone-frame.tsx');
 const disposals: (() => void)[] = [];
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
-afterAll(async () => {
-  await mock.module('../api/main.ts', () => api);
-  await mock.module('next/headers', () => host);
+afterAll(() => {
+  restoreApi();
+  restoreHost();
 });
 
 function sample(label: string) {

@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import '../../tests/support/official-package-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
@@ -39,10 +40,10 @@ const view = () => ({ kind: 'view', publication: presentation, presentation: pre
 const originalHeaders = { ...(await import('next/headers')) };
 const reads = { ...(await import('../realm/read.ts')) };
 const i18n = { ...(await import('../../i18n/server.ts')) };
-void mock.module('next/headers', () => ({ ...originalHeaders, cookies: async () => ({ get: () => undefined }),
-  headers: async () => new Headers() }));
+const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, { cookies: async () => ({ get: () => undefined }),
+  headers: async () => new Headers() });
 
-void mock.module('../realm/read.ts', () => ({ ...reads,
+const restoreReads = replaceModule(import.meta.resolve('../realm/read.ts'), reads, {
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
   readZoneRoute: async () => {
     routeReads += 1;
@@ -50,21 +51,20 @@ void mock.module('../realm/read.ts', () => ({ ...reads,
   },
   readCompletePresentation: async () => refused ? { ok: false, failure: 'unavailable' }
     : { ok: true, data: presentation },
-}));
-void mock.module('../../i18n/server.ts', () => ({
-  ...i18n,
+});
+const restoreI18n = replaceModule(import.meta.resolve('../../i18n/server.ts'), i18n, {
   getMessages: async (namespace: string) => namespace === 'realm' ? messages : zoneMessagesFor('en'),
   getTranslation: async () => ({ t: {} }),
-}));
+});
 const frames = { ...(await import('../realm/realm-page.tsx')) };
-void mock.module('../realm/realm-page.tsx', () => ({ ...frames,
+const restoreFrames = replaceModule(import.meta.resolve('../realm/realm-page.tsx'), frames, {
   loadRealmView: async () => refused ? { kind: 'unavailable', failure: 'unavailable' } : view(),
-}));
+});
 afterAll(async () => {
-  await mock.module('../realm/realm-page.tsx', () => frames);
-  await mock.module('../../i18n/server.ts', () => i18n);
-  await mock.module('../realm/read.ts', () => reads);
-  await mock.module('next/headers', () => originalHeaders);
+  restoreFrames();
+  restoreI18n();
+  restoreReads();
+  restoreOriginalHeaders();
 });
 const { ZoneSiteRoute, StandaloneZoneSiteFrame } = await import('./site-route.tsx');
 

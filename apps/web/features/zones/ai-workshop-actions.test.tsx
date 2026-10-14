@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, expect, test } from 'bun:test';
 import { cloneElement, isValidElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { WorkCardSlotProps, ZoneCardLayout, ZonePackage } from '@rezics/zone-sdk';
@@ -18,20 +19,20 @@ const originalHeaders = { ...(await import('next/headers')) };
 const originalServerRead = { ...(await import('../api/server-read.ts')) };
 let answer: PlatformAccess | 'unavailable' | 'malformed' = NO_PLATFORM_ACCESS;
 let reads = 0;
-await mock.module('next/headers', () => ({ ...originalHeaders,
+const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => undefined }), headers: async () => new Headers(),
-}));
-await mock.module('../api/server-read.ts', () => ({ ...originalServerRead,
+});
+const restoreOriginalServerRead = replaceModule(import.meta.resolve('../api/server-read.ts'), originalServerRead, {
   serverRead: async (url: string) => {
     expect(new URL(url).pathname).toBe('/v1/me/platform-access');
     reads++;
     if (answer === 'unavailable') throw new Error('Main unavailable');
     return Response.json(answer === 'malformed' ? null : answer);
   },
-}));
+});
 afterAll(async () => {
-  await mock.module('next/headers', () => originalHeaders);
-  await mock.module('../api/server-read.ts', () => originalServerRead);
+  restoreOriginalHeaders();
+  restoreOriginalServerRead();
 });
 
 // Resolve only the server card adapter; the real package and client Link still render below the shell.

@@ -1,4 +1,5 @@
-import { afterAll, beforeEach, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, beforeEach, expect, test } from 'bun:test';
 import '../../tests/support/official-package-fixture.ts';
 import { fromPlainText } from '@rezics/document';
 import { direction } from '@rezics/main/language';
@@ -27,31 +28,28 @@ const discussionAddresses: Array<{ zone?: string; ref?: string; path: string; hr
 
 const originalHeaders = { ...(await import('next/headers')) };
 const i18n = { ...(await import('../../i18n/server.ts')) };
-void mock.module('next/headers', () => ({
-  ...originalHeaders,
+const restoreOriginalHeaders = replaceModule(import.meta.resolve('next/headers'), originalHeaders, {
   cookies: async () => ({ get: () => undefined }),
   headers: async () => new Headers(),
-}));
-void mock.module('../../i18n/server.ts', () => ({
-  ...i18n,
+});
+const restoreI18n = replaceModule(import.meta.resolve('../../i18n/server.ts'), i18n, {
   requestLocale: async () => 'en',
   getMessages: async (namespace: string) => namespace === 'realm' ? messages
     : namespace === 'workPage' ? workMessages.en : zoneMessages,
   getTranslation: async () => ({ t: {} }),
-}));
+});
 const discussionEntry = { ...(await import('./about-discussion-entry.tsx')) };
-void mock.module('./about-discussion-entry.tsx', () => ({
-  ...discussionEntry,
+const restoreDiscussionEntry = replaceModule(import.meta.resolve('./about-discussion-entry.tsx'), discussionEntry, {
   ZoneAboutDiscussion: (address: typeof discussionAddresses[number]) => {
     discussionCalls += 1;
     discussionAddresses.push(address);
     return <aside data-zone-discussion-entry aria-label="Discussion">Discussion sentinel</aside>;
   },
-}));
+});
 const editLink = { ...(await import('../zone-editor/edit-link.tsx')) };
-void mock.module('../zone-editor/edit-link.tsx', () => ({ ...editLink, ZoneEditLink: () => null }));
+const restoreEditLink = replaceModule(import.meta.resolve('../zone-editor/edit-link.tsx'), editLink, { ZoneEditLink: () => null });
 const reads = { ...(await import('../realm/read.ts')) };
-void mock.module('../realm/read.ts', () => ({ ...reads,
+const restoreReads = replaceModule(import.meta.resolve('../realm/read.ts'), reads, {
   resolveSite: async () => ({ kind: 'site', zone, realm: attached ? zone : null, address: { canonical } }),
   readCompletePresentation: async () => ({ ok: true, data: publication }),
   readZoneBrowse: async () => ({ ok: false, failure: 'unavailable' }),
@@ -59,51 +57,51 @@ void mock.module('../realm/read.ts', () => ({ ...reads,
     kind: pageKind === 'document' ? 'document' : 'detail',
     resource: { id: metadataOnlyWork.id }, mount: null, tab: null,
   } }),
-}));
+});
 const modules = { ...(await import('../realm/modules.ts')) };
-void mock.module('../realm/modules.ts', () => ({ ...modules,
+const restoreModules = replaceModule(import.meta.resolve('../realm/modules.ts'), modules, {
   loadHomeModules: async () => ({ modules: [], images: [] }),
-}));
+});
 const frames = { ...(await import('../realm/realm-page.tsx')) };
-void mock.module('../realm/realm-page.tsx', () => ({ ...frames,
+const restoreFrames = replaceModule(import.meta.resolve('../realm/realm-page.tsx'), frames, {
   loadRealmView: async () => currentView,
-}));
+});
 const workReads = { ...(await import('../work-page/read.ts')) };
-void mock.module('../work-page/read.ts', () => ({ ...workReads,
+const restoreWorkReads = replaceModule(import.meta.resolve('../work-page/read.ts'), workReads, {
   loadWork: async () => ({ ok: true, id: metadataOnlyWork.id.slice(-36), header: metadataOnlyWork }),
   readText: async () => ({ ok: true, data: { language: 'en', body: 'Mounted guide prose' } }),
-}));
+});
 // These content regions have their own reads; the Zone route and the components that own its entry stay real.
 const workViews = { ...(await import('../work-page/work-views.tsx')) };
-void mock.module('../work-page/work-views.tsx', () => ({ ...workViews,
+const restoreWorkViews = replaceModule(import.meta.resolve('../work-page/work-views.tsx'), workViews, {
   WorkFrameView: ({ work, children }: { work: typeof metadataOnlyWork; children: ReactNode }) =>
     <section><h1>{work.title.value}</h1>{children}</section>,
   WorkOverview: () => <article>Work overview body</article>,
-}));
+});
 const entityReads = { ...(await import('../entity-page/read.ts')) };
-void mock.module('../entity-page/read.ts', () => ({ ...entityReads,
+const restoreEntityReads = replaceModule(import.meta.resolve('../entity-page/read.ts'), entityReads, {
   readEntityProjection: async () => ({ ok: true, data: {
     target: { base: pageKind === 'work' ? 'work' : 'resource' },
     summary: { status: 'available', name: { value: 'Harbor resource', language: 'en',
       direction: direction('en', 'Harbor resource') } },
   } }),
-}));
+});
 const entityViews = { ...(await import('../entity-page/entity-page.tsx')) };
-void mock.module('../entity-page/entity-page.tsx', () => ({ ...entityViews,
+const restoreEntityViews = replaceModule(import.meta.resolve('../entity-page/entity-page.tsx'), entityViews, {
   EntityPage: () => <article><h1>Harbor resource</h1></article>,
-}));
+});
 afterAll(async () => {
-  await mock.module('../entity-page/entity-page.tsx', () => entityViews);
-  await mock.module('../entity-page/read.ts', () => entityReads);
-  await mock.module('../work-page/work-views.tsx', () => workViews);
-  await mock.module('../work-page/read.ts', () => workReads);
-  await mock.module('../realm/realm-page.tsx', () => frames);
-  await mock.module('../realm/modules.ts', () => modules);
-  await mock.module('../realm/read.ts', () => reads);
-  await mock.module('../zone-editor/edit-link.tsx', () => editLink);
-  await mock.module('./about-discussion-entry.tsx', () => discussionEntry);
-  await mock.module('../../i18n/server.ts', () => i18n);
-  await mock.module('next/headers', () => originalHeaders);
+  restoreEntityViews();
+  restoreEntityReads();
+  restoreWorkViews();
+  restoreWorkReads();
+  restoreFrames();
+  restoreModules();
+  restoreReads();
+  restoreEditLink();
+  restoreDiscussionEntry();
+  restoreI18n();
+  restoreOriginalHeaders();
 });
 const { ZoneSiteHome } = await import('./site-home.tsx');
 const { ZoneHomeContent } = await import('../zone-editor/home-content.tsx');

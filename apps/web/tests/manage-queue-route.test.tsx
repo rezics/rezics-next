@@ -1,3 +1,4 @@
+import { replaceModule } from './support/module-replacement.ts';
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { header, queuePage, realm } from '../features/manage/fixtures.ts';
 import { messages } from '../features/manage/messages.ts';
@@ -21,29 +22,38 @@ const headerRead = mock(async ({ query }: { query: { language: string; actingSub
 const main = { v1: { realms: () => ({ get: headerRead }) } } as unknown as MainClient;
 const names = mock(async () => queueApi.noNames);
 
+const serverReplacements = {
+  managedAddress: async () => ({ id: realm, address: 'books' }),
+  manager: async () => ({ principal: 'account-A', actingSubject, main, anonymous: {}, signInHref }),
+  permissionsIn: async () => permissions,
+};
+const restoreServer = replaceModule(import.meta.resolve('../features/manage/server.ts'), server, serverReplacements);
+const readsReplacements = {
+  readQueue: async () => ({ ok: true, data: queuePage }),
+};
+const restoreReads = replaceModule(import.meta.resolve('../features/manage/read.ts'), reads, readsReplacements);
+const queueApiReplacements = { readQueueNames: names };
+const restoreQueueApi = replaceModule(import.meta.resolve('../features/manage/queue-api.ts'), queueApi, queueApiReplacements);
+const i18nReplacements = {
+  requestLocale: async () => 'en', getMessages: async () => messages,
+};
+const restoreI18n = replaceModule(import.meta.resolve('../i18n/server.ts'), i18n, i18nReplacements);
+
 beforeEach(async () => {
   names.mockClear();
   headerRead.mockClear();
   permissions = [];
-  await mock.module('../features/manage/server.ts', () => ({ ...server,
-    managedAddress: async () => ({ id: realm, address: 'books' }),
-    manager: async () => ({ principal: 'account-A', actingSubject, main, anonymous: {}, signInHref }),
-    permissionsIn: async () => permissions,
-  }));
-  await mock.module('../features/manage/read.ts', () => ({ ...reads,
-    readQueue: async () => ({ ok: true, data: queuePage }),
-  }));
-  await mock.module('../features/manage/queue-api.ts', () => ({ ...queueApi, readQueueNames: names }));
-  await mock.module('../i18n/server.ts', () => ({ ...i18n,
-    requestLocale: async () => 'en', getMessages: async () => messages,
-  }));
+  restoreServer.set(serverReplacements);
+  restoreReads.set(readsReplacements);
+  restoreQueueApi.set(queueApiReplacements);
+  restoreI18n.set(i18nReplacements);
 });
 
 afterEach(async () => {
-  await mock.module('../features/manage/server.ts', () => server);
-  await mock.module('../features/manage/read.ts', () => reads);
-  await mock.module('../features/manage/queue-api.ts', () => queueApi);
-  await mock.module('../i18n/server.ts', () => i18n);
+  restoreServer();
+  restoreReads();
+  restoreQueueApi();
+  restoreI18n();
 });
 
 async function route() {

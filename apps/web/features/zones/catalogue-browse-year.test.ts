@@ -1,4 +1,5 @@
-import { afterAll, expect, mock, test } from 'bun:test';
+import { replaceModule } from '../../tests/support/module-replacement.ts';
+import { afterAll, expect, test } from 'bun:test';
 import '../../tests/support/official-package-fixture.ts';
 import { createElement, isValidElement, type ReactNode, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
@@ -92,8 +93,7 @@ const calls: { realm: string; query: Record<string, unknown> }[] = [];
 let transport: (query: Record<string, unknown>) => unknown;
 const directoryCalls: Record<string, unknown>[] = [];
 let directoryTransport: (body: Record<string, unknown>) => unknown;
-await mock.module('../api/main.ts', () => ({
-  ...mainExports,
+const restoreMainExports = replaceModule(import.meta.resolve('../api/main.ts'), mainExports, {
   mainApiWithToken: () => ({
     v1: {
       realms: ({ realm }: { realm: string }) => ({
@@ -115,9 +115,9 @@ await mock.module('../api/main.ts', () => ({
       },
     },
   }),
-}));
+});
 afterAll(async () => {
-  await mock.module('../api/main.ts', () => mainExports);
+  restoreMainExports();
 });
 const { RealmBrowseRoute } = await import('../realm/routes.tsx');
 

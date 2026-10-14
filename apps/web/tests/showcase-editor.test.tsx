@@ -1,4 +1,5 @@
-import { afterAll, describe, expect, mock, test } from 'bun:test';
+import { replaceModule } from './support/module-replacement.ts';
+import { afterAll, describe, expect, test } from 'bun:test';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { ShowcaseImage, WorkShowcase } from '../features/api/showcase.ts';
@@ -20,13 +21,12 @@ import { uiLocales } from '../i18n/define.ts';
 
 // The editor refreshes through the App Router after a save.
 const navigation = { ...(await import('next/navigation')) };
-void mock.module('next/navigation', () => ({
-  ...navigation,
+const restoreNavigation = replaceModule(import.meta.resolve('next/navigation'), navigation, {
   useRouter: () => ({ refresh() {} }),
   usePathname: () => '/',
   useSearchParams: () => new URLSearchParams(),
-}));
-afterAll(() => mock.module('next/navigation', () => navigation));
+});
+afterAll(() => restoreNavigation());
 const { SlotStatusView } = await import('../features/showcase-editor/status.tsx');
 const { LayerRow } = await import('../features/showcase-editor/cards.tsx');
 
