@@ -5,8 +5,18 @@ import { grantLaunchRecipeAuthority } from '../../../../../scripts/load/launch-c
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import { settledWrite } from '../../../support/settled-write.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import { browserMainApi } from '../../../../../apps/web/features/api/browser.ts';
+import { createReaderStore } from '../../../../../apps/web/features/catalogue/reader-store.ts';
+import { mainTrackingApi } from '../../../../../apps/web/features/tracking/api.ts';
+import { mainEpisodeApi } from '../../../../../apps/web/features/tracking/episode-api.ts';
+import { markPosition, standingOf } from '../../../../../apps/web/features/tracking/episodes.ts';
+import { readAnimeAgentCredits, readAnimeWorkCredits, readResourcePage } from '../../../../../apps/web/features/work-page/anime-hub-recorded-page.ts';
+import { readCustomShelves } from '../../../../../apps/web/features/library/read.ts';
+import { followHref } from '../../../../../apps/web/features/entity-page/href.ts';
+import { hubPlan } from '../../../../../apps/web/features/work-page/hub.ts';
+import { PREVIEW_COUNTS } from '../../../../../apps/web/features/work-levels/previews.tsx';
 
-setDefaultTimeout(90_000);
+setDefaultTimeout(210_000);
 let sessions: PersonaSessions;
 const requests = new WeakMap<Response, { method: string; path: string; body: unknown; key?: string }>();
 const failures: { request: unknown; status: number; answer: string }[] = [];
@@ -236,7 +246,6 @@ async function journey(name: PersonaName) {
   expect(await answer(sample('resume-watching', 'GET', `/v1/reading-positions/${short(show.work)}?${acting(person)}&position=mine&limit=1`)))
     .toMatchObject({ resolved: occurrences[0], scope: 'resume' });
   await isolated(name, person, name === 'owner' ? sessions.member : sessions.owner, sample);
-  await libraryVisit(name, person, sample);
 }
 
 /** One English `/library?shelf=reading&view=grid` visit, using the server's exact reads. */
@@ -291,10 +300,132 @@ async function libraryVisit(name: PersonaName, person: PersonaSession, sample: S
   }
 }
 
+/** Transport only: production owns paths, serialization, versions and command keys. */
+async function productionVisit(name: PersonaName, person: PersonaSession, sample: Sample) {
+  let stage = 'frame', count = 0, stopped = false;
+  const at = (part: string) => { stage = part; count = 0; };
+  const client = (anonymous = false) => browserMainApi('http://record.invalid', { fetcher: (async (input, init) => {
+    if (stopped) throw new Error('Production recording stopped after a 5xx');
+    const url = new URL(String(input));
+    const method = init?.method ?? 'GET';
+    const body = init?.body === undefined ? undefined : JSON.parse(String(init.body));
+    const key = new Headers(init?.headers).get('idempotency-key') ?? undefined;
+    const response = await (anonymous ? recording.session(name, sessions.visitor) : sample)(
+      `${stage}-${++count}`, method, url.pathname.replace(/^\/api\/main/, '') + url.search, body, key);
+    stopped = response.status >= 500;
+    return response;
+  }) as typeof fetch });
+  const main = client(), publicMain = client(true), agent = person.actingSubject!;
+  await main.v1.me['platform-access'].get();
+  await publicMain.v1.types.get();
+  const zones = await publicMain.v1.zones.get({ query: { official: 'true', limit: 6 } });
+  for (const zone of zones.data?.items.slice(0, 6) ?? []) await publicMain.v1.realms({ realm: short(zone.realm) }).get();
+  // The visitor is redirected by LibraryRoute; no private Library or Work control is reached.
+  if (name === 'visitor') return;
+  await main.v1.me['person-preferences'].get({ query: { actingSubject: agent } });
+  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, order: 'pinned', include: 'newSince' } });
+  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20, kind: 'space', order: 'recent', include: 'newSince' } });
+  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } });
+  await main.v1.me['managed-realms'].get({ query: { actingSubject: agent } });
+  await main.v1.me.notifications['unread-count'].get();
+  at('library-production-shelves');
+  await readCustomShelves(main, agent);
+  at('work-page');
+  const id = short(show.work), query = { actingSubject: agent };
+  await main.v1.works({ id }).get({ query });
+  await main.v1.works({ id })['reader-state'].get({ query });
+  await readAnimeAgentCredits(main, agent, id);
+  await readAnimeWorkCredits(main, agent, id);
+  const projection = await readResourcePage(main, agent, id);
+  await publicMain.v1.resources.showcase.post({ profile: 'work-showcase-batch-v1', targets: [show.work] });
+  const contexts = await main.v1.resources({ resource: id })['rating-contexts'].get({ query: { ...query, scope: 'global' } });
+  const context = contexts.data?.items[0]?.context;
+  await main.v1.resources({ resource: id }).ratings.get({ query: { ...query, scope: 'global', context } });
+  await main.v1['rating-populations'].get({ query: { limit: 20, target: show.work, ...query } });
+  await main.v1.works({ id })['reader-stats'].get({ query: { ...query, context } });
+  const plan = hubPlan(projection.ok ? projection.data : null);
+  if (plan.includes('availability')) {
+    await main.v1.works({ id }).realizations.get({ query: { ...query, limit: 20 } });
+    await main.v1.works({ id }).releases.get({ query: { limit: 20, ...query } });
+    await main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: 1 } });
+  }
+  if (plan.includes('parts')) {
+    await main.v1.resources({ resource: id }).parts.get({ query: { ...query, limit: PREVIEW_COUNTS.parts + 1 } });
+    await main.v1.resources({ resource: id }).wholes.get({ query: { ...query, limit: PREVIEW_COUNTS.wholes } });
+    await main.v1.resources({ resource: id }).relations.get({ query: { ...query, limit: 20 } });
+  }
+  if (projection.ok) {
+    const statements = projection.data.sections.find(section => section.id === 'statements');
+    if (statements) await followHref(main, statements.href, query)();
+    const discussion = projection.data.sections.find(section => section.id === 'discussion');
+    if (discussion) await followHref(main, discussion.href, query)();
+  }
+  if (plan.includes('about')) await main.v1.works({ id }).classifications.get({ query: { ...query, scope: 'global' } });
+  if (plan.includes('ratings') && context) await main.v1.resources({ resource: id }).reviews.get({ query: { context, sort: 'helpful', limit: 10, ...query } });
+  if (plan.includes('lists')) await main.v1.works({ id })['also-enjoyed'].get({ query: { ...query, limit: 12 } });
+  if (plan.includes('lists') || plan.includes('discussion')) await main.v1.query.post({
+    profile: 'template-query-v1', query: 'https://rezics.com/query/work-adoptions', revision: 1,
+    parameters: { roots: [show.work] }, presentation: { actingSubject: agent },
+  });
+  const tracking = mainTrackingApi(agent, () => main);
+  const panel = async (part: string) => {
+    at(part);
+    await tracking.media!.types(show.work);
+    await tracking.episodes!.structure(show.work);
+    await tracking.preference(show.work);
+    await tracking.editions(show.work);
+    await tracking.relations(show.work);
+    await tracking.definition('correspondence-equivalent');
+    await tracking.series(show.work, 'en');
+  };
+  if (!plan.includes('parts')) return;
+  await panel('work-series-panel');
+  const episodes = mainEpisodeApi(agent, () => main);
+  at('work-episode-standing');
+  const standing = await standingOf(episodes, show.work);
+  // Episode 2 is untouched by the proof, and all proof assertions have finished.
+  const episode = standing.ok ? standing.data?.mains.items[1] : undefined;
+  at('status-control');
+  const store = createReaderStore({ actingSubject: agent, main: () => main });
+  await store.setStatus(show.work, 'read');
+  at('status-series-refresh');
+  await tracking.series(show.work, 'en');
+  at('status-navigation-refresh');
+  await main.v1.me.follows.get({ query: { actingSubject: agent, limit: 20 } });
+  if (!episode) return;
+  at('episode-select');
+  await episodes.progress(episode);
+  at('episode-mark-watched');
+  const watched = await episodes.mark(episode, { completed: true, position: markPosition(episode) });
+  if (!watched.ok) return;
+  at('episode-watched-refresh');
+  await standingOf(episodes, show.work);
+  at('episode-clear');
+  // The control omits position; episode-api carries Main's current position into the PUT.
+  const cleared = await episodes.mark(episode, { completed: false });
+  if (!cleared.ok) return;
+  at('episode-cleared-refresh');
+  await standingOf(episodes, show.work);
+}
+
 const qualification: { persona: string; passed: boolean; error?: string }[] = [];
+async function within<T>(milliseconds: number, part: string, run: () => Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([run(), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${part} exceeded ${milliseconds} ms`)), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
 async function qualify(name: PersonaName) {
   try {
-    await journey(name);
+    // The API proof owns its original 90 s; production recording has a separate 120 s afterwards.
+    await within(90_000, 'API proof', () => journey(name));
+    await within(120_000, 'production recording', async () => {
+      const person = sessions[name], sample = recording.session(name, person);
+      await libraryVisit(name, person, sample);
+      await productionVisit(name, person, sample);
+    });
     qualification.push({ persona: name, passed: true });
   } catch (error) {
     qualification.push({ persona: name, passed: false, error: String(error) });
