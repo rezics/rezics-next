@@ -38,7 +38,8 @@ export async function readRecipeVisitFrame(
   },
 ): Promise<RecipeVisitFrame> {
   await main.v1.me['platform-access'].get();
-  const types = await main.v1.types.get();
+  const anonymous = browserMainApi(input.origin, { anonymous: true, fetcher });
+  const types = await anonymous.v1.types.get();
   if (types.error || !types.data) {
     return {
       ok: false,
@@ -48,7 +49,6 @@ export async function readRecipeVisitFrame(
   seedTypes(types.data);
   // The shell asks for one public page of six official Zones.
   const officialZones = { official: 'true' as const, limit: 6 };
-  const anonymous = browserMainApi(input.origin, { anonymous: true, fetcher });
   const zones = await anonymous.v1.zones.get({ query: officialZones });
   // A refused or empty Zone page names no Realms. The shell still continues.
   if (!zones.error && zones.data) {
