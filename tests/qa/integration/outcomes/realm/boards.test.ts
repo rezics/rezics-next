@@ -27,8 +27,9 @@ async function answer<T>(request: Promise<Response>, status = 200): Promise<T> {
 
 function placementHead(value: unknown, reply: Reply): string {
   expect(value).toMatchObject({ profile: 'realm-reply-placement-v1', realm: sessions.realm,
-    reply: reply.reply, revisionId: reply.revisionId, placement: expect.any(String) });
+    reply: reply.reply, revisionId: reply.revisionId });
   const { placement } = value as { placement: string };
+  expect(placement).toBeString();
   expect(placement).toMatch(/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/);
   return placement;
 }
