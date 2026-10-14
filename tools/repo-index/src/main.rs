@@ -195,6 +195,28 @@ struct VariableFact {
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+struct SqlNodeFact {
+    node_ast_deflate: String,
+    ancestors: Vec<SqlNodeAncestor>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct SqlNodeAncestor {
+    #[serde(flatten)]
+    scope: SyntaxScope,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    function_like: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    method_kind: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    branch: Option<&'static str>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    condition_ast_deflate: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first_argument: Option<bool>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct IndexedFile {
     text: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -209,6 +231,8 @@ struct IndexedFile {
     trace_ast_deflate: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     variable_facts: Option<Vec<VariableFact>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    sql_node_facts: Option<Vec<SqlNodeFact>>,
     imports: Vec<Import>,
     sql_candidates: Vec<SqlCandidate>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -306,6 +330,9 @@ fn file_header(
     }
     if let Some(variables) = facts.variable_facts {
         payloads.insert("variableFacts", payload(&variables, writer, position)?);
+    }
+    if let Some(nodes) = facts.sql_node_facts {
+        payloads.insert("sqlNodeFacts", payload(&nodes, writer, position)?);
     }
     // Empty arrays are cheap to materialize lazily and preserve facts for
     // explicit fixtures without forcing every guard to read literal payloads.
@@ -687,6 +714,7 @@ fn indexed_mode(
             fragment_ast_deflate: None,
             trace_ast_deflate: None,
             variable_facts: None,
+            sql_node_facts: None,
             imports: vec![],
             sql_candidates: vec![],
             sql_deflate: Some(compressed_sql(&sql)?),
@@ -795,22 +823,31 @@ fn indexed_mode(
                 facts: Vec::new(),
             };
             variables.visit_program(&parsed.program);
-            let mut fragment_program = parsed.program.clone_in(&allocator);
-            let mut selection = SqlSyntaxSelection::default();
-            selection.visit_program(&fragment_program);
-            SqlSyntaxProjection {
-                marked: selection.marked,
-            }
-            .visit_program(&mut fragment_program);
-            (
+            let fragment = if keep_runtime {
+                let mut fragment_program = parsed.program.clone_in(&allocator);
+                let mut selection = SqlSyntaxSelection::default();
+                selection.visit_program(&fragment_program);
+                SqlSyntaxProjection {
+                    marked: selection.marked,
+                }
+                .visit_program(&mut fragment_program);
                 Some(compressed_ast(
                     &fragment_program.to_estree_json(true, false),
-                )?),
-                Some(variables.facts),
-            )
+                )?)
+            } else {
+                None
+            };
+            (fragment, Some(variables.facts))
         } else {
             (None, None)
         };
+    let sql_node_facts = if keep_runtime || service_graph_domain(&source.file) {
+        let mut nodes = SqlNodes::default();
+        nodes.visit_program(&parsed.program);
+        Some(nodes.facts)
+    } else {
+        None
+    };
     let trace_ast_deflate = if keep_runtime || service_graph_domain(&source.file) {
         let mut trace_program = parsed.program.clone_in(&allocator);
         let mut selection = SqlSyntaxSelection {
@@ -859,6 +896,7 @@ fn indexed_mode(
         fragment_ast_deflate,
         trace_ast_deflate,
         variable_facts,
+        sql_node_facts,
         imports,
         sql_candidates: candidates,
         sql_deflate: None,
@@ -1943,17 +1981,19 @@ namespace Inventory { const namespaceValue = table; }
             initializer["body"][0]["expression"]["start"],
             text.find("'UP' +").unwrap()
         );
-        let fragment = decode(facts.fragment_ast_deflate.as_ref().unwrap());
+        assert!(facts.fragment_ast_deflate.is_none());
         let mut names = Vec::new();
         let mut queries = Vec::new();
-        visit(&fragment, &mut |node| {
-            if node["type"] == "VariableDeclarator" {
-                names.push(node["id"]["name"].as_str().unwrap_or("").to_string());
-            }
-            if node["type"] == "CallExpression" {
-                queries.push(node["start"].as_u64().unwrap() as usize);
-            }
-        });
+        for fact in facts.sql_node_facts.as_ref().unwrap() {
+            visit(&decode(&fact.node_ast_deflate), &mut |node| {
+                if node["type"] == "VariableDeclarator" {
+                    names.push(node["id"]["name"].as_str().unwrap_or("").to_string());
+                }
+                if node["type"] == "CallExpression" {
+                    queries.push(node["start"].as_u64().unwrap() as usize);
+                }
+            });
+        }
         assert!(!names.iter().any(|name| matches!(
             name.as_str(),
             "table" | "assembled" | "sibling" | "local" | "namespaceValue"
@@ -1968,7 +2008,8 @@ namespace Inventory { const namespaceValue = table; }
         }
         let mut bytes = Vec::new();
         let header = file_header(facts, &mut bytes, &mut 0).unwrap();
-        assert!(header.payloads.contains_key("fragmentAstDeflate"));
+        assert!(!header.payloads.contains_key("fragmentAstDeflate"));
+        assert!(header.payloads.contains_key("sqlNodeFacts"));
         assert!(header.payloads.contains_key("variableFacts"));
         assert!(!header.payloads.contains_key("sqlAstDeflate"));
     }
@@ -2121,6 +2162,168 @@ const arrow = () => receiver.method('expression-body');
                     .unwrap()
                     .len()
         );
+    }
+    #[test]
+    fn sql_node_records_preserve_preorder_argument_identity_template_stops_and_branch_owners() {
+        let root = env::current_dir().unwrap();
+        let text = r#"const unicode = 'é🧭';
+function probe(id, key) {
+ if (flag) db.query('UPDATE owner.direct SET value=$1', [id, key]);
+ else db.execute(('SELECT * FROM owner.wrapped' as string), params);
+ helper('UPDATE owner.skip SET value=1');
+ helper(('UPDATE owner.duplicate SET value=1' as string));
+ helper(other, 'UPDATE owner.second SET value=1');
+ db['query']('UPDATE owner.computed SET value=1');
+ (db.query)('UPDATE owner.paren SET value=1');
+ db.query(`value=${db.query('UPDATE owner.hidden SET value=1') as 'UPDATE owner.hidden_type SET value=1'}`);
+ const cast = key as 'UPDATE owner.type SET value=1';
+ const object = { method() { if (flag) db.query('SELECT * FROM owner.method'); }, get current() { return db.query('SELECT * FROM owner.getter'); } };
+ const conditional = flag ? 'SELECT * FROM owner.then' : 'SELECT * FROM owner.else';
+}
+class Owner { method() { db.execute('SELECT * FROM owner.class'); } }
+"#;
+        let facts = indexed(
+            Source {
+                file: "nodes.ts".into(),
+                text: text.into(),
+            },
+            &root,
+            &resolver(&root),
+            false,
+        )
+        .unwrap();
+        let nodes = facts.sql_node_facts.as_ref().unwrap();
+        let decode = |encoded: &str| {
+            let bytes = STANDARD.decode(encoded).unwrap();
+            serde_json::from_reader::<_, Value>(flate2::read::DeflateDecoder::new(bytes.as_slice()))
+                .unwrap()
+        };
+        let expressions = nodes
+            .iter()
+            .map(|node| decode(&node.node_ast_deflate)["body"][0]["expression"].clone())
+            .collect::<Vec<_>>();
+        let at = |prefix: &str| {
+            expressions
+                .iter()
+                .position(|expression| expression["start"] == text.find(prefix).unwrap())
+                .unwrap()
+        };
+        let direct = at("db.query('UPDATE owner.direct");
+        let literal = at("'UPDATE owner.direct");
+        assert!(direct < literal);
+        assert_eq!(expressions[direct]["callee"]["type"], "MemberExpression");
+        assert_eq!(expressions[direct]["callee"]["property"]["name"], "query");
+        assert_eq!(expressions[direct]["callee"]["computed"], false);
+        assert_eq!(
+            expressions[direct]["arguments"][1]["type"],
+            "ArrayExpression"
+        );
+        assert_eq!(
+            expressions[direct]["arguments"][1]["elements"][0]["name"],
+            "id"
+        );
+        assert_eq!(nodes[literal].ancestors[0].scope.kind, "CallExpression");
+        assert_eq!(nodes[literal].ancestors[0].first_argument, Some(true));
+        assert_eq!(
+            nodes[at("'UPDATE owner.skip")].ancestors[0].first_argument,
+            Some(true)
+        );
+        assert_eq!(
+            nodes[at("'UPDATE owner.second")].ancestors[0].first_argument,
+            Some(false)
+        );
+        let duplicate = &nodes[at("'UPDATE owner.duplicate")];
+        assert_eq!(duplicate.ancestors[0].scope.kind, "TSAsExpression");
+        assert!(
+            duplicate
+                .ancestors
+                .iter()
+                .any(|parent| parent.first_argument == Some(true))
+        );
+        let call_spans = expressions
+            .iter()
+            .filter(|expression| expression["type"] == "CallExpression")
+            .map(|expression| expression["start"].as_u64().unwrap() as usize)
+            .collect::<Vec<_>>();
+        for prefix in [
+            "db['query'](",
+            "(db.query)(",
+            "db.query('UPDATE owner.hidden",
+        ] {
+            assert!(!call_spans.contains(&text.find(prefix).unwrap()));
+        }
+        assert!(!expressions.iter().any(
+            |expression| expression["start"] == text.find("'UPDATE owner.hidden_type").unwrap()
+        ));
+        assert!(
+            expressions
+                .iter()
+                .any(|expression| expression["start"] == text.find("'UPDATE owner.type").unwrap())
+        );
+        let branch = nodes[direct]
+            .ancestors
+            .iter()
+            .find(|parent| parent.scope.kind == "IfStatement")
+            .unwrap();
+        assert_eq!(branch.branch, Some("then"));
+        assert_eq!(
+            decode(branch.condition_ast_deflate.as_ref().unwrap())["body"][0]["expression"]["name"],
+            "flag"
+        );
+        let alternate = nodes[at("db.execute(('SELECT")]
+            .ancestors
+            .iter()
+            .find(|parent| parent.scope.kind == "IfStatement")
+            .unwrap();
+        assert_eq!(alternate.branch, Some("else"));
+        assert_eq!(
+            alternate.condition_ast_deflate,
+            branch.condition_ast_deflate
+        );
+        for (prefix, truth) in [
+            ("'SELECT * FROM owner.then'", "then"),
+            ("'SELECT * FROM owner.else'", "else"),
+        ] {
+            let parent = nodes[at(prefix)]
+                .ancestors
+                .iter()
+                .find(|parent| parent.scope.kind == "ConditionalExpression")
+                .unwrap();
+            assert_eq!(parent.branch, Some(truth));
+        }
+        for (prefix, kind, method, start) in [
+            (
+                "db.query('SELECT * FROM owner.method",
+                "Property",
+                "method",
+                "method() { if",
+            ),
+            (
+                "db.query('SELECT * FROM owner.getter",
+                "Property",
+                "get",
+                "get current()",
+            ),
+            (
+                "db.execute('SELECT * FROM owner.class",
+                "MethodDefinition",
+                "method",
+                "method() { db.execute",
+            ),
+        ] {
+            let parents = &nodes[at(prefix)].ancestors;
+            let owner = parents.iter().find(|parent| parent.function_like).unwrap();
+            assert_eq!(owner.scope.kind, kind);
+            assert_eq!(owner.method_kind, Some(method));
+            assert_eq!(owner.scope.start as usize, text.find(start).unwrap());
+            assert!(
+                !parents
+                    .iter()
+                    .any(|parent| matches!(parent.scope.kind, "FunctionExpression" | "ClassBody"))
+            );
+            assert_eq!(parents.last().unwrap().scope.kind, "Program");
+            assert_eq!(parents.last().unwrap().scope.start, 0);
+        }
     }
     #[test]
     fn graph_wire_compression_is_lossless_and_empty_services_signal_complete_facts() {
@@ -3030,6 +3233,112 @@ fn expression_ast(node: &Expression<'_>) -> Result<String> {
     InitializerProgram(node).serialize(&mut serializer);
     compressed_ast(&serializer.into_string())
 }
+fn syntax_node_ast(node: &impl ESTree, span: oxc_span::Span) -> Result<String> {
+    let mut serializer = CompactSerializer::new(true, false);
+    SyntaxProgram(node, span).serialize(&mut serializer);
+    compressed_ast(&serializer.into_string())
+}
+struct SyntaxProgram<'n, N>(&'n N, oxc_span::Span);
+struct SyntaxBody<'n, N>(&'n N, oxc_span::Span);
+struct SyntaxStatement<'n, N>(&'n N, oxc_span::Span);
+impl<N: ESTree> ESTree for SyntaxProgram<'_, N> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "Program");
+        state.serialize_field("body", &SyntaxBody(self.0, self.1));
+        state.serialize_field("sourceType", "module");
+        state.serialize_span(self.1);
+        state.end();
+    }
+}
+impl<N: ESTree> ESTree for SyntaxBody<'_, N> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_sequence();
+        state.serialize_element(&SyntaxStatement(self.0, self.1));
+        state.end();
+    }
+}
+impl<N: ESTree> ESTree for SyntaxStatement<'_, N> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "ExpressionStatement");
+        state.serialize_field("expression", self.0);
+        state.serialize_span(self.1);
+        state.end();
+    }
+}
+struct SqlQueryExpression<'n, 'a>(&'n CallExpression<'a>);
+struct SqlQueryMember<'n, 'a>(&'n StaticMemberExpression<'a>);
+struct OpaqueExpression<'n, 'a>(&'n Expression<'a>);
+impl ESTree for SqlQueryExpression<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let Expression::StaticMemberExpression(member) = &self.0.callee else {
+            unreachable!()
+        };
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "CallExpression");
+        state.serialize_field("callee", &SqlQueryMember(member));
+        state.serialize_field("arguments", &InitializerArguments(&self.0.arguments));
+        state.serialize_field("optional", &self.0.optional);
+        state.serialize_span(self.0.span);
+        state.end();
+    }
+}
+impl ESTree for SqlQueryMember<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", "MemberExpression");
+        state.serialize_field("object", &OpaqueExpression(&self.0.object));
+        state.serialize_field("property", &self.0.property);
+        state.serialize_field("computed", &false);
+        state.serialize_field("optional", &self.0.optional);
+        state.serialize_span(self.0.span);
+        state.end();
+    }
+}
+impl ESTree for OpaqueExpression<'_, '_> {
+    fn serialize<S: Serializer>(&self, serializer: S) {
+        let kind = match self.0 {
+            Expression::StaticMemberExpression(_)
+            | Expression::ComputedMemberExpression(_)
+            | Expression::PrivateFieldExpression(_) => "MemberExpression",
+            Expression::CallExpression(_) => "CallExpression",
+            Expression::NewExpression(_) => "NewExpression",
+            Expression::ObjectExpression(_) => "ObjectExpression",
+            Expression::ArrayExpression(_) => "ArrayExpression",
+            Expression::FunctionExpression(_) => "FunctionExpression",
+            Expression::ArrowFunctionExpression(_) => "ArrowFunctionExpression",
+            Expression::ClassExpression(_) => "ClassExpression",
+            Expression::TemplateLiteral(_) => "TemplateLiteral",
+            Expression::ConditionalExpression(_) => "ConditionalExpression",
+            Expression::BinaryExpression(_) => "BinaryExpression",
+            Expression::LogicalExpression(_) => "LogicalExpression",
+            Expression::AssignmentExpression(_) => "AssignmentExpression",
+            Expression::UnaryExpression(_) => "UnaryExpression",
+            Expression::ParenthesizedExpression(_) => "ParenthesizedExpression",
+            Expression::TSAsExpression(_) => "TSAsExpression",
+            Expression::TSSatisfiesExpression(_) => "TSSatisfiesExpression",
+            Expression::TSNonNullExpression(_) => "TSNonNullExpression",
+            Expression::TSTypeAssertion(_) => "TSTypeAssertion",
+            Expression::AwaitExpression(_) => "AwaitExpression",
+            Expression::ChainExpression(_) => "ChainExpression",
+            _ => {
+                self.0.serialize(serializer);
+                return;
+            }
+        };
+        let mut state = serializer.serialize_struct();
+        state.serialize_field("type", kind);
+        if kind == "MemberExpression" {
+            state.serialize_field(
+                "computed",
+                &matches!(self.0, Expression::ComputedMemberExpression(_)),
+            );
+        }
+        state.serialize_span(self.0.span());
+        state.end();
+    }
+}
 struct InitializerProgram<'n, 'a>(&'n Expression<'a>);
 struct InitializerBody<'n, 'a>(&'n Expression<'a>);
 struct InitializerStatement<'n, 'a>(&'n Expression<'a>);
@@ -3426,6 +3735,141 @@ impl<'a> Visit<'a> for VariableSyntax<'_> {
     }
     fn leave_node(&mut self, _: AstKind<'a>) {
         self.frames.pop();
+    }
+}
+struct SqlNodeFrame<'a> {
+    span: oxc_span::Span,
+    scope: Option<SyntaxScope>,
+    function_like: bool,
+    method_kind: Option<&'static str>,
+    condition: Option<&'a Expression<'a>>,
+    consequent: Option<oxc_span::Span>,
+    alternate: Option<oxc_span::Span>,
+    call: bool,
+    first_argument: Option<oxc_span::Span>,
+}
+#[derive(Default)]
+struct SqlNodes<'a> {
+    frames: Vec<SqlNodeFrame<'a>>,
+    facts: Vec<SqlNodeFact>,
+    conditions: BTreeMap<(u32, u32), String>,
+}
+impl SqlNodes<'_> {
+    fn record(&mut self, node: &impl ESTree, span: oxc_span::Span) {
+        let mut child = span;
+        let mut ancestors = Vec::new();
+        for frame in self.frames.iter().rev() {
+            if let Some(scope) = &frame.scope {
+                let branch = if frame.consequent == Some(child) {
+                    Some("then")
+                } else if frame.alternate == Some(child) {
+                    Some("else")
+                } else {
+                    None
+                };
+                let condition_ast_deflate = branch.and(frame.condition).map(|condition| {
+                    let span = condition.span();
+                    self.conditions
+                        .entry((span.start, span.end))
+                        .or_insert_with(|| expression_ast(condition).unwrap())
+                        .clone()
+                });
+                ancestors.push(SqlNodeAncestor {
+                    scope: scope.clone(),
+                    function_like: frame.function_like,
+                    method_kind: frame.method_kind,
+                    branch,
+                    condition_ast_deflate,
+                    first_argument: frame.call.then_some(frame.first_argument == Some(child)),
+                });
+            }
+            child = frame.span;
+        }
+        self.facts.push(SqlNodeFact {
+            node_ast_deflate: syntax_node_ast(node, span).unwrap(),
+            ancestors,
+        });
+    }
+}
+impl<'a> Visit<'a> for SqlNodes<'a> {
+    fn enter_node(&mut self, kind: AstKind<'a>) {
+        let method_kind = match kind {
+            AstKind::MethodDefinition(node) => Some(match node.kind {
+                MethodDefinitionKind::Constructor => "constructor",
+                MethodDefinitionKind::Method => "method",
+                MethodDefinitionKind::Get => "get",
+                MethodDefinitionKind::Set => "set",
+            }),
+            AstKind::ObjectProperty(node) if node.method || node.kind != PropertyKind::Init => {
+                Some(match node.kind {
+                    PropertyKind::Init => "method",
+                    PropertyKind::Get => "get",
+                    PropertyKind::Set => "set",
+                })
+            }
+            _ => None,
+        };
+        let hidden_function = matches!(kind, AstKind::Function(_))
+            && self
+                .frames
+                .last()
+                .is_some_and(|frame| frame.method_kind.is_some());
+        let span = kind.span();
+        let (condition, consequent, alternate) = match kind {
+            AstKind::IfStatement(node) => (
+                Some(&node.test),
+                Some(node.consequent.span()),
+                node.alternate.as_ref().map(GetSpan::span),
+            ),
+            AstKind::ConditionalExpression(node) => (
+                Some(&node.test),
+                Some(node.consequent.span()),
+                Some(node.alternate.span()),
+            ),
+            _ => (None, None, None),
+        };
+        self.frames.push(SqlNodeFrame {
+            span,
+            scope: if hidden_function {
+                None
+            } else {
+                scope_kind(kind).map(|name| SyntaxScope {
+                    kind: name,
+                    start: if name == "Program" { 0 } else { span.start },
+                    end: span.end,
+                })
+            },
+            function_like: method_kind.is_some() || (!hidden_function && function_node(kind)),
+            method_kind,
+            condition,
+            consequent,
+            alternate,
+            call: matches!(kind, AstKind::CallExpression(_)),
+            first_argument: match kind {
+                AstKind::CallExpression(node) => node.arguments.first().map(GetSpan::span),
+                _ => None,
+            },
+        });
+    }
+    fn leave_node(&mut self, _: AstKind<'a>) {
+        self.frames.pop();
+    }
+    fn visit_call_expression(&mut self, node: &CallExpression<'a>) {
+        if matches!(&node.callee, Expression::StaticMemberExpression(member) if matches!(member.property.name.as_str(), "query" | "execute"))
+        {
+            self.record(&SqlQueryExpression(node), node.span);
+        }
+        walk::walk_call_expression(self, node);
+    }
+    fn visit_string_literal(&mut self, node: &StringLiteral<'a>) {
+        if sql_operation_literal(&node.value) {
+            self.record(node, node.span);
+        }
+    }
+    fn visit_template_literal(&mut self, node: &TemplateLiteral<'a>) {
+        // The source-fragment visitor treats a complete template as one value.
+        // Relation guards retain their separate full template-tree payload.
+        self.record(node, node.span);
     }
 }
 #[derive(Default)]
