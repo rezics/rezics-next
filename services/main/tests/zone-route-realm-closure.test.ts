@@ -5,8 +5,7 @@ import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 import { prepareComponent, RV } from '../src/modules/work/activate.ts';
 import { ZONE_CONFIG_FORMAT, ZONE_PROFILE } from '../src/modules/zone/config-format.ts';
 import { readZonePublication } from '../src/modules/zone/publication.ts';
-import { readZonePresentation, resolveZoneRoute } from '../src/modules/zone/route.ts';
-import { WorkReadMissing } from '../src/modules/work/read-session.ts';
+import { readZonePresentation, resolveZoneRoute, ZoneRouteMissing } from '../src/modules/zone/route.ts';
 
 function fixture(input: { realm: 'public' | 'private' | 'closed'; granted?: boolean;
   changed?: boolean; revoked?: boolean; fault?: boolean }) {
@@ -75,7 +74,7 @@ test('Realm membership revocation refuses a read rather than disclosing an admit
   const f = fixture({ realm: 'private', granted: true, revoked: true });
   try {
     await expect(resolveZoneRoute(f.work, f.request, { zone: f.zone, path: '/',
-      actingSubject: `https://rezics.com/id/${randomUUID()}` })).rejects.toBeInstanceOf(WorkReadMissing);
+      actingSubject: `https://rezics.com/id/${randomUUID()}` })).rejects.toBeInstanceOf(ZoneRouteMissing);
   } finally { f.close(); }
 });
 

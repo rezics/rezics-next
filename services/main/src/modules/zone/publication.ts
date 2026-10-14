@@ -27,6 +27,7 @@ import { discloseContent } from '../disclosure/assembly.ts';
 import { currentDisclosureViewer, withDisclosureViewer } from '../disclosure/viewer.ts';
 import { discloseInventory } from '../disclosure/read.ts';
 import { ZonePublicationUnavailable } from './configuration.ts';
+import { readRealmPolicy } from '../space/policy.ts';
 
 export const ZonePublicPage = Type.Object({ ...ZonePageDocument.properties,
   reference: exactContentRevision.properties.reference }, { additionalProperties: false });
@@ -300,6 +301,12 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
   const bounded = { ...env, fuseki: boundedFuseki };
   const presentation = typeof config.presentation === 'object'
     ? config.presentation : DEFAULT_ZONE_PRESENTATION;
+  const publicRealmSources = presentation.modules.some(module => [module.source,
+    ...(module.tabs ?? []).map(tab => tab.source)].some(source => source.kind === 'query-block'
+      && (ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(source.block)));
+  const realmPolicy = publicRealmSources && config.defaultRealm
+    ? await readRealmPolicy(bounded, config.defaultRealm) : null;
+  const publicRealm = realmPolicy !== null && realmPolicy.visibility !== 'private';
   const used = new Set(presentation.modules.flatMap(module => [module.source,
     ...(module.tabs ?? []).map(tab => tab.source)]).filter(source => source.kind === 'query-block')
     .map(source => source.kind === 'query-block' ? source.block : '')
@@ -349,7 +356,7 @@ export async function readZoneModuleData(env: WorkActivationEnvironment,
     sources: [module.source, ...(module.tabs ?? []).map(tab => tab.source)].map(source =>
       source.kind === 'query-block'
         ? { source, state: (ZONE_PUBLIC_READ_SOURCES as readonly string[]).includes(source.block)
-          ? 'public-read' as const : blocks.get(source.block)?.state ?? 'skipped',
+          ? publicRealm ? 'public-read' as const : 'unavailable' as const : blocks.get(source.block)?.state ?? 'skipped',
           members: blocks.get(source.block)?.members ?? [] }
         : source.kind === 'collection'
           ? { source, state: collectionData.get(source.collection)?.state ?? 'skipped',

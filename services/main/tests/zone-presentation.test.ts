@@ -54,7 +54,9 @@ test('every built-in Realm module source is unavailable without a live public Re
       ZONE_PUBLIC_READ_SOURCES.map(() => ['public', 'restricted'].includes(visibility) ? 'public-read' : 'unavailable'));
     expect(data.flatMap(module => module.sources.flatMap(source => source.members))).toEqual([]);
   }
-  const unavailable = await readZoneModuleData({} as WorkActivationEnvironment, { ...config, defaultRealm: undefined });
+  const unavailable = await readZoneModuleData({ fuseki: { query: async () => {
+    throw new Error('A missing Realm must not probe storage');
+  } } } as unknown as WorkActivationEnvironment, { ...config, defaultRealm: undefined });
   expect(unavailable.every(module => module.sources[0]?.state === 'unavailable')).toBe(true);
   const fault = { ...config, defaultRealm: three };
   await expect(readZoneModuleData({ fuseki: { query: async () => { throw new Error('Realm source fault'); } },

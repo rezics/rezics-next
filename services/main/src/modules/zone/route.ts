@@ -226,6 +226,22 @@ class RouteRead {
       this.privateZones.add(state.zone);
     }
   }
+  async visibleRealm(state: Publication): Promise<Publication> {
+    if (!state.realm) return state;
+    const target = state.realm;
+    const readable = await this.dependency(`zone-realm:${target}`, async () => {
+      try { await this.scopeSession.realm(target); return true; }
+      catch (error) {
+        if (error instanceof WorkReadMissing) return false;
+        throw error;
+      }
+    });
+    if (readable) return state;
+    // The immutable publication survives; its Realm identity and dependent
+    // sources consume current reader admission rather than the saved link.
+    const { defaultRealm: _realm, ...configuration } = state.configuration;
+    return { ...state, realm: null, configuration };
+  }
   async privateZone(zone: string) {
     try { await readZoneVisibility(this.scopeSession, zone); }
     catch (error) {
@@ -338,8 +354,9 @@ export function readZonePresentation<T>(work: MainWorkDependencies, request: Req
   // cross-unit cut has no selected-token API yet, so this read retains its
   // narrow dataset fence until those owner dependencies can join RouteRead.
   return boundedRead(work, request, actingSubject, async read => {
-    const state = await readZonePublication(work.environment, zone);
-    await read.zone(state);
+    const publication = await readZonePublication(work.environment, zone);
+    await read.zone(publication);
+    const state = await read.visibleRealm(publication);
     if (state.documentSite && !state.bundle) {
       if (after) throw new WorkReadExpired('Zone publication changed; restart from the first page');
       return present(state, [], read.viewer, slides => visibleZoneSlides(read, slides),
@@ -529,6 +546,7 @@ export async function resolveZoneRoute(work: MainWorkDependencies, request: Requ
     try { state = await readZonePublication(work.environment, input.zone); }
     catch (error) { if (error instanceof ZoneUnavailable) throw new ZoneRouteMissing('Zone route is unavailable'); throw error; }
     await read.zone(state);
+    state = await read.visibleRealm(state);
     const basis: RouteBasis = { profile: 'zone-route-v1', zone: input.zone, path: input.path,
       name: state.name, language: state.language, direction: state.direction,
       listing: state.listing, discovery: state.discovery,
