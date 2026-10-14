@@ -164,7 +164,7 @@ test('the request refusal keeps the recorded problem code', async () => {
     expect(problem.status).toBe(403);
     expect(result.failure).toBe('denied');
     expect(result.code).toBe(problem.code);
-    expect('title' in result).toBe(false);
+    expect(result.title).toBe(problem.title);
   }
   for (const persona of ['stranger', 'operator'] as const) {
     const problem = answerOf<{ title: string; code: string; status: number }>(persona, 'requests-access-realm');
