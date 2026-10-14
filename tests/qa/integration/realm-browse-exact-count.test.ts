@@ -31,7 +31,7 @@ beforeAll(async () => {
 }, 300_000);
 afterAll(async () => { try { await save(); } finally { await sessions?.close(); } });
 
-test('the preparation boundary refuses an unadmitted cut or traverses the independent Recipe inventory exactly', async () => {
+test('the preparation boundary reports an incomplete cut or traverses the independent Recipe inventory exactly', async () => {
   const path = `/v1/realms/${short(sessions.realm)}/modules/browse`;
   const read = async (reader: string, query: URLSearchParams, initial = false): Promise<Page | null> => {
     const request = `GET ${path}?${query}`;
@@ -60,6 +60,13 @@ test('the preparation boundary refuses an unadmitted cut or traverses the indepe
         type: 'https://schema.org/Recipe', limit: '20' });
       const first = await read(reader, query, reader === 'first' && sort === 'newest');
       if (!first) return;
+      if (!first.window.complete && first.nextCursor === null) {
+        expect(first.matches).toEqual({ value: first.items.length, kind: 'lower-bound' });
+        expect(first.items.every(item => inventory.matching.includes(item.id))).toBe(true);
+        expect(first.sourcePosition.dataEpoch).toBeString();
+        expect(first.sourcePosition.sequence).toMatch(/^\d+$/);
+        return;
+      }
       expect(first.items).toHaveLength(20);
       expect(first.matches).toEqual({ value: 20, kind: 'lower-bound' });
       expect(first.window.complete).toBe(false);
@@ -67,6 +74,11 @@ test('the preparation boundary refuses an unadmitted cut or traverses the indepe
       query.set('cursor', first.nextCursor!);
       const last = await read(reader, query);
       if (!last) throw new Error('An admitted traversal lost its catalogue answer');
+      if (!last.window.complete && last.nextCursor === null) {
+        expect(last.matches).toEqual({ value: first.items.length + last.items.length, kind: 'lower-bound' });
+        expect(last.items.every(item => inventory.matching.includes(item.id))).toBe(true);
+        return;
+      }
       expect(last.items).toHaveLength(1);
       const ids = [...first.items, ...last.items].map(item => item.id);
       expect(new Set(ids).size).toBe(21);

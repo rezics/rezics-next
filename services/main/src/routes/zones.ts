@@ -292,8 +292,11 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
   await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
   const { principal, workPrincipal } = await zoneRouteViewer(work, request, input.actingSubject);
   if (!principal) throw new CompositionUnavailable('Zone is unavailable');
-  if (!await work.access.canReadSemanticResource?.(principal, input.actingSubject, zone)) {
-    throw new CompositionUnavailable('Zone is unavailable');
+  const editorRead = !await work.access.canReadSemanticResource?.(principal, input.actingSubject, zone);
+  if (editorRead) {
+    // Saved navigation is part of the editor's own Zone. An exact edit mandate
+    // supplies this read without granting semantic access to its mount targets.
+    await requireZoneEditor(work, request, zone, input.actingSubject);
   }
   const state = await readZoneConfiguration(work.environment, zone);
   const structure = await navigation(fuseki, zone);
@@ -315,6 +318,7 @@ async function zonePage(fuseki: FusekiClient, work: MainWorkDependencies, reques
           canReadSemanticResource: (semanticPrincipal, actor, resource) =>
             work.access.canReadSemanticResource?.(semanticPrincipal, actor, resource) ?? Promise.resolve(false),
         }, principal, actingSubject: input.actingSubject }, targets) });
+  if (editorRead) await requireZoneEditor(work, request, zone, input.actingSubject);
   // The optional revision selects navigation history; metadata names the current owner head.
   return { zone, navigation: structure, revision: result.revision,
     ownerRevision: state.revision, name: state.name, language: state.language, direction: state.direction,

@@ -113,6 +113,12 @@ test('explicit adoption is covered truthfully by both public Realm browse adapte
     const page = request.method === 'POST' ? parsed.result! : parsed;
     expect(page.sourcePosition.dataEpoch).toBe(adopted.sourcePosition.dataEpoch);
     expect(BigInt(page.sourcePosition.sequence)).toBeGreaterThanOrEqual(BigInt(adopted.sourcePosition.sequence));
+    if (!page.window.complete) {
+      expect(page.matches).toEqual({ value: page.items.length, kind: 'lower-bound' });
+      expect(page.items.every(item => item.id === work.work)).toBe(true);
+      expect(page.nextCursor).toBeNull();
+      continue;
+    }
     expect(page.window.complete).toBe(true);
     expect(page.matches).toEqual({ value: 1, kind: 'exact' });
     expect(page.items.map(item => item.id)).toEqual([work.work]);

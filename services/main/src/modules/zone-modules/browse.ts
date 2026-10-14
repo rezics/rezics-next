@@ -310,10 +310,11 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   if (!projection) throw new WorkReadUnavailable('Zone browse projection is unavailable');
   if (!prior.current) throw new WorkReadExpired('Zone browse inventory changed; restart from a current projection');
   let current = prior.current && await projection.current(session.position);
-  // A lagging index can omit an already admitted selection ahead of the seek
-  // key. No continuation can recover that missing prefix without restarting.
-  if (!current) throw new WorkReadUnavailable('Zone browse projection is not current');
-  for (let batchIndex = 0; batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
+  // A lagging index can omit an admitted selection ahead of the seek key.
+  // First readers get an incomplete lower bound at the actual graph read
+  // position; a continuation must restart rather than skip that missing prefix.
+  if (!current && cursor) throw new WorkReadExpired('Zone browse inventory changed; restart from a current projection');
+  for (let batchIndex = 0; current && batchIndex < ZONE_BROWSE_COST.batches; batchIndex++) {
     const entries = await projection.batch(realm, appliedSort, after, session.position);
     if (!entries.length) { more = false; break; }
     const batch = await evaluate(entries.map(item => item.work), new Map(entries.map(item => [item.work, item])));
@@ -329,7 +330,6 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
     if (!more || page.length === limit) break;
   }
   current = current && await projection.current(session.position);
-  if (!current) throw new WorkReadUnavailable('Zone browse projection is not current');
   const counts = browseCandidates(examined, filter, text, appliedSort).facets;
   const pageIds = page.map(item => item.work);
   const conceptIds = [...new Set([...(filter.concept ?? []), ...(filter.conceptExclude ?? []),
@@ -368,7 +368,7 @@ export async function readZoneBrowse(session: WorkReadSession, realm: string, qu
   await readRealmBasis(session, realm);
   const complete = !more && current;
   const visible = prior.visible + page.length;
-  const next = more ? encodeReadCursor(binding, session.position,
+  const next = more && current ? encodeReadCursor(binding, session.position,
     JSON.stringify({ after, current, visible }), '', cursor?.expiresAt ?? Date.now() + 300_000) : null;
   return { profile: 'zone-browse-v1' as const, realm,
     query: { text, sort, appliedSort, textMatch: text ? 'title' as const : 'none' as const,

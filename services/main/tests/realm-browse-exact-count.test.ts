@@ -15,7 +15,7 @@ const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${Strin
 const realm = id(9000), concept = id(9001), book = 'https://schema.org/Book';
 const binding = (value: string) => ({ value });
 
-function fixture(count = 21) {
+function fixture(count = 21, type = book) {
   const entries: BrowseEntry[] = Array.from({ length: count }, (_, n) => ({ work: id(n + 1),
     adoptedOrder: String(count - n), words: n, updatedAt: n < 700 ? '2026-09-20T00:00:00.000001Z' : null }));
   const hidden = new Set<string>(), reads: number[] = [];
@@ -77,7 +77,7 @@ function fixture(count = 21) {
         work: binding(work), head: binding(id(9003)), main: binding(id(9004)), evidence: binding(id(9005)),
         revisionEpoch: binding('epoch'), sequence: binding('1'), status: binding(Number(work.slice(-12)) % 2 ? 'completed' : 'ongoing'),
       }));
-      if (sparql.includes('SELECT ?work ?type')) return ids.map(work => ({ work: binding(work), type: binding(book) }));
+      if (sparql.includes('SELECT ?work ?type')) return ids.map(work => ({ work: binding(work), type: binding(type) }));
       if (sparql.includes('SELECT ?work ?head')) return ids.map(work => ({ work: binding(work) }));
       return [];
     },
@@ -105,6 +105,23 @@ function fixture(count = 21) {
   }) as unknown as WorkReadSession;
   return { entries, hidden, reads, make, coverage, setTags: (value: typeof tagState) => { tagState = value; } };
 }
+
+test('an adopted VideoGame title search reports lag and finds the selection after projection catch-up', async () => {
+  const videoGame = 'https://schema.org/VideoGame';
+  const data = fixture(1, videoGame);
+  const query = { q: 'Story', type: [videoGame] };
+  data.coverage.current = false;
+  const lagging = await readZoneBrowse(data.make(), realm, query);
+  expect(lagging.matches).toEqual({ value: 0, kind: 'lower-bound' });
+  expect(lagging.window.complete).toBe(false);
+  expect(lagging.sourcePosition).toEqual(data.make().position);
+  expect(lagging.nextCursor).toBeNull();
+  data.coverage.current = true;
+  const caughtUp = await readZoneBrowse(data.make(), realm, query);
+  expect(caughtUp.items.map(item => item.id)).toEqual([data.entries[0]!.work]);
+  expect(caughtUp.matches).toEqual({ value: 1, kind: 'exact' });
+  expect(caughtUp.window.complete).toBe(true);
+});
 
 for (const sort of ['newest', 'updated', 'relevance'] as const) {
   const query = { sort, type: [book], ...(sort === 'relevance' ? { q: 'Story' } : {}) };
@@ -134,8 +151,35 @@ for (const sort of ['newest', 'updated', 'relevance'] as const) {
   test(`an incomplete first-reader ${sort} cut refuses a cursor`, async () => {
     const data = fixture();
     data.coverage.current = false;
-    await expect(readZoneBrowse(data.make(), realm, query)).rejects.toBeInstanceOf(WorkReadUnavailable);
+    const result = await readZoneBrowse(data.make(), realm, query);
+    expect(result.items).toEqual([]);
+    expect(result.matches).toEqual({ value: 0, kind: 'lower-bound' });
+    expect(result.window).toEqual({ scanned: 0, complete: false });
+    expect(result.sourcePosition).toEqual(data.make().position);
+    expect(result.nextCursor).toBeNull();
     expect(data.reads).toEqual([]);
+  });
+
+  test(`a ${sort} projection that falls behind during a read returns a lower bound without continuation`, async () => {
+    const data = fixture();
+    const session = data.make();
+    let checks = 0;
+    session.deps.zoneBrowse!.current = () => ++checks === 1;
+    const result = await readZoneBrowse(session, realm, query);
+    expect(result.items).toHaveLength(20);
+    expect(result.matches).toEqual({ value: 20, kind: 'lower-bound' });
+    expect(result.window.complete).toBe(false);
+    expect(result.sourcePosition).toEqual(session.position);
+    expect(result.nextCursor).toBeNull();
+  });
+
+  test(`a ${sort} continuation restarts when projection coverage falls behind`, async () => {
+    const data = fixture();
+    const first = await readZoneBrowse(data.make(), realm, query);
+    const reads = [...data.reads];
+    data.coverage.current = false;
+    await expect(readZoneBrowse(data.make(first.nextCursor!), realm, query)).rejects.toBeInstanceOf(WorkReadExpired);
+    expect(data.reads).toEqual(reads);
   });
 
   test(`a historical incomplete ${sort} cursor cannot pin later terminal count precision`, async () => {

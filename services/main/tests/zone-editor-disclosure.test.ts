@@ -115,7 +115,8 @@ async function savedSite(mountCount = 1, foreignMount = false) {
     replacementContent: randomUUID(),
     headReads: 0, bodyReads: 0, configReads: 0, navigationReads: 0,
     moved: '' as '' | 'content' | 'configuration' | 'navigation', missingNavigation: false, missingObject: false,
-    targetChecks: 0, revokeTarget: false, readable: true };
+    targetChecks: 0, revokeTarget: false, readable: true, zoneReadable: true,
+    editChecks: [] as { scope: string; action: string }[] };
   const principal = { issuer: 'https://account.local', subject: 'editor', emailVerified: true };
   const fuseki = { query: async (query: string) => {
     const budget = fusekiReadBudget.getStore();
@@ -153,6 +154,7 @@ async function savedSite(mountCount = 1, foreignMount = false) {
         generation, count: String(mountCount), manifest: navDigest })] } };
     }
     if (query.includes('SELECT ?owner')) return { results: { bindings: [row({ owner: zone })] } };
+    if (query.includes('SELECT ?navigation WHERE')) return { results: { bindings: [row({ navigation })] } };
     if (query.includes('SELECT ?manifest ?predecessor') || query.includes('SELECT ?manifest ?count')) {
       return { results: { bindings: [row({ manifest: state.missingObject ? `urn:rezics:sha256:${'0'.repeat(64)}` : navDigest,
         count: String(mountCount), epoch: 'epoch', sequence: '1' })] } };
@@ -167,7 +169,10 @@ async function savedSite(mountCount = 1, foreignMount = false) {
       if (!request.headers.has('authorization')) throw new AccountAssertionDenied('Sign in required');
       return principal;
     } }, access: {
-      assertAuthority: async () => { if (state.revoked) throw new AdmissionDenied('Revoked'); },
+      assertAuthority: async (input: { scope: string; action: string }) => {
+        state.editChecks.push({ scope: input.scope, action: input.action });
+        if (state.revoked) throw new AdmissionDenied('Revoked');
+      },
       activePrincipalId: async () => admissionId,
       withOwnerAuthority: async (_request: unknown, operation: (client: PoolClient) => Promise<unknown>) => {
         if (state.bridgeRevoked) throw new AdmissionDenied('Revoked during read');
@@ -176,7 +181,8 @@ async function savedSite(mountCount = 1, foreignMount = false) {
       },
       canReadWork: async () => { state.targetChecks++;
         return state.readable && !(state.revokeTarget && state.targetChecks > mountCount); },
-      canReadSemanticResource: async () => state.readable,
+      canReadSemanticResource: async (_principal: unknown, _actor: string, target: string) =>
+        target === zone ? state.zoneReadable : state.readable,
     }, contentAuthoring: {
       readDraftHead: async () => { state.headReads++; return state.empty ? null : {
         revisionId: state.moved === 'content' && state.headReads > 1 ? state.replacementContent : contentRevision,
@@ -188,11 +194,49 @@ async function savedSite(mountCount = 1, foreignMount = false) {
   configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const app = zoneRoutes(fuseki, work);
   return { work, state, zone, homeDocument, variantId, contentRevision, navRevision, records, document, publishedContent,
+    readNavigation: (revision?: string) => app.handle(new Request(
+      `http://main.local/v1/zones/${zone.slice(-36)}${revision ? `/revisions/${revision.slice(-36)}` : ''}?actingSubject=${encodeURIComponent(actor)}`,
+      { headers: { authorization: 'Bearer editor' } })),
     read: (input: { anonymous?: boolean; after?: string } = {}) => app.handle(new Request(
       `http://main.local/v1/zones/${zone.slice(-36)}/showcase-editor?actingSubject=${encodeURIComponent(actor)}`
         + (input.after ? `&after=${encodeURIComponent(input.after)}` : ''),
       { headers: input.anonymous ? {} : { authorization: 'Bearer editor' } })) };
 }
+
+test('exact Zone editors can read saved navigation and its revisions without semantic read authority', async () => {
+  const f = await savedSite();
+  f.state.zoneReadable = false;
+  for (const revision of [undefined, f.navRevision]) {
+    const response = await f.readNavigation(revision);
+    expect(response.status, await response.clone().text()).toBe(200);
+    expect(await response.json()).toMatchObject({ zone: f.zone, revision: f.navRevision, mounts: f.records });
+  }
+  expect(f.state.editChecks).toEqual([
+    { scope: `zone:edit:${f.zone}`, action: 'zone.edit' },
+    { scope: `zone:edit:${f.zone}`, action: 'zone.edit' },
+    { scope: `zone:edit:${f.zone}`, action: 'zone.edit' },
+    { scope: `zone:edit:${f.zone}`, action: 'zone.edit' },
+  ]);
+});
+
+test('Zone editor navigation retains target disclosure and refuses a missing or revoked exact mandate', async () => {
+  const f = await savedSite();
+  f.state.zoneReadable = false;
+  f.state.readable = false;
+  const readable = await f.readNavigation();
+  expect(readable.status, await readable.clone().text()).toBe(200);
+  expect((await readable.json()).mounts).toEqual([]);
+  f.state.revoked = true;
+  expect((await f.readNavigation()).status).toBe(404);
+  expect((await f.readNavigation(f.navRevision)).status).toBe(404);
+});
+
+test('Zone navigation refuses an edit mandate revoked while mount targets are read', async () => {
+  const f = await savedSite();
+  f.state.zoneReadable = false;
+  f.work.access.canReadWork = async () => { f.state.revoked = true; return true; };
+  expect((await f.readNavigation()).status).toBe(404);
+});
 
 test('saved site preview resolves the page, local campaign, structural tokens and current navigation without publishing', async () => {
   const f = await savedSite();
@@ -205,7 +249,8 @@ test('saved site preview resolves the page, local campaign, structural tokens an
   const result = await response.json();
   expect(result.preview.page.document).toEqual(f.document);
   expect(result.preview.page.blocks[0].status).toBe('resolved');
-  expect(result.preview.page.showcases[0].sources[0].state).toBe('public-read');
+  // This site has no Realm: a saved Realm catalogue source remains unavailable.
+  expect(result.preview.page.showcases[0].sources[0]).toMatchObject({ state: 'unavailable', members: [] });
   expect(result.preview.presentation).toMatchObject({ tokens: { density: 'compact', pageSurface: 'cards', titleEffect: 'outline' },
     navigation: [{ label: 'Saved menu', href: '/saved' }], slides: [{ id: 'saved', href: '/saved' }],
     modules: [{ id: 'hero', title: 'Saved campaign' }] });
