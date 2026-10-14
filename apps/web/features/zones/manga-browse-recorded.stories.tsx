@@ -54,10 +54,12 @@ function at(story: Story, viewport: 'phone' | 'desktop'): Story {
 
 /** The generated cover repeats the credit in a hidden paragraph. The byline is the name a reader sees. */
 function bylines(canvas: ReturnType<typeof within>, name: string): HTMLElement[] {
-  return [...new Set(canvas.getAllByText(name).flatMap(element => {
+  const found: HTMLElement[] = [];
+  for (const element of canvas.getAllByText(name) as HTMLElement[]) {
     const byline = element.closest('p.truncate');
-    return byline instanceof HTMLElement ? [byline] : [];
-  }))];
+    if (byline instanceof HTMLElement && !found.includes(byline)) found.push(byline);
+  }
+  return found;
 }
 
 const playPopulated: Play = async ({ canvasElement, args }) => {
