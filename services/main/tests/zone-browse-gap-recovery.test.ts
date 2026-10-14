@@ -516,7 +516,10 @@ test('sustained unrelated writes defer reconciliation after three attempts and r
       'rezics.projection.recovery_state': 'waiting-for-cut', 'rezics.projection.recovery_attempts': 3,
       'rezics.projection.recovery_retry_ms': 30_000, 'rezics.projection.checkpoint_sequence': '3' });
     const queries = { graph: f.calls.graph.length, relay: f.calls.relay.length, sql: f.calls.sql.length };
-    for (let poll = 0; poll < 3; poll++) expect(await f.instance.tick()).toBe(0);
+    for (let poll = 0; poll < 3; poll++) {
+      f.graph.sequence = String(BigInt(f.graph.sequence) + 1n);
+      expect(await f.instance.tick()).toBe(0);
+    }
     expect(await f.current()).toBe(false);
     await expect(f.instance.batch(realm, 'newest', null)).rejects.toBeInstanceOf(WorkReadUnavailable);
 
@@ -529,13 +532,15 @@ test('sustained unrelated writes defer reconciliation after three attempts and r
     try {
       f.instance.start();
       expect(poll).toBeDefined();
+      f.graph.sequence = String(BigInt(f.graph.sequence) + 1n);
       poll!();
       await f.instance.stop();
     } finally {
       interval.mockRestore();
       clear.mockRestore();
     }
-    expect({ graph: f.calls.graph.length, relay: f.calls.relay.length, sql: f.calls.sql.length }).toEqual(queries);
+    expect({ graph: f.calls.graph.length, relay: f.calls.relay.length, sql: f.calls.sql.length })
+      .toEqual({ ...queries, graph: queries.graph + 4 });
     now = 30_001;
     await f.finish();
     expect(f.instance.recoveryStatus()).toMatchObject({ state: 'ready', attempts: 0, retryAfterMs: 0 });
@@ -545,6 +550,37 @@ test('sustained unrelated writes defer reconciliation after three attempts and r
     clock.mockRestore();
     consoleWarn.mockRestore();
   }
+});
+
+test('fresh-stack write bursts wake recovery before cooldown without declaring a probe current', async () => {
+  const f = fixture(65);
+  f.state.usableCut = false;
+  f.state.checkpoint.sequence = '0';
+  const clock = spyOn(performance, 'now').mockReturnValue(0);
+  const warn = spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    for (let attempt = 0; attempt < ZONE_BROWSE_PROJECTION_COST.recoveryRetries; attempt++) {
+      f.afterPage(() => { f.graph.sequence = String(BigInt(f.graph.sequence) + 1n); });
+      await expect(f.instance.tick()).rejects.toThrow('authoritative cut changed');
+    }
+    expect(f.instance.recoveryStatus().state).toBe('waiting-for-cut');
+    const projected = f.calls.project.length;
+    // The first quiet observation neither scans nor advertises completeness.
+    await f.instance.tick();
+    expect(f.calls.project.length).toBe(projected);
+    expect(await f.current()).toBe(false);
+    expect(f.state.checkpoint.sequence).toBe('0');
+    // A second unchanged observation permits a new, fully fenced scan.
+    clock.mockReturnValue(ZONE_BROWSE_PROJECTION_COST.pollMs);
+    await f.instance.tick();
+    expect(f.calls.project.length).toBe(projected + 1);
+    expect(await f.current()).toBe(false);
+    for (let page = 0; page < 8 && !f.state.usableCut; page++) await f.instance.tick();
+    expect(await f.current()).toBe(true);
+    expect(f.candidates().size).toBe(65);
+    expect(f.state.checkpoint.sequence).toBe('5');
+    expect(f.instance.recoveryStatus()).toMatchObject({ state: 'ready', attempts: 0, retryAfterMs: 0 });
+  } finally { clock.mockRestore(); warn.mockRestore(); }
 });
 
 test('partial SQL failures roll back the page and retry without losing candidates', async () => {

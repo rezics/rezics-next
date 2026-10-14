@@ -53,6 +53,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private reconciliation: Reconciliation | undefined;
   private recoveryAttempts = 0;
   private retryAfter = 0;
+  private recoveryProbe: GraphCut | undefined;
   private handoffRetries = 0;
   private handoffDeferred = false;
   constructor(private readonly access: Pool, private readonly relay: Pool,
@@ -207,12 +208,23 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
    * Partial pages remain unreadable and never move the relay checkpoint. */
   private async reconcilePage(): Promise<void> {
     this.usableCut = false;
-    if (this.retryAfter > performance.now()) return;
-    if (this.retryAfter) { this.retryAfter = 0; this.recoveryAttempts = 0; }
     const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
     await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
       callsLeft: 6, bytesLeft: 256 * 1024 }, async () => {
       const cut = await this.graphCut();
+      if (this.retryAfter > performance.now()) {
+        // Cool down expensive scans while writes continue, but observe their
+        // cessation. This probe is only permission to retry: the full scan
+        // and its before/after cut validation still prove readiness.
+        const prior = this.recoveryProbe;
+        this.recoveryProbe = cut;
+        if (!prior || !this.sameCut(prior, cut)) return;
+      }
+      if (this.retryAfter) {
+        this.retryAfter = 0;
+        this.recoveryAttempts = 0;
+        this.recoveryProbe = undefined;
+      }
       let state = this.reconciliation;
       if (!state) {
         const coverage = await this.mainStreamCoverage(deadline);
@@ -289,10 +301,14 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   }
 
   private validateCut(before: GraphCut, after: GraphCut): void {
-    if (before.dataEpoch !== after.dataEpoch || before.sequence !== after.sequence
-      || before.relaySequence !== after.relaySequence) {
+    if (!this.sameCut(before, after)) {
       this.invalidateCut('Zone browse authoritative cut changed during reconciliation');
     }
+  }
+
+  private sameCut(before: GraphCut, after: GraphCut): boolean {
+    return before.dataEpoch === after.dataEpoch && before.sequence === after.sequence
+      && before.relaySequence === after.relaySequence;
   }
 
   /** Kernel's scoped native capture is not yet available to this reader.
@@ -302,6 +318,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     this.handoffDeferred = false;
     this.handoffRetries = 0;
     this.reconciliation = undefined;
+    this.recoveryProbe = undefined;
     this.recoveryAttempts++;
     if (this.recoveryAttempts >= ZONE_BROWSE_PROJECTION_COST.recoveryRetries) {
       this.retryAfter = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryWaitMs;
