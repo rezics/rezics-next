@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import { expect, type Locator, type Page, test } from '@playwright/test';
 import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
-import { device } from './g-743-stack.ts';
+import { signInAtAccounts } from './account-sign-in.ts';
 import { expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
 import type { VisualNovelHubFixture } from './visual-novel-hub-seed.ts';
 
@@ -25,11 +25,14 @@ async function choose(page: Page, control: Locator, option: Locator, found: Find
 }
 
 for (const locale of ['en', 'ja'] as const) {
-  test(`visual-novel-hub / ${locale}: a player chooses a release by keyboard and returns to the saved edition`, async ({ browser }, info) => {
+  test(`visual-novel-hub / ${locale}: a player chooses a release by keyboard and returns to the saved edition`, async ({ page }, info) => {
     test.setTimeout(180_000);
     const fixture = JSON.parse(readFileSync(resolve('.temp/visual-novel-hub', process.env.REZICS_QA_RUN_ID!, 'seed.json'), 'utf8')) as VisualNovelHubFixture;
     const at = localizedPath(resourceHref('/w/', fixture.work.slice(-36)), locale);
-    const page = await device(browser, info, at, { reducedMotion: true });
+    const { member } = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH!, 'utf8')) as { member: { email: string; password: string } };
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signInAtAccounts(page, localizedPath(resourceHref('/w/', fixture.work.slice(-36)), 'en'), member);
+    if (locale !== 'en') await page.goto(at);
     const found: Findings = [];
     const t = locale === 'en'
       ? { availability: 'Your edition and availability', language: 'Language', english: 'English', edition: 'Edition', save: 'Save choice', saved: 'Saved.', line: 'Your edition:' }
@@ -59,7 +62,7 @@ for (const locale of ['en', 'ja'] as const) {
       await page.screenshot({ path: info.outputPath(`visual-novel-edition-${locale}.png`), fullPage: true });
       expectClean(found);
     } finally {
-      await page.context().close();
+      await page.close();
     }
   });
 }

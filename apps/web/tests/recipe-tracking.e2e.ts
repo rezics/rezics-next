@@ -1,24 +1,25 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { expect, test } from '@playwright/test';
-import type { LaunchRecipesCorpus } from '../../../scripts/load/launch-corpus-types.ts';
 import { resourceHref } from '../features/address/path.ts';
-import { realmWorkHref } from '../features/realm/route.ts';
 import { localizedPath } from '../i18n/locale.ts';
-import { device } from './g-743-stack.ts';
+import { signInAtAccounts } from './account-sign-in.ts';
+import type { RecipeTrackingFixture } from './recipe-tracking-seed.ts';
 import { expectClean, type Findings, pressByKeyboard } from './g-743-matrix.ts';
 
 test.use({ actionTimeout: 15_000 });
 
 for (const locale of ['en', 'ja'] as const) {
-  test(`recipe-tracking / ${locale}: a cook saves a recipe, completes it and returns to persisted progress`, async ({ browser }, info) => {
+  test(`recipe-tracking / ${locale}: a cook saves a recipe, completes it and returns to persisted progress`, async ({ page }, info) => {
     test.setTimeout(180_000);
-    const prepared = JSON.parse(readFileSync(resolve('.temp/launch-corpus', `browser-recipes-${process.env.REZICS_QA_RUN_ID}.json`), 'utf8')) as { corpus: LaunchRecipesCorpus; restored: boolean };
-    expect(prepared.restored).toBe(true);
-    const recipe = prepared.corpus.records.find(record => record.recipeId === 'puff-paste')!;
-    const home = localizedPath(realmWorkHref('launch-recipes', recipe.work), locale);
-    const connections = localizedPath(resourceHref('/w/', recipe.work.slice(-36), ['connections']), locale);
-    const page = await device(browser, info, home, { reducedMotion: true });
+    const recipe = JSON.parse(readFileSync(resolve('.temp/recipe-tracking', process.env.REZICS_QA_RUN_ID!, 'seed.json'), 'utf8')) as RecipeTrackingFixture;
+    const path = resourceHref('/w/', recipe.work.slice(-36));
+    const home = localizedPath(path, locale);
+    const connections = localizedPath(`${path}/connections`, locale);
+    const { member } = JSON.parse(readFileSync(process.env.REZICS_WEB_AUTH_PRIVATE_PATH!, 'utf8')) as { member: { email: string; password: string } };
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await signInAtAccounts(page, localizedPath(path, 'en'), member);
+    if (locale !== 'en') await page.goto(home);
     const found: Findings = [];
     const t = locale === 'en'
       ? { want: 'Want to cook', cooking: 'Cooking', cooked: 'Cooked', remove: 'Remove from my shelves', start: 'Mark reading', finish: 'Mark completed', reset: 'Mark not started', started: 'Reading', completed: 'Completed', empty: 'Not started' }
@@ -69,7 +70,7 @@ for (const locale of ['en', 'ja'] as const) {
       await savedShelf(t.cooked);
       expectClean(found);
     } finally {
-      await page.context().close();
+      await page.close();
     }
   });
 }
