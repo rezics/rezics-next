@@ -1,58 +1,42 @@
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
-import type { ZoneBrowseQuery } from '../realm/types.ts';
-import { parseBrowseState, type BrowseState } from './browse-state.ts';
 
-const conceptPrefix = 'https://rezics.com/id/';
+/** The catalogue page's recorded readers. The route chooses the query; these names only select samples. */
+export const mangaBrowsePersonas = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 
-/** One sample of a persona. The record is the only source of the request. */
 export function recordedSample(record: AnswerRecord, persona: AnswerPersona, label: string): AnswerSample {
   const found = record.personas[persona].filter(sample => sample.label === label);
   if (found.length !== 1) throw new Error(`Expected one recorded sample: ${record.row}/${persona}/${label}`);
   return found[0]!;
 }
 
-export function recordedActingSubject(path: string): string | undefined {
-  return new URL(path, 'https://recorded.invalid').searchParams.get('actingSubject') ?? undefined;
+/** The Zone key the site address carries. Every persona resolves the same public key. */
+export function recordedSiteKey(record: AnswerRecord): string {
+  const key = new URL(recordedSample(record, 'visitor', 'frame-address').path, 'https://recorded.invalid')
+    .searchParams.get('key');
+  if (!key) throw new Error('Recorded address has no site key');
+  return key;
+}
+
+/** The production session's acting person. A visitor has none. */
+export function recordedActingSubject(record: AnswerRecord, persona: AnswerPersona): string | undefined {
+  if (persona === 'visitor') return undefined;
+  const answer = recordedSample(record, persona, 'frame-session-agent').answer as {
+    sessionAgent: { actingSubject: string };
+  };
+  return answer.sessionAgent.actingSubject;
+}
+
+/** The page address's search, taken from the recorded production request. */
+export function recordedSearch(record: AnswerRecord, persona: AnswerPersona, label: string): Record<string, string> {
+  return Object.fromEntries(new URL(recordedSample(record, persona, label).path, 'https://recorded.invalid').searchParams);
 }
 
 /**
- * The browse call a recorded path already made. The page query keeps the Facets
- * `parseBrowseState` understands; `publicationYear` stays on the API query because
- * the page state has no parameter for it.
+ * Frame reads the site browse route makes, plus the page sample.
+ * A missing browse mount is the recorded 404. Signed-in reads follow the session person.
  */
-export function recordedBrowseCall(path: string): { realm: string; query: ZoneBrowseQuery; state: BrowseState } {
-  const url = new URL(path, 'https://recorded.invalid');
-  const realm = url.pathname.split('/')[3];
-  if (!realm) throw new Error(`Recorded browse path has no realm: ${path}`);
-  const sort = url.searchParams.get('sort');
-  const admittedSort = sort === 'newest' || sort === 'updated' || sort === 'relevance' ? sort : undefined;
-  const types = url.searchParams.getAll('type');
-  const concepts = url.searchParams.getAll('concept');
-  const statuses = url.searchParams.getAll('status');
-  const length = url.searchParams.get('length');
-  const text = url.searchParams.get('q');
-  const cursor = url.searchParams.get('cursor');
-  const year = url.searchParams.get('publicationYear');
-  const limit = url.searchParams.get('limit');
-  const query: ZoneBrowseQuery = {
-    ...(admittedSort ? { sort: admittedSort } : {}),
-    ...(limit ? { limit: Number(limit) } : {}),
-    ...(text ? { q: text } : {}),
-    ...(cursor ? { cursor } : {}),
-    ...(year ? { publicationYear: year } : {}),
-    ...(types.length ? { type: types } : {}),
-    ...(concepts.length ? { concept: concepts } : {}),
-    ...(statuses.length ? { status: statuses } : {}),
-    ...(length ? { length } : {}),
-  };
-  const state = parseBrowseState({
-    ...(admittedSort ? { sort: admittedSort } : {}),
-    ...(text ? { q: text } : {}),
-    ...(cursor ? { cursor } : {}),
-    ...(types.length ? { type: types.map(type => type.replace('https://schema.org/', 'schema:').replace('https://rezics.com/vocab/', 'rv:')) } : {}),
-    ...(concepts.length ? { concept: concepts.map(value => value.startsWith(conceptPrefix) ? value.slice(conceptPrefix.length) : value) } : {}),
-    ...(statuses.length ? { status: statuses } : {}),
-    ...(length ? { length } : {}),
-  });
-  return { realm, query, state };
+export function recordedFrameLabels(persona: AnswerPersona, label: string): string[] {
+  return ['frame-address', 'frame-presentation', 'frame-routes', 'frame-realm-header', 'frame-facets', label,
+    ...(persona === 'visitor' ? [] : ['frame-session-agent', 'frame-person-preferences', 'frame-joining',
+      'frame-member-ban', 'frame-follow', 'frame-platform-access'])];
 }
