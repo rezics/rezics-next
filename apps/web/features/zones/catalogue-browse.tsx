@@ -105,7 +105,9 @@ export async function applyCatalogueYear({ view, search, model }: {
   for (const item of model.views) item.href = stamp(item.href);
   if (year !== null) model.kept = [...model.kept, { name: 'year', value: String(year) }];
   else if (directory) model.kept = [...model.kept, { name: 'years', value: '1' }];
-  const kept = model.kept.filter(item => item.name !== 'year' && item.name !== 'years');
+  const kept = [...model.kept.filter(item => item.name !== 'year' && item.name !== 'years'),
+    ...(state.text ? [{ name: 'q', value: state.text }] : []),
+    ...(state.sort ? [{ name: 'sort', value: state.sort }] : [])];
   const plain = browseHref(base, { ...state, cursor: null });
   const yearControl = {
     action: base, value: year === null ? '' : String(year), kept,

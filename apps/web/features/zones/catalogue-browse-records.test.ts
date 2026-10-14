@@ -11,6 +11,7 @@ import { zoneMessagesFor } from './fixtures.ts';
 import type { RealmView } from '../realm/realm-page.tsx';
 import { uiLocales } from '../../i18n/define.ts';
 import { presetTokens } from './presentation.ts';
+import { isValidElement } from 'react';
 
 const zone = (realm: string): ZoneContext => ({
   slug: null, realm: `https://rezics.com/id/${realm}`, name: { value: 'Catalogue', lang: 'en', dir: 'ltr' },
@@ -112,9 +113,12 @@ test('a year range stays on all generated links without fabricating card dates',
     const page = await readCatalogueStory(browserMainApi('https://recorded.invalid', { anonymous: true, fetcher: replay.fetcher }),
       sample.path, context, 'en', zoneMessagesFor('en'), false);
     if (!page.ok) throw new Error('Range fixture did not build');
-    const year = await applyCatalogueYear({ model: page.data, search: request.search,
-      view: { kind: 'view', zone: context, context: { locale: 'en' }, pkg: null,
+    const year = await applyCatalogueYear({ model: page.data, search: { ...request.search, q: 'Lantern title', sort: 'updated' },
+      view: { kind: 'view', zone: context, context: { locale: 'en' }, pkg: { slots: { browseHeader: () => null } },
         zoneMessages: zoneMessagesFor('en') } as unknown as Extract<RealmView, { kind: 'view' }> });
+    if (!isValidElement<{ year: { kept: { name: string; value: string }[] } }>(year.header)) throw new Error('Missing year form');
+    expect(year.header.props.year.kept).toContainEqual({ name: 'q', value: 'Lantern title' });
+    expect(year.header.props.year.kept).toContainEqual({ name: 'sort', value: 'updated' });
     expect(year.publicationYears.size).toBe(0);
     expect(page.data.kept).toContainEqual({ name: 'year', value: request.query.publicationYear! });
     for (const link of [...page.data.sorts, ...page.data.views, ...page.data.chosen]) {

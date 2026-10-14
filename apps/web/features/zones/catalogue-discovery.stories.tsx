@@ -140,6 +140,7 @@ export const MangaOwner: Story = { args: { slug: 'manga', persona: 'owner' } };
 export const MangaModerator: Story = { args: { slug: 'manga', persona: 'moderator' } };
 export const MangaOperator: Story = { args: { slug: 'manga', persona: 'operator' } };
 export const MangaConditions: Story = { args: { slug: 'manga', label: 'combined-filters' } };
+export const MangaYearAndTitle: Story = { args: { slug: 'manga', label: 'page-publication-year-and-search' } };
 export const MangaYearRangePhone: Story = { args: { slug: 'manga', label: 'publication-year-range-and-format' },
   globals: { viewport: { value: 'phone' } } };
 export const MangaEmpty: Story = { args: { slug: 'manga', label: catalogueLabels.manga.empty } };
