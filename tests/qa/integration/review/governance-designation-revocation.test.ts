@@ -27,6 +27,7 @@ let baseline: string;
 let baselineReady = false;
 let evidencePath: string;
 let phase = 'bootstrap';
+const repairPath = 'services/main/migrations/access/2070_governance_designation_ceiling_revocation.sql';
 
 function evidence(value: Record<string, unknown>) {
   appendFileSync(evidencePath, `${JSON.stringify({ phase, ...value })}\n`);
@@ -77,6 +78,18 @@ async function change(body: Record<string, unknown>): Promise<Response> {
   });
 }
 
+async function installedRevocation() {
+  return (await access!.query<{ definition: string }>(
+    "SELECT pg_get_functiondef('access.revoke_source_publication_assignment_ceiling()'::regprocedure) AS definition",
+  )).rows[0]!.definition;
+}
+
+async function permissionRows() {
+  return (await access!.query<{ id: string; value: { active: boolean } }>(
+    'SELECT id,to_jsonb(g) AS value FROM access.permission_grant g ORDER BY id',
+  )).rows;
+}
+
 beforeAll(async () => {
   const runId = Bun.env.REZICS_QA_RUN_ID;
   if (!runId || !Bun.env.ACCESS_DATABASE_URL) throw new Error('Requires the isolated QA integration tier');
@@ -92,6 +105,9 @@ beforeAll(async () => {
     evidence({ migration: control.migration, sha256: createHash('sha256').update(source).digest('hex'),
       source, installed: installed.rows[0]!.definition });
   }
+  const repair = readFileSync(repairPath, 'utf8');
+  evidence({ migration: repairPath, sha256: createHash('sha256').update(repair).digest('hex'),
+    source: repair, installed: await installedRevocation() });
   const compose = readEnv(resolve('.temp/stack', `rezics-qa-${runId}`, 'compose.env'));
   const url = new URL(Bun.env.ACCESS_DATABASE_URL);
   database = url.pathname.slice(1);
@@ -171,5 +187,94 @@ for (const control of controls) {
     expect(persisted, `Revoked designation created a privileged assignment: ${raw}`).toEqual([]);
     expect(response.status, raw).toBe(403);
     expect(JSON.parse(raw)).toMatchObject({ code: 'grant_denied' });
+    expect((await access!.query<{ active: boolean }>(`SELECT active FROM access.permission_grant
+      WHERE assigned_by_principal = $1 AND scope_id = 'work:publish:*'
+        AND action = 'access.grant.assign.work.publish'`, [principalId])).rows).toEqual([{ active: false }]);
   }, 180_000);
 }
+
+test('upgrade clears pre-migration revoked designation ceilings and preserves unrelated authority', async () => {
+  phase = 'revoked-designation-upgrade';
+  await start();
+  const original = (await access!.query<{ id: string }>(`SELECT principal_grant_id AS id
+    FROM access.platform_grant_episode WHERE permission = 'platform:grant'
+      AND principal_grant_id IS NOT NULL ORDER BY created_at,id LIMIT 1`)).rows[0]!;
+  const designation = (await inventory()).find(grant => grant.id === original.id);
+  if (!designation?.recipient.principalId) throw new Error('Missing original deployment designation');
+  expect(designation.active).toBe(true);
+  const principalId = designation.recipient.principalId;
+  const ceilings = (await access!.query<{ id: string; action: string; active: boolean }>(
+    `SELECT id,action,active FROM access.permission_grant WHERE assigned_by_principal = $1
+      AND (scope_id,action) IN (
+        ('work:publish:*','access.grant.assign.work.publish'),
+        ('governance:platform','access.grant.assign.governance.rule.publish'),
+        ('realm:attach:*','access.grant.assign.realm.attach')) ORDER BY action`, [principalId])).rows;
+  expect(ceilings.map(row => [row.action, row.active])).toEqual([
+    ['access.grant.assign.governance.rule.publish', true],
+    ['access.grant.assign.realm.attach', true],
+    ['access.grant.assign.work.publish', true],
+  ]);
+
+  const repair = readFileSync(repairPath, 'utf8');
+  const liveRows = await permissionRows();
+  await access!.query(repair);
+  expect(await permissionRows()).toEqual(liveRows);
+  const liveGrants: Grant[] = [];
+  for (const control of controls) {
+    const live = await answer<{ grant: Grant }>(change({ action: 'create', grantId: randomUUID(),
+      permission: control.permission, scopeId: control.scope(), recipient: { principalId }, validUntil: null }));
+    expect(live.grant.active).toBe(true);
+    liveGrants.push(live.grant);
+  }
+  const ordinaryId = randomUUID();
+  await answer(change({ action: 'create', grantId: ordinaryId, permission: 'platform:grant',
+    scopeId: 'platform:access', recipient: { principalId }, validUntil: null }));
+
+  // Reinstall the exact historical function, keeping its existing trigger, so
+  // the public revocation leaves the stale state that the upgrade must repair.
+  const legacyPath = 'services/main/migrations/access/2068_source_publication_mandates.sql';
+  const legacy = readFileSync(legacyPath, 'utf8');
+  const legacyFunction = legacy.match(/CREATE FUNCTION access\.revoke_source_publication_assignment_ceiling\(\)[\s\S]*?END \$\$;/)?.[0];
+  if (!legacyFunction) throw new Error('Missing historical revocation function');
+  await access!.query(legacyFunction.replace('CREATE FUNCTION', 'CREATE OR REPLACE FUNCTION'));
+  evidence({ migration: legacyPath, sha256: createHash('sha256').update(legacy).digest('hex'),
+    source: legacyFunction, installed: await installedRevocation() });
+  const revoked = await answer<{ grant: Grant }>(change({ action: 'revoke', grantId: designation.id,
+    expectedObjectGeneration: designation.generation }));
+  expect(revoked.grant.active).toBe(false);
+  const before = await permissionRows();
+  const staleIds = ceilings.filter(row => row.action !== 'access.grant.assign.work.publish').map(row => row.id);
+  expect(before.filter(row => staleIds.includes(row.id)).map(row => row.value.active)).toEqual([true, true]);
+  expect(before.find(row => row.id === ceilings.find(ceiling => ceiling.action === 'access.grant.assign.work.publish')!.id)!.value.active).toBe(false);
+
+  await access!.query(repair);
+  const after = await permissionRows();
+  expect(after.filter(row => staleIds.includes(row.id)).map(row => row.value.active)).toEqual([false, false]);
+  const unrelated = before.filter(row => !staleIds.includes(row.id));
+  expect(unrelated.length).toBeGreaterThan(0);
+  expect(after.filter(row => !staleIds.includes(row.id))).toEqual(unrelated);
+  evidence({ installed: await installedRevocation(), staleIds, before, after });
+
+  const ordinary = await answer<{ grant: Grant }>(change({ action: 'create', grantId: randomUUID(),
+    permission: 'platform:use:platform-admin', scopeId: 'platform:access',
+    recipient: { principalId }, validUntil: null }));
+  expect(ordinary.grant.active).toBe(true);
+  const resource = await answer<{ grant: Grant }>(change({ action: 'create', grantId: randomUUID(),
+    permission: 'platform:resource:work.create', scopeId: 'work:create:root',
+    recipient: { principalId }, validUntil: null }));
+  expect(resource.grant.active).toBe(true);
+  const retained = await inventory();
+  expect(retained.find(grant => grant.id === ordinaryId)?.active).toBe(true);
+  for (const live of liveGrants) expect(retained.find(grant => grant.id === live.id)).toEqual(live);
+  for (const control of controls) {
+    const deniedId = randomUUID();
+    const response = await change({ action: 'create', grantId: deniedId,
+      permission: control.permission, scopeId: control.scope(), recipient: { principalId }, validUntil: null });
+    const raw = await response.text();
+    const persisted = (await inventory()).filter(grant => grant.id === deniedId);
+    evidence({ permission: control.permission, deniedId, status: response.status, response: raw, persisted });
+    expect(persisted).toEqual([]);
+    expect(response.status, raw).toBe(403);
+    expect(JSON.parse(raw)).toMatchObject({ code: 'grant_denied' });
+  }
+}, 180_000);
