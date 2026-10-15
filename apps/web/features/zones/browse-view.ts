@@ -127,7 +127,6 @@ export function browseModel({ base, zoneName, state, page, admitted, locale, mes
     href: browseHref(base, { ...state, view, cursor: state.cursor }) }));
   const notes = [
     !page.window.complete ? messages.catalogueIncomplete : null,
-    page.sourcePosition ? t.catalogueFreshness({ sequence: page.sourcePosition.sequence }) : null,
     page.tags === 'stale' && (state.filter.concept || state.excludedConcepts?.length) ? messages.tagsStale : null,
     page.tags === 'unavailable' && (state.filter.concept || state.excludedConcepts?.length)
       ? messages.tagsUnavailable : null,

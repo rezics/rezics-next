@@ -157,6 +157,7 @@ const meta = {
   component: RecordedBooksLanguage,
   args: { request: { persona: 'visitor', locale: 'en', kind: 'published' } },
   parameters: {
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } },
     controls: { disable: true },
     route: { pathname: textHref(publishedRef) },
   },
@@ -219,6 +220,7 @@ export const ModeratorEnglishDesktop: Story = published('moderator', 'en', 'desk
 export const OperatorEnglishDesktop: Story = published('operator', 'en', 'desktop');
 export const VisitorSimplifiedChineseDesktop: Story = published('visitor', 'zh-Hans', 'desktop');
 export const VisitorJapaneseDesktop: Story = published('visitor', 'ja', 'desktop');
+export const VisitorJapanesePhone: Story = published('visitor', 'ja', 'phone');
 export const VisitorKoreanDesktop: Story = published('visitor', 'ko', 'desktop');
 export const VisitorGermanDesktop: Story = published('visitor', 'de', 'desktop');
 export const VisitorFrenchDesktop: Story = published('visitor', 'fr', 'desktop');

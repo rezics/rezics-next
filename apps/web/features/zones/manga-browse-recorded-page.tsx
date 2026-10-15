@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import manga from '../../../../tests/qa/fixtures/outcomes/manga/catalogue-browse-and-search-in-its-zone.json';
+import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import type { RealmReadClient } from '../realm/read.ts';
 import { RealmBrowseRoute } from '../realm/routes.tsx';
@@ -14,7 +15,6 @@ import {
 } from './manga-browse-recorded-page.ts';
 
 const record = manga as AnswerRecord;
-const locale = 'en' as const;
 type Persona = (typeof mangaBrowsePersonas)[number];
 
 function selections(persona: Persona, label: string, state: RecordedState): RecordedSelection[] {
@@ -30,10 +30,11 @@ const pending = <PageContainer><p role="status" aria-busy="true">{shellMessages.
  * Manga browse through `RealmBrowseRoute` and the shared frame.
  * The page search is the recorded production request. The route builds the catalogue query.
  */
-export function MangaBrowseRecordedPage({ persona, label, state }: {
+export function MangaBrowseRecordedPage({ persona, label, state, locale = 'en' }: {
   persona: Persona;
   label: string;
   state: RecordedState;
+  locale?: UiLocale;
 }) {
   const [node, setNode] = useState<ReactNode>(null);
   const [error, setError] = useState<Error | null>(null);
@@ -62,7 +63,7 @@ export function MangaBrowseRecordedPage({ persona, label, state }: {
       active = false;
       replay.dispose();
     };
-  }, [persona, label, state]);
+  }, [persona, label, state, locale]);
   if (error) throw error;
   if (!node) return pending;
   return node;

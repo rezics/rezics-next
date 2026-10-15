@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
 import { materializeData } from 'native-i18n';
+import type { UiLocale } from '../../../i18n/define.ts';
 import type { AnswerPersona, AnswerRecord, AnswerSample } from '../../../../../scripts/api/answer-record.ts';
 import loansRecord from '../../../../../tests/qa/fixtures/outcomes/books/loans.json';
 import returnRecord from '../../../../../tests/qa/fixtures/outcomes/books/return-an-expired-loan-expired-loans.json';
@@ -10,6 +11,7 @@ import { recordedFetch, type RecordedSelection } from '../../stories/recorded-fe
 import { formatDay } from '../format.ts';
 import { memoryLibraryApi, storyReaderActions } from '../fixtures.ts';
 import { messages } from '../messages.ts';
+import ja from '../messages/ja.ts';
 import { PageContainer } from '../../shell/page.tsx';
 import { LibraryProvider } from '../library-context.tsx';
 import { mainCopiesApi } from './api.ts';
@@ -80,11 +82,12 @@ async function acceptRecordedCreate(record: AnswerRecord, persona: AnswerPersona
   return mainCopiesApi(actingSubject, () => main).openLoan(recorded.draft, 'open-loan');
 }
 
-function RecordedLoans({ row, persona, selections }: {
-  row: RowName; persona: AnswerPersona; selections: readonly RecordedSelection[];
+function RecordedLoans({ row, persona, selections, locale = 'en' }: {
+  row: RowName; persona: AnswerPersona; selections: readonly RecordedSelection[]; locale?: UiLocale;
 }) {
   const record = records[row];
-  const t = materializeData(messages, { locale: 'en' });
+  const copy = locale === 'ja' ? { ...messages, ...ja } : messages;
+  const t = materializeData(copy, { locale });
   const [ready, setReady] = useState<Ready | null>(null);
   const key = selections.map(item => `${item.label}:${item.state}`).join('|');
   useEffect(() => {
@@ -103,6 +106,7 @@ function RecordedLoans({ row, persona, selections }: {
             throw new Error(`Recorded loan create failed: ${created.ok ? created.data.state : created.failure}`);
           }
         }
+        // Replay the recorded content-language read; only the interface changes language.
         const read = await readLoans(null, 'en', { main, actingSubject });
         if (!mounted) return;
         if (!read.ok && !selections.some(item => item.state === 'error')) {
@@ -114,12 +118,12 @@ function RecordedLoans({ row, persona, selections }: {
       }
     })();
     return () => { mounted = false; replay.dispose(); };
-  }, [record, persona, key, selections]);
+  }, [record, persona, key, selections, locale]);
   const region = !ready ? <p role="status">{t.loading}</p>
-    : <LoansRecordedRegion read={ready.read} cursor={null} locale="en" messages={messages} />;
+    : <LoansRecordedRegion read={ready.read} cursor={null} locale={locale} messages={copy} />;
   return <PageContainer className="py-6">{ready
     ? <LibraryProvider actingSubject={ready.actingSubject} seed={{}} ratingContext={null} titles={{}}
-      api={memoryLibraryApi()} readerActions={storyReaderActions()} locale="en" messages={messages}>
+      api={memoryLibraryApi()} readerActions={storyReaderActions()} locale={locale} messages={copy}>
       <CopiesApiProvider api={mainCopiesApi(ready.actingSubject, () => ready.main)}>{region}</CopiesApiProvider>
     </LibraryProvider> : region}</PageContainer>;
 }
@@ -127,11 +131,21 @@ function RecordedLoans({ row, persona, selections }: {
 const meta = {
   title: 'Library/Recorded loans', component: RecordedLoans,
   args: { row: 'loans', persona: 'owner', selections: ownerRead },
-  parameters: { controls: { disable: true }, route: { pathname: '/en/library/loans' } },
+  parameters: { controls: { disable: true }, route: { pathname: '/en/library/loans' },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
   globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof RecordedLoans>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const OwnerJapaneseDesktop: Story = {
+  args: { locale: 'ja' }, globals: { locale: 'ja', viewport: { value: 'desktop' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).findByRole('heading', { level: 2, name: ja.loans })).resolves.toBeVisible();
+  },
+};
+export const OwnerJapanesePhone: Story = { ...OwnerJapaneseDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
 
 const phone = { viewport: { value: 'phone' } };
 const t = materializeData(messages, { locale: 'en' });

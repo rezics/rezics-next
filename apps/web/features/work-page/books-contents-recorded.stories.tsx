@@ -7,6 +7,7 @@ import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch, type RecordedSelection } from '../stories/recorded-fetch.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { localizedPath } from '../../i18n/locale.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 import {
   BooksContentsRecordedPage, booksContentsInventoryQueryFromPath, mapBooksContentsRecordedPage,
   type BooksContentsRecordedView,
@@ -30,11 +31,12 @@ function recordedSample(persona: AnswerPersona, label: string) {
   return found;
 }
 
-function RecordedBooksContents({ persona, label, state, headerLabel }: {
+function RecordedBooksContents({ persona, label, state, headerLabel, locale = 'en' }: {
   persona: AnswerPersona;
   label: string;
   state: RecordedSelection['state'];
   headerLabel?: string;
+  locale?: UiLocale;
 }) {
   const [view, setView] = useState<BooksContentsRecordedView>({ kind: 'loading' });
   useEffect(() => {
@@ -59,7 +61,7 @@ function RecordedBooksContents({ persona, label, state, headerLabel }: {
         workRef: work,
         workIri: sample.answer && typeof sample.answer === 'object' && 'work' in sample.answer
           && typeof sample.answer.work === 'string' ? sample.answer.work : `https://rezics.com/id/${work}`,
-        locale: 'en',
+        locale,
         language: typeof query.language === 'string' ? query.language : undefined,
         cursor: typeof query.cursor === 'string' ? query.cursor : undefined,
         title: headerAnswer?.data?.title ?? null,
@@ -68,9 +70,9 @@ function RecordedBooksContents({ persona, label, state, headerLabel }: {
       if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
     });
     return () => { mounted = false; replay.dispose(); };
-  }, [persona, label, state, headerLabel]);
+  }, [persona, label, state, headerLabel, locale]);
   return <PageContainer>
-    <BooksContentsRecordedPage view={view} locale="en" messages={messages.en} />
+    <BooksContentsRecordedPage view={view} locale={locale} messages={messages[locale]} />
   </PageContainer>;
 }
 
@@ -78,10 +80,21 @@ const meta = {
   title: 'Work page/Books contents recorded',
   component: RecordedBooksContents,
   args: { persona: 'visitor' as const, label: 'inventory-page-1', state: 'populated' as const },
-  parameters: { controls: { disable: true } },
+  parameters: { controls: { disable: true },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
 } satisfies Meta<typeof RecordedBooksContents>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+export const VisitorJapaneseDesktop: Story = {
+  args: { locale: 'ja' }, globals: { locale: 'ja', viewport: { value: 'desktop' } },
+  async play({ canvasElement }) {
+    await expect(within(canvasElement).findByText('Chapter 1', { exact: true })).resolves.toBeVisible();
+    await expect(within(canvasElement).getByRole('region', { name: messages.ja.contents })).toBeVisible();
+  },
+};
+export const VisitorJapanesePhone: Story = { ...VisitorJapaneseDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
 
 const phone = { viewport: { value: 'phone' } } as const;
 const desktop = { viewport: { value: 'desktop' } } as const;

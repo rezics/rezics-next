@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, within } from 'storybook/test';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import inventoryRecord from '../../../../tests/qa/fixtures/outcomes/anime/navigate-a-thousand-episode-inventory-thousand-chapters.json';
+import type { UiLocale } from '../../i18n/define.ts';
 import { localizedPath } from '../../i18n/locale.ts';
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { PageContainer } from '../shell/page.tsx';
@@ -45,10 +46,11 @@ function enteredLabel(path: string): string {
   return q;
 }
 
-function RecordedAnimeContents({ persona, state, header = false }: {
+function RecordedAnimeContents({ persona, state, header = false, locale = 'en' }: {
   persona: AnswerPersona;
   state: RecordedSelection['state'];
   header?: boolean;
+  locale?: UiLocale;
 }) {
   const [view, setView] = useState<BooksContentsRecordedView>({ kind: 'loading' });
   useEffect(() => {
@@ -68,7 +70,7 @@ function RecordedAnimeContents({ persona, state, header = false }: {
       const readHeader = withHeader ? await booksEditionReads(host).readWorkHeader(work) : null;
       if (readHeader && !readHeader.ok) throw new Error(readHeader.failure);
       const next = await readContentsInventory(host, {
-        workId: work, workRef: work, workIri: iriOf(work), locale: 'en', language: 'en',
+        workId: work, workRef: work, workIri: iriOf(work), locale, language: 'en',
         q: enteredLabel(chosen.path), title: readHeader?.ok ? readHeader.data.title : null,
       });
       if (mounted) setView(next);
@@ -76,9 +78,9 @@ function RecordedAnimeContents({ persona, state, header = false }: {
       if (!(error instanceof DOMException && error.name === 'AbortError')) throw error;
     });
     return () => { mounted = false; replay.dispose(); };
-  }, [persona, state, header]);
+  }, [persona, state, header, locale]);
   return <PageContainer>
-    <BooksContentsRecordedPage view={view} locale="en" messages={messages.en} />
+    <BooksContentsRecordedPage view={view} locale={locale} messages={messages[locale]} />
   </PageContainer>;
 }
 

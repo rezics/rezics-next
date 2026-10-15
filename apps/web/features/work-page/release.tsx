@@ -59,7 +59,7 @@ export function ReleaseCard({ release, locale, messages: t }: {
   };
   return <article className="grid min-w-0 grid-cols-1 gap-3 border-border/70 border-b pb-5">
     <div className="grid min-w-0 gap-1">
-      <h3 className="break-words text-base" lang={release.title.language}>
+      <h3 className="text-base [overflow-wrap:anywhere]" lang={release.title.language}>
         <Link href={releaseHref(release.id)} className="text-primary underline underline-offset-4">
           {release.title.value}</Link>
       </h3>
