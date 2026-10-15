@@ -3,6 +3,9 @@ import { expect, type Locator, type Page, test, type TestInfo } from '@playwrigh
 import { studioHref } from '../features/studio/agent.ts';
 import { signInAtAccounts } from './account-sign-in.ts';
 
+// Preserve the action request and navigation when creation fails before reaching the editor.
+test.use({ trace: 'retain-on-failure' });
+
 // A cook creates a recipe in Studio and writes it in the recipe editor: two ingredient sections that
 // each hold "butter", a step that uses one of them, a stale edit from a second tab, a reload, and
 // the published Work page. The browser signs in as the isolated QA stack's web member.
