@@ -141,15 +141,19 @@ test('a wave worktree uses main job control to adopt and wake a later parked att
   symlinkSync(join(import.meta.dir, '../qa'), join(wave, 'scripts/qa'));
   const ledger = f.ledger(); ledger.tasks.worker!.worktree = wave;
   writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(ledger));
+  const release = join(f.cwd, '.temp/job-release');
+  const command = `import { existsSync } from 'node:fs';
+    while (!existsSync(${JSON.stringify(release)})) await Bun.sleep(10); console.log(process.cwd());`;
   const output = await f.execute(`
     import { runJob } from ${JSON.stringify(join(wave, 'scripts/goal/job.ts'))};
-    await runJob([process.execPath, '-e', 'await Bun.sleep(1000); console.log(process.cwd())'],
+    await runJob([process.execPath, '-e', ${JSON.stringify(command)}],
       { cwd: ${JSON.stringify(wave)}, inlineMs: 1 });
   `);
   expect(output).toStartWith('PARKED job:');
   const current = f.ledger(); const task = current.tasks.worker!;
   task.attempts.push({ ...task.attempts[0]!, n: 2 }, { ...task.attempts[0]!, n: 3 });
   writeFileSync(join(f.cwd, '.temp/goal-orchestration/ledger.json'), JSON.stringify(current));
+  writeFileSync(release, 'complete');
   const store = new JobStore(jobDirectory(wave));
   try {
     // No coordinator rescue: main's detached completion must adopt this newer turn itself.
