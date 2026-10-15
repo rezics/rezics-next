@@ -209,8 +209,9 @@ export async function seedCensus(api: CorpusApi, cut: Pick<RetainedSeedCut, 'wor
   expect(cut.works.every(work => !related.has(work.work))).toBe(true);
   const posts = new Set<string>();
   for (const post of cut.posts) {
-    const selected = await api.read(`/v1/posts/${post.post.slice(-36)}`);
-    expect(selected).toMatchObject({ id: post.post });
+    const selected = await api.read(`/v1/posts/${post.post.slice(-36)}?actingSubject=${encodeURIComponent(cut.population.actor)}`);
+    expect(selected).toMatchObject({ id: post.post, publisher: cut.population.actor,
+      disclosure: 'public', placements: [] });
     posts.add(post.post);
   }
   expect(posts.size).toBe(cut.posts.length);

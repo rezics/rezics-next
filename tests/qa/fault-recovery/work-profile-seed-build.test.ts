@@ -8,7 +8,7 @@ import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
 
-test('explicit preparation retains one API-built store at three population cuts', async () => {
+test('explicit preparation retains one API-built store across six independent population series', async () => {
   console.log('seed BUILD host load start', loadavg());
   // Instrument PostgreSQL before any application/driver import, as in the
   // existing request-profile workers. These are the existing meters.
