@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { activeGoals, areasOf, briefGoal, readLedger, root, stateDir, unlandedChangeConflicts, unlandedChanges, type UnlandedChanges, withLedger } from './ledger.ts';
-import { areaConflicts, claimConflicts, goalOfBriefPath, mechanismSectionErrors, parseBrief, validateBrief } from './briefs.ts';
+import { activeGoals, areasOf, briefGoal, briefClaimConflicts, readLedger, root, stateDir, withLedger } from './ledger.ts';
+import { areaConflicts, goalOfBriefPath, mechanismSectionErrors, parseBrief, validateBrief } from './briefs.ts';
 import { dispatchMethodErrors, neededFileWaits } from './tasks.ts';
 import { prepareHandover } from './handover.ts';
 import { processAlive, processIdentity } from '../qa/process/identity.ts';
@@ -39,9 +39,9 @@ async function validatedBrief(path: string): Promise<Brief> {
 
 function ledgerWaits(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): string[] {
   const tasks = Object.values(ledger.tasks);
-  const waits = claimConflicts(brief, tasks);
+  const waits = briefClaimConflicts(brief, tasks, entry?.goal);
   if (entry) {
-    const holders = tasks.filter(task => claimConflicts(brief, [task]).length).map(task => task.id);
+    const holders = tasks.filter(task => briefClaimConflicts(brief, [task], entry.goal).length).map(task => task.id);
     entry.waitedFor = [...new Set([...entry.waitedFor ?? [], ...holders, ...brief.depends])];
   }
   for (const id of brief.depends) {
@@ -58,19 +58,10 @@ function ledgerWaits(ledger: QueueLedger, brief: Brief, entry?: QueuedBrief): st
   return waits;
 }
 
-function waitsFor(ledger: QueueLedger, brief: Brief, entry: QueuedBrief,
-  changes: readonly UnlandedChanges[], needs: readonly string[]): string[] {
+function waitsFor(ledger: QueueLedger, brief: Brief, entry: QueuedBrief, needs: readonly string[]): string[] {
   const waits = ledgerWaits(ledger, brief, entry);
   if (waits.length) return waits;
-  const conflicts = unlandedChangeConflicts(brief, Object.values(ledger.tasks), changes);
-  const changers = conflicts.flatMap(line => / changed by ([^(]+) \(unlanded\)$/.exec(line)?.[1]?.split(', ') ?? []);
-  entry.waitedFor = [...new Set([...entry.waitedFor ?? [], ...changers])];
-  return [...conflicts, ...needs];
-}
-
-function passChanges(): () => UnlandedChanges[] {
-  let snapshot: UnlandedChanges[] | undefined;
-  return () => snapshot ??= unlandedChanges(Object.values(readLedger().tasks));
+  return [...needs];
 }
 
 function assertDispatchable(ledger: Ledger, brief: Brief, goal: string | undefined, allowArea = false): void {
@@ -102,7 +93,7 @@ function recordRefusal(ledger: QueueLedger, entry: QueuedBrief, reason: string):
   }
 }
 
-async function startQueued(id: string, submission = false, changes = passChanges()): Promise<void> {
+async function startQueued(id: string, submission = false): Promise<void> {
   const captured = (readLedger() as QueueLedger).queue?.[id];
   if (!captured) return;
   let brief: Brief | undefined;
@@ -135,14 +126,14 @@ async function startQueued(id: string, submission = false, changes = passChanges
   });
   if (!candidate) return;
   let reason = candidate.refusal;
-  let computed: { brief: Brief; changes: UnlandedChanges[]; needs: string[] } | undefined;
+  let computed: { brief: Brief; needs: string[] } | undefined;
   if (!reason) {
     try {
       const validated = await validatedBrief(candidate.brief);
       if (validated.id !== id) throw new Error(`Queued brief ID changed from ${id} to ${validated.id}`);
       const fromPath = goalOfBriefPath(relative(root, candidate.brief));
       if (fromPath && fromPath !== candidate.goal) throw new Error('Queued brief Goal changed');
-      computed = { brief: validated, changes: changes(), needs: neededFileWaits(validated) };
+      computed = { brief: validated, needs: neededFileWaits(validated) };
     } catch (error) { reason = error instanceof Error ? error.message : String(error); }
   }
   if (candidate.refusal) {
@@ -164,9 +155,8 @@ async function startQueued(id: string, submission = false, changes = passChanges
     try {
       if (reason) throw new Error(reason);
       assertDispatchable(ledger, computed!.brief, current.goal, current.allowArea);
-      // A branch moving after the scan is seen next pass. Dispatch repeats claims,
-      // including unlanded changes, under its own lock before reserving the task.
-      current.waits = waitsFor(ledger, computed!.brief, current, computed!.changes, computed!.needs);
+      // Dispatch repeats live claims under its own lock before reserving the task.
+      current.waits = waitsFor(ledger, computed!.brief, current, computed!.needs);
     } catch (error) {
       const refusal = error instanceof Error ? error.message : String(error);
       recordRefusal(ledger, current, refusal);
@@ -246,14 +236,13 @@ export async function listQueue(): Promise<void> {
   const snapshot = readLedger() as QueueLedger;
   const entries = Object.values(snapshot.queue ?? {}).filter(entry => !process.env.GOAL_ID
     || process.env.GOAL_ID === 'program' || entry.goal === process.env.GOAL_ID);
-  const changes = passChanges();
-  const computed = new Map<string, { brief: Brief; changes: UnlandedChanges[]; needs: string[] }>();
+  const computed = new Map<string, { brief: Brief; needs: string[] }>();
   const errors = new Map<string, string>();
   for (const entry of entries) {
     try {
       const brief = parseBrief(readFileSync(entry.brief, 'utf8'));
       const blocked = ledgerWaits(snapshot, brief, entry).length || (entry.goal && !activeGoals(snapshot).includes(entry.goal));
-      computed.set(entry.id, { brief, changes: blocked ? [] : changes(), needs: blocked ? [] : neededFileWaits(brief) });
+      computed.set(entry.id, { brief, needs: blocked ? [] : neededFileWaits(brief) });
     } catch (error) { errors.set(entry.id, error instanceof Error ? error.message : String(error)); }
   }
   await withLedger((ledger: QueueLedger) => {
@@ -264,7 +253,7 @@ export async function listQueue(): Promise<void> {
         if (errors.has(entry.id)) throw new Error(errors.get(entry.id));
         const result = computed.get(entry.id)!;
         entry.waits = entry.goal && !activeGoals(ledger).includes(entry.goal) ? [`Goal ${entry.goal} is not active`]
-          : [...waitsFor(ledger, result.brief, entry, result.changes, result.needs), ...entry.waits.filter(gateRefusal)];
+          : [...waitsFor(ledger, result.brief, entry, result.needs), ...entry.waits.filter(gateRefusal)];
       } catch (error) { entry.waits = [error instanceof Error ? error.message : String(error)]; }
       console.log(queueLine(entry));
     }
@@ -298,6 +287,5 @@ export async function pumpQueue(): Promise<void> {
     if (code !== 0) console.error(`${task.id} waiting resume failed: ${stderr.trim()}`);
   }
   const entries = Object.values(ledger.queue ?? {}).sort((a, b) => a.queuedAt.localeCompare(b.queuedAt));
-  const changes = passChanges();
-  for (const entry of entries) await startQueued(entry.id, false, changes);
+  for (const entry of entries) await startQueued(entry.id);
 }

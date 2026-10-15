@@ -31,8 +31,11 @@ makes, stop and report that instead of building it.
 ## Scope
 
 - Change the files your claimed `paths` match. A needed file outside them: if
-  `task goal -- owner <path>` prints `unclaimed`, make the minimal change and
-  list it under OWNER CHANGES; if another task claims it, hand off that blocker.
+  `task goal -- owner <path>` prints `unclaimed` or an unlanded overlap, make the
+  minimal change and list it under OWNER CHANGES. An overlap on another branch
+  (including a wave, merge candidate, exited or stopped task) is resolved at
+  merge: proceed and note it in the handoff. Hand off a blocker only for another
+  starting or running task's explicit path claim on the same integration base.
   Other needed work goes under PROPOSED TASKS, not into your diff.
 - Name files, tests and identifiers by capability or acceptance ID, never by
   task ID; comments state reasons, not task IDs.
