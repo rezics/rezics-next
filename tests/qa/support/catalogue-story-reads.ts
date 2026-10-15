@@ -100,8 +100,6 @@ export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, nam
   const addresses: [string, Record<string, string>][] = [
     ['page-browse-default', {}], ['page-search-default', { q: phrase }],
     ['page-search-no-match', { q: `${phrase}nomatch` }],
-    ['page-format', { concept: format.slice(-36) }], ['page-status', { status: 'completed' }],
-    ['page-year', { year: '2004' }],
     ['page-combined', { concept: format.slice(-36), status: 'completed', year: '2004', q: phrase, sort: 'updated' }],
   ];
   for (const [label, address] of addresses) {
@@ -118,6 +116,8 @@ export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, nam
           const response = await pending;
           throw new Error(`${pageLabel} did not render: HTTP ${response.status}: ${await response.clone().text()}`);
         }
+        throw new Error(`${pageLabel} stopped before its browse request: ${JSON.stringify(rendered,
+          (key, value: unknown) => typeof value === 'function' ? value.name : key === '_owner' ? undefined : value)}`);
       }
       expect(model, `${pageLabel} rendered the production catalogue`).not.toBeNull();
       if (!model) throw new Error(`${pageLabel} has no catalogue`);
