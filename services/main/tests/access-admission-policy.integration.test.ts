@@ -16,6 +16,7 @@ import { AccessPolicyOwner } from '../src/modules/access/policy-owner.ts';
 import { directWorkCreateProof } from '../src/modules/access/direct-principal.ts';
 import { type RuleInput } from '../src/modules/access/policy-evaluator.ts';
 import { accessPolicyRoutes } from '../src/routes/access-policy.ts';
+import { grantFixtureAuthority } from '../src/modules/access/fixture-authority.ts';
 import type { MainWorkDependencies } from '../src/routes/dependencies.ts';
 
 const root = resolve(import.meta.dir, '../../..');
@@ -220,7 +221,7 @@ test('exact authority batches retain PostgreSQL locks and generations in one sta
   }
 });
 
-test('C1: published deny between register and claim rejects dispatch without writes; retry recovers only its receipt', async () => {
+test('C1: published deny between register and claim rejects dispatch and receipt disclosure without writes', async () => {
   const h = await fixture();
   await h.publish([condition('authenticated'), condition('represents')], [allow()]);
   expect((await h.preview()).result).toBe('allow');
@@ -232,11 +233,7 @@ test('C1: published deny between register and claim rejects dispatch without wri
   await expect(h.registry.claim(registered.id, request.requestDigest)).rejects.toBeInstanceOf(
     AdmissionDenied,
   );
-  expect(await h.registry.register(request)).toMatchObject({
-    id: registered.id,
-    replayed: true,
-    dispatchEligible: false,
-  });
+  await expect(h.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   await expect(h.registry.register(h.request())).rejects.toBeInstanceOf(AdmissionDenied);
   expect(await h.writes()).toEqual(before);
 });
@@ -297,7 +294,7 @@ test('C1: grant expiry with unchanged generation denies claim and caps the lease
   await expect(h.registry.claim(registered.id, request.requestDigest)).rejects.toBeInstanceOf(
     AdmissionDenied,
   );
-  expect((await h.registry.register(request)).dispatchEligible).toBe(false);
+  await expect(h.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   expect(await h.writes()).toEqual(before);
 });
 
@@ -347,6 +344,12 @@ test('C1: revoking either selected source denies claim; an alternative grant can
       VALUES ($1,$2,$2,$3,'work.create',clock_timestamp()+interval '1 hour')`,
         [randomUUID(), h.actor, h.scope],
       );
+    if (table === 'representation') {
+      await expect(h.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
+      await grantFixtureAuthority(pool, { scope: h.scope, requireDispatch: true,
+        representations: [{ principalId: h.principalId, actor: h.actor, action: 'work.create', lifetime: '8 hours' }],
+        grant: { actor: h.actor, action: 'work.create', lifetime: '8 hours' } });
+    }
     const before = await h.writes();
     await expect(h.registry.claim(registered.id, request.requestDigest)).rejects.toBeInstanceOf(
       AdmissionDenied,
@@ -438,7 +441,7 @@ test('C1: claim and retry reevaluate a time restriction even when the policy and
   await expect(h.registry.claim(registered.id, request.requestDigest)).rejects.toBeInstanceOf(
     AdmissionDenied,
   );
-  expect((await h.registry.register(request)).dispatchEligible).toBe(false);
+  await expect(h.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
   expect(await h.writes()).toEqual(before);
 });
 
@@ -648,7 +651,7 @@ test('C1: an atomic membership switch cannot compose two deny snapshots into an 
         AdmissionDenied,
       );
     } else if (phase === 'retry') {
-      expect((await h.registry.register(request)).dispatchEligible).toBe(false);
+      await expect(h.registry.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
     } else {
       await expect(h.registry.register(h.request())).rejects.toBeInstanceOf(AdmissionDenied);
     }

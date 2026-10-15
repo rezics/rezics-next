@@ -55,7 +55,9 @@ test('G265: controlled Persons author exact contribution comments and replay wit
     expect((await h.post('/v1/member-reply-drafts', erase, eraseKey)).body.replayed).toBe(true);
     await h.accessPool.query('UPDATE access.authority_subject SET active = false WHERE id = $1', [h.pen]);
     const replay = await h.post('/v1/member-reply-drafts', input, key);
-    expect(replay.body).toMatchObject({ revisionId: draft.body.revisionId, replayed: true });
+    expect(replay.status).toBe(403);
+    expect(replay.body).toMatchObject({ code: 'authority_denied' });
+    expect(replay.body).not.toHaveProperty('revisionId');
     expect((await h.get(readPath)).status).toBe(404);
     expect((await h.get(pagePath)).body.items).toEqual([]);
     expect((await h.accessPool.query(`SELECT id FROM access.permission_grant WHERE recipient_subject = ANY($1)
@@ -759,9 +761,8 @@ test('unverified and suspended Accounts cannot use scoped action grants for memb
     const unverifiedPrincipal = await h.principal();
     await expect(h.access.claim(unverifiedRegistered.id, unverifiedRequest.requestDigest, principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
-    const unverifiedReplay = await h.access.register({ ...unverifiedRequest, principal: unverifiedPrincipal });
-    expect(unverifiedReplay).toMatchObject({ id: unverifiedRegistered.id, replayed: true,
-      dispatchEligible: false, state: 'registered' });
+    await expect(h.access.register({ ...unverifiedRequest, principal: unverifiedPrincipal }))
+      .rejects.toBeInstanceOf(AdmissionDenied);
     await assertGrantStillActive(unverified);
     await assertNoDraft(unverified);
 

@@ -253,9 +253,9 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     const selectionLink = `<${target.mainVersion}> <https://rezics.com/vocab/selectionHead> <${selected.selection}>`;
     await h.fuseki.update(`DELETE DATA { GRAPH <urn:rezics:graph:current> { ${selectionLink} } }`);
     await expect(access.claim(pending.id, pending.requestDigest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
+    await expect(access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
       scope: `work:edit:${target.work}`, idempotencyKey: pending.idempotencyKey,
-      requestDigest: pending.requestDigest })).dispatchEligible).toBe(false);
+      requestDigest: pending.requestDigest })).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(access.withWorkEditAuthority(principal, editor.subject, target.work, async proof => proof))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await h.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:current> { ${selectionLink} } }`);
@@ -269,9 +269,9 @@ test('G508: role matrix gates kinds, retyping, every import entry point and publ
     await expect(access.claim(pending.id, pending.requestDigest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(access.withWorkEditAuthority(principal, editor.subject, target.work, async proof => proof))
       .rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
+    await expect(access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
       scope: `work:edit:${target.work}`, idempotencyKey: pending.idempotencyKey,
-      requestDigest: pending.requestDigest })).dispatchEligible).toBe(false);
+      requestDigest: pending.requestDigest })).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(access.register({ principal, actingSubject: editor.subject, action: 'work.edit',
       scope: `work:edit:${native()}`, idempotencyKey: randomUUID(), requestDigest: '0'.repeat(64) }))
       .rejects.toBeInstanceOf(AdmissionDenied);

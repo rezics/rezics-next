@@ -244,8 +244,7 @@ test('a ban fences a registered placement; an expired public ban permits a fresh
     const intent = await registerPlacement(h, h.pen, beforeBan);
     expect(intent.registered.dispatchEligible).toBe(true);
     await insertPublicBan(h, h.pen);
-    const replay = await h.access.register(intent.request);
-    expect(replay).toMatchObject({ id: intent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.register(intent.request)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.access.claim(intent.registered.id, intent.digest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
 
@@ -323,8 +322,7 @@ test('expired and revoked owner grants fence registered private trusted placemen
     const originalGrant = await currentOwnerGrant(h);
     await h.accessPool.query(`UPDATE access.permission_grant
       SET valid_until = clock_timestamp() - interval '1 second' WHERE id = $1`, [originalGrant.id]);
-    const firstReplay = await h.access.register(firstIntent.request);
-    expect(firstReplay).toMatchObject({ id: firstIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.register(firstIntent.request)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.access.claim(firstIntent.registered.id, firstIntent.digest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await replaceOwnerGrant(h);
@@ -338,8 +336,7 @@ test('expired and revoked owner grants fence registered private trusted placemen
     expect(secondIntent.registered.dispatchEligible).toBe(true);
     const currentGrant = await currentOwnerGrant(h);
     await h.accessPool.query(`UPDATE access.permission_grant SET active = false WHERE id = $1`, [currentGrant.id]);
-    const secondReplay = await h.access.register(secondIntent.request);
-    expect(secondReplay).toMatchObject({ id: secondIntent.registered.id, replayed: true, dispatchEligible: false });
+    await expect(h.access.register(secondIntent.request)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.access.claim(secondIntent.registered.id, secondIntent.digest, h.principal))
       .rejects.toBeInstanceOf(AdmissionDenied);
     await replaceOwnerGrant(h);

@@ -159,7 +159,8 @@ test('G-277: legacy singleton migration and retained replay preserve other langu
     const savedSequence = (await h.fuseki.query(`PREFIX rv: <${RV}> SELECT ?n WHERE {
       GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n } }`)).results!.bindings[0]!.n!.value;
     const graphs = [...Object.values(GRAPHS), PUBLIC_SEARCH_GRAPH];
-    for (const graph of graphs) await h.fuseki.update(`COPY GRAPH ${iri(graph)} TO GRAPH <urn:test:saved:${hash(graph)}>`);
+    for (const graph of graphs) await h.fuseki.update(`INSERT { GRAPH <urn:test:saved:${hash(graph)}> { ?s ?p ?o } }
+      WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } }`);
     const command = (index: number, expectedSelectionHead: string | null) => actor.send('POST', '/v1/publication-selections', {
       profile: 'main-default-selection-v1', context: { kind: 'main-version-default', id: work.mainVersion },
       work: work.work, contribution: work.variants[index]!.contribution,
@@ -181,7 +182,10 @@ test('G-277: legacy singleton migration and retained replay preserve other langu
     while (await relayMainOutboxOnce(h.fuseki, relay, consumer)) { /* retain the complete source prefix */ }
     const coverage = await relayCoverage(relay, consumer);
     const fence = await engageAccessRecoveryFence(h.accessPool);
-    for (const graph of graphs) await h.fuseki.update(`COPY GRAPH <urn:test:saved:${hash(graph)}> TO GRAPH ${iri(graph)}`);
+    for (const graph of graphs) await h.fuseki.update(`DELETE { GRAPH ${iri(graph)} { ?s ?p ?o } }
+      WHERE { GRAPH ${iri(graph)} { ?s ?p ?o } };
+      INSERT { GRAPH ${iri(graph)} { ?s ?p ?o } }
+      WHERE { GRAPH <urn:test:saved:${hash(graph)}> { ?s ?p ?o } }`);
     const next = { dataEpoch: randomUUID(), routingEpoch: randomUUID() };
     await cutoverRestoredGraphLineage(h.fuseki, { prior: { ...h.env.lineage, sequence: savedSequence }, next });
     const restored = { ...h.env, lineage: next };

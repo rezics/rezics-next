@@ -74,7 +74,7 @@ test('policy-only Realm replies retain identity witnesses and lose dispatch when
       const pending = await h.access.register(intent);
       await h.policy(visibility, reviewMode);
       await expect(h.access.claim(pending.id, pending.requestDigest, h.principal)).rejects.toBeInstanceOf(AdmissionDenied);
-      expect((await h.access.register(intent)).dispatchEligible, `${visibility}/${reviewMode}`).toBe(false);
+      await expect(h.access.register(intent)).rejects.toBeInstanceOf(AdmissionDenied);
       expect((await h.accessPool.query('SELECT state FROM access.admission WHERE id = $1', [pending.id])).rows[0]!.state)
         .toBe('registered');
       await expect(h.access.register(request())).rejects.toBeInstanceOf(AdmissionDenied);
@@ -111,7 +111,7 @@ test('public submissions use author baseline and open Realm self-join uses recip
     const settings = { ...closed, settings: { ...closed.settings, whoMaySubmit: 'closed' } };
     expect((await h.call('PUT', `${h.root}/settings`, settings)).status).toBe(201);
     await expect(h.access.claim(pending.id, pending.requestDigest, h.principal)).rejects.toBeInstanceOf(AdmissionDenied);
-    expect((await h.access.register(intent)).dispatchEligible).toBe(false);
+    await expect(h.access.register(intent)).rejects.toBeInstanceOf(AdmissionDenied);
     expect((await h.submit(h.pen)).result.status).toBe(403);
 
     // Self-join needs the recipient's consent mandate, with no Realm grant.

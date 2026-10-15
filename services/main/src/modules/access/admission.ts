@@ -219,6 +219,11 @@ const admissionGateLock = 'SHARE';
 class AuthorityChecked extends Error {}
 
 interface GateRow { authority_epoch: string; open: boolean; dispatch_open: boolean }
+
+interface LockedAdmissionIdentity {
+  gate: GateRow & { group_generation: string };
+  principal: { id: string; active: boolean; enforcement_epoch: string };
+}
 interface SearchReadRow {
   id: string; principal_id: string; acting_subject: string; contribution: string;
   scope_id: string; representation_id: string; grant_id: string;
@@ -1219,7 +1224,8 @@ export class AccessAdmissionRegistry {
     }, borrowed);
   }
 
-  private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false): Promise<RegisteredAdmission> {
+  private async registerRequest(request: AdmissionRequest, transaction?: PoolClient, authorityOnly = false,
+    lockedIdentity?: LockedAdmissionIdentity): Promise<RegisteredAdmission> {
     const memberReply = memberReplyAuthoringIntent(request);
     if (memberReply && (!memberReply.valid || request.editorialPermit)) {
       throw new AdmissionDenied('member reply intent is malformed');
@@ -1247,29 +1253,31 @@ export class AccessAdmissionRegistry {
       if (!transaction) await client.query('BEGIN');
       await client.query("SET LOCAL lock_timeout = '2s'");
       await client.query("SET LOCAL statement_timeout = '5s'");
-      await requireRecoveryOpen(client);
-      await ensureBaselineScopeGate(client, request.scope);
-      if (platformAdministratorAction(request.action, request.scope)) {
-        await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [request.scope]);
+      if (!lockedIdentity) {
+        await requireRecoveryOpen(client);
+        await ensureBaselineScopeGate(client, request.scope);
+        if (platformAdministratorAction(request.action, request.scope)) {
+          await client.query('INSERT INTO access.scope_gate (id) VALUES ($1) ON CONFLICT (id) DO NOTHING', [request.scope]);
+        }
       }
-      const gateResult = await client.query<GateRow & { group_generation: string }>(
+      const gate = lockedIdentity?.gate ?? (await client.query<GateRow & { group_generation: string }>(
         `SELECT authority_epoch, group_generation, open, dispatch_open
-         FROM access.scope_gate WHERE id = $1 FOR ${admissionGateLock}`, [request.scope]);
-      const gate = gateResult.rows[0];
+         FROM access.scope_gate WHERE id = $1 FOR ${admissionGateLock}`, [request.scope])).rows[0];
       if (!gate) throw new AdmissionUnavailable('scope gate is unavailable');
 
-      const principalResult = await client.query<{
+      const principal = lockedIdentity?.principal ?? (await client.query<{
         id: string; active: boolean; enforcement_epoch: string;
       }>(
         `SELECT id, active, enforcement_epoch FROM access.principal
          WHERE account_issuer = $1 AND account_subject = $2 FOR SHARE`,
-        [request.principal.issuer, request.principal.subject]);
-      const principal = principalResult.rows[0];
+        [request.principal.issuer, request.principal.subject])).rows[0];
       if (principal?.active !== true) throw new AdmissionDenied('principal is not admitted');
       const principalId = principal.id;
       await requirePlatformParticipation(client, principalId);
-      // A shared gate no longer serializes retries of one key; this lock does.
-      await lockAdmissionKey(client, principalId, request.action, request.idempotencyKey);
+      if (!lockedIdentity) {
+        // A shared gate no longer serializes retries of one key; this lock does.
+        await lockAdmissionKey(client, principalId, request.action, request.idempotencyKey);
+      }
 
       const existingResult = authorityOnly ? { rows: [] } : await client.query<AdmissionRow>(
         `SELECT authority_witness, id, principal_id, acting_subject, authority_path, scope_id, action, idempotency_key, request_digest,
@@ -1294,7 +1302,9 @@ export class AccessAdmissionRegistry {
         // the saved witness that still decides whether this admission dispatches.
         // The probe retains the same transaction's authority locks and writes
         // no admission, proof, receipt or effect.
-        try { await this.registerRequest(request, client, true); }
+        // The identical request borrows this transaction's recovery, scope,
+        // principal and key locks. All ordinary authority and policy reads stay live.
+        try { await this.registerRequest(request, client, true, { gate, principal }); }
         catch (error) { if (!(error instanceof AuthorityChecked)) throw error; }
       }
       if (existing && (existing.request_digest !== request.requestDigest
@@ -1491,7 +1501,6 @@ export class AccessAdmissionRegistry {
       let roleFamilyId: string | null = null;
       let roleRevision: string | null = null;
       const authoritySources: AuthoritySource[] = [
-        { table: 'principal', id: principalId, generation: principal.enforcement_epoch },
         { table: 'authority_subject', id: request.actingSubject },
       ];
       let publishingProof: RepresentedWorkProof | null = null;
@@ -1656,7 +1665,9 @@ export class AccessAdmissionRegistry {
         authoritySources.push({ table: kind === 'owner' ? 'permission_grant'
           : kind === 'private' ? 'private_membership' : 'membership', id: membershipId!, generation });
       }
-      const witness = await captureAuthorityWitness(client, [...authoritySources,
+      // The active principal's exact epoch is already held FOR SHARE above.
+      const witness: AuthorityWitness[] = [{ table: 'principal', id: principalId,
+        generation: principal.enforcement_epoch }, ...await captureAuthorityWitness(client, [...authoritySources,
         { table: 'principal_permission_grant', id: directGrantId, generation: directGrantGeneration },
         { table: 'principal_agent_attribution', id: attributionId, generation: attributionGeneration },
         { table: 'private_group_member', id: privateGroupMemberId, generation: privateGroupMemberGeneration },
@@ -1675,7 +1686,7 @@ export class AccessAdmissionRegistry {
           ?? administrator?.representation_generation ?? rating?.representation_generation },
         { table: 'representation', id: baseline?.avatar_control_id ?? null, generation: baseline?.avatar_control_generation },
         { table: 'permission_grant', id: rating?.grant_id ?? null, generation: rating?.grant_generation },
-      ]);
+      ])];
       if (!scopePolicyAbsent && !await admissionPolicyAllowed(client, principalId, request.actingSubject,
         request.scope, request.action, { witness, eligible: true })) {
         throw new AdmissionDenied('published policy denies admission');

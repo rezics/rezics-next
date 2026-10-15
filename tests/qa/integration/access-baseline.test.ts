@@ -9,7 +9,7 @@ import { BASELINE_SPACE_QUOTA_POLICY } from '../../../services/main/src/modules/
 import { baselineMemberProof } from '../../../services/main/src/modules/access/baseline.ts';
 import { AccessActingContexts, ActingContextDenied } from '../../../services/main/src/modules/access/contexts.ts';
 import { AccessSessionAgents } from '../../../services/main/src/modules/access/session-agent.ts';
-import { globalContextPattern } from '../../../services/main/src/modules/rating/global.ts';
+import { GLOBAL_RATING_SCALE, globalContextPattern } from '../../../services/main/src/modules/rating/global.ts';
 import { receiptFamilyFor } from '../../../services/main/src/modules/access/receipt-families.ts';
 import { createAdmittedTextContribution } from '../../../services/main/src/modules/contribution/create-admitted.ts';
 import { publishAdmittedTextContribution } from '../../../services/main/src/modules/contribution/publish-admitted.ts';
@@ -170,7 +170,7 @@ test('baseline: current public targets permit contribution, translation, rating,
           <${work}> a schema:CreativeWork ; rv:head <${iri()}> ; rv:mainVersion <${main}> .
           <${main}> a rv:MainVersion ; rv:work <${work}> ; rv:selectionHead <${selection}> .
           <${contribution}> rv:work <${work}> ; rv:publicationHead <${publication}> .
-          ${globalContextPattern(context)} .
+          ${globalContextPattern(context, GLOBAL_RATING_SCALE)} .
           <${privateContext}> a rv:RealmRatingContext ; rv:contextState rv:Active .
           <${variant}> rv:resource <${work}> ; rv:contentPublicationHead <${contentPublication}> ;
             rv:publicSearchEligibilityHead <${eligibility}> .
@@ -340,13 +340,13 @@ test('baseline: pinned control, principal and policy generations fence retries a
     await h.accessPool.query(`UPDATE access.representation SET active = false, generation = generation + 1
       WHERE subject_id = $1 AND action = 'agent.control'
         AND principal_id = (SELECT principal_id FROM access.agent_provision WHERE agent_id = $1)`, [h.subject]);
-    expect((await h.access.register(request)).dispatchEligible).toBe(false);
+    await expect(h.access.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.access.claim(admission.id, admission.requestDigest, principal)).rejects.toBeInstanceOf(AdmissionDenied);
     await expect(h.accessPool.query(`UPDATE access.representation SET active = true, generation = generation + 1
       WHERE subject_id = $1 AND action = 'agent.control'
         AND principal_id = (SELECT principal_id FROM access.agent_provision WHERE agent_id = $1)`, [h.subject]))
       .rejects.toThrow('a revoked controller cannot be restored');
-    expect((await h.access.register(request)).dispatchEligible).toBe(false);
+    await expect(h.access.register(request)).rejects.toBeInstanceOf(AdmissionDenied);
     request.actingSubject = await h.agent();
     const next = await h.access.register({ ...request, idempotencyKey: randomUUID() });
     await h.accessPool.query(`UPDATE access.principal SET enforcement_epoch = enforcement_epoch + 1
