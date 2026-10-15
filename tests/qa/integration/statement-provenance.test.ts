@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import type { StatementRead } from '../../../services/main/src/modules/statement/read.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
-import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { contextFixture, RV } from './context-fixture.ts';
 
 const PROV = 'http://www.w3.org/ns/prov#';
 type Written = { statement: string; revision: string; meaningKey: string; replayed: boolean };
