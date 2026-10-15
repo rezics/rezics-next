@@ -324,6 +324,7 @@ function privateHomeReport(owner: 'graph' | 'content', kind: ReportInput['kind']
     const transaction = ++transactions;
     return { release() {}, query: async (sql: string) => {
       if (sql === 'BEGIN' && transaction > 1) throw new GovernanceUnavailable('Accepted evidence reached its owner write boundary');
+      if (sql.includes('JOIN access.representation')) return { rows: [{ id: 'principal', enforcement_epoch: '1' }] };
       return { rows: sql.includes('access.recovery_fence') ? [{ open: true }] : [] };
     } };
   } } as unknown as Pool;

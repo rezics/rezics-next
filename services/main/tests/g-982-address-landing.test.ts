@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { Elysia } from 'elysia';
 import { identityKeyUuid, uuidToSid } from '@rezics/model/address/sid';
@@ -126,6 +128,8 @@ function fixture() {
       currents: async () => new Map(state.named ? [[`space\0${space}`, current]] : []),
     },
   } as unknown as WorkActivationEnvironment;
+  configureFixtureDisclosureAncestry(env, () => undefined);
+  configureDisclosure(env, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   const work = {
     environment: env,
     governance: { rules: { publishedRealmRules: async () => [] } },

@@ -1,3 +1,4 @@
+import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -348,6 +349,7 @@ async function createReplyReportFixture(
       access,
       env,
     );
+    configureFixtureDisclosureAncestry(env, () => undefined);
     configureDisclosure(env, new DisclosureStore(accessPool));
     access.configureBaseline(fuseki);
     const deps: MainWorkDependencies = {

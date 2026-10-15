@@ -273,7 +273,7 @@ for (const owner of ['content', 'access', 'graph'] as const) {
     const b = owner === 'content' ? await contentTarget() : target();
     const effects = ownerModerationEffects(new ContentModeration(pool), receiptGraph());
     const f = await fixture({ targets: [a, b], effects, ...(owner === 'access' ? { effect: 'search' as const } : {}) });
-    expect(f.decision.operation.status).toBe('completed');
+    expect(f.decision.operation.status, JSON.stringify(f.decision.operation)).toBe('completed');
     const ownerReceipt = f.decision.operation.items[1]!.receipt!;
     const operationId = `governance-moderation:${f.decision.decisionId}`;
     const encodedOrdinal = owner === 'graph' ? digest(`${operationId}:2`) : `${operationId}:2`;
