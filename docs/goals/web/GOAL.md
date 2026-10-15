@@ -8,7 +8,7 @@ areas:
   - packages/wiki-toolkit/**
 ---
 
-# Web
+# Web Goal
 
 The [checkpoint](state.md) records retained task decisions. Start surfaces after
 their API rows are proved; use live ledger status instead of the former pause.

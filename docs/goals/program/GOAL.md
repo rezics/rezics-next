@@ -24,7 +24,7 @@ areas:
   - tests/qa/support/**
 ---
 
-# Program
+# Program Goal
 
 The supermanager owns delivery scope, the [method](../method.md), Goal tooling
 and the shared host. It runs the program's tooling tasks and leaves product

@@ -14,7 +14,7 @@ areas:
   - scripts/load/**
 ---
 
-# API
+# API Goal
 
 The [checkpoint](state.md) records retained decisions. Use the ledger for live
 tasks and the scope registry for pending persona cells.

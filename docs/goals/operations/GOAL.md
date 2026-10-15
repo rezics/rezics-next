@@ -9,7 +9,7 @@ areas:
   - docs/operations/**
 ---
 
-# Operations
+# Operations Goal
 
 Status: started by the [program](../program/GOAL.md) on 2026-10-13 15:34 UTC with the
 restore, drill and release work that does not depend on the erasure contract. The

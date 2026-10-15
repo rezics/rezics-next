@@ -23,19 +23,19 @@ Design documents do not claim that a capability or deployment is complete.
 ## Goal protocols and state
 
 - [Goal program](goals/README.md) — Goal ownership, shared-host coordination and convergence; read for orchestration.
-- [Coarse areas other Goals' briefs may not claim (goalctl reads them at every dispatch).](goals/api/GOAL.md) — Api outcome and boundaries; read when working for that Goal.
+- [API Goal](goals/api/GOAL.md) — API outcome and boundaries; read when working for that Goal.
 - [Later](goals/api/later.md) — Api deferred findings; read before promoting or briefing a related defect.
 - [Retained population checkpoint rebuild](goals/api/seed-rebuild.md) — Retained population checkpoint rebuild; read when its retained preparation or evidence is needed.
 - [API checkpoint](goals/api/state.md) — Api retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Goal manager charter](goals/manager.md) — Manager authority and standing policy; read when managing a Goal.
 - [How work is defined, proved and landed](goals/method.md) — Outcome rows and landing criteria; read when defining or proving work.
-- [Coarse areas other Goals' briefs may not claim (goalctl reads them at every dispatch).](goals/operations/GOAL.md) — Operations outcome and boundaries; read when working for that Goal.
+- [Operations Goal](goals/operations/GOAL.md) — Operations outcome and boundaries; read when working for that Goal.
 - [Later](goals/operations/later.md) — Operations deferred findings; read before promoting or briefing a related defect.
 - [Operations checkpoint](goals/operations/state.md) — Operations retained decisions and unproved obligations; read for continuation, then check live ledger status.
-- [Coarse areas other Goals' briefs may not claim (goalctl reads them at every dispatch).](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.
+- [Program Goal](goals/program/GOAL.md) — Program outcome and boundaries; read when working for that Goal.
 - [State](goals/program/state.md) — Program retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Waves: build, then prove](goals/wave.md) — Build and prove phase boundaries; read only for wave work.
-- [Coarse areas other Goals' briefs may not claim (goalctl reads them at every dispatch).](goals/web/GOAL.md) — Web outcome and boundaries; read when working for that Goal.
+- [Web Goal](goals/web/GOAL.md) — Web outcome and boundaries; read when working for that Goal.
 - [Later](goals/web/later.md) — Web deferred findings; read before promoting or briefing a related defect.
 - [Web checkpoint](goals/web/state.md) — Web retained decisions and unproved obligations; read for continuation, then check live ledger status.
 - [Goal worker protocol](goals/worker.md) — Worker authority and handoff; read when assigned a Goal task.
