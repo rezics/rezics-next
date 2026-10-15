@@ -4,7 +4,7 @@ import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { englishMessages } from '../work-page/messages.ts';
 import { recipeReadingReads } from '../work-page/recipe-reading-recorded-page.ts';
-import { recipeWorkFrame, recipeWorkOverview } from '../work-page/recipe-reading-recorded-page.tsx';
+import { recipeRegion, recipeWorkFrame, recipeWorkOverview } from '../work-page/recipe-reading-recorded-page.tsx';
 import { EVERYONE } from '../work-page/route.ts';
 import { mainRelationships } from '../relationships/api.ts';
 import { RecipeContent } from '../work-page/types/recipe.tsx';
@@ -12,6 +12,19 @@ import { loadRecipeAuthoring } from './authoring-page.ts';
 import { mainRecipeExportApi, RecipeExportError } from './export-api.ts';
 import { instructionVisitTransport } from './instruction-recorded-fixture.ts';
 import { readRecipeVisitFrame } from './recipe-authoring-recorded-page.ts';
+
+test('a server Recipe region leaves continuation functions inside the client boundary', async () => {
+  const visit = instructionVisitTransport('visitor', 'https://recorded.invalid', source =>
+    readFile(new URL(`../../../../${source}`, import.meta.url)).then(bytes => new Uint8Array(bytes)), error => { throw error; });
+  try {
+    const region = await recipeRegion({ host: { ...visit.host, recordingFetch: undefined, recipeReadPage: undefined },
+      id: visit.id, work: visit.header, href: `/v1/recipes/works/${visit.id}`, locale: 'en', messages: englishMessages });
+    expect(region.type).not.toBeUndefined();
+    expect(region.props.initial?.instructions).toHaveLength(4);
+    expect(region.props.readPage).toBeUndefined();
+    expect(region.props.recordingFetch).toBeUndefined();
+  } finally { visit.dispose(); }
+});
 
 test.each(['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const)(
   '%s replays unchanged instruction captures through production page, editor and exchange with zero misses', async persona => {

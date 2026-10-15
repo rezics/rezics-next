@@ -3,6 +3,7 @@ import captured from '../../../../tests/qa/fixtures/outcomes/recipes/instruction
 import { BFF_PREFIX, browserMainApi } from '../api/browser.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import type { RecipeWorkPage, WorkHeader } from '../work-page/types.ts';
+import { recipePageReader } from '../work-page/recipe-reading-recorded-page.ts';
 
 export const instructionRecord = captured as AnswerRecord;
 export function instructionVisitIdentity(persona: AnswerPersona) {
@@ -33,6 +34,7 @@ export function instructionVisitTransport(persona: AnswerPersona, origin: string
   const identity = instructionVisitIdentity(persona);
   return { ...identity, main, fetcher, dispose: replay.dispose,
     host: { main, anonymous, publicOrigin: origin, publicFetch: fetcher, recordingFetch: fetcher,
+      recipeReadPage: (href: string) => recipePageReader({ main, actingSubject: identity.actingSubject }, href),
       actingSubject: identity.actingSubject, signedIn: persona !== 'visitor' } };
 }
 
