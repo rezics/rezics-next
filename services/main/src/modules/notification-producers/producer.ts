@@ -254,7 +254,7 @@ export class NotificationProducer {
     } catch (error) {
       // A missing responder or failed safety intake must not stall the other
       // Access producers or prevent the worker's following relay tick.
-      logWorkerFault('main.notification.safety-alerts', error);
+      logWorkerFault('main.notification.safety-alerts', error, { messages: false });
       recordWorkerOutcome({ outcome: 'deferred' });
       return count + mail;
     }
@@ -275,7 +275,7 @@ export class NotificationProducer {
     for (const recover of [() => recoverSpaceFollows(this.access,this.graph),
       () => recoverLibraryFollows(this.content,this.access)]) {
       try { count += await recover(); }
-      catch (error) { logWorkerFault('main.notification.relationship-recovery', error); }
+      catch (error) { logWorkerFault('main.notification.relationship-recovery', error, { messages: false }); }
     }
     return count;
   }
@@ -610,15 +610,15 @@ export class NotificationProducerWorker {
           console.warn('Horizon lag observation unavailable');
           recordWorkerOutcome({ outcome: 'deferred' });
         });
-        await this.producer.runRelationshipRecoveryOnce().catch(error => { logWorkerFault('main.notification.relationship-recovery', error); });
+        await this.producer.runRelationshipRecoveryOnce().catch(error => { logWorkerFault('main.notification.relationship-recovery', error, { messages: false }); });
         const access = await this.producer.runAccessOnce();
         const relay = await this.producer.runRelayOnce();
         let matched = 0;
         try { matched = await this.producer.runSavedViewsRelayOnce(); }
-        catch (error) { logWorkerFault('main.notification.saved-views', error); recordWorkerOutcome({ outcome: 'deferred' }); }
+        catch (error) { logWorkerFault('main.notification.saved-views', error, { messages: false }); recordWorkerOutcome({ outcome: 'deferred' }); }
         return access + relay + matched;
       }, count => ({ outcome: count ? 'worked' : 'idle', processed: count, unit: 'item' })))
-        .then(() => undefined).catch(error => { logWorkerFault('main.notification.producer', error); })
+        .then(() => undefined).catch(error => { logWorkerFault('main.notification.producer', error, { messages: false }); })
         .finally(() => { this.running = null; });
     };
     poll();
