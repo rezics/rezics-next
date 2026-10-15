@@ -3,6 +3,19 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RecipeEditorMessages } from '../messages.ts';
 
 export default {
+  adoptInstructions: "采用此说明",
+  instructionKind: "说明形式",
+  instructionPost: "文章或程序",
+  instructionRecording: "录音或视频",
+  instructionTarget: "来源资源",
+  instructionRevision: "确切修订",
+  instructionVariant: "内容版本",
+  instructionBlock: "程序区块（选填）",
+  instructionRepresentation: "媒体呈现",
+  instructionFragment: "录制片段（选填）",
+  instructionSelectionHelp: "选择已保存的确切来源。再次添加会建立独立使用；来源中的引用仍为引用。",
+  nativeExportAction: "下载原生食谱",
+  exportLosses: "此格式无法保留的信息",
   pageTitle: '编辑食谱', backToRecipe: '返回食谱', viewRecipe: '查看食谱',
   editRecipe: '编辑食谱',
   editorView: '编辑器视图', viewEdit: '编辑', viewPreview: '预览',

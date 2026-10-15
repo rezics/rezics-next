@@ -17,9 +17,9 @@ const exported: RecipeExport = { profile: 'recipe-schema-org-export-v1', structu
 
 function client(reply: { data: unknown; error: { status: number; value?: unknown } | null }) {
   const calls: { id: string; query: unknown }[] = [];
-  const main = { v1: { recipes: (_: { id: string }) => ({ exports: { 'schema-org': { get: async ({ query }: { query: unknown }) => {
+  const main = { v1: { recipes: (_: { id: string }) => ({ export: { get: async ({ query }: { query: unknown }) => {
     calls.push({ id: _.id, query }); return reply;
-  } } } }) } } as unknown as MainClient;
+  } } }) } } as unknown as MainClient;
   return { main: () => main, calls };
 }
 
@@ -27,7 +27,7 @@ test('the Schema.org export is pinned to the editor revision and names that retu
   const fake = client({ data: exported, error: null });
   const actual = await mainRecipeExportApi(fake.main).exportRevision({ structure, revision, actingSubject });
   expect(actual).toEqual(exported);
-  expect(fake.calls).toEqual([{ id: structure.slice(-36), query: { actingSubject, revision } }]);
+  expect(fake.calls).toEqual([{ id: structure.slice(-36), query: { actingSubject, revision, format: 'schema-org' } }]);
   expect(recipeExportFilename(actual.revision)).toBe(`recipe-revision-${revision.slice(-36)}.schema-org.json`);
 });
 

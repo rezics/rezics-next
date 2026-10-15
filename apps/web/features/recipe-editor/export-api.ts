@@ -6,7 +6,12 @@ export interface RecipeExport {
   structure: string;
   revision: string;
   recipe: Record<string, unknown>;
+  losses?: { code: string; occurrence: string; pointer: string }[];
   [key: string]: unknown;
+}
+export interface NativeRecipeExport {
+  format: 'native'; structure: string; revision: string;
+  occurrences: unknown[]; contents: unknown[]; derivations: unknown[]; losses: unknown[];
 }
 
 export interface RecipeExportRequest {
@@ -26,6 +31,7 @@ export class RecipeExportError extends Error {
 
 export interface RecipeExportApi {
   exportRevision: (input: RecipeExportRequest) => Promise<RecipeExport>;
+  exportNativeRevision?: (input: RecipeExportRequest) => Promise<NativeRecipeExport>;
 }
 
 const idOf = (iri: string) => iri.slice(-36);
@@ -54,10 +60,19 @@ function exportFailure(status: number, value: unknown): RecipeExportError {
 /** Reads exactly the selected editor revision through Main's typed Schema.org export route. */
 export function mainRecipeExportApi(main: () => MainClient = browserMainApi): RecipeExportApi {
   return {
+    async exportNativeRevision({ structure, revision, actingSubject }) {
+      const answer = await main().v1.recipes({ id: idOf(structure) }).export.get({
+        query: { ...(actingSubject ? { actingSubject } : {}), revision, format: 'native' },
+      });
+      if (answer.error) throw exportFailure(answer.error.status, answer.error.value);
+      if (!answer.data || !('format' in answer.data) || answer.data.format !== 'native'
+        || answer.data.structure !== structure || answer.data.revision !== revision) throw new RecipeExportError('unavailable');
+      return answer.data as NativeRecipeExport;
+    },
     async exportRevision({ structure, revision, actingSubject }) {
       try {
-        const answer = await main().v1.recipes({ id: idOf(structure) }).exports['schema-org'].get({
-          query: { actingSubject, revision },
+        const answer = await main().v1.recipes({ id: idOf(structure) }).export.get({
+          query: { ...(actingSubject ? { actingSubject } : {}), revision, format: 'schema-org' },
         });
         if (answer.error) throw exportFailure(answer.error.status, answer.error.value);
         const data: unknown = answer.data;
@@ -74,6 +89,14 @@ export function mainRecipeExportApi(main: () => MainClient = browserMainApi): Re
       }
     },
   };
+}
+
+export function downloadNativeRecipeExport(exported: NativeRecipeExport): void {
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }));
+  link.download = `recipe-revision-${idOf(exported.revision)}.native.json`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(link.href), 10_000);
 }
 
 /** Keep the exported revision in the filename so downloaded recipes remain distinguishable. */

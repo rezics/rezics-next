@@ -19,12 +19,15 @@ import { recipePageReader } from '../recipe-reading-recorded-page.ts';
 import type { WorkPageMessages } from '../messages.ts';
 import { Region } from '../region.tsx';
 import type { RecipeWorkPage } from '../types.ts';
+import { InstructionReading } from '../../recipe-editor/instruction-reading.tsx';
+import type { Instruction } from '../../recipe-editor/instructions.ts';
 
 /** What the published page and the editor's preview both render. The editor fills it from its own state. */
 export interface ReadableRecipe {
   ingredients: readonly ReadableIngredient[];
   occurrences: readonly ReadableOccurrence[];
   measures: readonly ReadableMeasure[];
+  instructions?: readonly Instruction[];
 }
 
 interface ReadableIngredient {
@@ -167,6 +170,7 @@ function linkedLines(step: ReadableOccurrence, page: ReadableRecipe, units: Unit
 }
 
 function Steps({ page, units, messages: t }: { page: ReadableRecipe; units: Units; messages: WorkPageMessages }) {
+  if (page.instructions?.length) return <InstructionReading instructions={page.instructions} messages={t} />;
   const steps = page.occurrences.filter(item => item.role === 'step' && item.qualifier?.type === 'recipe-step');
   return <ol className="grid gap-5">{steps.map((step, index) => {
     const instruction = step.qualifier?.type === 'recipe-step' ? step.qualifier.instructionText?.value ?? '' : '';

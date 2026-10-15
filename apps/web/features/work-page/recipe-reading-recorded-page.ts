@@ -3,6 +3,7 @@ import { followHref } from '../entity-page/href.ts';
 import { workExperience } from '../entity-page/experience.ts';
 import type { EntityProjection } from '../entity-page/types.ts';
 import { recipePageQuery } from '../recipe-editor/pages.ts';
+import { readInstructionDetails } from '../recipe-editor/instruction-reads.ts';
 import { allowedActionsOf, mayEdit } from '../work-levels-edit/allowed.ts';
 import { booksEditionReads, settle, settleNullable, type BooksRead } from './books-edition-page.read.ts';
 import { booksLanguageReads } from './books-language-recorded-page.ts';
@@ -54,8 +55,12 @@ async function settleCall<T>(call: () => Promise<CallResult<T>>): Promise<BooksR
  * serving count starts a different page, and the two are never combined.
  */
 export function recipePageReader(host: RecipeReadingHost, href: string) {
-  return (query: { cursor?: string; servings?: number }) => followHref<RecipeWorkPage | null>(
-    host.main, href, recipePageQuery(host.actingSubject, query))();
+  return async (query: { cursor?: string; servings?: number }) => {
+    const answer = await followHref<RecipeWorkPage | null>(host.main, href, recipePageQuery(host.actingSubject, query))();
+    if (answer.data?.instructions?.length) return { ...answer, data: { ...answer.data,
+      instructions: await readInstructionDetails(host.main as MainClient, answer.data.instructions, host.actingSubject) } };
+    return answer;
+  };
 }
 
 /** The reads the published recipe region and its recorded surface share. */

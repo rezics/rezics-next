@@ -1,5 +1,6 @@
 import type { IngredientQualifier } from './ingredient-line.ts';
 import type { Rational } from './quantity.ts';
+import type { Instruction, InstructionReference } from './instructions.ts';
 
 // The recipe as the editor holds it: Main's Composition occurrences in reading order (each parent's
 // children in their order), and the measures stored with the head they were read at. Occurrence
@@ -17,9 +18,10 @@ interface Base { occurrence: string; parent: string }
 export type GroupNode = Base & { role: 'group'; label: { value: string; language: string } | null };
 export type IngredientNode = Base & { role: 'ingredient'; qualifier: IngredientQualifier };
 export type StepNode = Base & { role: 'step'; qualifier: StepQualifier };
+export type InstructionNode = Base & { role: 'instruction'; reference: InstructionReference };
 /** Equipment and anything else Main holds: kept in order, never edited here. */
 export type OtherNode = Base & { role: 'equipment' | 'chapter' | 'part' | 'member' | 'mount' | 'navigation' };
-export type Node = GroupNode | IngredientNode | StepNode | OtherNode;
+export type Node = GroupNode | IngredientNode | StepNode | InstructionNode | OtherNode;
 
 export interface Measure {
   kind: 'yield' | 'servings' | 'preparation-duration' | 'cooking-duration' | 'total-duration' | 'nutrient';
@@ -35,6 +37,7 @@ export interface RecipeState {
   head: string | null;
   nodes: Node[];
   measures: Measure[];
+  instructions?: Instruction[];
 }
 
 export const emptyRecipe: RecipeState = { structure: null, head: null, nodes: [], measures: [] };
@@ -44,16 +47,21 @@ export interface RecipePageLike {
   structure: string;
   revision: string;
   occurrences: readonly { occurrence: string; parent: string; role: string; state: string;
-    labels: readonly { value: string; language: string }[]; qualifier?: { type: string } }[];
+    labels: readonly { value: string; language: string }[]; qualifier?: { type: string };
+    target?: string; selection?: { mode: string; selector?: InstructionReference['selector'] } }[];
   measures: readonly { kind: string; value: Rational; [more: string]: unknown }[];
   /** Present when a later page of this revision is still unread. */
   next?: string;
+  instructions?: readonly Instruction[];
 }
 
 export function stateOf(page: RecipePageLike | null): RecipeState {
   if (!page) return emptyRecipe;
   const nodes = page.occurrences.filter(item => item.state === 'active').flatMap((item): Node[] => {
     const base = { occurrence: item.occurrence, parent: item.parent };
+    if ((item.role === 'instruction' || item.role === 'step') && item.target && item.selection?.selector) {
+      return [{ ...base, role: 'instruction', reference: { target: item.target, selector: item.selection.selector } }];
+    }
     if (item.role === 'group') return [{ ...base, role: 'group', label: item.labels[0] ?? null }];
     if (item.role === 'ingredient' && item.qualifier?.type === 'ingredient-line') {
       return [{ ...base, role: 'ingredient', qualifier: item.qualifier as IngredientQualifier }];
@@ -63,7 +71,8 @@ export function stateOf(page: RecipePageLike | null): RecipeState {
     }
     return [{ ...base, role: item.role as OtherNode['role'] }];
   });
-  return { structure: page.structure, head: page.revision, nodes, measures: page.measures as Measure[] };
+  return { structure: page.structure, head: page.revision, nodes, measures: page.measures as Measure[],
+    instructions: [...(page.instructions ?? [])] };
 }
 
 export const groups = (state: RecipeState) => state.nodes.filter((node): node is GroupNode => node.role === 'group');

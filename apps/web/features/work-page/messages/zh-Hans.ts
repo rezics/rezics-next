@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  instructionTransformation: "转换",
+  instructionTransformationNotice: "转换署名不代表原始作者身份或重用许可。",
   authorNote: "作者的话",
   loading: '正在加载作品…', loadingRegion: '正在加载…',
   notFoundTitle: '找不到作品',

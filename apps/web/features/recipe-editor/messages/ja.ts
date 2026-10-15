@@ -3,6 +3,19 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RecipeEditorMessages } from '../messages.ts';
 
 export default {
+  adoptInstructions: "この手順を採用",
+  instructionKind: "手順の形式",
+  instructionPost: "投稿または手順書",
+  instructionRecording: "録音・動画",
+  instructionTarget: "参照元リソース",
+  instructionRevision: "正確なリビジョン",
+  instructionVariant: "コンテンツのバリアント",
+  instructionBlock: "手順ブロック（任意）",
+  instructionRepresentation: "メディア表現",
+  instructionFragment: "録音区間（任意）",
+  instructionSelectionHelp: "保存済みの参照元を正確に選択します。再追加すると別の使用になります。本文中の参照は参照のまま保持されます。",
+  nativeExportAction: "ネイティブレシピをダウンロード",
+  exportLosses: "この形式で保持できない情報",
   pageTitle: 'レシピを編集', backToRecipe: 'レシピに戻る', viewRecipe: 'レシピを見る',
   editRecipe: 'レシピを編集',
   editorView: 'エディターの表示', viewEdit: '編集', viewPreview: 'プレビュー',

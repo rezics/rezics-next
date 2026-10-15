@@ -35,7 +35,9 @@ export function recordedFetch(
   record: AnswerRecord,
   persona: AnswerPersona,
   selections: readonly RecordedSelection[],
-  { pathPrefix = '', sequence = false }: { pathPrefix?: string; sequence?: boolean } = {},
+  { pathPrefix = '', sequence = false, readBinary }: { pathPrefix?: string; sequence?: boolean;
+    /** Node callers read repository files; browser callers read the bundler's URL for that same fixture. */
+    readBinary?: (source: string) => Promise<Uint8Array> } = {},
 ): { fetcher: typeof fetch; dispose: () => void } {
   if (pathPrefix && (!pathPrefix.startsWith('/') || pathPrefix.endsWith('/'))) {
     throw new Error('Recorded fetch pathPrefix must be a path without a trailing slash');
@@ -100,6 +102,16 @@ export function recordedFetch(
       request.signal.addEventListener('abort', release, { once: true });
     });
     const { status, headers, answer } = match.sample;
+    if (match.sample.binary) {
+      const { source, byteLength, sha256 } = match.sample.binary;
+      if (!readBinary) throw new Error(`Recorded binary source loader is absent: ${source}`);
+      const bytes = await readBinary(source);
+      const digest = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)))].map(value => value.toString(16).padStart(2, '0')).join('');
+      if (bytes.byteLength !== byteLength || digest !== sha256) throw new Error(`Recorded binary source integrity mismatch: ${source}`);
+      if (disposed) throw ended();
+      request.signal.throwIfAborted();
+      return new Response(new Uint8Array(bytes), { status, headers });
+    }
     return new Response([204, 205, 304].includes(status) ? null : JSON.stringify(answer), { status, headers });
   }) as typeof fetch;
 

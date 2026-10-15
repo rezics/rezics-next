@@ -6,11 +6,11 @@ import { materializeData } from 'native-i18n';
 import { useEffect, useRef, useState } from 'react';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { RecipeEditorMessages } from './messages.ts';
-import { downloadRecipeExport, mainRecipeExportApi, RecipeExportError, type RecipeExport, type RecipeExportApi } from './export-api.ts';
+import { downloadRecipeExport, downloadNativeRecipeExport, mainRecipeExportApi, RecipeExportError, type RecipeExport, type RecipeExportApi } from './export-api.ts';
 import { mainRecipeImportApi, RecipeImportError, RECIPE_FILE_MAX_BYTES,
   type RecipeFileImport, type RecipeImportApi, type RecipeImportFailure, type RecipeImportRequest } from './import-api.ts';
 
-type ExportStage = { kind: 'idle' } | { kind: 'exporting' } | { kind: 'done'; revision: string }
+type ExportStage = { kind: 'idle' } | { kind: 'exporting' } | { kind: 'done'; revision: string; losses?: RecipeExport['losses'] }
   | { kind: 'failed'; failure: 'denied' | 'too-large' | 'unavailable'; detail: string | null };
 
 type ImportStage = { kind: 'idle' } | { kind: 'importing' }
@@ -50,13 +50,20 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
 
   useEffect(() => setHydrated(true), []);
 
-  async function exportRecipe() {
+  async function exportRecipe(native = false) {
     if (!hydrated || !structure || !revision || exportBusy || disabled) return;
     setExportStage({ kind: 'exporting' });
     try {
+      if (native) {
+        if (!exportClient.exportNativeRevision) throw new RecipeExportError('unavailable');
+        const exported = await exportClient.exportNativeRevision({ structure, revision, actingSubject });
+        downloadNativeRecipeExport(exported);
+        setExportStage({ kind: 'done', revision: exported.revision });
+        return;
+      }
       const exported = await exportClient.exportRevision({ structure, revision, actingSubject });
       save(exported, contentLanguage, recipeName);
-      setExportStage({ kind: 'done', revision: exported.revision });
+      setExportStage({ kind: 'done', revision: exported.revision, losses: exported.losses });
     } catch (error) {
       const refusal = error instanceof RecipeExportError ? error : new RecipeExportError('unavailable');
       setExportStage({ kind: 'failed', failure: refusal.failure, detail: refusal.detail });
@@ -153,7 +160,7 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
           : importStage.failure === 'denied' ? t.importDenied : t.importUnavailable
     : null;
 
-  return <div className="grid min-w-0 gap-3 sm:grid-flow-col sm:auto-cols-max sm:items-start sm:justify-end">
+  return <div className="grid min-w-0 gap-3 sm:flex sm:flex-wrap sm:items-start sm:justify-end">
     <div className="grid min-w-0 justify-items-start gap-1 sm:justify-items-end">
       <Button type="button" size="sm" variant="outline" disabled={!hydrated || disabled || exportBusy || !structure || !revision}
         data-hydrated={hydrated ? 'true' : undefined} aria-busy={exportBusy || undefined}
@@ -162,8 +169,16 @@ export function RecipeExchange({ structure, revision, actingSubject, locale, mes
           : <DownloadIcon aria-hidden="true" />}
         {exportBusy ? t.exporting : t.exportAction}
       </Button>
+      {exportClient.exportNativeRevision ? <Button type="button" size="sm" variant="outline"
+        disabled={!hydrated || disabled || exportBusy || !structure || !revision}
+        className="min-h-11 whitespace-normal text-left" onClick={() => void exportRecipe(true)}>{t.nativeExportAction}</Button> : null}
       {exportStage.kind === 'done' ? <p role="status" className="max-w-72 text-left text-xs text-muted-foreground sm:text-right">
         {t.exportedRevision({ revision: revisionName(exportStage.revision) })}</p> : null}
+      {exportStage.kind === 'done' && exportStage.losses?.length ? <div role="status" className="grid max-w-80 gap-2 break-words text-sm">
+        <p className="font-medium">{t.exportLosses}</p>
+        <ul className="grid gap-1">{exportStage.losses.map((loss, index) => <li key={index} className="break-all text-xs">
+          {loss.code} · {loss.occurrence} · {loss.pointer}</li>)}</ul>
+      </div> : null}
       {exportFailureText ? <p role="alert" className="max-w-72 text-left text-xs text-destructive sm:text-right">
         {exportFailureText}{exportStage.kind === 'failed' && exportStage.detail && exportStage.failure !== 'too-large'
           ? <span> {t.mainSays}: {exportStage.detail}</span> : null}

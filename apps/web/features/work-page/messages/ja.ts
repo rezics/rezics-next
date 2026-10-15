@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  instructionTransformation: "変換",
+  instructionTransformationNotice: "変換のクレジットは、原著者であることや再利用の許可を示しません。",
   authorNote: "作者のことば",
   loading: '作品を読み込み中…', loadingRegion: '読み込み中…',
   notFoundTitle: '作品が見つかりません',

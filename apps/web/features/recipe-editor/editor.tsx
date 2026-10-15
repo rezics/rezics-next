@@ -18,7 +18,7 @@ import { messages, type RecipeEditorMessages } from './messages.ts';
 import { messages as workPageMessages } from '../work-page/messages.ts';
 import { MethodSection } from './method.tsx';
 import { ingredients, type RecipeState, steps } from './model.ts';
-import { readRecipe } from './api.ts';
+import { readRecipeDraft as readRecipe } from './api.ts';
 import { Preview } from './preview.tsx';
 import { missingBeforePublishing, PublishBar } from './publish.tsx';
 import { createRecipePublisher } from './publication.ts';

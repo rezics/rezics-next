@@ -13,7 +13,7 @@ export function Preview({ state, title, description, notes, language, t, message
 }) {
   const lang = { lang: language, dir: directionOf(language) } as const;
   const body = notes.trim();
-  const empty = !title && !description && !body && !ingredients(state).length && !steps(state).length && !state.measures.length;
+  const empty = !title && !description && !body && !ingredients(state).length && !steps(state).length && !state.instructions?.length && !state.measures.length;
   return <article aria-labelledby="recipe-preview" className="grid gap-5 rounded-2xl border border-border/60 bg-card p-4 sm:p-5">
     <div className="grid gap-1">
       <h2 id="recipe-preview" className="font-semibold text-sm text-muted-foreground">{t.previewHeading}</h2>

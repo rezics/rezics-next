@@ -8,12 +8,22 @@ import instructions, { document, paragraph, resourceReference,
 } from '../../../../../scripts/qa/cases/outcomes/recipes/instructions-in-any-form.ts';
 import { acting, originalRecipe, short, type RecipeWork } from '../../../../../scripts/qa/cases/outcomes/recipes/read-a-recipe.ts';
 import { personas } from '../../../../../scripts/qa/cases/outcome-cells.ts';
-import { outcomeTest } from '../../../support/outcome-test.ts';
+import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
+import { browserMainApi, BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { readRecipeVisitFrame } from '../../../../../apps/web/features/recipe-editor/recipe-authoring-recorded-page.ts';
+import { loadRecipeAuthoring } from '../../../../../apps/web/features/recipe-editor/authoring-page.ts';
+import { mainRecipeExportApi, RecipeExportError } from '../../../../../apps/web/features/recipe-editor/export-api.ts';
+import { recipeReadingReads } from '../../../../../apps/web/features/work-page/recipe-reading-recorded-page.ts';
+import { recipeWorkFrame, recipeWorkOverview } from '../../../../../apps/web/features/work-page/recipe-reading-recorded-page.tsx';
+import { englishMessages } from '../../../../../apps/web/features/work-page/messages.ts';
+import { EVERYONE } from '../../../../../apps/web/features/work-page/route.ts';
 import { grantPersonaFixtureAuthority } from '../../../support/persona-fixture-authority.ts';
 import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
 
 setDefaultTimeout(180_000);
 let sessions: PersonaSessions;
+const recording = new OutcomeRecorder(instructions, { binarySources: ['tests/fixtures/recipes/original-tomato-method.wav'] });
+let preparationOwner: PersonaSession | undefined;
 let recipe: RecipeWork, intermediate: RecipeWork;
 let preparation: Promise<Slice> | undefined;
 type Stage = { revision: string; references: ResourceReference[]; pages: Record<PersonaName, InstructionPage> };
@@ -44,15 +54,16 @@ const pagePath = (person: PersonaSession, revision?: string) =>
 
 beforeAll(async () => {
   sessions = await personaSessions('public');
+  await recording.prepare();
   // Only already implemented operations run in setup. A missing new operation
   // fails all six persona proofs by assertion, rather than failing beforeAll.
   recipe = await originalRecipe(sessions.owner, 'Original tomato adoption slice', { published: false });
   intermediate = await originalRecipe(sessions.owner, 'Original exact tomato stock', { laterDraft: true });
 }, 240_000);
-afterAll(async () => { await sessions?.close(); });
+afterAll(async () => { try { await recording.publish(); } finally { await sessions?.close(); } });
 
 async function authoredPost(title: string, value: BlocksDocument): Promise<AuthoredPostResponse> {
-  const owner = sessions.owner, actingSubject = owner.actingSubject!;
+  const owner = preparationOwner ?? sessions.owner, actingSubject = owner.actingSubject!;
   const book = await answer<{ work: string; mainVersion: string }>(owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title: `${title} notebook`, language: 'en',
     semanticTypes: ['https://schema.org/Book'], authoring: 'own-work', actingSubject,
@@ -86,7 +97,7 @@ function originalRecording(): Uint8Array {
 }
 
 async function prepareSlice(): Promise<Slice> {
-  const owner = sessions.owner, actor = owner.actingSubject!;
+  const owner = preparationOwner ?? sessions.owner, actor = owner.actingSubject!;
   // Post authoring and exact Content admission use their existing public owners.
   const post = await authoredPost('Original tomato method', document([paragraph('method', 'Stir the tomatoes into the stock.')]));
   await grantPersonaFixtureAuthority(owner, [
@@ -220,6 +231,12 @@ async function prepareSlice(): Promise<Slice> {
 }
 
 async function readInstructions(name: PersonaName) {
+  if (name === 'owner' && !preparation) {
+    const sample = recording.session(name, sessions.owner);
+    let command = 0;
+    preparationOwner = { ...sessions.owner, main: (...args) => args[0] === 'PUT' && args[1].endsWith('/bytes')
+      ? sessions.owner.main(...args) : sample(`owner-command-${++command}`, ...args) };
+  }
   const slice = await (preparation ??= prepareSlice());
   const person = sessions[name], final = slice.stages.at(-1)!;
   for (const stage of slice.stages) {
@@ -257,7 +274,7 @@ async function readInstructions(name: PersonaName) {
   const originalBytes = originalRecording();
   expect(metadata.representation).toBe(recorded.reference.selector.representation);
   expect(metadata.sha256).toBe(createHash('sha256').update(originalBytes).digest('hex'));
-  const delivered = await person.main('GET', `${mediaPath}/bytes${mediaQuery}`);
+  const delivered = await recording.session(name, person)('recording-bytes', 'GET', `${mediaPath}/bytes${mediaQuery}`);
   expect(delivered.status).toBe(200);
   expect(new Uint8Array(await delivered.arrayBuffer())).toEqual(new Uint8Array(originalBytes));
   const stock = await answer<{ structure: string; revision: string }>(person.main('GET',
@@ -326,15 +343,75 @@ async function readInstructions(name: PersonaName) {
       operations: [{ op: 'remove', occurrence: pinned.instructions[0]!.occurrence }],
     }), name === 'visitor' ? 401 : 403);
   }
+  await productionVisits(name);
   // Every persona sees the author Person, never the transformer as author.
   const credits = await answer<{ items: { role: string; agent: string }[] }>(person.main('GET',
     `/v1/works/${short(recipe.work)}/credits${query(person)}`));
   expect(credits.items.filter(item => item.role === 'author').map(item => item.agent)).toEqual([sessions.owner.actingSubject!]);
 }
 
-outcomeTest(instructions, 'visitor', () => readInstructions('visitor'));
-outcomeTest(instructions, 'stranger', () => readInstructions('stranger'));
-outcomeTest(instructions, 'member', () => readInstructions('member'));
-outcomeTest(instructions, 'owner', () => readInstructions('owner'));
-outcomeTest(instructions, 'moderator', () => readInstructions('moderator'));
-outcomeTest(instructions, 'operator', () => readInstructions('operator'));
+/** Whole reached visits use the real page/editor clients; no requests are reconstructed from expected answers. */
+async function productionVisits(name: PersonaName) {
+  const person = sessions[name];
+  let phase = 'frame', index = 0;
+  const cache = new Map<string, Promise<Response>>();
+  const fetcher = (async (input, init) => {
+    const request = new Request(input, init);
+    const url = new URL(request.url);
+    const path = url.pathname.slice(BFF_PREFIX.length) + url.search;
+    const raw = await request.text();
+    const anonymous = request.credentials === 'omit';
+    const key = JSON.stringify([phase, anonymous, request.method, path, raw]);
+    let pending = cache.get(key);
+    if (!pending) {
+      const sample = recording.session(name, anonymous ? sessions.visitor : person);
+      pending = sample(`${phase}-visit-${++index}`, request.method, path,
+        raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined,
+        { headers: Object.fromEntries(request.headers.entries()), settle: false });
+      cache.set(key, pending);
+    }
+    return (await pending).clone();
+  }) as typeof fetch;
+  const origin = 'https://record.invalid';
+  const main = browserMainApi(origin, { anonymous: name === 'visitor', fetcher });
+  const anonymous = browserMainApi(origin, { anonymous: true, fetcher });
+  const frame = await readRecipeVisitFrame(main, fetcher, { actingSubject: person.actingSubject, locale: 'en', origin });
+  expect(frame.ok).toBe(true);
+  phase = 'reading';
+  const reads = recipeReadingReads({ main, actingSubject: person.actingSubject });
+  const header = await reads.readWorkHeader(short(recipe.work));
+  expect(header.ok).toBe(true);
+  if (!header.ok) throw new Error('Production Recipe header is unavailable');
+  const host = { main, anonymous, publicOrigin: origin, publicFetch: fetcher,
+    actingSubject: person.actingSubject, signedIn: name !== 'visitor' };
+  const overview = await recipeWorkOverview({ host, workRef: short(recipe.work), id: short(recipe.work), work: header.data,
+    scope: EVERYONE, locale: 'en', messages: englishMessages });
+  await recipeWorkFrame({ host, workRef: short(recipe.work), id: short(recipe.work), work: header.data,
+    locale: 'en', messages: englishMessages, children: overview });
+  phase = 'editor';
+  const editor = await loadRecipeAuthoring(main, { id: short(recipe.work), actingSubject: person.actingSubject, signedIn: name !== 'visitor' });
+  expect(editor.kind).toBe(name === 'owner' ? 'editor' : 'no-authority');
+  if (editor.kind === 'editor') {
+    expect(editor.initial.recipe.head).toBe((await preparation!).draftRevision);
+    expect(JSON.stringify(editor.initial.recipe)).toContain(privateText);
+  }
+  phase = 'exchange';
+  const exported = mainRecipeExportApi(() => main);
+  const final = (await preparation!).stages.at(-1)!;
+  const input = { structure: recipe.structure, revision: final.revision, actingSubject: person.actingSubject ?? '' };
+  if (name === 'visitor') {
+    await expect(exported.exportRevision(input)).rejects.toBeInstanceOf(RecipeExportError);
+    await expect(exported.exportNativeRevision!(input)).rejects.toBeInstanceOf(RecipeExportError);
+  } else {
+    expect((await exported.exportRevision(input)).losses?.length).toBeGreaterThan(0);
+    expect((await exported.exportNativeRevision!(input)).losses).toEqual([]);
+  }
+}
+
+outcomeTest(instructions, 'owner', () => readInstructions('owner'), recording);
+outcomeTest(instructions, 'visitor', () => readInstructions('visitor'), recording);
+outcomeTest(instructions, 'stranger', () => readInstructions('stranger'), recording);
+outcomeTest(instructions, 'member', () => readInstructions('member'), recording);
+outcomeTest(instructions, 'moderator', () => readInstructions('moderator'), recording);
+outcomeTest(instructions, 'operator', () => readInstructions('operator'), recording);
+

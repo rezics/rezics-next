@@ -1,6 +1,6 @@
 import { onTestFinished, test } from 'bun:test';
 import { existsSync, linkSync, lstatSync, mkdirSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { dirname, isAbsolute, relative, resolve, sep } from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { AnswerRecordValidator, answerPersonas, answerRecord,
@@ -91,11 +91,14 @@ export class OutcomeRecorder {
   private readonly samples = Object.fromEntries(answerPersonas.map(persona => [persona, [] as AnswerSample[]])) as AnswerRecord['personas'];
   private readonly directory?: string;
   private readonly root: string;
+  private readonly binarySources: readonly string[];
 
   constructor(private readonly declaration: RowOutcomes, options: {
     directory?: string; root?: string; contract?: AnswerContract; debts?: readonly AnswerContractDebt[];
+    binarySources?: readonly string[];
   } = {}) {
     this.root = options.root ?? process.cwd();
+    this.binarySources = options.binarySources ?? [];
     const directory = options.directory ?? process.env.OUTCOME_RECORD_DIR;
     if (directory) this.directory = recordingDirectory(this.root, directory);
     this.contract = options.contract;
@@ -126,18 +129,36 @@ export class OutcomeRecorder {
         if (response.status >= 500) throw new Error(`Persona proof ${persona} received HTTP ${response.status}: ${await response.clone().text()}`);
         if (this.passed.has(persona) || this.published) throw new Error('Samples must belong to an active persona proof');
         const [method, path, body] = args;
-        const raw = await response.clone().text();
         const validator = await this.validator();
         let operationId = '<undeclared>';
         try { operationId = validator.operationId(method, path); } catch { /* Report the full sample context below. */ }
         let answer: unknown = null;
-        try { if (raw) answer = JSON.parse(raw) as unknown; }
-        catch { throw new Error(`row ${this.declaration.rowId}, persona ${persona}, sample ${label}, operation ${operationId}, `
-          + `status ${response.status}, /answer: expected JSON, received string; Response is not valid JSON`); }
+        let binary: AnswerSample['binary'];
+        const mediaType = response.headers.get('content-type')?.split(';')[0]?.trim();
+        if (this.binarySources.length && response.ok && mediaType && !mediaType.endsWith('/json') && !mediaType.endsWith('+json')) {
+          const bytes = new Uint8Array(await response.clone().arrayBuffer());
+          const sha256 = createHash('sha256').update(bytes).digest('hex');
+          for (const source of this.binarySources) {
+            const file = resolve(this.root, source);
+            if (isAbsolute(source) || relative(this.root, file).startsWith('..')
+              || relative(realpathSync(this.root), realpathSync(file)).startsWith('..')) throw new Error('Binary source must stay inside the repository');
+            const original = await readFile(file);
+            if (original.byteLength === bytes.byteLength && createHash('sha256').update(original).digest('hex') === sha256) {
+              binary = { source, byteLength: bytes.byteLength, sha256 }; break;
+            }
+          }
+          if (!binary) throw new Error(`Binary answer ${label} has no matching registered source asset (${sha256})`);
+        } else {
+          const raw = await response.clone().text();
+          try { if (raw) answer = JSON.parse(raw) as unknown; }
+          catch { throw new Error(`row ${this.declaration.rowId}, persona ${persona}, sample ${label}, operation ${operationId}, `
+            + `status ${response.status}, /answer: expected JSON, received string; Response is not valid JSON`); }
+        }
         const sample: AnswerSample = {
           label, operationId, method, path,
           ...(body === undefined ? {} : { body }), status: response.status,
           answer,
+          ...(binary ? { binary } : {}),
           headers: Object.fromEntries(response.headers.entries()),
         };
         const violations = validator.responseViolations(sample)

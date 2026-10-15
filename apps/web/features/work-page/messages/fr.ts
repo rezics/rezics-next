@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  instructionTransformation: "Transformation",
+  instructionTransformationNotice: "Le crédit de transformation ne prouve ni la paternité de la source ni une autorisation de réutilisation.",
   authorNote: "Note de l’auteur",
   loading: 'Chargement de l’œuvre…', loadingRegion: 'Chargement…',
   notFoundTitle: 'Œuvre introuvable',

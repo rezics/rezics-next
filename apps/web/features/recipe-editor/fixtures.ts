@@ -190,7 +190,8 @@ export function fakeMain(start: { recipe: RecipeState; notes?: NotesState; detai
         const body = await interference.recipe(page);
         return answer(body === undefined ? page() : body);
       } }) }),
-    compositions: Object.assign((_: { id: string }) => ({ changes: compositionChanges }), {
+    compositions: Object.assign((_: { id: string }) => ({ changes: compositionChanges,
+      get: async () => answer({ structure: recipe.structure, revision: recipe.head }) }), {
       post: async (body: unknown, options?: never) => {
         await record('create', body, options);
         const denied = removed();

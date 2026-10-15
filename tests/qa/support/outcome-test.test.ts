@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { loadOutcomes } from '../../../scripts/qa/cases/outcomes.ts';
@@ -7,6 +8,32 @@ import { OutcomeRecorder, outcomeTest } from './outcome-test.ts';
 import { notApplicable, proved, rowOutcomes } from '../../../scripts/qa/cases/outcome-cells.ts';
 import { AnswerRecordValidator, answerPersonas, type AnswerContract, type AnswerRecord, type AnswerSample } from '../../../scripts/api/answer-record.ts';
 import { assertAnswerContractDebts, matchesAnswerContractDebt } from './answer-contract-debts.ts';
+
+test('binary capture retains only a verified repository asset descriptor and validates the declared media type', async () => {
+  const source = 'tests/fixtures/recipes/original-tomato-method.wav';
+  const bytes = readFileSync(resolve(root, source));
+  const directory = mkdtempSync(resolve(root, '.temp/binary-answer-'));
+  const declaration = rowOutcomes('recipes/instructions-in-any-form', Object.fromEntries(answerPersonas.map(persona => [persona, proved('reads exact bytes')])));
+  const contract: AnswerContract = { paths: { '/v1/recording/bytes': { get: { operationId: 'recording-bytes', responses: {
+    200: { content: { 'audio/wav': { schema: { type: 'string', format: 'binary' } } } },
+  } } } } };
+  const recorder = new OutcomeRecorder(declaration, { root, directory, contract, binarySources: [source] });
+  try {
+    for (const persona of answerPersonas) await recorder.prove(persona, async () => {
+      const response = await recorder.session(persona, { main: async () => new Response(bytes, { headers: { 'content-type': 'audio/wav' } }) })(
+        'recording-bytes', 'GET', '/v1/recording/bytes');
+      expect(new Uint8Array(await response.arrayBuffer())).toEqual(new Uint8Array(bytes));
+    });
+    await recorder.publish();
+    const record = JSON.parse(readFileSync(resolve(directory, 'recipes/instructions-in-any-form.json'), 'utf8')) as AnswerRecord;
+    expect(record.personas.visitor[0]).toMatchObject({ answer: null, binary: { source,
+      byteLength: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') } });
+    expect(new AnswerRecordValidator(contract).validate(record)).toEqual(record);
+    expect(new AnswerRecordValidator({ paths: { '/v1/recording/bytes': { get: { operationId: 'recording-bytes', responses: {
+      200: { content: { 'application/json': { schema: {} } } },
+    } } } } }).responseViolations(record.personas.visitor[0]!)).not.toEqual([]);
+  } finally { rmSync(directory, { recursive: true, force: true }); }
+});
 
 const root = resolve(import.meta.dir, '../../..');
 const declarationsModule = join(root, 'scripts/qa/cases/outcome-cells.ts');

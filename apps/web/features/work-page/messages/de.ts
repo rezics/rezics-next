@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  instructionTransformation: "Bearbeitung",
+  instructionTransformationNotice: "Die Nennung der Bearbeitung belegt weder die ursprüngliche Urheberschaft noch eine Nutzungserlaubnis.",
   authorNote: "Anmerkung des Autors",
   loading: 'Werk wird geladen…', loadingRegion: 'Wird geladen…',
   notFoundTitle: 'Werk nicht gefunden',

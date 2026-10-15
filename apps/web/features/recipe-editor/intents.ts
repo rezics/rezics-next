@@ -2,6 +2,7 @@ import { type IngredientQualifier, sameQualifier } from './ingredient-line.ts';
 import { ingredients, type Measure, measureOf, minutesOf, type Node, nodeOf, type RecipeState, siblings,
   type StepQualifier, type TimingName } from './model.ts';
 import { type Rational, sameRational } from './quantity.ts';
+import { instructionSelection, type InstructionReference } from './instructions.ts';
 
 // What a cook did, as something that can be worked out again against newer state. A write that
 // Main refuses because the head moved is not replayed from a stale plan: the editor reads Main
@@ -11,7 +12,8 @@ import { type Rational, sameRational } from './quantity.ts';
 type Label = { value: string; language: string };
 export type Position = 'first' | 'last' | { after: string };
 export type Operation =
-  | { op: 'insert'; parent: string; position: Position; role: 'group' | 'ingredient' | 'step'; label?: Label;
+  | { op: 'insert'; parent: string; position: Position; role: 'group' | 'ingredient' | 'step' | 'instruction'; label?: Label;
+    target?: string; selection?: ReturnType<typeof instructionSelection>;
     qualifier?: IngredientQualifier | StepQualifier }
   | { op: 'update'; occurrence: string; label?: Label; qualifier?: IngredientQualifier | StepQualifier }
   | { op: 'move'; occurrence: string; parent: string; position: Position }
@@ -22,6 +24,9 @@ export const MAX_OPERATIONS = 16;
 
 export type Direction = 'up' | 'down';
 export type Intent =
+  | { kind: 'adoptInstruction'; reference: InstructionReference }
+  | { kind: 'removeInstruction'; occurrence: string }
+  | { kind: 'moveInstruction'; occurrence: string; direction: Direction }
   | { kind: 'ensureRecipe' }
   | { kind: 'addSection'; label: string; language: string }
   | { kind: 'renameSection'; occurrence: string; label: string; language: string }
@@ -118,9 +123,16 @@ export function plan(state: RecipeState, intent: Intent): Plan {
       return node.label?.value === intent.label.trim() ? moot
         : changes([{ op: 'update', occurrence: node.occurrence, label: { value: intent.label.trim(), language: node.label?.language ?? intent.language } }]);
     }
-    case 'moveSection': case 'moveLine': case 'moveStep': {
+    case 'adoptInstruction':
+      return changes([{ op: 'insert', parent: root, position: 'last', role: 'instruction',
+        target: intent.reference.target, selection: instructionSelection(intent.reference) }]);
+    case 'removeInstruction':
+      return nodeOf(state, intent.occurrence)?.role === 'instruction'
+        ? changes([{ op: 'remove', occurrence: intent.occurrence }]) : moot;
+    case 'moveSection': case 'moveLine': case 'moveStep': case 'moveInstruction': {
       const node = nodeOf(state, intent.occurrence);
-      const role = intent.kind === 'moveSection' ? 'group' : intent.kind === 'moveLine' ? 'ingredient' : 'step';
+      const role = intent.kind === 'moveSection' ? 'group' : intent.kind === 'moveLine' ? 'ingredient'
+        : intent.kind === 'moveInstruction' ? 'instruction' : 'step';
       if (node?.role !== role) return invalid('gone');
       const operation = stepOver(state, node, intent.direction);
       return operation ? changes([operation]) : moot;
@@ -217,7 +229,9 @@ export function applyOperations(state: RecipeState, operations: readonly Operati
       const occurrence = created[next++];
       if (!occurrence) continue;
       const base = { occurrence, parent: operation.parent };
-      const node: Node = operation.role === 'group' ? { ...base, role: 'group', label: operation.label ?? null }
+      const node: Node = operation.role === 'instruction' ? { ...base, role: 'instruction',
+        reference: { target: operation.target!, selector: operation.selection!.selector } }
+        : operation.role === 'group' ? { ...base, role: 'group', label: operation.label ?? null }
         : operation.role === 'ingredient' ? { ...base, role: 'ingredient', qualifier: operation.qualifier as IngredientQualifier }
           : { ...base, role: 'step', qualifier: operation.qualifier as StepQualifier };
       nodes = place(nodes, node, operation.position);

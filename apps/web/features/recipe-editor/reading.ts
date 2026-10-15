@@ -5,6 +5,7 @@ import type { ReadableRecipe } from '../work-page/types/recipe.tsx';
 /** The editor's recipe in the shape the published page renders. */
 export function readingOf(state: RecipeState): ReadableRecipe {
   return {
+    instructions: state.instructions,
     occurrences: state.nodes.map(node => ({
       occurrence: node.occurrence,
       role: node.role,

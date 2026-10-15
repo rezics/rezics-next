@@ -12,6 +12,7 @@ import { groups, ingredients, type IngredientNode, type RecipeState, steps, type
 import { selectionWhilePending, textWhilePending, toggleIngredient } from './step-selection.ts';
 import type { RecipeStore } from './store.ts';
 import { directionOf } from '../studio/types.ts';
+import { InstructionEditor } from './instruction-editor.tsx';
 
 interface Common { store: RecipeStore; state: RecipeState; language: string; t: Copy; busy: boolean;
   /** Editing access is gone. Typed text stays; nothing here is written. */
@@ -137,6 +138,7 @@ export function MethodSection(common: Common) {
   const { t } = common;
   return <section aria-labelledby="recipe-method" className="grid gap-4">
     <h2 id="recipe-method" className="font-semibold text-xl">{t.methodHeading}</h2>
+    <InstructionEditor {...common} />
     {list.length ? <ol className="grid gap-3">{list.map((node, index) =>
       <StepRow key={node.occurrence} node={node} index={index} count={list.length} {...common} />)}</ol>
       : <p className="text-muted-foreground text-sm">{t.emptySteps}</p>}

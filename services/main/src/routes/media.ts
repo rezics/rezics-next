@@ -17,7 +17,7 @@ import { concealCommand, documentUseCommand, imageLabelCommand, inferenceCommand
 import type { MetadataRef } from '../modules/media/presentation.ts';
 import { ShowcaseRefused, campaignArtCommand } from '../modules/media/showcase-contract.ts';
 import { DEFAULT_MEDIA_CONTEXT, MAX_UPLOAD_BYTES, MediaConflict, MediaFenced, MediaInvalid, MediaMissing, MediaStale,
-  MediaUnavailable, avatarImageEligible } from '../modules/media/store.ts';
+  MediaUnavailable, avatarImageEligible, MEDIA_TYPES } from '../modules/media/store.ts';
 import { readResourceSummaries } from '../modules/media/summary.ts';
 import { publicAgent } from '../modules/profiles/read.ts';
 import { GRAPHS, RV, iri, lit } from '../modules/work/activate.ts';
@@ -388,7 +388,9 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/media/representations/:representation/bytes',{params:t.Object({representation:uuid}),
       query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid),
         zoneVariant:t.Optional(t.String({maxLength:80})),zone:t.Optional(t.String({maxLength:80}))},{additionalProperties:false}),
-      response:{200:t.Any(),...authorizedReadProblems}},async ({request,params,query}: {request:Request;
+      response:{200:t.File({type:[...MEDIA_TYPES]}),...authorizedReadProblems},
+      detail:{responses:{200:{description:'Exact retained representation bytes',content:Object.fromEntries(MEDIA_TYPES.map(type=>[
+        type,{schema:{type:'string',format:'binary'}}]))}}}},async ({request,params,query}: {request:Request;
         params:{representation:string};query:{actingSubject?:string;use?:string;zoneVariant?:string;zone?:string}})=>publicFirst(request,query.actingSubject,async request=>{
       let lease: DownloadReadLease|undefined;
       try {

@@ -3,6 +3,19 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RecipeEditorMessages } from '../messages.ts';
 
 export default {
+  adoptInstructions: "Diese Anleitung verwenden",
+  instructionKind: "Anleitungsformat",
+  instructionPost: "Beitrag oder Ablauf",
+  instructionRecording: "Aufnahme",
+  instructionTarget: "Quellressource",
+  instructionRevision: "Genaue Revision",
+  instructionVariant: "Inhaltsvariante",
+  instructionBlock: "Ablaufblock (optional)",
+  instructionRepresentation: "Mediendatei",
+  instructionFragment: "Aufnahmeausschnitt (optional)",
+  instructionSelectionHelp: "Eine genau gespeicherte Quelle auswählen. Erneutes Hinzufügen erzeugt eine eigene Verwendung; Verweise im Inhalt bleiben Verweise.",
+  nativeExportAction: "Natives Rezept herunterladen",
+  exportLosses: "Informationen, die dieses Format nicht bewahrt",
   pageTitle: 'Rezept bearbeiten', backToRecipe: 'Zurück zum Rezept', viewRecipe: 'Rezept ansehen',
   editRecipe: 'Rezept bearbeiten',
   editorView: 'Editor-Ansicht', viewEdit: 'Bearbeiten', viewPreview: 'Vorschau',

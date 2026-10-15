@@ -1,4 +1,5 @@
 import { emptyRecipe, type RecipePageLike, type RecipeState, stateOf } from './model.ts';
+import { appendInstructions, type Instruction } from './instructions.ts';
 
 // Removing a section removes every child and rewrites every step that names those ingredients.
 // Moving a line, a step or a section chooses its place among siblings, and editing a step drops
@@ -37,7 +38,8 @@ function mergeById<T extends { occurrence: string }>(current: readonly T[], inco
 }
 
 type RecipePageShape = { occurrences: readonly { occurrence: string }[];
-  ingredients: readonly { occurrence: string }[]; revision?: string; structure?: string; measures: readonly unknown[]; next?: string };
+  ingredients: readonly { occurrence: string }[]; revision?: string; structure?: string; measures: readonly unknown[]; next?: string;
+  instructions?: readonly Instruction[] };
 
 /** One recipe page followed by the next, in the order they were read. A section started earlier stays that section. */
 export function appendRecipePage<T extends RecipePageShape>(current: T, incoming: T): T {
@@ -45,6 +47,7 @@ export function appendRecipePage<T extends RecipePageShape>(current: T, incoming
     throw new Error('Recipe continuation changed the pinned revision');
   const merged = { ...incoming, occurrences: mergeById(current.occurrences, incoming.occurrences),
     ingredients: mergeById(current.ingredients, incoming.ingredients),
+    instructions: appendInstructions(current.instructions, incoming.instructions),
     measures: incoming.measures.length ? incoming.measures : current.measures };
   if (!incoming.next) delete merged.next;
   return merged;
@@ -59,6 +62,7 @@ export function mergeRecipeState(current: RecipeState, page: RecipePageLike): Re
     head: incoming.head ?? current.head,
     nodes: [...current.nodes, ...incoming.nodes.filter(node => !seen.has(node.occurrence))],
     measures: incoming.measures.length ? incoming.measures : current.measures,
+    instructions: appendInstructions(current.instructions, incoming.instructions),
   };
 }
 

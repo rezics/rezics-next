@@ -8,6 +8,8 @@ import { labelFromSummary, recipeLanguage } from './authored-language.ts';
 import type { RecipeEditorProps } from './editor.tsx';
 import { initialDetails } from './initial-details.ts';
 import { stateOf, type RecipePageLike } from './model.ts';
+import { readInstructionDetails } from './instruction-reads.ts';
+import { fetchRecipePage } from './api.ts';
 import type { NotesState } from './saves.ts';
 
 const emptyNotes = (): NotesState => ({ text: null, head: null, body: '', publicationHead: null });
@@ -87,7 +89,21 @@ export async function loadRecipeAuthoring(
   ]);
   if (!notes.ok) return { kind: 'unavailable', refusal: notes };
   if (!recipe.ok) return { kind: 'unavailable', refusal: recipe };
-  const page = recipe.data.page as RecipePageLike | null;
+  let page = recipe.data.page as RecipePageLike | null;
+  if (page && work.publicationState === 'published') {
+    const current = await main.v1.compositions({ id: idOf(page.structure) }).get({ query: { actingSubject } });
+    if (current.error || !current.data) return { kind: 'unavailable', refusal: {
+      ok: false, failure: 'unavailable', status: current.status, problem: current.error?.value,
+    } };
+    if (current.data.revision !== page.revision) {
+      const draft = await fetchRecipePage(main, work.id, actingSubject, undefined, current.data.revision);
+      if (!draft.ok) return { kind: 'unavailable', refusal: { ok: false, failure: 'unavailable',
+        status: draft.status, problem: draft.value } };
+      page = draft.page;
+    }
+  }
+  const instructionDetails = page?.instructions?.length
+    ? await readInstructionDetails(main, page.instructions, actingSubject) : undefined;
   const label = summaryName ?? { value: work.title.value, language: work.title.language };
   return {
     kind: 'editor',
@@ -96,7 +112,7 @@ export async function loadRecipeAuthoring(
     language,
     actingSubject,
     initial: {
-      recipe: stateOf(page),
+      recipe: stateOf(page && instructionDetails ? { ...page, instructions: instructionDetails } : page),
       next: page?.next ?? null,
       notes: notes.data,
       details: {

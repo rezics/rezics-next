@@ -18,6 +18,7 @@ export interface RecordedAnswer extends AnswerCall {
   status: number;
   answer: unknown;
   headers: Record<string, string>;
+  binary?: { source: string; byteLength: number; sha256: string };
 }
 export interface AnswerSample extends RecordedAnswer { label: string }
 export interface AnswerViolation {
@@ -62,7 +63,7 @@ export function recordAnswer(call: RecordedAnswer): RecordedAnswer {
     .filter(([key]) => clientResponseHeaders.some(header => header === key)));
   return redactAnswer({ operationId: call.operationId, method: call.method, path: call.path,
     ...(Object.hasOwn(call, 'body') ? { body: call.body } : {}), status: call.status,
-    answer: call.answer, headers }) as RecordedAnswer;
+    answer: call.answer, headers, ...(call.binary ? { binary: call.binary } : {}) }) as RecordedAnswer;
 }
 
 export function answerRecord(row: string, personas: Record<AnswerPersona, AnswerSample[]>): AnswerRecord {
@@ -91,6 +92,10 @@ const sampleSchema = {
     label: { type: 'string', minLength: 1 }, operationId: { type: 'string', minLength: 1 },
     method: { type: 'string', pattern: '^[A-Z]+$' }, path: { type: 'string', minLength: 1 },
     body: {}, status: { type: 'integer', minimum: 100, maximum: 599 }, answer: {},
+    binary: { type: 'object', additionalProperties: false, required: ['source', 'byteLength', 'sha256'], properties: {
+      source: { type: 'string', pattern: '^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9_./-]+$' },
+      byteLength: { type: 'integer', minimum: 0 }, sha256: { type: 'string', pattern: '^[0-9a-f]{64}$' },
+    } },
     headers: { type: 'object', additionalProperties: false,
       properties: Object.fromEntries(clientResponseHeaders.map(header => [header, { type: 'string' }])) },
   },
@@ -192,9 +197,15 @@ export class AnswerRecordValidator {
     if (!content) return sample.answer === null ? [] :
       [violation('/answer', 'null', sample.answer, 'Bodyless response must have a null answer')];
     const mediaType = sample.headers['content-type']?.split(';')[0]?.trim();
-    const schema = content[mediaType ?? 'application/json']?.schema;
+    const schema = (content[mediaType ?? 'application/json'] ?? content[`${mediaType?.split('/')[0]}/*`] ?? content['*/*'])?.schema;
     if (schema === undefined) return [violation('/headers/content-type', 'declared media type', mediaType,
       'Response has no declared schema for this media type')];
+    if (sample.binary) {
+      const binarySchema = this.resolved<{ type?: string; format?: string }>(schema);
+      if (binarySchema.type !== 'string' || binarySchema.format !== 'binary')
+        return [violation('/binary', 'declared binary response', sample.binary, 'Binary metadata cannot replace a JSON answer')];
+      return sample.answer === null ? [] : [violation('/answer', 'null', sample.answer, 'Binary bytes belong to the source asset, never record JSON')];
+    }
     const validator = this.validator(schema);
     if (validator.Check(sample.answer)) return [];
     // A suppressed first error must not hide later members behind TypeBox's default

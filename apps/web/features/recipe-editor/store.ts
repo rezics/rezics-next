@@ -1,6 +1,6 @@
 import { commandInstance, type CommandInstance, type WriteRound } from '../api/command.ts';
 import type { MainClient } from '../studio/types.ts';
-import { type Answer, createRecipe, readRecipe, writePlan } from './api.ts';
+import { type Answer, createRecipe, readRecipeDraft as readRecipe, writePlan } from './api.ts';
 import { applyPlan, type Intent, plan, type Plan, type Reason } from './intents.ts';
 import type { RecipeState } from './model.ts';
 
@@ -194,6 +194,8 @@ export function createRecipeStore({ work, mainVersion, actingSubject, initial, m
         return { kind: 'refresh-body', requireRead: inserts > created.length };
       }
       state = applyPlan(state, flight.plan, answer.data.revision, created);
+      if (entry.intent.kind === 'adoptInstruction' || entry.intent.kind === 'removeInstruction'
+        || entry.intent.kind === 'moveInstruction') return { kind: 'refresh-body', requireRead: true };
       entry.command.finish({ ok: true });
       entry.flight = null;
       return { kind: 'done', outcome: { kind: 'saved' } };

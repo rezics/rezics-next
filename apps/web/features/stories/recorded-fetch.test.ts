@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from 'bun:test';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import type { AnswerRecord, AnswerSample } from '../../../../scripts/api/answer-record.ts';
 import books from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
 import hub from '../../../../tests/qa/fixtures/outcomes/books/work-hub-and-edition-choice.json';
@@ -11,6 +13,26 @@ const populated = bookRecord.personas.visitor.find(sample => sample.label === 'b
 const empty = bookRecord.personas.visitor.find(sample => sample.label === 'search-no-match')!;
 const problem = bookRecord.personas.visitor.find(sample => sample.label === 'unsupported-query-shape')!;
 const disposals: (() => void)[] = [];
+const recordingSource = 'tests/fixtures/recipes/original-tomato-method.wav';
+
+test('binary replay reads the source fixture and rejects a changed or absent source', async () => {
+  const bytes = new Uint8Array(await readFile(new URL('../../../../tests/fixtures/recipes/original-tomato-method.wav', import.meta.url)));
+  const sample: AnswerSample = { label: 'recording', operationId: 'recording-bytes', method: 'GET',
+    path: '/v1/media/recording/bytes', status: 200, answer: null, headers: { 'content-type': 'audio/wav' },
+    binary: { source: recordingSource, byteLength: bytes.byteLength, sha256: createHash('sha256').update(bytes).digest('hex') } };
+  const readBinary = (source: string) => readFile(new URL(`../../../../${source}`, import.meta.url)).then(value => new Uint8Array(value));
+  for (const selected of [sample, { ...sample, binary: { ...sample.binary!, sha256: '0'.repeat(64) } },
+    { ...sample, binary: { ...sample.binary!, source: 'tests/fixtures/recipes/absent.wav' } }]) {
+    const playback = recordedFetch(recordWith(selected), 'visitor', [{ label: selected.label, state: 'populated' }], { readBinary });
+    disposals.push(playback.dispose);
+    const response = playback.fetcher(`https://recorded.invalid${selected.path}`);
+    if (selected === sample) {
+      const actual = await response;
+      expect(actual.headers.get('content-type')).toBe('audio/wav');
+      expect(new Uint8Array(await actual.arrayBuffer())).toEqual(bytes);
+    } else await expect(response).rejects.toThrow(selected.binary!.source === recordingSource ? 'integrity mismatch' : 'ENOENT');
+  }
+});
 afterEach(() => { for (const dispose of disposals.splice(0)) dispose(); });
 
 test('a recorded public header with a bare question mark has the same empty query as the typed client', async () => {

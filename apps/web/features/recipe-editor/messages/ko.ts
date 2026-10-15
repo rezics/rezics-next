@@ -3,6 +3,19 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { RecipeEditorMessages } from '../messages.ts';
 
 export default {
+  adoptInstructions: "이 조리법 사용",
+  instructionKind: "조리법 형식",
+  instructionPost: "게시물 또는 절차",
+  instructionRecording: "녹음·동영상",
+  instructionTarget: "원본 리소스",
+  instructionRevision: "정확한 리비전",
+  instructionVariant: "콘텐츠 변형",
+  instructionBlock: "절차 블록(선택)",
+  instructionRepresentation: "미디어 표현",
+  instructionFragment: "녹음 구간(선택)",
+  instructionSelectionHelp: "저장된 원본을 정확히 선택하세요. 다시 추가하면 별도의 사용이 만들어집니다. 본문 속 참조는 참조로 유지됩니다.",
+  nativeExportAction: "네이티브 레시피 다운로드",
+  exportLosses: "이 형식에서 보존할 수 없는 정보",
   pageTitle: '레시피 편집', backToRecipe: '레시피로 돌아가기', viewRecipe: '레시피 보기',
   editRecipe: '레시피 편집',
   editorView: '편집기 보기', viewEdit: '편집', viewPreview: '미리보기',

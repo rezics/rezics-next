@@ -2,6 +2,8 @@ import { asValue, insert, number, plural } from 'native-i18n';
 import type { WorkPageMessages } from '../messages.ts';
 
 export default {
+  instructionTransformation: "변환",
+  instructionTransformationNotice: "변환 기여 표시는 원저자임이나 재사용 허가를 의미하지 않습니다.",
   authorNote: "작가의 말",
   loading: '작품을 불러오는 중…', loadingRegion: '불러오는 중…',
   notFoundTitle: '작품을 찾을 수 없습니다',

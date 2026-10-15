@@ -67,6 +67,8 @@ const en = {
   credits: 'Credits', creditsUnavailable: 'Credits unavailable',
   someCreditsUnavailable: 'Some credits could not load.',
   author: 'Author', authors: 'Authors', translator: 'Translator', editor: 'Editor',
+  instructionTransformation: 'Transformation',
+  instructionTransformationNotice: 'Transformation credit does not establish source authorship or permission to reuse.',
   openLibraryAuthor: insert('Open Library author {{key}}', { key: String }),
   openLibraryListed: 'As Open Library lists the author',
   originalTitle: 'Original title', about: 'About this Work',
