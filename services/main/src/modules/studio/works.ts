@@ -31,7 +31,7 @@ export function studioWorkState(texts: readonly { publicationHead: string | null
 
 const recipeStateBindings = (work: string, main: string) => `
   BIND(EXISTS { GRAPH ${iri(GRAPHS.current)} { ?studioRecipe a rv:Structure ; rv:structureOf ${main} ;
-    rv:structureProfile ${iri(`${RV}RecipeComposition`)} ; rv:structureHead ?studioRecipeHead . } } AS ?recipeStarted)
+    rv:structureProfile rv:RecipeComposition ; rv:structureHead ?studioRecipeHead . } } AS ?recipeStarted)
   BIND(EXISTS { ${publishedStructuredWork(work, main)} } AS ?recipePublished)`;
 
 export interface StudioWorkFilters { state?: 'draft' | 'published' | 'empty'; type?: WorkType;
