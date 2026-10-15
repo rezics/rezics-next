@@ -686,7 +686,11 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
     test: 'recipes / Browse every recipe page in its Zone',
   });
   expect(rows('recipes', 'Collection tracking and progress')).toEqual([
-    expect.objectContaining({ api: expect.objectContaining({ missing: 'gap' }),
+    expect.objectContaining({ api: {
+      file: 'tests/qa/integration/outcomes/recipes/collection-tracking-and-progress.test.ts',
+      test: 'recipes/collection-tracking-and-progress / owner: curates repeated recipe members and retains private standing with replay and stale protection',
+      evidence: 'Publishes an original Recipe, curates repeated collection members and checks private whole-recipe standing, replay and stale protection across all six personas. Passed in QA 20261015t015605-ab33e2.',
+    },
       browser: expect.objectContaining({ file: 'apps/web/tests/recipe-tracking.e2e.ts',
         test: 'recipe-tracking / en: a cook saves a recipe, completes it and returns to persisted progress',
         evidence: expect.stringContaining('ordinary signed-in cook creates and publishes an original Recipe') }) }),
@@ -730,10 +734,10 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 53, missingRows: 15, missingProofs: 16 });
+    .toEqual({ rows: 68, provedPairs: 67, missingRows: 1, missingProofs: 1 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 1, L11: 1, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 1, L26: 0, gap: 11, 'content-adoption': 1 });
+  ]))).toEqual({ L10: 0, L11: 0, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 0, L26: 0, gap: 1, 'content-adoption': 0 });
 });
 
 test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
@@ -798,39 +802,54 @@ test('every Realm closure surface records its API proof and observed browser jou
     file: 'services/main/tests/realm-platform-closure-reads.test.ts',
     test: 'closed-directory-before-drain: hidden indexed rows are omitted and live rows remain traversable',
   });
-  for (const row of closureRows.filter(row => !['Closure: notifications', 'Closure: feed', 'Closure: rankings'].includes(row.capability)))
-    expect(row.browser, row.capability).toMatchObject({ missing: 'gap' });
-  for (const capability of ['Closure: feed', 'Closure: rankings']) {
-    expect(closureRows.find(row => row.capability === capability)!.browser).toMatchObject({
-      file: 'apps/web/tests/realm-closure-discovery.e2e.ts',
-      journey: 'apps/web/tests/journeys/realm-closure-discovery.ts',
+  for (const row of closureRows) {
+    expect(proofMissing(row.browser), row.capability).toBe(false);
+    if (!proofMissing(row.browser)) expect(row.browser.evidence?.trim().length, row.capability).toBeGreaterThan(0);
+  }
+  for (const [surface, title] of [
+    ['direct routes', 'realm-closure-direct: readers and the Realm owner lose direct pages after reload and recover after restoration'],
+    ['threads and replies', 'realm-closure-threads: a reader cannot reopen an opening or nested reply until the Realm is restored'],
+    ['directory', 'realm-closure-directory: a newcomer sees only live communities after reload and follows one by keyboard'],
+    ['Zone discussion entry and modules', 'realm-closure-zone: a visitor keeps the independent Zone while its Realm discussion and shelf disappear after reload'],
+  ] as const) {
+    expect(closureRows.find(row => row.capability === `Closure: ${surface}`)!.browser).toMatchObject({
+      file: 'apps/web/tests/realm-route-closure.e2e.ts',
+      test: title,
     });
   }
-  expect(closureRows.find(row => row.capability === 'Closure: notifications')!.browser)
-    .toMatchObject({ file: 'apps/web/tests/realm-closure.e2e.ts', journey: 'apps/web/tests/journeys/realm-closure.ts' });
+  for (const [surface, file, title] of [
+    ['feed', 'apps/web/tests/realm-closure-discovery.e2e.ts',
+      'realm-closure-feed: a returning member loses closed Realm results after reload and keeps the original'],
+    ['rankings', 'apps/web/tests/realm-closure-discovery.e2e.ts',
+      'realm-closure-rankings: a returning member loses closed Realm results after reload and keeps the original'],
+    ['search', 'apps/web/tests/realm-closure-search.e2e.ts',
+      'realm-closure-search: a returning member loses closed Realm results after reload and keeps the original'],
+  ] as const) {
+    expect(closureRows.find(row => row.capability === `Closure: ${surface}`)!.browser).toMatchObject({
+      file,
+      journey: 'apps/web/tests/journeys/realm-closure-discovery.ts',
+      test: title,
+    });
+  }
 });
 
-test('Realm closure browser coverage registers the proved notification journey and preserves exact media and roster blockers', () => {
+test('Realm closure browser coverage registers the proved notification, media and roster journeys in both locales', () => {
   const rows = launchCoverage.filter(row => row.kind === 'realm');
-  const notification = rows.find(row => row.capability === 'Closure: notifications')!.browser;
-  expect(proofMissing(notification)).toBe(false);
-  if (proofMissing(notification) || !journeyProof(notification)) throw new Error('Expected a registered notification journey');
-  const wrapper = readFileSync(resolve(repositoryRoot, notification.file), 'utf8');
-  const journey = readFileSync(resolve(repositoryRoot, notification.journey), 'utf8');
-  const specifier = relative(dirname(notification.file), notification.journey).split(sep).join('/');
-  const registrations = journeyRegistrations(wrapper, `./${specifier}`);
-  expect(namedTestExists(journey, notification.test, registrations)).toBe(true);
-  expect(namedTestExists(journey, notification.test.replace('(en)', '(ja)'), registrations)).toBe(true);
-  for (const [capability, request] of [
-    ['Closure: media', 'POST /v1/media/metadata'],
-    ['Closure: roster', 'GET /v1/realms/{closedRealm}/members?actingSubject={founder}'],
-  ]) {
-    const browser = rows.find(row => row.capability === capability)!.browser;
-    expect(browser).toMatchObject({ missing: 'gap' });
-    if (!proofMissing(browser)) throw new Error('An API-blocked journey must remain missing');
-    expect(browser.reason).toContain(request!);
-    expect(browser.reason).toContain('HTTP 200');
-    expect(browser.reason).toContain('Exact request and answer: QA ');
+  const file = 'apps/web/tests/realm-closure.e2e.ts';
+  const journeyPath = 'apps/web/tests/journeys/realm-closure.ts';
+  const wrapper = readFileSync(resolve(repositoryRoot, file), 'utf8');
+  const journey = readFileSync(resolve(repositoryRoot, journeyPath), 'utf8');
+  const registrations = journeyRegistrations(wrapper, './journeys/realm-closure.ts');
+  for (const [surface, title] of [
+    ['notifications', 'realm-closure-notifications: a recipient reloads a concealed reply notice and keeps the independent notice (en)'],
+    ['media', 'realm-closure-media: a reader reloads reply-backed art as unavailable while independent art survives, then sees restoration (en)'],
+    ['roster', 'realm-closure-roster: a founder and listed member reload concealed public and management rosters, then recover unchanged membership (en)'],
+  ] as const) {
+    const browser = rows.find(row => row.capability === `Closure: ${surface}`)!.browser;
+    expect(proofMissing(browser), surface).toBe(false);
+    expect(browser, surface).toMatchObject({ file, journey: journeyPath, test: title });
+    expect(namedTestExists(journey, title, registrations), `${surface} (en)`).toBe(true);
+    expect(namedTestExists(journey, title.replace('(en)', '(ja)'), registrations), `${surface} (ja)`).toBe(true);
   }
 });
 
