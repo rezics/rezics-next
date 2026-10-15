@@ -24,7 +24,7 @@ function findBrowse(node: ReactNode): BrowseModel | null {
 }
 
 async function visit(persona: AnswerPersona, label: string, locale: UiLocale = 'en',
-  search = animeBrowseSearch(record, persona, label)) {
+  search: Record<string, string | string[] | undefined> = animeBrowseSearch(record, persona, label)) {
   const replay = recordedFetch(record, persona, animeBrowseLabels(record, persona, label).map(item => ({
     label: item, state: animeBrowseSample(record, persona, item).status >= 400 ? 'error' : 'populated',
   })));
