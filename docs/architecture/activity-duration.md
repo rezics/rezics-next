@@ -182,3 +182,14 @@ separation and bounded large-population reads. No visual surface is changed or
 qualified in this step. The later surface must explain sample count, unknowns,
 procedure and the limits of a fit estimate; API success alone proves no human
 usability result.
+
+Qualification on 2026-10-15: QA run `20261015t133833-87dca9` completed fixture
+preparation and executed all six pending persona tests. Every persona reached
+`POST /v1/activity-duration-estimates` and received 404 `not_found`, "No such
+operation", where the outcome requires 200. The runner reports six expected
+failures as passing `test.failing` cases; none of the six cells is proved.
+Production routes were unchanged, so this is the unsupported Main behavior,
+not an implementation of duration. `task goal -- check` passed types, API
+inference, lint, AST checks and guards; `task docs:check` passed. The remaining
+assertions intentionally await implementation and do not yet prove corrections,
+export or disclosure behavior.
