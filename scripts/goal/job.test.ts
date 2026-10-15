@@ -96,7 +96,7 @@ test('one coordinator pass records a parked turn while its command is still runn
     const before = Date.now();
     await coordinateWorkerJobs(f.ledger, f.options);
     expect(Date.parse(f.task.attempts[0]!.endedAt!)).toBeGreaterThanOrEqual(before);
-    expect(f.task.state).toBe('exited');
+    expect(f.ledger.tasks.worker!.state).toBe('exited');
     expect(store.get('pending')!.code).toBeUndefined();
     expect(f.prompts).toHaveLength(0); expect(f.reports).toHaveLength(0);
     const ended = f.task.attempts[0]!.endedAt;
