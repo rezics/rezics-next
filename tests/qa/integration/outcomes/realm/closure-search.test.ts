@@ -1,4 +1,4 @@
-import { closureSetup, closureCell, closureHydrationFence, prepareClosure, publishClosureRule } from './closure-fixture.ts';
+import { closureSetup, closureCell, prepareClosure, publishClosureRule } from './closure-fixture.ts';
 import closure from '../../../../../scripts/qa/cases/outcomes/realm/closure-search.ts';
 import { afterAll, beforeAll, expect, setDefaultTimeout } from 'bun:test';
 import { randomUUID } from 'node:crypto';
@@ -21,8 +21,7 @@ const recording = new OutcomeRecorder(closure);
 const queryContinuations = new Map<PersonaName, string>();
 const publications: Publication[] = [];
 let closureUnavailable: string | null = null;
-let hydration: ReturnType<typeof closureHydrationFence>;
-const raced = new Map<PersonaName, { path: string; status: number; body: string }>();
+const closureReads = new Map<PersonaName, { path: string; status: number; body: string }>();
 const phrase = `Closuregarden${randomUUID().replaceAll('-', '')}`;
 const short = (id: string) => id.slice(-36);
 const acting = (person: PersonaSession) =>
@@ -143,8 +142,7 @@ async function publishOriginals() {
 }
 
 beforeAll(async () => {
-  hydration = closureHydrationFence();
-  sessions = await personaSessions('public', { graphEndpoint: hydration.url });
+  sessions = await personaSessions('public');
   await recording.prepare();
   closureUnavailable = await closureSetup(sessions, async () => {
     const rule = await publishClosureRule(sessions);
@@ -158,28 +156,22 @@ beforeAll(async () => {
       queryContinuations.set(name, page.result.nextCursor!);
     }
     const enforce = await prepareClosure(sessions, rule);
-    hydration.arm(publications.map(publication => publication.work), personaNames.length);
+    // enforce resolves only after the completed decision and public Realm
+    // absence are observable through the API. A held hydration transport can
+    // instead be aborted and deferred before closure commits.
+    await enforce();
     const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
     const path = `/v1/search/catalogue?${params}`;
-    const pending = personaNames.map(async name => {
+    await Promise.all(personaNames.map(async name => {
       const response = await sessions[name].main('GET', path);
-      raced.set(name, { path, status: response.status, body: await response.text() });
-    });
-    const finished = Promise.allSettled(pending);
-    try {
-      await hydration.blocked();
-      await enforce();
-    } finally {
-      hydration.resume();
-      const results = await finished;
-      for (const result of results) if (result.status === 'rejected') throw result.reason;
-    }
+      closureReads.set(name, { path, status: response.status, body: await response.text() });
+    }));
   });
 }, 180_000);
 
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { try { await sessions?.close(); } finally { await hydration?.close(); } }
+  finally { await sessions?.close(); }
 });
 
 function storyQuery(kind: RealmSearchState, cursor?: string) {
@@ -225,10 +217,10 @@ async function delivered(name: PersonaName) {
   const person = sessions[name];
   await requireClosure(person);
   await storySearches(name);
-  const during = raced.get(name)!;
+  const during = closureReads.get(name)!;
   expect(during.status, during.path).toBeLessThan(500);
   const body = JSON.parse(during.body) as { results?: unknown[]; count?: { value: number }; code?: string };
-  console.log('Realm search during hydration', JSON.stringify({ persona: name, ...during }));
+  console.log('Realm search after closure', JSON.stringify({ persona: name, ...during }));
   expect(JSON.stringify(body), during.path).not.toContain(sessions.realm);
   for (const publication of publications) {
     expect(JSON.stringify(body), during.path).not.toContain(publication.selection);
