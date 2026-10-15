@@ -1,6 +1,6 @@
 # Selected architecture
 
-Confirmed 2026-09-24: PostgreSQL owns Content bodies, drafts and private
+PostgreSQL owns Content bodies, drafts and private
 operational state; Apache Jena Fuseki/TDB2 owns semantic aggregates, retained
 graph references and graph command receipts. The configured jena-text/Lucene
 index joins text matches with graph relations in one query service. Object
@@ -38,9 +38,9 @@ reconciliation. See [Main Version](../contracts/main-version.md),
 [authorization bridge](../implementation/authorization-bridge.md) and
 [recovery](../operations/recovery.md).
 
-The [bounded community automation proposal](community-automation.md) considers
-event-triggered owner commands using the durable-job machinery shared with
-Scheduled; activation, narrow grants and guarded reversal await program review.
+[Community automation](community-automation.md) defines event-triggered owner
+commands using Scheduled's durable jobs. It is deferred beyond the first launch;
+activation requires narrow grants and guarded reversal.
 
 The initial path uses one effective graph writer and one assessed principal
 host. Redis, a broker, replicas and an external search cluster are later choices

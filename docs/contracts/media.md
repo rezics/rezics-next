@@ -9,7 +9,7 @@ Media context inputs accept the platform's `urn:rezics:context:global` as the de
 
 ## Image presentation
 
-Maintainer decision, 2026-10-02. NSFW, authored concealment and age assessment
+NSFW, authored concealment and age assessment
 are independent. NSFW and assessment describe exact image representations;
 concealment belongs to an individual Use or document image occurrence. The
 viewer combines those values with Account preferences when rendering. NSFW
@@ -32,7 +32,7 @@ enter the graph only as [image Works](#images-in-the-semantic-graph).
 
 ## Images in the semantic graph
 
-Maintainer decision, 2026-10-04. Images have the same semantic standing as video
+Images have the same semantic standing as video
 and audio; only their rollout is restricted. The direction is Pixiv and
 Danbooru, as it is YouTube for video and Spotify for audio: hosted artwork and an
 index of images by creator, source Work, depicted characters and Concepts.
@@ -96,7 +96,7 @@ A banner is one static image; the sliding hero is the
 
 ## Showcase art
 
-Maintainer decision, 2026-10-05. Showcase art belongs to the Work, so every
+Showcase art belongs to the Work, so every
 Zone that features it, the Work page and lists reuse one upload; a Zone's slide
 may override it for a campaign. Its roles are background landscape (16:9),
 background portrait (3:4), logo and cutout. A logo is language-neutral (`zxx`)

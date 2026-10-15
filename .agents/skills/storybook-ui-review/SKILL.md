@@ -6,8 +6,7 @@ description: Inspect new or changed REZICS UI through Storybook and actual scree
 # Storybook UI review
 
 The goal is to find problems in the current UI. Screenshot counts and pixel
-similarity are not acceptance criteria. Follow the browser authorization boundary
-in [AGENTS.md](../../../AGENTS.md) and the runtime instructions in the
+similarity are not acceptance criteria. Use the task's browser authorization and the runtime instructions in the
 [Storybook workflow](../../../docs/development/storybook.md).
 In a Goal task, the worker protocol's [tests and checks](../../../docs/goals/worker.md#tests-and-checks)
 apply to story/test authoring and this rendered review.
@@ -59,8 +58,8 @@ assets remain governed by their normal owners.
 
 Use installed official Storybook skills for current APIs, CSF syntax and tool
 arguments. Use MCP/official tools for a running host and the official Vitest addon
-for independent tests or CI. This repository policy determines task scope,
-evidence and completion, overriding generic defaults requiring a story for every component, full-suite
-testing at every handoff, or permission for every routine visual correction.
+for independent tests or CI. Use this skill's scoped evidence and completion guidance when generic tooling suggests
+a story for every component, a full suite or approval for a routine correction.
+Instruction precedence remains in [AGENTS.md](../../../AGENTS.md).
 Use the repository's Storybook runtime and temporary directory when applying a
 generic frontend-testing skill. Do not edit installed plugin caches to change policy.

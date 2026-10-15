@@ -133,7 +133,7 @@ behavior and its limits are recorded with the [media decision evidence](media.md
 
 ## Showcase carousel
 
-Maintainer decision, 2026-10-05. A Zone's hero is a showcase: a carousel of
+A Zone's hero is a showcase: a carousel of
 layered media slides, as on the Steam, Microsoft and Epic stores, IMDb and the
 streaming services. A banner is a different thing: one static image that never
 slides ([media](media.md#covers-banners-and-aspect-ratios)). The reason is that
@@ -223,7 +223,6 @@ consumers.
 
 ## Document editor choice
 
-Maintainer decision, 2026-10-02, superseding decision 22's BlockNote preference.
 Use Tiptap's maintained editing ecosystem with the independent Apache-2.0
 [REZICS Document contract](../../packages/document/README.md). Core, Text and
 Blocks share ProseMirror's JSON model and Tiptap node names; the package owns

@@ -88,7 +88,6 @@ reconstruction as stopped-Fuseki maintenance.
 
 ## Main owns business tasks
 
-Decision 11, product manager under maintainer delegation, 2026-09-29.
 Import matching, publication, scheduling, bulk moderation, onboarding,
 save-and-pin, discovery composition and search recovery are resumable Main
 operations. Clients present and poll their outcomes. Exact inputs, expected

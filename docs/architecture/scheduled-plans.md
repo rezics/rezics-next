@@ -1,8 +1,9 @@
 # Private plans and scheduled actions
 
-Decided by program on 2026-10-15, with the amendment under "Program review" below. This decides the smallest Scheduled
-extension behind competitor-coverage finding B05. It proposes ownership and
-semantics; it adds no contracts, scope rows, operations or implementation.
+This design defines the finite Scheduled extension: private plans, occurrences
+and due notifications. Contracts, persona proofs and implementation follow.
+Meal plans bound to Collection entries are the first configuration to prove;
+reading clubs, return reminders and airing calendars use the same owners.
 
 The intended loop is capture–plan–shop. Recipe capture already exists;
 [actionable Collections](actionable-collections.md) decides entries, runs and
@@ -25,7 +26,7 @@ and Event/Activity/Action. That vocabulary is broader than current behavior:
 | [Committed events/jobs](../contracts/events-and-jobs.md), [export readers](../../services/main/src/modules/export/readers.ts) and [Access](../contracts/identity-and-access.md). | Owner receipts/outboxes, resumable work, recovery generations, exact export selections and current authorization. | Scheduled selections and an iCalendar adapter. Neither timers, exporting nor possession of a resource IRI grants authority. |
 
 Main Event owns schedule meaning and occurrence revisions. Activity and
-Collection retain their respective execution state. Propose private PostgreSQL
+Collection retain their respective execution state. Use private PostgreSQL
 schedule custody in Main, colocated with notification intake in Access's
 database so a schedule gate, due disposition and intake can commit together.
 Database placement does not transfer grant authority to Event: Access remains
@@ -38,7 +39,7 @@ This placement is an addition to the existing Event owner, not a new service or
 calendar ledger. Content sessions and graph references still cross transactions:
 use their exact revisions and selected disclosure witnesses, returning unavailable
 if a witness cannot be established. Do not pretend colocation makes those owners
-one transaction. Recovery must fence generation publication and deliveries until
+one transaction. Recovery must fence reconciliation and deliveries until
 their retained receipts and erasure/disclosure obligations reconcile.
 
 ## Meaning, occurrence identity and configuration
@@ -104,7 +105,7 @@ RFC's interpretation of explicit gap times. Finite presets are sufficient for
 weekly menus and club series. Sub-day recurrence, arbitrary rule combinations,
 floating times and implicit forever-renewal are outside the proposal.
 
-Propose at most 512 generated occurrences per admitted series and a last
+Admit at most 512 generated occurrences per admitted series and a last
 occurrence within two years of its start, including moved replacements. A
 COUNT rule whose valid instances exceed that horizon is refused, never
 truncated. These are reviewable admission budgets, not measured capacity or a
@@ -132,14 +133,17 @@ explicit decision, not an accidental consequence of a simple time edit.
 
 ## Bounded reads and durable work
 
-Choose finite, staged occurrence indexing rather than expansion on reads or
-one timer per recurrence. A committed definition starts preparing; resumable
-work evaluates candidates into a private generation, retaining a checkpoint
-and exception/source pins. Publish it only after verifying complete coverage
-and the due-work handoff. Capacity exhaustion is an explicit pending/refused
-outcome, never a successful prefix. An edit fences the superseded generation
-immediately; its replacement can remain preparing. Cancellation needs no
-walk through all occurrences to become effective.
+A command that defines, edits or cancels a finite series writes its complete
+occurrence set and due actions in the same transaction. At most 512 occurrences
+within two years bound its work independently of the number of plans. Ordinary
+edits have no preparing generation, checkpointed preparation or published-generation
+state. A read never sees a partial series. Cancellation advances its fence and
+retains the dispositions needed for replay.
+
+Use resumable work only for triggers spanning many schedules: timezone-rule
+updates, export, cleanup and catch-up after downtime. Index occurrences before
+reads rather than expanding recurrence on a request or maintaining one timer
+per occurrence.
 
 The following are proposed fixed work budgets for later executable contracts
 and measurements, not established performance results:
@@ -148,7 +152,7 @@ and measurements, not established performance results:
 | --- | --- |
 | Direct definition/occurrence read | One selected definition, one exact occurrence/exception and at most 16 exact referenced-owner dependencies; separately continue exception lists and large Collection/provenance data. No expansion or repair. |
 | Timeline/list read | At most 50 indexed occurrence candidates for one authorized principal/selection and finite window, then exact head, grant and source checks per candidate. Cursor advances over examined candidates, even when none can be disclosed. No refill scan, offset pagination or full-inventory count. |
-| Recurrence preparation/reconciliation | At most 32 candidate periods/instances per activation, with a fixed rule-size/byte/deadline budget and a persisted next position. The two-year horizon bounds an empty or sparse rule too. Never restart at DTSTART on each page or catch-up tick. |
+| Timezone-rule reconciliation | At most 32 candidate periods/instances per activation, with a fixed rule-size/byte/deadline budget and a persisted next position. The two-year horizon bounds an empty or sparse rule too. Never restart at DTSTART on each page or catch-up tick. |
 | Due sweep | At most 32 indexed due-action candidates plus 32 expired leases. Each touches one occurrence, its current schedule/reminder head, one recipient and bounded exact disclosure inputs. No plan scan, recurrence evaluation or group-member expansion. |
 | Export, sharing index maintenance and cleanup | Bounded, checkpointed pages with current authority and revision checks; no request constructs the whole account calendar or bulk rewrites every old row. |
 
@@ -162,14 +166,14 @@ Exact whole-calendar counts are not implied. Index seeks may have ordinary
 tree-depth cost; rows hydrated and recurrence/disclosure work remain bounded
 independently of total plans, recipients and recurrence history.
 
-Every due action is durable before its generation is ready. It references the
+Every due action commits with the complete occurrence set. It references the
 occurrence and reminder identity, current selected recipient and authority basis,
 time/head revisions, recovery generation and retry disposition. A timer merely
 wakes a sweep. Lease tokens and fences prevent a late worker from committing
 over a move, cancellation or restore. A crash after intake but before ACK retries
 the same logical source event. The notification owner's intake dedupes it.
 Do not put schedule revision into the logical due identity: a move must not
-become a second notification. New generation rows recover prior dispositions.
+become a second notification. Replacement rows retain prior dispositions.
 
 First-cut due actions only notify; they never execute arbitrary Collection
 bindings, start runs, purchase ingredients or publish content. Each reminder
@@ -274,14 +278,14 @@ service duplicates Event, entry, authority and delivery ownership. Query-time
 RRULE expansion grows with series age and inventory. Forever pre-expansion
 cannot terminate. A rolling horizon is credible for indefinite series but adds
 coverage renewal and missed-window failure modes; the selected finite first cut
-accepts bounded storage and preparation delay instead. A standalone scheduler
+accepts bounded storage and atomic finite-series writes instead. A standalone scheduler
 or broker would not resolve current recipient authority or provider uncertainty.
 
 The remaining uncertainties are composition and cost, not whether a library can
 parse RRULE. Select an existing maintained recurrence implementation only after
 checking the admitted subset, DST behavior and checkpointability; this note
-adds no dependency or measured capacity claim. Program review must accept or
-revise the finite admission budgets and private-state placement before contracts.
+adds no dependency or measured capacity claim. Executable contracts must
+express and qualify the finite admission budgets and private-state placement.
 
 The falsifier for the later contract/outcome step is:
 
@@ -291,33 +295,16 @@ The falsifier for the later contract/outcome step is:
 | Weekly reminder crossing the 2026 spring gap and autumn fold, plus explicit edits into a gap. | Generated gap instances are skipped, fold instances occur once, explicit invalid edits are refused, and the finite rule's count/end semantics survive export. |
 | Queue due work for A, then revoke A and consent/select B before inbox intake. Race a stale worker, move and cancel; separately revoke after intake and lose a provider ACK. | Only current eligible B receives one logical due item when not cancelled; replay creates no duplicate. After intake, A's revoked item is concealed and pending sends are suppressed; the action reports already fired instead of notifying B automatically. Cancellation winning send admission starts no send. An already-started/uncertain send is reported and reconciled before any explicitly new reminder. |
 | Known day-precision airing observation, unknown availability, and a private reminder at an explicitly chosen local time. | Calendar preserves the known date and unknown availability independently. A personal reminder proves neither platform availability nor an exact broadcast instant; native/iCalendar exports preserve or explicitly report the distinction. |
-| Many plans and old revisions, a mostly hidden page, sparse monthly rules, downtime, erasure and restore. | Query plans/counters demonstrate the fixed candidate neighbourhood on reads, preparation, sweeps, cleanup and export. Empty disclosed pages retain progressing continuations; no scan repairs or silently completes an incomplete calendar. |
+| Many plans and old revisions, a mostly hidden page, sparse monthly rules, downtime, erasure and restore. | Query plans/counters demonstrate the fixed candidate neighbourhood on reads, series writes, reconciliation, sweeps, cleanup and export. Empty disclosed pages retain progressing continuations; no scan repairs or silently completes an incomplete calendar. |
 
 Each persona above needs public-API observations of allowed and refused work,
 including stale heads, replay, source loss and export. Fault tests must cover
 the cross-owner witness and notification gate, not mock them. Numeric budget
 qualification needs retained large-population fixtures, native storage plans,
 deadline/byte counters and competing edits; no such experiment is run here.
-The later UI must make timezone, finite end, move/cancel scope, preparing state
+The later UI must make timezone, finite end, move/cancel scope, reconciliation state
 and in-flight delivery outcome understandable, preserve advanced saved state
 and complete the same actions through those APIs. This static decision review
 does not establish a human journey, public calendar readiness or competitor
-replacement parity. This step hands only this proposal to program review;
-contracts, persona rows, proof, implementation and surfaces follow separately.
-
-## Program review
-
-Accepted on 2026-10-15 with one simplification. Because a series is finite
-(at most 512 occurrences within two years), the command that defines, edits or
-cancels a series writes its complete occurrence set and due actions in the same
-transaction. That is bounded work per command, independent of how many plans
-exist. Ordinary edits therefore have no preparing generation, checkpointed
-preparation or published-generation state; a read never sees a partial series.
-Resumable, checkpointed work remains only where the trigger is not one
-person's command: a timezone-rules update that touches many schedules, export,
-cleanup and catch-up after downtime. Backend complexity is the cost to avoid,
-and this keeps the first cut to what its finite admission already makes safe.
-The other budgets, the due-sweep design and the notification gate stand as
-written. Meal plans bound to Collection entries are the first configuration to
-prove; reading clubs, return reminders and airing calendars follow on the same
-owners.
+replacement parity. Contracts, persona rows, proof, implementation and surfaces
+follow separately.

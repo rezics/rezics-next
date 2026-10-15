@@ -1,0 +1,119 @@
+---
+name: goal-management
+description: Start or enroll a REZICS Goal manager, handle its event turns, checkpoint it, and close it. Use for manager lifecycle work, not ordinary product implementation.
+---
+
+# Goal management
+
+The [manager charter](../../../docs/goals/manager.md) owns authority and policy.
+Use the [Goal program](../../../docs/goals/README.md) for shared-host ownership
+and the [method](../../../docs/goals/method.md) for acceptance. Load only the
+procedure below needed for the current event. For account configuration or
+capacity defaults, read [settings](references/settings.md).
+
+## How to run the Goal
+
+1. Start. Confirm the registered manager with `goalctl status`; check
+   `git log` and `git status` for maintainer edits. Read
+   the Goal's `GOAL.md` and `state.md`, the [method](../../../docs/goals/method.md), this charter
+   and the [program](../../../docs/goals/README.md). Load other documents only as a task needs them.
+2. Take rows, not tasks. Work is a row of the scope registry. For each row:
+   an outcome task, then an implementation task, then (in the web Goal) a
+   surface task. Read the outcome matrix yourself before any implementation is
+   dispatched.
+3. Brief the outcome. A brief names the row, its tests, the files likely to
+   change and what not to build. It never names a mechanism to build; a shared
+   mechanism starts from a design note the supermanager has read.
+4. Let the tool decide landings. A task lands on its gates, and on one
+   review pass where the method asks for one. At the attempt cap the task stops
+   and you choose, in the brief: cut the row's scope, split, or write a design
+   note. Do not grant an exception in a mail. A wave build task
+   (docs/goals/wave.md) is never landed on its own: accept its `RESULT: done`
+   once its commits are on `wave/<n>`, and it reaches `main` with the wave.
+   Leave it exited: program closes the wave's tasks as verified after the wave
+   merges.
+5. Keep a later list. A finding no row's persona meets goes to `later.md`
+   in the Goal's directory, in one line. Promotion into scope is the
+   supermanager's.
+6. Checkpoint. Keep `state.md` short and current: rows proved, rows in
+   work, the measures, the next action. After compaction or a restart, rebuild
+   from `goalctl status`, `state.md` and `git log`. Commit only your own paths
+   (`git commit --only <paths>`), and never amend or rebase a commit on `main`:
+   landings can rebase onto it at any moment. A correction is a new commit. Name a brief in `state.md` by its ID, without a link: the brief
+   leaves the tree when its task closes.
+7. Close. When the outcome holds, fold what the Goal decided into its
+   owners, remove its row from the root `GOAL.md` and run `goal close <goal>`
+   ([convergence](../../../docs/goals/README.md#convergence)).
+
+## Starting a manager
+
+A Goal gets a manager once its directory exists, with `GOAL.md` and
+`state.md`. From the repository root, start and register its headless manager:
+
+```sh
+task goal -- coordinator start <goal> --engine <engine> --effort <effort> [--model <id>]
+```
+
+The existing independent tmux server must run outside the coordinator service's
+cgroup. The command uses its default socket; set `GOAL_COORDINATOR_TMUX_SOCKET`
+when the server has a custom socket. It uses `goal start`'s registration and area
+checks, sends the [start message](../../../scripts/goal/coordinator.ts), and enrolls
+the new native session without an interactive owner. Repeating it refuses an
+existing session or an unresolved turn; when the native session is gone, it
+starts a replacement. `enroll` below remains the handover command. Program runs
+in the maintainer's own terminal.
+
+### A manager on Codex
+
+A manager can run on GPT-6.1 Sol.
+Choose a configured Codex engine with `--effort high` in
+the start command. The coordinator replaces the foreground `next-event.sh`
+loop: end the turn when its event is decided and arm no watcher. The
+coordinator launches a fresh native event turn from retained state.
+
+Managers message each other through durable Goal mail:
+`task goal -- mail send <goal> --file <path> --key <unique-key> [--deadline <minutes>]`.
+Sending requires the caller's `GOAL_ID`, recorded as the sender. The same key
+never sends twice or extends its deadline. Read what still waits with `task goal -- mail inbox <goal>` (`--all` adds the acknowledged history) and acknowledge
+each message after acting on it with `task goal -- mail ack <id>`. The old
+`messages/<goal>.md` files are read-only history and still appear in the inbox
+view. Keep the same reserve as any manager: if its account nears its limit,
+move workers to the other account first.
+
+Inbox entries and wake prompts show the sender and deadline. Mail has no
+deadline unless one was supplied. Once an unacknowledged delivery is past its
+deadline, the coordinator adds one deadline wake and sends the original sender
+one automatic notice, attributed to the recipient. The notice has no deadline.
+`task goal -- coordinator status` lists overdue deliveries; acknowledgements
+remove them from that list. Historical mail keeps unknown sender and deadline
+fields rather than inventing them.
+
+### Handing a Codex manager to the coordinator
+
+The coordinator can hold one enrolled manager per Goal, on a configured Codex account.
+Hand over explicitly while the interactive owner is still running:
+
+1. Checkpoint the Goal's state and commit coherent progress.
+2. Mail Program the exact native session UUID and the interactive Codex process
+   PID, along with the Goal, engine, effort, working directory and tmux socket.
+3. Program enrolls it with
+   `task goal -- coordinator enroll <goal> --session <UUID> --engine <engine> --effort <effort> --cwd <directory> --previous-owner-pid <pid> --tmux-socket <socket>`.
+   The descriptor retains that engine's configured account home; status reports
+   the wait for the named previous owner to exit.
+4. After Program confirms enrollment, exit the interactive session. The
+   coordinator starts finite turns for queued mail and task exits; end each
+   turn once nothing is ready.
+
+A Claude manager uses the same handover. Program enrolls it with
+`task goal -- coordinator enroll <goal> --session <UUID> --engine claude --model <id> --effort <effort> --cwd <directory> --previous-owner-pid <pid> --tmux-socket <socket>`.
+The descriptor records `~/.claude` and that model. Each event is a fresh headless Claude turn in the manager's directory. A live process whose
+argv resumes the session, or a claude process whose shells still carry
+`CLAUDE_CODE_SESSION_ID` for it, delays the wake. A worker that inherited
+those variables (`GOAL_TASK_ID`) is not that owner. The Claude usage gate
+defers the wake while the level is restricted, as it does for dispatch.
+
+Keep the tmux server outside the coordinator's service cgroup so a coordinator
+restart leaves manager turns and their dispatched workers running. Program
+serializes enrollment with the coordinator pump, pausing and restarting the
+pump when necessary; existing descriptors and attempts stay in its durable
+store.

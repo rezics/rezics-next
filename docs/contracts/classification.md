@@ -23,7 +23,7 @@ different reading is a new attributed statement or labeled projection. The
 
 ## Installed profiles and transition
 
-Program decision, 2026-10-14. A Realm's boards are Concepts in one SKOS scheme
+A Realm's boards are Concepts in one SKOS scheme
 selected by its classification Context. `classification-context-v2` stores one
 scheme pointer on that Context, reusing the vocabulary owner's graph object
 without a second collection engine. Several Realms may select the same scheme;
@@ -65,7 +65,6 @@ and owner tests identify the replacement profile's required behavior.
 
 ## Restricted structure and open vocabulary
 
-Decision 15, product manager under maintainer delegation, 2026-09-29.
 Structural types come from a versioned registry; descriptive types add labels and
 presentation without adding behaviour. Administrators holding a `type:admit` grant
 admit or retire descriptive types through the API. A type's structural base binds
@@ -83,13 +82,10 @@ support controlled structural boundaries; [SKOS](https://www.w3.org/TR/skos-refe
 supports multilingual descriptive vocabulary. Labels create no authority;
 descriptive admission requires a current administrator grant. The
 [vertical manifest](../product/platform-thesis.md#the-vertical-engine-is-the-product)
-composes these admitted definitions. This administrator-only admission decision
-was confirmed in G-653 on 2026-10-01; it replaces the earlier namespace, steward
-and open-proposal design for types.
+composes these admitted definitions. Administrator-only admission is independent of descriptive vocabulary.
 
 ## Classification journeys
 
-Decision 17, product manager under maintainer delegation, 2026-09-29.
 One multilingual selector serves applying and voting, term/translation proposals,
 review, Concept pages, saved include/exclude Home filters and onboarding interests
 without a cap. Fit and spoiler judgments stay separate; spoiler reveal respects

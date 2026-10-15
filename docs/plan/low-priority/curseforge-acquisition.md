@@ -1,6 +1,6 @@
 # CurseForge acquisition
 
-Deferred by the maintainer on 2026-09-27; low priority.
+Deferred; low priority.
 
 ## Current state
 

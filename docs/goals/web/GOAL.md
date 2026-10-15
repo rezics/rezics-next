@@ -10,9 +10,8 @@ areas:
 
 # Web
 
-Status: paused on 2026-10-13. It ran that day on the client-contract guards,
-which need no proved row; [state.md](state.md) is the checkpoint. Surfaces start
-when the first vertical's rows are proved by the [api](../api/GOAL.md) Goal.
+The [checkpoint](state.md) records retained task decisions. Start surfaces after
+their API rows are proved; use live ledger status instead of the former pause.
 
 ## Outcome
 
@@ -22,21 +21,17 @@ desktops, in the eight UI locales.
 
 A surface follows a proved row and never leads it. When a screen needs an
 operation that is missing or awkward, this Goal asks the api Goal for it; it
-does not work around the API in the client (maintainer: APIs own business
-operations, the UI consumes them; "api 没问题，storybook 没问题，道理上 web
-都不用验证的").
+does not work around the API in the client.
 
 ## How a surface is verified
 
-As the [method](../method.md) says: types, unit tests and stories, with each
-state (loading, empty, error, pending, populated) a story fed by responses
-recorded from the row's outcome tests. No model review of web diffs. One browser
+Use the [method](../method.md)'s types, unit and recorded-story gate.
+Only states admitted by the operation need stories; pending requires a 202. No model review of web diffs. One browser
 journey for each vertical runs in the program's nightly regression.
 
-The web defects found on 2026-10-12 were all the client not following the API's
-contract: a continuation dropped, a `202` shown as done, a read sent without the
-member's identity, a cursor built by arithmetic. Each of those classes gets a
-rule in the client or a guard (the cursor guard exists), not a browser proof.
+Enforce continuation, pending-result, identity and cursor contracts through
+client types and guards. A test should prove those contracts rather than mirror
+a small reversible edit.
 
 Visual quality is judged by eye, from screenshots, as before.
 

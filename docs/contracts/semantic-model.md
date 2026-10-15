@@ -86,7 +86,7 @@ code or grant authority.
 
 ## Types, capabilities and Access
 
-Maintainer and product manager, 2026-09-30. Types describe; capabilities behave;
+Types describe; capabilities behave;
 Access authorizes. A [capability](../product/platform-thesis.md#capabilities)
 such as facets, measurements, location, schedules, releases, credits, lists,
 ratings, discussion or follows is implemented once in Main and bound to types
@@ -136,7 +136,7 @@ profile activation.
 
 ## Identities, variants and projections
 
-Decision 51, maintainer and product manager, 2026-10-04. A character, person
+A character, person
 or thing keeps one Resource across Works, volumes, adaptations, translations,
 ages, forms and names. What differs by Work, continuity, time or form is a
 Statement scoped by applicability, or a participation in an appearance; neither
@@ -229,7 +229,6 @@ relations. The same dimensions type projection frames.
 
 ## Relation lexicon
 
-Maintainer and product manager, 2026-09-30
 ([relations in every language](../product/platform-thesis.md#relations-in-every-language)).
 One shared relation lexicon serves
 every domain, Zone and client; manifests reference its definitions and never

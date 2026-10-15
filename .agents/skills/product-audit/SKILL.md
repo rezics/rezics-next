@@ -5,10 +5,10 @@ description: Find class-level product problems in REZICS before users do. Use at
 
 # Product audit
 
-A reported defect is usually one instance of a broken principle. The earlier
-"natively multilingual" failure was one: two stored languages, glued names and a
-checker that counted missing keys without failing all came from the same gap.
-This method finds the class, fixes it and makes code prevent it from returning.
+Find all instances of the broken principle within the task's authorized scope.
+Use the relevant parts of this method for a milestone or a reported defect;
+an internal tooling or documentation task does not require API/UI journeys,
+competitor research or a new guard unrelated to its outcome.
 
 ## 1. Pick jobs, not pages
 
@@ -69,10 +69,9 @@ acceptance scenario for each class.
 
 ## 7. Fix the class and make code guard it
 
-Fix every instance of the class, not the reported one. Then add the guard that
-fails when it returns: a lint rule, a schema constraint, a generator, a test over
-all routes or catalogues, a check in `task check`. A principle that only lives in
-a document will be broken again.
+Fix every instance of the class, not the reported one. When the invariant can be enforced meaningfully, add or extend its owning
+guard. Follow [AGENTS.md](../../../AGENTS.md) for proportional tests; a small
+reversible edit needs no test that only mirrors it.
 
 ## Output
 

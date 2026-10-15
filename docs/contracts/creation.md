@@ -29,7 +29,6 @@ frontend implementation and stories.
 
 ## Creator experience
 
-Decision 21, product manager under maintainer delegation, 2026-09-29.
 Prioritize manuscript safety, Main-owned scheduling with time zones, rights and
 translation declarations, collaborators scoped to read/suggest/edit/publish,
 a feedback inbox and a complete author backup. Publication rights are distinct
@@ -43,7 +42,6 @@ commands above and the [job owner](events-and-jobs.md) carry the execution contr
 
 ## Private worldbuilding
 
-Decision 28, product manager under maintainer delegation, 2026-09-29.
 Give authors a private World beside the manuscript: characters, places,
 organizations, events, items and lore in versioned templates, not code. Selected
 pages publish into the Work's Realm wiki without private history. A coherent,

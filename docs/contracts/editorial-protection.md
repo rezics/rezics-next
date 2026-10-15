@@ -50,7 +50,6 @@ occupancy and fan-out separately from full-corpus capacity.
 
 ## Shared collaboration lifecycle
 
-Decision 19, product manager under maintainer delegation, 2026-09-29.
 Catalogue corrections, wiki edits and translations share a review lifecycle at
 GitHub's level: exact candidates, stewardship, required reviewers, and changed
 candidates invalidating approval. Actionable requests differ from discussions;

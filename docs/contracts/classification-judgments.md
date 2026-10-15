@@ -33,18 +33,17 @@ until their schemas and behavioral tests carry them.
 
 ## Suitability and disclosure
 
-Decision 1, product manager under maintainer delegation, 2026-09-29.
 Keep recognizable `general`, `r15`, `r18` (sexual) and `r18g` (grotesque) labels,
 with independent category preferences: material with both adult labels requires
 both opt-ins. Missing assessment is `unassessed`, never `general`. The manager's
-2026-10-01 review admits unassessed content on reads, indexing, share previews,
+Admit unassessed content on reads, indexing, share previews,
 email and push; show **Not assessed** wherever the assessment is shown and never
 count it as general. Signed-out viewers and people under 15 can see general
 and unassessed representations; `r15` starts at 15, and adult categories at
 18, subject to
 [market restrictions](../operations/trust-and-safety.md#safety-and-legal-readiness).
 
-Maintainer revision, 2026-10-01: General, R15, R18 and R18G each have an
+General, R15, R18 and R18G each have an
 independent saved preference. General defaults on and requires no age check.
 Restricted categories request a missing birth date when enabled. Unknown age
 cannot grant restricted eligibility. With an eligible birthday supplied through
@@ -63,7 +62,7 @@ independent of these gates. Main consumes live Account introspection for the
 viewing state; public indexing and share previews retain anonymous eligibility.
 Unknown age remains unable to render restricted categories.
 
-Maintainer revision, 2026-10-02: ordinary interactive reads return the
+ordinary interactive reads return the
 Access-authorized payload and its assessments. The frontend applies the current
 viewer's category choices, age and market state at each rendered body or image.
 A rating is a presentation classification, not an Access denial. A restricted

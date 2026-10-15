@@ -45,12 +45,12 @@ export async function dispatchMethodErrors(brief: Brief, markdown: string, outco
   }
   if (brief.kind === 'mechanism') {
     const section = /^## Design note[ \t]*\r?\n([\s\S]*?)(?=^## (?!#)|$(?![\s\S]))/m.exec(markdown)?.[1] ?? '';
-    const readBy = /^(?:-\s+)?Read by program:[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*\r?$/m.exec(section);
-    const date = readBy?.[1];
+    const reviewMarker = /^(?:-\s+)?(?:Reviewed|Read by program):[ \t]*(\d{4}-\d{2}-\d{2})[ \t]*\r?$/m.exec(section);
+    const date = reviewMarker?.[1];
     const timestamp = date ? Date.parse(`${date}T00:00:00Z`) : NaN;
     const dated = Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === date;
-    if (!dated || !section.replace(readBy?.[0] ?? '', '').trim()) {
-      return ['mechanism brief needs a non-empty ## Design note with Read by program: YYYY-MM-DD'];
+    if (!dated || !section.replace(reviewMarker?.[0] ?? '', '').trim()) {
+      return ['mechanism brief needs a non-empty ## Design note with Reviewed: YYYY-MM-DD'];
     }
   }
   return [];
@@ -861,7 +861,9 @@ export async function newBrief(args: string[]): Promise<void> {
       '# worktree: wave-9                    # optional: tasks naming one worktree share its tree and branch',
       `${['outcome', 'surface', 'tooling'].includes(kind) ? '' : '# '}land: auto                           # optional: wait lands a done handoff on an exclusive branch`,
       '---', '', '## Outcome', '', '## Mechanisms', '', 'none',
-      '# <id>: consume | configure | extend | new — <why no owner fits>', '', '## Checks', ''].join('\n'));
+      '# <id>: consume | configure | extend | new — <why no owner fits>',
+      ...kind === 'mechanism' ? ['', '## Design note', '', 'Reviewed: YYYY-MM-DD', ''] : [],
+      '', '## Checks', ''].join('\n'));
     ledger.reserved = { ...ledger.reserved, [id]: goal };
     console.log(`${id} reserved for Goal ${goal}: ${relative(root, path)}`);
   });

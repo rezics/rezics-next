@@ -30,13 +30,13 @@ General product exposition, implementation explanation, and prose that merely so
 
 Use these optional labels when they help explain an audit finding:
 
-- **N — No audience need:** no concrete audience task, question, decision, or obligation supports publication.
-- **R — Redundant:** repeats a label, visible state, nearby sentence, or information already communicated by the structure.
-- **T — Trivial or interface narration:** says that items appear here, describes the component presentation, or verbalizes an obvious interaction without helping the audience.
-- **S — System-oriented:** describes data models, storage, identifiers, implementation mechanics, authoring operations, or team rationale instead of an audience-visible fact or consequence.
-- **O — Over-communication:** contains some value but adds detail beyond what this audience needs at this point.
-- **P — Misplaced:** useful content on the wrong surface or at the wrong level of detail.
-- **U — Unsupported:** invents or infers facts, benefits, user misconceptions, or behavior that the available sources do not establish.
+- N — No audience need: no concrete audience task, question, decision, or obligation supports publication.
+- R — Redundant: repeats a label, visible state, nearby sentence, or information already communicated by the structure.
+- T — Trivial or interface narration: says that items appear here, describes the component presentation, or verbalizes an obvious interaction without helping the audience.
+- S — System-oriented: describes data models, storage, identifiers, implementation mechanics, authoring operations, or team rationale instead of an audience-visible fact or consequence.
+- O — Over-communication: contains some value but adds detail beyond what this audience needs at this point.
+- P — Misplaced: useful content on the wrong surface or at the wrong level of detail.
+- U — Unsupported: invents or infers facts, benefits, user misconceptions, or behavior that the available sources do not establish.
 
 These labels diagnose the content; they are not phrase-matching rules.
 

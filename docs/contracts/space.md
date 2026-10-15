@@ -24,7 +24,7 @@ Current profiles and operations live in `model/definitions/space-realm-v1.ts`,
 
 ## Surfaces and routers
 
-Maintainer, 2026-10-02. One Space can be two products: a Realm is a community
+One Space can be two products: a Realm is a community
 and a Zone is a site. Each has its own router over the same
 [Space address](../product/urls-and-seo.md#durable-addresses).
 
@@ -53,7 +53,7 @@ had two homes competing for one URL, and only a site can ever bind a host.
 
 ## Visibility, listing and history
 
-Maintainer, 2026-10-02. Who can read, who can find and what a newcomer sees are
+Who can read, who can find and what a newcomer sees are
 separate settings, as XMPP's
 [multi-user chat](https://xmpp.org/extensions/xep-0045.html) separates public
 and hidden rooms from open and members-only rooms, and as
@@ -82,7 +82,7 @@ visibility from join rules and history visibility.
 
 ## Closing a Realm
 
-Maintainer, 2026-10-12. A Realm is closed by the platform, not by its owner.
+A Realm is closed by the platform, not by its owner.
 
 - The platform can take a whole Realm out of public reach as a moderation or
   rights effect and can restore it. This is the takedown channel for a

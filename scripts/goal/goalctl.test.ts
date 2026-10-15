@@ -267,15 +267,16 @@ describe('goalctl briefs', () => {
     expect(resumeDecisionError(steps, '')).toContain('two fix rounds exhausted');
   });
 
-  test('mechanisms require a design note read by program, with an actual UTC date', async () => {
+  test('mechanisms require substantive reviewed design with a real date', async () => {
     const mechanism = { ...parseBrief(brief), kind: 'mechanism' as const };
-    for (const markdown of ['', '## Design note\n', '## Design note\nRead by program: 2026-10-13\n',
+    for (const markdown of ['', '## Design note\n', '## Design note\nReviewed: 2026-10-13\n',
       '## Design note\nProtect every reader.\n', '## Design note\nProtect every reader.\nRead by owner: 2026-10-13\n',
-      '## Design note\nProtect every reader.\nRead by program: someday\n',
-      '## Design note\nProtect every reader.\nRead by program: 2026-02-30\n',
-      '## Design note\nProtect every reader.\n## Checks\nRead by program: 2026-10-13\n']) {
+      '## Design note\nProtect every reader.\nReviewed: someday\n',
+      '## Design note\nProtect every reader.\nReviewed: 2026-02-30\n',
+      '## Design note\nProtect every reader.\n## Checks\nReviewed: 2026-10-13\n']) {
       expect((await dispatchMethodErrors(mechanism, markdown)).join()).toContain('non-empty ## Design note');
     }
+    expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nReviewed: 2026-10-13\n')).toEqual([]);
     expect(await dispatchMethodErrors(mechanism, '## Design note\nProtect every reader and writer.\nRead by program: 2026-10-13\n')).toEqual([]);
     for (const kind of ['outcome', 'surface', 'tooling'] as const) {
       expect(await dispatchMethodErrors({ ...parseBrief(brief), kind }, '')).toEqual([]);
@@ -4420,9 +4421,9 @@ process.exit(0);
       const text = readFileSync(brief, 'utf8').replace('kind: tooling', 'kind: mechanism');
       writeFileSync(brief, text);
       const refused = r.run(['dispatch', brief, '--dry-run']);
-      expect(refused.status).toBe(1); expect(refused.stderr).toContain('Read by program: YYYY-MM-DD');
+      expect(refused.status).toBe(1); expect(refused.stderr).toContain('Reviewed: YYYY-MM-DD');
       expect(r.ledger().tasks['G-001']).toBeUndefined();
-      writeFileSync(brief, text + '\n## Design note\n\nBound every reader and writer through the existing owner.\nRead by program: 2026-10-13\n');
+      writeFileSync(brief, text + '\n## Design note\n\nBound every reader and writer through the existing owner.\nReviewed: 2026-10-13\n');
       expect(r.run(['dispatch', brief, '--dry-run']).status).toBe(0);
     } finally { r.cleanup(); }
   });

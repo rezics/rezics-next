@@ -141,7 +141,6 @@ wording and unit annotations remain independent of the recorded source spans.
 The Recipe projection retains these as `rv:ingredientName` and the bounded
 `rv:ingredientTextParts` JSON literal.
 
-The final Program decision replaces the spanless inference design entirely.
 Display never locates wording, strips a prefix, or reparses retained text. Its
 only source slice is the named `ingredientNameFromSpans` helper, using the
 recorded food-name offsets. It composes a line only from that food name or an

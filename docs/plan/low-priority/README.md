@@ -1,11 +1,10 @@
 # Low-priority work
 
-Deferred items the maintainer chose to handle later. They are outside the
-current phase, block no qualified case, and are picked up only by an explicit
-maintainer decision. Each page records the current state, what was learned and
-the decision still open.
+These items are outside the current phase and block no qualified case. Resuming
+them needs an explicit scope decision. Each page keeps its current state and
+remaining question.
 
-| Item | Area | Deferred |
-| --- | --- | --- |
-| [CurseForge acquisition](curseforge-acquisition.md) | Mod provider dependencies (PKG09) | 2026-09-27 |
-| [Steam Workshop acquisition](steam-workshop-acquisition.md) | Mod provider dependencies (PKG11) | 2026-09-27 |
+| Item | Area |
+| --- | --- |
+| [CurseForge acquisition](curseforge-acquisition.md) | Mod provider dependencies (PKG09). |
+| [Steam Workshop acquisition](steam-workshop-acquisition.md) | Mod provider dependencies (PKG11). |

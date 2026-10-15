@@ -1,21 +1,15 @@
 # Plan
 
-The active [Goals](../../GOAL.md) state the outcomes and milestones; the
-[goal page](../product/goal.md) states what REZICS is for. This page keeps the
-current state, where a task starts reading, and the acceptance gates. It was
-shortened on 2026-09-30 at the Goal's restart: the stage A–G sequence, the S0–S3
-fast-start milestones and the 2026-09-23/24 documentation verification narrative
-described backend phase 1, which finished on 2026-09-27 (history on
-`archive/goals`; the recorded run is the baseline below).
+The [active Goals](../../GOAL.md) own delivery scope and current work. The
+[method](../goals/method.md) defines outcome proof; the [manager charter](../goals/manager.md)
+owns task allocation. The routes below locate contracts and checks without
+requiring the entire documentation set.
 
 ## Current state
 
-| Field | Selection |
-| --- | --- |
-| Scope | The active [Goals](../../GOAL.md): production readiness (M4–M8), restarted on 2026-09-30 after the documentation discussion that settled decisions 39–50, and since 2026-10-04 addresses, relationships and discovery as a Goal of its own. |
-| Goals | Each Goal keeps its checkpoint in its own `state.md` (`docs/goals/<goal>/state.md`); live tasks: `task goal -- status`. |
-| Model allocation | The [manager charter](../goals/manager.md#resources) says which engine does what; Claude is for managers only (maintainer, 2026-10-12). |
-| Baseline | Backend phase 1 passed all 276 retained backend acceptance IDs on 2026-09-27 (run `20260927t101230-1616d8`, tag `goal/backend-phase1`). The frontend-centred Goal paused after M3 at `59a85a96`. |
+Use the Goal ledger and [scope registry](../../scripts/qa/cases/launch-coverage.ts)
+for current progress. An archived backend acceptance run or frontend milestone
+does not qualify the current product.
 
 ## Task reading routes
 

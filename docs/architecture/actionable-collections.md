@@ -1,7 +1,6 @@
 # Actionable collections and ingredient reconciliation
 
-Status: decided by program, 2026-10-15, with exact-conversion and vocabulary
-amendments. This note decides ownership and semantics; it installs no capability.
+This design defines ownership and semantics; it installs no capability.
 API contracts and the six pending `recipes/cook-and-shop` outcome cells follow
 after wave/2 merges. Implementation requires a later brief.
 
@@ -165,7 +164,7 @@ The procedure applies these rules:
 
 [UCUM 2.2](https://ucum.org/ucum), dated 2024-06-17, distinguishes unit equality
 from commensurability and magnitude (§§18–20). That distinction supports the
-same-dimension check; program's decision additionally requires an exact rational
+same-dimension check; the procedure requires an exact rational
 factor from the unit registry. UCUM does not supply food equivalence, egg sizes,
 package quantities or flour density. Registry conversion definitions and their
 version form part of the pinned procedure input; display rounding and its

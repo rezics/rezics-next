@@ -61,7 +61,6 @@ subscription status cannot buy a verdict. Untrusted source/tool content stays da
 
 ## Knowledge workspace
 
-Decision 23, product manager under maintainer delegation, 2026-09-29.
 Realm wikis combine multilingual addresses, citations, graph infoboxes, links and
 backlinks, discussion, review, watch, exact history/diff/restore and export.
 Saved list/table/gallery views over Collections and filters, plus private reading
@@ -72,7 +71,6 @@ to compose existing owners is to preserve one identity and disclosure policy.
 
 ## A big-franchise wiki for every Work
 
-Decision 29, product manager under maintainer delegation, 2026-09-29.
 Build sourced, position-aware knowledge: fictional entities, chapter-evidenced
 claims, multilingual names/aliases, and event time separate from revelation
 position. Agents propose chapter-by-chapter facts and structure from licensed,
@@ -80,12 +78,11 @@ public-domain or author-supplied text and structured dumps. Reviewers publish
 coherent bundles and new-chapter deltas; nothing reaches readers without human
 review, and readers see only what their consumption position admits.
 
-Maintainer, 2026-09-30: building the wiki is one action, and the wiki is the
+building the wiki is one action, and the wiki is the
 flagship; the [goal](../product/goal.md#wiki-the-flagship) describes the flow and
 the wiki+ positioning. The rules it relies on:
 
-- **A thin, neutral toolkit; the platform does the work.** Maintainer,
-  2026-09-30. Three layers, heaviest first: REZICS's API and remote MCP server
+- **A thin, neutral toolkit; the platform does the work.** Three layers, heaviest first: REZICS's API and remote MCP server
   (evidence, candidate lookup, proposal bundles, publication, status, and every
   platform rule such as schema, quotation limits and idempotency); an agent
   skill following the [Agent Skills](https://agentskills.io/specification)

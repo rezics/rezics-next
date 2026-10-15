@@ -4,11 +4,11 @@
 
 - Read the rooted `aspire.config.json` when present and follow its AppHost path and language.
 - Follow the configured project style. REZICS owns a TypeScript AppHost under
-  `aspire-apphost/`; its Taskfile owns restore and typechecking.
+  `apphost/`; root Task tasks own restore and typechecking.
 - Inspect the AppHost's package or project definition and the applications it orchestrates
   before changing their relationship.
 
-Edit authored sources and configuration. `aspire-apphost/.aspire/modules/`
+Edit authored sources and configuration. `apphost/.aspire/modules/`
 contains generated SDK code; inspect declarations when useful and regenerate
 through the owning restore task when SDK inputs change.
 
