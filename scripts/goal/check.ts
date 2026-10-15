@@ -1,8 +1,9 @@
 import { spawn, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve, relative, isAbsolute } from 'node:path';
 import { parseBrief } from './briefs.ts';
-import { workerTypeCommands } from '../qa/worker-types.ts';
+import { workerTypeCommands, WORKER_TYPE_PROJECTS } from '../qa/worker-types.ts';
 import { typecheckDiagnostics } from './typecheck-gate.ts';
 import { mergeUnitFiles, timeoutOnlyTestFiles, failingTestFiles, unitFileErrorDetails, recoveredSlowTests, rememberSlowTests, slowTestLine, timeoutRetryArg, UNIT_JUNIT_MARKER } from './unit-gate.ts';
 import { repositoryGuardSelectionLine } from '../qa/repository-guards.ts';
@@ -94,8 +95,19 @@ export interface CheckOptions {
   slotOptions?: Omit<SlotRunOptions, 'runCommand'>;
   gateLaneOptions?: Omit<GateLaneOptions, 'command'>;
   historyDirectory?: string;
+  /** Successful merge gates on this candidate already cover these workspaces and test files. */
+  completed?: { typeWorkspaces?: readonly string[]; testFiles?: readonly string[] };
+  /** Injected runners opt in explicitly; real commands reuse successful checks on clean trees. */
+  cache?: boolean;
 }
 export interface CheckResult { name: CheckName; code: number; seconds: number; waitSeconds?: number; note?: string }
+
+function cleanCheckTree(cwd: string): string | undefined {
+  const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd, encoding: 'utf8' });
+  if (top.status !== 0 || resolve(top.stdout.trim()) !== cwd) return;
+  if (gitOutput(cwd, ['status', '--porcelain', '--untracked-files=all']).trim()) return;
+  return gitOutput(cwd, ['rev-parse', 'HEAD^{tree}']).trim();
+}
 
 /** Hosted QA prints a report link rather than its case diagnostics. Read this invocation's isolated artifact root. */
 function testArtifactOutput(directory: string): { output: string; failures: string; diagnostics: string; report: string } {
@@ -175,12 +187,24 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   const print = options.print ?? console.log;
   const now = options.now ?? Date.now;
   const checks: CheckResult[] = [];
+  const tree = (options.cache ?? !options.runner) ? cleanCheckTree(cwd) : undefined;
+  const completedFiles = new Set(options.completed?.testFiles ?? []);
   let qaEnv = process.env;
 
   async function check(name: CheckName, commands: string[][], note?: string, testFiles: readonly string[] = []): Promise<void> {
     const start = now();
     const outputs: string[] = [];
     let code = 0;
+    const cache = tree && commands.length ? join(root, 'cache', createHash('sha256')
+      .update(JSON.stringify({ tree, name, commands, testFiles })).digest('hex') + '.json') : undefined;
+    let reused: string | undefined;
+    if (cache && existsSync(cache) && cleanCheckTree(cwd) === tree) {
+      try {
+        const previous = JSON.parse(readFileSync(cache, 'utf8')) as { log?: string };
+        if (previous.log && existsSync(previous.log)) reused = previous.log;
+      } catch { /* Incomplete evidence is rerun. */ }
+    }
+    if (reused) appendFileSync(log, `\n=== ${name}: reused successful check for tree ${tree} ===\nFull output: ${reused}\n`);
     async function execute(command: string[], label: string, selected: readonly string[]): Promise<{ result: CheckCommandResult; failureOutput: string }> {
       const artifactsDirectory = join(directory, `${label}-artifacts`);
       mkdirSync(artifactsDirectory, { recursive: true });
@@ -207,7 +231,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
       appendFileSync(log, `\n=== ${name}: ${invocation.join(' ')} ===\n${result.output}\n`);
       return { result, failureOutput };
     }
-    for (let i = 0; i < commands.length; i++) {
+    for (let i = 0; !reused && i < commands.length; i++) {
       const initial = await execute(commands[i]!, `${name}-${i}`, testFiles);
       if (initial.result.code === 0) continue;
       const retryFiles = timeoutOnlyTestFiles(initial.result.output, testFiles, cwd)
@@ -231,6 +255,11 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
         for (const test of recovered) { const line = slowTestLine(test); print(line); appendFileSync(log, `${line}\n`); }
       }
     }
+    if (cache && !reused && code === 0 && cleanCheckTree(cwd) === tree) {
+      mkdirSync(join(root, 'cache'), { recursive: true });
+      writeFileSync(cache, JSON.stringify({ log }));
+    }
+    if (reused) note = `reused successful check for tree ${tree}`;
     const seconds = (now() - start) / 1000;
     const result = { name, code, seconds, ...(note ? { note } : {}) };
     checks.push(result);
@@ -243,8 +272,12 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   // The gate owns workspace and guard selection. Heavy compiler/lint processes share one serial lane.
   const staticLane = async () => {
     if (only.includes('types')) {
-      const commands = workerTypeCommands(cwd, changed);
-      await check('types', commands, commands.length ? undefined : 'no TypeScript workspace changed');
+      const selected = workerTypeCommands(cwd, changed);
+      const commands = selected.filter(command => !WORKER_TYPE_PROJECTS.some(project =>
+        options.completed?.typeWorkspaces?.includes(project.workspace)
+        && (command[1] === project.task || (command[1] === 'goal:type-files' && command[4] === project.project))));
+      await check('types', commands, selected.length && !commands.length ? 'covered by merge type check'
+        : commands.length ? undefined : 'no TypeScript workspace changed');
       if (needsInferenceGate(changed)) await check('inference', [[...inferenceGateCommand]]);
     }
     if (only.includes('lint')) {
@@ -256,18 +289,20 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
   };
   // `task guards` summarizes its child output; running its gate-selected files keeps the full transcript for this log.
   const guardFiles = only.includes('guards') ? mergeUnitFiles(cwd, 'Affected since worker check\n', changed) : [];
+  const pendingTests = tests.filter(file => !completedFiles.has(file));
+  const pendingGuards = guardFiles.filter(file => !completedFiles.has(file));
   if (only.includes('guards')) print(repositoryGuardSelectionLine(changed, cwd));
   const qaLane = async () => {
     const work = async () => {
-      if (only.includes('tests')) await check('tests', tests.length ? [['bun', 'scripts/qa/test.ts', ...tests]] : [],
-        tests.length ? undefined : 'no test files named in brief', tests);
-      if (only.includes('guards')) await check('guards', guardFiles.length
-        ? [['task', 'runRepositoryGuardFiles' in repositoryGuardRunner ? 'guards' : 'goal:unit-files', '--', ...tierBunTestArgs('unit', guardFiles).slice(1)]] : [],
-        guardFiles.length ? undefined : 'no repository guard files present', guardFiles);
+      if (only.includes('tests')) await check('tests', pendingTests.length ? [['bun', 'scripts/qa/test.ts', ...pendingTests]] : [],
+        pendingTests.length ? undefined : tests.length ? 'covered by merge unit gate' : 'no test files named in brief', pendingTests);
+      if (only.includes('guards')) await check('guards', pendingGuards.length
+        ? [['task', 'runRepositoryGuardFiles' in repositoryGuardRunner ? 'guards' : 'goal:unit-files', '--', ...tierBunTestArgs('unit', pendingGuards).slice(1)]] : [],
+        pendingGuards.length ? undefined : guardFiles.length ? 'covered by merge unit gate' : 'no repository guard files present', pendingGuards);
       return checks.some(check => (check.name === 'tests' || check.name === 'guards') && check.code !== 0) ? 1 : 0;
     };
-    if ((only.includes('tests') && tests.length) || guardFiles.length) {
-      await withSlot(['worker-check', ...tests, ...guardFiles], false, undefined, { ...options.slotOptions,
+    if ((only.includes('tests') && pendingTests.length) || pendingGuards.length) {
+      await withSlot(['worker-check', ...pendingTests, ...pendingGuards], false, undefined, { ...options.slotOptions,
         runCommand: async (_command, env, onStart) => { qaEnv = env; onStart(); return work(); } });
     } else await work();
   };
