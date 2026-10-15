@@ -173,6 +173,7 @@ test("the mechanism map's import surface is its entry-point files and named adap
     'api-contract-generation': [
       'scripts/api/answer-record.ts',
       'scripts/api/generate.ts',
+      'scripts/api/inference-cost.ts',
       'scripts/api/operation-index.ts',
     ],
     'rights-evaluation': [
