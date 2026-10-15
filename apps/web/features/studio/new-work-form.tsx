@@ -9,7 +9,7 @@ import { Input } from '@rezics/ui/input';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { BookOpenIcon, CookingPotIcon, FileTextIcon, HourglassIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { useActionState, useEffect, useId } from 'react';
+import { useActionState, useEffect, useId, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
@@ -49,7 +49,13 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
   const [state, action, pending] = useActionState(create, initialState);
   const router = useRouter();
   const destination = state.status === 'created' ? state.href : null;
-  useEffect(() => { if (destination) router.push(destination); }, [destination, router]);
+  const navigated = useRef<string | null>(null);
+  useEffect(() => {
+    // Canonicalizing the editor address changes the router while this form may still be mounted.
+    if (!destination || navigated.current === destination) return;
+    navigated.current = destination;
+    router.push(destination);
+  }, [destination, router]);
   const busy = pending || state.status === 'created';
   const errorId = useId();
   // A person writing in this interface most likely writes in its language.
