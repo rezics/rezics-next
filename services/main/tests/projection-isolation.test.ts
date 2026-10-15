@@ -424,9 +424,9 @@ test('Read ranking upgrades populated coverage and retains each failed Structure
       const client = await pool.connect();
       try {
         await client.query('BEGIN');
-        await client.query(`INSERT INTO structure.progress_command (principal_issuer,principal_subject,idempotency_key,
+        await client.query(`INSERT INTO structure.progress_command (agent,principal_issuer,principal_subject,idempotency_key,
           request_digest,structure,occurrence,selection_key,result_version,result_completed,content_operation,first_read,first_finish)
-          VALUES ('test','test',$1,$2,$3,$4,'',1,false,$1,true,false)`, [operation, 'a'.repeat(64), structure, occurrence]);
+          VALUES ($5,'test','test',$1,$2,$3,$4,'',1,false,$1,true,false)`, [operation, 'a'.repeat(64), structure, occurrence, id()]);
         await client.query(`INSERT INTO content.receipt(operation_id,request_digest,action,outcome)
           VALUES ($1,$2,'structure.progress','succeeded')`, [operation, 'a'.repeat(64)]);
         await client.query(`INSERT INTO content.outbox(id,operation_id,event_type,recipe,payload)

@@ -147,7 +147,7 @@ function fixture(chapters: readonly Chapter[]) {
   const resume = async (chapter: number) => {
     const item = chapters[chapter - 1]!;
     completions.length = 0;
-    completions.push({ issuer: 'https://qa.test', subject: 'reader', structure, revision,
+    completions.push({ agent: actor, structure, revision,
       occurrence: item.occurrence, orderKey: `${item.segmentKey}\u0002${item.orderKey}` });
     const before = { statements, sql, queries: queries.length };
     const response = await app.handle(new Request(

@@ -41,7 +41,7 @@ export interface WorkProgress { structure: string; occurrence: string; selectedR
   completed: boolean; position: string | null; version: number; changedAt: string }
 /** Read finishes the whole Work: the last placement of its composition. */
 export function libraryCompletionSource(principal: VerifiedPrincipal, agent: string, work: string): CompletionSource {
-  return { principal, source: `library:${agent}:${work}`, demand: async client => {
+  return { principal, agent, source: `library:${agent}:${work}`, demand: async client => {
     const found = await client.query<{ status: ReadingStatus | null }>(`SELECT status FROM reader.library_status
       WHERE agent = $1 AND work = $2`, [agent, work]);
     return { occurrences: [], lastOfWorks: found.rows[0]?.status === 'read' ? [work] : [] };
@@ -152,7 +152,7 @@ export class ReaderLibraryStatusStore {
    * A row whose structure is the occurrence is the Work itself: it has no chapters,
    * so it adds nothing here. Finished works are the shelf dates above, not this row.
    * No Work or occurrence inventory is transferred to Main. */
-  async readingYear(agent: string, principal: VerifiedPrincipal, year: number): Promise<ReadingYear> {
+  async readingYear(agent: string, _principal: VerifiedPrincipal, year: number): Promise<ReadingYear> {
     if (!ID.test(agent) || !Number.isInteger(year) || year < 1900 || year > 2100) {
       throw new InvalidLibraryStatus('invalid reading stats year');
     }
@@ -160,22 +160,22 @@ export class ReaderLibraryStatusStore {
       WITH books AS (
         SELECT extract(month FROM finished_on)::integer AS month, count(*) AS count
         FROM reader.library_status
-        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($4,1,1)
-          AND finished_on < make_date($4 + 1,1,1)
+        WHERE agent = $1 AND status = 'read' AND finished_on >= make_date($2,1,1)
+          AND finished_on < make_date($2 + 1,1,1)
         GROUP BY 1
       ), chapters AS (
         SELECT extract(month FROM created_at AT TIME ZONE 'UTC')::integer AS month, count(*) AS count
         FROM structure.progress_command
-        WHERE principal_issuer = $2 AND principal_subject = $3 AND first_finish
+        WHERE agent = $1 AND first_finish
           AND structure <> occurrence
-          AND created_at >= (make_date($4,1,1)::timestamp AT TIME ZONE 'UTC')
-          AND created_at < (make_date($4 + 1,1,1)::timestamp AT TIME ZONE 'UTC')
+          AND created_at >= (make_date($2,1,1)::timestamp AT TIME ZONE 'UTC')
+          AND created_at < (make_date($2 + 1,1,1)::timestamp AT TIME ZONE 'UTC')
         GROUP BY 1
       )
       SELECT month, coalesce(books.count,0)::text AS books, coalesce(chapters.count,0)::text AS chapters
       FROM generate_series(1,12) AS months(month)
       LEFT JOIN books USING (month) LEFT JOIN chapters USING (month) ORDER BY month`,
-    [agent, principal.issuer, principal.subject, year]);
+    [agent, year]);
     const months = result.rows.map(row => ({ month: row.month, books: Number(row.books),
       chapters: Number(row.chapters) }));
     return { year, books: months.reduce((total, month) => total + month.books, 0),
@@ -302,7 +302,7 @@ export class ReaderLibraryStatusStore {
       .sort((a, b) => (b.changedAt ?? '').localeCompare(a.changedAt ?? ''));
   }
 
-  async progress(principal: VerifiedPrincipal, structures: string[]): Promise<Map<string, WorkProgress>> {
+  async progress(agent: string, structures: string[]): Promise<Map<string, WorkProgress>> {
     if (structures.length > STATUS_SHELF_COST.progressStructures || structures.some(structure => !ID.test(structure))) {
       throw new InvalidLibraryStatus('invalid progress batch');
     }
@@ -311,14 +311,14 @@ export class ReaderLibraryStatusStore {
       completed: boolean; position: string | null; version: string; changed_at: string }>(`
       SELECT latest.structure, occurrence, selection_key, completed, position,
         version::text AS version, updated_at::text AS changed_at
-      FROM unnest($3::text[]) AS requested(structure)
+      FROM unnest($2::text[]) AS requested(structure)
       CROSS JOIN LATERAL (
         SELECT structure, occurrence, selection_key, completed, position, version, updated_at
-        FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
+        FROM structure.progress WHERE agent = $1
           AND structure = requested.structure
         ORDER BY updated_at DESC, occurrence DESC, selection_key ASC LIMIT 1
       ) AS latest`,
-    [principal.issuer, principal.subject, structures]);
+    [agent, structures]);
     return new Map(rows.rows.map(row => [row.structure, { structure: row.structure,
       occurrence: row.occurrence, selectedRevision: row.selection_key || null,
       completed: row.completed, position: row.position, version: Number(row.version),

@@ -178,6 +178,8 @@ test('BOOK03: an exact composition seal retains its selected Content revision', 
 
 let cluster: PostgresCluster | undefined;
 let server: Pool | undefined;
+let legacyAccessUrl: string;
+const legacyPerson = id();
 const pools: Pool[] = [];
 
 async function database(name: string): Promise<Pool> {
@@ -198,6 +200,14 @@ async function rejects(action: Promise<unknown>, pattern: RegExp): Promise<void>
 beforeAll(async () => {
   cluster = await startPostgresCluster();
   server = new Pool({ ...cluster.connection, max: 2 });
+  const legacyAccess = await database('progress_legacy_access');
+  legacyAccessUrl = `postgresql://${encodeURIComponent(cluster.user)}@127.0.0.1:${cluster.port}/progress_legacy_access`;
+  await legacyAccess.query(`CREATE SCHEMA access;
+    CREATE TABLE access.principal (id text, account_issuer text, account_subject text);
+    CREATE TABLE access.representation (principal_id text, subject_id text, action text);
+    CREATE TABLE access.agent_provision (principal_id text, agent_id text, agent_kind text);
+    INSERT INTO access.principal VALUES ('legacy','issuer','subject');
+    INSERT INTO access.agent_provision VALUES ('legacy','${legacyPerson}','person')`);
   // Replaying Content through 869 is only the saved-state baseline. On a cold or
   // loaded host that replay exceeds the five-second case budget before any assertion.
   const libraryUpgrade = await database('library_revision_upgrade');
@@ -220,8 +230,8 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   expect(versions).toContain(STAGE_MIGRATION);
 
   const empty = await database('structure_empty');
-  await migrateContent(empty);
-  await migrateContent(empty);
+  await migrateContent(empty, undefined, { accessUrl: legacyAccessUrl });
+  await migrateContent(empty, undefined, { accessUrl: legacyAccessUrl });
   const installed = await empty.query<{ version: number }>(
     'SELECT version FROM content.schema_migration ORDER BY version');
   expect(installed.rows.map(row => row.version)).toEqual(versions);
@@ -247,8 +257,8 @@ test('COMP03 owner schema: Content migrations install 030 empty and upgrade from
   const record = randomUUID();
   await upgraded.query(`INSERT INTO source.record (id, provider, namespace, external_id)
     VALUES ($1, 'open-library', 'work', 'OL1W')`, [record]);
-  await migrateContent(upgraded);
-  await migrateContent(upgraded);
+  await migrateContent(upgraded, undefined, { accessUrl: legacyAccessUrl });
+  await migrateContent(upgraded, undefined, { accessUrl: legacyAccessUrl });
   const after = await upgraded.query<{ version: number }>(
     'SELECT version FROM content.schema_migration ORDER BY version');
   expect(after.rows.map(row => row.version)).toEqual(versions);
@@ -265,14 +275,14 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
   const pool = pools.find(candidate => candidate.options.database === 'structure_upgrade')!;
   const store = new StructureProgressStore(pool);
   const principal = { issuer: 'https://account.example', subject: randomUUID() };
-  const other = { ...principal, subject: randomUUID() };
+  const agent = id(), other = id();
   const structure = id(), first = id(), repeated = id();
-  const command = { principal, structure, occurrence: first, completed: true,
+  const command = { principal, agent, structure, occurrence: first, completed: true,
     position: 'paragraph:4', expectedVersion: 0, idempotencyKey: `progress:${randomUUID()}` };
-  expect(await store.read(principal, structure, first)).toMatchObject({ version: 0, completed: false });
+  expect(await store.read(agent, structure, first)).toMatchObject({ version: 0, completed: false });
   expect(await store.write(command)).toMatchObject({ version: 1, completed: true, replayed: false });
   expect(await store.write(command)).toMatchObject({ version: 1, completed: true, replayed: true });
-  expect(await store.read(principal, structure, repeated)).toMatchObject({ version: 0, completed: false });
+  expect(await store.read(agent, structure, repeated)).toMatchObject({ version: 0, completed: false });
   expect(await store.read(other, structure, first)).toMatchObject({ version: 0, completed: false });
   await expect(store.write({ ...command, occurrence: repeated })).rejects.toBeInstanceOf(
     StructureProgressConflict);
@@ -283,13 +293,13 @@ test('BOOK02/COMP06: progress keys each occurrence and replays a private command
   [principal.issuer, principal.subject, command.idempotencyKey]), /immutable/);
   // No active-placement foreign key exists: removing and restoring a placement
   // never rekeys this private state away from the stable occurrence ID.
-  expect(await store.read(principal, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
+  expect(await store.read(agent, structure, first)).toMatchObject({ version: 1, position: 'paragraph:4' });
 });
 
 test.each(['startup', 'artifact'])('Progress index migration commits library changes before its online build and recovers a cancelled invalid index (%s)', async runner => {
   const pool = await database(`progress_online_upgrade_${runner}`);
-  const run = () => runner === 'startup' ? migrateContent(pool) : migrateContentFromArtifact(
-    `postgresql://${encodeURIComponent(cluster!.user)}@127.0.0.1:${cluster!.port}/${pool.options.database}`, root);
+  const run = () => runner === 'startup' ? migrateContent(pool, undefined, { accessUrl: legacyAccessUrl }) : migrateContentFromArtifact(
+    `postgresql://${encodeURIComponent(cluster!.user)}@127.0.0.1:${cluster!.port}/${pool.options.database}`, root, legacyAccessUrl);
   await pool.query(`CREATE SCHEMA content; CREATE TABLE content.schema_migration
     (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())`);
   for (const name of schemaFiles(root, 'content').filter(name => migrationVersion(name) < 870)) {
@@ -357,13 +367,13 @@ test('Populated libraries migrate to point revisions without rewriting saved sta
     VALUES ('issuer','subject',$1,$2,true,4)`, [structure, occurrence]);
   const savedLibrary = (await pool.query('SELECT to_jsonb(saved) AS state FROM reader.library_status AS saved')).rows;
   const savedProgress = (await pool.query('SELECT to_jsonb(saved) AS state FROM structure.progress AS saved')).rows;
-  await migrateContent(pool);
-  await migrateContent(pool);
+  await migrateContent(pool, undefined, { accessUrl: legacyAccessUrl });
+  await migrateContent(pool, undefined, { accessUrl: legacyAccessUrl });
   expect((await pool.query('SELECT to_jsonb(saved) AS state FROM reader.library_status AS saved')).rows).toEqual(savedLibrary);
   // Order columns arrived after the saved row: every saved column is unchanged and legacy rows stay unindexed.
-  const orderColumns = ['order_key', 'order_revision', 'resume_eligible'];
+  const orderColumns = ['order_key', 'order_revision', 'resume_eligible', 'agent'];
   expect((await pool.query(`SELECT to_jsonb(saved) - $1::text[] AS state FROM structure.progress AS saved`,
-    [orderColumns])).rows).toEqual(savedProgress);
+    [orderColumns])).rows).toEqual(savedProgress.map(row => ({ state: Object.fromEntries(Object.entries(row.state as Record<string, unknown>).filter(([key]) => !['principal_issuer','principal_subject'].includes(key))) })));
   expect((await pool.query(`SELECT to_jsonb(saved) -> 'order_key' AS order_key, to_jsonb(saved) -> 'order_revision' AS order_revision,
     to_jsonb(saved) -> 'resume_eligible' AS resume_eligible FROM structure.progress AS saved`)).rows)
     .toEqual([{ order_key: null, order_revision: null, resume_eligible: null }]);
@@ -371,7 +381,7 @@ test('Populated libraries migrate to point revisions without rewriting saved sta
   const store = new ReaderLibraryStatusStore(pool);
   expect(await store.fence(agent)).toBe('0:0');
   expect((await store.batch(agent, [work]))[0]).toMatchObject({ status: 'reading', version: 7 });
-  expect((await store.progress({ issuer: 'issuer', subject: 'subject' }, [structure])).get(structure))
+  expect((await store.progress(legacyPerson, [structure])).get(structure))
     .toMatchObject({ occurrence, completed: true, version: 4 });
   await pool.query(`UPDATE reader.library_status SET title_key='new title' WHERE agent=$1`, [agent]);
   expect(await store.fence(agent)).toBe('0:0');
@@ -406,7 +416,7 @@ function planNodes(plan: SeekPlan): SeekPlan[] { return [plan, ...(plan.Plans ??
 
 test('Progress write, replay, batch latest and shelf revision plans examine bounded rows at 1,000 and 20,000 entries', async () => {
   const pool = await database('progress_latest_bounds');
-  await migrateContent(pool);
+  await migrateContent(pool, undefined, { accessUrl: legacyAccessUrl });
   const principal = { issuer: 'https://account.example', subject: randomUUID() }, structure = id(), agent = id(), work = id();
   const library = new ReaderLibraryStatusStore(pool), progress = new StructureProgressStore(pool);
   const requested = [structure, ...Array.from({ length: 23 }, id)];
@@ -414,10 +424,9 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
   const measurements = [];
   for (const size of [1_000, 20_000]) {
     await pool.query(`INSERT INTO structure.progress
-      (principal_issuer,principal_subject,structure,occurrence,completed,version,updated_at)
-      SELECT $1,$2,$3,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),false,1,
-        '2026-01-01'::timestamptz + n * interval '1 second' FROM generate_series($4::int,$5::int) n`,
-    [principal.issuer, principal.subject, structure, size === 1_000 ? 1 : 1_001, size]);
+      (agent,structure,occurrence,completed,version,updated_at)
+      SELECT $1,$2,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),false,1,
+        '2026-01-01'::timestamptz + n * interval '1 second' FROM generate_series($3::int,$4::int) n`, [agent, structure, size === 1_000 ? 1 : 1_001, size]);
     await pool.query(`INSERT INTO reader.library_status(agent,work,status,version,finished_on)
       SELECT $1,'https://rezics.com/id/00000000-0000-4000-8000-' || lpad(n::text,12,'0'),
         CASE WHEN n % 2 = 0 THEN 'reading' ELSE 'read' END,1,
@@ -434,12 +443,12 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
       }
       return Reflect.apply(original, this, args);
     } as typeof original);
-    const command = { principal, structure, occurrence: id(), completed: false, position: 'line-1',
+    const command = { principal, agent, structure, occurrence: id(), completed: false, position: 'line-1',
       expectedVersion: 0, idempotencyKey: randomUUID(), library: { agent, work } };
     try {
       const saved = await progress.write(command);
       const latestFence = await library.fence(agent, 'last-read');
-      const latest = await library.progress(principal, requested);
+      const latest = await library.progress(agent, requested);
       expect(latest.size).toBe(1);
       expect(latest.get(structure)?.occurrence).toBe(command.occurrence);
       expect(await progress.write(command)).toEqual({ ...saved, replayed: true });
@@ -499,11 +508,10 @@ test('Progress write, replay, batch latest and shelf revision plans examine boun
   const occurrence = id();
   const selections = [`urn:rezics:content:revision:${randomUUID()}`, `urn:rezics:content:revision:${randomUUID()}`].sort();
   await pool.query(`INSERT INTO structure.progress
-    (principal_issuer,principal_subject,structure,occurrence,selection_key,completed,version,updated_at)
-    SELECT $1,$2,$3,$4,selection,false,1,'2099-01-01' FROM unnest($5::text[]) selection`,
-  [principal.issuer, principal.subject, structure, occurrence, selections]);
-  expect((await library.progress(principal, [structure])).get(structure)?.selectedRevision).toBe(selections[0]);
-  expect((await library.progress({ ...principal, subject: randomUUID() }, [structure])).size).toBe(0);
+    (agent,structure,occurrence,selection_key,completed,version,updated_at)
+    SELECT $1,$2,$3,selection,false,1,'2099-01-01' FROM unnest($4::text[]) selection`, [agent, structure, occurrence, selections]);
+  expect((await library.progress(agent, [structure])).get(structure)?.selectedRevision).toBe(selections[0]);
+  expect((await library.progress(id(), [structure])).size).toBe(0);
 }, 60_000);
 
 interface JobSeed { kind?: string; structure?: string; key?: string; principal?: string;

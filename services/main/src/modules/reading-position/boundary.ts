@@ -260,7 +260,7 @@ export class ReadingBoundary {
     // a continuation from either source is stale when that source moves.
     const saved = deps.readingPositions
       ? await deps.readingPositions.privateSnapshot(principal!, options.actingSubject!) : null;
-    const indexed = deps.progress ? await deps.progress.readerVersion(principal!) : null;
+    const indexed = deps.progress ? await deps.progress.readerVersion(options.actingSubject!) : null;
     if (saved === null && indexed === null) return 'unconfigured';
     return indexed === null ? saved! : `${saved ?? ''}\u0001${indexed}`;
   }

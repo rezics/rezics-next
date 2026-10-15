@@ -47,6 +47,8 @@ export interface StructureProgress {
 
 export interface ProgressWrite {
   principal: VerifiedPrincipal;
+  /** Authorized Person; principal is retained only as receipt provenance. */
+  agent: string;
   structure: string;
   occurrence: string;
   selectedRevision?: string | null;
@@ -97,29 +99,29 @@ export class StructureProgressStore {
   /** The Content pool this owner writes to, which keys the cross-owner hooks. */
   get owner(): Pool { return this.pool; }
 
-  async readerVersion(principal: VerifiedPrincipal): Promise<string> {
+  async readerVersion(agent: string): Promise<string> {
     const value = await contentConnection(this.pool).query<{ version: string }>(`SELECT version::text AS version
-      FROM structure.progress_reader WHERE principal_issuer = $1 AND principal_subject = $2`,
-    [principal.issuer, principal.subject]);
+      FROM structure.progress_reader WHERE agent = $1`,
+    [agent]);
     return value.rows[0]?.version ?? '0';
   }
 
   /** A partial index stops after 16 candidates and one lookahead. Readiness
    * is a keyed owner row, never a hash/count of the history. */
-  async resumeCandidates(principal: VerifiedPrincipal, structure: string, revision: string, after?: ResumePageKey) {
+  async resumeCandidates(agent: string, structure: string, revision: string, after?: ResumePageKey) {
     validIdentity(structure, structure, null);
     if (after) validIdentity(structure, after.occurrence, after.selectedRevision);
     if (!ID.test(revision)) throw new InvalidStructureProgress('progress order revision is invalid');
     const scope = await contentConnection(this.pool).query<{ order_revision: string | null; ready: boolean }>(
       `SELECT order_revision, ready FROM structure.progress_scope
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3`,
-    [principal.issuer, principal.subject, structure]);
+       WHERE agent = $1 AND structure = $2`,
+    [agent, structure]);
     if (!scope.rows[0]?.ready || scope.rows[0]?.order_revision !== revision) {
       const legacy = await contentConnection(this.pool).query(`SELECT occurrence FROM structure.progress
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 LIMIT 1`,
-      [principal.issuer, principal.subject, structure]);
+        WHERE agent = $1 AND structure = $2 LIMIT 1`,
+      [agent, structure]);
       if (legacy.rows.length) {
-        this.projection?.request(principal, structure);
+        this.projection?.request(agent, structure);
         throw new ProgressOrderUnavailable('Completed progress needs a current order index');
       }
       return { items: [] as StructureProgress[], more: false, next: null as ResumePageKey | null };
@@ -127,31 +129,31 @@ export class StructureProgressStore {
     let key: string | undefined;
     if (after) {
       const point = await contentConnection(this.pool).query<{ order_key: string }>(`SELECT order_key FROM structure.progress
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-          AND occurrence=$4 AND selection_key=$5 AND order_revision=$6`,
-      [principal.issuer, principal.subject, structure, after.occurrence, after.selectedRevision ?? '', revision]);
+        WHERE agent= $1 AND structure=$2
+          AND occurrence=$3 AND selection_key=$4 AND order_revision=$5`,
+      [agent, structure, after.occurrence, after.selectedRevision ?? '', revision]);
       if (!point.rows[0]?.order_key) throw new InvalidStructureProgress('Resume continuation changed');
       key = point.rows[0].order_key;
     }
     const result = await contentConnection(this.pool).query<{ occurrence: string; selection_key: string; completed: boolean;
       position: string | null; version: string; order_key: string }>(after ? `SELECT * FROM (
         (SELECT occurrence,selection_key,completed,position,version::text AS version,order_key
-         FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-           AND order_revision=$4 AND completed AND resume_eligible AND order_key IS NOT NULL
-           AND order_key=$6 AND occurrence=$7 AND selection_key>$8
-         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5)
+         FROM structure.progress WHERE agent= $1 AND structure=$2
+           AND order_revision=$3 AND completed AND resume_eligible AND order_key IS NOT NULL
+           AND order_key=$5 AND occurrence=$6 AND selection_key>$7
+         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $4)
         UNION ALL
         (SELECT occurrence,selection_key,completed,position,version::text AS version,order_key
-         FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-           AND order_revision=$4 AND completed AND resume_eligible AND order_key IS NOT NULL
-           AND (order_key,occurrence)<($6,$7)
-         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5)
-      ) continuation ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $5` : `SELECT occurrence, selection_key, completed, position,
+         FROM structure.progress WHERE agent= $1 AND structure=$2
+           AND order_revision=$3 AND completed AND resume_eligible AND order_key IS NOT NULL
+           AND (order_key,occurrence)<($5,$6)
+         ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $4)
+      ) continuation ORDER BY order_key DESC,occurrence DESC,selection_key ASC LIMIT $4` : `SELECT occurrence, selection_key, completed, position,
         version::text AS version,order_key FROM structure.progress
-      WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-        AND order_revision = $4 AND completed AND resume_eligible AND order_key IS NOT NULL
-      ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT $5`,
-    [principal.issuer, principal.subject, structure, revision, STRUCTURE_PROGRESS_COST.resumeCandidates + 1,
+      WHERE agent = $1 AND structure = $2
+        AND order_revision = $3 AND completed AND resume_eligible AND order_key IS NOT NULL
+      ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT $4`,
+    [agent, structure, revision, STRUCTURE_PROGRESS_COST.resumeCandidates + 1,
       ...(after ? [key!, after.occurrence, after.selectedRevision ?? ''] : [])]);
     const more = result.rows.length > STRUCTURE_PROGRESS_COST.resumeCandidates;
     const last = result.rows[Math.min(result.rows.length, STRUCTURE_PROGRESS_COST.resumeCandidates) - 1];
@@ -164,12 +166,12 @@ export class StructureProgressStore {
    * compositions than they keep anchors for. One index page on a partial
    * index: a reader without any costs a single empty seek. More than a page
    * is reported as one extra entry, so the caller refuses instead of guessing. */
-  async overflowMembers(principal: VerifiedPrincipal): Promise<string[]> {
+  async overflowMembers(agent: string): Promise<string[]> {
     const result = await contentConnection(this.pool).query<{ structure: string }>(
       `SELECT structure FROM structure.progress_anchor_scope
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND parent = ''
-       ORDER BY structure LIMIT $3`,
-      [principal.issuer, principal.subject, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
+       WHERE agent = $1 AND parent = ''
+       ORDER BY structure LIMIT $2`,
+      [agent, STRUCTURE_PROGRESS_COST.resumeCandidates + 1]);
     return result.rows.map(row => row.structure);
   }
 
@@ -177,7 +179,7 @@ export class StructureProgressStore {
    * before filtering completion: a sparse history must not scan the series.
    * Empty pages can carry a continuation, including through revision selections.
    * https://www.postgresql.org/docs/18/indexes-multicolumn.html */
-  async completedPage(principal: VerifiedPrincipal, structure: string, limit = 50,
+  async completedPage(agent: string, structure: string, limit = 50,
     after?: ProgressPageKey): Promise<CompletedProgressPage> {
     validIdentity(structure, after ? after.occurrence : structure, after ? after.selectedRevision : null);
     if (!Number.isInteger(limit) || limit < 1 || limit >= STRUCTURE_PROGRESS_COST.pageRows) {
@@ -187,10 +189,10 @@ export class StructureProgressStore {
       completed: boolean; position: string | null; version: string }>(
       `SELECT occurrence, selection_key, completed, position, version::text AS version
        FROM structure.progress
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-         ${after ? 'AND (occurrence, selection_key) > ($4, $5)' : ''}
-       ORDER BY occurrence, selection_key LIMIT $${after ? 6 : 4}`,
-      [principal.issuer, principal.subject, structure,
+       WHERE agent = $1 AND structure = $2
+         ${after ? 'AND (occurrence, selection_key) > ($3, $4)' : ''}
+       ORDER BY occurrence, selection_key LIMIT $${after ? 5 : 3}`,
+      [agent, structure,
         ...(after ? [after.occurrence, after.selectedRevision ?? ''] : []), limit + 1]);
     const page = result.rows.slice(0, limit);
     const last = page.at(-1);
@@ -200,27 +202,26 @@ export class StructureProgressStore {
       selectedRevision: last.selection_key || null } : null };
   }
 
-  async read(principal: VerifiedPrincipal, structure: string, occurrence: string,
+  async read(agent: string, structure: string, occurrence: string,
     selectedRevision: string | null = null): Promise<StructureProgress> {
     validIdentity(structure, occurrence, selectedRevision);
     const result = await contentConnection(this.pool).query<{ completed: boolean; position: string | null; version: string }>(
       `SELECT completed, position, version::text AS version FROM structure.progress
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-         AND occurrence = $4 AND selection_key = $5`,
-      [principal.issuer, principal.subject, structure, occurrence, selectedRevision ?? '']);
+       WHERE agent = $1 AND structure = $2
+         AND occurrence = $3 AND selection_key = $4`,
+      [agent, structure, occurrence, selectedRevision ?? '']);
     return state({ structure, occurrence, selectedRevision }, result.rows[0]);
   }
 
   private async projectLibrary(client: PoolClient, input: ProgressWrite) {
     if (!input.library) return;
     await client.query(`WITH latest AS MATERIALIZED (
-      SELECT updated_at FROM structure.progress WHERE principal_issuer = $3
-        AND principal_subject = $4 AND structure = $5
+      SELECT updated_at FROM structure.progress WHERE agent = $1 AND structure = $3
       ORDER BY updated_at DESC, occurrence DESC, selection_key ASC LIMIT 1
     ) UPDATE reader.library_status SET last_read_at = greatest(last_read_at, latest.updated_at)
       FROM latest WHERE agent = $1 AND work = $2
-        AND last_read_at IS DISTINCT FROM greatest(last_read_at, latest.updated_at)`, [input.library.agent, input.library.work,
-      input.principal.issuer, input.principal.subject, input.structure]);
+        AND last_read_at IS DISTINCT FROM greatest(last_read_at, latest.updated_at)`,
+    [input.agent, input.library.work, input.structure]);
   }
 
   /** Each anchor this write carries derives from one pair of heads. A scope it
@@ -231,19 +232,19 @@ export class StructureProgressStore {
   private async recordAnchorBasis(client: PoolClient, input: ProgressWrite, opened: boolean) {
     const anchoring = input.anchoring;
     if (!input.order || !anchoring) return;
-    const principal = [input.principal.issuer, input.principal.subject, input.structure];
+    const principal = [input.agent, input.structure];
     const vouched = anchoring.unknown ? [] : anchoring.anchors.flatMap(anchor => anchor.order ? [{
       parent: anchor.structure, parentRevision: anchor.order.revision }] : []);
     if (opened) {
       for (const anchor of vouched) {
-        await prepareAnchorScope(client, input.principal, input.structure, anchor.parent, input.order.revision, anchor.parentRevision);
+        await prepareAnchorScope(client, input.agent, input.structure, anchor.parent, input.order.revision, anchor.parentRevision);
       }
       return;
     }
     await client.query(`UPDATE structure.progress_anchor_scope SET revision=NULL, parent_revision=NULL, cursor=NULL
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent <> ''
+      WHERE agent= $1 AND structure=$2 AND parent <> ''
         AND revision IS NOT NULL AND (parent, revision, parent_revision) NOT IN
-          (SELECT * FROM unnest($4::text[], $5::text[], $6::text[]))`,
+          (SELECT * FROM unnest($3::text[], $4::text[], $5::text[]))`,
     [...principal, vouched.map(anchor => anchor.parent), vouched.map(() => input.order!.revision),
       vouched.map(anchor => anchor.parentRevision)]);
   }
@@ -254,34 +255,33 @@ export class StructureProgressStore {
   private async recordOverflow(client: PoolClient, input: ProgressWrite) {
     const anchoring = input.anchoring;
     if (!anchoring || anchoring.unknown) return;
-    const identity = [input.principal.issuer, input.principal.subject, input.structure];
+    const identity = [input.agent, input.structure];
     if (anchoring.overflow && input.completed) {
       await client.query(`INSERT INTO structure.progress_anchor_scope
-        (principal_issuer, principal_subject, structure, parent) VALUES ($1,$2,$3,'')
+        (agent, structure, parent) VALUES ($1,$2,'')
         ON CONFLICT DO NOTHING`, identity);
       return;
     }
     await client.query(`DELETE FROM structure.progress_anchor_scope
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=''
-        AND ($4 OR NOT EXISTS (SELECT 1 FROM structure.progress WHERE principal_issuer=$1
-          AND principal_subject=$2 AND structure=$3 AND completed LIMIT 1))`, [...identity, !anchoring.overflow]);
+      WHERE agent= $1 AND structure=$2 AND parent=''
+        AND ($3 OR NOT EXISTS (SELECT 1 FROM structure.progress WHERE agent= $1 AND structure=$2 AND completed LIMIT 1))`, [...identity, !anchoring.overflow]);
   }
 
   /** True when every earlier completion of this member Structure is indexed on
    * this one enclosing composition for exactly these heads. One keyed row
    * of that pair, whatever else encloses the member; otherwise the background
    * pass is asked to prepare it. */
-  async anchorsCurrent(principal: VerifiedPrincipal, member: { structure: string; revision: string },
+  async anchorsCurrent(agent: string, member: { structure: string; revision: string },
     parent: { structure: string; revision: string }): Promise<boolean> {
     validIdentity(member.structure, member.structure, null);
     validIdentity(parent.structure, parent.structure, null);
     if (!ID.test(member.revision) || !ID.test(parent.revision)) throw new InvalidStructureProgress('progress order revision is invalid');
     const ready = await contentConnection(this.pool).query(`SELECT 1 FROM structure.progress_anchor_scope
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND parent=$4
-        AND revision=$5 AND parent_revision=$6 AND cursor IS NULL`,
-    [principal.issuer, principal.subject, member.structure, parent.structure, member.revision, parent.revision]);
+      WHERE agent= $1 AND structure=$2 AND parent=$3
+        AND revision=$4 AND parent_revision=$5 AND cursor IS NULL`,
+    [agent, member.structure, parent.structure, member.revision, parent.revision]);
     if (ready.rows.length) return true;
-    this.projection?.request(principal, member.structure);
+    this.projection?.request(agent, member.structure);
     return false;
   }
 
@@ -296,14 +296,14 @@ export class StructureProgressStore {
         || anchor.order !== null && !validOrder(anchor.order)))) {
       throw new InvalidStructureProgress('progress order key is invalid');
     }
-    if (!KEY.test(input.idempotencyKey) || !Number.isSafeInteger(input.expectedVersion)
+    if (!ID.test(input.agent) || !KEY.test(input.idempotencyKey) || !Number.isSafeInteger(input.expectedVersion)
       || input.expectedVersion < 0 || typeof input.completed !== 'boolean'
       || input.position !== null && (typeof input.position !== 'string'
         || Buffer.byteLength(input.position) < 1 || Buffer.byteLength(input.position) > 500
         || /[\u0000-\u001f\u007f]/u.test(input.position))) {
       throw new InvalidStructureProgress('progress command is invalid');
     }
-    if (input.library && (!ID.test(input.library.agent) || !ID.test(input.library.work))) {
+    if (input.library && (!ID.test(input.library.agent) || !ID.test(input.library.work) || input.library.agent !== input.agent)) {
       throw new InvalidStructureProgress('library identity is invalid');
     }
     const selectionKey = selectedRevision ?? '';
@@ -348,28 +348,27 @@ export class StructureProgressStore {
     prepared: ReturnType<StructureProgressStore['prepareWrite']> = this.prepareWrite(input)):
     Promise<{ saved: StructureProgress; operation: string | null }> {
     const { selectionKey, digest, identity } = prepared;
-    await client.query(`INSERT INTO structure.progress_reader VALUES ($1,$2,1)
-      ON CONFLICT (principal_issuer,principal_subject) DO UPDATE
-        SET version=structure.progress_reader.version`, [input.principal.issuer, input.principal.subject]);
+    await client.query(`INSERT INTO structure.progress_reader VALUES ($1,1)
+      ON CONFLICT (agent) DO UPDATE
+        SET version=structure.progress_reader.version`, [input.agent]);
     const scope = await client.query<{ ready: boolean }>(`INSERT INTO structure.progress_scope
-      (principal_issuer, principal_subject, structure, order_revision, ready, version)
-      SELECT $1,$2,$3,$4,$5 AND NOT EXISTS (SELECT 1 FROM structure.progress
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
-      ON CONFLICT DO NOTHING RETURNING ready`, [input.principal.issuer, input.principal.subject, input.structure,
+      (agent, structure, order_revision, ready, version)
+      SELECT $1,$2,$3,$4 AND NOT EXISTS (SELECT 1 FROM structure.progress
+        WHERE agent= $1 AND structure=$2 AND completed AND resume_eligible IS DISTINCT FROM false LIMIT 1),1
+      ON CONFLICT DO NOTHING RETURNING ready`, [input.agent, input.structure,
       input.order?.revision ?? null, !!input.order]);
     await this.recordAnchorBasis(client, input, scope.rows[0]?.ready === true);
     if (input.library) await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1,0))',
       [JSON.stringify(['library-status-work', input.library.agent, input.library.work])]);
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [JSON.stringify(['structure-progress', input.principal.issuer,
-        input.principal.subject, input.idempotencyKey])]);
+      [JSON.stringify(['structure-progress', input.agent, input.idempotencyKey])]);
     const prior = await client.query<{ request_digest: string; structure: string; occurrence: string;
       selection_key: string; result_completed: boolean; result_position: string | null;
       result_version: string }>(
       `SELECT request_digest, structure, occurrence, selection_key, result_completed, result_position,
          result_version::text AS result_version FROM structure.progress_command
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND idempotency_key = $3`,
-      [input.principal.issuer, input.principal.subject, input.idempotencyKey]);
+       WHERE agent = $1 AND idempotency_key = $2 AND principal_issuer = $3 AND principal_subject = $4`,
+      [input.agent, input.idempotencyKey, input.principal.issuer, input.principal.subject]);
     if (prior.rows[0]) {
       const row = prior.rows[0];
       if (row.request_digest !== digest || row.structure !== input.structure
@@ -383,50 +382,48 @@ export class StructureProgressStore {
     // Serialize selections for one chapter so each reader contributes at most
     // one read and one finish, even with concurrent revision-specific writes.
     await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-      [JSON.stringify(['structure-progress-chapter', input.principal.issuer,
-        input.principal.subject, input.structure, input.occurrence])]);
+      [JSON.stringify(['structure-progress-chapter', input.agent, input.structure, input.occurrence])]);
     const first = await client.query<{ read: boolean; finished: boolean }>(
       `SELECT NOT EXISTS (SELECT 1 FROM structure.progress_command
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4)
+        WHERE agent = $1 AND structure = $2 AND occurrence = $3)
           AS read,
         NOT EXISTS (SELECT 1 FROM structure.progress_command
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4
+        WHERE agent = $1 AND structure = $2 AND occurrence = $3
           AND result_completed) AS finished`,
-      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence]);
+      [input.agent, input.structure, input.occurrence]);
     const current = await client.query<{ version: string }>(
       `SELECT version::text AS version FROM structure.progress
-       WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3
-         AND occurrence = $4 AND selection_key = $5 FOR UPDATE`,
-      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence, selectionKey]);
+       WHERE agent = $1 AND structure = $2
+         AND occurrence = $3 AND selection_key = $4 FOR UPDATE`,
+      [input.agent, input.structure, input.occurrence, selectionKey]);
     const version = Number(current.rows[0]?.version ?? 0);
     if (version !== input.expectedVersion) throw new StaleStructureProgress('progress version changed');
     const next = version + 1;
     const operation = `structure.progress:${createHash('sha256').update(JSON.stringify([
-      input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
+      input.agent, input.principal.issuer, input.principal.subject, input.idempotencyKey])).digest('hex')}`;
     if (version === 0) {
       await client.query(`INSERT INTO structure.progress
-        (principal_issuer, principal_subject, structure, occurrence, selection_key,
-          completed, position, version, order_revision, order_key, resume_eligible) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
-      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
+        (agent, structure, occurrence, selection_key,
+          completed, position, version, order_revision, order_key, resume_eligible) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [input.agent, input.structure, input.occurrence,
         selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
     } else {
-      await client.query(`UPDATE structure.progress SET completed = $6, position = $7,
-        version = $8, order_revision = $9, order_key = $10, resume_eligible = $11, updated_at = clock_timestamp() WHERE principal_issuer = $1
-        AND principal_subject = $2 AND structure = $3 AND occurrence = $4 AND selection_key = $5`,
-      [input.principal.issuer, input.principal.subject, input.structure, input.occurrence,
+      await client.query(`UPDATE structure.progress SET completed = $5, position = $6,
+        version = $7, order_revision = $8, order_key = $9, resume_eligible = $10, updated_at = clock_timestamp() WHERE agent = $1 AND structure = $2 AND occurrence = $3 AND selection_key = $4`,
+      [input.agent, input.structure, input.occurrence,
         selectionKey, input.completed, input.position, next, input.order?.revision ?? null, input.order?.key ?? null, input.order ? input.order.eligible ?? true : null]);
     }
-    await applyAnchors(client, input.principal, input.structure, input.occurrence, selectionKey,
+    await applyAnchors(client, input.agent, input.structure, input.occurrence, selectionKey,
       input.completed, input.anchoring?.unknown ? [] : input.anchoring?.anchors ?? []);
     await this.recordOverflow(client, input);
     await client.query(`INSERT INTO structure.progress_command
-      (principal_issuer, principal_subject, idempotency_key, request_digest,
+      (agent, idempotency_key, request_digest,
         structure, occurrence, selection_key, result_version, result_completed, result_position,
-        content_operation, first_read, first_finish)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [input.principal.issuer, input.principal.subject, input.idempotencyKey, digest,
+        content_operation, first_read, first_finish, principal_issuer, principal_subject)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
+    [input.agent, input.idempotencyKey, digest,
       input.structure, input.occurrence, selectionKey, next, input.completed, input.position,
-      operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished]);
+      operation, first.rows[0]!.read, input.completed && first.rows[0]!.finished, input.principal.issuer, input.principal.subject]);
     await advanceContentSequence(client, { operationId: operation, requestDigest: digest,
       action: 'structure.progress', outcome: 'succeeded', eventType: 'structure.progress.written',
       recipe: 'structure-progress-v1', payload: { structure: input.structure, occurrence: input.occurrence,

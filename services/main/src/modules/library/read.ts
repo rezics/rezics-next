@@ -82,7 +82,7 @@ export async function readReaderStates(session: WorkReadSession, agent: string, 
       shelves.set(work, list);
     }
   }
-  const progress = await status.progress(session.principal, [...structures.values()]);
+  const progress = await status.progress(session.options.actingSubject!, [...structures.values()]);
   if (!session.deps.libraryRatings) throw new WorkReadUnavailable('Reader rating inventory is unavailable');
   const ratings = await session.deps.libraryRatings.read(session, currentMains, realm);
   if (await status.fence(agent) !== statusFence

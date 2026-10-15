@@ -42,16 +42,15 @@ test('G-552: SQL totals cover 1,000 status rows and 2,601 completions; a Work ra
       } } LIMIT 1`)).results!.bindings;
     const structure = structureRows[0]!.structure!.value;
     await home.stack.contentPool.query(`INSERT INTO structure.progress_command
-      (principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence,
+      (agent,principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence,
         selection_key, result_version, result_completed, first_finish, created_at)
-      SELECT $1,$2,'g-552-' || ordinal, $3,$4,occurrence,'',1,true,true,
+      SELECT $6,$1,$2,'g-552-' || ordinal, $3,$4,occurrence,'',1,true,true,
         CASE WHEN ordinal <= 1300 THEN '2026-01-15'::timestamptz
           WHEN ordinal = 2601 THEN '2027-01-01 00:59:59+01'::timestamptz
           WHEN ordinal = 2602 THEN '2027-01-01 00:00:00+00'::timestamptz
           ELSE '2026-12-31 23:59:59+00'::timestamptz END
-      FROM unnest($5::text[]) WITH ORDINALITY AS fixture(occurrence,ordinal)`,
-    [home.reader.principal.issuer, home.reader.principal.subject, 'a'.repeat(64), structure,
-      Array.from({ length: 2_602 }, id)]);
+      FROM unnest($5::text[]) WITH ORDINALITY AS fixture(occurrence,ordinal)`, [home.reader.principal.issuer, home.reader.principal.subject, 'a'.repeat(64), structure,
+      Array.from({ length: 2_602 }, id), seeded.reader]);
     const meter = meterStatements();
     try {
       const before = meter.count();

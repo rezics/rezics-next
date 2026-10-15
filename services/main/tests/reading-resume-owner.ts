@@ -10,8 +10,7 @@ import { RV } from '../src/modules/work/activate.ts';
 
 /** One completion the production progress owner can resume. */
 export interface ResumeCompletion {
-  issuer: string;
-  subject: string;
+  agent: string;
   structure: string;
   revision: string;
   occurrence: string;
@@ -23,19 +22,19 @@ export interface ResumeCompletion {
 export function readingResumeOwner(rows: ResumeCompletion[]) {
   const pool = { query: async (sql: string, values: unknown[] = []) => {
     if (sql.includes('structure.progress_reader')) {
-      const hit = rows.some(row => row.issuer === values[0] && row.subject === values[1]);
+      const hit = rows.some(row => row.agent === values[0]);
       return { rows: hit ? [{ version: '1' }] : [] };
     }
     if (sql.includes('FROM structure.progress_scope') && sql.includes('order_revision')) {
-      const hit = rows.find(row => row.issuer === values[0] && row.subject === values[1] && row.structure === values[2]);
+      const hit = rows.find(row => row.agent === values[0] && row.structure === values[1]);
       return { rows: hit ? [{ order_revision: hit.revision, ready: true }] : [] };
     }
     if (sql.includes('order_key DESC')) {
-      const [issuer, subject, structure, revision, limit] = values;
-      let matched = rows.filter(row => row.issuer === issuer && row.subject === subject
+      const [agent, structure, revision, limit] = values;
+      let matched = rows.filter(row => row.agent === agent
         && row.structure === structure && row.revision === revision);
-      if (values.length > 5) {
-        const key = String(values[5]), occurrence = String(values[6]);
+      if (values.length > 4) {
+        const key = String(values[4]), occurrence = String(values[5]);
         matched = matched.filter(row => row.orderKey < key || row.orderKey === key && row.occurrence < occurrence);
       }
       matched.sort((a, b) => a.orderKey < b.orderKey ? 1 : a.orderKey > b.orderKey ? -1

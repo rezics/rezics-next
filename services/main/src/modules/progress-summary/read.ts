@@ -15,7 +15,7 @@ import { decodeWorkStanding, type WorkStanding } from '../progress/work-standing
 async function wholeWorkStanding(session: WorkReadSession, resource: string): Promise<WorkStanding | null> {
   const progress = session.deps.progress;
   if (!progress || !session.principal) return null;
-  const row = await progress.read(session.principal, resource, resource);
+  const row = await progress.read(session.options.actingSubject!, resource, resource);
   return row.version > 0 ? decodeWorkStanding(row) : null;
 }
 

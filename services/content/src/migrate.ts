@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { compareMigrationPaths, migrationVersion } from '../../../scripts/lib/migration-order.ts';
 import { applySqlMigration, sqlMigration, type SqlMigration } from '../../../scripts/lib/concurrent-index.ts';
 import type { Pool } from 'pg';
+import { prepareProgressPeople } from './progress-people.ts';
 
 function migrations(directory: string): Array<SqlMigration & { version: number }> {
   const files = readdirSync(directory).filter(name => name.endsWith('.sql')).sort(compareMigrationPaths);
@@ -19,7 +20,8 @@ function migrations(directory: string): Array<SqlMigration & { version: number }
 }
 
 /** Apply Content and private source-staging schemas in Main's PostgreSQL database. */
-export async function migrateContent(pool: Pool, directory = join(import.meta.dir, '../migrations')): Promise<number[]> {
+export async function migrateContent(pool: Pool, directory = join(import.meta.dir, '../migrations'),
+  options: { accessUrl?: string } = {}): Promise<number[]> {
   const pending = migrations(directory);
   const installed: number[] = [];
   const client = await pool.connect();
@@ -52,7 +54,12 @@ export async function migrateContent(pool: Pool, directory = join(import.meta.di
         await applySqlMigration(client, migration);
         await client.query('BEGIN');
         inTransaction = true;
-      } else await client.query(migration.sql);
+      } else {
+        if (migration.sql.startsWith('-- migrate: progress-people\n')) {
+          await prepareProgressPeople(client, options.accessUrl ?? Bun.env.ACCESS_DATABASE_URL);
+        }
+        await client.query(migration.sql);
+      }
       await client.query('INSERT INTO content.schema_migration (version) VALUES ($1)',
         [migration.version]);
       installed.push(migration.version);

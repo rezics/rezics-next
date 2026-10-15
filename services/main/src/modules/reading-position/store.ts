@@ -43,10 +43,10 @@ export class ReadingPositionStore {
     return result.rows[0]!.version;
   }
   /** Constant-size owner clock; no history aggregation or paging. */
-  async privateSnapshot(principal: VerifiedPrincipal, _agent: string): Promise<string> {
+  async privateSnapshot(_principal: VerifiedPrincipal, agent: string): Promise<string> {
     const result = await contentConnection(this.pool).query<{ version: string }>(`SELECT version::text AS version
-      FROM structure.progress_reader WHERE principal_issuer=$1 AND principal_subject=$2`,
-    [principal.issuer, principal.subject]);
+      FROM structure.progress_reader WHERE agent=$1`,
+    [agent]);
     return result.rows[0]?.version ?? '0';
   }
   async lookup(records: readonly string[]): Promise<Map<string, Revelation[]>> {
@@ -133,13 +133,13 @@ export class ReadingPositionStore {
   }
   /** Saved completions when the prepared resume index is absent. One occurrence
    * page, never the chapter inventory. The index path does not call this. */
-  async completedPage(principal: VerifiedPrincipal, structures: readonly string[], after?: string) {
+  async completedPage(agent: string, structures: readonly string[], after?: string) {
     if (structures.length > REVELATION_COST.batch) throw new WorkReadInvalid('Progress structure batch exceeds its cost');
     if (!structures.length) return { items: [] as string[], next: null as string | null };
     const result = await contentConnection(this.pool).query<{ occurrence: string }>(`SELECT DISTINCT occurrence
-      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
-        AND structure = ANY($3::text[]) AND completed AND ($4::text IS NULL OR occurrence > $4)
-      ORDER BY occurrence LIMIT $5`, [principal.issuer, principal.subject, structures, after ?? null, REVELATION_COST.batch + 1]);
+      FROM structure.progress WHERE agent = $1
+        AND structure = ANY($2::text[]) AND completed AND ($3::text IS NULL OR occurrence > $3)
+      ORDER BY occurrence LIMIT $4`, [agent, structures, after ?? null, REVELATION_COST.batch + 1]);
     const items = result.rows.slice(0, REVELATION_COST.batch).map(row => row.occurrence);
     return { items, next: result.rows.length > REVELATION_COST.batch ? items.at(-1)! : null };
   }

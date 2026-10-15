@@ -48,7 +48,7 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
       (generation, metric, interval, bucket, work, score, growth)
       VALUES ($1,'reads','day',$2,$3,5,5)`, [initial.generation, previousDay, work]);
     const start = await stack.content.ownerPosition();
-    const input = { principal, structure, occurrence, selectedRevision: null,
+    const input = { principal, agent: member.actor, structure, occurrence, selectedRevision: null,
       completed: false, position: 'paragraph:1', expectedVersion: 0, idempotencyKey: randomUUID() };
     expect(await store.write(input)).toMatchObject({ version: 1, replayed: false });
     expect(await store.write(input)).toMatchObject({ version: 1, replayed: true });
@@ -116,7 +116,7 @@ test('G291: progress outbox replays once; ranking cursor and scores reset on gra
     const concurrentCut = await stack.content.ownerPosition();
     const repeatedOccurrence = id();
     const concurrent = await Promise.allSettled([0, 1].map(() => store.write({
-      principal, structure, occurrence: repeatedOccurrence,
+      principal, agent: member.actor, structure, occurrence: repeatedOccurrence,
       selectedRevision: `urn:rezics:content:revision:${randomUUID()}`,
       completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID(),
     })));
@@ -160,7 +160,7 @@ test('A ranking checkpoint ahead of the restored Content owner rebuilds scores f
         rv:structureOf ${iri(work.mainVersion)} . }
     }`);
     const store = new StructureProgressStore(stack.contentPool);
-    await store.write({ principal: member.principal, structure, occurrence: id(),
+    await store.write({ principal: member.principal, agent: member.actor, structure, occurrence: id(),
       completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
     const projection = new ReadRankingProjection(stack.accessPool, stack.content, stack.contentPool, stack.env);
     for (let i = 0; i < 100 && (await projection.tick()) > 0; i++) { /* bounded catch-up */ }
@@ -187,7 +187,7 @@ test('A ranking checkpoint ahead of the restored Content owner rebuilds scores f
     expect((await stack.accessPool.query(`SELECT 1 FROM access.read_ranking_score WHERE generation = $1`,
       [before.generation])).rowCount).toBe(0);
 
-    await store.write({ principal: member.principal, structure, occurrence: id(),
+    await store.write({ principal: member.principal, agent: member.actor, structure, occurrence: id(),
       completed: true, position: null, expectedVersion: 0, idempotencyKey: randomUUID() });
     expect(await projection.tick()).toBe(1);
     expect((await projection.current()).generation).toBe(restored.generation);

@@ -29,6 +29,7 @@ export interface CompletionPlanner {
 export interface CompletionDemand { occurrences: string[]; lastOfWorks: string[] }
 export interface CompletionSource {
   principal: VerifiedPrincipal;
+  agent: string;
   /** Stable identity of whatever records the finish, e.g. `session:<id>`. */
   source: string;
   /** Read inside the projection transaction, after its locks: the answer is
@@ -80,7 +81,7 @@ export class ProgressCompletionProjector {
   }
 
   private async reconcileOnce(input: CompletionSource) {
-    const { principal } = input;
+    const { agent } = input;
     const sourceHash = digest(input.source);
     const operations: string[] = [];
     const borrowed = contentSessionClient(this.pool);
@@ -88,26 +89,26 @@ export class ProgressCompletionProjector {
     try {
       await client.query("BEGIN; SET LOCAL lock_timeout = '2s'; SET LOCAL statement_timeout = '5s'");
       await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-        [JSON.stringify(['progress-completion-source', principal.issuer, principal.subject, sourceHash])]);
+        [JSON.stringify(['progress-completion-source', agent, sourceHash])]);
       const plans = await this.plan(await input.demand(client), client);
-      const held = await this.heldBy(client, principal, sourceHash);
+      const held = await this.heldBy(client, input, sourceHash);
       // One order for every lock, so two sources over the same targets queue
       // instead of deadlocking.
       const involved = [...new Set([...plans.keys(), ...held.map(targetKey)])].sort();
       for (const key of involved) {
         const [structure, occurrence] = key.split(' ') as [string, string];
         await client.query('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))',
-          [JSON.stringify(['structure-progress-chapter', principal.issuer, principal.subject, structure, occurrence])]);
+          [JSON.stringify(['structure-progress-chapter', agent, structure, occurrence])]);
       }
       // A release replans nothing it does not need: the occurrence may be gone.
       for (const target of held) {
         if (plans.has(targetKey(target))) continue;
-        const operation = await this.release(client, principal, sourceHash, target,
+        const operation = await this.release(client, input, sourceHash, target,
           await this.planner.occurrence(target.occurrence, client));
         if (operation) operations.push(operation);
       }
       for (const plan of [...plans.values()].sort((a, b) => targetKey(a) < targetKey(b) ? -1 : 1)) {
-        const operation = await this.hold(client, principal, sourceHash, plan);
+        const operation = await this.hold(client, input, sourceHash, plan);
         if (operation) operations.push(operation);
       }
       await client.query('COMMIT');
@@ -124,86 +125,86 @@ export class ProgressCompletionProjector {
   /** Targets this source holds: the newest receipt of each pair is a hold that
    * no direct write has superseded. One range over the source's key prefix;
    * its keys are lowercase hex then `h`/`r` and digits, all below `z`. */
-  private async heldBy(client: PoolClient, principal: VerifiedPrincipal, sourceHash: string) {
+  private async heldBy(client: PoolClient, owner: Pick<CompletionSource, 'principal' | 'agent'>, sourceHash: string) {
     const prefix = `${PROJECTION_KEY_PREFIX}${sourceHash}`;
     const rows = await client.query<{ structure: string; occurrence: string }>(`
       SELECT structure, occurrence FROM (
         SELECT DISTINCT ON (structure, occurrence) structure, occurrence, idempotency_key, created_at
         FROM structure.progress_command
-        WHERE principal_issuer = $1 AND principal_subject = $2
-          AND idempotency_key >= $3 AND idempotency_key < $4 AND starts_with(idempotency_key, $3)
+        WHERE agent = $1
+          AND idempotency_key >= $2 AND idempotency_key < $3 AND starts_with(idempotency_key, $2)
         ORDER BY structure, occurrence, created_at DESC, result_version DESC) latest
       WHERE substr(idempotency_key, ${KIND_AT}, 1) = 'h'
         AND created_at > coalesce((SELECT max(c.created_at) FROM structure.progress_command c
-          WHERE c.principal_issuer = $1 AND c.principal_subject = $2
+          WHERE c.agent = $1
             AND c.structure = latest.structure AND c.occurrence = latest.occurrence
-            AND NOT starts_with(c.idempotency_key, $5)), '-infinity')
+            AND NOT starts_with(c.idempotency_key, $4)), '-infinity')
       LIMIT 17`,
-    [principal.issuer, principal.subject, prefix, `${prefix}z`, PROJECTION_KEY_PREFIX]);
+    [owner.agent, prefix, `${prefix}z`, PROJECTION_KEY_PREFIX]);
     return rows.rows;
   }
 
   /** Every source that currently holds this target, from receipts on that one
    * occurrence alone. */
-  private async holders(client: PoolClient, principal: VerifiedPrincipal, target: { structure: string; occurrence: string }) {
+  private async holders(client: PoolClient, owner: Pick<CompletionSource, 'principal' | 'agent'>, target: { structure: string; occurrence: string }) {
     const rows = await client.query<{ source: string }>(`
       SELECT substr(idempotency_key, ${SOURCE_AT}, 24) AS source FROM (
         SELECT DISTINCT ON (substr(idempotency_key, ${SOURCE_AT}, 48)) idempotency_key, created_at
         FROM structure.progress_command
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4
-          AND starts_with(idempotency_key, $5)
+        WHERE agent = $1 AND structure = $2 AND occurrence = $3
+          AND starts_with(idempotency_key, $4)
         ORDER BY substr(idempotency_key, ${SOURCE_AT}, 48), created_at DESC, result_version DESC) latest
       WHERE substr(idempotency_key, ${KIND_AT}, 1) = 'h'
         AND created_at > coalesce((SELECT max(c.created_at) FROM structure.progress_command c
-          WHERE c.principal_issuer = $1 AND c.principal_subject = $2 AND c.structure = $3 AND c.occurrence = $4
-            AND NOT starts_with(c.idempotency_key, $5)), '-infinity')`,
-    [principal.issuer, principal.subject, target.structure, target.occurrence, PROJECTION_KEY_PREFIX]);
+          WHERE c.agent = $1 AND c.structure = $2 AND c.occurrence = $3
+            AND NOT starts_with(c.idempotency_key, $4)), '-infinity')`,
+    [owner.agent, target.structure, target.occurrence, PROJECTION_KEY_PREFIX]);
     return rows.rows.map(row => row.source);
   }
 
-  private async cells(client: PoolClient, principal: VerifiedPrincipal, target: { structure: string; occurrence: string }) {
+  private async cells(client: PoolClient, owner: Pick<CompletionSource, 'principal' | 'agent'>, target: { structure: string; occurrence: string }) {
     const rows = await client.query<{ selection_key: string; completed: boolean; position: string | null;
       version: string; order_revision: string | null; order_key: string | null; resume_eligible: boolean | null }>(`
       SELECT selection_key, completed, position, version::text AS version, order_revision, order_key, resume_eligible
-      FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
-        AND structure = $3 AND occurrence = $4 LIMIT 17`,
-    [principal.issuer, principal.subject, target.structure, target.occurrence]);
+      FROM structure.progress WHERE agent = $1
+        AND structure = $2 AND occurrence = $3 LIMIT 17`,
+    [owner.agent, target.structure, target.occurrence]);
     const cell = rows.rows.find(row => row.selection_key === '');
     return { cell, version: Number(cell?.version ?? 0),
       // A completed revision selection is the reader's own, whoever else holds.
       selected: rows.rows.some(row => row.selection_key !== '' && row.completed) };
   }
 
-  private command(principal: VerifiedPrincipal, plan: { structure: string; occurrence: string }, sourceHash: string,
+  private command(owner: Pick<CompletionSource, 'principal' | 'agent'>, plan: { structure: string; occurrence: string }, sourceHash: string,
     kind: 'h' | 'r', version: number, change: Pick<ProgressWrite, 'completed' | 'position' | 'order' | 'anchoring'>): ProgressWrite {
-    return { principal, structure: plan.structure, occurrence: plan.occurrence, ...change,
+    return { ...owner, structure: plan.structure, occurrence: plan.occurrence, ...change,
       expectedVersion: version,
       idempotencyKey: `${PROJECTION_KEY_PREFIX}${sourceHash}${digest(plan.structure, plan.occurrence)}${kind}${version + 1}` };
   }
 
-  private async hold(client: PoolClient, principal: VerifiedPrincipal, sourceHash: string, plan: CompletionPlan) {
-    const holders = await this.holders(client, principal, plan);
+  private async hold(client: PoolClient, owner: Pick<CompletionSource, 'principal' | 'agent'>, sourceHash: string, plan: CompletionPlan) {
+    const holders = await this.holders(client, owner, plan);
     if (holders.includes(sourceHash)) return null;
-    const { cell, version, selected } = await this.cells(client, principal, plan);
+    const { cell, version, selected } = await this.cells(client, owner, plan);
     // The reader's own completion already says it: nothing to hold or undo.
     if (selected || cell?.completed && !holders.length) return null;
-    const written = await this.progress.writeWithin(client, this.command(principal, plan, sourceHash, 'h', version, {
+    const written = await this.progress.writeWithin(client, this.command(owner, plan, sourceHash, 'h', version, {
       completed: true, position: cell?.position ?? null, order: plan.order, anchoring: plan.anchoring }));
     return written.operation;
   }
 
-  private async release(client: PoolClient, principal: VerifiedPrincipal, sourceHash: string,
+  private async release(client: PoolClient, owner: Pick<CompletionSource, 'principal' | 'agent'>, sourceHash: string,
     target: { structure: string; occurrence: string }, plan: CompletionPlan | null) {
-    const holders = await this.holders(client, principal, target);
+    const holders = await this.holders(client, owner, target);
     if (!holders.includes(sourceHash)) return null;
-    const { cell, version, selected } = await this.cells(client, principal, target);
+    const { cell, version, selected } = await this.cells(client, owner, target);
     if (!cell) return null;
     if (holders.length > 1 || selected) {
       // Another hold or the reader still stands on it: record the release and
       // keep the completion exactly as it is, order keys and anchors included.
       const order = cell.order_revision && cell.order_key
         ? { revision: cell.order_revision, key: cell.order_key, eligible: cell.resume_eligible ?? true } : undefined;
-      const written = await this.progress.writeWithin(client, this.command(principal, target, sourceHash, 'r', version, {
+      const written = await this.progress.writeWithin(client, this.command(owner, target, sourceHash, 'r', version, {
         completed: true, position: cell.position, order }));
       return written.operation;
     }
@@ -211,7 +212,7 @@ export class ProgressCompletionProjector {
     // placed leaves them to the background pass.
     const anchoring: MemberAnchoring | undefined = !plan?.anchoring || plan.anchoring.unknown ? { unknown: true }
       : { overflow: plan.anchoring.overflow, anchors: plan.anchoring.anchors.map(anchor => ({ ...anchor, order: null })) };
-    const written = await this.progress.writeWithin(client, this.command(principal, target, sourceHash, 'r', version, {
+    const written = await this.progress.writeWithin(client, this.command(owner, target, sourceHash, 'r', version, {
       completed: false, position: null, order: plan?.order, anchoring }));
     return written.operation;
   }

@@ -29,7 +29,8 @@ test('G1022: wiki prefix resolves explicit and Mine boundaries with exact batche
       { occurrence: revealed, segmentKey: 'a', orderKey: '00001' },
       { occurrence, segmentKey: 'z', orderKey: lateKey },
     ] });
-    const completions: ResumeCompletion[] = [{ issuer: 'https://qa.test', subject: 'reader', structure, revision,
+    const agent = id();
+  const completions: ResumeCompletion[] = [{ agent, structure, revision,
       occurrence, orderKey: `z\u0002${lateKey}` }];
     const deps = { readingPositions: {
       generation: async () => '1', privateSnapshot: async () => 'stable', required: async () => new Set(),
@@ -37,7 +38,7 @@ test('G1022: wiki prefix resolves explicit and Mine boundaries with exact batche
       completedPage: async () => ({ items: [occurrence], next: null }), finishedWorks: async () => new Set(),
     }, access: { canReadAsBaselineMember: async () => true },
       progress: readingResumeOwner(completions), environment: book.environment } as unknown as MainWorkDependencies;
-    const session = new WorkReadSession(deps, new Request('http://main.local/fixture'), { actingSubject: id() }, { dataEpoch: 'epoch', sequence: '1' });
+    const session = new WorkReadSession(deps, new Request('http://main.local/fixture'), { actingSubject: agent }, { dataEpoch: 'epoch', sequence: '1' });
     session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
     let calls = 0, returned = 0;
     session.query = async query => {

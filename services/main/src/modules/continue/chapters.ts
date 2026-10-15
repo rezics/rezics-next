@@ -1,4 +1,3 @@
-import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { CompositionCorrupt, CompositionUnavailable } from '../structure/graph.ts';
 import { nextChapter } from '../structure/reading-order.ts';
@@ -48,7 +47,7 @@ async function nextRecord(session: WorkReadSession, structure: string, progress?
   return { record: next.record, pageCount: next.page.placementCount, ordinal };
 }
 
-export async function continueChapters(session: WorkReadSession, principal: VerifiedPrincipal,
+export async function continueChapters(session: WorkReadSession, agent: string,
   works: readonly string[], mode: 'preview' | 'resume' = 'preview'): Promise<{ chapters: ReadonlyMap<string, Chapter>;
     progress: ReadonlyMap<string, WorkProgress>; structures: ReadonlyMap<string, string> }> {
   const status = session.deps.libraryStatus;
@@ -83,7 +82,7 @@ export async function continueChapters(session: WorkReadSession, principal: Veri
     byWork.set(work, entry);
   }
   const structures = new Map([...byWork].map(([work, item]) => [work, item.structure]));
-  const byStructure = await status.progress(principal, [...new Set([...byWork.values()].map(item => item.structure))]);
+  const byStructure = await status.progress(agent, [...new Set([...byWork.values()].map(item => item.structure))]);
   const progress = new Map([...byWork].flatMap(([work, item]) => {
     const saved = byStructure.get(item.structure);
     return saved ? [[work, saved] as const] : [];

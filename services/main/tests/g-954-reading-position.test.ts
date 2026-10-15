@@ -364,7 +364,7 @@ function fixture(inventory = chapters, leaves: string[] = []) {
       const revision = headFor(item.structure);
       if (!revision || seen.has(`${item.structure}\0${item.occurrence}`)) return;
       seen.add(`${item.structure}\0${item.occurrence}`);
-      completions.push({ issuer: 'https://qa.test', subject: 'reader', structure: item.structure, revision,
+      completions.push({ agent: reader, structure: item.structure, revision,
         occurrence: item.occurrence, orderKey: placeKey(item) });
     };
     for (const occurrence of completed) add(inventory.find(item => item.occurrence === occurrence));

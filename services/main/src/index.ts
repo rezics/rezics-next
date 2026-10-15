@@ -32,7 +32,7 @@ const contentPool = boundedPool({ connectionString: config.CONTENT_DATABASE_URL 
 // that is migrating, which the request bounds would cut short.
 if (process.env.NODE_ENV !== 'production') {
   const migration = new Pool({ connectionString: config.CONTENT_DATABASE_URL, max: 1 });
-  try { await migrateContent(migration); } finally { await migration.end(); }
+  try { await migrateContent(migration, undefined, { accessUrl: config.ACCESS_DATABASE_URL }); } finally { await migration.end(); }
 }
 const composed = await composeMain({
   config, fuseki, accessPool: pool, contentPool, relayPool, erasureRelayPool, ownerRelayPool,

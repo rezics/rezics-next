@@ -12,7 +12,7 @@ import type { SessionSelection } from '../src/modules/session/contract.ts';
 import { ConsumptionSessionStore, sessionCompletionSource } from '../src/modules/session/store.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
-const principal = (): VerifiedPrincipal => ({ issuer: 'https://progress-from-sessions.test', subject: randomUUID() });
+const principal = (): VerifiedPrincipal & { agent: string } => ({ agent: id(), issuer: 'https://progress-from-sessions.test', subject: randomUUID() });
 const order = (index: number) => `a\u0002${index.toString(36).padStart(4, '0')}`;
 
 let cluster: PostgresCluster | undefined;
@@ -56,9 +56,9 @@ function stores(world: ReturnType<typeof series>) {
   return { progress, library, sessions };
 }
 
-const resume = async (progress: StructureProgressStore, world: ReturnType<typeof series>, reader: VerifiedPrincipal,
+const resume = async (progress: StructureProgressStore, world: ReturnType<typeof series>, reader: VerifiedPrincipal & { agent: string },
   structure = world.structure, revision = world.revision) =>
-  (await progress.resumeCandidates(reader, structure, revision)).items.map(item => world.occurrences.indexOf(item.occurrence));
+  (await progress.resumeCandidates(reader.agent, structure, revision)).items.map(item => world.occurrences.indexOf(item.occurrence));
 
 /** The Session pins one occurrence, but names a Work that has no composition,
  * so only the occurrence itself can move the reader's record. */
@@ -69,15 +69,15 @@ function sessionOn(world: ReturnType<typeof series>, occurrence: string, work: s
 
 let keys = 0;
 const key = (label: string) => `${label}-${++keys}-${randomUUID()}`;
-const finish = (sessions: ConsumptionSessionStore, reader: VerifiedPrincipal, agent: string, world: ReturnType<typeof series>,
+const finish = (sessions: ConsumptionSessionStore, reader: VerifiedPrincipal & { agent: string }, agent: string, world: ReturnType<typeof series>,
   index: number, idempotencyKey = key('finish'), work = id()) =>
   sessions.write({ principal: reader, agent, target: world.occurrences[index]!, changes: { state: 'finished' },
     expectedVersion: 0, idempotencyKey }, async () => [sessionOn(world, world.occurrences[index]!, work)]);
 
-async function complete(progress: StructureProgressStore, world: ReturnType<typeof series>, reader: VerifiedPrincipal,
+async function complete(progress: StructureProgressStore, world: ReturnType<typeof series>, reader: VerifiedPrincipal & { agent: string },
   index: number, completed = true) {
-  const current = await progress.read(reader, world.structure, world.occurrences[index]!);
-  return progress.write({ principal: reader, structure: world.structure, occurrence: world.occurrences[index]!,
+  const current = await progress.read(reader.agent, world.structure, world.occurrences[index]!);
+  return progress.write({ principal: reader, agent: reader.agent, structure: world.structure, occurrence: world.occurrences[index]!,
     order: world.plan(index).order, anchoring: world.plan(index).anchoring, completed, position: null,
     expectedVersion: current.version, idempotencyKey: key('direct') });
 }
@@ -98,14 +98,14 @@ async function setSessionState(session: string, value: string) {
   finally { client.release(); }
 }
 
-async function reopen(reader: VerifiedPrincipal, agent: string, session: string) {
+async function reopen(reader: VerifiedPrincipal & { agent: string }, agent: string, session: string) {
   await setSessionState(session, 'active');
   await progressCompletion(pool)!.reconcile(sessionCompletionSource({ principal: reader, agent }, session));
 }
 
 test('a finished Session moves the resume position, and reopening it moves it back', async () => {
   const world = series(10), { progress, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   // Clearing first: the finish is the only thing that says chapter 3 was read.
   await complete(progress, world, reader, 3);
   await complete(progress, world, reader, 3, false);
@@ -121,15 +121,15 @@ test('a finished Session moves the resume position, and reopening it moves it ba
   await reopen(reader, agent, second.id);
   expect(await resume(progress, world, reader)).toEqual([]);
   // Reopening again, or reconciling a Session that never held, changes nothing.
-  const versions = await pool.query('SELECT sum(version) AS total FROM structure.progress WHERE principal_subject = $1', [reader.subject]);
+  const versions = await pool.query('SELECT sum(version) AS total FROM structure.progress WHERE agent = $1', [reader.agent]);
   await reopen(reader, agent, first.id);
-  expect((await pool.query('SELECT sum(version) AS total FROM structure.progress WHERE principal_subject = $1',
-    [reader.subject])).rows).toEqual(versions.rows);
+  expect((await pool.query('SELECT sum(version) AS total FROM structure.progress WHERE agent = $1',
+    [reader.agent])).rows).toEqual(versions.rows);
 });
 
 test('a Library read finishes the Work and moving it back undoes only that', async () => {
   const world = series(10), { progress, library } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   const read = await library.write({ agent, work: world.work, status: 'read', expectedVersion: 0, idempotencyKey: key('read'), principal: reader });
   expect(await resume(progress, world, reader)).toEqual([9]);
   const reading = await library.write({ agent, work: world.work, status: 'reading', expectedVersion: read.version,
@@ -148,7 +148,7 @@ test('a Library read finishes the Work and moving it back undoes only that', asy
 
 test('a direct completion recorded before or after a hold stays when the source lets go', async () => {
   const world = series(10), { progress, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   await complete(progress, world, reader, 2);
   const before = await finish(sessions, reader, agent, world, 2);
   expect(await resume(progress, world, reader)).toEqual([2]);
@@ -164,7 +164,7 @@ test('a direct completion recorded before or after a hold stays when the source 
   // A completion the reader made on one revision of the chapter also stands.
   const revision = 'urn:rezics:content:revision:' + randomUUID();
   const selected = await finish(sessions, reader, agent, world, 7);
-  await progress.write({ principal: reader, structure: world.structure, occurrence: world.occurrences[7]!,
+  await progress.write({ principal: reader, agent: reader.agent, structure: world.structure, occurrence: world.occurrences[7]!,
     selectedRevision: revision, order: world.plan(7).order, completed: true, position: null,
     expectedVersion: 0, idempotencyKey: key('revision') });
   await reopen(reader, agent, selected.id);
@@ -173,7 +173,7 @@ test('a direct completion recorded before or after a hold stays when the source 
 
 test('a Session and a Library read holding the same placement release it only when both have', async () => {
   const world = series(10), { progress, library, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   const session = await finish(sessions, reader, agent, world, 9, key('finish'), world.work);
   // The finish also marked the Work read, so the end is held twice.
   expect(await resume(progress, world, reader)).toEqual([9]);
@@ -187,9 +187,9 @@ test('a Session and a Library read holding the same placement release it only wh
 
 test('anchors on the enclosing series follow the hold and the release', async () => {
   const world = series(10, { seriesStructure: true }), { progress, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   const session = await finish(sessions, reader, agent, world, 4);
-  const anchor = async () => (await progress.resumeCandidates(reader, world.parent, world.parentRevision)).items.length;
+  const anchor = async () => (await progress.resumeCandidates(reader.agent, world.parent, world.parentRevision)).items.length;
   expect(await anchor()).toBe(1);
   await reopen(reader, agent, session.id);
   expect(await anchor()).toBe(0);
@@ -197,7 +197,7 @@ test('anchors on the enclosing series follow the hold and the release', async ()
 
 test('concurrent finishes and reopens settle on the committed state of the source', async () => {
   const world = series(10), { progress, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   const session = await finish(sessions, reader, agent, world, 4);
   const source = () => progressCompletion(pool)!.reconcile(sessionCompletionSource({ principal: reader, agent }, session.id));
   const setState = (value: string) => setSessionState(session.id, value);
@@ -218,11 +218,11 @@ test('concurrent finishes and reopens settle on the committed state of the sourc
 
 test('a replayed finish adds no second completion', async () => {
   const world = series(10), { progress, sessions } = stores(world);
-  const reader = principal(), agent = id();
+  const reader = principal(), agent = reader.agent;
   const idempotencyKey = key('replay');
   const first = await finish(sessions, reader, agent, world, 4, idempotencyKey, world.work);
   const read = () => pool.query(`SELECT occurrence, version::text AS version FROM structure.progress
-    WHERE principal_subject = $1 AND structure = $2 ORDER BY occurrence`, [reader.subject, world.structure]);
+    WHERE agent = $1 AND structure = $2 ORDER BY occurrence`, [reader.agent, world.structure]);
   const saved = (await read()).rows;
   const receipts = () => pool.query(`SELECT count(*)::int AS count FROM structure.progress_command
     WHERE principal_subject = $1`, [reader.subject]);
@@ -238,7 +238,7 @@ test('a replayed finish adds no second completion', async () => {
 
 test('a placement the reader cannot hold is not projected, and nothing is revealed', async () => {
   const world = series(10, { hidden: new Set([4]) }), { progress, library, sessions } = stores(world);
-  const reader = principal(), neighbour = principal(), agent = id();
+  const reader = principal(), neighbour = principal(), agent = reader.agent;
   const elsewhere = id();
   const foreign = await sessions.write({ principal: reader, agent, target: elsewhere, changes: { state: 'finished' },
     expectedVersion: 0, idempotencyKey: key('foreign') }, async () => [sessionOn(world, elsewhere, id())]);
@@ -246,15 +246,15 @@ test('a placement the reader cannot hold is not projected, and nothing is reveal
   const stranger = id();
   await library.write({ agent, work: stranger, status: 'read', expectedVersion: 0, idempotencyKey: key('stranger'), principal: reader });
   expect([foreign.state, unreadable.state]).toEqual(['finished', 'finished']);
-  expect((await pool.query('SELECT count(*)::int AS count FROM structure.progress WHERE principal_subject = $1',
-    [reader.subject])).rows[0].count).toBe(0);
+  expect((await pool.query('SELECT count(*)::int AS count FROM structure.progress WHERE agent = $1',
+    [reader.agent])).rows[0].count).toBe(0);
   expect(await resume(progress, world, reader)).toEqual([]);
   // The record belongs to its reader: another reader's finish never lands in it.
-  await finish(sessions, neighbour, id(), world, 2);
+  await finish(sessions, neighbour, neighbour.agent, world, 2);
   expect(await resume(progress, world, reader)).toEqual([]);
   expect(await resume(progress, world, neighbour)).toEqual([2]);
   // The ledger prefix is the owner's: a reader's own key cannot forge a hold.
-  await expect(progress.write({ principal: reader, structure: world.structure, occurrence: world.occurrences[0]!,
+  await expect(progress.write({ principal: reader, agent: reader.agent, structure: world.structure, occurrence: world.occurrences[0]!,
     completed: true, position: null, expectedVersion: 0, idempotencyKey: `projection:${'0'.repeat(48)}h1` }))
     .rejects.toBeInstanceOf(InvalidStructureProgress);
 });
@@ -262,13 +262,13 @@ test('a placement the reader cannot hold is not projected, and nothing is reveal
 test('the projection costs the same statements and graph reads in a 10- and a 1,000-chapter series', async () => {
   const measure = async (chapters: number) => {
     const world = series(chapters), { sessions, library } = stores(world);
-    const reader = principal(), agent = id();
+    const reader = principal(), agent = reader.agent;
     // A long history of the reader's own completions, mid-series, in the same range.
-    await pool.query(`INSERT INTO structure.progress (principal_issuer, principal_subject, structure, occurrence,
+    await pool.query(`INSERT INTO structure.progress (agent, structure, occurrence,
         selection_key, completed, version, order_revision, order_key, resume_eligible)
-      SELECT $1, $2, $3, 'https://rezics.com/id/' || gen_random_uuid(), '', true, 1, $4,
-        'a' || chr(2) || 'x' || lpad(to_hex(n), 6, '0'), true FROM generate_series(1, $5::int) AS n`,
-    [reader.issuer, reader.subject, world.structure, world.revision, chapters]);
+      SELECT $1, $2, 'https://rezics.com/id/' || gen_random_uuid(), '', true, 1, $3,
+        'a' || chr(2) || 'x' || lpad(to_hex(n), 6, '0'), true FROM generate_series(1, $4::int) AS n`,
+    [agent, world.structure, world.revision, chapters]);
     const statements: string[] = [];
     const query = pool.query.bind(pool), connect = pool.connect.bind(pool);
     const normal = (sql: unknown) => typeof sql === 'string' ? sql.replace(/\s+/g, ' ').trim() : String((sql as { text?: string })?.text);

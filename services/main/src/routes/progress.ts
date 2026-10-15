@@ -138,7 +138,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       response: { 200: t.Object({ structure: ref,
         items: t.Array(t.Object({ ...result.properties, completed: t.Literal(true) }), {
           maxItems: STRUCTURE_PROGRESS_COST.pageRows - 1,
-          description: 'This principal\'s completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.' }), ...pageFields,
+          description: 'This Person\'s completed states whose occurrence and selected revision remain readable. Readable tombstones are included; any completed selection marks its occurrence complete.' }), ...pageFields,
         consistency: t.Literal('live'), complete: t.Boolean(),
         cost: t.Object({ progressRows: t.Integer({ maximum: STRUCTURE_PROGRESS_COST.pageRows }) }) }),
       ...workReadProblems },
@@ -166,7 +166,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
               throw new InvalidStructureProgress('progress cursor is invalid');
             }
           }
-          const saved = await work.progress!.completedPage(session.principal!, structure, query.limit ?? 50, after);
+          const saved = await work.progress!.completedPage(query.actingSubject, structure, query.limit ?? 50, after);
           const items = await disclosedCompletedProgress(session, header, saved.items);
           const nextCursor = saved.next ? encodeReadCursor(binding, session.position, JSON.stringify(saved.next)) : null;
           return { structure, items, nextCursor, sourcePosition: session.position,
@@ -192,9 +192,9 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const structure = `https://rezics.com/id/${params.id}`;
         const occurrence = `https://rezics.com/id/${params.occurrence}`;
-        const visible = await visibleOccurrence(request, structure, occurrence,
+        await visibleOccurrence(request, structure, occurrence,
           query.actingSubject, query.selectedRevision ?? null);
-        const value = await work.progress.read(visible.principal, structure, occurrence,
+        const value = await work.progress.read(query.actingSubject, structure, occurrence,
           query.selectedRevision ?? null);
         return Response.json(value, { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return failure(error); }
@@ -219,7 +219,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         const occurrence = `https://rezics.com/id/${params.occurrence}`;
         const visible = await visibleOccurrence(request, structure, occurrence,
           body.actingSubject, body.selectedRevision ?? null, true);
-        const value = await work.progress.write({ principal: visible.principal, structure, occurrence,
+        const value = await work.progress.write({ principal: visible.principal, agent: body.actingSubject, structure, occurrence,
           library: { agent: body.actingSubject, work: visible.work },
           order: visible.order, anchoring: visible.anchoring,
           selectedRevision: body.selectedRevision ?? null, completed: body.completed,
@@ -236,11 +236,11 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
       try {
         const workId = `https://rezics.com/id/${params.id}`;
         await assertGraphAdmissionOpen(fuseki, work.environment.lineage);
-        const principal = await own(request, query.actingSubject);
+        await own(request, query.actingSubject);
         const basis = await workProgressBasis(work, request, workId, query.actingSubject);
         if (basis.parts) return Response.json({ work: workId, parts: true },
           { headers: { 'cache-control': 'private, no-store' } });
-        const row = await work.progress.read(principal, workId, workId);
+        const row = await work.progress.read(query.actingSubject, workId, workId);
         return Response.json({ ...standingBody(workId, row), parts: false },
           { headers: { 'cache-control': 'private, no-store' } });
       } catch (error) { return standingFailure(error); }
@@ -266,7 +266,7 @@ export function progressRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
         if (basis.parts) throw new WorkHasParts('Progress for this Work is kept on its parts');
         const canonical = basis.work;
         const encoded = encodeWorkStanding(body.standing);
-        const value = await work.progress.write({ principal, structure: workId, occurrence: workId,
+        const value = await work.progress.write({ principal, agent: body.actingSubject, structure: workId, occurrence: workId,
           library: { agent: body.actingSubject, work: canonical },
           completed: encoded.completed, position: encoded.position,
           expectedVersion: body.expectedVersion, idempotencyKey });

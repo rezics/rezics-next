@@ -27,7 +27,7 @@ export class FeedViewerStateReader {
       supplied ?? feedCompositions(session, works)]);
     const books = new Map([...compositions].filter(([work, value]) => works.includes(work) && value.header.profile === 'book-composition'));
     const structures = [...books.values()].map(book => book.header.structure);
-    const progress = await status.progress(reader.principal, structures);
+    const progress = await status.progress(reader.agent, structures);
     const revisions = [...new Set([...progress.values()].flatMap(row => row.selectedRevision ? [row.selectedRevision] : []))];
     const languages = books.size ? await session.query(`SELECT ?part ?work ?revision ?language WHERE {
       { VALUES (?work ?main) { ${[...books].map(([work,book]) => `(${iri(work)} ${iri(book.header.mainVersion)})`).join(' ')} }
@@ -86,7 +86,7 @@ export class FeedViewerStateReader {
         spoiler: { policy: 'hide-unread', hidden } });
     }
     const [shelvesNow, progressNow, allowed] = await Promise.all([status.batch(reader.agent, works),
-      status.progress(reader.principal, structures), frame ? true : canRead.call(session.deps.access, reader.principal, reader.agent)]);
+      status.progress(reader.agent, structures), frame ? true : canRead.call(session.deps.access, reader.principal, reader.agent)]);
     if (!allowed || JSON.stringify(shelvesNow) !== JSON.stringify(shelves)
       || JSON.stringify([...progressNow]) !== JSON.stringify([...progress])) throw new WorkReadMoved('Reader state changed');
     return result;

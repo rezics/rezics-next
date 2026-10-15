@@ -44,7 +44,7 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
   const header = await readCompositionHeader(deps.environment, meta.structure);
   if (!header || header.head !== meta.revision) throw new ReadingResumeUnavailable('Resume order changed');
   let candidates;
-  try { candidates = await deps.progress.resumeCandidates(principal, meta.structure, header.head, seriesAfter(after)); }
+  try { candidates = await deps.progress.resumeCandidates(session.options.actingSubject!, meta.structure, header.head, seriesAfter(after)); }
   catch (error) {
     if (error instanceof ProgressOrderUnavailable) throw new ReadingResumeUnavailable('Saved progress is being prepared for resume. Try again shortly.');
     throw error;
@@ -61,7 +61,7 @@ export async function chooserPosition(session: WorkReadSession, traversal: Readi
   const volumes = new Map<string, Promise<ReadonlySet<string>>>();
   const volumeDisclosed = (anchor: ReadingOccurrence) => {
     if (!volumes.has(anchor.structure)) volumes.set(anchor.structure, (async () => {
-      if (!await deps.progress!.anchorsCurrent(principal, { structure: anchor.structure, revision: anchor.revision },
+      if (!await deps.progress!.anchorsCurrent(session.options.actingSubject!, { structure: anchor.structure, revision: anchor.revision },
         { structure: meta.structure!, revision: header.head })) {
         throw new ReadingResumeUnavailable('Saved progress is being prepared for resume. Try again shortly.');
       }
@@ -108,7 +108,7 @@ async function unavailableIfUnanchored(session: WorkReadSession, header: { struc
   const { principal, deps } = session;
   // Stubs that only answer a series candidate keep the unstarted result.
   if (!principal || !deps.progress || typeof deps.progress.overflowMembers !== 'function') return;
-  const members = await deps.progress.overflowMembers(principal);
+  const members = await deps.progress.overflowMembers(session.options.actingSubject!);
   if (members.length > STRUCTURE_PROGRESS_COST.resumeCandidates) {
     throw new ReadingResumeUnavailable('Too many compositions hold this reader\'s progress to resolve resume');
   }
@@ -141,7 +141,7 @@ async function resumeMember(session: WorkReadSession, traversal: ReadingPosition
   if (!header || header.head !== child.revision) throw new ReadingResumeUnavailable('Resume order changed');
   let candidates;
   try {
-    candidates = await deps.progress.resumeCandidates(principal, child.structure, header.head, after && {
+    candidates = await deps.progress.resumeCandidates(session.options.actingSubject!, child.structure, header.head, after && {
       occurrence: after.occurrence, selectedRevision: after.selectedRevision,
     });
   } catch (error) {

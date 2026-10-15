@@ -95,11 +95,10 @@ test('a partless Work is marked on one device and read, undone and refused when 
     expect(await library.readingYear(person, a.principal, year)).toMatchObject({ books: 0, chapters: 0 });
     const chapter = `https://rezics.com/id/${randomUUID()}`;
     await stack.contentPool.query(`INSERT INTO structure.progress_command
-      (principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence, selection_key,
+      (agent,principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence, selection_key,
         result_version, result_completed, first_finish)
-      VALUES ($1,$2,$3,$4,$5,$6,'',1,true,true)`,
-    [a.principal.issuer, a.principal.subject, randomUUID(), 'a'.repeat(64),
-      `https://rezics.com/id/${randomUUID()}`, chapter]);
+      VALUES ($7,$1,$2,$3,$4,$5,$6,'',1,true,true)`, [a.principal.issuer, a.principal.subject, randomUUID(), 'a'.repeat(64),
+      `https://rezics.com/id/${randomUUID()}`, chapter, person]);
     expect(await library.readingYear(person, a.principal, year)).toMatchObject({ books: 0, chapters: 1 });
     expect(await json<{ status: string }>(await call('GET',
       `/v1/me/progress-summaries/${short(saved.work)}?actingSubject=${encodeURIComponent(person)}`)))

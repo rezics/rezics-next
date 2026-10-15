@@ -36,10 +36,10 @@ test('G414: yearly goal counts dated finishes and preserves idempotent, concurre
     for (const [occurrence, completedAt, first] of [[january, '2026-01-08', true],
       [january, '2026-02-08', false], [december, '2026-12-29', true]] as const) {
       await stack.contentPool.query(`INSERT INTO structure.progress_command
-        (principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence, selection_key,
+        (agent,principal_issuer, principal_subject, idempotency_key, request_digest, structure, occurrence, selection_key,
           result_version, result_completed, first_finish, created_at)
-        VALUES ($1,$2,$3,$4,$5,$6,'',1,true,$7,$8)`, [reader.principal.issuer, reader.principal.subject,
-        randomUUID(), 'a'.repeat(64), structure, occurrence, first, completedAt]);
+        VALUES ($9,$1,$2,$3,$4,$5,$6,'',1,true,$7,$8)`, [reader.principal.issuer, reader.principal.subject,
+        randomUUID(), 'a'.repeat(64), structure, occurrence, first, completedAt, agent]);
     }
     const stats = await status.readingYear(agent, reader.principal, 2026);
     expect(stats).toMatchObject({ year: 2026, books: 2, chapters: 2 });

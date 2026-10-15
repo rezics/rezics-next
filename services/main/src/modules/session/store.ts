@@ -226,7 +226,7 @@ export class ConsumptionSessionStore {
 /** A finished Session finishes what it names: each occurrence it pinned, and
  * the end of each Work it covers. */
 export function sessionCompletionSource(input: SessionOwner, id: string): CompletionSource {
-  return { principal: input.principal, source: `session:${id}`, demand: async client => {
+  return { principal: input.principal, agent: input.agent, source: `session:${id}`, demand: async client => {
     const found = await client.query<Row>(`SELECT state, attempt_order::text FROM reader.consumption_session
       WHERE principal_issuer = $1 AND principal_subject = $2 AND agent = $3 AND id = $4`,
     [input.principal.issuer, input.principal.subject, input.agent, id]);

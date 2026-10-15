@@ -65,8 +65,8 @@ export async function readShelfMetadata(content: Pool | PoolClient, access: Pool
     }
     const progress = (await content.query<{ last_read_at: string | null }>(`
       SELECT max(updated_at)::text AS last_read_at FROM structure.progress
-      WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = ANY($3::text[])`,
-    [principal.account_issuer, principal.account_subject, structures])).rows[0]!.last_read_at;
+      WHERE agent = $1 AND structure = ANY($2::text[])`,
+    [agent, structures])).rows[0]!.last_read_at;
     lastReadAt = progress;
     if (includeSessionHistory) {
       // Only the one-time backfill reads immutable locator history. State-only

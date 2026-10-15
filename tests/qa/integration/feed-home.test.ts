@@ -716,8 +716,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
     }
     const absentOccurrence = native();
     await stack.contentPool.query(`UPDATE structure.progress SET occurrence = $1
-      WHERE principal_issuer = $2 AND principal_subject = $3 AND structure = $4 AND occurrence = $5`,
-    [absentOccurrence, b.principal.issuer, b.principal.subject, composition.structure, distant]);
+      WHERE agent = $2 AND structure = $3 AND occurrence = $4`,
+    [absentOccurrence, reader, composition.structure, distant]);
     try {
       const unreadable = await json<Page>(await call('GET',
         `/v1/feed?scope=all&sort=best&language=en&${authQuery}`, undefined, b.token));
@@ -726,8 +726,8 @@ test('G282: follows and home feed use real receipts, relay progress, public read
           primaryAction: { kind: 'read-chapter' } });
     } finally {
       await stack.contentPool.query(`UPDATE structure.progress SET occurrence = $1
-        WHERE principal_issuer = $2 AND principal_subject = $3 AND structure = $4 AND occurrence = $5`,
-      [distant, b.principal.issuer, b.principal.subject, composition.structure, absentOccurrence]);
+        WHERE agent = $2 AND structure = $3 AND occurrence = $4`,
+      [distant, reader, composition.structure, absentOccurrence]);
     }
 
     // Hub cards expose exact public previews and declared compatibility, never

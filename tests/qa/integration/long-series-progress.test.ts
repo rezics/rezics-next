@@ -192,9 +192,9 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
 
     // Saved incomplete rows cannot turn a request bound into a series limit.
     await stack.contentPool.query(`INSERT INTO structure.progress
-      (principal_issuer,principal_subject,structure,occurrence,selection_key,completed,position,version)
-      SELECT $1,$2,$3,item,'',false,NULL,1 FROM unnest($4::text[]) AS item
-      ON CONFLICT DO NOTHING`, [editor.principal.issuer, editor.principal.subject, composition.structure, episodes]);
+      (agent,structure,occurrence,selection_key,completed,position,version)
+      SELECT $1,$2,item,'',false,NULL,1 FROM unnest($3::text[]) AS item
+      ON CONFLICT DO NOTHING`, [person, composition.structure, episodes]);
     const completedPath = `${path}/progress?${actorQuery}&limit=17`;
     let cursor: string | null = null, pages = 0, emptyContinuations = 0;
     const ticks: string[] = [];
@@ -235,7 +235,7 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     // update would intentionally invalidate the resume index as legacy state.
     for (const occurrence of episodes) {
       const prior = await store.read(editor.principal, composition.structure, occurrence);
-      await store.write({ principal: editor.principal, structure: composition.structure, occurrence,
+      await store.write({ principal: editor.principal, agent: person, structure: composition.structure, occurrence,
         completed: true, position: null, expectedVersion: prior.version,
         idempotencyKey: `complete-${short(occurrence)}`,
         order: await readProgressOrder(stack.env, header, occurrence) });
@@ -245,10 +245,9 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
       'Actual Rows': number; 'Actual Loops': number; 'Rows Removed by Filter'?: number; Plans?: PlanNode[] };
     const explained = await stack.contentPool.query<{ 'QUERY PLAN': Array<{ Plan: PlanNode }> }>(
       `EXPLAIN (ANALYZE, FORMAT JSON) SELECT occurrence, selection_key, completed, position, version::text
-        FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
-          AND order_revision=$4 AND completed AND resume_eligible AND order_key IS NOT NULL
-        ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT 17`,
-      [editor.principal.issuer, editor.principal.subject, composition.structure, header.head]);
+        FROM structure.progress WHERE agent = $1 AND structure=$2
+          AND order_revision=$3 AND completed AND resume_eligible AND order_key IS NOT NULL
+        ORDER BY order_key DESC, occurrence DESC, selection_key ASC LIMIT 17`, [person, composition.structure, header.head]);
     const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
     const plan = explained.rows[0]!['QUERY PLAN'][0]!.Plan;
     const scans = nodes(plan).filter(node => node['Relation Name'] === 'progress');
@@ -390,8 +389,8 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     const withheldRevision = `urn:rezics:content:revision:${randomUUID()}`;
     const withheldPosition = 'secret position on a withheld Content revision';
     await stack.contentPool.query(`INSERT INTO structure.progress
-      (principal_issuer,principal_subject,structure,occurrence,selection_key,completed,position,version)
-      VALUES ($1,$2,$3,$4,$5,true,$6,1)`, [editor.principal.issuer, editor.principal.subject,
+      (agent,structure,occurrence,selection_key,completed,position,version)
+      VALUES ($1,$2,$3,$4,true,$5,1)`, [person,
       composition.structure, episodes[999], withheldRevision, withheldPosition]);
     expect((await call(second, 'GET', `${path}/occurrences/${short(episodes[999]!)}/progress?${actorQuery}&selectedRevision=${encodeURIComponent(withheldRevision)}`)).status)
       .toBe(404);
@@ -414,38 +413,33 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     const projection = new ProgressOrderProjection(stack.contentPool, stack.env);
     const recover = async (head: string) => {
       for (let step = 0; step < 600; step++) {
-        const beforeVersion = BigInt(await store.readerVersion(editor.principal));
+        const beforeVersion = BigInt(await store.readerVersion(person));
         await projection.step();
-        const writes = BigInt(await store.readerVersion(editor.principal)) - beforeVersion;
+        const writes = BigInt(await store.readerVersion(person)) - beforeVersion;
         expect(writes >= 0n && writes <= 2n).toBe(true);
         const state = await stack.contentPool.query<{ ready: boolean; order_revision: string | null }>(
           `SELECT ready,order_revision FROM structure.progress_scope
-            WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-          [editor.principal.issuer, editor.principal.subject, composition.structure]);
+            WHERE agent = $1 AND structure=$2`, [person, composition.structure]);
         if (state.rows[0]?.ready && state.rows[0].order_revision === head) return;
       }
       throw new Error('Bounded progress order projection did not recover the current Structure');
     };
     const firstKey = (await stack.contentPool.query<{ occurrence: string; selection_key: string }>(
       `SELECT occurrence,selection_key FROM structure.progress
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3
+        WHERE agent = $1 AND structure=$2
           AND completed AND resume_eligible IS DISTINCT FROM false
-        ORDER BY occurrence,selection_key LIMIT 1`,
-      [editor.principal.issuer, editor.principal.subject, composition.structure])).rows[0]!;
-    const firstStepVersion = BigInt(await store.readerVersion(editor.principal));
+        ORDER BY occurrence,selection_key LIMIT 1`, [person, composition.structure])).rows[0]!;
+    const firstStepVersion = BigInt(await store.readerVersion(person));
     await projection.step();
-    const firstStepWrites = BigInt(await store.readerVersion(editor.principal)) - firstStepVersion;
+    const firstStepWrites = BigInt(await store.readerVersion(person)) - firstStepVersion;
     expect(firstStepWrites >= 0n && firstStepWrites <= 2n).toBe(true);
     // This write lands behind the projection cursor. A new invalidation must
     // restart recovery immediately, rather than certify a skipped legacy row.
     await stack.contentPool.query(`UPDATE structure.progress SET order_revision=NULL,order_key=NULL,resume_eligible=NULL
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=$5`,
-    [editor.principal.issuer, editor.principal.subject, composition.structure, firstKey.occurrence, firstKey.selection_key]);
+      WHERE agent = $1 AND structure=$2 AND occurrence=$3 AND selection_key=$4`, [person, composition.structure, firstKey.occurrence, firstKey.selection_key]);
     await recover(header.head);
     expect((await stack.contentPool.query<{ order_revision: string | null; order_key: string | null }>(
-      `SELECT order_revision,order_key FROM structure.progress WHERE principal_issuer=$1
-        AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=$5`,
-      [editor.principal.issuer, editor.principal.subject, composition.structure, firstKey.occurrence, firstKey.selection_key])).rows[0])
+      `SELECT order_revision,order_key FROM structure.progress WHERE agent = $1 AND structure=$2 AND occurrence=$3 AND selection_key=$4`, [person, composition.structure, firstKey.occurrence, firstKey.selection_key])).rows[0])
       .toMatchObject({ order_revision: header.head, order_key: expect.any(String) });
     const recovered = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`));
     expect(recovered.resolved).toBe(episodes[999]!);
@@ -470,13 +464,10 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
     // Recovery must derive eligibility again, even though the old index marked
     // the row false. Incomplete main rows also exercise the raw scan bound.
     await stack.contentPool.query(`UPDATE structure.progress SET completed=false
-      WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 AND occurrence=ANY($4::text[]) AND selection_key=''`,
-    [editor.principal.issuer, editor.principal.subject, composition.structure, episodes]);
+      WHERE agent = $1 AND structure=$2 AND occurrence=ANY($3::text[]) AND selection_key=''`, [person, composition.structure, episodes]);
     await json(await tick(special, true, 2));
     expect((await stack.contentPool.query<{ completed: boolean; resume_eligible: boolean }>(
-      `SELECT completed,resume_eligible FROM structure.progress WHERE principal_issuer=$1
-        AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=''`,
-      [editor.principal.issuer, editor.principal.subject, composition.structure, special])).rows[0])
+      `SELECT completed,resume_eligible FROM structure.progress WHERE agent = $1 AND structure=$2 AND occurrence=$3 AND selection_key=''`, [person, composition.structure, special])).rows[0])
       .toMatchObject({ completed: true, resume_eligible: false });
     expect((await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`))).resolved).toBe('start');
     const required = await json<Changed>(await call(first, 'POST', `${path}/changes`, {
@@ -484,9 +475,7 @@ test('a thousand grouped Episode occurrences resume with bounded disclosed progr
       operations: [{ op: 'update', occurrence: special, displayLabel: 'Required bonus episode', inclusion: 'required' }] }));
     await recover(required.revision);
     expect((await stack.contentPool.query<{ resume_eligible: boolean; order_revision: string }>(
-      `SELECT resume_eligible,order_revision FROM structure.progress WHERE principal_issuer=$1
-        AND principal_subject=$2 AND structure=$3 AND occurrence=$4 AND selection_key=''`,
-      [editor.principal.issuer, editor.principal.subject, composition.structure, special])).rows[0])
+      `SELECT resume_eligible,order_revision FROM structure.progress WHERE agent = $1 AND structure=$2 AND occurrence=$3 AND selection_key=''`, [person, composition.structure, special])).rows[0])
       .toMatchObject({ resume_eligible: true, order_revision: required.revision });
     const requiredResume = await json<Chooser>(await call(second, 'GET', `${chooser}?${actorQuery}&position=mine&limit=1`));
     expect(requiredResume.resolved).toBe(special);
@@ -616,8 +605,7 @@ test('a chapter inside a volume resumes and discloses across the series, and a d
     const chapterOrder = await readProgressOrder(stack.env, bookHeader, readerPosition);
     const anchor = await stack.contentPool.query<{ order_key: string; position: string | null; completed: boolean }>(
       `SELECT order_key, position, completed FROM structure.progress
-        WHERE principal_issuer = $1 AND principal_subject = $2 AND structure = $3 AND occurrence = $4`,
-      [editor.principal.issuer, editor.principal.subject, seriesComposition.structure, readerPosition]);
+        WHERE agent = $1 AND structure = $2 AND occurrence = $3`, [person, seriesComposition.structure, readerPosition]);
     expect(anchor.rows).toEqual([{ order_key: `${memberOrder.key}\u0001${chapterOrder.key}`, position: null, completed: true }]);
     const listed = async (signed: boolean, position?: string) => {
       const query = new URLSearchParams({ ...(signed ? { actingSubject: person } : {}), ...(position ? { position } : {}) });
@@ -741,10 +729,10 @@ test('series resume anchors earlier completions in the background and follows a 
     const projection = new ProgressOrderProjection(stack.contentPool, stack.env);
     const converge = async (accept: (response: Response) => Promise<boolean>) => {
       for (let step = 0; step < 80; step++) {
-        const before = BigInt(await progress.readerVersion(editor.principal));
+        const before = BigInt(await progress.readerVersion(person));
         await projection.step();
         // A step rewrites a fixed number of rows and never a volume's inventory.
-        expect(BigInt(await progress.readerVersion(editor.principal)) - before <= 4n).toBe(true);
+        expect(BigInt(await progress.readerVersion(person)) - before <= 4n).toBe(true);
         if (await accept(await mine())) return;
       }
       throw new Error('Bounded background preparation did not reach the series');
@@ -762,8 +750,7 @@ test('series resume anchors earlier completions in the background and follows a 
     await converge(resolvedAs(second));
     expect((await stack.contentPool.query<{ cursor: unknown; parent: string }>(
       `SELECT cursor,parent FROM structure.progress_anchor_scope
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3`,
-      [editor.principal.issuer, editor.principal.subject, book.structure])).rows)
+        WHERE agent = $1 AND structure=$2`, [person, book.structure])).rows)
       .toEqual([{ cursor: null, parent: seriesComposition.structure }]);
 
     // A series row naming a Content revision this chapter never selected is
@@ -775,13 +762,13 @@ test('series resume anchors earlier completions in the background and follows a 
     const volumeKey = (await readProgressOrder(stack.env, seriesHeader, attachedPart)).key;
     const withdrawn = `urn:rezics:content:revision:${randomUUID()}`;
     await stack.contentPool.query(`INSERT INTO structure.progress
-      (principal_issuer,principal_subject,structure,occurrence,selection_key,completed,position,version,order_revision,order_key,resume_eligible)
-      VALUES ($1,$2,$3,$4,$5,true,NULL,1,$6,$7,true)`, [editor.principal.issuer, editor.principal.subject,
+      (agent,structure,occurrence,selection_key,completed,position,version,order_revision,order_key,resume_eligible)
+      VALUES ($1,$2,$3,$4,true,NULL,1,$5,$6,true)`, [person,
       seriesComposition.structure, third, withdrawn, seriesHeader.head,
       `${volumeKey}\u0001${(await readProgressOrder(stack.env, bookHeader, third)).key}`]);
     expect((await json<Chooser>(await mine())).resolved).toBe(second);
-    await stack.contentPool.query(`DELETE FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2
-      AND structure=$3 AND selection_key=$4`, [editor.principal.issuer, editor.principal.subject,
+    await stack.contentPool.query(`DELETE FROM structure.progress WHERE agent = $1
+      AND structure=$2 AND selection_key=$3`, [person,
       seriesComposition.structure, withdrawn]);
 
     await json(await tick(third, true, 0));
@@ -805,8 +792,7 @@ test('series resume anchors earlier completions in the background and follows a 
     const omnibusMine = () => call('GET', `/v1/reading-positions/${short(omnibus.work)}?${actorQuery}&position=mine&limit=1`);
     const anchorPairs = async () => (await stack.contentPool.query<{ parent: string; cursor: unknown }>(
       `SELECT parent,cursor FROM structure.progress_anchor_scope
-        WHERE principal_issuer=$1 AND principal_subject=$2 AND structure=$3 ORDER BY parent`,
-    [editor.principal.issuer, editor.principal.subject, book.structure])).rows;
+        WHERE agent = $1 AND structure=$2 ORDER BY parent`, [person, book.structure])).rows;
     const convergeOmnibus = async (accept: (response: Response) => Promise<boolean>) => {
       for (let step = 0; step < 80; step++) {
         await projection.step();
@@ -832,8 +818,8 @@ test('series resume anchors earlier completions in the background and follows a 
       operations: [{ op: 'remove', occurrence: omnibusComposition.occurrences[0] }] }));
     await convergeOmnibus(resolvedAs('start'));
     expect(await anchorPairs()).toEqual([{ parent: seriesComposition.structure, cursor: null }]);
-    expect((await stack.contentPool.query(`SELECT 1 FROM structure.progress WHERE principal_issuer=$1 AND principal_subject=$2
-      AND structure=$3 AND completed`, [editor.principal.issuer, editor.principal.subject, omnibusComposition.structure])).rows).toEqual([]);
+    expect((await stack.contentPool.query(`SELECT 1 FROM structure.progress WHERE agent = $1
+      AND structure=$2 AND completed`, [person, omnibusComposition.structure])).rows).toEqual([]);
     expect((await json<Chooser>(await mine())).resolved).toBe(third);
   } finally { await stack.stop(); }
 }, 300_000);

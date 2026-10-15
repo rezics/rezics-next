@@ -56,8 +56,8 @@ async function fixture(target = 'https://schema.org/DigitalDocument') {
         canReadAsBaselineMember: async () => own,
         canReadWork: async () => { const result = readable; afterWork?.(); return result; },
       },
-      libraryStatus: { progress: async (reader: typeof principal, structures: string[]) => {
-        expect(reader).toEqual(principal);
+      libraryStatus: { progress: async (reader: string, structures: string[]) => {
+        expect(reader).toEqual(agent);
         expect(structures).toEqual([structure]);
         progressReads++;
         const result = new Map(saved ? [[structure, saved]] : []);
@@ -106,12 +106,12 @@ test.each(['https://schema.org/DigitalDocument', 'https://schema.org/Book'])(
     f.save(1, true);
     expect(await f.resume()).toMatchObject({ nextUnread: null, unreadCount: null });
     expect(f.publicationQueries).toEqual([]);
-    expect((await continueChapters(f.session, f.principal, [f.work])).chapters.size).toBe(0);
+    expect((await continueChapters(f.session, f.session.options.actingSubject!, [f.work])).chapters.size).toBe(0);
   });
 
 test('ranked Continue omits catalog placements and native resume still requires publication', async () => {
   const catalog = await fixture();
-  expect((await continueChapters(catalog.session, catalog.principal, [catalog.work])).chapters.size).toBe(0);
+  expect((await continueChapters(catalog.session, catalog.session.options.actingSubject!, [catalog.work])).chapters.size).toBe(0);
   expect(catalog.publicationQueries).toEqual([]);
   const native = await fixture(id());
   expect(await native.resume()).toMatchObject({ nextUnread: null, unreadCount: null });

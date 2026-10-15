@@ -132,7 +132,7 @@ test('file and reviewed batches share one checkout across owner reads and per-ro
       expect(await positions.privateSnapshot(principal, agent)).toBe('0');
       await positions.lookup([work]);
       await positions.required([work]);
-      await positions.completedPage(principal, [work]);
+      await positions.completedPage(agent, [work]);
       await positions.finishedWorks(agent, [work]);
       const revelation = { record: work, recordKind: 'entity' as const, continuityWork: work,
         occurrence: work, receipt: 'import-revelation' };

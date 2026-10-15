@@ -30,12 +30,13 @@ function fixture(selection: string, principal = false) {
   const book = bookResumeEnvironment({ work, structure, revision: head, generation,
     chapters: composition.occurrences.map((item, index) => ({ occurrence: item.occurrence,
       segmentKey: 'a', orderKey: String(index).padStart(4, '0') })) });
-  const completions: ResumeCompletion[] = [{ issuer: 'https://qa.test', subject: 'reader', structure, revision: head,
+  const agent = id();
+  const completions: ResumeCompletion[] = [{ agent, structure, revision: head,
     occurrence: chapter3, orderKey: 'a\u00020002' }];
   const deps = { readingPositions: store, access: { canReadAsBaselineMember: async () => own },
     progress: readingResumeOwner(completions), environment: book.environment } as unknown as MainWorkDependencies;
   const session = new WorkReadSession(deps, new Request(`http://main.local/v1/fixture?position=${encodeURIComponent(selection)}`),
-    principal ? { actingSubject: id() } : {}, { dataEpoch: 'epoch', sequence: '1' });
+    principal ? { actingSubject: agent } : {}, { dataEpoch: 'epoch', sequence: '1' });
   if (principal) session.principal = { issuer: 'https://qa.test', subject: 'reader', emailVerified: true };
   const boundary = new ReadingBoundary(session);
   const location = (resource: string): ReadingLocation | null => {

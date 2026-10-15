@@ -91,6 +91,10 @@ test('G-940: the Content applier executes 1000 after 999 and skips applied versi
       join(fixture, 'services/content/src/migrate.ts'),
     );
     copyFileSync(
+      join(root, 'services/content/src/progress-people.ts'),
+      join(fixture, 'services/content/src/progress-people.ts'),
+    );
+    copyFileSync(
       join(root, 'scripts/lib/migration-order.ts'),
       join(fixture, 'scripts/lib/migration-order.ts'),
     );

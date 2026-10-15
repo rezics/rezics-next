@@ -16,6 +16,30 @@ ordinary changes. A second host does not provide a live TDB2 replica. Stable
 UUIDs and IRIs do not encode a host or shard; a locator is neither an existence
 proof nor permission authority.
 
+## Private occurrence progress
+
+Occurrence progress belongs to the acting Person, as library status does. Two
+Account principals controlling the same Person share saved chapter/episode
+positions, completion, optimistic versions, Continue and shelf progress. Different
+Persons retain separate state, including when one principal controls both. Access
+must confirm current control of the acting Person before any private progress
+read or write; target and selected-revision disclosure still apply independently.
+Command receipts retain their authenticating principal for exact replay and event
+provenance; they do not grant access to another Person's state.
+
+The owner migration resolves legacy principal bindings through Access. A missing
+or ambiguous Person binding stops migration before saved state changes. Where
+principals of one Person recorded the same occurrence and selection, the newest
+state wins (including an incomplete state); equal timestamps use issuer/subject
+order. A merged version advances beyond every source version. All original
+command receipts remain, and derived order/anchor scopes rebuild before resume
+can report a prepared result. Development startup, fixture restore and release
+installation use the same Content migration runner.
+
+The [owner tests](../../services/main/tests/progress-person-owner.test.ts) cover
+migration and isolated Person state; the [API test](../../tests/qa/integration/progress-person.test.ts)
+covers shared principals and private disclosure.
+
 ## Movement procedure
 
 To move an owner, stage the target and retained objects, stop admission, drain

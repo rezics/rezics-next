@@ -31,7 +31,7 @@ export async function readContinue(session: WorkReadSession, principal: Verified
   const candidates = works.filter(work => !hidden.has(work)
     && (statuses.get(work)?.status === 'reading' || followedSet.has(work)));
   const targets = await readFollowTargets(publicSession, candidates, 'work');
-  const { chapters, progress } = await continueChapters(session, principal,
+  const { chapters, progress } = await continueChapters(session, agent,
     candidates.filter(work => targets.has(work)));
   const read = candidates.flatMap(work => {
     const target = targets.get(work);
@@ -87,13 +87,13 @@ export async function readWorkResume(session: WorkReadSession, principal: Verifi
     || !await session.deps.access.canReadWork(principal, agent, work)) {
     throw new WorkReadMissing('Work is unavailable');
   }
-  const { chapters, progress, structures } = await continueChapters(session, principal, [work], 'resume');
+  const { chapters, progress, structures } = await continueChapters(session, agent, [work], 'resume');
   const next = chapters.get(work), saved = progress.get(work);
-  // Fence the same principal's latest progress without re-reading the chapters.
+  // Fence the same Person's latest progress without re-reading the chapters.
   // A save racing this request must not produce an already-read resume link.
   const structure = structures.get(work);
   if (structure) {
-    const current = (await status.progress(principal, [structure])).get(structure);
+    const current = (await status.progress(agent, [structure])).get(structure);
     if (JSON.stringify(current) !== JSON.stringify(saved)) throw new WorkReadMoved('Work progress changed');
   }
   if (!await canRead.call(session.deps.access, principal, agent)

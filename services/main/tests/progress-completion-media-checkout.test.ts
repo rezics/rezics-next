@@ -77,7 +77,7 @@ test('completion demand and release planning hydrate avatars and disclosure on t
       lastOf: (_work, client) => read('lastOf', client),
     };
     const projector = new ProgressCompletionProjector({} as StructureProgressStore, pool, planner);
-    const source = { principal: { issuer: 'https://account.example', subject: 'reader' }, source: 'session:finished',
+    const source = { agent: target, principal: { issuer: 'https://account.example', subject: 'reader' }, source: 'session:finished',
       demand: async (client: PoolClient) => {
         demandClient = client;
         return { occurrences: [target], lastOfWorks: [target] };

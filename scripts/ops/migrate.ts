@@ -113,10 +113,10 @@ export async function migrateTracked(
   return withDatabaseLock(url, (_pool, client) => trackedIn(client, root, owner));
 }
 
-export async function migrateContentFromArtifact(url: string, root: string): Promise<string[]> {
+export async function migrateContentFromArtifact(url: string, root: string, accessUrl?: string): Promise<string[]> {
   return withDatabaseLock(url, async pool => {
     // Startup and release share online-build recovery and the Content lock.
-    const installed = new Set(await migrateContent(pool, join(root, migrationDirectories.content)));
+    const installed = new Set(await migrateContent(pool, join(root, migrationDirectories.content), { accessUrl }));
     return migrationRecords(root, 'content').filter(file => installed.has(file.version)).map(file => file.name);
   });
 }
@@ -192,7 +192,7 @@ export async function migrateOwners(
   return [
     ...(await migrateTracked(env.ACCESS_DATABASE_URL!, root, migrationDirectories.access)),
     ...(await migrateTracked(env.MAIN_RELAY_DATABASE_URL!, root, migrationDirectories.relay)),
-    ...(await migrateContentFromArtifact(env.CONTENT_DATABASE_URL!, root)),
+    ...(await migrateContentFromArtifact(env.CONTENT_DATABASE_URL!, root, env.ACCESS_DATABASE_URL)),
     ...(await migrateAccount(env, root)),
   ];
 }
