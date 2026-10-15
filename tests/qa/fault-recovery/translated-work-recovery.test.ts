@@ -35,18 +35,20 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
   const directory = join(root, '.temp', `translation-restore-${randomUUID()}`);
   mkdirSync(directory, { recursive: true, mode: 0o700 });
   let accessPool: Pool | undefined;
+  let contentPool: Pool | undefined;
   try {
     await rootCommand(['stack:up', '--profile', 'qa', '--run-id', liveRunId], 180_000);
     const liveApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: liveRunId }), 'apps.env'));
     const liveFuseki = new FusekiClient(liveApps.FUSEKI_URL!,
       liveApps.FUSEKI_MAINTENANCE_TOKEN!, liveApps.FUSEKI_COMMAND_TOKEN!);
     accessPool = new Pool({ connectionString: liveApps.ACCESS_DATABASE_URL, max: 4 });
+    contentPool = new Pool({ connectionString: liveApps.CONTENT_DATABASE_URL, max: 4 });
     const directorySql = join(root, 'services/main/migrations/access');
     for (const file of schemaFiles(root, 'access')) {
       await accessPool.query(await Bun.file(join(directorySql, file)).text());
     }
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
-    const liveEnv: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
+    const liveEnv: WorkActivationEnvironment = { fuseki: liveFuseki, lineage, referenceFencePool: contentPool,
       objectDirectory: join(directory, 'objects') };
     await initializeFreshGraph(liveFuseki, lineage);
     const principal = { issuer: 'https://qa-translation-recovery.test', subject: randomUUID() };
@@ -167,6 +169,7 @@ test('WORK02/OPS03: isolated graph loss restores exact translated Work links fro
       thirdPartyTarget.mainRevision)).toEqual(originalThirdParty);
   } finally {
     await accessPool?.end();
+    await contentPool?.end();
     await rootCommand(['stack:reset', '--profile', 'qa', '--run-id', liveRunId], 120_000);
     rmSync(directory, { recursive: true, force: true });
   }

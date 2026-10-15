@@ -1,7 +1,7 @@
 import type { AccountAssertionVerifier } from '../account/verify-assertion.ts';
 import { AdmissionDenied, AdmissionExpired, type AccessAdmissionRegistry } from '../access/admission.ts';
 import { assertGraphAdmissionOpen } from '../work/restore-lineage.ts';
-import { IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
+import { createWorkActivationEnvironment, IdempotencyConflict, type WorkActivationEnvironment } from '../work/activate.ts';
 import { PendingAdmittedWork } from '../work/create-admitted.ts';
 import { checkedTextContributionEditReceipt, ContributionEditUnavailable,
   editTextContributionDraft, readTextContributionEditReceipt,
@@ -18,6 +18,7 @@ export async function editAdmittedTextContribution(
   input: EditTextContributionInput & { idempotencyKey: string },
 ): Promise<TextContributionEditReceipt & { replayed: boolean }> {
   const digest = textContributionEditDigest(input);
+  createWorkActivationEnvironment(env);
   await assertGraphAdmissionOpen(env.fuseki, env.lineage);
   const principal = await account.verify(request, ['work:edit']);
   const registered = await access.register({ principal, actingSubject: input.actingSubject,

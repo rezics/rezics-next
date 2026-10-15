@@ -716,7 +716,7 @@ export async function createRetainedErasureRestoreScenario() {
     let lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
     await initializeFreshGraph(fuseki, lineage);
     const objects = new DirectoryObjects(join(state, 'objects'));
-    const workEnvironment: WorkActivationEnvironment = { fuseki, lineage,
+    const workEnvironment: WorkActivationEnvironment = { fuseki, lineage, referenceFencePool: contentPool,
       objectDirectory: objects.directory, workObjects: objects };
     await ensureModelGeneration(workEnvironment);
     const request = new Request('http://main.local/v1/works', {
@@ -884,6 +884,7 @@ export async function createRetainedErasureRestoreScenario() {
     const ownerOperationFor = (candidate: Awaited<ReturnType<typeof bindCandidate>>,
       cut: Awaited<ReturnType<typeof captureAndBackup>>) => {
       const environment: WorkActivationEnvironment = {
+        referenceFencePool: candidate.restored.content,
         fuseki: candidate.candidateGraph.fuseki,
         lineage: candidate.candidateGraph.lineage,
         objectDirectory: candidate.candidateObjects.directory,

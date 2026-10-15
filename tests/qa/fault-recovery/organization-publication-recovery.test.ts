@@ -49,6 +49,7 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
   mkdirSync(directory, { recursive: true });
   const started: string[] = [];
   let pool: Pool | undefined, relay: Pool | undefined, before: Pool | undefined, after: Pool | undefined;
+  let contentPool: Pool | undefined;
   try {
     for (const id of [liveId, restoreId]) { started.push(id); await stack('stack:up', id); }
     const liveDirectory = stackDirectory(root, { profile: 'qa', runId: liveId });
@@ -56,12 +57,14 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
     const compose = readEnv(join(liveDirectory, 'compose.env'));
     const restoredApps = readEnv(join(stackDirectory(root, { profile: 'qa', runId: restoreId }), 'apps.env'));
     pool = new Pool({ connectionString: apps.ACCESS_DATABASE_URL });
+    contentPool = new Pool({ connectionString: apps.CONTENT_DATABASE_URL });
     relay = new Pool({ connectionString: apps.ACCOUNT_RELAY_DATABASE_URL });
     await migrate(pool, 'access'); await migrate(relay, 'relay');
     const fuseki = new FusekiClient(apps.FUSEKI_URL!, apps.FUSEKI_MAINTENANCE_TOKEN!, apps.FUSEKI_COMMAND_TOKEN!);
     const restoredFuseki = new FusekiClient(restoredApps.FUSEKI_URL!, restoredApps.FUSEKI_MAINTENANCE_TOKEN!, restoredApps.FUSEKI_COMMAND_TOKEN!);
     const lineage = { dataEpoch: apps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
-    const env: WorkActivationEnvironment = { fuseki, lineage, objectDirectory: join(directory, 'objects') };
+    const env: WorkActivationEnvironment = { fuseki, lineage, referenceFencePool: contentPool,
+      objectDirectory: join(directory, 'objects') };
     await initializeFreshGraph(fuseki, lineage);
     const consumer = `org-moderation:${randomUUID()}`;
     await initializeRelayCheckpoint(relay, consumer, lineage.dataEpoch);
@@ -171,7 +174,7 @@ test('IAM23/OPS03: isolated Access cuts and graph replay preserve one exact loca
     expect(heldMarker.results?.bindings?.map(row => [row.graphSequence?.value, row.mainSequence?.value]))
       .toEqual([['9', '9']]);
   } finally {
-    await Promise.all([pool?.end(), relay?.end(), before?.end(), after?.end()]);
+    await Promise.all([pool?.end(), relay?.end(), before?.end(), after?.end(), contentPool?.end()]);
     for (const id of started.reverse()) await stack('stack:reset', id);
     rmSync(directory, { recursive: true, force: true });
   }

@@ -84,7 +84,7 @@ test('MODEL01/WORK05/OPS03/LIVE10: graph loss restores the admitted fixed releas
     await migrate(relayPool, 'relay');
     await migrateContent(contentPool);
     const lineage = { dataEpoch: liveApps.MAIN_DATA_EPOCH!, routingEpoch: '1' };
-    const live: WorkActivationEnvironment = { fuseki: liveFuseki, lineage,
+    const live: WorkActivationEnvironment = { fuseki: liveFuseki, lineage, referenceFencePool: contentPool,
       objectDirectory: join(directory, 'objects') };
     await initializeFreshGraph(liveFuseki, lineage);
     const consumer = `work05-restore:${randomUUID()}`;

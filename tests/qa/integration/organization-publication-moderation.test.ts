@@ -38,6 +38,7 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
   const databases = await cloneQaOwnerDatabases(Bun.env.REZICS_QA_RUN_ID, ['account', 'access'], 'owner');
   const pool = new Pool({ connectionString: databases.urls.access });
   const accountPool = new Pool({ connectionString: databases.urls.account });
+  const contentPool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   const account = await ratingAccount({ ...Bun.env, ACCOUNT_DATABASE_URL: databases.urls.account } as Record<string, string>, moderationScopes);
   const costs = { calls: 0, rows: 0, writes: 0, graphCalls: 0, graphBytes: 0, graphWrites: 0 };
   let observe: ((sql: string) => void) | undefined;
@@ -65,7 +66,7 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
     };
     return typeof value === 'function' ? value.bind(client) : value;
   } });
-  const env: WorkActivationEnvironment = { fuseki, objectDirectory: join(directory, 'objects'),
+  const env: WorkActivationEnvironment = { fuseki, referenceFencePool: contentPool, objectDirectory: join(directory, 'objects'),
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! } };
   const access = new AccessAdmissionRegistry(pool);
   const owner = new AccessOrganizationModeration(measured);
@@ -334,7 +335,7 @@ test('IAM23/IAM24: exact organization publication moderation and suspension affe
     await accountPool.query('DELETE FROM session WHERE "userId" = $1', [account.a.id]);
     costs.writes = 0; await must(await moderate(flightKey), 401); expect(costs.writes).toBe(0);
   } finally {
-    await account.close(); await Promise.all([pool.end(), accountPool.end()]);
+    await account.close(); await Promise.all([pool.end(), accountPool.end(), contentPool.end()]);
     await databases.close(); rmSync(directory, { recursive: true, force: true });
   }
 }, 180_000);

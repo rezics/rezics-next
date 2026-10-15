@@ -13,7 +13,8 @@ import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.t
 import { AccessAdmissionRegistry } from '../../../services/main/src/modules/access/admission.ts';
 import { AccountAssertionVerifier } from '../../../services/main/src/modules/account/verify-assertion.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
-import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { createWorkActivationEnvironment, type WorkActivationEnvironment }
+  from '../../../services/main/src/modules/work/activate.ts';
 
 async function freePort(): Promise<number> {
   return new Promise((resolvePort, reject) => {
@@ -39,6 +40,7 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   mkdirSync(state, { recursive: true, mode: 0o700 });
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
+  const referenceFencePool = new Pool({ connectionString: Bun.env.CONTENT_DATABASE_URL });
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
   const operators = new Set<string>();
@@ -95,10 +97,10 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   const token = await tokenFor(user, 'openid agent:create');
   const wrongScopeToken = await tokenFor(user, 'openid work:create');
   const fuseki = new FusekiClient(Bun.env.FUSEKI_URL);
-  const env: WorkActivationEnvironment = { fuseki,
+  const env: WorkActivationEnvironment = createWorkActivationEnvironment({ fuseki, referenceFencePool,
     lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH,
       routingEpoch: Bun.env.MAIN_ROUTING_EPOCH },
-    objectDirectory: join(state, 'objects') };
+    objectDirectory: join(state, 'objects') });
   const verifier = new AccountAssertionVerifier({ issuer: `${base}/api/auth`,
     audience: Bun.env.ACCOUNT_MAIN_RESOURCE, jwksUrl: `${base}/api/auth/jwks`,
     introspectUrl: `${base}/api/auth/oauth2/introspect`,
@@ -117,7 +119,7 @@ export async function agentProvisionHarness(scopes: readonly string[] = ['agent:
   return { accountPool, accessPool, accountApp, auth, base, user, token, client, verifierClient, redirectUri,
     wrongScopeToken, fuseki, env, verifier, main, call,
     close: async () => { await accountApp.stop();
-      await Promise.all([accountPool.end(), accessPool.end()]);
+      await Promise.all([accountPool.end(), accessPool.end(), referenceFencePool.end()]);
       rmSync(state, { recursive: true, force: true }); },
   };
 }

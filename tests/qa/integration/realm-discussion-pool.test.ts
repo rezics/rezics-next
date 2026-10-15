@@ -105,6 +105,7 @@ test('one guarded Access connection projects and reads mandatory-review Realm di
       `urn:rezics:access-receipt:${'b'.repeat(64)}`,
     ]);
     const env: WorkActivationEnvironment = {
+      referenceFencePool: contentPool,
       fuseki: new FusekiClient(Bun.env.FUSEKI_URL!),
       lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
       objectDirectory: join(state, 'objects'),
