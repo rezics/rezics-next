@@ -653,12 +653,15 @@ async function qualifyAuthenticatedSourceSteps(continuation: boolean): Promise<v
       actingSubject: actor, confirmedTitle: 'Source title', titleLanguage: 'en' };
     expect((await call('POST', adoptionPath, readToken, adoptionBody)).status).toBe(401);
     expect((await call('POST', adoptionPath, sourceAdoptToken, adoptionBody)).status).toBe(401);
+    // Current creation authority is checked before disclosing proposal conflicts.
     expect((await call('POST', adoptionPath, fullToken,
-      { ...adoptionBody, confirmedTitle: 'Different title' })).status).toBe(409);
+      { ...adoptionBody, confirmedTitle: 'Different title' })).status).toBe(403);
     expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(403);
     expect((await contentPool.query('SELECT id FROM source.native_work_binding WHERE principal_id = $1',
       [principalId])).rowCount).toBe(0);
     await authority('work:create:root', 'work.create');
+    expect((await call('POST', adoptionPath, fullToken,
+      { ...adoptionBody, confirmedTitle: 'Different title' })).status).toBe(409);
     failNextBinding = true;
     expect((await call('POST', adoptionPath, fullToken, adoptionBody)).status).toBe(503);
     expect(failNextBinding).toBe(false);

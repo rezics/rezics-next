@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { PoolClient } from 'pg';
+import { accessClient } from '../access/topology-control.ts';
 import type { Json } from '../editorial-review/contract.ts';
 import type { MergeDependencies } from '../identity-merge/runtime.ts';
 import { personMergeEffect } from '../identity-merge/person-effect.ts';
@@ -11,7 +12,7 @@ type Row = Record<string,Json>;
 interface Snapshot { source: Row; survivor: Row | null; sourceSlot: Row | null }
 const owner = 'review';
 export function reviewMergeHandler({ accessPool,graph }: MergeDependencies): MergeHandler<MergeDependencies> {
-  const inventory = async (work: string,after: string | null,limit: number) => (await accessPool.query<{ id: string }>(`
+  const inventory = async (work: string,after: string | null,limit: number) => (await (accessClient(accessPool) ?? accessPool).query<{ id: string }>(`
     SELECT id::text FROM access.reader_review WHERE work=$1 AND NOT deleted
       AND ($2::uuid IS NULL OR id>$2::uuid) ORDER BY id LIMIT $3`,[work,after,limit])).rows;
   const read = async (client: PoolClient,task: MergeTask,id: string): Promise<Snapshot | null> => {
@@ -72,12 +73,13 @@ export function reviewMergeHandler({ accessPool,graph }: MergeDependencies): Mer
     cost: { page: MERGE_COST.page,callsPerItem: 24,bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) { const rows = await inventory(plan.source.resource,null,33); return { owner,count: Math.min(rows.length,32),complete: rows.length<=32 }; },
     async plan(task,after,limit) {
-      const rows = await inventory(task.plan.source.resource,after,limit+1), kept = rows.slice(0,limit), client = await accessPool.connect();
+      const rows = await inventory(task.plan.source.resource,after,limit+1), kept = rows.slice(0,limit),
+        borrowed = accessClient(accessPool), client = borrowed ?? await accessPool.connect();
       try {
         const items = [];
         for (const row of kept) { const before = await read(client,task,row.id); if (!before) throw new MergeConflict('Review disappeared'); items.push({ key: row.id,expectedHead: mergeDigest(before),before: before as unknown as Json }); }
         return { items,next: rows.length > limit ? kept.at(-1)!.id : null };
-      } finally { client.release(); }
+      } finally { if (!borrowed) client.release(); }
     },apply: (task,item,key) => deliver(task,item,key),compensate: (task,item,key) => deliver(task,item,key,item) };
 }
 export const mergeHandlerModule = { owner,create: reviewMergeHandler };

@@ -436,6 +436,10 @@ async function scopedResourceDecision(client: PoolClient, graph: Pick<FusekiClie
   facts: ScopedReadFacts, privatePreview = false): Promise<boolean> {
   const { principalId, gateOpen, hasPolicy } = facts;
   if (gateOpen === false || !principalId) return false;
+  // A batched explicit permit is sufficient without probing alternate graph
+  // baselines for every member. Installed policy still evaluates its witness.
+  if (gateOpen && !hasPolicy && facts.authority?.subject
+    && facts.authority.represented && facts.authority.granted) return true;
   if (!privatePreview && platformAdministratorAction(action, scope)
     && !hasPolicy
     && await platformAdministratorProof(client, principalId, actingSubject)
@@ -1155,17 +1159,22 @@ export class AccessAdmissionRegistry {
    * Cost matches one registration's bounded authority reads, with no owner IO. */
   async assertAuthority(request: Omit<AdmissionRequest, 'editorialPermit' | 'idempotencyKey' | 'requestDigest'>,
     publicationWork?: string | null): Promise<void> {
-    const client = await this.pool.connect();
-    try {
-      await client.query('BEGIN');
-      const probe = { ...request,idempotencyKey: `authority:${Bun.randomUUIDv7()}`,requestDigest: '0'.repeat(64) };
-      await withCommandOwnerAuthority(client,probe,this.baselineGraph,
-        () => this.registerRequest(probe,client,true),publicationWork);
-    } catch (error) {
-      if (!(error instanceof AuthorityChecked)) throw error;
-    } finally {
-      await rollback(client); client.release();
-    }
+    const borrowed = accessClient(this.pool);
+    return withAccessClient(this.pool, async client => {
+      await client.query(borrowed ? 'SAVEPOINT authority_probe' : 'BEGIN');
+      try {
+        const probe = { ...request,idempotencyKey: `authority:${Bun.randomUUIDv7()}`,requestDigest: '0'.repeat(64) };
+        await withCommandOwnerAuthority(client,probe,this.baselineGraph,
+          () => this.registerRequest(probe,client,true),publicationWork);
+      } catch (error) {
+        if (!(error instanceof AuthorityChecked)) throw error;
+      } finally {
+        if (borrowed) {
+          await client.query('ROLLBACK TO SAVEPOINT authority_probe');
+          await client.query('RELEASE SAVEPOINT authority_probe');
+        } else await rollback(client);
+      }
+    }, borrowed);
   }
 
   /** Commit an Access-owned SQL effect under the ordinary, live admission

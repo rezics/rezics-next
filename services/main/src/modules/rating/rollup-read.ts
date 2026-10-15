@@ -1,5 +1,5 @@
 import { DATASET, GRAPHS, iri } from '../work/activate.ts';
-import { WorkReadLimit, WorkReadMissing, WorkReadMoved, type WorkReadSession } from '../work/read-session.ts';
+import { WorkReadLimit, WorkReadMissing, WorkReadMoved, WorkReadUnavailable, type WorkReadSession } from '../work/read-session.ts';
 import { resolveTargets, resolveVisibleTargets, TARGET_RESOLVE_COST, TargetNotBound, TargetUnavailable } from '../target/resolve.ts';
 import { MAX_TARGET_TYPES, type ResolvedTarget } from '../target/contract.ts';
 import { dimensionOf, type FrameDimension } from '../projection/dimension.ts';
@@ -164,11 +164,15 @@ export async function queryRatingRollup(read: RollupReader, store: TargetRatingI
   };
   const verdict = await classifyMembers(read, input.targets, context.targetGrain, policy);
   const readable = input.targets.filter(target => verdict.get(target) === null);
-  return read(session => {
-    session.observeDependency(`rating-rollup-admission:${JSON.stringify([input.context, input.targets])}`, verdict,
-      () => classifyMembers(read, input.targets, context.targetGrain, policy));
-    return assemble(session, store, input, context, verdict, readable);
-  });
+  const result = await read(session => assemble(session, store, input, context, verdict, readable));
+  // Admission closes in its own bounded member sessions. Nesting the complete
+  // inventory under assembly's fixed budget charges every visibility window to
+  // one session, even though assembly touches only the selected aggregate rows.
+  const current = await classifyMembers(read, input.targets, context.targetGrain, policy);
+  if (input.targets.some(target => current.get(target) !== verdict.get(target))) {
+    throw new WorkReadUnavailable('Rating member admission changed');
+  }
+  return result;
 }
 
 /** One Access snapshot and two graph probes over the readable members. */

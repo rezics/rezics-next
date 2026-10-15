@@ -193,6 +193,7 @@ test('a roll-up costs the owners a fixed snapshot plus a bounded cost per member
     expect(result.members.every(member => member.status === 'available')).toBe(true);
     costs.set(size, { graph, access });
   }
+  console.info('Rollup owner costs by member count:', Object.fromEntries(costs));
   // Members are paid for by the shared target resolver: linear in their number, within its declared per-member bound.
   const declared = ROLLUP_COST.perMember;
   for (const [small, large] of [[1, 64], [64, 130], [130, 200]] as const) {
