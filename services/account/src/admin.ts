@@ -5,7 +5,7 @@ import { accountFailure, accountJson, AccountProblem, accountSession, literalUni
 import { decodeCursor, encodeCursor, pageQuery } from './pagination.ts';
 import { operatorPermissions, operatorRole, requireOperator, rolePermits, writeAudit,
   type OperatorRole } from './operators.ts';
-import { readMethods, requireSecondFactor } from './methods.ts';
+import { readMethods, requireSecondFactor, secondFactorUntil } from './methods.ts';
 import { readSecurityActivity, readSessions } from './security-activity.ts';
 import { readConnectedApps } from './connected-apps.ts';
 import { accountResponses, activityView, commandView, connectedAppView,
@@ -141,11 +141,7 @@ export async function exportDirectory(pool: Pool, secret: string, actorId: strin
 
 /** Until when the session's recent sign-in or re-authentication admits writes. */
 async function stepUpUntil(pool: Pool, sessionId: string) {
-  const result = await pool.query<{ until: Date | null }>(`SELECT greatest(s."createdAt", p.verified_at) + interval '5 minutes' AS until
-    FROM "session" s LEFT JOIN rezics_account_step_up p ON p.session_id = s.id WHERE s.id = $1
-      AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = s."userId")`, [sessionId]);
-  const until = result.rows[0]?.until;
-  return until && until.getTime() > Date.now() ? until.toISOString() : null;
+  return (await secondFactorUntil(pool, sessionId))?.toISOString() ?? null;
 }
 
 const noteRow = (row: { id: string; authorId: string; body: string; createdAt: Date; authorName: string | null; authorEmail: string | null }) =>
@@ -181,8 +177,8 @@ export function adminApi(auth: AccountAuth, pool: Pool) {
       finally { running.delete(jobId); }
     })());
   };
-  // Display preferences are private to the operator and reversible: any
-  // current operator may change their own without re-authenticating.
+  // Display preferences are private to the operator; the common current-factor
+  // policy applies to their reads and reversible changes too.
   const preferenceActor = async (request: Request) => {
     const session = await accountSession(auth, request);
     if (!await operatorRole(pool, session.user.id)) throw new AccountProblem('forbidden', 403);

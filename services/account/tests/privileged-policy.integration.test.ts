@@ -15,16 +15,20 @@ test('operator reads and provider mutations require a fresh current second facto
       grant_types: ['authorization_code'], redirect_uris: ['https://app.example.test/callback'], scope: 'openid',
     }, owner.cookie, { 'x-account-reason': 'Explicit operator change' });
     expect((await f.request('/api/account/admin/users', undefined, owner.cookie)).status).toBe(403);
+    expect(await (await f.request('/api/account/admin/me', undefined, owner.cookie)).json())
+      .toMatchObject({ stepUpUntil: null });
     expect((await create()).status).toBe(403);
     const secret = await enrollSecondFactor(f, owner);
     expect((await f.request('/api/account/admin/users', undefined, owner.cookie)).status).toBe(200);
-    expect((await create()).status).toBe(200);
+    expect((await create()).status).toBe(201);
     await f.pool.query('DELETE FROM rezics_account_step_up WHERE session_id IN (SELECT id FROM "session" WHERE "userId" = $1)', [owner.id]);
+    expect(await (await f.request('/api/account/admin/me', undefined, owner.cookie)).json())
+      .toMatchObject({ stepUpUntil: null });
     expect((await create()).status).toBe(403);
     expect((await f.request('/api/account/reauthenticate', { password: owner.password }, owner.cookie)).status).toBe(403);
     expect((await f.request('/api/account/reauthenticate', { password: owner.password,
       totpCode: await createOTP(secret).totp() }, owner.cookie)).status).toBe(200);
-    expect((await create()).status).toBe(200);
+    expect((await create()).status).toBe(201);
   } finally { await f.close(); }
 }, 60_000);
 

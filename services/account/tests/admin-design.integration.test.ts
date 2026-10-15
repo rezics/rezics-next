@@ -26,8 +26,11 @@ const json = async <T>(response: Response | Promise<Response>) => {
 const act = (f: Fixture, userId: string, body: Record<string, unknown>, cookie: string) =>
   json<{ requestId: string }>(f.request(`/api/account/admin/users/${userId}/actions`, { commandId: randomUUID(), ...body }, cookie));
 /** Moves a sign-in outside the five-minute step-up window. */
-const age = (f: Fixture, person: Person) => f.pool.query(`UPDATE "session" SET "createdAt" = now() - interval '1 hour'
-  WHERE "userId" = $1`, [person.id]);
+const age = async (f: Fixture, person: Person) => {
+  await f.pool.query(`UPDATE "session" SET "createdAt" = now() - interval '1 hour' WHERE "userId" = $1`, [person.id]);
+  await f.pool.query(`UPDATE rezics_account_step_up SET verified_at = now() - interval '1 hour'
+    WHERE session_id IN (SELECT id FROM "session" WHERE "userId" = $1)`, [person.id]);
+};
 const fail = (f: Fixture, person: Person, times: number) => Promise.all(Array.from({ length: times }, () =>
   f.request('/api/auth/sign-in/email', { email: person.email, password: 'not the password at all' })));
 const event = (f: Fixture, userId: string, action: string, ago: string, detail: object = {}) => f.pool.query(`INSERT INTO
@@ -289,8 +292,10 @@ test('G356 admin bulk: an undo window before the first item, and stopping what i
     expect(waiting).toMatchObject({ pending: 2, finishedAt: null });
     expect(Date.parse(waiting.startsAt)).toBeGreaterThan(Date.now() + 10_000);
     expect((await cancel(jobId, first.cookie)).status).toBe(403);
-    // Stopping only withholds changes, so it needs no fresh sign-in.
+    // Cancellation is an operator action and requires the current factor too.
     await age(f, admin);
+    expect((await cancel(jobId)).status).toBe(403);
+    await enrollSecondFactor(f, admin);
     expect(await json<object>(cancel(jobId))).toEqual({ cancelled: 2 });
     const undone = await job(jobId);
     expect(undone).toMatchObject({ pending: 0, cancelled: 2, succeeded: 0 });
@@ -302,7 +307,6 @@ test('G356 admin bulk: an undo window before the first item, and stopping what i
     expect(audit.items[0]).toMatchObject({ targetId: jobId, after: { cancelled: 2 } });
 
     // An owner may stop another operator's job; after its window a job runs.
-    await json(f.request('/api/account/reauthenticate', { password: admin.password }, admin.cookie));
     const started = await json<{ jobId: string }>(bulk({ undoSeconds: 1 }));
     expect((await cancel(started.jobId, owner.cookie)).status).toBe(200);
     const late = await json<{ jobId: string }>(bulk({ undoSeconds: 1, commandId: randomUUID(), reason: 'Second wave' }));

@@ -86,6 +86,8 @@ The proof is session-bound and identifies the current factor. Bootstrap assigns
 responsibility but grants no exception: the first owner enrolls an authenticator
 through ordinary Account settings, then reauthenticates before administration.
 Local development preparation enrolls and proves its disposable operator fixture.
+Own-role discovery stays available to guide enrollment; its step-up deadline
+comes from the same current-factor proof that authorizes administration.
 
 Replacing or disabling a verified TOTP requires that same fresh proof of the
 authenticator being replaced. The existing independent Account recovery path

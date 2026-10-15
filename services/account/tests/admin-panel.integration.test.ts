@@ -23,8 +23,11 @@ const json = async <T>(response: Response | Promise<Response>) => {
 const act = (f: Fixture, userId: string, body: Record<string, unknown>, cookie: string) =>
   f.request(`/api/account/admin/users/${userId}/actions`, { commandId: randomUUID(), ...body }, cookie);
 /** Moves the operator's sign-in outside the five-minute step-up window. */
-const age = (f: Fixture, person: Person) => f.pool.query(`UPDATE "session" SET "createdAt" = now() - interval '1 hour'
-  WHERE "userId" = $1`, [person.id]);
+const age = async (f: Fixture, person: Person) => {
+  await f.pool.query(`UPDATE "session" SET "createdAt" = now() - interval '1 hour' WHERE "userId" = $1`, [person.id]);
+  await f.pool.query(`UPDATE rezics_account_step_up SET verified_at = now() - interval '1 hour'
+    WHERE session_id IN (SELECT id FROM "session" WHERE "userId" = $1)`, [person.id]);
+};
 async function settle(f: Fixture, jobId: string, cookie: string) {
   for (let attempt = 0; attempt < 200; attempt++) {
     const job = await json<Job>(f.request(`/api/account/admin/bulk-actions/${jobId}`, undefined, cookie));
@@ -171,7 +174,7 @@ test('G262 admin panel: sanctions need a reason code, message the user, and read
     await age(f, owner);
     expect(await json<object>(f.request('/api/account/admin/me', undefined, owner.cookie))).toMatchObject({ stepUpUntil: null });
     expect((await act(f, member.id, { action: 'revoke-sessions', reasonCode: 'support', reason: 'Asked to sign out' }, owner.cookie)).status).toBe(403);
-    await json(f.request('/api/account/reauthenticate', { password: owner.password }, owner.cookie));
+    await enrollSecondFactor(f, owner);
     expect((await act(f, member.id, { action: 'revoke-sessions', reasonCode: 'support', reason: 'Asked to sign out' }, owner.cookie)).status).toBe(200);
   } finally { await f.close(); }
 }, 90_000);

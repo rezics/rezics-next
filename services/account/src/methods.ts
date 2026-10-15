@@ -24,15 +24,19 @@ export async function requireStepUp(pool: Pool | PoolClient, session: { session:
 
 /** Privileged use and replacement prove the currently enrolled authenticator,
  * even on a newly created or remembered-device session. */
-export async function requireSecondFactor(pool: Pool | PoolClient, sessionId: string) {
-  const current = await pool.query(`SELECT 1 FROM "session" s
+export async function secondFactorUntil(pool: Pool | PoolClient, sessionId: string): Promise<Date | null> {
+  const current = await pool.query<{ until: Date }>(`SELECT p.verified_at + interval '5 minutes' AS until FROM "session" s
     JOIN "user" u ON u.id = s."userId" AND u."twoFactorEnabled"
     JOIN "twoFactor" f ON f."userId" = u.id AND f.verified
     JOIN rezics_account_step_up p ON p.session_id = s.id AND p.totp_factor_id = f.id
     WHERE s.id = $1 AND s."expiresAt" > clock_timestamp()
       AND s.rezics_generation = (SELECT session_generation FROM rezics_account_security WHERE user_id = u.id)
       AND p.verified_at > clock_timestamp() - interval '5 minutes'`, [sessionId]);
-  if (!current.rowCount) throw new AccountProblem('step_up_required', 403);
+  return current.rows[0]?.until ?? null;
+}
+
+export async function requireSecondFactor(pool: Pool | PoolClient, sessionId: string) {
+  if (!await secondFactorUntil(pool, sessionId)) throw new AccountProblem('step_up_required', 403);
 }
 
 /** Raw signed-in TOTP and reauthentication prove the same factor, so they

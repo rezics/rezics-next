@@ -273,8 +273,8 @@ export async function runBulkItem(auth: AccountAuth, pool: Pool, jobId: string):
 
 /** Cancels what a job has not done yet: inside its undo window that is every
  * item, later the rest of the list (items already done stay done). Its actor
- * or an owner may stop it; stopping never needs a fresh sign-in, since it
- * only withholds changes. Waits for the item in flight to commit. */
+ * or an owner may stop it with a current second-factor proof. Waits for the
+ * item in flight to commit. */
 export async function cancelBulkJob(auth: AccountAuth, pool: Pool, request: Request, jobId: string) {
   const session = await accountSession(auth, request, true);
   const role = await operatorRole(pool, session.user.id);
