@@ -34,6 +34,8 @@ export interface AuthoredContentDraftInput extends AuthoredBodyInput {
   actingSubject: string;
   idempotencyKey: string;
   publicDomain?: { assessmentId: string; source: PublicDomainTextSource };
+  /** Internal source-adoption custody; ordinary authored draft requests cannot assert it. */
+  privateImport?: import('../../../../content/src/core.ts').PrivateImportSource;
 }
 
 export function contentDraftReceiptIri(admissionId: string): string {
@@ -254,6 +256,7 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     || !/^urn:rezics:variant:[0-9a-f-]{36}$/i.test(input.variant.id)
     || (input.expectedHead !== null
       && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(input.expectedHead))
+    || (input.privateImport && (input.publicDomain || input.targetProfile === 'catalog-description'))
     || (input.publicDomain !== undefined && (input.targetProfile === 'catalog-description'
       || !/^[0-9a-f-]{36}$/i.test(input.publicDomain.assessmentId)
       || !validPublicDomainSource(input.publicDomain.source)))) {
@@ -267,11 +270,11 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
     expectedHead: input.expectedHead,
     model: input.targetProfile === 'catalog-description' ? 'catalog-description-v1'
       : notes !== undefined ? POST_CONTENT_MODEL : 'content-shape-v1',
-    sourceRevision: null,
+    sourceRevision: input.privateImport?.sourceObservation ?? null,
     provenance: {}, serializedJson };
   const publicDomain = input.publicDomain;
   const digest = contentDraftIntentDigest(command, input.actingSubject,
-    publicDomain ? { rightsAssessmentId: publicDomain.assessmentId, source: publicDomain.source } : undefined);
+    publicDomain ? { rightsAssessmentId: publicDomain.assessmentId, source: publicDomain.source } : input.privateImport);
   const target = await resolveContentTarget(env, input.resourceId);
   const principal = await account.verify(request, [target.zone ? 'zone:edit' : 'work:edit']);
   if (target.readOnly) throw new ContentDraftDenied('Home variants require the owning document identity');
@@ -286,7 +289,10 @@ export async function saveAdmittedContentDraft(env: WorkActivationEnvironment,
   const registered = await access.register(target.zone
     ? withZonePageContentTarget(registration, target.zone) : registration);
   command.operationId = `content-draft:${registered.id}`;
-  command.provenance = publicDomain ? { kind: 'admitted-public-domain-v1',
+  command.provenance = input.privateImport ? { kind: 'admitted-private-import-v1',
+    transcriber: input.actingSubject, rightsBasis: 'unknown', ...input.privateImport,
+    admissionId: registered.id, authorityEpoch: registered.authorityEpoch,
+    scope, requestDigest: digest, expectedHead: input.expectedHead } : publicDomain ? { kind: 'admitted-public-domain-v1',
     transcriber: input.actingSubject, rightsBasis: 'public-domain',
     rightsAssessmentId: publicDomain.assessmentId, source: publicDomain.source,
     admissionId: registered.id, authorityEpoch: registered.authorityEpoch,

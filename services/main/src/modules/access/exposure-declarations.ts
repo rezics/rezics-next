@@ -25,6 +25,7 @@ import { openApiOperations as owner22 } from '../../routes/content-private-searc
 import { openApiOperations as owner23 } from '../../routes/content.ts';
 import { openApiOperations as contentAdoptionOperations } from '../../routes/content-adoption.ts';
 import { openApiOperations as authoredPostOperations } from '../../routes/authored-posts.ts';
+import { openApiOperations as recipeCollectionOperations } from '../../routes/recipe-collections.ts';
 import { openApiOperations as owner24 } from '../../routes/contexts.ts';
 import { openApiOperations as owner25 } from '../../routes/continue.ts';
 import { openApiOperations as owner26 } from '../../routes/contributions.ts';
@@ -164,6 +165,7 @@ export const exposureDeclarations: readonly ExposureDeclarations[] = [
   owner23,
   contentAdoptionOperations,
   authoredPostOperations,
+  recipeCollectionOperations,
   owner24,
   owner25,
   owner26,

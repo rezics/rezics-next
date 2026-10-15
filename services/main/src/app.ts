@@ -67,6 +67,7 @@ import { graphLayoutRoutes } from './routes/graph-layouts.ts';
 import { graphQueryRoutes } from './routes/graph-queries.ts';
 import { recommendationRoutes } from './routes/recommendations.ts';
 import { recipeRoutes } from './routes/recipes.ts';
+import { recipeCollectionRoutes } from './routes/recipe-collections.ts';
 import { ratingRoutes } from './routes/ratings.ts';
 import { realmReplyRoutes } from './routes/realm-replies.ts';
 import { memberReplyRoutes } from './routes/member-replies.ts';
@@ -295,6 +296,7 @@ function extraRoutes6(fuseki: FusekiClient, work: SearchRouteDependencies) {
     .use(catalogueImportRoutes(work))
     .use(judgmentRoutes(work))
     .use(proposalRoutes(work))
+    .use(recipeCollectionRoutes(work))
     .use(recipeRoutes(fuseki, work));
 }
 

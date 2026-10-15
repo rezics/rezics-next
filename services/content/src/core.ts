@@ -90,6 +90,12 @@ export interface AdmittedPublicDomainProvenance {
   requestDigest: string;
   expectedHead: string | null;
 }
+export interface PrivateImportSource { sourceObservation: string; sourceDigest: string }
+export interface AdmittedPrivateImportProvenance extends PrivateImportSource {
+  kind: 'admitted-private-import-v1'; transcriber: string; rightsBasis: 'unknown';
+  admissionId: string; authorityEpoch: string; scope: string; requestDigest: string;
+  expectedHead: string | null;
+}
 export interface SaveDraftResult {
   outcome: 'succeeded' | 'stale_head' | 'cancelled';
   revisionId: string | null;
@@ -204,7 +210,12 @@ function stable(value: unknown): string {
 /** The Access request and later rights audit bind the same exact Content bytes. */
 export function contentDraftIntentDigest(command: Pick<SaveDraftCommand,
   'variant' | 'expectedHead' | 'model' | 'sourceRevision' | 'serializedJson'>,
-author: string, publicDomain?: { rightsAssessmentId: string; source: PublicDomainTextSource }): string {
+author: string, publicDomain?: { rightsAssessmentId: string; source: PublicDomainTextSource } | PrivateImportSource): string {
+  if (publicDomain && 'sourceObservation' in publicDomain) return hash(stable({
+    family: 'content-draft-private-import-v1', variant: command.variant, expectedHead: command.expectedHead,
+    model: command.model, sourceRevision: command.sourceRevision,
+    byteDigest: hash(Buffer.from(command.serializedJson, 'utf8')), transcriber: author,
+    rightsBasis: 'unknown', ...publicDomain }));
   if (publicDomain) return hash(stable({ family: 'content-draft-public-domain-v1', variant: command.variant,
     expectedHead: command.expectedHead, model: command.model,
     sourceRevision: command.sourceRevision, byteDigest: hash(Buffer.from(command.serializedJson, 'utf8')),
@@ -675,6 +686,20 @@ export class ContentCore {
     checkId(command.model, 'model', 200);
     if (command.sourceRevision !== null) checkId(command.sourceRevision, 'source revision');
     validateProvenance(command.provenance);
+    if (command.provenance.kind === 'admitted-private-import-v1') {
+      const proof = command.provenance as unknown as AdmittedPrivateImportProvenance;
+      if (!['content-shape-v1', POST_CONTENT_MODEL].includes(command.model)
+        || !/^[0-9a-f-]{36}$/i.test(proof.admissionId) || !/^(0|[1-9][0-9]*)$/.test(proof.authorityEpoch)
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(proof.transcriber)
+        || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/i.test(proof.sourceObservation)
+        || !/^[0-9a-f]{64}$/.test(proof.sourceDigest) || proof.rightsBasis !== 'unknown'
+        || command.sourceRevision !== proof.sourceObservation
+        || proof.scope !== `content:draft:${command.variant.resourceId}` || proof.expectedHead !== command.expectedHead
+        || proof.requestDigest !== contentDraftIntentDigest(command, proof.transcriber,
+          { sourceObservation: proof.sourceObservation, sourceDigest: proof.sourceDigest })) {
+        throw new ContentConflict('private import proof does not bind the exact draft and source');
+      }
+    }
     if (command.provenance.kind === 'admitted-original-contribution-v1') {
       const proof = command.provenance as unknown as AdmittedAuthorProvenance;
       if (!/^[0-9a-f-]{36}$/i.test(proof.admissionId)
@@ -754,7 +779,8 @@ export class ContentCore {
     }
     const digest = command.provenance.kind === 'admitted-original-contribution-v1'
       || command.provenance.kind === 'admitted-public-domain-v1'
-      ? (command.provenance as unknown as AdmittedAuthorProvenance | AdmittedPublicDomainProvenance).requestDigest
+      || command.provenance.kind === 'admitted-private-import-v1'
+      ? (command.provenance as unknown as AdmittedAuthorProvenance | AdmittedPublicDomainProvenance | AdmittedPrivateImportProvenance).requestDigest
       : hash(stable({ action: 'draft.save', variant: command.variant,
       expectedHead: command.expectedHead, model: command.model,
       sourceRevision: command.sourceRevision, provenance: command.provenance, byteDigest }));
@@ -882,6 +908,9 @@ export class ContentCore {
       await client.query('SELECT id FROM content.revision WHERE id = $1 FOR UPDATE', [revisionId]);
       const reference = await readReference(client, revisionId);
       if (!reference || reference.byteDigest !== expectedDigest) throw new ContentUnavailable('exact revision unavailable or digest differs');
+      if (reference.provenance.kind === 'admitted-private-import-v1') {
+        throw new ContentConflict('private imported text requires a rights assessment before publication');
+      }
       if (old.rowCount) {
         return { operationId, reference, status: old.rows[0].status, pinActive: old.rows[0].pin_active, replayed: true };
       }

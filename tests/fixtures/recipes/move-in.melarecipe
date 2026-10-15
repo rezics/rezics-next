@@ -1,0 +1,14 @@
+{
+  "id": "original-tricky-mela",
+  "title": "奶奶的豆汤 — soupe",
+  "ingredients": "1–2 cups beans\n½ cup crème\n2 tomatoes\n200 克 牛奶\nsalt to taste\n7up soda\n  1 1/2 cups 小麦粉  ",
+  "instructions": "Mix gently.\n炖煮至软。\nServe with crème.",
+  "notes": "PRIVATE: Grandma's note — 少许盐。",
+  "text": "A family collection fixture.",
+  "categories": ["Family", "汤"],
+  "rating": 4.5,
+  "link": "https://example.org/recipes/beans",
+  "images": ["iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aJ1sAAAAASUVORK5CYII="],
+  "yield": "four bowls",
+  "future_field": { "keep": "原文" }
+}

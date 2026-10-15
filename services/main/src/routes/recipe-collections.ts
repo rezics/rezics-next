@@ -1,0 +1,80 @@
+import { Elysia, t } from 'elysia';
+import type { MainWorkDependencies } from './dependencies.ts';
+import { problem, commandError } from './problems.ts';
+import { problemResult } from '../api-contract.ts';
+import { cancelRecipeFileBody, readRecipeFileBytes, RecipeFileInvalid, RecipeFileTooLarge }
+  from '../modules/recipe/file-intake.ts';
+import { readRecipeCollection, normalizeCollectionRecipe, RECIPE_COLLECTION_LIMITS,
+  type RecipeCollectionFormat } from '../modules/recipe/collection-file.ts';
+import { importCollectionRecipe, collectionRecipeConflict } from '../modules/recipe/collection-import.ts';
+import { ReaderImportUnavailable } from '../modules/library-import/reader-import.ts';
+import { RecipeNotImportable } from '../modules/recipe/importer.ts';
+import { PendingActivation } from '../modules/work/activate.ts';
+
+export const openApiOperations = {
+  '/v1/recipes/file-imports': { post: { exposure: 'public', rateLimitFamily: 'upload', bearer: true, idempotencyKey: true } },
+} as const;
+
+export function recipeCollectionRoutes(deps: MainWorkDependencies) {
+  return new Elysia().post('/v1/recipes/file-imports', {
+    query: t.Object({ actingSubject: t.String({ pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$' }),
+      format: t.Union([t.Literal('paprikarecipes'), t.Literal('melarecipes'), t.Literal('melarecipe')]),
+      after: t.Optional(t.Integer({ minimum: 0, maximum: RECIPE_COLLECTION_LIMITS.recipes })),
+      limit: t.Optional(t.Integer({ minimum: 1, maximum: RECIPE_COLLECTION_LIMITS.page })),
+    }, { additionalProperties: false }), parse: 'none',
+    detail: { description: 'Import a private Paprika or Mela collection. Re-submit the same file with next as after to continue. Each recipe reports native fields, source-only fields and losses. Re-importing unchanged recipes replays; changed source identities conflict without overwriting edits.',
+      requestBody: { required: true, content: { 'application/octet-stream': { schema: { type: 'string', format: 'binary' } },
+        'application/zip': { schema: { type: 'string', format: 'binary' } },
+        'application/json': { schema: { type: 'object' } } } } },
+    response: { 200: t.Any(), ...Object.fromEntries([400,401,403,409,413,422,429,500,503].map(status => [status, problemResult(status)])) },
+  }, async ({ request, query }: { request: Request; query: { actingSubject: string; format: RecipeCollectionFormat;
+    after?: number; limit?: number } }) => {
+    try {
+      if (!/^[A-Za-z0-9:_./-]{1,128}$/.test(request.headers.get('idempotency-key') ?? '')) {
+        return problem(400, 'invalid_idempotency_key', 'A valid Idempotency-Key is required');
+      }
+      const principal = await deps.account.verify(request, ['work:read', 'work:create', 'work:edit', 'library:write']);
+      if (!await deps.access.canReadAsBaselineMember?.(principal, query.actingSubject)) {
+        return problem(403, 'recipe_import_denied', 'Recipe imports are private to your own Person');
+      }
+      const principalId = await deps.access.activePrincipalId(principal);
+      if (!principalId) return problem(403, 'recipe_import_denied', 'Recipe import principal is inactive');
+      if (!deps.sourceIntake || !deps.libraryImport || !deps.contentAuthoring) {
+        return problem(503, 'recipe_import_unavailable', 'Recipe import owners are unavailable');
+      }
+      const bytes = await readRecipeFileBytes(request, RECIPE_COLLECTION_LIMITS.bytes);
+      const entries = readRecipeCollection(bytes, query.format);
+      const after = query.after ?? 0, limit = query.limit ?? RECIPE_COLLECTION_LIMITS.page;
+      if (after > entries.length) return problem(400, 'invalid_recipe_cursor', 'Recipe offset is outside this collection');
+      const items: unknown[] = [];
+      for (let index = after; index < Math.min(entries.length, after + limit); index++) {
+        const entry = entries[index]!;
+        try {
+          const recipe = normalizeCollectionRecipe(entry, query.format);
+          const outcome = await importCollectionRecipe(deps, request, query.actingSubject, principalId, recipe);
+          if (!outcome) {
+            return Response.json({ items, total: entries.length, next: index, pending: true },
+              { headers: { 'cache-control': 'private, no-store' } });
+          }
+          items.push({ index, name: entry.name, ...outcome });
+        } catch (error) {
+          if (error instanceof RecipeFileInvalid || error instanceof RecipeNotImportable || collectionRecipeConflict(error)) {
+            items.push({ index, name: entry.name, status: 'failed',
+              reason: collectionRecipeConflict(error) ? 'source-changed' : 'invalid-or-unsupported-recipe',
+              detail: error instanceof Error ? error.message : 'Recipe was refused',
+              ...(error instanceof RecipeNotImportable ? { importability: error.importability } : {}) });
+          } else throw error;
+        }
+      }
+      const next = after + items.length;
+      return Response.json({ items, total: entries.length, next: next < entries.length ? next : null, pending: false },
+        { headers: { 'cache-control': 'private, no-store' } });
+    } catch (error) {
+      if (error instanceof RecipeFileTooLarge) return problem(413, 'recipe_not_importable', error.message);
+      if (error instanceof RecipeFileInvalid) return problem(422, 'invalid_recipe_file', error.message);
+      if (error instanceof ReaderImportUnavailable) return problem(503, 'recipe_import_unavailable', error.message);
+      if (error instanceof PendingActivation) return problem(503, 'recipe_import_pending', error.message);
+      return commandError(error);
+    } finally { cancelRecipeFileBody(request); }
+  });
+}

@@ -13,6 +13,7 @@ import { CommandRejected } from '../../infrastructure/fuseki.ts';
 /** Native Post custody uses the same admitted creator/maintainer proof as placed Posts. */
 export async function authorPost(deps: MainWorkDependencies, request: Request, input: {
   title: { value: string; language: string }; language: string; document: DocumentSnapshot; actingSubject: string;
+  privateImport?: import('../../../../content/src/core.ts').PrivateImportSource;
 }, key: string) {
   if (!deps.contentAuthoring) throw new PendingActivation('Content authoring is unavailable');
   const body = authoredDocumentBody({ document: input.document }, 262_144);
@@ -71,8 +72,10 @@ export async function authorPost(deps: MainWorkDependencies, request: Request, i
     resourceId: post, variant: { id: variantId, resourceId: post,
       language: { kind: 'tag', tag: input.language, originalTag: input.language }, direction: 'ltr' },
     expectedHead: null, document: body.document, actingSubject: input.actingSubject,
+    ...(input.privateImport ? { privateImport: input.privateImport } : {}),
     idempotencyKey: `authored-post-draft:${admission.id}`,
   });
+  if (!saved.revisionId) throw new PendingActivation('Post Content is not settled');
   return { post, variantId, revisionId: saved.revisionId, byteDigest: saved.byteDigest,
     author: input.actingSubject, replayed: admission.replayed && saved.replayed };
 }

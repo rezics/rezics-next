@@ -93,13 +93,13 @@ function inspect(value: unknown, root: boolean, context: string | undefined,
 }
 
 /** Read the raw request body with a hard byte ceiling before parsing or retaining it. */
-export async function readRecipeFileBytes(request: Request): Promise<Uint8Array> {
+export async function readRecipeFileBytes(request: Request, maximum = MAX_RECIPE_FILE_BYTES): Promise<Uint8Array> {
   const declared = request.headers.get('content-length');
   if (declared !== null) {
     if (!/^(?:0|[1-9][0-9]*)$/.test(declared) || !Number.isSafeInteger(Number(declared))) {
       invalid('Recipe file content length is invalid');
     }
-    if (Number(declared) > MAX_RECIPE_FILE_BYTES) throw new RecipeFileTooLarge(Number(declared));
+    if (Number(declared) > maximum) throw new RecipeFileTooLarge(Number(declared), maximum);
   }
   if (!request.body) return new Uint8Array();
   const reader = request.body.getReader();
@@ -109,9 +109,9 @@ export async function readRecipeFileBytes(request: Request): Promise<Uint8Array>
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
-      if (value.byteLength > MAX_RECIPE_FILE_BYTES - length) {
+      if (value.byteLength > maximum - length) {
         void reader.cancel().catch(() => undefined);
-        throw new RecipeFileTooLarge(length + value.byteLength);
+        throw new RecipeFileTooLarge(length + value.byteLength, maximum);
       }
       chunks.push(value);
       length += value.byteLength;
