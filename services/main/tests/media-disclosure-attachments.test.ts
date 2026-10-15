@@ -250,7 +250,13 @@ test('exact Use disclosure has identical summary probes and bytes at 1, 16, 64 a
   await isolated(async f => {
     let count = 1, baseline: ReturnType<typeof f.cost> | undefined;
     for (const size of [1, 16, 64, 256]) {
-      while (count < size) { await f.attach(); count++; }
+      // These Uses only populate the index under test; admit them in one
+      // owner transaction rather than paying one receipt transaction per row.
+      const target = iri(randomUUID());
+      f.entries.set(target, { public: true });
+      await f.store.createPublicationUses(randomUUID(), owner, target,
+        Array.from({ length: size - count }, () => ({ ...basis, use: randomUUID() })));
+      count = size;
       f.reset();
       const disclosed = await f.read(iri(ownUse));
       expect(disclosed).toEqual(['visible']);
@@ -271,7 +277,13 @@ test('exact Use database work does not grow with unrelated Uses', async () => {
     let count = 1;
     const samples: number[] = [];
     for (const size of [256, 1024]) {
-      while (count < size) { await f.attach(); count++; }
+      // These Uses only populate the index under test; admit them in one
+      // owner transaction rather than paying one receipt transaction per row.
+      const target = iri(randomUUID());
+      f.entries.set(target, { public: true });
+      await f.store.createPublicationUses(randomUUID(), owner, target,
+        Array.from({ length: size - count }, () => ({ ...basis, use: randomUUID() })));
+      count = size;
       await f.pool.query('ANALYZE media.use');
       const plan = await f.visibilityPlan(iri(ownUse));
       const useScans = planNodes(plan).filter(node => node['Relation Name'] === 'use'
