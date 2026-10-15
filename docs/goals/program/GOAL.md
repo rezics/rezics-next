@@ -82,8 +82,9 @@ Call a model for decisions and use programs for mechanical waiting, checks and
 landing. Workers still commit and follow the [worker protocol](../worker.md);
 automating those commits is a desired harness change, not current procedure.
 Keep a fix session only while its context is small and recent; otherwise restart
-from the brief, findings and changed files. Context and compaction defaults live
-in [launch](../../../scripts/goal/launch.ts), rather than a second table here.
+from the brief, findings and changed files. Read
+[Goal settings](../../../.agents/skills/goal-management/references/settings.md)
+when configuring context and compaction.
 
 Caps bound wrongly scoped tasks but do not establish savings. Compare tokens
 per landed task of the same kind before and after a change. Measure every turn's

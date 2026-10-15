@@ -88,11 +88,11 @@ bun <main-checkout>/scripts/goal/goalctl.ts job --then 'task docs:check' --then 
 
 The command after `--` runs first, followed by each quoted `--then` command in
 order in the same worktree. Each command has its own log and four-hour deadline.
-The owner stops at the first nonzero exit, signal, lost executor or timeout,
-and wakes the worker once with the failing command and bounded errors. If all
-pass, the one wake contains a result and log path for each command. A lost owner
-fails the sequence and remaining commands do not start. Plain jobs retain their
-existing behavior.
+Passing steps continue without waking the worker. The owner stops at the first
+nonzero exit, signal, lost executor or timeout, and wakes the worker once with
+the failing command and bounded errors. If all pass, the one completion wake
+contains a result and log path for each command. A lost owner fails the sequence
+and remaining commands do not start. Plain jobs retain their existing behavior.
 
 The whole sequence runs inline for up to 20 seconds. Set the tool call's
 `yield_time_ms` to exactly `30000` (30 seconds), including an orchestration

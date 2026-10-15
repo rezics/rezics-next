@@ -66,9 +66,8 @@ its open briefs. The root [GOAL.md](../../GOAL.md) lists the Goals.
   not claim them; paths in no Goal's areas belong to whoever claims them first.
   When a Goal needs a path in another's area, its manager asks the owner to do
   the work, to narrow its areas, or to agree to one `dispatch --allow-area`.
-  A disagreement goes to the program manager. A path that
-  `task goal -- owner` reports unclaimed needs no request: a worker changes it
-  minimally and lists it under OWNER CHANGES.
+  A disagreement goes to the program manager. The [worker scope](worker.md#scope)
+  defines how to handle live path claims and unlanded overlaps.
 - Shared host. Claims, QA slots, the heavy QA lock, the shared lifecycle lock, merge gate lanes, the live-worker limit,
   usage gates and host memory are one pool for all Goals. Writing code in
   parallel is cheap; heavy QA is not, and the lock keeps it to one run at a time.
