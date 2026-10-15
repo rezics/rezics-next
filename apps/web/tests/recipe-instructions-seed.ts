@@ -21,7 +21,7 @@ const main = async (method: string, path: string, body?: unknown, key?: string) 
   method, headers: { authorization: `Bearer ${await session.session.current()}`,
     ...(key ? { 'idempotency-key': key } : {}),
     ...(body ? { 'content-type': body instanceof Uint8Array ? 'audio/wav' : 'application/json' } : {}) },
-  ...(body ? { body: body instanceof Uint8Array ? body : JSON.stringify(body) } : {}),
+  ...(body ? { body: body instanceof Uint8Array ? new Uint8Array(body).buffer : JSON.stringify(body) } : {}),
 });
 async function answer<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await settledWrite(main, method, path, body);
