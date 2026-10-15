@@ -87,11 +87,10 @@ wording and directions that later ones replaced are in this file's history.
 8. **Boundaries** (2026-09-27). Work locally and commit on `main`. Do not push,
    deploy, provision paid services or send repository data to other services
    unless the maintainer asks.
-9. **Allowances** (2026-10-02, 2026-10-08, 2026-10-12). No top-up and no
-   usage-limit reset credits, on any account. Claude is for managers only; an
-   ending week's leftover may go to workers when the maintainer says so. When an
-   allowance is spent, work pauses cleanly; it does not move to a dearer
-   engine.
+9. **Allowances** (2026-10-15). Account allowances and scheduling constraints
+   are internal operational details and stay out of Git. They live in
+   `.temp/goal-orchestration/accounts.md`; record changes there, not in briefs,
+   documents, code or commit messages.
 10. **Maintainer edits win** (2026-09-27). The maintainer may change any
     document at any time. Detect such changes, adapt, and never revert one
     silently ([documentation changes](README.md#maintainer-documentation-changes)).
@@ -135,8 +134,7 @@ wording and directions that later ones replaced are in this file's history.
 | Engine (`goalctl`) | Model | Account and readout | Used for |
 | --- | --- | --- | --- |
 | `claude`, `sonnet`, `haiku` | Claude Opus 5.5, Sonnet 5.5, Haiku 5.5 | One Claude subscription shared by every manager; 5-hour and 7-day windows (`goalctl usage`) | Managers only (direction 9) |
-| `codex` | GPT-6.1 Sol | Default Codex account in `~/.codex`; weekly window | Outcome and implementation tasks that need judgment; the landing review |
-| `codex-1` | GPT-6.1 Sol | Second Codex account in `~/.codex-1`; weekly window | The same |
+| `codex`, `codex-1`, … | GPT-6.1 Sol | Codex accounts and their policies: `.temp/goal-orchestration/accounts.md` (untracked) | Outcome and implementation tasks that need judgment; the landing review |
 | `luna` | GPT-6 Luna | Shares the `codex` account | Bounded mechanical work, at `max` |
 | `grok` | Grok 4.7 | Grok Build CLI; no readout, a quota error shows exhaustion | Surface tasks and bounded work whose risk is not assertion integrity |
 | `cursor` | Grok 4.7 | Cursor Agent, a separate quota; no readout | The same |
