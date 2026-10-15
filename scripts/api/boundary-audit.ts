@@ -4,6 +4,7 @@ import ts from 'typescript-6';
 import { buildMainOpenApi } from './generate.ts';
 import { buildOperationIndex } from './operation-index.ts';
 import { rateLimitFamily } from '../../services/main/src/modules/rate-limit/budgets.ts';
+import { inferenceTypeSize } from './inference-type-size.ts';
 
 interface Evidence { status: number; code?: string; line: number }
 export interface HandlerFacts {
@@ -269,29 +270,15 @@ async function diagnostics(root: string, baselineOnly = false) {
 }
 
 async function typeSize(root: string) {
-  const { API } = await import('typescript/unstable/async');
-  const api = new API({ cwd: root });
-  try {
-    const projectPath = join(root, 'services/main/tsconfig.json');
-    const snapshot = await api.updateSnapshot({ openProjects: [projectPath] });
-    const project = snapshot.getProject(projectPath)!;
-    const file = join(root, 'services/main/src/app.ts');
-    const source = readFileSync(file, 'utf8');
-    const app = (await project.checker.getTypeAtPosition(file, source.indexOf('MainApp =')))!;
-    const property = (await project.checker.getPropertyOfType(app, '~Routes'))!;
-    const routes = (await project.checker.getTypeOfSymbol(property))!;
-    const flags = ts.TypeFormatFlags.NoTruncation | ts.TypeFormatFlags.InTypeAlias;
-    const rendered = await project.checker.typeToString(app, undefined, flags);
-    const renderedRoutes = await project.checker.typeToString(routes, undefined, flags);
-    const output = join(root, '.temp/api-boundary');
-    mkdirSync(output, { recursive: true });
-    writeFileSync(join(output, 'MainApp.type.txt'), rendered);
-    writeFileSync(join(output, 'MainApp-routes.type.txt'), renderedRoutes);
-    const result = { appBytes: Buffer.byteLength(rendered), routesBytes: Buffer.byteLength(renderedRoutes),
-      appEllipses: rendered.split('...').length - 1, routesEllipses: renderedRoutes.split('...').length - 1 };
-    writeFileSync(join(output, 'type-size.json'), JSON.stringify(result, null, 2) + '\n');
-    console.log(JSON.stringify(result, null, 2));
-  } finally { await api.close(); }
+  const { appBytes, routesBytes, rendered, renderedRoutes } = await inferenceTypeSize(root, 'services/main/tsconfig.json');
+  const output = join(root, '.temp/api-boundary');
+  mkdirSync(output, { recursive: true });
+  writeFileSync(join(output, 'MainApp.type.txt'), rendered);
+  writeFileSync(join(output, 'MainApp-routes.type.txt'), renderedRoutes);
+  const result = { appBytes, routesBytes,
+    appEllipses: rendered.split('...').length - 1, routesEllipses: renderedRoutes.split('...').length - 1 };
+  writeFileSync(join(output, 'type-size.json'), JSON.stringify(result, null, 2) + '\n');
+  console.log(JSON.stringify(result, null, 2));
 }
 
 if (import.meta.main) {

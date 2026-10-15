@@ -12,9 +12,10 @@ import { tierBunTestArgs, type TierTestTimeout } from '../qa/core.ts';
 import { withSlot, type SlotRunOptions, type GateLaneOptions } from './qa-slots.ts';
 import { selectSurface, runSurfaceGate } from './surface-gate.ts';
 import { prepareCheckTree, worktreeBase } from './tree-currency.ts';
+import { inferenceGateCommand, needsInferenceGate } from '../api/inference-cost.ts';
 
 export type CheckGroup = 'types' | 'lint' | 'tests' | 'guards';
-export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection' | 'currency';
+export type CheckName = CheckGroup | 'ast' | 'contract' | 'stories' | 'selection' | 'currency' | 'inference';
 const GROUPS: CheckGroup[] = ['types', 'lint', 'tests', 'guards'];
 
 export function parseCheckArgs(args: readonly string[]): CheckGroup[] {
@@ -244,6 +245,7 @@ export async function workerCheck(options: CheckOptions = {}): Promise<{ code: n
     if (only.includes('types')) {
       const commands = workerTypeCommands(cwd, changed);
       await check('types', commands, commands.length ? undefined : 'no TypeScript workspace changed');
+      if (needsInferenceGate(changed)) await check('inference', [[...inferenceGateCommand]]);
     }
     if (only.includes('lint')) {
       await check('lint', lintFiles.length ? [['node_modules/.bin/oxlint', ...lintFiles]] : [],
