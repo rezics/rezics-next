@@ -1,16 +1,12 @@
 import { dirname, join, normalize } from 'node:path';
-import { parseSync, visitorKeys, type Node } from 'oxc-parser';
+import { parseSync, type Node } from 'oxc-parser';
+import { isWebDataModule, webChildren as children, webProgram } from './web-source-scan.ts';
 import type { WebSource } from './web-continuations.ts';
 
 export interface PageSelection { path: string; consumer: string; operation: string; predicate: string }
 interface Unit { file: WebSource; name: string; nodes: Node[]; variables: Map<string, Node> }
 const name = (node?: Node | null): string => node?.type === 'Identifier' ? node.name
   : node?.type === 'Literal' ? String(node.value) : node?.type === 'MemberExpression' ? name(node.property) : '';
-const children = (node: Node): Node[] => (visitorKeys[node.type] ?? []).flatMap(key => {
-  const value = (node as unknown as Record<string, unknown>)[key];
-  return (Array.isArray(value) ? value : [value]).filter((child): child is Node =>
-    !!child && typeof child === 'object' && 'type' in child);
-});
 // Preserve literals and operators, ignore trivia and parser position metadata.
 export const structure = (node: Node): string => JSON.stringify(node, (key, value) =>
   ['start', 'end', 'raw', 'loc', 'range', 'comments', 'typeAnnotation', 'decorators'].includes(key)
@@ -33,8 +29,8 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
   };
   const key = (unit: Unit) => `${unit.file.path}:${unit.name}`;
   for (const file of sources.filter(file => production(file.path))) {
-    const parsed = parseSync(file.path, file.source);
-    if (parsed.errors.length) throw new Error(`${file.path}: ${parsed.errors[0]!.message}`);
+    const program = webProgram(file);
+    if (isWebDataModule(program)) continue;
     const root: Unit = { file, name: '<module>', nodes: [], variables: new Map() };
     units.push(root);
     const visit = (node: Node, unit: Unit, parent?: Node) => {
@@ -55,7 +51,7 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
       if (node.type === 'VariableDeclarator' && node.init) unit.variables.set(name(node.id), node.init);
       for (const child of children(node)) visit(child, unit, node);
     };
-    visit(parsed.program, root);
+    visit(program, root);
   }
   const operations = new Map<string, Set<string>>();
   const callKey = (unit: Unit, node: Node) => {
@@ -76,14 +72,19 @@ export function pageSelections(sources: readonly WebSource[], paged = new Set<st
     }
     return name(node);
   };
+  const pageOperations = new WeakMap<Node, string>();
   const pageOperation = (node: Node): string => {
     if (node.type !== 'CallExpression') return '';
+    const cached = pageOperations.get(node);
+    if (cached !== undefined) return cached;
     const parts = route(node.callee).split('/');
     const start = parts.indexOf('v1');
-    if (start < 0 || !['get', 'post'].includes(parts.at(-1)!)) return '';
+    if (start < 0 || !['get', 'post'].includes(parts.at(-1)!)) { pageOperations.set(node, ''); return ''; }
     const operation = `${parts.at(-1)!.toUpperCase()} /${parts.slice(start, -1).join('/')}`;
-    return paged.has(operation) || node.arguments.some(argument => descendants(argument).some(child =>
+    const result = paged.has(operation) || node.arguments.some(argument => descendants(argument).some(child =>
       child.type === 'Property' && name(child.key) === 'limit')) ? operation : '';
+    pageOperations.set(node, result);
+    return result;
   };
   for (const unit of units) {
     const reads = new Set<string>();

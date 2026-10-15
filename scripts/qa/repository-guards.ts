@@ -125,7 +125,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/web-continuations.test.ts',
-    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-continuations*'],
+    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-continuations*', 'scripts/static/web-source-scan*'],
     reason: 'Web list consumers preserve continuations and offer a route beyond capped results.',
   },
   {
@@ -140,7 +140,7 @@ export const repositoryGuards = [
   },
   {
     file: 'scripts/static/web-page-filtering.test.ts',
-    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-page-filtering*', 'scripts/static/web-continuations*'],
+    reads: [webSourcePattern, ...generatedContractReads, 'scripts/static/web-page-filtering*', 'scripts/static/web-continuations*', 'scripts/static/web-source-scan*'],
     reason: 'Web consumers do not define result eligibility by filtering only a capped API page.',
   },
   {

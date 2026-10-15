@@ -1,7 +1,8 @@
 import { repositoryGlob } from '../lib/repository-files.ts';
 import { readFileSync } from 'node:fs';
 import { dirname, join, normalize } from 'node:path';
-import { parseSync, visitorKeys, type Node } from 'oxc-parser';
+import type { Node } from 'oxc-parser';
+import { isWebDataModule, webChildren as children, webProgram } from './web-source-scan.ts';
 import type { ListOpenApi } from './list-convention.ts';
 
 export interface WebSource { path: string; source: string }
@@ -17,14 +18,6 @@ const production = (path: string) => /\.[cm]?[jt]sx?$/.test(path)
   && !/(?:^|\/)(?:__tests__|fixtures|test|tests)(?:\/|\.)|\.(?:test|spec|stories)\.|(?:^|\/)[^/]*fixtures\./.test(path);
 const continuations = new Set(['nextCursor', 'continuation', 'after', 'before', 'cursor']);
 
-function children(node: Node): Node[] {
-  const fields = node as unknown as Record<string, unknown>;
-  return (visitorKeys[node.type] ?? []).flatMap(key => {
-    const value = fields[key];
-    return (Array.isArray(value) ? value : [value]).filter((child): child is Node =>
-      !!child && typeof child === 'object' && 'type' in child);
-  });
-}
 function name(node: Node | null | undefined): string {
   if (node?.type === 'Identifier') return node.name;
   if (node?.type === 'Literal') return String(node.value);
@@ -83,8 +76,8 @@ export function continuationInventory(sources: readonly WebSource[], operations 
       .find(candidate => paths.has(candidate)) ?? target;
   };
   for (const file of sources.filter(file => production(file.path))) {
-    const parsed = parseSync(file.path, file.source);
-    if (parsed.errors.length) throw new Error(`${file.path}: ${parsed.errors[0]!.message}`);
+    const program = webProgram(file);
+    if (isWebDataModule(program)) continue;
     const root: Unit = { file, consumer: '<module>', nodes: [] };
     units.push(root);
     const visit = (node: Node, unit: Unit, parent?: Node) => {
@@ -106,7 +99,7 @@ export function continuationInventory(sources: readonly WebSource[], operations 
       unit.nodes.push(node);
       for (const child of children(node)) visit(child, unit, node);
     };
-    visit(parsed.program, root);
+    visit(program, root);
   }
   const key = (unit: Unit) => `${unit.file.path}:${unit.consumer}`;
   const callKey = (unit: Unit, callee: Node): string => {
