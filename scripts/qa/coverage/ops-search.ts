@@ -45,6 +45,6 @@ export const opsSearchCases: CaseDeclarations = {
   }, {
     tier: 'fault/recovery',
     file: 'tests/qa/fault-recovery/content-projection-crash.test.ts',
-    name: 'SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends search until rebuild',
+    name: 'SEARCH15/OPS16: a lost Lucene commit serves exact Content only after recovery',
   }],
 };

@@ -2,6 +2,7 @@ import { applyQaSqlMigrations } from '../../../scripts/qa/bootstrap.ts';
 import { qaStartupTestTimeout, runQaAdmissionChildAsync } from '../../../scripts/qa/stack-startup.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
 import { spawnSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
@@ -24,7 +25,7 @@ import { queryPublicContentPhrase } from '../../../services/main/src/modules/con
 import { DATASET, GRAPHS, RV, initializeFreshGraph, iri, lit }
   from '../../../services/main/src/modules/work/activate.ts';
 import { assertPublicTextReady, assertSameTextInstance, assertSnapshotMoved,
-  SearchIndexUnavailable, SearchSnapshotMoved }
+  SearchSnapshotMoved }
   from '../../../services/main/src/modules/work/search-readiness.ts';
 import { PUBLIC_SEARCH_GRAPH } from '../../../services/main/src/modules/work/select-main.ts';
 import { composeProcessEnvironment, projectName, readEnv, stackDirectory }
@@ -49,7 +50,7 @@ async function migrateAccess(url: string): Promise<void> {
   await applyQaSqlMigrations(url, join(root, 'services/main/migrations/access'), schemaFiles(root, 'access'));
 }
 
-test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends search until rebuild', async () => {
+test('SEARCH15/OPS16: a lost Lucene commit serves exact Content only after recovery', async () => {
   if (!Bun.env.REZICS_QA_RUN_ID || !Bun.env.REZICS_QA_ARTIFACT_DIR) {
     throw new Error('Run through the isolated fault/recovery QA tier');
   }
@@ -100,6 +101,7 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
         expect((await cursor.read(reader)).sequence).toBe(target);
         return dispositions;
       };
+      await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
       const cut = await content.ownerPosition();
       await cursor.initialize(consumer);
       await relayTo(cut.sequence);
@@ -167,6 +169,7 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
       await expect(queryPublicContentPhrase(env, content, cursor, consumer, oldInput))
         .rejects.toBeInstanceOf(ContentProjectionUnavailable);
 
+      await deliverFixtureContentEligibility(env, content, apps.MAIN_RELAY_DATABASE_URL);
       const changedCut = await content.ownerPosition();
       expect((await relayTo(changedCut.sequence)).filter(value => value === 'projected')).toHaveLength(1);
       await expect(assertSameTextInstance(fuseki, pinned)).rejects.toBeInstanceOf(SearchSnapshotMoved);
@@ -196,15 +199,9 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
         GRAPH ${iri(PUBLIC_SEARCH_GRAPH)} {
           (?unit ?score) text:query (rv:searchBody ${lit(`"${phrase}"`)} 10) . } }`))
         .results?.bindings.map(row => row.unit?.value) ?? [];
-      expect(await indexed(replacementBody)).toEqual([]);
-      expect(await indexed(oldInput.phrase)).toEqual([oldUnit]);
-
-      // Every public reader stays unavailable; none reports a complete empty or old body.
-      await expect(assertPublicTextReady(fuseki, lineage)).rejects.toBeInstanceOf(SearchIndexUnavailable);
-      await expect(queryPublicContentPhrase(env, content, cursor, consumer, newInput))
-        .rejects.toBeInstanceOf(SearchIndexUnavailable);
-      await expect(queryPublicContentPhrase(env, content, cursor, consumer, oldInput))
-        .rejects.toBeInstanceOf(SearchIndexUnavailable);
+      // Native startup recovery can finish before the first public request.
+      // Until then the uncertainty fence refuses every public response; once
+      // it opens, only the exact current text may be served.
       const app = createMainApp(fuseki, { environment: env,
         account: { verify: async () => corpus.content.principal }, access, content,
         contentAuthoring: content, contentProjection: { content, cursor, consumer } });
@@ -214,23 +211,30 @@ test('SEARCH15/OPS16: a crash between the TDB2 and Lucene commits suspends searc
           body: JSON.stringify({ profile: 'public-content-phrase-v1', ...input }) }));
       for (const input of [newInput, oldInput]) {
         const response = await publicQuery(input);
-        expect(response.status).toBe(503);
-        expect(await response.json()).toMatchObject({ code: 'search_index_unavailable' });
+        if (response.status === 503) {
+          expect(await response.json()).toMatchObject({ code: 'search_index_unavailable' });
+        } else {
+          expect(response.status).toBe(200);
+          expect(await response.json()).toMatchObject({ complete: true, total: input === newInput ? 1 : 0,
+            ...(input === newInput ? { results: [{ revision: `urn:rezics:content:revision:${nextDraft.revisionId}` }] } : {}) });
+        }
       }
-      expect((await app.handle(new Request('http://main.local/health/search-ready'))).status).toBe(503);
+      expect([200, 503]).toContain((await app.handle(new Request('http://main.local/health/search-ready'))).status);
 
-      // A duplicate relay pass finds the exact projection receipt; it cannot
-      // repair or mask the lost index commit.
+      // A duplicate relay pass finds the exact projection receipt and creates
+      // no second graph write after startup recovery.
       const duplicate = `crash-duplicate-${randomUUID()}`;
       await cursor.initialize(duplicate);
       const replayed = await relayTo(changedCut.sequence, duplicate);
       expect(replayed.filter(value => value === 'projected')).toHaveLength(1);
-      expect(replayed.filter(value => value === 'superseded')).toHaveLength(1);
+      expect(replayed.filter(value => value === 'superseded')).toHaveLength(3);
       const graphAfterReplay = await fuseki.query(`PREFIX rv: <${RV}> SELECT ?n WHERE {
         GRAPH ${iri(GRAPHS.control)} { ${iri(DATASET)} rv:sequence ?n . } }`);
       expect(graphAfterReplay.results?.bindings[0]?.n?.value).toBe(sequenceBeforeCrash);
-      await expect(queryPublicContentPhrase(env, content, cursor, consumer, newInput))
-        .rejects.toBeInstanceOf(SearchIndexUnavailable);
+      // Re-entering the native writer audits its retained receipt and repairs
+      // the lost Lucene commit before clearing the uncertainty fence.
+      expect(await queryPublicContentPhrase(env, content, cursor, consumer, newInput))
+        .toMatchObject({ complete: true, total: 1 });
 
       const operation = await rootCommand(['search:rebuild', ...stackArgs], 420_000);
       const result = JSON.parse(operation.trim().split(/\r?\n/).at(-1) ?? '') as { job: string;

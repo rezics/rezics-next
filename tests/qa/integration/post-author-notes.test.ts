@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test';
+import { deliverFixtureContentEligibility } from '../fixtures/content-projection.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { randomUUID } from 'node:crypto';
 import { fromPlainText } from '@rezics/document';
 import { startMediaStack, type MediaStack } from './media-support.ts';
@@ -135,6 +137,7 @@ test('Post notes stay language-local on exact chapter reads and outside length, 
 
     const command = new FusekiClient(Bun.env.FUSEKI_URL!, Bun.env.FUSEKI_MAINTENANCE_TOKEN!, Bun.env.FUSEKI_COMMAND_TOKEN!);
     const relayEnv = { ...stack.env, fuseki: command };
+    await deliverFixtureContentEligibility(relayEnv, stack.content);
     const cut = await stack.content.ownerPosition();
     for (let i = 0; i < 20 && (await stack.contentCursor.read(stack.contentConsumer)).sequence !== cut.sequence; i++) {
       if (!await relayContentProjectionOnce(relayEnv, stack.content, stack.contentCursor, stack.contentConsumer)) {
@@ -177,7 +180,22 @@ test('Post spoiler publication and reply draft declarations survive exact storag
   const { RealmReplyStore } = await import('../../../services/main/src/modules/realm-reply/store.ts');
   const stack = await startMediaStack('post-spoiler');
   try {
-    const author = await stack.member('spoiler-author');
+    const member = await stack.member('spoiler-author', { verified: true });
+    const person = await json<{ agent: string }>(await member.send('POST', '/v1/agents', {
+      profile: 'agent-provision-v1', kind: 'person', displayName: 'Spoiler author' }), 201);
+    const author = { ...member, actor: person.agent,
+      principal: { ...member.principal, emailVerified: true as const,
+        currentAssertion: async () => ({ ...member.principal, emailVerified: true as const }) },
+      read: (path: string) => {
+        const url = new URL(path, 'http://main.local');
+        url.searchParams.set('actingSubject', person.agent);
+        return member.send('GET', url.pathname + url.search);
+      },
+      grant: async (scope: string, action: string) => (await grantFixtureAuthority(stack.accessPool, {
+        scope, requireDispatch: true,
+        representations: [{ principalId: member.principalId, actor: person.agent, action, lifetime: '8 hours' }],
+        grant: { actor: person.agent, action, lifetime: '8 hours' },
+      })).grantId };
     const title = `Spoiler Book ${randomUUID()}`;
     const types = ['https://schema.org/Book'];
     const root = await activateMetadataWork(stack.env, { title, language: 'en', semanticTypes: types,
@@ -188,8 +206,9 @@ test('Post spoiler publication and reply draft declarations survive exact storag
       expectedSelectionHead: null, selectionBasis: 'main-maintainer' as const, actingSubject: author.actor };
     await selectMainDefault(stack.env, stack.admission(author.actor, `publication:select:${root.mainVersion}`,
       'publication.select', mainSelectionDigest(selection)), selection);
-    const replies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env);
+    const replies = new RealmReplyStore(new RealmReplyContentStore(stack.contentPool), stack.content, stack.access, stack.env, stack.accessPool);
     const app = createMainApp(stack.fuseki, { environment: stack.env, access: stack.access,
+      governance: stack.composition.dependencies.governance,
       content: stack.content, contentAuthoring: stack.content, realmReplies: replies,
       account: { verify: async () => author.principal },
       platformAccess: new AccessExposure(stack.accessPool) });
@@ -197,6 +216,7 @@ test('Post spoiler publication and reply draft declarations survive exact storag
       method, headers: { authorization: 'Bearer fixture', 'idempotency-key': key,
         ...(body ? { 'content-type': 'application/json' } : {}) }, ...(body ? { body: JSON.stringify(body) } : {}) }));
     await author.grant(`reply:create:${root.work}`, 'reply.create');
+    await author.grant(`work:read:${root.work}`, 'work.read');
     const payload = { 'rv:work': [root.work], 'schema:name': [{ '@value': 'A linked Work', '@language': 'en' }] };
     for (const spoiler of [undefined, false, true]) {
       const reply = `https://rezics.com/id/${randomUUID()}`;
