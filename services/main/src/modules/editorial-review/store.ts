@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
 import { AdmissionConflict, AdmissionDenied, type VerifiedPrincipal } from '../access/admission.ts';
-import { controlRead, ControlUnavailable, normalizeControlError } from '../access/topology-control.ts';
+import { accessClient, controlRead, withAccessClient, ControlUnavailable, normalizeControlError } from '../access/topology-control.ts';
 import { fusekiReadBudget } from '../../infrastructure/fuseki.ts';
 import { workRead } from '../work/read-session.ts';
 import { resolveTargets } from '../target/resolve.ts';
@@ -127,7 +127,7 @@ export class EditorialReviewStore {
   }
   /** Internal immutable receipt lookup for an owner's compensation validator. */
   async appliedReceipt(proposal: string): Promise<OwnerReceipt | null> {
-    return (await this.pool.query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision
+    return (await (accessClient(this.pool) ?? this.pool).query<{ owner_receipt: OwnerReceipt }>(`SELECT owner_receipt FROM access.editorial_decision
       WHERE proposal = $1 AND outcome = 'applied'`,[proposal])).rows[0]?.owner_receipt ?? null;
   }
   private async disclosedReceipt(adapter: EditorialAdapter, revision: ProposalRevision, receipt: OwnerReceipt | null) {
@@ -180,7 +180,7 @@ export class EditorialReviewStore {
       await client.query("SET statement_timeout = '5s'");
       if (commandLock) await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[commandLock]);
       await client.query('SELECT pg_advisory_lock(hashtextextended($1,0))',[`editorial:${id}`]);
-      return await work(client);
+      return await withAccessClient(this.pool, work, client);
     } catch (error) {
       await client.query('ROLLBACK').catch(() => {});
       throw normalizeControlError(error);
@@ -386,9 +386,11 @@ export class EditorialReviewStore {
             reviewer: application.actor,reviewerKey: independenceKey(row.id,application.principal),
             outcome: 'approve',message: application.message,sequence: '0' } } : undefined);
         const viewer = await viewerFor(client,proposal,application.principal,application.actor,graph);
+        // Each ordered owner commits its own binding and receipt before the
+        // next stage. The session advisory lock still serializes this proposal.
+        await client.query('COMMIT');
         const decision = await applyReviewedRevision(adapter,proposal,input,basis.reviews,basis.authority,viewer,row.reverts);
         resolution = { outcome: 'applied',receipt: decision.receipt! };
-        await client.query('ROLLBACK');
       } else resolution = adapter.commands ? await applyOrderedCommands(adapter,input) : await adapter.resolve!(input);
     }
     catch (error) {
@@ -475,6 +477,7 @@ export class EditorialReviewStore {
         await requireReview(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
         const fresh = await reviewBasis(client,proposal,adapter.requiredApprovals,call.work.environment.fuseki,prospective);
         const viewer = await viewerFor(client,proposal,principal,call.actingSubject,call.work.environment.fuseki);
+        if (adapter.commands) await client.query('COMMIT');
         deliveryAttempted = true;
         const deliver = () => applyReviewedRevision(adapter,proposal,this.applyInput(proposal,revision,application!),fresh.reviews,fresh.authority,viewer,row.reverts);
         decision = adapter.commands ? await deliver() : await fusekiReadBudget.run({ signal: AbortSignal.timeout(EDITORIAL_STORE_COST.applyDeadlineMs),
@@ -509,6 +512,7 @@ export class EditorialReviewStore {
         }
         return { proposal: id,revision: revision.n,outcome: 'apply_pending',replayed: false };
       }
+      if (adapter.commands) await this.begin(client);
       const result = await this.finish(client,row,revision,application,'applied',decision.receipt!);
       await this.commitEvents(client); return result;
     },{ call,key });
@@ -544,6 +548,7 @@ export class EditorialReviewStore {
     limit = 50, cursor?: string) {
     if (!Number.isInteger(limit) || limit < 1 || limit > 50) throw new EditorialInvalid('Page limit must be 1–50');
     const client = await this.pool.connect();
+    return withAccessClient(this.pool, async () => {
     let recoveryLocked = false;
     try {
       let row = await this.proposal(client,id);
@@ -626,6 +631,7 @@ export class EditorialReviewStore {
       if (recoveryLocked) await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))',[`editorial:${id}`]).catch(() => {});
       client.release();
     }
+    }, client);
   }
   async list(call: Pick<EditorialCall,'work' | 'request' | 'actingSubject'> & { principal?: VerifiedPrincipal },
     options: { filter: 'mine' | 'review-requested' | 'target'; target?: string; limit: number; cursor?: string }) {

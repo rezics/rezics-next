@@ -100,6 +100,7 @@ export function resourceRoutes(fuseki: FusekiClient, work: MainWorkDependencies)
     const selected = new Request(url,{ headers: request.headers,signal: request.signal });
     return boundedReadingPositionRead(work,selected,principal,input.actingSubject,(boundary, session) =>
       session.summaryBatch({ resources: input.resources,
+        settleNonAgentNameOwners: 'includingAbsent',
         channel: input.channel,
         context: input.context ?? DEFAULT_MEDIA_CONTEXT, language: input.language ?? null,
         languages: readerLanguages([input.language, request.headers.get('x-rezics-display-languages')]

@@ -7,6 +7,7 @@ import { readRealmDirectory, type RealmDirectorySort } from '../../../services/m
 import { resourceDisclosureTarget } from '../../../services/main/src/modules/query/resources.ts';
 import type { WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import type { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
+import type { PublicProfile } from '../../../services/main/src/modules/realm-profile/schema.ts';
 
 const id = (n: number) => `https://rezics.com/id/00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const closed = id(1), live = id(2);
@@ -14,22 +15,25 @@ const value = (text: string) => ({ value: text });
 
 function fixture() {
   const state = { closingDuringHydration: false, hydrated: [] as string[], targets: [] as DisclosureTarget[][],
-    closedVisible: false, after: false };
+    closedVisible: false, after: false, publicSpace: true, hiddenName: false,
+    profile: null as PublicProfile | null };
   const environment = { fuseki: {} } as WorkActivationEnvironment;
   configureDisclosure(environment, { read: async () => [] });
   const session = { options: {}, displayLanguages: ['en'], position: { dataEpoch: 'epoch', sequence: '9' },
     deps: { environment, access: { realmDirectory: {
       page: async () => ({ rows: (state.after ? [live] : [closed]).map(realm => ({
-        realm, space: id(realm === closed ? 11 : 12), profile: null, rank: '-9', count_value: '0', count_revision: '0',
+        realm, space: id(realm === closed ? 11 : 12), profile: state.profile, rank: '-9', count_value: '0', count_revision: '0',
       })), next: state.after ? null : 'opaque-source-continuation', position: 'directory-position',
         sourcePosition: { dataEpoch: 'epoch', sequence: '8' } }),
       fence: async () => {},
     } } },
     query: async () => (state.after ? [live] : [closed]).map(realm => ({ realm: value(realm),
-      space: value(id(realm === closed ? 11 : 12)), head: value(id(20)) })),
+      space: value(id(realm === closed ? 11 : 12)), head: value(id(20)),
+      disclosure: value(`https://rezics.com/vocab/${state.publicSpace ? 'Public' : 'Private'}`) })),
     disclosure: async (targets: DisclosureTarget[]) => {
       state.targets.push(targets);
-      return targets.map(target => target.resource === closed && !state.closedVisible ? 'hidden' : 'visible');
+      return targets.map(target => target.resource === closed && !state.closedVisible
+        || target.component === 'name' && state.hiddenName ? 'hidden' : 'visible');
     },
     summaries: async (realms: string[]) => {
       state.hydrated.push(...realms);
@@ -78,6 +82,22 @@ test('resource-list successor gates Realm records while retaining independent Wo
     .toEqual({ owner: 'graph', resource: live, component: 'name', nameOwnerResolved: true,
       work: live, workRevision: id(21), revision: id(21) });
 });
+
+for (const hiddenName of [false, true]) {
+  test(`published directory text uses its snapshot with current name disclosure hidden=${hiddenName}`, async () => {
+    const { session, state } = fixture();
+    state.after = true;
+    state.hiddenName = hiddenName;
+    state.profile = { name: { original: 'en', labels: { en: 'Published name' } },
+      description: { original: 'en', labels: { en: 'Published description' } },
+      iconSelection: null, bannerSelection: null, count: { kind: 'unknown', value: null }, moderators: [] };
+    const page = await readRealmDirectory(session, { sort: 'newest' });
+    expect(state.hydrated).toEqual([]);
+    expect(state.targets.flat()).toContainEqual({ owner: 'graph', resource: live, component: 'name',
+      revision: id(20), nameOwnerResolved: true });
+    expect(page.items.map(item => item.name.value)).toEqual(hiddenName ? [] : ['Published name']);
+  });
+}
 
 test('closure search and directory outcomes are included in the recursive integration tier', () => {
   const root = resolve(import.meta.dir, '../../..');

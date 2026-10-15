@@ -26,6 +26,8 @@ export const PERSON_STATE_MERGE_EXCLUSIONS: Readonly<Record<string,string>> = {
   'table:reader.private_import_review.work': 'Private imported annotation remains attached to its original import; it is not a public review slot.',
   'table:structure.progress_command.structure': 'Exact occurrence command receipt retains its original structure and selection.',
   'table:structure.progress.structure': 'Reading progress pins an exact structure, occurrence and selection; independent attempts remain on the original Work, like sessions.',
+  'table:structure.progress_scope.structure': 'Derived progress order and invalidation state belongs to the original exact structure, like its progress rows.',
+  'table:structure.progress_anchor_scope.structure': 'Derived member anchors retain their original structure and revision; merge does not transfer exact reading positions.',
   'table:reader.consumption_session.work': 'Independent reading sessions remain distinct; no session reconciliation at launch.',
   'table:reader.library_copy.work': 'Independent copies retain their exact original release and parent Work; merge never coalesces physical ownership or loan history.',
   'table:reader.consumption_session_target.resource': 'An exact target within an independent session retains its original identity.',

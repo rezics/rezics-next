@@ -4,7 +4,7 @@ import { t } from 'elysia';
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
-import { controlRead, controlTransaction } from '../access/topology-control.ts';
+import { accessClient, controlRead, controlTransaction } from '../access/topology-control.ts';
 import { canonicalCandidate } from '../editorial-review/contract.ts';
 import { checkMergeAuthority } from '../identity-merge/authority.ts';
 import { checkedItem, checkedOutcome, InvalidMerge, itemCommandKey, MERGE_COST, mergeDigest,
@@ -63,7 +63,7 @@ async function put(client: PoolClient, row: Row) {
  * Unmerge checks both exact post-merge slots and leaves later edits ambiguous. */
 export function followsMergeHandler({ accessPool, graph, authority = checkMergeAuthority }: FollowsMergeDependencies): MergeHandler<FollowsMergeDependencies> {
   const inventory = async (plan: IdentityPlan, after: string | null, limit: number) =>
-    (await accessPool.query<Row>(`SELECT ${columns} FROM access.follow
+    (await (accessClient(accessPool) ?? accessPool).query<Row>(`SELECT ${columns} FROM access.follow
       WHERE target=$1 AND following AND ($2::uuid IS NULL OR principal_id > $2::uuid)
       ORDER BY principal_id LIMIT $3`, [plan.source.resource, after, limit])).rows;
   const deliver = async (task: MergeTask, item: MergeItem, key: string,
@@ -96,9 +96,10 @@ export function followsMergeHandler({ accessPool, graph, authority = checkMergeA
     // Each preflight statement commits independently. Graph I/O holds neither
     // a Postgres transaction nor a scope gate; the effect repeats live SQL
     // authority and CAS checks with these facts and the same recovery generation.
-    const probe = await accessPool.connect();
+    const borrowed = accessClient(accessPool);
+    const probe = borrowed ?? await accessPool.connect();
     try { await authority(probe,task,collecting,owner); }
-    finally { probe.release(); }
+    finally { if (!borrowed) probe.release(); }
     const prepared: Pick<FusekiClient,'query'> = { query: async (sql,limit) => {
       const fact = facts.get(JSON.stringify([sql,limit]));
       if (!fact) throw new MergeUnavailable('Follow merge graph facts changed; retry');
@@ -174,7 +175,7 @@ export function followsMergeHandler({ accessPool, graph, authority = checkMergeA
       checkedTask(task);
       if (task.plan.operation !== 'merge' || limit < 1 || limit > MERGE_COST.page) throw new InvalidMerge('Invalid follow inventory page');
       const rows = await inventory(task.plan, after, limit + 1), kept = rows.slice(0, limit);
-      const survivors = (await accessPool.query<Row>(`SELECT ${columns} FROM access.follow
+      const survivors = (await (accessClient(accessPool) ?? accessPool).query<Row>(`SELECT ${columns} FROM access.follow
         WHERE target=$1 AND principal_id=ANY($2::uuid[])`, [task.plan.survivor.resource, kept.map(row => row.principal_id)])).rows;
       return { items: kept.map(row => snapshot(row, survivors.find(survivor => survivor.principal_id === row.principal_id) ?? null)),
         next: rows.length > limit ? kept.at(-1)!.principal_id : null };
