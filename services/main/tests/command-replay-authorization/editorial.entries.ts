@@ -814,6 +814,12 @@ export const moduleOwners = ["work", "content-publication", "editorial-review", 
 export const replayEntries = entries;
 export const coveredOperations = [...new Set(replayEntries.map(entry => entry.operation))];
 export const uncoveredOperations: string[] = [
+  // Fresh reference resolution takes no idempotency key and retains no saved result.
+  // The tracer reaches the generic owner helper through the live Zone content.draft
+  // authority check; tests/qa/integration/content-adoption.test.ts witnesses public
+  // resolution and private/successor refusal. Keep this trace named without claiming
+  // command replay coverage.
+  "POST /v1/resource-reference-resolutions",
   // This keyed saved-result owner requires only an active Account principal.
   // The accepted controller/domain-grant reducers cannot make it refuse;
   // retain the gap until the shared contract can execute that authority class.
