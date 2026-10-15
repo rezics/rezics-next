@@ -25,15 +25,21 @@ const HARNESS_PATHS = ['scripts/goal/', 'scripts/qa/', 'tests/qa/support/'];
 export function worktreeBase(cwd: string): string {
   const main = git(cwd, ['rev-parse', 'main']);
   const waves = git(cwd, ['for-each-ref', '--format=%(refname:short)', 'refs/heads/wave/']).split('\n').filter(Boolean);
+  const carrying: { wave: string; base: string }[] = [];
   for (const wave of waves) {
     const base = spawnSync('git', ['merge-base', 'HEAD', wave], { cwd, encoding: 'utf8' });
     if (base.status === 1) continue; // An unrelated local wave carries none of this branch's work.
     if (base.status !== 0) throw new Error(base.stderr);
     const ancestor = spawnSync('git', ['merge-base', '--is-ancestor', base.stdout.trim(), main], { cwd, encoding: 'utf8' });
-    if (ancestor.status === 1) return wave;
-    if (ancestor.status !== 0) throw new Error(ancestor.stderr);
+    if (ancestor.status === 1) carrying.push({ wave, base: base.stdout.trim() });
+    else if (ancestor.status !== 0) throw new Error(ancestor.stderr);
   }
-  return 'main';
+  // A later wave contains an earlier one, so both share wave work with this tree: follow the wave whose shared
+  // history is newest, the one whose merge base descends from every other's.
+  const isAncestor = (older: string, newer: string) =>
+    spawnSync('git', ['merge-base', '--is-ancestor', older, newer], { cwd }).status === 0;
+  const newest = carrying.find(candidate => carrying.every(other => isAncestor(other.base, candidate.base)));
+  return (newest ?? carrying[0])?.wave ?? 'main';
 }
 
 /** Ancestry, rather than a patch comparison, detects whether this tree has its base's last harness fix. */

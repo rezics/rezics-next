@@ -233,6 +233,8 @@ let firstOperator:
   | { runId: string; email: string; password: string; actingSubject: string }
   | undefined;
 interface PersonaOptions {
+  /** Retained sources need authority to outlive build, admission and restores. */
+  moderatorLifetimeMs?: number;
   /** Observe actual public Main setup attempts, including fixed-key provisioning.
    * A focused probe can end setup here before any joining command. */
   observeMain?: (answer: {
@@ -654,7 +656,7 @@ export async function personaSessions(
       roleId,
       member: moderator.actingSubject,
       assigned: true,
-      validUntil: new Date(Date.now() + 3_600_000).toISOString(),
+      validUntil: new Date(Date.now() + (options.moderatorLifetimeMs ?? 3_600_000)).toISOString(),
     });
     const site = await json<{ zone: string; zoneRevision: string }>(
       owner.main('POST', '/v1/spaces', {

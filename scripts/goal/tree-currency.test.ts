@@ -104,6 +104,22 @@ test('an unrelated local wave does not hide the wave carrying the worker work', 
   expect(prepareCheckTree(r.cwd, () => {})?.line).toContain('0 commits behind wave/1; already current');
 });
 
+test('a worker on a later wave that contains an earlier one follows the later wave', () => {
+  const r = waveRepository();
+  r.git(r.main, 'checkout', '-qb', 'wave/2', 'wave/1');
+  const later = r.commit('later.ts', 'export {};\n');
+  r.git(r.cwd, 'merge', '--ff-only', later);
+  r.git(r.main, 'checkout', 'main');
+  expect(prepareCheckTree(r.cwd, () => {})?.line).toContain('0 commits behind wave/2; already current');
+  // A worker of the earlier wave, whose own work is newer than the later wave's branch point, keeps its wave.
+  r.git(r.cwd, 'reset', '-q', '--hard', 'wave/1');
+  r.git(r.main, 'checkout', 'wave/1');
+  const earlier = r.commit('earlier.ts', 'export {};\n');
+  r.git(r.main, 'checkout', 'main');
+  r.git(r.cwd, 'merge', '--ff-only', earlier);
+  expect(prepareCheckTree(r.cwd, () => {})?.line).toContain('0 commits behind wave/1; already current');
+});
+
 test.each(['scripts/goal/fix.ts', 'scripts/qa/fix.ts', 'tests/qa/support/fix.ts'])('warns for missing ancestry under %s without moving the tree', path => {
   const r = repository();
   const before = r.git(r.cwd, 'rev-parse', 'HEAD');

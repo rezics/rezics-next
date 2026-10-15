@@ -5,6 +5,7 @@ import { expect, within } from 'storybook/test';
 import type { AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import browseFixture from '../../../../tests/qa/fixtures/outcomes/books/catalogue-browse-and-search-in-its-zone.json';
 import { localizedPath } from '../../i18n/locale.ts';
+import type { UiLocale } from '../../i18n/define.ts';
 import { spaceHref } from '../address/path.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import type { RealmReadClient } from '../realm/read.ts';
@@ -102,7 +103,9 @@ const pending = <PageContainer><p role="status" aria-busy="true">{shellMessages.
  * Browse and search through `RealmBrowseRoute` and the shared frame.
  * A later page's routes read belongs to the site route; these stories open the catalogue the route renders.
  */
-function ProductionBrowse({ persona, label, state }: { persona: Persona; label: string; state: RecordedState }) {
+function ProductionBrowse({ persona, label, state, locale: pageLocale = locale }: {
+  persona: Persona; label: string; state: RecordedState; locale?: UiLocale;
+}) {
   const [node, setNode] = useState<ReactNode>(null);
   const [error, setError] = useState<Error | null>(null);
   useEffect(() => {
@@ -117,7 +120,7 @@ function ProductionBrowse({ persona, label, state }: { persona: Persona; label: 
       fetch: replay.fetcher,
     };
     void RealmBrowseRoute({
-      params: Promise.resolve({ locale, realm: siteKey() }),
+      params: Promise.resolve({ locale: pageLocale, realm: siteKey() }),
       searchParams: Promise.resolve(searchOf(persona, label)),
     }, undefined, client).then(rendered => {
       if (active) setNode(rendered);
@@ -129,7 +132,7 @@ function ProductionBrowse({ persona, label, state }: { persona: Persona; label: 
       active = false;
       replay.dispose();
     };
-  }, [persona, label, state]);
+  }, [persona, label, state, pageLocale]);
   if (error) throw error;
   if (!node) return pending;
   return node;
@@ -139,11 +142,25 @@ const meta = {
   title: 'Zones/Books catalogue browse',
   component: ProductionBrowse,
   args: { persona: 'visitor' as Persona, label: 'page-browse-default', state: 'populated' as RecordedState },
-  parameters: { route: { pathname: browsePath } },
+  parameters: { route: { pathname: browsePath },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
   globals: { locale },
 } satisfies Meta<typeof ProductionBrowse>;
 export default meta;
 type Story = StoryObj<typeof meta>;
+export const JapaneseBrowseDesktop: Story = {
+  args: { locale: 'ja' }, globals: { locale: 'ja', viewport: { value: 'desktop' } },
+  async play({ canvasElement, args }) {
+    await expect(within(canvasElement).findByRole('link', {
+      name: pageOf('visitor', args.label).items[0]!.title!.value,
+    })).resolves.toBeVisible();
+  },
+};
+export const JapaneseBrowsePhone: Story = { ...JapaneseBrowseDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
+export const JapaneseSearchDesktop: Story = { ...JapaneseBrowseDesktop, args: { locale: 'ja', label: 'page-search-default' } };
+export const JapaneseSearchPhone: Story = { ...JapaneseSearchDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
 type Play = NonNullable<Story['play']>;
 
 function at(base: Story, viewport: 'phone' | 'desktop'): Story {

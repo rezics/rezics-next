@@ -15,8 +15,8 @@ export function SiteFrame({ agent, locale, messages, children }: {
   agent: AgentOption; locale: UiLocale; messages: ManageMessages; children: ReactNode;
 }) {
   const t = materializeData(messages, { locale });
-  return <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-6 sm:px-6 lg:px-10">
-    <div className="grid gap-3 border-border/60 border-b pb-4">
+  return <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:px-10">
+    <div className="grid grid-cols-1 gap-3 border-border/60 border-b pb-4">
       <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
         <nav aria-label={t.title} className="flex min-w-0 items-center gap-1 text-muted-foreground text-sm">
           <LocalizedLink href="/manage" className="rounded-md px-1 outline-none hover:text-foreground

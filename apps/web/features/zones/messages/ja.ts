@@ -4,7 +4,6 @@ import type { ZoneMessages } from '../messages.ts';
 export default {
   catalogueIncomplete: 'この件数は最小値です。さらに一致する作品がある可能性があります。',
   browseIncompleteTitle: 'このページには一致する作品がありません',
-  catalogueFreshness: insert('変更 {{sequence}} 時点のカタログ', { sequence: String }),
   more: 'もっと見る', shuffle: '入れ替える',
   whyHere: insert('「{{title}}」がここにある理由', { title: String }),
   untitled: 'タイトル未設定の作品',

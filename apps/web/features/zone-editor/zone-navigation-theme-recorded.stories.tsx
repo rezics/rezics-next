@@ -152,6 +152,7 @@ export const ThemeOwner: Story = {
     await expect(canvas.getByRole('radio', { name: copy.themeComfortable })).not.toBeChecked();
     await expect(canvas.getByRole('radio', { name: copy.themeFlat })).not.toBeChecked();
     if (acting) await expect(canvas.getAllByText(acting).length).toBeGreaterThan(0);
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
   },
 };
 export const ThemeOwnerPhone: Story = { ...ThemeOwner, globals: phone };

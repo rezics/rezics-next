@@ -9,6 +9,9 @@ import type { PersonaName, PersonaSession, PersonaSessions, RetainedPersonaRealm
 export const realmSourcePopulation = Object.freeze({ publicRanking: 261, retainedPrivate: 21,
   currentPrivate: 21, roots: 21, siblings: 193, nested: 34, privateRoots: 1 });
 export const realmSourceBuildDeadlineMs = 1_800_000;
+/** Bound fixture authority independently of active operation clocks. A retained
+ * grant must survive producer work and the host's admission queue unchanged. */
+export const realmSourceAuthorityLifetimeMs = 86_400_000;
 export const realmSourceBuildEvidence = 'Measured retained attempt 20261014t020607-6ecee7: 189 serial identities in 290645ms; ' +
   '192 drafts in 77594ms and 184 placements in 42794ms. The complete 552-publication corpus extrapolates to about ' +
   '1200s of these phases, plus four persona bootstraps, authority/complete inventory reads and the admission transition. ' +
@@ -95,7 +98,7 @@ export type RealmSourceMetadata = {
   contract: 'realm-discussion-source-v1'; population: typeof realmSourcePopulation;
   realms: Record<keyof RealmSourceSessions, RetainedPersonaRealm>;
   authoritySnapshots: Record<keyof RealmSourceSessions, { members: RetainedOwnerState; roles: RetainedOwnerState; settings: RetainedOwnerState }>;
-  /** Preserve the original one-hour moderation assignment; expired starting states refuse. */
+  /** Restores preserve the producer's moderation deadline; expired sources refuse. */
   startingStatesValidUntil: number;
   sequenceStarts: Record<'ranking' | 'discussion', Record<PersonaName, {
     publicRealm: string; privateRealm: string; accountId: string | null; actingSubject: string | null;
@@ -125,6 +128,7 @@ export function realmDiscussionSourceSpecification(files: Record<string, string>
   return { producer: 'realm-discussion-source', version: '1', files, compatibility,
     inputs: { population: realmSourcePopulation, roles: [...realmSourceRoles], language: 'en', direction: 'ltr',
       authoring: 'own-work', batch: 8, identityPublication: 'serial-no-overlapping-writes',
+      authorityLifetimeMs: realmSourceAuthorityLifetimeMs,
       producerDeadlineMs: realmSourceBuildDeadlineMs, producerDeadlineEvidence: realmSourceBuildEvidence } };
 }
 
@@ -246,8 +250,23 @@ async function grow(sessions: PersonaSessions, work: RealmSourceWork, bodies: st
 }
 
 async function createWork(sessions: PersonaSessions, title: string) {
-  const work = await answer<RealmSourceWork>(sessions.owner.main('POST', '/v1/works', {
+  const work = await answer<RealmSourceWork & { mainVersion: string }>(sessions.owner.main('POST', '/v1/works', {
     profile: 'metadata-only-v1', title, language: 'en', authoring: 'own-work', actingSubject: sessions.owner.actingSubject }), 201);
+  // Discussion disclosure follows the root's publication as well as Realm
+  // membership. Metadata alone leaves non-author members with no visible roots.
+  const author = sessions.owner.actingSubject;
+  const contribution = await answer<{ contribution: string; draftRevision: string }>(sessions.owner.main('POST', '/v1/contributions', {
+    profile: 'text-contribution-v1', work: work.work, language: 'en',
+    body: `An original essay about ${title}.`, actingSubject: author }), 201);
+  const publication = await answer<{ publicationDecision: string }>(sessions.owner.main('POST', '/v1/contribution-publications', {
+    profile: 'text-publication-v1', contribution: contribution.contribution,
+    expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
+    rightsBasis: 'original-contribution', disclosure: 'public', actingSubject: author }), 201);
+  await answer(sessions.owner.main('POST', '/v1/publication-selections', {
+    profile: 'main-default-selection-v1', work: work.work, contribution: contribution.contribution,
+    publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
+    context: { kind: 'main-version-default', id: work.mainVersion }, selectionBasis: 'main-maintainer',
+    actingSubject: author }), 201);
   await authority(sessions.owner, work);
   return work;
 }
@@ -359,7 +378,7 @@ export async function buildRealmDiscussionCorpus(runtime: RealmSourceRuntime, co
         privateAccountId: priv[role].accountId, privateActingSubject: priv[role].actingSubject }]))];
     })) as RealmSourceMetadata['sequenceStarts'];
     const metadata: RealmSourceMetadata = { contract: 'realm-discussion-source-v1', population: realmSourcePopulation,
-      realms, authoritySnapshots, startingStatesValidUntil: startedAt + 3_600_000, sequenceStarts,
+      realms, authoritySnapshots, startingStatesValidUntil: startedAt + realmSourceAuthorityLifetimeMs, sequenceStarts,
       ranking: { publicWork, retainedWork, currentWork, public: pub, retained, current, admission },
       discussion: { publicWork: discussionWork, privateWork, roots, siblings, nested, privateOpener },
       measurements: realmSourceMeasurements(requests, intervals) };
@@ -388,9 +407,9 @@ async function realmAuthoritySnapshot(realm: PersonaSessions) {
 
 /** Complete API inventory, including exact authored revisions and concealed
  * historical/private resources. This is custody readiness, not the twelve row proofs. */
-export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions, metadata: RealmSourceMetadata) {
+export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions, metadata: RealmSourceMetadata, row?: 'ranking') {
   validateRealmSourceMetadata(metadata);
-  for (const [name, realm] of Object.entries(sessions))
+  for (const [name, realm] of Object.entries(sessions).filter(([name]) => !row || name.startsWith(row)))
     requireFact(stable(await realmAuthoritySnapshot(realm)) === stable(metadata.authoritySnapshots[name as keyof RealmSourceSessions]),
       'restored membership, role or disclosure starting state differs');
   const collect = async (realm: PersonaSessions, role: PersonaName) => {
@@ -408,12 +427,15 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
     requireFact(new Set(replies).size === replies.length, 'thread inventory repeats');
     return replies.sort();
   };
-  const same = (actual: string[], expected: RealmSourceReply[]) => requireFact(stable(actual) === stable(expected.map(item => item.reply).sort()), 'complete API thread inventory differs');
+  const same = (actual: string[], expected: RealmSourceReply[]) => requireFact(stable(actual) === stable(expected.map(item => item.reply).sort()),
+    `complete API thread inventory differs: expected ${expected.length}, read ${actual.length}`);
   same(await collect(sessions.rankingPublic, 'owner'), metadata.ranking.public);
   for (const role of ['owner', 'moderator', 'member'] as const) same(await collect(sessions.rankingPrivate, role),
     role === 'member' ? metadata.ranking.current : [...metadata.ranking.retained, ...metadata.ranking.current]);
-  same(await collect(sessions.discussionPublic, 'owner'), metadata.discussion.roots);
-  same(await collect(sessions.discussionPrivate, 'member'), [metadata.discussion.privateOpener]);
+  if (!row) {
+    same(await collect(sessions.discussionPublic, 'owner'), metadata.discussion.roots);
+    same(await collect(sessions.discussionPrivate, 'member'), [metadata.discussion.privateOpener]);
+  }
   const inventories: [PersonaSessions, RealmSourceWork, RealmSourceReply[]][] = [
     [sessions.rankingPublic, metadata.ranking.publicWork, metadata.ranking.public],
     [sessions.rankingPrivate, metadata.ranking.retainedWork, metadata.ranking.retained],
@@ -422,13 +444,14 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
     [sessions.discussionPrivate, metadata.discussion.privateWork, [metadata.discussion.privateOpener]],
   ];
   for (const [realm, work, items] of inventories) {
+    if (row && realm !== sessions.rankingPublic && realm !== sessions.rankingPrivate) continue;
     await authority(realm.owner, work);
     for (let start = 0; start < items.length; start += 8) await together(items.slice(start, start + 8).map(async expected => {
       const selected = await answer<RealmSourceReply>(realm.owner.main('GET', `/v1/member-replies/${short(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['reply', 'variantId', 'revisionId', 'revisionDigest', 'author', 'rootTarget', 'rootRevision', 'body'] as const)
         requireFact(selected[field] === expected[field], `restored exact reply ${field} differs`);
       const placed = await answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
-        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/replies/${short(expected.reply)}?${acting(realm.owner)}`));
+        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['placement', 'reply', 'revisionId', 'author', 'rootTarget'] as const)
         requireFact(placed[field] === expected[field], `restored placement ${field} differs`);
       requireFact(placed.realm === realm.realm, 'restored placement Realm differs');
@@ -441,13 +464,13 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
   }
   const member = sessions.rankingPrivate.member;
   await answer(member.main('GET', `/v1/realms/${short(sessions.rankingPrivate.realm)}/threads/${short(metadata.ranking.retained[0]!.reply)}?${acting(member)}`), 404);
-  for (const realm of [sessions.rankingPrivate, sessions.discussionPrivate]) for (const role of ['visitor', 'stranger', 'operator'] as const) {
+  for (const realm of row ? [sessions.rankingPrivate] : [sessions.rankingPrivate, sessions.discussionPrivate]) for (const role of ['visitor', 'stranger', 'operator'] as const) {
     const person = realm[role];
     for (const suffix of ['', '/threads']) await answer(person.main('GET', `/v1/realms/${short(realm.realm)}${suffix}?${acting(person)}`), 404);
   }
 }
 
-export function realmDiscussionSourceAdapter(specification: SourceInputs, runtime: RealmSourceRuntime): RetainedSourceAdapter<RealmSourceMetadata, RealmSourceCandidate> {
+export function realmDiscussionSourceAdapter(specification: SourceInputs, runtime: RealmSourceRuntime, row?: 'ranking'): RetainedSourceAdapter<RealmSourceMetadata, RealmSourceCandidate> {
   let produced: Awaited<ReturnType<typeof buildRealmDiscussionCorpus>> | undefined;
   let living: RealmSourceSessions | undefined;
   return { specification,
@@ -475,7 +498,7 @@ export function realmDiscussionSourceAdapter(specification: SourceInputs, runtim
       const candidate = await runtime.restore(context, manifest.metadata);
       const verificationStarted = Date.now();
       try {
-        await verifyRealmDiscussionCorpus(candidate.sessions, manifest.metadata); context.budget.remaining();
+        await verifyRealmDiscussionCorpus(candidate.sessions, manifest.metadata, row); context.budget.remaining();
         const verificationMs = Date.now() - verificationStarted;
         candidate.preparation.readinessMs += verificationMs; candidate.preparation.totalMs += verificationMs;
         return candidate;
@@ -492,8 +515,8 @@ export function realmDiscussionSourceAdapter(specification: SourceInputs, runtim
 
 /** Default construction imports physical helpers only when explicitly preparing
  * or consuming this source. Unit regressions inject a stack-free runtime. */
-export async function realmDiscussionSource(directory?: string) {
+export async function realmDiscussionSource(directory?: string, row?: 'ranking') {
   const runtime = await import('./realm-discussion-source-runtime.ts');
-  const adapter = realmDiscussionSourceAdapter(await runtime.realmSourceInputs(), runtime.realmSourceRuntime());
+  const adapter = realmDiscussionSourceAdapter(await runtime.realmSourceInputs(), runtime.realmSourceRuntime(), row);
   return { adapter, sources: new RetainedSources(directory ?? runtime.realmSourceDirectory()) };
 }

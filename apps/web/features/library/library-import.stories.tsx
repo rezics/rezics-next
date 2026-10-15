@@ -33,7 +33,9 @@ const faked = (options: FakeOptions = {}): (() => ImportApi) => () => (last = fa
 
 const meta = { title: 'Library/Import', component: Harness,
   args: { agent: agentId, context: agentId, locale: 'en', messages, make: faked() },
-  parameters: { route: { pathname: '/en/library' } },
+  parameters: { route: { pathname: '/en/library' },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
+  globals: { viewport: { value: 'desktop' } },
 } satisfies Meta<typeof Harness>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -228,6 +230,7 @@ export const German: Story = { args: { locale: 'de', messages: { ...messages, ..
 
 export const Japanese: Story = { args: { locale: 'ja', messages: { ...messages, ...ja } },
   async play({ canvasElement }) { await userEvent.click(within(canvasElement).getByText('本をインポート')); } };
+export const JapanesePhone: Story = { ...Japanese, globals: { locale: 'ja', viewport: { value: 'phone' } } };
 
 
 /** Observation stops after admission exhaustion; an explicit check reads the durable job later. */

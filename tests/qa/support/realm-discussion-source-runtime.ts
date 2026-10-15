@@ -9,11 +9,11 @@ import { dockerEnvironment, postgresImage, projectRunning, removeStoppedContaine
 import { loadCompatibility } from '../../../scripts/load/compatibility.ts';
 import { retainStoppedOwnerBackup, restoreCatalogueBackup } from '../../../scripts/load/catalogue-backup.ts';
 import { stopCorpusSourcePostgres } from '../../../scripts/load/corpus-backup-driver.ts';
-import { sourceFileDigests } from '../../../scripts/qa/retained-source.ts';
+import { RetainedSources, sourceFileDigests } from '../../../scripts/qa/retained-source.ts';
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { producerModules, retainedVolumeInventory } from '../fault-recovery/owner-restore-erasure-fixture.ts';
 import { personaSessions, retainPersonaRealm, restorePersonaRealms } from './personas.ts';
-import { realmDiscussionSource, realmDiscussionSourceSpecification, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
+import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 export const realmSourceDirectory = () => join(root, '.temp', 'realm-discussion-sources');
 const physicalNamespace = sha256(root);
@@ -54,7 +54,8 @@ export function realmSourceRuntime(): RealmSourceRuntime {
           startedAt: event.requestStartedAt, finishedAt: event.answeredAt, status: event.response.status,
           answer: service === 'Main' ? JSON.parse(event.response.body) : null });
       };
-      const options = { observeMain: observer('Main'), observeAccount: observer('Account') };
+      const options = { observeMain: observer('Main'), observeAccount: observer('Account'),
+        moderatorLifetimeMs: realmSourceAuthorityLifetimeMs };
       const rankingPublic = await personaSessions('public', options);
       try {
         return { rankingPublic, rankingPrivate: await personaSessions('private', options),
@@ -139,7 +140,10 @@ export function realmSourceRuntime(): RealmSourceRuntime {
 if (import.meta.main) {
   if (process.argv[2] !== '--prepare' || process.argv.length !== 3)
     throw new Error('Realm source accepts only an explicit --prepare under admitted QA preparation');
-  const { sources, adapter } = await realmDiscussionSource();
+  // The consumer factory dynamically imports this module. Awaiting it from
+  // this module's own top-level entry waits forever for our evaluation to end.
+  const adapter = realmDiscussionSourceAdapter(await realmSourceInputs(), realmSourceRuntime());
+  const sources = new RetainedSources(realmSourceDirectory());
   const result = await sources.prepare(adapter);
   // A bounded summary names custody; it never prints private credential metadata.
   console.log(JSON.stringify({ key: result.manifest.key, digest: result.manifest.digest, built: result.built,
