@@ -444,7 +444,7 @@ export async function verifyRealmDiscussionCorpus(sessions: RealmSourceSessions,
       for (const field of ['reply', 'variantId', 'revisionId', 'revisionDigest', 'author', 'rootTarget', 'rootRevision', 'body'] as const)
         requireFact(selected[field] === expected[field], `restored exact reply ${field} differs`);
       const placed = await answer<{ placement: string; realm: string; reply: string; revisionId: string; author: string; rootTarget: string }>(
-        realm.owner.main('GET', `/v1/realms/${short(realm.realm)}/replies/${short(expected.reply)}?${acting(realm.owner)}`));
+        realm.owner.main('GET', `/v1/realms/${encodeURIComponent(realm.realm)}/replies/${encodeURIComponent(expected.reply)}?${acting(realm.owner)}`));
       for (const field of ['placement', 'reply', 'revisionId', 'author', 'rootTarget'] as const)
         requireFact(placed[field] === expected[field], `restored placement ${field} differs`);
       requireFact(placed.realm === realm.realm, 'restored placement Realm differs');

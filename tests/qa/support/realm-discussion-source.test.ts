@@ -89,7 +89,9 @@ function fixture(options: { retryIdentity?: boolean; denyIdentity?: boolean } = 
               items: [{ reply: item.reply, parent: item.parentReply, revisionId: item.revisionId }] });
           }
           if (url.pathname.includes('/replies/')) {
-            const item = replies.get(`https://rezics.com/id/${url.pathname.split('/').at(-1)}`)!;
+            const coordinates = url.pathname.split('/');
+            expect(decodeURIComponent(coordinates[3]!)).toBe(realm);
+            const item = replies.get(decodeURIComponent(coordinates.at(-1)!))!;
             return Response.json({ ...item, realm });
           }
           return Response.json({});
