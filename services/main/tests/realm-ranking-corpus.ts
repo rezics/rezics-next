@@ -8,9 +8,9 @@ import {
   renameSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { Pool } from 'pg';
-import { stream } from '../../../scripts/fixture/stack.ts';
+import { fixtureRoot, stream } from '../../../scripts/fixture/stack.ts';
 import {
   createCorpusBackupDriver,
   type CorpusBackupDriverOptions,
@@ -138,8 +138,13 @@ export function realmRankingCorpusKey(compatibility = loadCompatibility(root)): 
     .slice(0, 16)}`;
 }
 
+/** Retained inputs share the fixture store across checkouts; stage logs stay local. */
+export function realmRankingCorpusDirectory(fixtures = fixtureRoot): string {
+  return join(dirname(resolve(fixtures)), 'work-profiles', 'realm-ranking-corpus');
+}
+
 export function realmRankingCorpusRoot(): string {
-  return join(root, '.temp', 'realm-ranking-corpus', realmRankingCorpusKey());
+  return join(realmRankingCorpusDirectory(), realmRankingCorpusKey());
 }
 
 export function realmRankingBackupPath(size: RealmRankingScale): string {
@@ -152,7 +157,7 @@ export function realmRankingBuildCommand(): string {
 
 /** How to produce the backups. The ranking test prints this instead of writing storage directly. */
 export function realmRankingCorpusInstructions(
-  reason = 'the backup is not in this checkout',
+  reason = `the backup is absent from the fixture store at ${realmRankingCorpusRoot()}`,
 ): string {
   const key = realmRankingCorpusKey();
   return (
@@ -163,8 +168,8 @@ export function realmRankingCorpusInstructions(
   );
 }
 
-function cutReady(size: RealmRankingScale): boolean {
-  const directory = join(realmRankingCorpusRoot(), String(size));
+function cutReady(size: RealmRankingScale, corpus = realmRankingCorpusRoot()): boolean {
+  const directory = join(corpus, String(size));
   return (
     existsSync(join(directory, 'backup.json')) &&
     existsSync(join(directory, 'compose.env')) &&
@@ -172,8 +177,8 @@ function cutReady(size: RealmRankingScale): boolean {
   );
 }
 
-export function readRealmRankingCorpus(): RealmRankingCorpusManifest | undefined {
-  const path = join(realmRankingCorpusRoot(), 'manifest.json');
+export function readRealmRankingCorpus(corpus = realmRankingCorpusRoot()): RealmRankingCorpusManifest | undefined {
+  const path = join(corpus, 'manifest.json');
   if (!existsSync(path)) return undefined;
   const manifest = JSON.parse(readFileSync(path, 'utf8')) as RealmRankingCorpusManifest;
   if (
@@ -188,7 +193,7 @@ export function readRealmRankingCorpus(): RealmRankingCorpusManifest | undefined
     !manifest.identity.followups.wideRoot.reply ||
     manifest.identity.followups.wide.length !== 193 ||
     !compatibleLoadStorage(manifest.compatibility, loadCompatibility(root)) ||
-    REALM_RANKING_SCALES.some((size) => !manifest.scales.includes(size) || !cutReady(size))
+    REALM_RANKING_SCALES.some((size) => !manifest.scales.includes(size) || !cutReady(size, corpus))
   ) {
     return undefined;
   }
@@ -197,7 +202,7 @@ export function readRealmRankingCorpus(): RealmRankingCorpusManifest | undefined
 
 export function explainUnavailableCorpus(): string {
   const current = loadCompatibility(root);
-  const directory = join(root, '.temp', 'realm-ranking-corpus');
+  const directory = realmRankingCorpusDirectory();
   if (!existsSync(directory)) return realmRankingCorpusInstructions();
   const stale = readdirSync(directory).flatMap((name) => {
     const path = join(directory, name, 'manifest.json');
