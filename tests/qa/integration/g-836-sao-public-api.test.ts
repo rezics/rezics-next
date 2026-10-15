@@ -347,9 +347,9 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     const libraryState = await json<{ status: { version: number } }>(await call('GET',
       `/v1/works/${shortId(survivor.work)}/reader-state?actingSubject=${encodeURIComponent(actorA)}`,undefined,f.account.tokenA));
     afterCapture('library',actorA,async () => { await status(survivor.work,actorA,'reading',f.account.tokenA,libraryState.status.version); });
-    const followState = await json<{ revision: string }>(await call('GET',
+    const currentFollow = await json<{ revision: string }>(await call('GET',
       `/v1/follows/${shortId(survivor.work)}?actingSubject=${encodeURIComponent(actorA)}&kind=work`,undefined,f.account.tokenA));
-    afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,followState.revision); });
+    afterCapture('follows',f.principalId,async () => { await follow(survivor.work,actorA,true,f.account.tokenA,currentFollow.revision); });
     // The write compares the graph observation head, which is the value a client
     // retries with. The aggregate table is only that head's private witness.
     const ratingSlot = standingRatingSlotIri(f.principalId, context, survivor.mainVersion);
