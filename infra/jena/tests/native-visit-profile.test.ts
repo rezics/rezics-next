@@ -21,6 +21,9 @@ test('native Realm seeks retain exact visit counters through query HTTP headers'
   mkdirSync(join(build, 'src/test/java/com/rezics/jena'), { recursive: true });
   cpSync(join(root, 'infra/jena/command-module/src/test/java/com/rezics/jena/RealmSearchSeekTest.java'),
     join(build, 'src/test/java/com/rezics/jena/RealmSearchSeekTest.java'));
+  for (const file of ['CatalogueRankIteratorWorkTest.java', 'CachedTitleRankTest.java'])
+    cpSync(join(root, 'infra/jena/command-module/src/test/java/com/rezics/jena', file),
+      join(build, 'src/test/java/com/rezics/jena', file));
   mkdirSync(join(build, 'tmp'));
   try {
     const result = spawnSync('docker', [
@@ -32,7 +35,7 @@ test('native Realm seeks retain exact visit counters through query HTTP headers'
       'mvn', '-B', '-ntp', '-DexcludedGroups=com.rezics.jena.ExternalFixture',
       '-DargLine=-Xmx384m', '-DforkCount=1', '-DreuseForks=false',
       '-Dmaven.repo.local=/maven-cache', '-Djava.io.tmpdir=/build/tmp',
-      '-Dtest=RealmSearchSeekTest', 'package',
+      '-Dtest=RealmSearchSeekTest,CatalogueRankIteratorWorkTest,CachedTitleRankTest', 'package',
     ], { cwd: root, encoding: 'utf8', timeout: 300_000 });
     if (result.status !== 0)
       throw new Error(`native visit tests failed (${result.status}):\n${result.stdout}\n${result.stderr}`);

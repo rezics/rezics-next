@@ -248,6 +248,8 @@ final class TextEntityDocuments {
             Entity entity = new Entity(scope.unit(), scope.graph(), value.getLiteralLanguage(), value.getLiteralDatatype());
             entity.put(scope.field(), value.getLiteralLexicalForm());
             Document document = RezicsLuceneDocument.build(index, entity);
+            if (CommandPolicy.PUBLIC_SEARCH.equals(scope.graph()))
+                FilteredGraphTextIndex.decorateTitleDocument(document, scope.unit());
             if (!document.getField(scope.field()).fieldType().stored()
                 || document.getField(scope.field()).fieldType().indexOptions() == org.apache.lucene.index.IndexOptions.NONE)
                 throw new IllegalArgumentException("external text requires searchable stored original values");
