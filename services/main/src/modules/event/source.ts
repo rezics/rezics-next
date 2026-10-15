@@ -7,21 +7,25 @@ import { contentEvidenceIri, eventTimeSlotIri, verifyEventObservationManifest } 
 import { eventEndpointBounds, UnsupportedEventTime, type EventTimePrecision } from './time.ts';
 
 export class EventSourceUnavailable extends Error {}
+export class EventSourceHeld extends EventSourceUnavailable {}
 const nativeId = /^https:\/\/rezics\.com\/id\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 export interface EventSourceKey { event: string; status: 'actual' | 'planned' }
 
 /** Fixed owner lineage; the moving Main sequence never qualifies a window. */
 export async function readEventDependencies(env: WorkActivationEnvironment) {
   const rows = (await env.fuseki.query(`PREFIX rv: <${RV}>
-    SELECT ?epoch ?sequence ?relaySequence WHERE {
+    SELECT ?epoch ?sequence ?relaySequence ?hold WHERE {
       GRAPH ${iri(GRAPHS.control)} {
         ${iri(DATASET)} rv:dataEpoch ?epoch ; rv:routingEpoch ${lit(env.lineage.routingEpoch)} ; rv:sequence ?sequence .
         OPTIONAL { ${iri(MAIN_RELAY_STREAM_SCOPE)} rv:dataEpoch ?epoch ; rv:streamSequence ?relaySequence }
-        FILTER NOT EXISTS { ${iri(DATASET)} rv:restoreHold true }
+        OPTIONAL { ${iri(DATASET)} rv:restoreHold ?hold }
       }
       FILTER(?epoch = ${lit(env.lineage.dataEpoch)})
     } LIMIT 2`)).results?.bindings ?? [];
   const row = rows[0];
+  if (rows.length === 1 && row?.hold?.value === 'true') {
+    throw new EventSourceHeld('event owner lineage is held for recovery');
+  }
   if (rows.length !== 1 || !row?.epoch || !row.sequence || !row.relaySequence
     || !/^(0|[1-9][0-9]{0,99})$/.test(row.relaySequence.value) || !/^(0|[1-9][0-9]*)$/.test(row.sequence.value)) {
     throw new EventSourceUnavailable('event owner lineage is unavailable or held');

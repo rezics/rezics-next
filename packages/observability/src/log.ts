@@ -25,6 +25,8 @@ const allowed = new Set([
   'rezics.worker.outcome',
   'rezics.worker.trigger',
   'error.class',
+  'error.message',
+  'error.chain.messages',
   'error.code',
   'error.sqlstate',
   'error.chain.classes',
@@ -149,6 +151,18 @@ function publicAttributes(attributes: Attributes): Attributes {
       if (typeof value === 'string' && classToken.test(value) && !logLineCarriesPersonalData(value)) result[key] = value;
       continue;
     }
+    if (key === 'error.message') {
+      const message = boundedMessage(value);
+      if (message) result[key] = message;
+      continue;
+    }
+    if (key === 'error.chain.messages') {
+      if (Array.isArray(value)) {
+        const messages = value.slice(0, ERROR_CHAIN_LIMIT).map(item => boundedMessage(item) ?? '[redacted]');
+        if (messages.length) result[key] = messages;
+      }
+      continue;
+    }
     if (key === 'error.code') {
       const code = boundedCodeValue(value);
       if (code) result[key] = code;
@@ -213,19 +227,29 @@ function boundedErrorChain(error: unknown): unknown[] {
   return chain;
 }
 
-/** One fixed event: bounded error classes/codes and a nested checkout's caller locations.
- * Never the message, stack, row, or query text. */
+/** Keep diagnostic prose bounded; omit messages containing identities, SQL or URLs. */
+function boundedMessage(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !value.length || value.length > 512
+    || /[\r\n\x00-\x1f]|\b(?:SELECT|INSERT|UPDATE|DELETE|VALUES)\b|:\/\//i.test(value)
+    || logLineCarriesPersonalData(value)) return undefined;
+  return value;
+}
+
+/** Bounded diagnostic messages and causes, never stacks, rows or query text. */
 export function logWorkerFault(worker: string, error: unknown): void {
   const chain = boundedErrorChain(error);
+  const messages = chain.map(item => item instanceof Error ? boundedMessage(item.message) : undefined);
   const codes = chain.flatMap(item => boundedCode(item) ?? []);
   const code = codes[0];
   const sqlstate = codes.find(value => sqlstateToken.test(value));
   telemetryLog('worker_fault', 'error', {
     ...(workerName.test(worker) && !logLineCarriesPersonalData(worker) ? { 'rezics.worker.name': worker } : {}),
     'error.class': boundedClass(error),
+    ...(error instanceof Error && boundedMessage(error.message) ? { 'error.message': error.message } : {}),
     ...(code ? { 'error.code': code } : {}),
     ...(sqlstate ? { 'error.sqlstate': sqlstate } : {}),
     ...(chain.length > 1 ? { 'error.chain.classes': chain.map(boundedClass),
+      ...(messages.some(Boolean) ? { 'error.chain.messages': messages.map(message => message ?? '[redacted]') } : {}),
       ...(codes.length ? { 'error.chain.codes': codes } : {}) } : {}),
     ...checkoutAttributes(error),
   });

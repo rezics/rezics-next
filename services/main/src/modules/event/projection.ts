@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import type { WorkActivationEnvironment } from '../work/activate.ts';
 import { effectInsertSql, effectInsertValues, hasEventEffects, uuidOrdinal } from './effects.ts';
-import { EVENT_COLLECTION_BATCH, EVENT_SOURCE_COST, readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
+import { EVENT_COLLECTION_BATCH, EVENT_SOURCE_COST, EventSourceHeld, readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys } from './source.ts';
 
 export const EVENT_PROJECTION_COST = {
   sourceKeys: EVENT_SOURCE_COST.members, relayBatches: EVENT_SOURCE_COST.batches, targets: 32, relayEvents: EVENT_SOURCE_COST.members, windowRows: 100,
@@ -191,6 +191,9 @@ export class EventTemporalProjection {
       return worked;
     } catch (error) {
       try { await client.query('ROLLBACK'); } catch { /* preserve the projection failure */ }
+      // Recovery holds are temporary. Roll back this bounded tick and let the
+      // regular poll retry, without advancing a checkpoint or blocking Content.
+      if (error instanceof EventSourceHeld) return 0;
       throw error;
     } finally { client.release(); }
   }

@@ -41,7 +41,7 @@ function logged(line: string): Record<string, unknown> {
   return rest;
 }
 
-test('a worker fault records the error class and code and omits the message', async () => {
+test('a worker fault records the error class and code and omits a message containing identities', async () => {
   const agent = 'https://rezics.com/id/00000000-0000-4000-8000-0000000000aa';
   const error = new DatabaseError(
     `duplicate key for reader@example.com ${agent}`,
@@ -75,8 +75,10 @@ test('a wrapped database failure keeps the outer class and the provider code', a
     'error.chain.classes': ['RecommendationUnavailable', 'Error'],
     'error.chain.codes': ['08006'],
   });
-  expect(line).not.toContain('provider connection lost');
-  expect(line).not.toContain('Access owner is unavailable');
+  expect(logged(line!)).toMatchObject({
+    'error.message': 'Access owner is unavailable',
+    'error.chain.messages': ['Access owner is unavailable', 'provider connection lost'],
+  });
 });
 
 test('fault chains retain at most five levels and stop at a repeated error', async () => {
@@ -99,7 +101,32 @@ test('fault chains retain at most five levels and stop at a repeated error', asy
     'error.chain.classes': ['RecommendationUnavailable', 'Error'], 'error.chain.codes': ['E0'],
   });
   expect(bounded).not.toContain('reader@example.com');
-  expect(cyclic).not.toContain('cyclic failure');
+  expect(logged(cyclic!)['error.chain.messages']).toEqual(['cyclic failure', '[redacted]']);
+});
+
+test('fault diagnostics preserve Event source reasons and bound messages at the telemetry boundary', async () => {
+  class EventSourceUnavailable extends Error {}
+  const [fault, invalid, boundary] = await capture(() => {
+    logWorkerFault('main.event.projection', new EventSourceUnavailable('Event retained batch members are incomplete', {
+      cause: new Error('relay batch was published before its members'),
+    }));
+    telemetryLog('worker_fault', 'error', {
+      'error.message': 'x'.repeat(513),
+      'error.chain.messages': ['reader@example.com', "SELECT secret FROM accounts", 'https://private/token', 'line\nbreak'],
+    });
+    telemetryLog('worker_fault', 'error', {
+      'error.message': 'x'.repeat(512), 'error.chain.messages': Array(7).fill('bounded cause'),
+    });
+  });
+  expect(logged(fault!)).toMatchObject({
+    'error.message': 'Event retained batch members are incomplete',
+    'error.chain.messages': ['Event retained batch members are incomplete', 'relay batch was published before its members'],
+  });
+  expect(logged(invalid!)).toEqual({ level: 'error', event: 'worker_fault',
+    'error.chain.messages': Array(4).fill('[redacted]') });
+  expect(logged(boundary!)).toMatchObject({
+    'error.message': 'x'.repeat(512), 'error.chain.messages': Array(5).fill('bounded cause'),
+  });
 });
 
 test('a provider code beyond the fifth error level is not inspected', async () => {
@@ -108,6 +135,8 @@ test('a provider code beyond the fifth error level is not inspected', async () =
   const [line] = await capture(() => logWorkerFault('main.route.work_read_unavailable', error));
   expect(logged(line!)).toEqual({ level: 'error', event: 'worker_fault',
     'rezics.worker.name': 'main.route.work_read_unavailable', 'error.class': 'Error',
+    'error.message': 'private wrapper',
+    'error.chain.messages': Array(5).fill('private wrapper'),
     'error.chain.classes': ['Error', 'Error', 'Error', 'Error', 'Error'] });
 });
 
@@ -271,6 +300,7 @@ test('a nested checkout fault keeps bounded caller locations and drops query tex
     event: 'worker_fault',
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
+    'error.message': 'Nested PostgreSQL pool checkout',
     'rezics.checkout.outer': [
       'services/main/src/infrastructure/pg-pool.test.ts:80 outerCheckout',
       'services/main/src/caller.ts:2',
@@ -285,6 +315,7 @@ test('a nested checkout fault keeps bounded caller locations and drops query tex
     event: 'worker_fault',
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
+    'error.message': 'Nested PostgreSQL pool checkout',
   });
   expect(line).not.toContain('SELECT');
   expect(line).not.toContain('reader@example.com');
@@ -316,6 +347,7 @@ test('a nested checkout fault names its worker tick and drops a tick that is dat
     time: expect.any(String),
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
+    'error.message': 'Nested PostgreSQL pool checkout',
     'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
     'rezics.checkout.tick': 'main.template.recovery',
   });
@@ -325,6 +357,7 @@ test('a nested checkout fault names its worker tick and drops a tick that is dat
     time: expect.any(String),
     'rezics.worker.name': 'main.database.nested-checkout',
     'error.class': 'NestedPoolCheckoutError',
+    'error.message': 'Nested PostgreSQL pool checkout',
     'rezics.checkout.inner': 'services/main/src/infrastructure/pg-pool.ts:88 controlTransaction',
   });
   expect(dropped).not.toContain('SELECT');
@@ -372,7 +405,7 @@ test('a line logged inside a request carries that request trace id without an ex
         'rezics.worker.name': 'main.database.nested-checkout',
         'error.class': 'Error',
       });
-      expect(JSON.stringify(fault)).not.toContain('composition unavailable');
+      expect(fault['error.message']).toBe('composition unavailable');
     }
   } finally {
     await app.stop();

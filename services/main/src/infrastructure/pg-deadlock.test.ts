@@ -10,7 +10,7 @@ test('the deadlock observer selects only the direct SQLSTATE and runs before que
   console.error = (...args: unknown[]) => {
     lines.push(args.join(' '));
   };
-  const error = new DatabaseError('private-error-text', 0, 'error');
+  const error = new DatabaseError('deadlock detected', 0, 'error');
   error.code = '40P01';
   let delivered: unknown;
   client.connection.on('errorMessage', (received: unknown) => {
@@ -32,6 +32,7 @@ test('the deadlock observer selects only the direct SQLSTATE and runs before que
         event: 'worker_fault',
         'rezics.worker.name': 'main.database.deadlock',
         'error.class': 'DatabaseError',
+        'error.message': 'deadlock detected',
         'error.code': '40P01',
         'error.sqlstate': '40P01',
       },

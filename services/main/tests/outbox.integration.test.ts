@@ -13,6 +13,8 @@ import { selectRealmLocal, realmSelectionDigest } from '../src/modules/work/sele
 import { ZoneBrowseProjection } from '../src/modules/zone-browse/store.ts';
 import { runMainRelay } from '../src/modules/outbox/worker.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
+import { readEventSourceKeys } from '../src/modules/event/source.ts';
+import { EventTemporalProjection } from '../src/modules/event/projection.ts';
 import { activateMetadataWork, DATASET, initializeFreshGraph, metadataWorkRequestDigest,
   type WorkActivationEnvironment } from '../src/modules/work/activate.ts';
 import { editMetadataWork, metadataWorkEditDigest, StaleWorkHead,
@@ -24,11 +26,11 @@ import { initializeRelayCheckpoint, OutboxEpochChanged, OutboxGap, OutboxIncompl
 
 const root = resolve(import.meta.dir, '../../..');
 
-async function bounded<T>(promise: Promise<T>): Promise<T> {
+async function bounded<T>(promise: Promise<T>, boundary: string): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([promise, new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error('live handoff boundary did not complete')), 10_000);
+      timer = setTimeout(() => reject(new Error(`live handoff ${boundary} boundary did not complete`)), 10_000);
     })]);
   } finally { clearTimeout(timer); }
 }
@@ -143,23 +145,23 @@ test('restored owner cut remains readable with live workers at header, event and
         if (!batch) running = false;
         return batch !== null;
       }, () => running, 100, { log: line => { logs.push(line); }, consumer });
-      await bounded(header.promise);
+      await bounded(header.promise, 'header');
       projection.start();
       contentWorker.start();
-      await bounded(Promise.all([contentPolled[0]!.promise, browsePolled[0]!.promise]));
+      await bounded(Promise.all([contentPolled[0]!.promise, browsePolled[0]!.promise]), 'header readers');
       expect(projection.recoveryStatus().checkpoint).toEqual(checkpoint);
       expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe('0');
       phase = 1;
       releaseHeader.resolve();
-      await bounded(events.promise);
-      await bounded(Promise.all([contentPolled[1]!.promise, browsePolled[1]!.promise]));
+      await bounded(events.promise, 'events');
+      await bounded(Promise.all([contentPolled[1]!.promise, browsePolled[1]!.promise]), 'event readers');
       expect(projection.recoveryStatus().checkpoint).toEqual(checkpoint);
       expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe('0');
       phase = 2;
       releaseEvents.resolve();
-      await bounded(relayTask);
+      await bounded(relayTask, 'relay');
       finalFrontier.resolve();
-      await bounded(Promise.all([contentCaughtUp.promise, browseCaughtUp.promise]));
+      await bounded(Promise.all([contentCaughtUp.promise, browseCaughtUp.promise]), 'reader convergence');
       expect(statuses.length).toBeGreaterThanOrEqual(8);
       expect(statuses.every(status => status === 200)).toBe(true);
       expect(faults).toEqual([]);
@@ -168,6 +170,15 @@ test('restored owner cut remains readable with live workers at header, event and
       expect(BigInt(coverage.sequence)).toBeGreaterThanOrEqual(12n);
       expect(projection.recoveryStatus().checkpoint.sequence).toBe(coverage.sequence);
       expect((await copy.content.readEligibilityDeliveryProgress(MAIN_RELAY_STREAM_SCOPE, lineage.dataEpoch)).sequence).toBe(coverage.sequence);
+      const eventProjection = new EventTemporalProjection(copy.accessPool, relay, copy.env);
+      await copy.fuseki.update(`INSERT DATA { GRAPH <urn:rezics:graph:control> {
+        <${DATASET}> <https://rezics.com/vocab/restoreHold> true } }`);
+      try { expect(await eventProjection.tick()).toBe(0); }
+      finally {
+        await copy.fuseki.update(`DELETE DATA { GRAPH <urn:rezics:graph:control> {
+          <${DATASET}> <https://rezics.com/vocab/restoreHold> true } }`);
+      }
+      expect(await eventProjection.tick()).toBeGreaterThan(0);
     } finally {
       running = false;
       releaseHeader.resolve(); releaseEvents.resolve();
@@ -222,8 +233,22 @@ test('SYS04/SYS05/SYS12 partial: retained RDF outbox and durable handoff', async
     }, work: created.work, expectedHead: head, title });
     const firstEdit = await editMetadataWork(env, editIntent(created.workRevision, 'Outbox Work edited'));
     await initializeRelayCheckpoint(pool, 'first-handoff', lineage.dataEpoch);
-    expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('1');
-    expect((await relayMainOutboxOnce(fuseki, pool, 'first-handoff'))?.sequence).toBe('2');
+    let publications = 0;
+    const publishingPool = { query: async (sql: string, values?: unknown[]) => {
+      const result = await pool.query(sql, values);
+      if (sql.includes('INSERT INTO relay.delivered_batch')) {
+        // Read while delivery is paused after publishing the header and before
+        // ACK. This deterministically exposed the old header-before-members race.
+        const source = await readEventSourceKeys(pool, { dataEpoch: lineage.dataEpoch,
+          afterSequence: (BigInt(String(values![1])) - 1n).toString() });
+        expect(source?.members).toBe(1);
+        publications++;
+      }
+      return result;
+    } } as unknown as Pool;
+    expect((await relayMainOutboxOnce(fuseki, publishingPool, 'first-handoff'))?.sequence).toBe('1');
+    expect((await relayMainOutboxOnce(fuseki, publishingPool, 'first-handoff'))?.sequence).toBe('2');
+    expect(publications).toBe(2);
     expect(await relayMainOutboxOnce(fuseki, pool, 'first-handoff')).toBeNull();
     expect((await relayCoverage(pool, 'first-handoff')).eventCount).toBe('2');
     expect((await relayCoverage(pool, 'first-handoff')).batchCount).toBe('2');

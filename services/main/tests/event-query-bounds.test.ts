@@ -8,7 +8,7 @@ import { contentEvidenceIri, eventTimeSlotIri, EventObservationUnavailable } fro
 import { EventTemporalQueries, EventQueryDenied, EventQueryRestart, EventQueryUnavailable,
   type EventQueryInput } from '../src/modules/event/queries.ts';
 import { readEventCollectionKeys, readEventDependencies, readEventSource, readEventSourceKeys,
-  EventSourceUnavailable } from '../src/modules/event/source.ts';
+  EventSourceHeld, EventSourceUnavailable } from '../src/modules/event/source.ts';
 import { eventEffectFence, effectInsertSql, effectInsertValues, uuidOrdinal } from '../src/modules/event/effects.ts';
 import { outboxEventHandlers } from '../src/modules/event/outbox-event.ts';
 import { GRAPHS } from '../src/modules/work/activate.ts';
@@ -294,8 +294,11 @@ test('RATE07: dependencies read only local collection revisions and enforce owne
   expect(await readEventDependencies(env)).toEqual({ dataEpoch: 'epoch-event', sequence: '10',
     relaySequence: '3' });
   expect(fuseki.queries[0]).toContain('LIMIT 2');
-  expect(fuseki.queries[0]).toContain('rv:restoreHold true');
+  expect(fuseki.queries[0]).toContain('rv:restoreHold ?hold');
   expect(fuseki.queries[0]).not.toContain('rv:EventTime');
+  fuseki.dependencies = [{ epoch: value('epoch-event'), sequence: value('10'),
+    relaySequence: value('3'), hold: value('true') }];
+  await expect(readEventDependencies(env)).rejects.toBeInstanceOf(EventSourceHeld);
   for (const dependencies of [[], [{ epoch: value('epoch-event'), sequence: value('-1') }],
     [{ epoch: value('epoch-event'), sequence: value('1') }, { epoch: value('epoch-event'), sequence: value('1') }]]) {
     fuseki.dependencies = dependencies;

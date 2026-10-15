@@ -1933,8 +1933,10 @@ export async function relayMainOutboxOnce(
   if (events.some((event, index) => event.data.ordinal !== index)) {
     throw new OutboxIncomplete('outbox event ordinals are not complete');
   }
-  await retainBatch(pool, batch);
   for (const event of events) await deliver(pool, event);
+  // The header publishes a complete immutable batch to independent readers.
+  // A crash during member delivery must leave no readable partial batch.
+  await retainBatch(pool, batch);
   await hooks?.afterDelivery?.(batch);
   const advanced = await pool.query(
     `UPDATE relay.checkpoint SET sequence = $3, updated_at = clock_timestamp()
