@@ -62,6 +62,7 @@ export async function createWork(previous: NewWorkState, form: FormData): Promis
   if (!response.data || 'operationId' in response.data) return { status: 'pending', message: t.createPending, key, values };
   // An author's own Work is always created here; a catalogue-grain redirect means the form sent the wrong grain.
   if ('outcome' in response.data) return { status: 'error', message: t.createUnavailable, key: crypto.randomUUID(), values };
-  console.info(JSON.stringify({ event: 'studio_create_redirect', presentation: offered.presentation }));
-  redirect(localizedPath(createdWorkPath(agent, response.data.work, offered.presentation, writing), locale));
+  // Keep completion in useActionState: the form owns navigation after accepting this successful command result.
+  return { status: 'created', key, values,
+    href: localizedPath(createdWorkPath(agent, response.data.work, offered.presentation, writing), locale) };
 }

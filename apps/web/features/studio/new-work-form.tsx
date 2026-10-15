@@ -9,7 +9,8 @@ import { Input } from '@rezics/ui/input';
 import { ChoiceSelect } from '@rezics/ui/select';
 import { BookOpenIcon, CookingPotIcon, FileTextIcon, HourglassIcon, TriangleAlertIcon } from 'lucide-react';
 import { materializeData } from 'native-i18n';
-import { useActionState, useId } from 'react';
+import { useActionState, useEffect, useId } from 'react';
+import { useRouter } from 'next/navigation';
 import type { UiLocale } from '../../i18n/define.ts';
 import type { AgentOption } from '../auth/acting-identity.ts';
 import type { StudioMessages } from './messages.ts';
@@ -23,6 +24,7 @@ interface Values { title: string; type: string; language: string }
 export type NewWorkState =
   | { status: 'idle'; key: string; values?: Values }
   | { status: 'error'; message: string; key: string; values: Values }
+  | { status: 'created'; href: string; key: string; values: Values }
   /** Main is still activating the Work; a retry sends the same key and gets the same Work. */
   | { status: 'pending'; message: string; key: string; values: Values };
 
@@ -45,6 +47,10 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
 }) {
   const t = materializeData(messages, { locale });
   const [state, action, pending] = useActionState(create, initialState);
+  const router = useRouter();
+  const destination = state.status === 'created' ? state.href : null;
+  useEffect(() => { if (destination) router.push(destination); }, [destination, router]);
+  const busy = pending || state.status === 'created';
   const errorId = useId();
   // A person writing in this interface most likely writes in its language.
   const choices = writableTypes();
@@ -52,7 +58,8 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
   const languages: readonly string[] = !values.language || values.language === 'und'
     || writingLanguages.includes(values.language as never)
     ? writingLanguages : [values.language, ...writingLanguages];
-  return <form action={action} className="grid gap-7" aria-describedby={state.status === 'idle' ? undefined : errorId}>
+  return <form action={action} className="grid gap-7"
+    aria-describedby={state.status === 'error' || state.status === 'pending' ? errorId : undefined}>
     <input type="hidden" name="agent" value={agent.iri} />
     <input type="hidden" name="key" value={state.key} />
     <Field invalid={state.status === 'error' && !values.title}>
@@ -63,7 +70,7 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     </Field>
     <fieldset className="grid min-w-0 gap-2">
       <legend className="mb-2 font-medium text-sm">{t.workType}</legend>
-      <RadioGroup name="type" defaultValue={values.type} aria-label={t.workType}>
+      <RadioGroup key={values.type} name="type" defaultValue={values.type} aria-label={t.workType}>
         <div className="grid gap-2 sm:grid-cols-3">
           {choices.map(entry => ({ entry, ...presentations[entry.presentation] ?? documentPresentation }))
             .map(({ entry, icon: Icon, help }) => <RadioGroupItem key={entry.type} className="flex cursor-pointer items-start
@@ -78,7 +85,7 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
     </fieldset>
     <Field>
       <FieldLabel>{t.writingLanguage}</FieldLabel>
-      <ChoiceSelect name="language" defaultValue={values.language} required className="sm:max-w-72"
+      <ChoiceSelect key={values.language} name="language" defaultValue={values.language} required className="sm:max-w-72"
         placeholder={t.chooseWritingLanguage} options={[{ value: 'und', label: t.languageUndetermined },
           ...languages.map(tag => ({ value: tag, label: languageName(tag, locale), lang: tag }))]} />
       <FieldHelper>{t.languageError}</FieldHelper>
@@ -96,8 +103,8 @@ export function NewWorkForm({ agent, action: create, initialState, locale, messa
         <span className="text-muted-foreground text-xs">{t.writingAs}</span>
         <AgentIdentity agent={agent} messages={messages} locale={locale} />
       </div>
-      <Button type="submit" size="lg" isLoading={pending} disabled={pending}>
-        {pending ? t.creating : t.createAs({ agent: studioAgentName(agent, t) })}</Button>
+      <Button type="submit" size="lg" isLoading={busy} disabled={busy}>
+        {busy ? t.creating : t.createAs({ agent: studioAgentName(agent, t) })}</Button>
     </div>
   </form>;
 }
