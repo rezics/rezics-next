@@ -21,7 +21,8 @@ test('catalogue Work commands wait for broker admission with the same body and k
         : { status: 201, body: { work: 'created' } };
     },
   };
-  expect(await call(fake, 'POST', '/v1/works', body, 'catalogue-work')).toEqual({ work: 'created' });
+  expect(await call<{ work: string }>(fake, 'POST', '/v1/works', body, 'catalogue-work'))
+    .toEqual({ work: 'created' });
   expect(requests).toEqual(Array.from({ length: 4 }, () => ({
     method: 'POST', path: '/v1/works', body, key: 'catalogue-work',
   })));
