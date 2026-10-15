@@ -28,9 +28,10 @@ test('G-911: document continuations consume rejected name/body documents without
         expect(sparql).toContain('\\"catalogue\\":true');
         const encoded = /rv:rankedText\(rv:searchBody, "(?:[^"\\]|\\.)*", \d+, ("(?:[^"\\]|\\.)*"),/u.exec(sparql)![1]!;
         const after = JSON.parse(encoded) as string;
+        const size = Number(/rv:rankedText\(rv:searchBody, "(?:[^"\\]|\\.)*", (\d+),/u.exec(sparql)![1]);
         const offset = after ? hits.findIndex(hit => hit.document === (JSON.parse(after) as { document: number }).document) + 1 : 0;
         return { results: { bindings: [{ epoch: b('epoch'), sequence: b('9'), generation: b(position.generation),
-          page: b(JSON.stringify({ hits: hits.slice(offset), commit: '7', more: false })) }] } };
+          page: b(JSON.stringify({ hits: hits.slice(offset, offset + size), commit: '7', more: offset + size < hits.length })) }] } };
       }
       return { results: { bindings: hits.filter(hit => hit.key !== null && sparql.includes(`<${hit.id}>`)).map(hit => ({
         unit: b(hit.id), work: b(hit.key!), main: b(hit.key!), contribution: b(id(9)),
@@ -49,7 +50,7 @@ test('G-911: document continuations consume rejected name/body documents without
   expect(second.count).toEqual({ value: 2, precision: 'exact' });
   expect(second.next).toBeNull();
   expect((await read(first.next!)).results).toEqual(second.results);
-  expect(calls.filter(query => query.includes('rv:rankedText'))).toHaveLength(3);
+  expect(calls.filter(query => query.includes('rv:rankedText'))).toHaveLength(5);
 });
 
 test('G-911: the shared native body recipe retains authored values and proposed header titles', async () => {

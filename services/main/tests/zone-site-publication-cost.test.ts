@@ -90,6 +90,7 @@ async function nativeProjection(f: ReturnType<typeof fixture>, allowErasedHome =
   writeFileSync(join(directory, `${prefix}.trig`), f.data);
   writeFileSync(join(directory, `${prefix}.rq`), query);
   const result = spawnSync('docker', ['run', '--rm', '--pull=never', '--network', 'none',
+    '--user', `${process.getuid!()}:${process.getgid!()}`,
     '--memory', '768m', '--memory-swap', '768m', '--pids-limit', '256', '--read-only',
     '--tmpfs', '/tmp:rw,nosuid,size=32m,mode=1777', '--volume', `${directory}:/artifacts:ro,Z`,
     '--entrypoint', 'java', image, '-Xmx384m', '-cp', serverJar, 'arq.arq',

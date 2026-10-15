@@ -134,6 +134,17 @@ interface RequestAttempt {
   revisionIds: string[];
 }
 
+/** Publication locking is separate from the relay journal and Content bytes. */
+function preservationPool(): Pool {
+  return { connect: async () => ({
+    query: async (sql: string) => {
+      if (!/^(BEGIN|COMMIT|ROLLBACK|SET LOCAL\b)/.test(sql) && !sql.includes('pg_advisory_xact_lock'))
+        throw new Error('Unexpected preservation read before target validation');
+      return { rows: [] };
+    }, release: () => {},
+  }) } as unknown as Pool;
+}
+
 async function expectRefusedBeforeMutation(input: RequestAttempt,
   expectedError: typeof ContentErasureInvalid | typeof GraphErasureUnavailable): Promise<void> {
   const graph = input.graph;
@@ -149,7 +160,7 @@ async function expectRefusedBeforeMutation(input: RequestAttempt,
       return { rows: [] };
     },
   } as unknown as Pool;
-  const service = new ErasureService(relay, content, content);
+  const service = new ErasureService(relay, content, preservationPool());
   const admissionId = randomUUID();
   const actingSubject = resource();
   const resourceId = graph.identityRows[0]?.owner?.value ?? resource();
@@ -276,7 +287,7 @@ test('a 257th requested revision is refused before target reads, journaling or g
   } as unknown as Pool;
   let contentReads = 0;
   const content = { query: async () => { contentReads++; return { rows: [] }; } } as unknown as Pool;
-  const service = new ErasureService(relay, content, content);
+  const service = new ErasureService(relay, content, preservationPool());
   const id = randomUUID();
   const access = { register: async (request: { actingSubject: string; scope: string; action: string;
       idempotencyKey: string; requestDigest: string }) => ({ id, principalId: 'principal',

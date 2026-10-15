@@ -76,7 +76,7 @@ test('G323 first-page retries share budgets, recheck authority, and do not repla
     calls = 0;
     await expect(workRead(deps, request, {}, async session => {
       await selected(session);
-      for (let n = 0; n < 60; n++) await session.query('SELECT ?x WHERE {}', 1);
+      for (let n = 0; n < WORK_READ_COST.graphCalls; n++) await session.query('SELECT ?x WHERE {}', 1);
       sequence++;
     })).rejects.toBeInstanceOf(WorkReadLimit);
     expect(calls).toBe(WORK_READ_COST.graphCalls);

@@ -67,6 +67,9 @@ function fixture(input: { published?: boolean; phase?: 'rights' | 'delivery'; po
         admission: { type: 'literal', value: randomUUID() }, receipt: uri(`urn:rezics:receipt:${'a'.repeat(64)}`),
         digest: { type: 'literal', value: 'b'.repeat(64) },
       }] : [] } };
+      if (query.includes('ASK') && query.includes('rv:ContentSearchEligibilityDecision'))
+        return { boolean: state.published && !state.restore };
+      if (query.includes('rv:WorkStructurePublicationDecision')) return { results: { bindings: [] } };
       if (query.includes('rv:ErasedRevision')) return { results: { bindings: state.erased
         ? [{ target: uri(`urn:rezics:content:revision:${revisionId}`) }] : [] } };
       if (query.includes('ASK')) return { boolean: !state.restore };

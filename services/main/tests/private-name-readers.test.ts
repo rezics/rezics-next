@@ -1,3 +1,4 @@
+import { configureDisclosurePool, DisclosureStore } from '../src/modules/disclosure/read.ts';
 import { expect, test } from 'bun:test';
 import type { Pool, PoolClient } from 'pg';
 import { RV } from '../src/modules/work/activate.ts';
@@ -179,6 +180,12 @@ test('the public roster keeps a member and withholds a private name', async () =
     mode: { value: 'mandatory' }, listing: { value: 'listed' }, history: { value: 'everything' },
     admission: { value: 'invitation' }, head: { value: 'rev-1' },
   }] } }) };
+  const disclosure = new DisclosureStore(access.pool);
+  disclosure.read = async targets => {
+    expect(targets).toMatchObject([{ owner: 'graph', resource: realm, component: 'record' }]);
+    return ['visible'];
+  };
+  configureDisclosurePool(access.pool, disclosure);
   const roster = new AccessRealmRoster(access.pool, { fuseki, lineage: { dataEpoch: 'epoch', routingEpoch: 'routing' },
     objectDirectory: '.temp/private-names' } as unknown as WorkActivationEnvironment);
   const hidden = await roster.read(realm, {});
@@ -257,16 +264,16 @@ test('discovery credits withhold a private name from an anonymous viewer and sho
   expect(hidden.has(privateAgent)).toBe(false);
   expect(hidden.get(publicAgent)?.displayName).toBe(publicName);
   expect(JSON.stringify([...hidden.values()])).not.toContain(privateName);
-  expect(gate.reads()).toBe(1);
+  expect(gate.reads()).toBe(2);
 
   const shown = await namedDiscoveryCredits(session(disclosureViewer(controller)), credits);
   expect(shown.get(privateAgent)?.displayName).toBe(privateName);
-  expect(gate.reads()).toBe(2);
+  expect(gate.reads()).toBe(4);
 
   gate.publish();
   const published = await namedDiscoveryCredits(session(ANONYMOUS_VIEWER), credits);
   expect(published.get(privateAgent)?.displayName).toBe(privateName);
-  expect(gate.reads()).toBe(3);
+  expect(gate.reads()).toBe(6);
 });
 
 test('a private creator name never matches or appears for an anonymous catalogue reader', async () => {
@@ -280,6 +287,9 @@ test('a private creator name never matches or appears for an anonymous catalogue
         publicSearchWriteActive: false, publicSearchDeltaAvailable: true };
     },
     async query(sparql: string) {
+      if (sparql.includes('SELECT ?epoch ?sequence WHERE')) return { results: { bindings: [{
+        epoch: { value: 'epoch' }, sequence: { value: '1' },
+      }] } };
       if (sparql.includes('text:query')) return { results: { bindings: [] } };
       if (sparql.includes('NativeAgentCredit')) {
         expect(sparql).toContain('?agent');

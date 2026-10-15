@@ -1,3 +1,5 @@
+import { configureDisclosure } from '../src/modules/disclosure/read.ts';
+import { configureFixtureDisclosureAncestry, fixtureDisclosureReader } from './support/disclosure-ancestry.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { resolve } from 'node:path';
@@ -77,6 +79,8 @@ function fixture(groups: string[] = [], operations: string[] = []) {
       assertRecoveryOpen: async () => undefined },
     semanticStages: {}, contentPrivateSearch: { settlement: { sweep: async () => undefined } },
   } as unknown as MainWorkDependencies;
+  configureFixtureDisclosureAncestry(work.environment, () => undefined);
+  configureDisclosure(work.environment, fixtureDisclosureReader(async targets => targets.map(() => 'visible')));
   return { work, graph, ...gate, admissions: () => admissions };
 }
 const resourceQuery = { profile: 'resource-list-v1', context: 'global', scope: { kind: 'all' }, sort: 'newest',

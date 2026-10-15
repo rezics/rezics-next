@@ -521,7 +521,7 @@ test('pending, invalid, foreign site receipts and stale owner epochs cannot sett
     const h = pinHarness(),
       proof = siteProof(h);
     if (mismatch === 'pending') proof.env.fuseki = environment().env.fuseki;
-    if (mismatch === 'invalid') proof.row.count = { value: '2' };
+    if (mismatch === 'invalid') proof.row.count = { value: '0' };
     if (mismatch === 'variant') proof.row.variant = { value: `urn:rezics:variant:${randomUUID()}` };
     if (mismatch === 'epoch') h.state.ownerEpoch = randomUUID();
     await expect(

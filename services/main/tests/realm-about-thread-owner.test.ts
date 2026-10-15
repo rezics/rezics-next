@@ -455,7 +455,7 @@ test('an authority refusal with no allocated intent stays recoverable alongside 
   await probed.reached;
   expect(probes).toBe(3);
   denied = true;
-  await expect(f.post()).rejects.toBeInstanceOf(RealmReplyUnavailable);
+  await expect(f.post()).rejects.toBeInstanceOf(AdmissionDenied);
   expect(await about.readIntent(f.principalKey, f.key, f.selection.intentDigest)).toBeNull();
   denied = false;
   resume.release();
