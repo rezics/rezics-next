@@ -512,6 +512,7 @@ test('Work reads: native public/private/erased disclosure, fallback, scoped rati
       WHERE { GRAPH ${iri(GRAPHS.control)} { <urn:rezics:dataset:product> rv:dataEpoch ?epoch ; rv:sequence ?sequence } }`);
     stack.env.lineage.dataEpoch = newEpoch;
     await refreshDiscovery();
-    expect((await json<Page<{ id: string }>>(await get('/v1/works'))).items.map(item => item.id)).toEqual([second.work]);
+    expect((await json<Page<{ id: string }>>(await get('/v1/works'))).items.map(item => item.id))
+      .toEqual(remaining.items.map(item => item.id));
   } finally { await stack.stop(); }
 }, 120_000);
