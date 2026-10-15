@@ -1,6 +1,6 @@
 # Activity duration and estimates
 
-Proposed decision for program review, 2026-10-15. B03 is deliberately pending;
+Decided by program on 2026-10-15, with the estimator amendment under "Program review" below. B03 is deliberately pending;
 this change supplies contracts and counterexamples, without handlers, storage,
 admission profiles or a GUI. The staged competitor report's B03 and closing
 decision identify the job: choose an activity that fits the time available.
@@ -193,3 +193,17 @@ not an implementation of duration. `task goal -- check` passed types, API
 inference, lint, AST checks and guards; `task docs:check` passed. The remaining
 assertions intentionally await implementation and do not yet prove corrections,
 export or disclosure behavior.
+
+## Program review
+
+Accepted on 2026-10-15 with one amendment. A mean alone is not a fit estimate:
+one run left idle for days moves it arbitrarily far, and small cohorts have no
+protection against that. Each cohort component therefore also keeps an additive
+fixed log-scale histogram of known finished durations, the same pattern as the
+rating histograms, so corrections and withdrawals subtract exactly and reads
+stay one component row per cohort. The estimate discloses the median as the
+bucket interval that contains it, with the bucket scheme and its resolution
+named in the response (adjacent bucket bounds within a ratio of 1.25), next to
+the exact mean and the counts. The histogram is part of the first
+implementation, and the outcome test asserts a cohort where one outlier moves
+the mean but not the median interval.
