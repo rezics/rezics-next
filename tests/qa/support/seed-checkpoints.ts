@@ -11,6 +11,7 @@ import { verifySeedCheckpointPopulation, type SeedCheckpointPopulation } from '.
 import { SEED_AXES, SEED_RECIPE, type SeedAxis } from './seed-checkpoint-plan.ts';
 import type { MediaStack } from '../integration/media-support.ts';
 import type { WorkProfile } from './work-profile.ts';
+import { settlePendingAnswer } from './command-race.ts';
 
 export const SEED_BUILD_COMMAND = 'bun scripts/goal/goalctl.ts test tests/qa/fault-recovery/work-profile-seed-build.test.ts';
 export function seedDirectoryForFixtureRoot(fixtureDirectory: string): string {
@@ -191,7 +192,17 @@ export function readRetainedSeed(path = retainedSeedPath): RetainedSeed {
 }
 export function seedApi(stack: MediaStack, token: string): CorpusApi {
   return workProfileCorpusApi('http://main.local', token, {
-    fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
+    fetch: (async (input, init) => {
+      const send = () => {
+        init?.signal?.throwIfAborted();
+        return stack.main.handle(new Request(input, init));
+      };
+      // Preparation follows the existing public retry protocol with the same
+      // body and key. A pending answer never becomes a retained completion.
+      return settlePendingAnswer(await send(), send, {},
+        reason => { throw new Error(`Seed preparation ${init?.method} ${new URL(String(input)).pathname}: ${reason}`); },
+        async () => {});
+    }) as typeof fetch,
   });
 }
 export const seedSelection = (id: string): `/v1/${string}` => `/v1/main-versions/${id.slice(-36)}/selection?language=en`;

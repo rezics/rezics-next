@@ -12,6 +12,7 @@ import {
   seedDirectory,
   seedDirectoryForFixtureRoot,
   SEED_BUILD_COMMAND,
+  seedApi,
   type SeedCommandCostRow,
   type SeedCommandMeasurement,
   type RetainedSeedCut,
@@ -19,6 +20,24 @@ import {
   from '../support/seed-checkpoints.ts';
 import { integrationResourceClass, qaResourceClasses } from '../../../scripts/qa/resource-classes.ts';
 import { seedVerificationPlan, SEED_RESTORE_RUN_CEILING_MS } from '../../../scripts/qa/seed-verification.ts';
+
+test('seed preparation follows reconciling writes with the original intent and key', async () => {
+  const requests: Array<{ key: string | null; body: string }> = [];
+  const stack = { main: { async handle(request: Request) {
+    requests.push({ key: request.headers.get('idempotency-key'), body: await request.text() });
+    return requests.length === 1 ? Response.json({ operationId: 'urn:operation:seed',
+      status: 'reconciling', phase: 'publication-selection', result: null,
+      retry: { allowed: true, afterMs: 0 } }, { status: 202 })
+      : Response.json({ selection: 'urn:selection:seed' }, { status: 201 });
+  } } } as Parameters<typeof seedApi>[0];
+  const result = await seedApi(stack, 'token').command('seed:selection', {
+    method: 'POST', path: '/v1/publication-selections', body: { expectedSelectionHead: null },
+  });
+  expect(result).toEqual({ selection: 'urn:selection:seed' });
+  expect(requests).toHaveLength(2);
+  expect(requests[0]).toEqual(requests[1]);
+  expect(requests[0]!.key).toBe('seed:selection');
+});
 
 test('every cut selection preserves the two-copy isolation proof and allocates its exact restore count', () => {
   const cuts = (['small', 'medium', 'large'] as const).map(scale => ({ manifest: { scale } }) as RetainedSeedCut);
