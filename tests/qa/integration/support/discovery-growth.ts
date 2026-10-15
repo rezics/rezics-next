@@ -42,7 +42,7 @@ export function discoveryGrowthMeter(selectSql: (sql: string) => boolean = () =>
           ['SQL statements', row.sql.statements, first.sql.statements, 2],
         ] as const) if (actual > baseline + slack) failures.push(`${label}: ${field} ${actual} > ${baseline} + ${slack}`);
         for (const counter of ['rank_lucene_iterator_next_calls', 'rank_lucene_iterator_advance_calls',
-          'typeahead_prefix_entries_visited']) {
+          'typeahead_prefix_entries_visited', 'typeahead_prefix_next_calls', 'typeahead_prefix_seek_calls']) {
           const actual = row.native.counters[counter], baseline = first.native.counters[counter];
           if (baseline !== undefined && actual === undefined) failures.push(`${label}: missing ${counter}`);
           if (actual !== undefined && baseline !== undefined && actual > baseline + 16)

@@ -662,8 +662,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
             // conjunction work. Fall back to the full ranking only at its tail.
             org.apache.lucene.search.TopDocs top = null;
             if (catalogue && (cursor == null || cursor.score == 2_000_000f)) {
-                top = searcher.search(workNameQuery,
-                    new org.apache.lucene.search.TopScoreDocCollectorManager(size + 1, cursor, 0));
+                top = workTitlePage(searcher, reader, workNameQuery, cursor, size + 1, deadline);
                 if (top.scoreDocs.length <= size) top = null;
             }
             if (top == null) top = catalogue ? searcher.search(query,
@@ -690,8 +689,8 @@ public final class FilteredGraphTextIndex implements TextIndex {
                         if (best.scoreDocs.length != 1 || best.scoreDocs[0].doc != hit.doc
                             || !PublicNameProjection.visibleUnit(data, id)) key = null;
                     }
-                    if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, catalogue && id.startsWith(PublicNameProjection.PREFIX + "work:") ? workNameQuery : query, key,
-                        witness == null ? id : witness, hit.doc, entityField, proof)) key = null;
+                    if (!names && key != null && scope != null && !canonicalGroupHit(data, scope, searcher, query, workNameQuery, key,
+                        id, hit.doc, entityField, proof, deadline)) key = null;
                     ordered.add(new RankHit(id, hit.score, key, catalogue || names ? hit.doc : null, witness));
                 }
             }
@@ -699,6 +698,36 @@ public final class FilteredGraphTextIndex implements TextIndex {
             return new RankPage(List.copyOf(ordered), top.totalHits.value(),
                 top.totalHits.relation() == TotalHits.Relation.EQUAL_TO ? "exact" : "lower-bound", commit, more, lease.expiresAt());
         } catch (IOException | ParseException ex) { throw new TextIndexException("ranked query failed", ex); }
+    }
+
+    /** This tier has one constant score, so its exact ordering is ascending
+     * Lucene document ID. Stop globally at the page witness, before opening
+     * later segment iterators. A top-score collector still opens those leaves
+     * to establish that their equal scores cannot beat the selected prefix. */
+    private static org.apache.lucene.search.TopDocs workTitlePage(IndexSearcher searcher,
+            DirectoryReader reader, Query query, ScoreDoc after, int bound, long deadline) throws IOException {
+        var weight = searcher.createWeight(searcher.rewrite(query), org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES, 1f);
+        List<ScoreDoc> hits = new ArrayList<>(bound);
+        for (var leaf : reader.leaves()) {
+            if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+            int start = after == null ? 0 : Math.max(0, after.doc - leaf.docBase + 1);
+            if (start >= leaf.reader().maxDoc()) continue;
+            var scorer = weight.scorer(leaf);
+            if (scorer == null) continue;
+            var phase = scorer.twoPhaseIterator();
+            var iterator = phase == null ? scorer.iterator() : org.apache.lucene.search.TwoPhaseIterator.asDocIdSetIterator(phase);
+            var live = leaf.reader().getLiveDocs();
+            for (int doc = iterator.advance(start); doc != org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS; doc = iterator.nextDoc()) {
+                if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+                if (live != null && !live.get(doc)) continue;
+                hits.add(new ScoreDoc(leaf.docBase + doc, 2_000_000f));
+                CommandWork.count("rank_lucene_collection_events", 1);
+                if (hits.size() == bound) return new org.apache.lucene.search.TopDocs(new org.apache.lucene.search.TotalHits(
+                    hits.size(), org.apache.lucene.search.TotalHits.Relation.GREATER_THAN_OR_EQUAL_TO), hits.toArray(ScoreDoc[]::new));
+            }
+        }
+        return new org.apache.lucene.search.TopDocs(new org.apache.lucene.search.TotalHits(
+            hits.size(), org.apache.lucene.search.TotalHits.Relation.EQUAL_TO), hits.toArray(ScoreDoc[]::new));
     }
 
     static final int OCCURRENCE_VISITS = 4096;
@@ -935,9 +964,12 @@ public final class FilteredGraphTextIndex implements TextIndex {
             if (terms != null) {
                 var iterator = terms.iterator();
                 String start = after == null ? scope : scope + after.key();
+                CommandWork.count("typeahead_prefix_seek_calls", 1);
                 if (iterator.seekCeil(new org.apache.lucene.util.BytesRef(start)) != org.apache.lucene.index.TermsEnum.SeekStatus.END) {
                     var term = iterator.term();
-                    if (after != null && term.utf8ToString().equals(start)) term = iterator.next();
+                    if (after != null && term.utf8ToString().equals(start)) {
+                        CommandWork.count("typeahead_prefix_next_calls", 1); term = iterator.next();
+                    }
                     try (var witnessPhase = PublicSearchPhaseEvidence.phase(PublicSearchPhaseEvidence.Phase.WITNESS)) {
                         while (term != null && term.utf8ToString().startsWith(scope) && entries.size() < size) {
                             prefixDeadline(deadline);
@@ -954,6 +986,7 @@ public final class FilteredGraphTextIndex implements TextIndex {
                             entry.put("matchedField", field); entry.put("rejected", invalid);
                             entries.add(entry); if (invalid) rejected++;
                             last = key;
+                            CommandWork.count("typeahead_prefix_next_calls", 1);
                             term = iterator.next();
                         }
                     }
@@ -1372,15 +1405,54 @@ public final class FilteredGraphTextIndex implements TextIndex {
         }
         return null;
     }
+    /** Only leaves containing this exact name may open its phrase iterator.
+     * Identity and phrase postings still pass through the observed weights. */
+    private static int firstWorkNameHit(IndexSearcher searcher, Query query, String field, String name, long deadline) throws IOException {
+        var identity = searcher.createWeight(searcher.rewrite(new TermQuery(new Term(field, name))), org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES, 1f);
+        var phrase = searcher.createWeight(searcher.rewrite(query), org.apache.lucene.search.ScoreMode.COMPLETE_NO_SCORES, 1f);
+        for (var leaf : searcher.getIndexReader().leaves()) {
+            if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+            var supplier = identity.scorerSupplier(leaf);
+            if (supplier == null || supplier.cost() == 0) continue;
+            var ids = supplier.get(Long.MAX_VALUE).iterator();
+            var live = leaf.reader().getLiveDocs();
+            org.apache.lucene.search.DocIdSetIterator matches = null;
+            for (int doc = ids.nextDoc(); doc != org.apache.lucene.search.DocIdSetIterator.NO_MORE_DOCS; doc = ids.nextDoc()) {
+                if (System.nanoTime() >= deadline) throw new TextIndexException("ranked query deadline exceeded");
+                if (live != null && !live.get(doc)) continue;
+                if (matches == null) {
+                    var scorer = phrase.scorer(leaf);
+                    if (scorer == null) break;
+                    var phase = scorer.twoPhaseIterator();
+                    matches = phase == null ? scorer.iterator() : org.apache.lucene.search.TwoPhaseIterator.asDocIdSetIterator(phase);
+                }
+                if (matches.docID() < doc) matches.advance(doc);
+                if (matches.docID() == doc) return leaf.docBase + doc;
+            }
+        }
+        return -1;
+    }
+
     private static boolean canonicalGroupHit(org.apache.jena.sparql.core.DatasetGraph data, RankScope scope,
-        IndexSearcher searcher, Query query, String key, String candidateId, int doc, String entityField, RankProof proof) throws IOException {
+        IndexSearcher searcher, Query query, Query workNames, String key, String candidateId, int doc, String entityField, RankProof proof, long deadline) throws IOException {
         if (proof.groups.containsKey(key)) return proof.groups.get(key) == doc;
         Query membership = new TermQuery(new Term(RANK_GROUP, key));
         if (scope.catalogue()) {
             Node work = namedValue(data, CURRENT_GRAPH, uri(key), "work");
-            if (PublicNameProjection.productResource(work)) membership = new BooleanQuery.Builder()
-                .add(membership, BooleanClause.Occur.SHOULD)
-                .add(new TermQuery(new Term(entityField, PublicNameProjection.nameUnit(work, "work").getURI())), BooleanClause.Occur.SHOULD).build();
+            if (PublicNameProjection.productResource(work)) {
+                String name = PublicNameProjection.nameUnit(work, "work").getURI();
+                if (name.equals(candidateId)) {
+                    // This group's own complete name is the highest tier.
+                    // Resolve its exact identity before opening title scorers,
+                    // instead of scoring titles in every unrelated segment.
+                    int first = firstWorkNameHit(searcher, workNames, entityField, name, deadline);
+                    proof.groups.put(key, first);
+                    if (first >= 0) CommandWork.count("rank_group_candidates_visited", 1);
+                    return first == doc;
+                }
+                membership = new BooleanQuery.Builder().add(membership, BooleanClause.Occur.SHOULD)
+                    .add(new TermQuery(new Term(entityField, name)), BooleanClause.Occur.SHOULD).build();
+            }
         }
         Query grouped = new BooleanQuery.Builder().add(query, BooleanClause.Occur.MUST).add(membership, BooleanClause.Occur.FILTER).build();
         // Reject an ineligible identity once, including all its name/cache

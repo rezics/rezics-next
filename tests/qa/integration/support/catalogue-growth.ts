@@ -138,7 +138,8 @@ test(`${group} Zone catalogue browse and search seeks a bounded page as Works gr
         () => stack.call('GET', '/v1/search/typeahead?prefix=growth'));
       expect(suggestions.items).toHaveLength(10);
       expect(suggestions.hasMore).toBe(true);
-      expect(meter.evidence.at(-1)!.native.counters.typeahead_prefix_entries_visited).toBeGreaterThan(0);
+      for (const counter of ['typeahead_prefix_entries_visited','typeahead_prefix_next_calls','typeahead_prefix_seek_calls'])
+        expect(meter.evidence.at(-1)!.native.counters[counter]).toBeGreaterThan(0);
       }
     }
   } finally {
