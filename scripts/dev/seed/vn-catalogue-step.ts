@@ -35,7 +35,7 @@ const CATALOGUE_RECORD = 'Catalogue record.';
 
 const short = (iri: string) => iri.slice(-36);
 const resource = (kind: string, id: string) => `https://rezics.com/id/${stableId(`vndb-${kind}:${id}`)}`;
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const delay = (ms: number) => Bun.sleep(ms);
 
 export function vndbReleaseIri(id: string): string {
   return resource('release', id);
@@ -515,6 +515,14 @@ export async function call<T>(port: SeedPort, method: 'GET' | 'POST' | 'PUT', pa
   for (let attempt = 0; attempt < 8; attempt++) {
     const result = await port.request(method, path, body, key);
     if (result.status === 202 && attempt < 7) { await delay(500); continue; }
+    // Broker admission refuses before the command runs. Keep its exact intent
+    // and key while waiting for the relay to drain, within a fixed retry bound.
+    if (result.status === 503 && attempt < 7 && result.body !== null
+      && typeof result.body === 'object' && 'code' in result.body
+      && result.body.code === 'backpressure_saturated') {
+      await delay(Math.min(4000, 500 * 2 ** attempt));
+      continue;
+    }
     if (result.status >= 400) unexpected(result, `${method} ${path}`);
     return result.body as T;
   }

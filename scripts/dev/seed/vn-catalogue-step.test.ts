@@ -1,10 +1,60 @@
 import { randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
-import { expect, test } from 'bun:test';
+import { afterEach, expect, mock, spyOn, test } from 'bun:test';
 import { catalogueIntakePath } from '../../../tests/fixtures/catalogue/intake.ts';
 import { loadVndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { seedKey } from './plan.ts';
-import { applyVnCatalogue, type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
+import { applyVnCatalogue, call, type HttpResult, type SeedPort } from './vn-catalogue-step.ts';
+
+afterEach(() => mock.restore());
+
+test('catalogue Work commands wait for broker admission with the same body and key', async () => {
+  const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+  const body = { title: 'A catalogue Work', actingSubject: native() };
+  const requests: { method: string; path: string; body: unknown; key?: string }[] = [];
+  const fake: SeedPort = {
+    actingSubject: native(), grant: async () => {},
+    request: async (method, path, sent, key) => {
+      requests.push({ method, path, body: sent, key });
+      return requests.length < 4
+        ? { status: 503, body: { code: 'backpressure_saturated' } }
+        : { status: 201, body: { work: 'created' } };
+    },
+  };
+  expect(await call(fake, 'POST', '/v1/works', body, 'catalogue-work')).toEqual({ work: 'created' });
+  expect(requests).toEqual(Array.from({ length: 4 }, () => ({
+    method: 'POST', path: '/v1/works', body, key: 'catalogue-work',
+  })));
+  expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([500, 1000, 2000]);
+});
+
+test('broker retries are bounded and preserve the final refusal', async () => {
+  const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+  let attempts = 0;
+  const fake: SeedPort = {
+    actingSubject: native(), grant: async () => {},
+    request: async () => { attempts++; return { status: 503, body: { code: 'backpressure_saturated' } }; },
+  };
+  await expect(call(fake, 'POST', '/v1/works', {}, 'catalogue-work'))
+    .rejects.toThrow('POST /v1/works HTTP 503 {"code":"backpressure_saturated"}');
+  expect(attempts).toBe(8);
+  expect(sleep.mock.calls.map(([ms]) => ms)).toEqual([500, 1000, 2000, 4000, 4000, 4000, 4000]);
+});
+
+test('seed commands keep authorization and unrelated unavailable refusals', async () => {
+  const sleep = spyOn(Bun, 'sleep').mockResolvedValue(undefined);
+  for (const [status, code] of [[403, 'authority_denied'], [503, 'backpressure_unavailable'],
+    [503, 'work_read_unavailable']] as const) {
+    let attempts = 0;
+    const fake: SeedPort = {
+      actingSubject: native(), grant: async () => {},
+      request: async () => { attempts++; return { status, body: { code } }; },
+    };
+    await expect(call(fake, 'POST', '/v1/works', {}, 'catalogue-work')).rejects.toThrow(code);
+    expect(attempts).toBe(1);
+  }
+  expect(sleep).not.toHaveBeenCalled();
+});
 
 const native = () => `https://rezics.com/id/${randomUUID()}`;
 
