@@ -388,7 +388,8 @@ export function mediaRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
     .get('/v1/media/representations/:representation/bytes',{params:t.Object({representation:uuid}),
       query:t.Object({actingSubject:t.Optional(nativeId),use:t.Optional(uuid),
         zoneVariant:t.Optional(t.String({maxLength:80})),zone:t.Optional(t.String({maxLength:80}))},{additionalProperties:false}),
-      response:{200:t.File({type:[...MEDIA_TYPES]}),...authorizedReadProblems},
+      // The handler returns a raw buffered/streamed Response, not a File object. Its wire formats are declared below.
+      response:{200:t.Any(),...authorizedReadProblems},
       detail:{responses:{200:{description:'Exact retained representation bytes',content:Object.fromEntries(MEDIA_TYPES.map(type=>[
         type,{schema:{type:'string',format:'binary'}}]))}}}},async ({request,params,query}: {request:Request;
         params:{representation:string};query:{actingSubject?:string;use?:string;zoneVariant?:string;zone?:string}})=>publicFirst(request,query.actingSubject,async request=>{

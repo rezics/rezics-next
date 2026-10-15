@@ -365,9 +365,12 @@ async function productionVisits(name: PersonaName) {
     let pending = cache.get(key);
     if (!pending) {
       const sample = recording.session(name, anonymous ? sessions.visitor : person);
+      const headers = Object.fromEntries(request.headers.entries());
+      // This frame helper uses a placeholder; the persona session supplies its real cached session key.
+      delete headers['x-session-key'];
       pending = sample(`${phase}-visit-${++index}`, request.method, path,
         raw ? JSON.parse(raw) as unknown : undefined, request.headers.get('idempotency-key') ?? undefined,
-        { headers: Object.fromEntries(request.headers.entries()), settle: false });
+        { headers, settle: false });
       cache.set(key, pending);
     }
     return (await pending).clone();
