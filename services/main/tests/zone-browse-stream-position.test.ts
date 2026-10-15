@@ -6,7 +6,7 @@ import type { WorkActivationEnvironment } from '../src/modules/work/activate.ts'
 
 function projection(checkpoint: string, coverage: RelayHandoffPosition, nextBatch?: {
   stream_scope: string; data_epoch: string; sequence: string; event_count: number;
-}) {
+}, graph?: { sequence: string; read?: () => void }) {
   const queries: { sql: string; values?: unknown[] }[] = [];
   const relay = {
     query: async (sql: string, values?: unknown[]) => {
@@ -26,9 +26,12 @@ function projection(checkpoint: string, coverage: RelayHandoffPosition, nextBatc
     },
   } as unknown as Pool;
   const instance = new ZoneBrowseProjection({} as Pool, relay,
-    { lineage: { dataEpoch: 'epoch' }, fuseki: { query: async () => ({ results: { bindings: [{
-      sequence: { value: '100' }, relaySequence: { value: coverage.sequence },
-    }] } }) } } as unknown as WorkActivationEnvironment);
+    { lineage: { dataEpoch: 'epoch' }, fuseki: { query: async () => {
+      graph?.read?.();
+      return { results: { bindings: [{
+        sequence: { value: '100' }, relaySequence: { value: graph?.sequence ?? coverage.sequence },
+      }] } };
+    } } } as unknown as WorkActivationEnvironment);
   const state = instance as unknown as { usableCut: boolean; checkpoint: RelayHandoffPosition };
   state.usableCut = true;
   state.checkpoint = { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: checkpoint };
@@ -46,6 +49,20 @@ test('A5: a projection behind Main coverage is not current', async () => {
   const { instance } = projection('3', {
     streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '4',
   });
+  expect(await instance.current({ dataEpoch: 'epoch', sequence: '100' })).toBe(false);
+});
+
+test('coverage remains current when the worker advances between source probes', async () => {
+  const { instance, state } = projection('3', {
+    streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3',
+  }, undefined, { sequence: '4', read: () => { state.checkpoint.sequence = '4'; } });
+  expect(await instance.current({ dataEpoch: 'epoch', sequence: '100' })).toBe(true);
+});
+
+test('a committed Main selection ahead of delivered coverage still prevents an exact count', async () => {
+  const { instance } = projection('3', {
+    streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: 'epoch', sequence: '3',
+  }, undefined, { sequence: '4' });
   expect(await instance.current({ dataEpoch: 'epoch', sequence: '100' })).toBe(false);
 });
 

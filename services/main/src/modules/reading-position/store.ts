@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { contentConnection, contentSessionClient } from '../../../../content/src/connection.ts';
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { NATIVE_ID, derivedId } from '../structure/graph.ts';
 import { WorkReadInvalid, WorkReadUnavailable } from '../work/read-session.ts';
@@ -36,14 +37,14 @@ export class ReadingPositionStore {
   constructor(private readonly pool: Pool) {}
   /** Opaque equality fence, rather than a numeric delivery offset. */
   async generation(): Promise<string> {
-    const result = await this.pool.query<{ version: string }>(
+    const result = await contentConnection(this.pool).query<{ version: string }>(
       'SELECT reading_position.current_generation() AS version');
     if (result.rows.length !== 1) throw new WorkReadUnavailable('Revelation generation is unavailable');
     return result.rows[0]!.version;
   }
   /** Constant-size owner clock; no history aggregation or paging. */
   async privateSnapshot(principal: VerifiedPrincipal, _agent: string): Promise<string> {
-    const result = await this.pool.query<{ version: string }>(`SELECT version::text AS version
+    const result = await contentConnection(this.pool).query<{ version: string }>(`SELECT version::text AS version
       FROM structure.progress_reader WHERE principal_issuer=$1 AND principal_subject=$2`,
     [principal.issuer, principal.subject]);
     return result.rows[0]?.version ?? '0';
@@ -51,7 +52,7 @@ export class ReadingPositionStore {
   async lookup(records: readonly string[]): Promise<Map<string, Revelation[]>> {
     if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
     if (!records.length) return new Map();
-    const result = await this.pool.query<Revelation>(`SELECT record, record_kind AS "recordKind",
+    const result = await contentConnection(this.pool).query<Revelation>(`SELECT record, record_kind AS "recordKind",
       continuity_work AS "continuityWork", occurrence, receipt
       FROM reading_position.revelation WHERE record = ANY($1::text[])`, [records]);
     const found = new Map<string, Revelation[]>();
@@ -62,7 +63,7 @@ export class ReadingPositionStore {
     if (records.length > REVELATION_COST.batch) throw new WorkReadInvalid('Revelation batch exceeds 50 records');
     if (!records.length) return new Set();
     // A record pending publication is required too, so readers fail closed without a graph query.
-    const result = await this.pool.query<{ record: string }>(`SELECT record
+    const result = await contentConnection(this.pool).query<{ record: string }>(`SELECT record
       FROM wiki.revelation_record WHERE record = ANY($1::text[])
       UNION SELECT record FROM reading_position.pending_revelation WHERE record = ANY($1::text[])`,[records]);
     return new Set(result.rows.map(row => row.record));
@@ -95,7 +96,8 @@ export class ReadingPositionStore {
    * receipt is a no-op; a different position for the same record and continuity is a conflict, never a move.
    * It also settles this receipt's pending registration. */
   async publish(row: Revelation): Promise<void> {
-    const client = await this.pool.connect();
+    const borrowed = contentSessionClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
     try {
       await client.query('BEGIN');
       await client.query(`INSERT INTO wiki.revelation_record(record) VALUES ($1) ON CONFLICT DO NOTHING`, [row.record]);
@@ -110,31 +112,31 @@ export class ReadingPositionStore {
     } catch (error) {
       await client.query('ROLLBACK').catch(() => undefined);
       throw error;
-    } finally { client.release(); }
+    } finally { if (!borrowed) client.release(); }
   }
   /** Register a relation's revelation before its graph write. The record is position-required, hence hidden, until
    * `publish` settles this receipt or `abandon` removes it, so a refused or interrupted write never leaves it unguarded.
    * An existing position is checked and never moves; a record already revealed there needs no registration. */
   async register(row: Revelation): Promise<void> {
-    const existing = await this.pool.query<{ occurrence: string }>(`SELECT occurrence FROM reading_position.revelation
+    const existing = await contentConnection(this.pool).query<{ occurrence: string }>(`SELECT occurrence FROM reading_position.revelation
       WHERE record = $1 AND continuity_work = $2`, [row.record, row.continuityWork]);
     if (existing.rows[0]) {
       if (existing.rows[0].occurrence !== row.occurrence) throw new RevelationConflict('Revelation position changed');
       return;
     }
-    await this.pool.query(`INSERT INTO reading_position.pending_revelation(record, receipt) VALUES ($1, $2)
+    await contentConnection(this.pool).query(`INSERT INTO reading_position.pending_revelation(record, receipt) VALUES ($1, $2)
       ON CONFLICT DO NOTHING`, [row.record, row.receipt]);
   }
   /** The graph refused the write: drop only this receipt's registration. */
   async abandon(receipt: string): Promise<void> {
-    await this.pool.query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1`, [receipt]);
+    await contentConnection(this.pool).query(`DELETE FROM reading_position.pending_revelation WHERE receipt = $1`, [receipt]);
   }
   /** Saved completions when the prepared resume index is absent. One occurrence
    * page, never the chapter inventory. The index path does not call this. */
   async completedPage(principal: VerifiedPrincipal, structures: readonly string[], after?: string) {
     if (structures.length > REVELATION_COST.batch) throw new WorkReadInvalid('Progress structure batch exceeds its cost');
     if (!structures.length) return { items: [] as string[], next: null as string | null };
-    const result = await this.pool.query<{ occurrence: string }>(`SELECT DISTINCT occurrence
+    const result = await contentConnection(this.pool).query<{ occurrence: string }>(`SELECT DISTINCT occurrence
       FROM structure.progress WHERE principal_issuer = $1 AND principal_subject = $2
         AND structure = ANY($3::text[]) AND completed AND ($4::text IS NULL OR occurrence > $4)
       ORDER BY occurrence LIMIT $5`, [principal.issuer, principal.subject, structures, after ?? null, REVELATION_COST.batch + 1]);
@@ -143,7 +145,7 @@ export class ReadingPositionStore {
   }
   async finishedWorks(agent: string, works: readonly string[]): Promise<Set<string>> {
     if (works.length > REVELATION_COST.batch) throw new WorkReadInvalid('Finished Work batch exceeds 50 records');
-    const result = await this.pool.query<{ work: string }>(`SELECT work FROM reader.library_status
+    const result = await contentConnection(this.pool).query<{ work: string }>(`SELECT work FROM reader.library_status
       WHERE agent = $1 AND work = ANY($2::text[]) AND status = 'read'`, [agent, works]);
     return new Set(result.rows.map(row => row.work));
   }

@@ -588,9 +588,11 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
       // Delivered coverage can itself lag committed Main selections. The
       // existing Main stream cut, never the graph diagnostic counter, proves
       // that a seek cannot omit an already admitted candidate.
-      return compareRelayPositions(this.checkpoint, coverage) === 0
+      // The worker can advance while these two source probes are in flight.
+      // Coverage is a minimum fence: a newer consumed cut still includes it.
+      return compareRelayPositions(this.checkpoint, coverage) >= 0
         && compareRelayPositions(this.checkpoint, { streamScope: MAIN_RELAY_STREAM_SCOPE,
-          dataEpoch: cut.dataEpoch, sequence: cut.relaySequence }) === 0;
+          dataEpoch: cut.dataEpoch, sequence: cut.relaySequence }) >= 0;
     } catch { return false; }
   }
 

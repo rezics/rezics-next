@@ -18,6 +18,7 @@ import { ensureFixtureScopeGate, grantFixtureAuthority } from '../src/modules/ac
 import { accessClient, controlRead, controlTransaction, ControlConflict, ControlUnavailable } from '../src/modules/access/topology-control.ts';
 import { AliasRegistry } from '../src/modules/address/registry.ts';
 import { TemplateSeekIndex } from '../src/modules/query/seek-index.ts';
+import { withRealmPermit } from '../src/modules/access/realm-management-policy.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const native = () => `https://rezics.com/id/${randomUUID()}`;
@@ -111,6 +112,20 @@ afterAll(async () => {
   cluster?.remove();
   setNestedPoolCheckoutMode(previousMode);
 }, 60_000);
+
+test('Realm permits share a held Access transaction without committing or releasing it', async () => {
+  await controlTransaction(pool, async client => {
+    await ensureFixtureScopeGate(client, `governance:realm:${realm}`, { open: true });
+    const before = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    const permit = await withRealmPermit(pool, principal, actor, realm, 'submission', async (value, held) => {
+      expect(held).toBe(client);
+      expect(accessClient(pool)).toBe(client);
+      return value;
+    });
+    expect(permit.visibility).toBe('public');
+    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(before);
+  });
+}, 30_000);
 
 test('a semantic admission graph callback joins topology reads on its one held client', async () => {
   let nested = false;
