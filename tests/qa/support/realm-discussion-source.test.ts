@@ -7,7 +7,7 @@ import { sha256, stable } from '../../../scripts/fixture/corpus.ts';
 import { RetainedSources, sourceKey } from '../../../scripts/qa/retained-source.ts';
 import type { PersonaSession, RetainedPersonaRealm } from './personas.ts';
 import { buildRealmDiscussionCorpus, realmDiscussionSourceAdapter, realmDiscussionSourceSpecification,
-  realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata,
+  realmSourceBuildDeadlineMs, realmSourceMeasurements, realmSourcePopulation, realmSourceRoles, validateRealmSourceMetadata,
   type RealmSourceReply, type RealmSourceRequest, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 const id = () => `https://rezics.com/id/${randomUUID()}`;
@@ -244,7 +244,7 @@ test('existing lifecycle retains once, isolates descriptor copies, and refuses c
     const store = new RetainedSources(directory);
     const adapter = realmDiscussionSourceAdapter(realmDiscussionSourceSpecification({ producer: sha256('fixture') }, { native: 'fixture' }), f.runtime);
     const prepared = await store.prepare(adapter);
-    expect(prepared.producerBuild?.deadlineMs).toBe(1_800_000);
+    expect(prepared.producerBuild?.deadlineMs).toBe(realmSourceBuildDeadlineMs);
     expect(prepared.manifest.provenance.producerBuild?.evidence).toContain('189 serial identities');
     expect((await store.prepare(adapter)).built).toBe(false);
     const first = await store.restore(adapter);

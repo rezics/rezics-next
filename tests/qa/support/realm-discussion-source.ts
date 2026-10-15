@@ -17,8 +17,9 @@ export const realmSourceAuthorityLifetimeMs = 86_400_000;
 export const realmSourceBuildEvidence = 'Measured retained attempt 20261014t020607-6ecee7: 189 serial identities in 290645ms; ' +
   '192 drafts in 77594ms and 184 placements in 42794ms. The complete 552-publication corpus extrapolates to about ' +
   '1200s of these phases, plus four persona bootstraps, authority/complete inventory reads and the admission transition. ' +
-  'Declare 1800s active producer work as a bounded estimate to recheck in prove, separately from the unchanged 600s physical cut. ' +
-  'This estimate establishes neither a product cause nor a measured complete-build pass.';
+  'The complete 573-publication attempts 20261015t103925-3e9ad8 and 20261015t112537-961239 exhausted 1800s during verification. ' +
+  'Allow 3600s only for the one-time producer; restore/readiness and the physical cut retain their separate 600s bounds. ' +
+  'Record the measured complete-build duration before reusing the retained result.';
 
 export const realmSourceRoles = ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const;
 export type RealmSourceSessions = {

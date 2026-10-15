@@ -1,2 +1,3 @@
-/** Active producer work; the physical-cut budget is added separately by the QA command. */
-export const realmSourceBuildDeadlineMs = 1_800_000;
+/** One-time producer work. Restore/readiness and physical custody keep their
+ * separate 600-second bounds; consumers restore the retained result. */
+export const realmSourceBuildDeadlineMs = 3_600_000;
