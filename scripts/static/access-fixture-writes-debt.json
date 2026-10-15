@@ -286,7 +286,6 @@
   "tests/qa/integration/realm-submission-api.test.ts",
   "tests/qa/integration/realm-submission-targets.test.ts",
   "tests/qa/integration/realm-visibility-policy.test.ts",
-  "tests/qa/integration/recipe-export-limit.test.ts",
   "tests/qa/integration/recipe-file-import.test.ts",
   "tests/qa/integration/recipe-measure-authority.test.ts",
   "tests/qa/integration/recipe-realm-variants.test.ts",

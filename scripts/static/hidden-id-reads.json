@@ -1966,6 +1966,7 @@
     "ids": [
       "path:id",
       "query:actingSubject",
+      "query:parent",
       "query:revision"
     ],
     "status": "registered"
@@ -1975,6 +1976,7 @@
     "ids": [
       "path:id",
       "query:actingSubject",
+      "query:parent",
       "query:revision"
     ],
     "status": "unregistered"
