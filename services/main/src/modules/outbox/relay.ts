@@ -4,6 +4,7 @@ import { readTitleControlReceipt } from '../work/title-control.ts';
 import type { Pool, PoolClient } from 'pg';
 import { createHash } from 'node:crypto';
 import type { FusekiClient } from '../../infrastructure/fuseki.ts';
+import { ObjectNotFound } from '../../infrastructure/immutable-objects.ts';
 import { DATASET, GRAPHS, RV, iri, lit } from '../work/activate.ts';
 import { ownerOutboxEventHandler, type OwnerCloudEvent,
   type OwnerOutboxEventHandler } from './event-handlers.ts';
@@ -268,6 +269,8 @@ export async function classifyDeliveredRelayBatch(client: Pick<PoolClient, 'quer
   if (!header || BigInt(header.actual_count) < BigInt(header.event_count)) {
     try { retained = await options.custody?.() ?? null; }
     catch (error) {
+      if (error instanceof ObjectNotFound) return { state: 'incomplete-healing',
+        error: new RelayHandoffIncomplete(position.dataEpoch, position.sequence) };
       if (error instanceof OutboxIncomplete || error instanceof OutboxEpochChanged
         || error instanceof RelayCheckpointConflict) return conflict(error.message);
       throw error;
@@ -300,12 +303,9 @@ export async function classifyDeliveredRelayBatch(client: Pick<PoolClient, 'quer
   } catch { return conflict('retained event envelope position differs'); }
 }
 
-interface VerifiedRelayWatermark { dataEpoch: string; routingEpoch: string; sequence: string }
-const verifiedRelayWatermarks = new WeakMap<Pool, Map<string, VerifiedRelayWatermark>>();
-
-/** At most 100 batches across verification and the requested page. Caught-up polls read only the acknowledgement and its
- * routing epoch. The watermark is process-local and resets on either epoch or
- * an acknowledgement rewind; offline captures still prove the entire cut. */
+/** Verify at most 100 batches after the downstream's committed cursor in one
+ * acknowledged snapshot. Previously consumed history is not startup work;
+ * offline recovery captures separately prove their entire retained cut. */
 export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
   afterSequence: string, limit = 100, client?: PoolClient): Promise<{ coverage: RelayHandoffPosition & { consumer: string };
     batches: RetainedRelayBatch[] }> {
@@ -316,12 +316,9 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
   const held = client ?? await pool.connect();
   try {
     await held.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
-    const checkpoint = (await held.query<{ stream_scope: string; data_epoch: string; sequence: string; routing_epoch: string | null }>(
-      `SELECT checkpoint.stream_scope, checkpoint.data_epoch, checkpoint.sequence::text,
-        batch.routing_epoch FROM relay.checkpoint AS checkpoint
-        LEFT JOIN relay.delivered_batch AS batch ON batch.stream_scope = checkpoint.stream_scope
-          AND batch.data_epoch = checkpoint.data_epoch AND batch.sequence = checkpoint.sequence
-        WHERE checkpoint.consumer = $1`, [consumer])).rows[0];
+    const checkpoint = (await held.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
+      `SELECT stream_scope, data_epoch, sequence::text FROM relay.checkpoint
+        WHERE consumer = $1`, [consumer])).rows[0];
     if (!checkpoint || checkpoint.stream_scope !== MAIN_RELAY_STREAM_SCOPE
       || !/^(0|[1-9][0-9]*)$/.test(checkpoint.sequence)) throw new RelayCheckpointConflict('relay checkpoint is invalid');
     const coverage = { streamScope: checkpoint.stream_scope, dataEpoch: checkpoint.data_epoch,
@@ -329,45 +326,16 @@ export async function verifiedRetainedRelayRange(pool: Pool, consumer: string,
     if (BigInt(afterSequence) > BigInt(coverage.sequence)) {
       throw new RelayHandoffIncomplete(coverage.dataEpoch, afterSequence);
     }
-    const watermarks = verifiedRelayWatermarks.get(pool) ?? new Map<string, VerifiedRelayWatermark>();
-    verifiedRelayWatermarks.set(pool, watermarks);
-    const routingEpoch = checkpoint.routing_epoch ?? '';
-    const previous = watermarks.get(consumer);
-    const watermark: VerifiedRelayWatermark = previous && previous.dataEpoch === coverage.dataEpoch
-      && previous.routingEpoch === routingEpoch && BigInt(previous.sequence) <= BigInt(coverage.sequence)
-      ? { ...previous } : { dataEpoch: coverage.dataEpoch, routingEpoch, sequence: '0' };
-    const verified = new Map<string, RetainedRelayBatch>();
-    const needed = BigInt(afterSequence) + BigInt(limit);
-    const through = needed < BigInt(coverage.sequence) ? needed : BigInt(coverage.sequence);
-    for (let index = 0; index < limit && BigInt(watermark.sequence) < through; index++) {
-      const sequence = String(BigInt(watermark.sequence) + 1n);
-      const result = await classifyDeliveredRelayBatch(held, { ...coverage, sequence }, { readEvents: true });
-      if (result.state !== 'complete') throw result.error;
-      verified.set(sequence, { streamScope: coverage.streamScope, sequence,
-        batchId: result.header.batch_id, routingEpoch: result.header.routing_epoch, events: result.events! });
-      watermark.sequence = sequence;
-    }
-    // An older restored cursor is not evidence that its skipped prefix was
-    // verified in this process. Continue that bounded verification next poll.
-    if (BigInt(afterSequence) > BigInt(watermark.sequence)) {
-      await held.query('COMMIT');
-      watermarks.set(consumer, watermark);
-      throw new RelayHandoffIncomplete(coverage.dataEpoch,
-        String(BigInt(watermark.sequence) + 1n));
-    }
     const batches: RetainedRelayBatch[] = [];
     for (let index = 0, next = BigInt(afterSequence) + 1n;
-      index < limit && next <= BigInt(watermark.sequence); index++, next++) {
+      index < limit && next <= BigInt(coverage.sequence); index++, next++) {
       const sequence = String(next);
-      const cached = verified.get(sequence);
-      if (cached) { batches.push(cached); continue; }
       const result = await classifyDeliveredRelayBatch(held, { ...coverage, sequence }, { readEvents: true });
       if (result.state !== 'complete') throw result.error;
       batches.push({ streamScope: coverage.streamScope, sequence, batchId: result.header.batch_id,
         routingEpoch: result.header.routing_epoch, events: result.events! });
     }
     await held.query('COMMIT');
-    watermarks.set(consumer, watermark);
     return { coverage, batches };
   } catch (error) {
     try { await held.query('ROLLBACK'); } catch { /* retain original error */ }

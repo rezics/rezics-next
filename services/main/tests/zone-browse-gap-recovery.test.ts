@@ -1,6 +1,7 @@
 import { expect, spyOn, test } from 'bun:test';
 import type { Pool } from 'pg';
-import { fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { FusekiClient, fusekiReadBudget } from '../src/infrastructure/fuseki.ts';
+import { ObjectNotFound } from '../src/infrastructure/immutable-objects.ts';
 import { MAIN_RELAY_STREAM_SCOPE, type RelayHandoffPosition } from '../src/modules/outbox/relay-position.ts';
 import type { CustodiedOutbox } from '../src/modules/outbox/relay.ts';
 import { ZoneBrowseProjection, ZONE_BROWSE_PROJECTION_COST } from '../src/modules/zone-browse/store.ts';
@@ -169,7 +170,7 @@ function fixture(count = 65) {
     expect(state.usableCut).toBe(true);
     expect(await current()).toBe(true);
   };
-  return { instance, state, graph, headers, headerCounts, delivered, acknowledged, custody, calls, failures, gap, finish, current,
+  return { instance, state, graph, headers, headerCounts, delivered, acknowledged, custody, calls, failures, gap, finish, current, env,
     supplyCustody: (value: CustodiedOutbox | null) => {
       custody.value = value;
       if (!headerCounts.has('4')) headers.delete('4');
@@ -283,7 +284,7 @@ test('slim receipt custody supplies a missing batch without reconstructing SQL r
     expect(f.state.usableCut).toBe(true);
     expect(f.calls.project).toEqual([]);
     expect(lines).toEqual([]);
-    expect(f.custody.reads.length).toBeGreaterThanOrEqual(2);
+    expect(f.custody.reads).toHaveLength(1);
     expect(f.custody.reads.every(position => position.epoch === 'epoch' && position.sequence === '4')).toBe(true);
     expect(f.calls.relay.some(statement => /^\s*(INSERT|UPDATE|DELETE)\b/.test(statement))).toBe(false);
     expect(await f.instance.tick()).toBe(0);
@@ -685,4 +686,64 @@ test('a reconciliation page stops at its time budget and can retry without advan
   } finally { clock.mockRestore(); }
   await f.finish();
   expect(f.candidates().size).toBe(1);
+});
+
+test('restored custody heals across startup pages under the real Fuseki call budget without duplicate candidates', async () => {
+  const f = fixture(130);
+  f.state.usableCut = false;
+  f.state.checkpoint.sequence = '0';
+  f.graph.relaySequence = f.acknowledged.sequence = '4';
+  f.supplyCustody(null);
+  const ownerRead = f.env.receiptCustody!.read.bind(f.env.receiptCustody);
+  let restored = false;
+  f.env.receiptCustody!.read = async (epoch, sequence) => {
+    // A cold owner may need a native receipt lookup and a commit-proof probe.
+    await f.env.fuseki.query('SELECT ?receipt WHERE {}');
+    await f.env.fuseki.query('SELECT ?proof WHERE {}');
+    if (!restored) throw new ObjectNotFound('custody object has not been restored');
+    return ownerRead(epoch, sequence);
+  };
+  const ownerGraph = f.env.fuseki;
+  let pageCalls = 0;
+  const costs: number[] = [];
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, async fetch(request) {
+    pageCalls++;
+    const query = await request.text();
+    if (query === 'SELECT ?receipt WHERE {}' || query === 'SELECT ?proof WHERE {}') {
+      return Response.json({ results: { bindings: [] } });
+    }
+    return Response.json(await ownerGraph.query(query));
+  } });
+  f.env.fuseki = new FusekiClient(server.url.href);
+  const faults: string[] = [];
+  const error = spyOn(console, 'error').mockImplementation(line => { faults.push(String(line)); });
+  const tick = async () => {
+    pageCalls = 0;
+    await f.instance.tick();
+    costs.push(pageCalls);
+    expect(pageCalls).toBeLessThanOrEqual(ZONE_BROWSE_PROJECTION_COST.recoveryGraphCalls);
+  };
+  try {
+    for (let poll = 0; poll < 3; poll++) {
+      await tick();
+      expect(f.instance.recoveryStatus()).toMatchObject({ state: 'incomplete-healing',
+        checkpoint: { sequence: '0' }, deferral: { retries: poll + 1 } });
+      expect(f.candidates().size).toBe(0);
+    }
+    f.custody.value = slimCustody();
+    restored = true;
+    for (let poll = 0; poll < 10 && !f.state.usableCut; poll++) {
+      await tick();
+      if (!f.state.usableCut) expect(f.state.checkpoint.sequence).toBe('0');
+    }
+    expect(f.instance.recoveryStatus()).toMatchObject({ state: 'ready', checkpoint: { sequence: '4' } });
+    expect(f.instance.recoveryStatus().deferral).toBeUndefined();
+    expect(f.candidates().size).toBe(130);
+    expect([...f.candidates().keys()].sort()).toEqual(f.graph.rows.map(key).sort());
+    const inserts = f.calls.insert;
+    await tick();
+    expect(f.calls.insert).toBe(inserts);
+    expect(costs).toContain(7); // Native lookup + two owner probes + four reconciliation reads.
+    expect(faults).toEqual([]);
+  } finally { error.mockRestore(); await server.stop(true); }
 });

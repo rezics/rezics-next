@@ -12,6 +12,8 @@ export const ZONE_BROWSE_PROJECTION_COST = {
   batch: 64, relayEvents: 64, relayBatches: 16, pollMs: 500, recoveryPageMs: 5_000,
   recoveryPassPages: 128, recoveryPassMs: 30_000,
   recoveryRetries: 3, recoveryWaitMs: 30_000,
+  // One native batch probe, two cold custody probes, four scan reads and a cooldown probe.
+  recoveryGraphCalls: 8,
 } as const;
 const ID = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const MAIN_RELAY_SOURCE = 'https://rezics.com/services/main';
@@ -211,7 +213,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     this.usableCut = false;
     const deadline = performance.now() + ZONE_BROWSE_PROJECTION_COST.recoveryPageMs;
     await fusekiReadBudget.run({ signal: AbortSignal.timeout(ZONE_BROWSE_PROJECTION_COST.recoveryPageMs),
-      callsLeft: 6, bytesLeft: 256 * 1024 }, async () => {
+      callsLeft: ZONE_BROWSE_PROJECTION_COST.recoveryGraphCalls, bytesLeft: 256 * 1024 }, async () => {
       if (this.retryAfter > performance.now()) {
         // Cool down expensive scans while writes continue, but observe their
         // cessation. This probe is only permission to retry: the full scan
@@ -244,7 +246,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
             { supplied: Boolean(this.env.receiptCustody), found: false });
         }
         this.verifiedCoverage = { ...coverage, sequence };
-        if (classification.events) break;
+        if (classification.events?.length) break;
       }
       if (this.verifiedCoverage.sequence !== coverage.sequence) return;
       const cut = await this.graphCut();
@@ -361,7 +363,9 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     const read = async (client: Pool | PoolClient): Promise<RelayHandoffPosition | null> => {
       if (this.relayConsumer) return new RelayHandoffPositions(client, this.relayConsumer).read();
       const rows = (await client.query<{ stream_scope: string; data_epoch: string; sequence: string }>(
-        'SELECT stream_scope, data_epoch, sequence::text AS sequence FROM relay.checkpoint')).rows;
+        `SELECT stream_scope, data_epoch, sequence::text AS sequence FROM relay.checkpoint
+          WHERE stream_scope = $1 AND data_epoch = $2`,
+        [MAIN_RELAY_STREAM_SCOPE, this.env.lineage.dataEpoch])).rows;
       let maximum: RelayHandoffPosition | null = null;
       for (const row of rows) {
         const position = { streamScope: row.stream_scope, dataEpoch: row.data_epoch, sequence: row.sequence };
@@ -402,8 +406,11 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
   private async custodiedBatch(lookup: CustodyLookup, sequence: string): Promise<CustodiedOutbox | null> {
     const custody = this.env.receiptCustody;
     if (!custody) return null;
+    // Header and envelope validation share one verified owner read. Apart from
+    // avoiding duplicate object reads, this bounds native custody probes per page.
+    let retainedRead: Promise<CustodiedOutbox | null> | undefined;
     const ownerOutbox = { read: async (epoch: string, sequence: string) => {
-      const retained = await custody.read(epoch, sequence);
+      const retained = await (retainedRead ??= custody.read(epoch, sequence));
       lookup.found ||= retained !== null;
       return retained;
     } };
@@ -431,7 +438,7 @@ export class ZoneBrowseProjection implements BrowseEntryReader {
     const custody: CustodyLookup = { supplied: Boolean(this.env.receiptCustody), found: false };
     const read = (client: Pool | PoolClient) => classifyDeliveredRelayBatch(client,
       { streamScope: MAIN_RELAY_STREAM_SCOPE, dataEpoch: this.env.lineage.dataEpoch, sequence },
-      { custody: () => this.custodiedBatch(custody, sequence) });
+      { readEvents: true, custody: () => this.custodiedBatch(custody, sequence) });
     return deadline === undefined ? read(this.relay) : this.poolPage(this.relay, deadline, read);
   }
 

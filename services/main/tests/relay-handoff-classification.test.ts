@@ -1,4 +1,5 @@
 import { expect, spyOn, test } from 'bun:test';
+import type { Pool } from 'pg';
 import { reconcileRelayGap } from '../src/modules/owner/relay-gap.ts';
 import { classifyDeliveredRelayBatch } from '../src/modules/outbox/relay.ts';
 import { MAIN_RELAY_STREAM_SCOPE } from '../src/modules/outbox/relay-position.ts';
@@ -95,4 +96,50 @@ test('finding 3: a complete operator window is reconciled independently of a col
     expect(f.accessPosition.sequence).toBe(String(history));
     expect(f.stats.headers).toBe(1);
   }
+});
+
+test('startup validates retained event envelopes as strictly as live range delivery', async () => {
+  const f = relayHandoffFixture(1);
+  f.state.completeEvents.add(1);
+  const query = f.relay.query.bind(f.relay);
+  const checkedQuery = async (sql: string, values: unknown[]) => {
+    const result = await query<{ envelope: { data: { ordinal: number } } }>(sql, values);
+    if (sql.includes('SELECT envelope FROM relay.delivered_event')) {
+      for (const row of result.rows) row.envelope.data.ordinal = 9;
+    }
+    return result;
+  };
+  const relay = { query: checkedQuery, connect: async () => ({ query: checkedQuery, release() {} }) } as unknown as Pool;
+  const projection = new ZoneBrowseProjection(f.access, relay, f.env, 'relay');
+  const error = spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await expect(projection.tick()).rejects.toThrow('retained event envelope differs');
+    expect(projection.recoveryStatus().checkpoint.sequence).toBe('0');
+    expect(await projection.current({ dataEpoch: 'epoch', sequence: '10' })).toBe(false);
+  } finally { error.mockRestore(); }
+});
+
+test('the no-consumer fallback selects only the current Main stream and recovery epoch', async () => {
+  const f = relayHandoffFixture(2);
+  const query = f.relay.query.bind(f.relay);
+  const positions = [
+    { stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'epoch', sequence: '2' },
+    { stream_scope: 'urn:rezics:stream:other', data_epoch: 'epoch', sequence: '1000' },
+    { stream_scope: MAIN_RELAY_STREAM_SCOPE, data_epoch: 'prior-epoch', sequence: '2000' },
+  ];
+  let probes = 0;
+  const checkedQuery = async (sql: string, values: unknown[]) => {
+    if (sql.includes('FROM relay.checkpoint')) {
+      probes++;
+      expect(sql).toContain('WHERE stream_scope = $1 AND data_epoch = $2');
+      expect(values).toEqual([MAIN_RELAY_STREAM_SCOPE, 'epoch']);
+      return { rows: positions.filter(position => position.stream_scope === values[0] && position.data_epoch === values[1]) };
+    }
+    return query(sql, values);
+  };
+  const relay = { query: checkedQuery, connect: async () => ({ query: checkedQuery, release() {} }) } as unknown as Pool;
+  const projection = new ZoneBrowseProjection(f.access, relay, f.env);
+  for (let poll = 0; poll < 3; poll++) await projection.tick();
+  expect(projection.recoveryStatus()).toMatchObject({ state: 'ready', checkpoint: { sequence: '2' } });
+  expect(probes).toBeGreaterThan(0);
 });
