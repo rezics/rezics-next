@@ -7,10 +7,10 @@ afterEach(() => { for (const restore of restores.splice(0)) restore(); });
 
 function fixture() {
   let calls = 0;
-  const fetch = spyOn(globalThis, 'fetch').mockImplementation((async () => {
+  const fetch = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(async () => {
     calls++;
     return Response.json({ results: { bindings: [{ head: { type: 'literal', value: 'head' } }] } });
-  }) as typeof globalThis.fetch);
+  }, { preconnect() {} }));
   restores.push(() => fetch.mockRestore());
   const graph = new FusekiClient('http://graph.invalid/rezics');
   return { graph, fence: new GraphReadFence(graph), calls: () => calls };
@@ -74,8 +74,8 @@ test('native discovery probes remain live even for an identical SPARQL body', as
 test('only bounded native header evidence supplies a physical query version', async () => {
   const version = '00000000-0000-4000-8000-000000000001:00000000-0000-4000-8000-000000000002:3';
   let header = version;
-  const fetch = spyOn(globalThis, 'fetch').mockImplementation((async () => Response.json(
-    { boolean: true, graphVersion: 'untrusted body field' }, { headers: { 'x-rezics-graph-version': header } })) as typeof globalThis.fetch);
+  const fetch = spyOn(globalThis, 'fetch').mockImplementation(Object.assign(async () => Response.json(
+    { boolean: true, graphVersion: 'untrusted body field' }, { headers: { 'x-rezics-graph-version': header } }), { preconnect() {} }));
   restores.push(() => fetch.mockRestore());
   const graph = new FusekiClient('http://graph.invalid/rezics');
   expect(graphReadVersion(await graph.query('ASK {}'))).toBe(version);
