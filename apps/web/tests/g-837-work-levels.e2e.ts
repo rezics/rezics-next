@@ -3,7 +3,7 @@ import { resourceHref } from '../features/address/path.ts';
 import { localizedPath } from '../i18n/locale.ts';
 import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
-import { expect, type Page, test, type TestInfo } from '@playwright/test';
+import { expect, type Locator, type Page, test, type TestInfo } from '@playwright/test';
 import { signInAtAccounts, signInDestinationMatches } from './account-sign-in.ts';
 import type { Catalogue } from './g-837-catalogue.ts';
 
@@ -44,19 +44,31 @@ test.beforeAll(async () => {
 });
 
 const uuid = (iri: string) => iri.slice(-36);
-const canonicalWorkPath = (work: { work: string; title: string }) =>
+const canonicalWorkPath = (work: { work: string; title: string }, locale: 'en' | 'zh-Hans' = 'en') =>
   localizedPath(
     resourceHref('/w/', {
       prefix: '/w/',
       key: uuidToSid(uuid(work.work)),
       suffixSource: work.title,
     }),
-    'en',
+    locale,
   );
 const phone = { width: 390, height: 844 };
 const desktop = { width: 1280, height: 860 };
 const overflows = (page: Page) =>
   page.evaluate(() => document.documentElement.scrollWidth > innerWidth);
+
+async function followByKeyboard(page: Page, link: Locator) {
+  const href = await link.getAttribute('href');
+  expect(href).not.toBeNull();
+  const destination = new URL(href!, page.url()).href;
+  // These links start streamed documents. A committed URL alone does not mean
+  // the destination DOM is ready for assertions or another navigation.
+  await Promise.all([
+    page.waitForURL(destination, { waitUntil: 'domcontentloaded', timeout: 60_000 }),
+    link.press('Enter'),
+  ]);
+}
 
 /** One screenshot per viewport in light and dark, none with horizontal overflow. */
 async function shoot(page: Page, path: string, name: string, info: TestInfo, content: string) {
@@ -96,8 +108,8 @@ test('parts, connections and editions read from Main for the franchise records',
     member: { email: string; password: string };
   };
   const { sao, index, railgun, volumeOne } = catalogue;
-  const at = (work: { work: string }, tab: string) =>
-    localizedPath(`${resourceHref('/w/', uuid(work.work))}/${tab}`, 'en');
+  const at = (work: { work: string; title: string }, tab: string) =>
+    `${canonicalWorkPath(work)}/${tab}`;
   await page.setViewportSize(desktop);
   // Signed-out visitors read the parts, wholes and relations Main discloses.
   await page.goto(at(index.newTestament, 'connections'));
@@ -183,7 +195,7 @@ test('parts, connections and editions read from Main for the franchise records',
   await expect(page.getByRole('alert')).toHaveCount(0);
   const adapted = page.locator('[data-relation-row]').filter({ hasText: 'Adapted from' });
   await expect(adapted.getByText('Source version unresolved')).toBeVisible();
-  await adapted.getByRole('link', { name: 'A Certain Scientific Railgun (manga)' }).click();
+  await followByKeyboard(page, adapted.getByRole('link', { name: 'A Certain Scientific Railgun (manga)' }));
   await expect(page).toHaveURL(
     new RegExp(localizedPath(resourceHref('/w/', uuid(railgun.manga.work)), 'en')),
   );
@@ -194,7 +206,7 @@ test('parts, connections and editions read from Main for the franchise records',
     .getByRole('link', { name: 'A Certain Magical Index (novel)' });
   const sourceHref = await sourceWork.getAttribute('href');
   expect(sourceHref).not.toBeNull();
-  await sourceWork.click();
+  await followByKeyboard(page, sourceWork);
   await expect.poll(() => signInDestinationMatches(new URL(page.url()), sourceHref!)).toBe(true);
   await expect(
     page.getByRole('heading', { level: 1, name: 'A Certain Magical Index (novel)' }),
@@ -225,16 +237,19 @@ test('parts, connections and editions read from Main for the franchise records',
 
   // The ISBN reaches the release, its realization and its Work.
   await page.goto(`/en/isbn/${volumeOne.isbn}`);
+  await page.waitForURL(new RegExp(`/en/releases/${uuid(volumeOne.release)}$`), {
+    waitUntil: 'domcontentloaded',
+    timeout: 60_000,
+  });
   await expect(page).toHaveURL(new RegExp(`/en/releases/${uuid(volumeOne.release)}$`));
   await expect(
     page.getByRole('heading', { level: 1, name: 'Sword Art Online 1: Aincrad' }),
   ).toBeVisible();
   await expect(page.getByText('English').first()).toBeVisible();
   await expect(page.getByText('Main Version').first()).toBeVisible();
-  await page
+  await followByKeyboard(page, page
     .getByRole('region', { name: 'What it covers' })
-    .getByRole('link', { name: 'Sword Art Online, Vol. 1' })
-    .click();
+    .getByRole('link', { name: 'Sword Art Online, Vol. 1' }));
   await expect
     .poll(() =>
       signInDestinationMatches(
@@ -248,12 +263,12 @@ test('parts, connections and editions read from Main for the franchise records',
 
   // Every page in Simplified Chinese keeps names in their own language and the interface in the reader's.
   await page.goto(
-    localizedPath(`${resourceHref('/w/', uuid(index.newTestament.work))}/connections`, 'zh-Hans'),
+    `${canonicalWorkPath(index.newTestament, 'zh-Hans')}/connections`,
   );
   await expect(page.getByRole('region', { name: '组成部分' })).toBeVisible();
   await expect(page.getByText('已完结')).toBeVisible();
   await page.goto(
-    localizedPath(`${resourceHref('/w/', uuid(volumeOne.work.work))}/editions`, 'zh-Hans'),
+    `${canonicalWorkPath(volumeOne.work, 'zh-Hans')}/editions`,
   );
   await expect(page.getByRole('region', { name: '文本与译本' })).toBeVisible();
   await expect(page.locator('[data-language-group="zh-Hant"]')).toBeVisible();
@@ -290,7 +305,7 @@ test('parts, connections and editions read from Main for the franchise records',
   await shoot(page, `/en/releases/${uuid(volumeOne.release)}`, 'release', info, '[data-coverage]');
   await shoot(
     page,
-    localizedPath(`${resourceHref('/w/', uuid(sao.bunko.work))}/connections`, 'zh-Hans'),
+    `${canonicalWorkPath(sao.bunko, 'zh-Hans')}/connections`,
     'sao-connections-zh-Hans',
     info,
     '[data-relation-row]',
@@ -306,52 +321,27 @@ test('franchise connections retain the selected volumes and parts level', async 
   };
   await signInAtAccounts(
     page,
-    localizedPath(`${resourceHref('/w/', uuid(catalogue.sao.bunko.work))}/connections`, 'en'),
+    `${canonicalWorkPath(catalogue.sao.bunko)}/connections`,
     member,
   );
   const franchises = page.locator('#franchises');
   await expect(franchises.getByRole('list', { name: 'Series' }).getByRole('listitem')).toHaveCount(
     4,
   );
-  await franchises.getByRole('link', { name: 'Volumes and parts' }).press('Enter');
-  await expect.poll(() => page.url()).toMatch(/grain=parts#franchises$/);
-  // The grain switch starts a streamed document; URL commit precedes its DOM.
-  await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
+  await followByKeyboard(page, franchises.getByRole('link', { name: 'Volumes and parts' }));
+  await expect(page).toHaveURL(/grain=parts#franchises$/);
   await expect(franchises.getByRole('link', { name: 'Volumes and parts' })).toHaveAttribute(
     'aria-current',
     'true',
   );
+  await expect(franchises.getByText('Sword Art Online, Vol. 1')).toBeVisible();
   await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
 });
-
-test(
-  'franchise member parts render after changing grain by keyboard',
-  async ({ page }) => {
-    const path = process.env.REZICS_WEB_AUTH_PRIVATE_PATH;
-    if (!path) throw new Error('The isolated QA web-auth fixture is required');
-    const { member } = JSON.parse(readFileSync(path, 'utf8')) as {
-      member: { email: string; password: string };
-    };
-    await signInAtAccounts(
-      page,
-      localizedPath(`${resourceHref('/w/', uuid(catalogue.sao.bunko.work))}/connections`, 'en'),
-      member,
-    );
-    const franchises = page.locator('#franchises');
-    await expect(
-      franchises.getByRole('list', { name: 'Series' }).getByRole('listitem'),
-    ).toHaveCount(4);
-    await franchises.getByRole('link', { name: 'Volumes and parts' }).press('Enter');
-    await expect.poll(() => page.url()).toMatch(/grain=parts#franchises$/);
-    await page.waitForLoadState('domcontentloaded', { timeout: 60_000 });
-    await expect(franchises.getByText('Sword Art Online, Vol. 1')).toBeVisible();
-    await expect(franchises.getByText('Sword Art Online Progressive, Vol. 2')).toBeVisible();
-  },
-);
 
 // Locator.click uses Chromium's pointer input and hit testing, after hydration.
 for (const kind of ['anime', 'manga', 'vn'] as const) {
   test(`${kind} hub: a pointer follows a relation to the related Work`, async ({ page }) => {
+    test.setTimeout(120_000);
     const source =
       kind === 'anime'
         ? catalogue.railgun.anime
@@ -379,6 +369,7 @@ for (const kind of ['anime', 'manga', 'vn'] as const) {
     const destination = new URL(href!, page.url()).href;
     await Promise.all([
       page.waitForRequest(request => request.isNavigationRequest() && request.url() === destination),
+      page.waitForURL(destination, { waitUntil: 'domcontentloaded', timeout: 60_000 }),
       link.click(),
     ]);
     await expect(page).toHaveURL(destination);

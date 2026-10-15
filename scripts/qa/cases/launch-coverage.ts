@@ -215,12 +215,9 @@ export const launchCoverage: readonly LaunchCoverage[] = [
     api: api('services/main/tests/g-829-public-reads.test.ts',
       'Work composition reads share public disclosure, preserve private grants and hide absent/protected Works',
       'Checks Main’s public composition disclosure, private grants, absent and protected Works.'),
-    browser: {
-      file: 'apps/web/tests/g-837-work-levels.e2e.ts',
-      test: 'parts, connections and editions read from Main for the franchise records',
-      missing: 'gap',
-      reason: 'pending a quiet rerun; runs 20261012t082439-67c0df, 20261012t084022-7efe8f and 20261012t095133-3772eb',
-    },
+    browser: browser('apps/web/tests/g-837-work-levels.e2e.ts',
+      'parts, connections and editions read from Main for the franchise records',
+      'Reads ordered parts, containing Works, typed relations, separate translation groups and ISBN releases in English and Simplified Chinese on desktop and phone; switches franchise grain by keyboard. Three consecutive passes: 20261015t193150-c51003, 20261015t193801-870024, 20261015t194429-70a0a5.'),
   },
   {
     kind: 'anime',

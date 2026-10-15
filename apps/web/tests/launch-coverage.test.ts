@@ -734,25 +734,24 @@ test('launch outcomes retain landed proofs, the recipe reading name and all five
   const missingRows = launchCoverage.filter(row => proofMissing(row.api) || proofMissing(row.browser));
   const missingProofs = launchCoverage.flatMap(row => [row.api, row.browser]).filter(proofMissing);
   expect({ rows: launchCoverage.length, provedPairs: provedPairs.length, missingRows: missingRows.length, missingProofs: missingProofs.length })
-    .toEqual({ rows: 68, provedPairs: 67, missingRows: 1, missingProofs: 1 });
+    .toEqual({ rows: 68, provedPairs: 68, missingRows: 0, missingProofs: 0 });
   expect(Object.fromEntries([...missingItems].map(item => [item,
     missingRows.filter(row => missingForRow(row).includes(item)).length,
-  ]))).toEqual({ L10: 0, L11: 0, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 0, L26: 0, gap: 1, 'content-adoption': 0 });
+  ]))).toEqual({ L10: 0, L11: 0, L12: 0, L13: 0, L17: 0, L19: 0, L20: 0, L21: 0, L26: 0, gap: 0, 'content-adoption': 0 });
 });
 
-test('hub structure browser coverage remains unproved pending a quiet rerun', () => {
+test('hub structure browser coverage records three consecutive passing runs', () => {
   const rows = launchCoverage.filter(row => 'file' in row.browser &&
     row.browser.file === 'apps/web/tests/g-837-work-levels.e2e.ts');
   expect(rows).toHaveLength(1);
   const row = rows[0]!;
   expect(row.capability).toBe('Anime, manga and VN hub parts, wholes and relations');
   expect(row.browser).toMatchObject({
-    missing: 'gap',
-    reason: 'pending a quiet rerun; runs 20261012t082439-67c0df, 20261012t084022-7efe8f and 20261012t095133-3772eb',
+    evidence: expect.stringContaining('Three consecutive passes: 20261015t193150-c51003, 20261015t193801-870024, 20261015t194429-70a0a5.'),
   });
-  expect(proofMissing(row.browser)).toBe(true);
+  expect(proofMissing(row.browser)).toBe(false);
   expect(launchCoverage.filter(candidate => !proofMissing(candidate.api) && !proofMissing(candidate.browser)))
-    .not.toContain(row);
+    .toContain(row);
 });
 
 test('literal loops and registered journeys retain all eleven browser citations', () => {
