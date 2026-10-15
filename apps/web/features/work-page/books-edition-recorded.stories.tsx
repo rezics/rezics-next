@@ -114,7 +114,8 @@ function RecordedBooksEdition({ row, persona, state, saved, locale }: Props) {
 
 const meta = { title: 'Work page/Books editions recorded', component: RecordedBooksEdition,
   args: { row: 'hub', persona: 'member', state: 'populated', saved: false, locale: 'en' },
-  globals: { viewport: { value: 'desktop' } }, parameters: { controls: { disable: true } },
+  globals: { viewport: { value: 'desktop' } }, parameters: { controls: { disable: true },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
 } satisfies Meta<typeof RecordedBooksEdition>;
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -130,6 +131,8 @@ async function compare(canvasElement: HTMLElement, args: Props) {
     const link = canvas.getAllByRole('link', { name: release.title.value })
       .find(item => item.getAttribute('href')?.endsWith(releaseHref(release.id)));
     await expect(link).toBeVisible();
+    const heading = link!.closest('h3')!;
+    await expect(heading.scrollWidth).toBeLessThanOrEqual(heading.clientWidth);
     const article = link!.closest('article')!;
     await expect(article).toHaveTextContent(release.publisher!);
     await expect(article).toHaveTextContent(release.platform === 'ebook' ? copyOf(args.locale).formatEbook
@@ -199,6 +202,10 @@ export const HubSaveProgress: Story = { async play({ canvasElement, args }) {
   await waitFor(() => expect(within(canvasElement).getByRole('list', { name: messages.en.yourEdition }))
     .toHaveTextContent(releaseChoiceName(release as Release, args.locale, copyOf(args.locale))));
 } };
+export const SavedHubJapaneseDesktop: Story = { ...SavedHubProgress, args: { saved: true, locale: 'ja' },
+  globals: { locale: 'ja', viewport: { value: 'desktop' } } };
+export const SavedHubJapanesePhone: Story = { ...SavedHubJapaneseDesktop,
+  globals: { locale: 'ja', viewport: { value: 'phone' } } };
 export const SavedHubChinesePhone: Story = { ...SavedHubProgress, args: { saved: true, locale: 'zh-Hans' },
   globals: { locale: 'zh-Hans', viewport: { value: 'phone' } } };
 

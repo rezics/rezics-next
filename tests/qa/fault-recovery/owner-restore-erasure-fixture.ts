@@ -1,4 +1,5 @@
 import { expect } from 'bun:test';
+import { parseVolumeInventory, volumeInventoryScript } from '../../../scripts/qa/volume-inventory.ts';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -2033,22 +2034,9 @@ export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEn
   if (!volumeExists(volume, docker)) throw new Error(`retained graph volume is missing: ${volume}`);
   const output = run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
     '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
-    '--entrypoint', 'sh', postgresImage(), '-ec',
-    `cd /backup
-test -z "$(find . -type l -print -quit)"
-find . -type f -exec sh -c 'for file do
-  digest=$(sha256sum "$file"); bytes=$(stat -c %s "$file")
-  printf "%s\\t%s\\t%s\\n" "${'${digest%% *}'}" "$bytes" "${'${file#./}'}"
-done' sh {} +`], docker, 60_000);
-  const inventory: Record<string, RetainedFileIntegrity> = {};
-  for (const line of output.trim().split('\n').filter(Boolean)) {
-    const match = /^([a-f0-9]{64})\t([0-9]+)\t([^\t\n]+)$/.exec(line);
-    if (!match || match[3]!.split('/').some(part => part === '..' || !part))
-      throw new Error('retained volume inventory is invalid');
-    inventory[match[3]!] = { sha256: match[1]!, bytes: Number(match[2]) };
-  }
-  if (!Object.keys(inventory).length) throw new Error('retained graph volume is empty');
-  return inventory;
+    '--workdir', '/backup', '--entrypoint', 'sh', postgresImage(), '-ec',
+    volumeInventoryScript], docker, 60_000);
+  return parseVolumeInventory(output);
 }
 
 /** Relative import closure binds the actual producer/helper/service bytes rather than Git HEAD. */

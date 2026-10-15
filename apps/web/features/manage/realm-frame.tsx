@@ -15,10 +15,10 @@ import type { MainClient, RealmHeader } from './types.ts';
 export function ActingAs({ agent, locale, messages }: { agent: AgentOption; locale: UiLocale; messages: ManageMessages }) {
   const t = materializeData(messages, { locale });
   const name = agent.label ?? t.agentFallback({ id: agentShort(agent.iri) });
-  return <section aria-label={t.actingAs} className="flex min-w-0 items-center gap-2 text-sm">
+  return <section aria-label={t.actingAs} className="flex min-w-0 max-w-full items-center gap-2 text-sm">
     <span className="hidden text-muted-foreground sm:inline">{t.actingAs}</span>
     <AgentMark name={name} iri={agent.iri} size="sm" />
-    <span className="truncate font-medium">{name}</span>
+    <span className="truncate font-medium" title={name}>{name}</span>
   </section>;
 }
 
@@ -42,7 +42,7 @@ export function RealmFrame({ realm, address = realm, header, agent, locale, mess
   const fallback = t.realmFallback({ id: realm.slice(0, 8) });
   return <div className="grid grid-cols-1">
     <div className="border-border/60 border-b bg-background/80">
-      <div className="mx-auto grid w-full max-w-7xl gap-3 px-4 pt-4 sm:px-6 lg:px-10">
+      <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-3 px-4 pt-4 sm:px-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2">
           <nav aria-label={t.title} className="flex min-w-0 items-center gap-1 text-muted-foreground text-sm">
             <LocalizedLink href="/manage" className="rounded-md px-1 outline-none hover:text-foreground

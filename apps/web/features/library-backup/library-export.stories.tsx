@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { expect, fn, userEvent, waitFor, within } from 'storybook/test';
 import { messages } from '../library/messages.ts';
 import ko from '../library/messages/ko.ts';
+import ja from '../library/messages/ja.ts';
 import { assembleFiles } from './export-job.ts';
 import { exportRow, fakeExportApi } from './export-fixtures.ts';
 import { type ExportStore, memoryExportStore } from './export-store.ts';
@@ -17,7 +18,9 @@ function Harness({ total = 45, failAt, moved, seed, ...props }: Partial<React.Co
   return <LibraryExport agent={agent} locale="en" messages={messages} api={api} store={store} {...props} />;
 }
 const meta = { title: 'Library/Export', component: Harness, args: { save: fn() },
-  parameters: { route: { pathname: '/en/library' } } } satisfies Meta<typeof Harness>;
+  parameters: { route: { pathname: '/en/library' },
+    viewport: { options: { desktop: { name: 'Desktop (1440 × 900)', styles: { width: '1440px', height: '900px' }, type: 'desktop' } } } },
+  globals: { viewport: { value: 'desktop' } } } satisfies Meta<typeof Harness>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 const open = (canvasElement: HTMLElement) => { const canvas = within(canvasElement); return userEvent.click(canvas.getByText('Download your library')).then(() => canvas); };
@@ -85,3 +88,9 @@ export const Phone: Story = { globals: { viewport: { value: 'phone' } }, args: {
 
 export const Korean: Story = { args: { locale: 'ko', messages: { ...messages, ...ko } }, globals: { viewport: { value: 'phone' } },
   async play({ canvasElement }) { await userEvent.click(within(canvasElement).getByRole('heading', { name: '서재 내려받기' })); } };
+
+export const Japanese: Story = { args: { locale: 'ja', messages: { ...messages, ...ja } },
+  async play({ canvasElement }) {
+    await userEvent.click(within(canvasElement).getByRole('heading', { name: ja.backupTitle }));
+  } };
+export const JapanesePhone: Story = { ...Japanese, globals: { locale: 'ja', viewport: { value: 'phone' } } };

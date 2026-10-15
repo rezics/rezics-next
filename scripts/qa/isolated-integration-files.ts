@@ -227,6 +227,7 @@ export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
   'tests/qa/integration/g-1038-catalogue-scale.test.ts',
   'tests/qa/integration/growth-search-refresh.test.ts',
   // API-built corpus backups need the product assembler and a closed raw-update endpoint.
+  'tests/qa/integration/realm-discussion-source.test.ts',
   'tests/qa/integration/profile-corpus-restore.test.ts',
   'tests/qa/integration/recipe-page-growth.test.ts',
   'tests/qa/integration/zone-navigation-growth.test.ts',

@@ -5,7 +5,8 @@ import { readRankingAnswer, readRankingModuleAnswer } from '../../../../../apps/
 import { recordedMainClient } from '../../../support/recorded-main-client.ts';
 import { publishClosureOriginals, type ClosureOriginal } from './closure-original-credit-setup.ts';
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
-import { personaSessions, type PersonaName, type PersonaSession, type PersonaSessions } from '../../../support/personas.ts';
+import type { PersonaName, PersonaSession, PersonaSessions } from '../../../support/personas.ts';
+import { realmDiscussionSource } from '../../../support/realm-discussion-source.ts';
 
 type Work = { work: string; workRevision: string; mainVersion: string };
 type Draft = { revisionId: string; revisionDigest: string };
@@ -13,11 +14,13 @@ type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
   nextCursor: string | null; count: { value: number; kind: string; total: null };
 };
-type Members = { generation: string; items: { member: string; membershipGeneration: string }[] };
 setDefaultTimeout(420_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
-let preparation: Promise<void> | undefined;
+// Admission waits pause the runner's active-work clock, not Bun's hook timer.
+// RetainedSources already bounds active restore/readiness work at 600 seconds.
+const source = await realmDiscussionSource(undefined, 'ranking');
+const restored = await source.sources.restore(source.adapter);
 let emptyRealm: string, movedRealm: string;
 const recording = new OutcomeRecorder(ranking);
 const coordinates = [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']] as const;
@@ -47,15 +50,12 @@ async function seedCommand(person: PersonaSession, target: Work, path: string, i
     await answer(person.main('GET', `/v1/works/${short(target.work)}?${acting(person)}`));
   }
 }
-async function seed(sessions: PersonaSessions, size: number, label: string) {
+async function publishRoot(sessions: PersonaSessions, target: Work) {
   const person = sessions.owner, author = person.actingSubject!;
-  const target = await answer<Work>(person.main('POST', '/v1/works', {
-    profile: 'metadata-only-v1', title: `Original ${label} ranking garden`, language: 'en',
-    authoring: 'own-work', actingSubject: author }), 201);
   // Ranking readers need a public root; Realm membership governs its discussion separately.
   const contribution = await answer<{ contribution: string; draftRevision: string }>(person.main('POST', '/v1/contributions', {
     profile: 'text-contribution-v1', work: target.work, language: 'en',
-    body: `An original essay about the ${label} discussion garden.`, actingSubject: author }), 201);
+    body: 'An original essay about the ranking discussion garden.', actingSubject: author }), 201);
   const publication = await answer<{ publicationDecision: string }>(person.main('POST', '/v1/contribution-publications', {
     profile: 'text-publication-v1', contribution: contribution.contribution,
     expectedDraftHead: contribution.draftRevision, expectedPublicationHead: null,
@@ -65,6 +65,13 @@ async function seed(sessions: PersonaSessions, size: number, label: string) {
     publicationDecision: publication.publicationDecision, expectedSelectionHead: null,
     context: { kind: 'main-version-default', id: target.mainVersion }, selectionBasis: 'main-maintainer',
     actingSubject: author }), 201);
+}
+async function seed(sessions: PersonaSessions, size: number, label: string) {
+  const person = sessions.owner, author = person.actingSubject!;
+  const target = await answer<Work>(person.main('POST', '/v1/works', {
+    profile: 'metadata-only-v1', title: `Original ${label} ranking garden`, language: 'en',
+    authoring: 'own-work', actingSubject: author }), 201);
+  await publishRoot(sessions, target);
   const replies: string[] = [];
   const create = async (index: number) => {
     const reply = `https://rezics.com/id/${randomUUID()}`, variantId = `urn:rezics:variant:${randomUUID()}`;
@@ -94,8 +101,14 @@ async function seed(sessions: PersonaSessions, size: number, label: string) {
   return replies;
 }
 beforeAll(async () => {
-  publicRealm = await personaSessions('public');
-  privateRealm = await personaSessions('private');
+  const started = performance.now();
+  const copy = restored;
+  publicRealm = copy.candidate.sessions.rankingPublic;
+  privateRealm = copy.candidate.sessions.rankingPrivate;
+  const inventory = copy.candidate.metadata.ranking;
+  publicThreads.push(...inventory.public.map(item => item.reply));
+  oldThreads.push(...inventory.retained.map(item => item.reply));
+  currentThreads.push(...inventory.current.map(item => item.reply));
   await recording.prepare();
   const founder = publicRealm.stranger;
   for (const state of ['empty', 'moved'] as const) {
@@ -108,29 +121,6 @@ beforeAll(async () => {
     if (state === 'empty') emptyRealm = created.realm;
     else movedRealm = created.realm;
   }
-}, 180_000);
-// All readers traverse the same inventory, authored through the public API.
-async function prepare() {
-  publicThreads.push(...await seed(publicRealm, 261, 'public'));
-  oldThreads.push(...await seed(privateRealm, 21, 'retained'));
-  const owner = privateRealm.owner, root = `/v1/realms/${short(privateRealm.realm)}`;
-  const settings = await answer<{ generation: string; settings: object }>(owner.main('GET',
-    `/v1/spaces/${short(privateRealm.space)}/settings?${acting(owner)}`));
-  await answer(owner.main('PUT', `/v1/spaces/${short(privateRealm.space)}/settings`, {
-    actingSubject: owner.actingSubject, expectedGeneration: settings.generation,
-    reason: 'Retain discussion history while fencing the next admission',
-    settings: { visibility: 'private', listing: 'listed', history: 'from-admission', admission: 'invitation' } }), 201);
-  const members = await answer<Members>(owner.main('GET', `${root}/members?${acting(owner)}`));
-  await answer(owner.main('POST', `${root}/members`, {
-    actingSubject: owner.actingSubject, member: privateRealm.member.actingSubject,
-    expectedGeneration: members.generation,
-    expectedMembershipGeneration: members.items.find(item => item.member === privateRealm.member.actingSubject)!.membershipGeneration,
-    reason: 'End the previous participation episode', action: 'remove', consent: null, durationSeconds: null }), 201);
-  const invitation = await answer<{ invitation: { id: string } }>(owner.main('POST', `${root}/invitations`, {
-    actingSubject: owner.actingSubject, member: privateRealm.member.actingSubject, expiresInSeconds: 3600 }));
-  await answer(privateRealm.member.main('POST', `${root}/invitations/${invitation.invitation.id}/response`, {
-    actingSubject: privateRealm.member.actingSubject, action: 'accept', listed: false }));
-  currentThreads.push(...await seed(privateRealm, 21, 'current'));
   await seed({ ...publicRealm, owner: publicRealm.stranger, realm: movedRealm }, 21, 'moving');
   // Whole-Work progress is the public source of the chart's reads metric.
   // Twelve adopted originals give its limit=10 request a real continuation.
@@ -140,10 +130,13 @@ async function prepare() {
     `/v1/works/${short(original.work)}/progress`, {
       actingSubject: publicRealm.owner.actingSubject, expectedVersion: 0, standing: 'started',
     }));
-}
+  console.info('Ranking setup', JSON.stringify({ sourceKey: copy.manifest.key,
+    restore: copy.candidate.preparation,
+    totalMs: Math.round(performance.now() - started) }));
+}, 600_000);
 afterAll(async () => {
   try { await recording.publish(); }
-  finally { await publicRealm?.close(); }
+  finally { await restored?.dispose(); }
 });
 
 async function storyRanking(sessions: PersonaSessions, name: PersonaName,
@@ -259,7 +252,6 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
 async function prove(name: PersonaName) {
   const person = publicRealm[name];
   await answer(person.main('GET', `/v1/realms/${short(publicRealm.realm)}?${acting(person)}`));
-  await (preparation ??= prepare());
   await traverse(publicRealm, name, publicThreads);
   if (['member', 'owner', 'moderator'].includes(name)) {
     const expected = name === 'member' ? currentThreads : [...oldThreads, ...currentThreads];
