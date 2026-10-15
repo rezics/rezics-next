@@ -185,7 +185,6 @@
   "tests/qa/integration/g-591-contribution-basis.test.ts",
   "tests/qa/integration/g-629-entity-page.test.ts",
   "tests/qa/integration/g-630-zone-routes.test.ts",
-  "tests/qa/integration/g-650-resource-targets.test.ts",
   "tests/qa/integration/g-652-target-reviews.test.ts",
   "tests/qa/integration/g-693-wiki-journey.ts",
   "tests/qa/integration/g-704-support.ts",
