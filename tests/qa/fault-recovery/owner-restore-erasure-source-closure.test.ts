@@ -200,7 +200,7 @@ test(
             fixture,
             copy,
             key,
-            /erased source selectors remain/,
+            /still exposes an erased revision|erased source selectors remain/,
           );
           expect(held.erasures).toEqual(lost.erasures);
           if (after) await after(copy);

@@ -63,7 +63,8 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
      * The running outer operation whose HMAC-bound qualification and release
      * findings authorize the opened captured+1 phase. The comparison below is
      * then against the coverage that verified finding recorded, never a caller
-     * value. Without it the opened phase still compares to the signed coverage.
+     * value. An opened fence requires this binding even when the covered rows
+     * happen to equal the signed pre-release coverage.
      */
     binding?: { outerReconciliationId: string; erasuresReconciliationId?: string } }): Promise<void> {
   const graphRelease = release ? structuredClone(release.graphRelease) : undefined;
@@ -104,6 +105,9 @@ export async function assertRetainedAuthorityCoverage(relay: Pool | PoolClient, 
   }
   let expected = { outboxCount: coverage.accessOutboxCount, outboxDigest: coverage.accessOutboxDigest,
     stateCount: coverage.accessStateCount, stateDigest: coverage.accessStateDigest };
+  if (fence.open && !release?.binding) {
+    throw new ErasureAuthorityCoverageConflict('opened Access differs from retained coverage without a release binding');
+  }
   if (release?.binding) {
     if (fence.open !== true) {
       throw new ErasureAuthorityCoverageConflict('a release binding needs the opened Access fence');

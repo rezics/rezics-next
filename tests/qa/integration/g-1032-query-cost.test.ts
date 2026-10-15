@@ -255,19 +255,24 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
     if (Bun.env.G1053_CATALOGUE_SCALE) {
       expect([1000, 10000]).toContain(catalogueScale);
       const background = `g1053background${randomUUID().replaceAll('-', '')}`;
-      for (let start = 0; start < catalogueScale; start += 128) {
+      // Independent public requests overlap preparation I/O. Keep each request
+      // within the API's 128-item cap and finish all writes before measuring.
+      for (let start = 0; start < catalogueScale; start += 512) {
+        const importedBatches = await Promise.all(
+          Array.from({ length: Math.min(4, Math.ceil((catalogueScale - start) / 128)) }, async (_, batch) => {
+        const batchStart = start + batch * 128;
         const imported = await command<{
           complete: boolean;
           partial: boolean;
           items: { status: string; receipt: { work: string } }[];
         }>('/v1/work-imports/bulk', {
           actingSubject: author.actor,
-          items: Array.from({ length: Math.min(128, catalogueScale - start) }, (_, offset) => ({
+          items: Array.from({ length: Math.min(128, catalogueScale - batchStart) }, (_, offset) => ({
             key: randomUUID(),
             input: {
               profile: 'work-catalogue-import-v1',
               expectedWorkHead: null,
-              title: `${background} Work ${start + offset}`,
+              title: `${background} Work ${batchStart + offset}`,
               language: 'en',
               evidence: 'G1051 public bulk scale background',
               aliases: [],
@@ -280,7 +285,10 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
         expect(imported.complete).toBe(true);
         expect(imported.partial).toBe(false);
         expect(imported.items.every((row) => row.status === 'succeeded')).toBe(true);
-        backgroundWorks.push(...imported.items.map((row) => row.receipt.work));
+        return imported.items.map((row) => row.receipt.work);
+          }),
+        );
+        backgroundWorks.push(...importedBatches.flat());
         expect(performance.now() - started).toBeLessThan(600_000);
         progress('bulk-background', { completed: backgroundWorks.length });
       }

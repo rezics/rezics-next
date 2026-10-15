@@ -26,6 +26,7 @@ import { selectRealmLocal, realmSelectionDigest }
 import { ZoneBrowseProjection } from '../../../services/main/src/modules/zone-browse/store.ts';
 import { callerEvidence } from './realm-browse-caller-evidence.ts';
 import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
+import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -129,6 +130,18 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     expect((await realmQuery.json() as { result: { results: unknown[] } }).result.results)
       .toEqual((await realmLegacy.json() as { results: unknown[] }).results);
 
+    // Browse readiness compares its checkpoint with the committed Main stream.
+    // Deliver the fixture's admissions before preparing its SQL projection.
+    const consumer = `query-read-${randomUUID()}`;
+    await initializeRelayCheckpoint(relayPool, consumer, env.lineage.dataEpoch);
+    let delivered = false;
+    for (let page = 0; page < 400; page++) {
+      if (!await relayMainOutboxOnce(fuseki, relayPool, consumer)) {
+        delivered = true;
+        break;
+      }
+    }
+    expect(delivered).toBe(true);
     await evidence.phase('projection.backfill', { operation: 'ZoneBrowseProjection.backfill',
       arguments: [], realm: space.realm, lineage: env.lineage }, () => zoneBrowse.backfill());
     const zoneQuery = await send('/v1/query', { context: { realm: space.realm },
