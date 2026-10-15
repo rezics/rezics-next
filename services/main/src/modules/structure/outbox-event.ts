@@ -39,7 +39,6 @@ function structureStageEvent(kind: string, action: string, type: string,
             rv:generation ?eventGeneration .
           ${action === 'structure.project' ? `${iri(eventId)} rv:projectionBatch ?eventBatch .` : ''}
         }
-        BIND(${lit(action)} AS ?eventAction)
       } LIMIT 2`);
       const rows = proof.results?.bindings ?? [];
       const row = rows[0];

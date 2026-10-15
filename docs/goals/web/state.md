@@ -1,5 +1,39 @@
 # State
 
+Checkpoint 36d38e9a-240a-441f-8630-2013ac43a6b2 consolidates handled event
+task:G-2462:18. Its decision supersedes G-2462's earlier landing disposition;
+later Program decisions and result events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:18 and decision `b25756dc2e` admit `entry-recorded-read.test.ts` as the ninth file solely for `740a31a7da`'s one-line locale-capture selection correction, retaining every persona assertion and recorded answer. Eleven entry tests/21 assertions and 19 roster tests/198 assertions passed. Canonical gate `run-aUJFQU` passed contract, types, lint and AST, then failed affected tests after 1528.990s with 0.366s slot wait: two approximately 724s attempts left seven files unfinished amid stale `fixture-small` preflight, fixture-preparation timeouts and incomplete process reports. No failures were baseline-classified; guards and stories were not reached. The deciding turn withheld acceptance, admitted the narrow scope with reclaim required and referred classification/recovery to Program in mail:b525a14c. Later brief decisions `f3f0eef58a` and `1f20ae1f32` record Program's classification, G-2685's landed preflight repair and Program-owned continuation for one complete canonical gate. Do not duplicate that continuation or infer its result here; the concurrent ledger already shows attempt 20 exited, whose handoff needs its own event. Preserve six-persona recording/replay, separate integration proof, 18-story phone/desktop inspection, applicable evidence, guard timing reports, existing budgets and every assertion. Acceptance still requires the complete canonical gate; this checkpoint supplies no acceptance or landing. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. G-2674's later landing/result disposition belongs
+to its own event. This checkpoint promotes no API row or persona cell.
+
+The method's measures, current status and latest efficiency report were read.
+Concurrent scope remains 67/68 API rows and 402 proved/6 pending persona cells.
+Web's first-attempt share is 24% overall and 6% today (5 of 86); attempts per
+landed task have median 3 and maximum 25 (G-2237). Recorded tokens are
+2052.7M input/13M output, with two sessions unavailable and tokens per proved
+row unavailable. Attempts count 71 first, 50 step, 219 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 12 gate, 0 failing-test findings and 18 other. These aggregate
+readings are not costs attributed to this event. The latest efficiency report
+remains dated 2026-10-13 21:49 UTC and supplies no comparable measurement of
+this correction. Repeated work here combines ambiguous locale selection in
+the entry replay with shared retained-source preflight refusals and host load.
+The narrow correction and Program's shared repair address those causes;
+retaining applicable recording/inspection evidence avoids unchanged work.
+No efficiency gain or successful gate is inferred before its result is decided.
+
+The task event has its committed brief decision. This checkpoint acknowledges
+its consolidation and supplies no mail to acknowledge. It changes only this
+file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint 1137feff
+
 Checkpoint 1137feff-c674-4bfc-9acf-df819ec2d92f consolidates handled events
 task:G-2462:16 and mail:8b28d8d5-de23-45d0-ad71-5379163eab47. These
 dispositions supersede G-2462's affected holds below; later events retain
