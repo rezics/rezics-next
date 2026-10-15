@@ -26,6 +26,7 @@ import { callerEvidence } from './realm-browse-caller-evidence.ts';
 import { configureDisclosure, DisclosureStore } from '../../../services/main/src/modules/disclosure/read.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { contextFixture, type ContextFixture } from './context-fixture.ts';
+import { AccessJudgments } from '../../../services/main/src/modules/judgment/access.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 const book = 'https://schema.org/Book';
@@ -48,6 +49,7 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
   const zoneBrowse = new ZoneBrowseProjection(accessPool, relayPool, env);
   const app = createMainApp(fuseki, { environment: env,
     zoneBrowse,
+    judgments: new AccessJudgments(accessPool),
     account: { verify: async () => { throw new Error('public Query made an authority request'); } },
     access: new AccessAdmissionRegistry(accessPool) });
   configureDisclosure(env, new DisclosureStore(accessPool));
