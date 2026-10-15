@@ -4,10 +4,172 @@
   "personas": {
     "visitor": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -24,7 +186,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -41,7 +203,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -52,15 +214,522 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ],
     "stranger": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&role=07571ea3-2907-4b77-b09f-678761a2b7f3",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&role=07571ea3-2907-4b77-b09f-678761a2b7f3",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -77,7 +746,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F4feebea1-f6df-46de-a927-a4513d522f9a",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -94,7 +763,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -105,15 +774,766 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "members-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/0c9ce095-e067-4f03-9704-ecc4f03a222a",
+            "revision": "f602143b-deb7-4a99-8b67-5ff8e0e19032",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "members-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/0c9ce095-e067-4f03-9704-ecc4f03a222a",
+            "revision": "f602143b-deb7-4a99-8b67-5ff8e0e19032",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-joining",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
+          "operations": [],
+          "generation": "cddf86931706c170d5c29e008c6294597ec71ef9559b5f6075430913500108f7"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-private-header",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow-state",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F0c9ce095-e067-4f03-9704-ecc4f03a222a&target=https%3A%2F%2Frezics.com%2Fid%2F01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ],
     "member": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&role=32ab2b8c-2ff1-4186-9bfd-ee53715432c3",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&role=32ab2b8c-2ff1-4186-9bfd-ee53715432c3",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -130,7 +1550,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F1bc4bc83-317e-4aeb-8824-4e9ac6ed19f8",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -147,7 +1567,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -158,15 +1578,800 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "members-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/e0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+            "revision": "c65788a9-464d-44ba-90f3-c0639a8f9c35",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "members-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/e0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+            "revision": "c65788a9-464d-44ba-90f3-c0639a8f9c35",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
+          "operations": [],
+          "generation": "cddf86931706c170d5c29e008c6294597ec71ef9559b5f6075430913500108f7"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-joining",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-private-header",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow-state",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fe0f6118f-ce18-4cd5-bae1-3f8ad8a2a253&target=https%3A%2F%2Frezics.com%2Fid%2F01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ],
     "owner": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&role=778225ee-d092-4bdc-8769-6aff2f4667c1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&role=778225ee-d092-4bdc-8769-6aff2f4667c1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "management-members",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "management-role-holders",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -183,7 +2388,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fd03f653b-2964-48cd-b191-46a8e5ea40dc",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -200,7 +2405,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -211,15 +2416,766 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "members-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/a66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+            "revision": "492a6f3d-eefb-47a9-8a4f-8560cd6c5376",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "members-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/a66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+            "revision": "492a6f3d-eefb-47a9-8a4f-8560cd6c5376",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
+          "operations": [],
+          "generation": "cddf86931706c170d5c29e008c6294597ec71ef9559b5f6075430913500108f7"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-private-header",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-joining",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow-state",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fa66ec2d3-823f-4762-9d5d-01aa5d07a4d2&target=https%3A%2F%2Frezics.com%2Fid%2F01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ],
     "moderator": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&role=7a9232a9-17d0-4b9d-aa63-863cc20b7ad2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&role=7a9232a9-17d0-4b9d-aa63-863cc20b7ad2",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -236,7 +3192,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F52aa7fce-4ffe-442e-9b01-beb624e28ef9",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -253,7 +3209,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -264,15 +3220,766 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "members-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/ddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+            "revision": "5d1b64d3-3ba0-491e-92be-6852e887c8fd",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "members-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/ddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+            "revision": "5d1b64d3-3ba0-491e-92be-6852e887c8fd",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
+          "operations": [],
+          "generation": "cddf86931706c170d5c29e008c6294597ec71ef9559b5f6075430913500108f7"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-joining",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-private-header",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow-state",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7&target=https%3A%2F%2Frezics.com%2Fid%2F01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ],
     "operator": [
       {
+        "label": "closed-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-featured",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?featured=true",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-first",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-retained",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roster?limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 403,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_operation_denied",
+          "title": "Realm is unavailable",
+          "status": 403,
+          "code": "realm_operation_denied"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-all",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-first",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&limit=1",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-retained",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&limit=1&after=https%3A%2F%2Frezics.com%2Fid%2Fddfac4e0-6f96-4960-b4e9-80c08e4201b7",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-search",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&search=Fixture",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&role=4c114a3b-48d7-4459-a440-db405b2da39a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-management-role",
+        "operationId": "getV1RealmsByRealmMembers",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/members?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&role=4c114a3b-48d7-4459-a440-db405b2da39a",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "closed-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "absent-roles",
+        "operationId": "getV1RealmsByRealmRoles",
+        "method": "GET",
+        "path": "/v1/realms/f3cac548-50bb-4d6c-a76a-bb53ddd0f536/roles?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
         "label": "members-address",
         "operationId": "getV1AddressesResolve",
         "method": "GET",
-        "path": "/v1/addresses/resolve?scope=space&key=01a13af8-c483-7269-9be3-e8fa4c27695c",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-1e18-76f1-932e-2ab72a71a13f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/address_not_found",
@@ -289,7 +3996,7 @@
         "label": "members-private-header",
         "operationId": "getV1RealmsByRealm",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F91d3fc25-8757-4caf-ba34-8549b035c500",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -306,7 +4013,7 @@
         "label": "members-join-page",
         "operationId": "getV1RealmsByRealmJoin-page",
         "method": "GET",
-        "path": "/v1/realms/01a13af8-c483-7269-9be3-e8fa4c27695c/join-page",
+        "path": "/v1/realms/01a140dd-1e18-76f1-932e-2ab72a71a13f/join-page",
         "status": 404,
         "answer": {
           "type": "https://rezics.com/problems/realm_unavailable",
@@ -317,6 +4024,391 @@
         "headers": {
           "cache-control": "no-store",
           "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "members-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+            "revision": "9bb65e25-b45d-4a1c-80e1-fe2d5d71eb3b",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "members-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-session-agent",
+        "operationId": "getV1MeSession-agent",
+        "method": "GET",
+        "path": "/v1/me/session-agent",
+        "status": 200,
+        "answer": {
+          "profile": "session-agent-v1",
+          "sessionAgent": {
+            "actingSubject": "https://rezics.com/id/5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+            "revision": "9bb65e25-b45d-4a1c-80e1-fe2d5d71eb3b",
+            "eligible": true
+          },
+          "mainAgent": {
+            "actingSubject": null,
+            "revision": null,
+            "eligible": false
+          },
+          "initialActingSubject": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-preferences",
+        "operationId": "getV1MePerson-preferences",
+        "method": "GET",
+        "path": "/v1/me/person-preferences?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 200,
+        "answer": {
+          "profile": "person-preferences-v1",
+          "profileVisibility": "public",
+          "followPolicy": "everyone",
+          "hideReadingActivity": false,
+          "contentLanguages": [],
+          "spoilerPolicy": "hide-unread",
+          "version": 0,
+          "blockedPeople": []
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-address",
+        "operationId": "getV1AddressesResolve",
+        "method": "GET",
+        "path": "/v1/addresses/resolve?scope=space&key=01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "address-resolution-v1",
+          "scope": "space",
+          "key": "01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "status": "resolved",
+          "holder": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "state": "current",
+          "canonical": {
+            "prefix": "/r/",
+            "key": "outcome-687bd1d7-8b5",
+            "suffixSource": "Outcome public Realm"
+          },
+          "capabilities": {
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          }
+        },
+        "headers": {
+          "cache-control": "public, max-age=30, must-revalidate",
+          "content-type": "application/json",
+          "etag": "\"address-identity-86de22eed3dc73487a45614d415a4e02779dcd205314effae8f043cfade6e51c\""
+        }
+      },
+      {
+        "label": "live-page-header",
+        "operationId": "getV1RealmsByRealm",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "realm-read-v1",
+          "id": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "space": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+          "revision": "https://rezics.com/id/01a140dd-2fd7-7241-bebe-56cf881a02f0",
+          "visibility": "public",
+          "reviewMode": "open",
+          "policyRevision": "urn:rezics:receipt:31913865a11cff76a224d40b3c8033397c2f42743fc7d2dab1c522439640104a",
+          "history": "everything",
+          "name": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "icon": {
+            "kind": "fallback",
+            "policy": "avatar-fallback-v1",
+            "resourceType": "realm",
+            "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+          },
+          "originalName": {
+            "value": "Outcome public Realm",
+            "language": "en",
+            "direction": "ltr",
+            "basis": "fallback"
+          },
+          "profileRevision": null,
+          "profileContract": null,
+          "listing": "listed",
+          "admission": "open",
+          "discovery": {
+            "indexable": true,
+            "robots": "index",
+            "referrerPolicy": null
+          },
+          "description": null,
+          "banner": null,
+          "rules": [],
+          "membership": {
+            "count": {
+              "kind": "unknown",
+              "value": null
+            },
+            "publicMembers": null
+          },
+          "moderators": {
+            "kind": "unknown",
+            "items": []
+          },
+          "sourcePosition": {
+            "dataEpoch": "2244f98d-31b6-4f2a-a802-b0744737838b",
+            "sequence": "18"
+          },
+          "links": {
+            "works": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/works",
+            "decisions": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/decisions"
+          }
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-zone",
+        "operationId": "getV1RealmsByRealmZone",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/zone?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/realm_unavailable",
+          "title": "Realm is unavailable",
+          "status": 404,
+          "code": "realm_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-access",
+        "operationId": "getV1MePlatform-access",
+        "method": "GET",
+        "path": "/v1/me/platform-access",
+        "status": 200,
+        "answer": {
+          "groups": [
+            "agent-mode",
+            "catalogue-import",
+            "commerce",
+            "developer-extras",
+            "events",
+            "executable-themes",
+            "institutional-voting",
+            "organization-authority",
+            "platform-admin",
+            "realm-appeals",
+            "realm-reply",
+            "recommendations",
+            "saved-views",
+            "update-subscriptions",
+            "wiki-agents",
+            "worldbuilding"
+          ],
+          "operations": [],
+          "generation": "733769bbbfd17b66ab54d01f2dde6ac11611433d9e6b5d78d4daa439d19c2c7c"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-joining",
+        "operationId": "getV1RealmsByRealmJoining",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/joining?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 200,
+        "answer": {
+          "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+          "policyRevision": "1",
+          "termsRevision": "realm-membership-v1",
+          "open": true,
+          "selfJoin": true,
+          "membershipGeneration": "0",
+          "state": "absent"
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-private-header",
+        "operationId": "getV1RealmsByRealmMember-ban",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/member-ban?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 404,
+        "answer": {
+          "type": "https://rezics.com/problems/appeal_unavailable",
+          "title": "Appeal is unavailable",
+          "status": 404,
+          "code": "appeal_unavailable"
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/problem+json"
+        }
+      },
+      {
+        "label": "live-page-follow",
+        "operationId": "getV1FollowsById",
+        "method": "GET",
+        "path": "/v1/follows/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9?kind=realm&actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-roster",
+        "operationId": "getV1RealmsByRealmRoster",
+        "method": "GET",
+        "path": "/v1/realms/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9/roster?limit=24",
+        "status": 200,
+        "answer": {
+          "items": [
+            {
+              "agent": "https://rezics.com/id/41db7b15-4343-4086-bdaa-359689ee88f5",
+              "displayName": "Outcome member",
+              "featured": true
+            },
+            {
+              "agent": "https://rezics.com/id/8fe937c2-d519-430c-bee2-70bfa7b55d96",
+              "displayName": "Outcome moderator",
+              "featured": false
+            }
+          ],
+          "nextCursor": null
+        },
+        "headers": {
+          "cache-control": "no-store",
+          "content-type": "application/json;charset=utf-8"
+        }
+      },
+      {
+        "label": "live-page-follow-state",
+        "operationId": "getV1MeFollow-state",
+        "method": "GET",
+        "path": "/v1/me/follow-state?actingSubject=https%3A%2F%2Frezics.com%2Fid%2F5b0bbcc8-3d1a-47de-b92f-ff313451759f&target=https%3A%2F%2Frezics.com%2Fid%2F01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+        "status": 200,
+        "answer": {
+          "profile": "follow-state-v1",
+          "target": {
+            "id": "https://rezics.com/id/01a140dd-2f49-72c6-af9d-3d10b8ab91df",
+            "kind": "space",
+            "name": {
+              "value": "Outcome public Realm",
+              "language": "en",
+              "direction": "ltr",
+              "basis": "fallback"
+            },
+            "icon": {
+              "kind": "fallback",
+              "policy": "avatar-fallback-v1",
+              "resourceType": "realm",
+              "key": "09c5c6d483f2338b61b8dfbcf6f34133"
+            },
+            "realm": "https://rezics.com/id/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9",
+            "href": "/r/01a140dd-2fd7-723f-b2bb-0d98dadc6cd9"
+          },
+          "following": false,
+          "revision": null,
+          "level": null,
+          "source": null,
+          "pinPosition": null,
+          "followers": {
+            "value": 2,
+            "kind": "exact"
+          }
+        },
+        "headers": {
+          "cache-control": "private, no-store",
+          "content-type": "application/json;charset=utf-8"
         }
       }
     ]
