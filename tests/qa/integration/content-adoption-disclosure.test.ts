@@ -72,22 +72,23 @@ test('a private Recipe reader loses Post bytes on preview and native export when
   const sessions = await personaSessions('public');
   const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   try {
-    const owner = sessions.owner;
-    const source = await post(owner, document([paragraph('method', 'PRIVATE revoked method')]));
-    const recipe = await adopt(owner, reference(source));
-    const paths = [`/v1/recipes/works/${short(recipe.work)}?${query(owner)}&revision=${encodeURIComponent(recipe.revision)}`,
-      `/v1/recipes/${short(recipe.structure)}/export?${query(owner)}&format=native&revision=${encodeURIComponent(recipe.revision)}`];
-    for (const path of paths) expect(JSON.stringify(await answer(owner.main('GET', path)))).toContain('PRIVATE revoked method');
+    const reader = sessions.stranger;
+    const source = await post(sessions.owner, document([paragraph('method', 'PRIVATE revoked method')]));
     const scope = `work:read:${source.post}`;
-    await grantPersonaFixtureAuthority(owner, [{ scope, action: 'work.read' }]);
+    await grantPersonaFixtureAuthority(reader, [{ scope, action: 'work.read' }]);
+    const recipe = await adopt(reader, reference(source));
+    const paths = [`/v1/recipes/works/${short(recipe.work)}?${query(reader)}&revision=${encodeURIComponent(recipe.revision)}`,
+      `/v1/recipes/${short(recipe.structure)}/export?${query(reader)}&format=native&revision=${encodeURIComponent(recipe.revision)}`];
+    for (const path of paths) expect(JSON.stringify(await answer(reader.main('GET', path)))).toContain('PRIVATE revoked method');
     // Revoke this target alone; the principal and Recipe preview remain live.
-    await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [scope]);
-    expect((await owner.main('GET', `/v1/content-revisions/${source.revisionId}?${query(owner)}`)).status).toBe(404);
+    await pool.query('UPDATE access.permission_grant SET active = false WHERE scope_id = $1 AND recipient_subject = $2',
+      [scope, reader.actingSubject]);
+    expect((await reader.main('GET', `/v1/content-revisions/${source.revisionId}?${query(reader)}`)).status).toBe(404);
     for (const path of paths) {
-      const body = await answer(owner.main('GET', path));
+      const body = await answer(reader.main('GET', path));
       expect(JSON.stringify(body)).not.toContain('PRIVATE revoked method');
     }
-    const page = await answer<{ instructions: { status: string }[] }>(owner.main('GET', paths[0]!));
+    const page = await answer<{ instructions: { status: string }[] }>(reader.main('GET', paths[0]!));
     expect(page.instructions.map(item => item.status)).toEqual(['unavailable']);
   } finally { await pool.end(); await sessions.close(); }
 }, 240_000);
@@ -98,16 +99,16 @@ test('a reference response rechecks private Post authority after waiting on anot
   const held = await pool.connect();
   let pending: Promise<Response> | undefined;
   try {
-    const owner = sessions.owner;
+    const owner = sessions.owner, reader = sessions.stranger;
     const first = await post(owner, document([paragraph('first', 'PRIVATE in-flight method')]));
     const second = await post(owner, document([paragraph('second', 'Second method')]));
     const firstScope = `work:read:${first.post}`, secondScope = `work:read:${second.post}`;
-    await grantPersonaFixtureAuthority(owner, [firstScope, secondScope].map(scope => ({ scope, action: 'work.read' })));
+    await grantPersonaFixtureAuthority(reader, [firstScope, secondScope].map(scope => ({ scope, action: 'work.read' })));
     await held.query('BEGIN');
     await held.query('SELECT id FROM access.scope_gate WHERE id = $1 FOR UPDATE', [secondScope]);
     const pid = (await held.query<{ pid: number }>('SELECT pg_backend_pid() AS pid')).rows[0]!.pid;
-    pending = owner.main('POST', '/v1/resource-reference-resolutions', {
-      references: [reference(first), reference(second)], actingSubject: owner.actingSubject,
+    pending = reader.main('POST', '/v1/resource-reference-resolutions', {
+      references: [reference(first), reference(second)], actingSubject: reader.actingSubject,
     });
     // Wait for the real second Access read, rather than guessing when the first resolved.
     const deadline = Date.now() + 1500;
@@ -117,7 +118,8 @@ test('a reference response rechecks private Post authority after waiting on anot
       if (!blocked) await Bun.sleep(5);
     }
     expect(blocked).toBe(true);
-    await pool.query('UPDATE access.scope_gate SET open = false WHERE id = $1', [firstScope]);
+    await pool.query('UPDATE access.permission_grant SET active = false WHERE scope_id = $1 AND recipient_subject = $2',
+      [firstScope, reader.actingSubject]);
     await held.query('COMMIT');
     const result = await answer<{ items: { status: string }[] }>(pending);
     expect(result.items.map(item => item.status)).toEqual(['unavailable', 'available']);
