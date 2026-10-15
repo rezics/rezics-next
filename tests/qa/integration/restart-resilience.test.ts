@@ -17,6 +17,7 @@ import { PostgresRateLimitStore, type RateLimitOptions } from '../../../services
 import { ensureLocalDatasetModelGeneration } from '../../../scripts/datasets/model-bootstrap.ts';
 import { readEnv, stackDirectory } from '../../../scripts/dev/config.ts';
 import { commandAsync } from '../../../scripts/qa/core.ts';
+import { preserveReapEnvironment } from '../../../scripts/qa/container-reaper.ts';
 
 const root = resolve(import.meta.dir, '../../..');
 function stack() {
@@ -26,7 +27,7 @@ function stack() {
   return { runId, directory, apps: readEnv(join(directory, 'apps.env')) };
 }
 async function docker(...args: string[]) {
-  const result = await commandAsync(root, 'docker', args, 60_000);
+  const result = await commandAsync(root, 'docker', args, 60_000, preserveReapEnvironment(process.env));
   if (!result.ok) throw new Error(`Docker ${args[0]} failed: ${result.output}`);
 }
 async function postgresReady(pool: Pool) {
