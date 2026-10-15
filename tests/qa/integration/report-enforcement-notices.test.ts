@@ -65,7 +65,7 @@ test('report enforcement reaches two authors and three private reporters across 
       await f.read(`/v1/reports/${reporters[0]!.reportId}`));
     const view = await json<{ generation: string }>(await f.read(`/v1/safety-cases/${reporters[0]!.caseId}`));
     const generation = view.generation;
-    const rule = f.rule;
+    const rule = { ref: f.rule.ref, revision: f.rule.revision, digest: f.rule.digest };
     const input: DecisionInput = {
       caseId: reporters[0]!.caseId,
       expectedGeneration: generation,

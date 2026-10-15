@@ -144,7 +144,7 @@ async function place(body: string, parent?: Reply): Promise<Reply> {
 }
 async function installManager(target: Realm) {
   const policy = await json<{ policyRevision: string; termsRevision: string }>(await call('GET',
-    `/v1/realms/${short(target.realm)}/join-requests/basis?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
+    `/v1/realms/${short(target.realm)}/joining?actingSubject=${encodeURIComponent(manager.actor)}`, manager));
   const consent = await json<{ consentReference: string }>(await call('POST', '/v1/me/membership-consents', manager,
     { profile: 'access-membership-consent-v1', kind: 'realm', ownerSubject: target.realm, memberSubject: manager.actor,
       expectedGeneration: '0', expectedPolicyRevision: policy.policyRevision, termsRevision: policy.termsRevision }));
@@ -284,7 +284,7 @@ beforeAll(async () => {
     settings: { visibility: 'public', listing: 'unlisted', admission: 'open', history: 'everything' },
     reason: 'Unlisted restoration control' }), 201);
   const policy = await json<{ policyRevision: string; termsRevision: string }>(await call('GET',
-    `/v1/realms/${short(realm.realm)}/join-requests/basis?actingSubject=${encodeURIComponent(member.actor)}`, member));
+    `/v1/realms/${short(realm.realm)}/joining?actingSubject=${encodeURIComponent(member.actor)}`, member));
   await grant(member, 'work:create:root', 'access.membership.consent');
   const consent = await json<{ consentReference: string }>(await call('POST', '/v1/me/membership-consents', member,
     { profile: 'access-membership-consent-v1', kind: 'realm', ownerSubject: realm.realm, memberSubject: member.actor,
