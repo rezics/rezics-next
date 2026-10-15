@@ -239,6 +239,7 @@ export function zoneWork(
     author: author ? zoneContentText(author) : null,
     authorHref: href,
     tagline: zoneText(card.tagline),
+    factObligations: card.factObligations,
     status: card.completionStatus,
     chapters: card.chapterCount,
     words: card.wordCount,

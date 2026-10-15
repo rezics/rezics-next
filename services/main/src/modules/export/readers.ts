@@ -24,6 +24,7 @@ import { discloseInventory, type DisclosureTarget } from '../disclosure/read.ts'
 import { disclosureViewer } from '../disclosure/viewer.ts';
 import { aggregateMeasurement, rollupMeasurement, readProjectionResource } from './scoped.ts';
 import { targetRead } from '../target/resolve.ts';
+import { resourceFactMaterial } from '../rights/store.ts';
 import { referenceDisclosure, semanticReaderOnly } from '../target/disclosed-references.ts';
 import { queryTargetRatingAggregate } from '../rating/target-aggregate.ts';
 import { queryRatingRollup } from '../rating/rollup-read.ts';
@@ -137,7 +138,21 @@ async function planFromOwner(input: { targetProfile: string; useScope: ExportPla
   members: readonly VerifiedExportMember[]; residuals: readonly ExportLoss[] }, rights?: LicenseScopeHook) {
   const identities = input.members.map(rightsIdentityFor);
   const members = await attachRightsIdentities(input.members, identities);
-  return planExport({ ...input, members }, rights ?? unknownRights);
+  return planExport({ ...input, members }, async (selected, useScope) => {
+    const hook = rights ?? unknownRights;
+    const exact = await hook(selected, useScope);
+    const workMembers = selected.flatMap((member, index) => {
+      const work = member.data?.work ?? member.data?.resource;
+      if (typeof work !== 'string' || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(work)) return [];
+      return [{ ordinal: index + 1, member: { ...member, data: { ...member.data,
+        rightsIdentity: { material: resourceFactMaterial(work), target: { owner: 'graph',
+          resource: work, component: 'record', revision: member.contentRevisionId ?? member.exactRef } } } } }];
+    });
+    if (!workMembers.length) return exact;
+    const imported = await hook(workMembers.map(item => item.member), useScope);
+    return [...exact, ...imported.filter(basis => basis.basisKind !== 'unassessed' || basis.result === 'prohibited')
+      .map(basis => ({ ...basis, memberOrdinals: basis.memberOrdinals.map(ordinal => workMembers[ordinal - 1]!.ordinal) }))];
+  });
 }
 
 /** Keep the original owner value in `data` even where the portable scalar is narrower. */

@@ -48,6 +48,8 @@ export function licenceLabel(instrument: string): string {
   const url = httpUrl(instrument);
   if (!url) return instrument;
   const host = url.hostname.replace(/^www\./, '');
+  if (host === 'opendatacommons.org' && url.pathname === '/licenses/odbl/1-0/') return 'ODbL 1.0';
+  if (host === 'opendatacommons.org' && url.pathname === '/licenses/dbcl/1-0/') return 'DbCL 1.0';
   if (host !== 'creativecommons.org') return instrument;
   const parts = url.pathname.split('/').filter(Boolean);
   const code = parts[1];
@@ -107,9 +109,10 @@ function NoticeText({ notice }: { notice: string }) {
   return <>{nodes}</>;
 }
 
-function LicenceLink({ instrument }: { instrument: string }) {
+function LicenceLink({ instrument, copy }: { instrument: string; copy: RightsMarkCopy }) {
   const url = httpUrl(instrument);
-  const label = licenceLabel(instrument);
+  const label = instrument === 'https://www.gutenberg.org/policy/license.html'
+    ? copy.publicDomain : licenceLabel(instrument);
   return url
     ? <a href={url.href} rel="noreferrer noopener" className={linkClass}>{label}</a>
     : <span>{label}</span>;
@@ -129,7 +132,7 @@ function markPieces(rights: Assessed, copy: RightsMarkCopy): ReactNode[] {
   const instruments = [rights.instrument, ...rights.obligations.map(item => item.instrument)]
     .filter((instrument): instrument is string => Boolean(instrument));
   for (const instrument of [...new Set(instruments)]) {
-    pieces.push(<LicenceLink key={`instrument-${instrument}`} instrument={instrument} />);
+    pieces.push(<LicenceLink key={`instrument-${instrument}`} instrument={instrument} copy={copy} />);
   }
   const seen = new Set<string>();
   for (const kind of noteKinds) {

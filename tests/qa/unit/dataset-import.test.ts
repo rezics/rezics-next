@@ -8,6 +8,7 @@ import {
   semanticBatches,
   projectionLanguage,
   nativeBatchSize,
+  assertNoImportedUserPosts,
 } from '../../../scripts/datasets/import.ts';
 import { localDatasetSession, type DatasetApi } from '../../../scripts/datasets/auth.ts';
 import { putBlob, repository, sha256 } from '../../../scripts/datasets/store.ts';
@@ -66,6 +67,14 @@ const snapshot = (records: DatasetRecord[]): DatasetSnapshot => ({
   ],
   images: [],
   captures: [],
+});
+
+test('platform imports refuse source user posts before retaining or publishing a snapshot', () => {
+  expect(() => assertNoImportedUserPosts([{ ...record('review'), kind: 'review' }])).toThrow('source user posts');
+  expect(() => assertNoImportedUserPosts([{ ...record('subject'), provider: 'bangumi',
+    data: { nested: [{ comments: ['private user expression'] }] } }])).toThrow('source user posts');
+  expect(() => assertNoImportedUserPosts([{ ...record('subject'), provider: 'bangumi',
+    data: { summary: 'Licensed wiki summary', infobox: 'Factual wiki fields' } }])).not.toThrow();
 });
 function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'selection')[];
   editorBeforeSelection?: boolean } = {}) {
@@ -163,6 +172,8 @@ function apiFixture(options: { loseCoverReplies?: ('reserve' | 'transfer' | 'sel
           return { key: item.key, status: 'succeeded', receipt: { outcome: 'succeeded', work,
             mainVersion: iri(id++), workRevision: iri(id++), mainRevision: iri(id++) } };
         }) };
+      } else if (path === '/v1/rights/use-assessments') {
+        receipt = { assessmentId: uuid(id++), obligations: (body as { obligations: unknown[] }).obligations };
       } else if (path === '/v1/semantic/changes/bulk') {
         expect(body).not.toHaveProperty('target');
         const states = (body as { items: { properties: unknown[] }[] }).items;
@@ -1167,7 +1178,7 @@ test('development auth registers and installs a public client, consents and exch
     throw new Error(`Unexpected auth route ${url.pathname}`);
   }) as typeof fetch;
   const scope =
-    'openid agent:create work:create work:edit work:read source:intake source:read classification:define classification:decide statement:write semantic:read';
+    'openid agent:create work:create work:edit work:read source:intake source:read classification:define classification:decide statement:write semantic:read rights:assess';
   const clientPath = join(
     repository,
     '.temp/datasets',

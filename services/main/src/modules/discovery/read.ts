@@ -1,4 +1,5 @@
 import { AccountAssertionDenied } from '../account/verify-assertion.ts';
+import { readFactObligations } from '../rights/read-imported.ts';
 import { decodeReadCursor, encodeReadCursor, pageResult, WorkReadInvalid, WorkReadLimit, WorkReadUnavailable,
   type WorkReadSession } from '../work/read-session.ts';
 import type { Static } from 'typebox';
@@ -76,6 +77,8 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
   // classification/credit payloads lack a current protection/erasure proof and
   // are withheld below, including term matches, until a fresh build is active.
   const summaries = await session.summaries(ids, true);
+  const factObligations = await readFactObligations(session, ids.filter((id, index) =>
+    summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'));
   const serial = await optionalPreview(session, () => readSerialSummaries(session, ids.filter((id, index) =>
     summaries[index]?.status === 'available' && summaries[index]?.disclosure === 'public'
     && summaries[index]?.type === 'work'), true));
@@ -125,6 +128,7 @@ export async function discoveryCards(session: WorkReadSession, page: readonly Di
       ...(payload.rating !== null && !ratingAvailable ? ['rating' as const] : [])];
     return [{ id: row.work, revision: payload.revision, mainVersion: payload.mainVersion,
       types: payload.types, title: summary.name, cover: current.avatar, rating: ratingAvailable ? payload.rating : null,
+      factObligations: factObligations.get(row.work),
       ...(serialValue ?? EMPTY_SERIAL_SUMMARY),
       ...(unavailablePreviews.length ? { unavailablePreviews } : {}),
       primaryCredits: (cardCredits ?? []).flatMap((credit): DiscoveryCredit[] => {

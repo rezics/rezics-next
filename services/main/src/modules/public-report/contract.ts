@@ -43,6 +43,10 @@ const contentRevision = t.String({ maxLength: 64,
 /** Public intake names an exact Content revision or Media Use, never its owner.
  * The resolver derives the resource and admitted owner relationship. */
 export const publicReportSelection = t.Union([
+  t.Object({ component: t.Literal('cover'), revision: t.String({ format: 'uuid' }), locator: t.Null() },
+    { additionalProperties: false }),
+  t.Object({ component: t.Literal('synopsis'), revision: readId, locator: t.Null() },
+    { additionalProperties: false }),
   t.Object({ component: t.Literal('body'), revision: contentRevision, locator: t.Null() },
     { additionalProperties: false }),
   t.Object({ component: t.Literal('media_use'), revision: contentRevision,

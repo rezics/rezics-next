@@ -15,7 +15,7 @@ import { textAttributes, writingLanguage } from '../content-language/writing-lan
 import { Confirm, Line, useFocusProblem } from './form-parts.tsx';
 import { type Failure, submitReport } from './report-api.ts';
 import { casePath, type CopyrightDeclaration, categoriesFor, declarationOf, fill, isUrgent, keyed, needsEmail,
-  type NciiDeclaration, plausibleTarget, type ReportCategory, textFor, waitText } from './report.ts';
+  type NciiDeclaration, plausibleTarget, type ReportCategory, type ReportSelection, textFor, waitText } from './report.ts';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const CYBERTIPLINE = 'https://www.ncmec.org/gethelpnow/cybertipline';
@@ -54,8 +54,9 @@ function Guidance({ category, t }: { category: ReportCategory | null; t: ReturnT
  * the writer's to state: their first reading language, or unspecified, never
  * the interface locale (docs/contracts/content-languages.md, Decision 7).
  */
-export function ReportForm({ locale, target: initialTarget = '', realm = null, actingSubject = null, send }: {
+export function ReportForm({ locale, target: initialTarget = '', realm = null, selection, actingSubject = null, send }: {
   locale: UiLocale; target?: string; realm?: string | null;
+  selection?: ReportSelection;
   /** The signed-in Agent, whose saved reading languages start the language choice. */
   actingSubject?: string | null; send?: typeof fetch;
 }) {
@@ -109,6 +110,7 @@ export function ReportForm({ locale, target: initialTarget = '', realm = null, a
     if (!complete || !category) { setAttempted(count => count + 1); return; }
     const body = {
       target: target.trim(), category, statement: statement.trim(), contentLanguage: language,
+      ...(target.trim() === initialTarget && selection ? { selection } : {}),
       ...(email.trim() ? { contactEmail: email.trim() } : {}),
       ...(category === 'realm_rules' && realm ? { realm } : {}),
       ...(declaration === 'ncii' ? { ncii: { signature: ncii.signature.trim(), depictedPersonOrAuthorized: true as const,

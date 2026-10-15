@@ -1,6 +1,8 @@
 import type { SafetyMessages } from '../messages.ts';
 
 export default {
+  reportText: '이 소개글 신고',
+  reportCover: '이 표지 신고',
   report: '신고',
   reportProfile: '이 프로필 신고',
   reportPost: '이 게시물 신고',

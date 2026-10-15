@@ -1,4 +1,4 @@
-import { RightsInvalid, RightsUnavailable, workDescriptionMaterial, type WikiDisplayObligations } from '../rights/store.ts';
+import { RightsInvalid, RightsUnavailable, resourceFactMaterial, workDescriptionMaterial, type WikiDisplayObligations } from '../rights/store.ts';
 import { DisclosureUnavailable } from '../disclosure/read.ts';
 import { workPublicationProfileFor, structureProfileForGraph } from '../structure/profiles.ts';
 import { chooseMainLanguage, readMainLanguageHeads } from './selection-heads.ts';
@@ -184,13 +184,30 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
   const basis = await readWorkBasis(session, work);
   const metadata = basis.metadata;
   const selected = selectedMetadata(metadata, session.options.language);
+  // Catalogue creation can carry a source synopsis before an editor has made
+  // a separate metadata component. It keeps the same disclosure and licence.
+  if (!metadata.revision && !selected.description) {
+    const descriptions = await session.query(`SELECT ?text WHERE { GRAPH ${iri(GRAPHS.current)} {
+      ${iri(work)} schema:description ?text } } LIMIT 2`, 2);
+    if (descriptions.length > 1) throw new WorkReadUnavailable('Work description is ambiguous');
+    const text = descriptions[0]?.text;
+    if (text) selected.description = { ...recordedDisplayText({ value: text.value, language: text['xml:lang'] ?? 'und' }),
+      basis: 'fallback' };
+  }
+  if (selected.description && (await session.disclosure([
+    { owner: 'graph', resource: work, component: 'synopsis' },
+  ]))[0] !== 'visible') selected.description = null;
   await fenceWorkBasis(session, basis);
   const store = session.deps.rights?.store;
   let descriptionObligations: WikiDisplayObligations = { status: 'unassessed' };
+  let factObligations: WikiDisplayObligations = { status: 'unassessed' };
   if (store) {
     try {
-      descriptionObligations = (await store.currentWikiDisplayObligations([workDescriptionMaterial(work)]))[0]
-        ?? descriptionObligations;
+      const read = () => store.currentWikiDisplayObligations([workDescriptionMaterial(work), resourceFactMaterial(work)]);
+      const rights = await read();
+      descriptionObligations = rights[0] ?? descriptionObligations;
+      factObligations = rights[1] ?? factObligations;
+      session.observeDependency(`work-display-rights:${work}`, rights, read);
     } catch (error) {
       if (error instanceof RightsUnavailable || error instanceof RightsInvalid) {
         throw new WorkReadUnavailable('Rights obligations are unavailable');
@@ -204,7 +221,7 @@ export async function readWorkHeader(session: WorkReadSession, work: string) {
     ...(session.principal && session.options.actingSubject
       && await session.deps.access.canEditWork(session.principal, session.options.actingSubject, work)
       ? { structurePublicationHead: basis.structurePublicationHead } : {}),
-    descriptionObligations,
+    descriptionObligations, factObligations,
     ...(basis.fieldProvenance ? { fieldProvenance: basis.fieldProvenance } : {}),
     title: selected.title ?? basis.card.title, description: selected.description,
     tagline: selected.tagline, completionStatus: metadata.completionStatus,

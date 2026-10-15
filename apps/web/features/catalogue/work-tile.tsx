@@ -9,6 +9,7 @@ import { RatingInline } from './rating.tsx';
 import { ShelfMark } from './reader-actions.tsx';
 import { CatalogueCover, CatalogueCoverCredit } from './cover.tsx';
 import { type CatalogueWork, otherLanguageTitle, shortWorkId } from './work.ts';
+import { RightsMark } from '../rights-mark/rights-mark.tsx';
 
 /** A Work's display title, or its short ID while Main cannot name it. */
 export function workTitle(work: Pick<CatalogueWork, 'id' | 'title'>, locale: UiLocale): string {
@@ -92,5 +93,6 @@ export function WorkTile({ work, slot = 2 / 3, headingLevel = 3, avatarQuery, lo
     </div> : null}
     {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
       className="mt-1.5 line-clamp-2 text-pretty text-muted-foreground text-sm/snug">{work.tagline.value}</p> : null}
+    {work.factObligations ? <RightsMark rights={work.factObligations} locale={locale} /> : null}
   </article>;
 }

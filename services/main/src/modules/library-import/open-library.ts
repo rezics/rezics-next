@@ -89,8 +89,11 @@ export async function adoptLibrarySource(
         }
       }
       const existing = await work.libraryImport!.adoptedOpenLibraryWork(workId);
-      if (existing)
+      if (!work.rights) return problem(503, 'source_unavailable', 'Source rights owner is unavailable');
+      if (existing) {
+        await work.rights.store.assessOpenLibraryImport(existing, workId);
         return Response.json({ work: existing, replayed: true }, { headers: privateHeaders });
+      }
       if (!observation) {
         await work.libraryImport!.takeBudget(body.actingSubject, 'acquisition');
         await work.sourceIntake!.reserveOpenLibrarySlot();
@@ -121,6 +124,7 @@ export async function adoptLibrarySource(
         },
       );
       if (!adopted) return problem(503, 'source_unavailable', 'Work adoption is unavailable');
+      await work.rights.store.assessOpenLibraryImport(adopted.adoption.work, workId);
       return Response.json(
         { work: adopted.adoption.work, replayed: adopted.replayed },
         { headers: privateHeaders },

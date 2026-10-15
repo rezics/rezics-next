@@ -9,6 +9,7 @@ type Client = ReturnType<typeof browserMainApi>;
 type Ok<Call> = Call extends (...args: never[]) => Promise<{ data: infer Data }> ? NonNullable<Data> : never;
 type Report = Client['v1']['public-reports'];
 export type ReportInput = Parameters<Report['post']>[0];
+export type ReportSelection = NonNullable<ReportInput['selection']>;
 export type ReportCategory = ReportInput['category'];
 export type NciiDeclaration = NonNullable<ReportInput['ncii']>;
 export type CopyrightDeclaration = NonNullable<ReportInput['copyright']>;
@@ -75,9 +76,14 @@ export const credentialFromHash = (hash: string): string | null => {
 export const casePath = (caseId: string, credential: string) => `/report/${caseId}#${credential}`;
 
 /** The report page for a target: the REZICS ID of what is reported (Main resolves only IDs and its own addresses). */
-export function reportHref(target: string, realm?: string | null): string {
+export function reportHref(target: string, realm?: string | null, selection?: ReportSelection): string {
   const query = new URLSearchParams({ target });
   if (realm) query.set('realm', realm);
+  if (selection) {
+    query.set('component', selection.component);
+    query.set('revision', selection.revision);
+    if (selection.locator) query.set('locator', selection.locator);
+  }
   return `/report?${query}`;
 }
 

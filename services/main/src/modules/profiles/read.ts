@@ -459,6 +459,7 @@ export async function readAgentWorks(session: WorkReadSession, agent: string, co
       {
         ...card,
         tagline: serial.get(id)!.tagline,
+        factObligations: serial.get(id)!.factObligations,
         completionStatus: serial.get(id)!.completionStatus,
         rating:
           rating?.status === 'available' && rating.count && rating.context && rating.scale

@@ -6,6 +6,7 @@ import type { ReactNode } from 'react';
 import { Expandable } from './expandable.tsx';
 import type { UiLocale } from '../../i18n/define.ts';
 import { RightsMark } from '../rights-mark/rights-mark.tsx';
+import { ReportAction } from '../safety/report-action.tsx';
 import { typeLabel } from '../catalogue/types.ts';
 import { formatCompact } from '../catalogue/work.ts';
 import { formatNumber, isoTime, languageName, paragraphs, sinceWhen, titleNeedsLanguageNote }
@@ -106,7 +107,10 @@ export function WorkHeader({ work, credits, ratingLine, showcase, now = new Date
 export function WorkAbout({ work, locale = 'en', messages }: {
   work: Header; locale?: UiLocale; messages: WorkPageMessages;
 }) {
-  const mark = <RightsMark rights={work.descriptionObligations} locale={locale} />;
+  const mark = <>
+    {work.factObligations ? <RightsMark rights={work.factObligations} locale={locale} /> : null}
+    <RightsMark rights={work.descriptionObligations} locale={locale} />
+  </>;
   if (!work.description) return mark;
   return <section aria-labelledby="work-about" className="grid max-w-3xl gap-2">
     <h2 id="work-about" className="sr-only">{messages.about}</h2>
@@ -117,5 +121,7 @@ export function WorkAbout({ work, locale = 'en', messages }: {
       </div>
     </Expandable>
     {mark}
+    <ReportAction target={work.id} kind="text" selection={{ component: 'synopsis', revision: work.revision, locator: null }}
+      className="inline-flex w-fit items-center gap-1 text-muted-foreground text-xs hover:underline" />
   </section>;
 }

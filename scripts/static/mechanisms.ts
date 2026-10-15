@@ -24,7 +24,9 @@ export const mechanisms = [
   {
     id: 'rights-evaluation',
     owner: 'services/main/src/modules/rights',
-    entryPoints: ['store.ts#RightsStore', 'schema.ts#useAssessment', 'schema.ts#obligation'],
+    entryPoints: ['store.ts#RightsStore', 'schema.ts#useAssessment', 'schema.ts#obligation',
+      'import-policy.ts#importedRightsAssessments', 'read-imported.ts#readFactObligations',
+      'read-imported.ts#readImportedExportBases'],
     ownedState: ['rights.material', 'rights.use_assessment', 'rights.use_assessment_head', 'rights.obligation'],
     protectedEffects: ['write assessment', 'write obligation', 'derive obligation from a licence'],
     allowedAdapters: ['licence-data', 'assessment-projection'],

@@ -145,6 +145,7 @@ async function hydrate(session: WorkReadSession, key: string, page: readonly Lis
   return page.flatMap(work => {
     const card = cards.get(work.id);
     return card ? [{ ...card, types: (types.get(work.id) ?? []).sort(), tagline: serial.get(work.id)?.tagline ?? null,
+      factObligations: serial.get(work.id)?.factObligations,
       completionStatus: serial.get(work.id)?.completionStatus ?? null, rating: work.rating,
       authors: authors.get(work.id) ?? [] }] : [];
   });

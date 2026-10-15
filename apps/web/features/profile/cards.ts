@@ -32,7 +32,7 @@ export function creditedCard(item: CreditedWork, name: string, profile: string |
     authors: [{ name: creditLine(name, item.attribution.map(credit => credit.role), locale, messages),
       href: profileHref(profile) }],
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max } : null,
-    tagline: item.tagline, completion: item.completionStatus };
+    tagline: item.tagline, completion: item.completionStatus, factObligations: item.factObligations };
 }
 
 /**
@@ -41,7 +41,7 @@ export function creditedCard(item: CreditedWork, name: string, profile: string |
  */
 export function shelfCard(card: ShelfCard): CatalogueWork {
   return { id: card.id, href: workHref(card.id.slice(-36)), title: card.title, cover: card.cover,
-    kind: coverKindOf(card.types), authors: [], rating: null };
+    kind: coverKindOf(card.types), authors: [], rating: null, factObligations: card.factObligations };
 }
 
 /**

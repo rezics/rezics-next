@@ -51,7 +51,8 @@ export function catalogueWork(work: ZoneWork): CatalogueWork {
       basis: { policy: '', context: '' } } : null,
     kind: work.kind, authors: work.author ? [{ name: work.author.value, href: work.authorHref ?? null }] : [],
     rating: null,
-    tagline: work.tagline ? name(work.tagline) : null, completion: work.status };
+    tagline: work.tagline ? name(work.tagline) : null, completion: work.status,
+    factObligations: work.factObligations };
 }
 
 /**

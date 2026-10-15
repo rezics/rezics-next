@@ -11,6 +11,7 @@ import { coverOf } from './types.ts';
  * builds these from its own Main read.
  */
 export interface CatalogueWork {
+  factObligations?: import('../rights-mark/rights-mark.tsx').DisplayObligations;
   /** The Work IRI; it seeds the generated cover and keys reader state. */
   id: string;
   href: string;

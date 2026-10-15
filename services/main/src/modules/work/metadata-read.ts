@@ -32,6 +32,10 @@ export async function readMetadataHeader(session: WorkReadSession, work: string,
   if (rows.length !== 1 || !rows[0]?.state) throw new WorkReadUnavailable('Metadata head is incomplete');
   const state = parsedMetadataState(rows[0].state.value);
   if (state.kind !== 'header') throw new WorkReadUnavailable('Metadata head has the wrong kind');
+  if (state.localized.some(row => row.description || row.tagline)
+    && (await session.disclosure([{ owner: 'graph', resource: work, component: 'synopsis' }]))[0] !== 'visible') {
+    state.localized = state.localized.map(row => ({ ...row, description: null, tagline: null }));
+  }
   return { revision, originalTitle: state.originalTitle,
     completionStatus: state.completionStatus ?? null, localized: state.localized };
 }

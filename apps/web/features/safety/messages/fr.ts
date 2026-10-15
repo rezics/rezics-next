@@ -1,6 +1,8 @@
 import type { SafetyMessages } from '../messages.ts';
 
 export default {
+  reportText: 'Signaler cette description',
+  reportCover: 'Signaler cette couverture',
   report: 'Signaler',
   reportProfile: 'Signaler ce profil',
   reportPost: 'Signaler cette publication',

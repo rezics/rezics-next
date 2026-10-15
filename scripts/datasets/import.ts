@@ -9,9 +9,11 @@ import {
 import { replayCommand } from '../lib/command-journal.ts';
 import { atomicJson, canonical, sha256, verifiedBlob } from './store.ts';
 import { checkedComponentState } from '../../services/main/src/modules/semantic/change.ts';
+import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import { acquireDatasetImportLock } from './lock.ts';
 import { verifyCoverSourceCapture } from './snapshot.ts';
 import type { DatasetEdge, DatasetRecord, DatasetSnapshot } from './types.ts';
+import { BANGUMI_USER_POST_FIELDS } from './bangumi.ts';
 
 const SCHEMA = 'https://schema.org/';
 const RV = 'https://rezics.com/vocab/';
@@ -24,6 +26,21 @@ const clean = (value: string) =>
     .replace(/[\u0000-\u001f\u007f]/g, ' ')
     .normalize('NFC')
     .trim();
+
+/** A frozen snapshot is still input. Refuse community posts before retaining
+ * bytes or issuing native writes, including snapshots made by older tooling. */
+export function assertNoImportedUserPosts(records: readonly DatasetRecord[]): void {
+  const userFields = new Set<string>(BANGUMI_USER_POST_FIELDS);
+  const userKinds = new Set(['blog', 'blogs', 'post', 'posts', 'review', 'reviews', 'comment',
+    'comments', 'user-post', 'user_post', 'discussion', 'thread', 'collection-comment']);
+  const containsPost = (value: unknown): boolean => Array.isArray(value) ? value.some(containsPost)
+    : value !== null && typeof value === 'object' && Object.entries(value).some(([key, child]) =>
+      userFields.has(key) || containsPost(child));
+  for (const record of records) if (userKinds.has(record.kind.toLowerCase())
+    || record.provider === 'bangumi' && containsPost(record.data)) {
+    throw new Error('Dataset contains source user posts; capture only licensed catalogue records');
+  }
+}
 /** Source language spelling belongs to provenance. Native typed labels use the
  * existing API's canonical BCP47 representation or explicitly undetermined. */
 export function projectionLanguage(source: string): string {
@@ -348,6 +365,10 @@ function responseReason(response: ApiResponse): string {
   return `HTTP ${response.status}`;
 }
 function sourceEvidence(record: DatasetRecord) {
+  if (record.provider === 'bangumi') return { basis: 'license' as const,
+    note: `Bangumi contributors, ${record.sourceUrl}; CC BY-SA 3.0 https://creativecommons.org/licenses/by-sa/3.0/. Covers have separate rights; user posts are excluded.` };
+  if (record.provider === 'vndb') return { basis: 'license' as const,
+    note: `VNDB contributors, ${record.sourceUrl}; ODbL https://opendatacommons.org/licenses/odbl/1-0/ and DbCL https://opendatacommons.org/licenses/dbcl/1-0/. Field exceptions retained; descriptions and user posts are not published.` };
   return {
     basis: 'unknown' as const,
     note: `Frozen local development evidence from ${record.sourceUrl}; raw provider data and images retain their original rights. No redistribution permission is asserted.`,
@@ -514,6 +535,7 @@ export async function importDataset(
   const { api, mainOrigin, actingSubject } = session;
   const locale = options.locale ?? 'zh-Hant';
   const records = snapshot.sources.flatMap((source) => source.records);
+  assertNoImportedUserPosts(records);
   const allEdges = snapshot.sources.flatMap((source) => source.edges);
   const byKey = new Map(records.map((record) => [record.key, record]));
   const imagesByRecord = new Map<string, DatasetSnapshot['images']>();
@@ -955,6 +977,9 @@ export async function importDataset(
             key: `dataset:${sha256(`${context}:native:${record.key}`)}`,
             input: { profile: 'work-catalogue-import-v1', expectedWorkHead: null,
               title: clean(record.title), language: projectionLanguage(record.language),
+              ...(record.provider === 'bangumi' && typeof record.data.summary === 'string'
+                && clean(record.data.summary) && clean(record.data.summary).length <= 4000
+                ? { description: { value: clean(record.data.summary), language: 'zh-Hans' } } : {}),
               evidence: `frozen-dataset:${snapshot.digest}:${record.key}`, aliases: [],
               semanticTypes: record.semanticTypes ?? [], credits: [], classifications: [] },
           }));
@@ -1007,6 +1032,22 @@ export async function importDataset(
           mappedWorks++;
           if (mappedWorks % 25 === 0 || mappedWorks === workRecords.length)
             options.progress?.(`Mapped ${mappedWorks}/${workRecords.length} native Works`);
+        }
+        // Run on resumed journals too: a Work is not a completed import until
+        // every display/export use retains the source's credit and licence.
+        for (const record of workRecords) {
+          const mapped = journal.native[record.key];
+          if (!mapped || (record.provider !== 'bangumi' && record.provider !== 'vndb')) continue;
+          const assessments = importedRightsAssessments({ provider: record.provider, url: record.sourceUrl },
+            mapped.id, record.provider === 'bangumi' && typeof record.data.summary === 'string'
+              && Boolean(clean(record.data.summary)) && clean(record.data.summary).length <= 4000);
+          for (const [index, assessment] of assessments.entries()) {
+            const label = `rights:${record.key}:${index}`;
+            await command(label, 'POST', '/v1/rights/use-assessments', {
+              profile: 'rights-use-assessment-v1', actingSubject, ...assessment,
+              idempotencyKey: `dataset:${sha256(`${context}:${label}`)}`,
+            });
+          }
         }
         const sourceWorkKeys = new Map(
           Object.entries(journal.native)

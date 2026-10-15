@@ -167,10 +167,13 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
   return {
     async admitted(target, admission) {
       if (target.owner === 'graph' && owners.graph && target.revision && graphAnchor.test(target.revision)) {
-        if (target.component === 'title') {
+        if (target.component === 'title' || target.component === 'synopsis') {
           try {
             const exact = await readExactWorkRevision(owners.graph.env, target.revision,
               async work => work === target.resource);
+            if (target.component === 'synopsis') return result(target, exact.description ? 'available' : 'unavailable',
+              exact.description ? sha256(JSON.stringify([exact.revision, exact.work, exact.description])) : null,
+              'work-synopsis', 'graph-exact-work-revision-v1');
             return result(target, 'available', sha256(JSON.stringify([exact.revision, exact.work, exact.title,
               exact.language])), 'work-title-en', 'graph-exact-work-revision-v1');
           } catch (error) {
@@ -216,7 +219,7 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
         }
         return result(target, read.status === 'erased' ? 'erased' : 'unavailable', null, null, 'content-exact-read-v1');
       }
-      if (target.owner === 'graph' && owners.graph && (target.component === 'title' || target.component === 'name')) {
+      if (target.owner === 'graph' && owners.graph && ['title', 'name', 'synopsis'].includes(target.component)) {
         if (!target.revision || !agent.test(target.revision) || !agent.test(target.resource)) {
           throw new GovernanceInvalid('graph evidence needs a Work and revision');
         }
@@ -226,6 +229,9 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
         try {
           const exact = await readExactWorkRevision(owners.graph.env, target.revision, async work =>
             work === target.resource);
+          if (target.component === 'synopsis') return result(target, exact.description ? 'available' : 'unavailable',
+            exact.description ? sha256(JSON.stringify([exact.revision, exact.work, exact.description])) : null,
+            'work-synopsis', 'graph-exact-work-revision-v1');
           return result(target, 'available', sha256(JSON.stringify([exact.revision, exact.work, exact.title,
             exact.language])), 'work-title-en', 'graph-exact-work-revision-v1');
         } catch (error) {

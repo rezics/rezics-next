@@ -9,6 +9,7 @@ import { RatingInline } from './rating.tsx';
 import { ShelfButton } from './reader-actions.tsx';
 import { type CatalogueWork, otherLanguageTitle } from './work.ts';
 import { CoverLink, workTitle } from './work-tile.tsx';
+import { RightsMark } from '../rights-mark/rights-mark.tsx';
 
 /**
  * One Work in a result list: cover, title, authors and rating, why it is
@@ -45,6 +46,7 @@ export function WorkRow({ work, headingLevel = 2, avatarQuery, locale, shelf = '
       {work.tagline ? <p lang={work.tagline.language} dir={work.tagline.direction}
         className="line-clamp-2 text-pretty text-muted-foreground">{work.tagline.value}</p> : null}
       {children ? <div className="mt-1.5 text-muted-foreground text-sm">{children}</div> : null}
+      {work.factObligations ? <RightsMark rights={work.factObligations} locale={locale} /> : null}
     </div>
     {shelf === 'none' ? null : <div className="col-start-2 mt-3 self-start sm:col-start-3 sm:mt-0">
       <ShelfButton work={work.id} title={title} locale={locale} size="sm"

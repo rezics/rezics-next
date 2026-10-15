@@ -45,7 +45,7 @@ export function authorCard(item: AuthorWork): CatalogueWork {
       return name ? [{ name, href: authorHref(credit) }] : [];
     }),
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max } : null,
-    tagline: item.tagline, completion: item.completionStatus };
+    tagline: item.tagline, completion: item.completionStatus, factObligations: item.factObligations };
 }
 
 /**

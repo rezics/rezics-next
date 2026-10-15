@@ -2,6 +2,8 @@ import type { SafetyMessages } from '../messages.ts';
 
 export default {
   report: '報告',
+  reportText: 'この紹介文を報告',
+  reportCover: 'この表紙を報告',
   reportProfile: 'このプロフィールを報告',
   reportPost: 'この投稿を報告',
   reportReply: 'この返信を報告',

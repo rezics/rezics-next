@@ -1,6 +1,8 @@
 import type { SafetyMessages } from '../messages.ts';
 
 export default {
+  reportText: 'Denunciar esta descripción',
+  reportCover: 'Denunciar esta portada',
   report: 'Denunciar',
   reportProfile: 'Denunciar este perfil',
   reportPost: 'Denunciar esta publicación',

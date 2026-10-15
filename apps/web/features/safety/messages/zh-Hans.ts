@@ -1,6 +1,8 @@
 import type { SafetyMessages } from '../messages.ts';
 
 export default {
+  reportText: '举报这段简介',
+  reportCover: '举报这张封面',
   report: '举报',
   reportProfile: '举报此个人资料',
   reportPost: '举报此帖子',

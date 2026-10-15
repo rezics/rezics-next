@@ -8,6 +8,7 @@ import {
   readPosition,
   creditItem,
   WORK_READ_COST,
+  wikiDisplayObligations,
 } from '../work/read-contract.ts';
 import type { FilterDocument } from '../../../../../model/definitions/filter-document-v1.ts';
 import { discoveryCredit, discoveryRating } from '../discovery/contract.ts';
@@ -22,6 +23,7 @@ export const RESOURCE_WORK_CARD_COST = {
   ratingSummaries: 64,
 } as const;
 export const resourceWorkCard = t.Object({
+  factObligations: t.Optional(wikiDisplayObligations),
   primaryCredits: t.Array(discoveryCredit, { maxItems: RESOURCE_WORK_CARD_COST.credits }),
   creditCount: t.Object({
     value: t.Integer({ minimum: 0 }),

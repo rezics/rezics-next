@@ -65,8 +65,8 @@ test('public reads return wiki-display obligations, an unassessed head, and noth
         { kind: 'attribution', instrument: openLibrary, appliesTo: 'display', notice: 'Open Library, https://openlibrary.org/works/OL45804W' },
         { kind: 'change_indication', instrument: openLibrary, appliesTo: 'all', notice: 'Name the change' },
       ] });
-    expect(headerSql.count()).toBe(1);
-    expect(headerFence.count()).toBe(1);
+    expect(headerSql.count()).toBe(2);
+    expect(headerFence.count()).toBe(2);
     headerSql.restore();
     headerFence.restore();
 

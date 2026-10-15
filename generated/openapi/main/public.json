@@ -73143,6 +73143,97 @@
                                   }
                                 ]
                               },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
@@ -74242,6 +74333,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -86753,6 +86935,97 @@
                                   }
                                 ]
                               },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
@@ -88905,6 +89178,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -157364,6 +157728,97 @@
                               }
                             ]
                           },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -213306,6 +213761,97 @@
                                             "kind"
                                           ],
                                           "type": "object"
+                                        },
+                                        "factObligations": {
+                                          "anyOf": [
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "status": {
+                                                  "const": "unassessed",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "instrument": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                },
+                                                "obligations": {
+                                                  "items": {
+                                                    "additionalProperties": false,
+                                                    "properties": {
+                                                      "appliesTo": {
+                                                        "enum": [
+                                                          "display",
+                                                          "all"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "instrument": {
+                                                        "type": "string"
+                                                      },
+                                                      "kind": {
+                                                        "enum": [
+                                                          "attribution",
+                                                          "share_alike",
+                                                          "notice_retention",
+                                                          "change_indication",
+                                                          "non_commercial",
+                                                          "no_derivatives",
+                                                          "other"
+                                                        ],
+                                                        "type": "string"
+                                                      },
+                                                      "notice": {
+                                                        "~elyTyp": 7,
+                                                        "nullable": true,
+                                                        "type": [
+                                                          "string",
+                                                          "null"
+                                                        ]
+                                                      }
+                                                    },
+                                                    "required": [
+                                                      "kind",
+                                                      "instrument",
+                                                      "appliesTo",
+                                                      "notice"
+                                                    ],
+                                                    "type": "object"
+                                                  },
+                                                  "maxItems": 16,
+                                                  "type": "array"
+                                                },
+                                                "status": {
+                                                  "const": "assessed",
+                                                  "type": "string"
+                                                },
+                                                "use": {
+                                                  "const": "wiki_display",
+                                                  "type": "string"
+                                                }
+                                              },
+                                              "required": [
+                                                "status",
+                                                "use",
+                                                "instrument",
+                                                "obligations"
+                                              ],
+                                              "type": "object"
+                                            }
+                                          ]
                                         },
                                         "primaryCredits": {
                                           "items": {
@@ -304398,6 +304944,97 @@
                                   }
                                 ]
                               },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
@@ -315037,6 +315674,97 @@
                                           "crop",
                                           "coverCredit",
                                           "basis"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "factObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
                                         ],
                                         "type": "object"
                                       }
@@ -362954,6 +363682,97 @@
                                   }
                                 ]
                               },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
@@ -384801,6 +385620,97 @@
                                       "crop",
                                       "coverCredit",
                                       "basis"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
                                     ],
                                     "type": "object"
                                   }
@@ -539389,6 +540299,50 @@
                         "additionalProperties": false,
                         "properties": {
                           "component": {
+                            "const": "cover",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "synopsis",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
                             "const": "body",
                             "type": "string"
                           },
@@ -539607,6 +540561,50 @@
                         "additionalProperties": false,
                         "properties": {
                           "component": {
+                            "const": "cover",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "synopsis",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
                             "const": "body",
                             "type": "string"
                           },
@@ -539821,6 +540819,50 @@
                   },
                   "selection": {
                     "anyOf": [
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "cover",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "format": "uuid",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
+                      {
+                        "additionalProperties": false,
+                        "properties": {
+                          "component": {
+                            "const": "synopsis",
+                            "type": "string"
+                          },
+                          "locator": {
+                            "type": "null"
+                          },
+                          "revision": {
+                            "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "component",
+                          "revision",
+                          "locator"
+                        ],
+                        "type": "object"
+                      },
                       {
                         "additionalProperties": false,
                         "properties": {
@@ -584956,6 +585998,97 @@
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
                                   },
+                                  "factObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "hub": {
                                     "~elyTyp": 7,
                                     "nullable": true,
@@ -586960,6 +588093,97 @@
                                       }
                                     ]
                                   },
+                                  "factObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "id": {
                                     "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                     "type": "string"
@@ -588288,6 +589512,97 @@
                                           "kind"
                                         ],
                                         "type": "object"
+                                      },
+                                      "factObligations": {
+                                        "anyOf": [
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "status": {
+                                                "const": "unassessed",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "status"
+                                            ],
+                                            "type": "object"
+                                          },
+                                          {
+                                            "additionalProperties": false,
+                                            "properties": {
+                                              "instrument": {
+                                                "~elyTyp": 7,
+                                                "nullable": true,
+                                                "type": [
+                                                  "string",
+                                                  "null"
+                                                ]
+                                              },
+                                              "obligations": {
+                                                "items": {
+                                                  "additionalProperties": false,
+                                                  "properties": {
+                                                    "appliesTo": {
+                                                      "enum": [
+                                                        "display",
+                                                        "all"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "instrument": {
+                                                      "type": "string"
+                                                    },
+                                                    "kind": {
+                                                      "enum": [
+                                                        "attribution",
+                                                        "share_alike",
+                                                        "notice_retention",
+                                                        "change_indication",
+                                                        "non_commercial",
+                                                        "no_derivatives",
+                                                        "other"
+                                                      ],
+                                                      "type": "string"
+                                                    },
+                                                    "notice": {
+                                                      "~elyTyp": 7,
+                                                      "nullable": true,
+                                                      "type": [
+                                                        "string",
+                                                        "null"
+                                                      ]
+                                                    }
+                                                  },
+                                                  "required": [
+                                                    "kind",
+                                                    "instrument",
+                                                    "appliesTo",
+                                                    "notice"
+                                                  ],
+                                                  "type": "object"
+                                                },
+                                                "maxItems": 16,
+                                                "type": "array"
+                                              },
+                                              "status": {
+                                                "const": "assessed",
+                                                "type": "string"
+                                              },
+                                              "use": {
+                                                "const": "wiki_display",
+                                                "type": "string"
+                                              }
+                                            },
+                                            "required": [
+                                              "status",
+                                              "use",
+                                              "instrument",
+                                              "obligations"
+                                            ],
+                                            "type": "object"
+                                          }
+                                        ]
                                       },
                                       "primaryCredits": {
                                         "items": {
@@ -590814,6 +592129,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -653983,6 +655389,97 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "hub": {
                             "~elyTyp": 7,
                             "nullable": true,
@@ -658421,6 +659918,97 @@
                                   }
                                 ]
                               },
+                              "factObligations": {
+                                "anyOf": [
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "status": {
+                                        "const": "unassessed",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "instrument": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      },
+                                      "obligations": {
+                                        "items": {
+                                          "additionalProperties": false,
+                                          "properties": {
+                                            "appliesTo": {
+                                              "enum": [
+                                                "display",
+                                                "all"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "instrument": {
+                                              "type": "string"
+                                            },
+                                            "kind": {
+                                              "enum": [
+                                                "attribution",
+                                                "share_alike",
+                                                "notice_retention",
+                                                "change_indication",
+                                                "non_commercial",
+                                                "no_derivatives",
+                                                "other"
+                                              ],
+                                              "type": "string"
+                                            },
+                                            "notice": {
+                                              "~elyTyp": 7,
+                                              "nullable": true,
+                                              "type": [
+                                                "string",
+                                                "null"
+                                              ]
+                                            }
+                                          },
+                                          "required": [
+                                            "kind",
+                                            "instrument",
+                                            "appliesTo",
+                                            "notice"
+                                          ],
+                                          "type": "object"
+                                        },
+                                        "maxItems": 16,
+                                        "type": "array"
+                                      },
+                                      "status": {
+                                        "const": "assessed",
+                                        "type": "string"
+                                      },
+                                      "use": {
+                                        "const": "wiki_display",
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "status",
+                                      "use",
+                                      "instrument",
+                                      "obligations"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              },
                               "id": {
                                 "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                                 "type": "string"
@@ -659843,6 +661431,97 @@
                           "evidence": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
                           },
                           "hub": {
                             "~elyTyp": 7,
@@ -663045,6 +664724,97 @@
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
                           },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "hub": {
                             "~elyTyp": 7,
                             "nullable": true,
@@ -664551,6 +666321,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -669337,6 +671198,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -690897,6 +692849,97 @@
                               }
                             ]
                           },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -695408,6 +697451,70 @@
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
                         },
+                        "rights": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basisKind": {
+                                "type": "string"
+                              },
+                              "basisRef": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "licenseExpression": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "memberOrdinals": {
+                                "items": {
+                                  "type": "integer"
+                                },
+                                "type": "array"
+                              },
+                              "notice": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "obligations": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "result": {
+                                "type": "string"
+                              },
+                              "useScope": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "basisKind",
+                              "basisRef",
+                              "licenseExpression",
+                              "notice",
+                              "obligations",
+                              "useScope",
+                              "result",
+                              "memberOrdinals"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
                         "structure": {
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
@@ -696648,6 +698755,70 @@
                         "revision": {
                           "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                           "type": "string"
+                        },
+                        "rights": {
+                          "items": {
+                            "additionalProperties": false,
+                            "properties": {
+                              "basisKind": {
+                                "type": "string"
+                              },
+                              "basisRef": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "licenseExpression": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "memberOrdinals": {
+                                "items": {
+                                  "type": "integer"
+                                },
+                                "type": "array"
+                              },
+                              "notice": {
+                                "~elyTyp": 7,
+                                "nullable": true,
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "obligations": {
+                                "items": {
+                                  "type": "string"
+                                },
+                                "type": "array"
+                              },
+                              "result": {
+                                "type": "string"
+                              },
+                              "useScope": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "basisKind",
+                              "basisRef",
+                              "licenseExpression",
+                              "notice",
+                              "obligations",
+                              "useScope",
+                              "result",
+                              "memberOrdinals"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
                         },
                         "sourceObservations": {
                           "items": {
@@ -698663,6 +700834,70 @@
                     "revision": {
                       "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                       "type": "string"
+                    },
+                    "rights": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "basisKind": {
+                            "type": "string"
+                          },
+                          "basisRef": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "licenseExpression": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "memberOrdinals": {
+                            "items": {
+                              "type": "integer"
+                            },
+                            "type": "array"
+                          },
+                          "notice": {
+                            "~elyTyp": 7,
+                            "nullable": true,
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "obligations": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          },
+                          "result": {
+                            "type": "string"
+                          },
+                          "useScope": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "basisKind",
+                          "basisRef",
+                          "licenseExpression",
+                          "notice",
+                          "obligations",
+                          "useScope",
+                          "result",
+                          "memberOrdinals"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
                     },
                     "sourceObservations": {
                       "items": {
@@ -729325,6 +731560,97 @@
                                     ],
                                     "type": "string"
                                   },
+                                  "factObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
                                   "fieldProvenance": {
                                     "properties": {
                                       "admission": {
@@ -737616,6 +739942,97 @@
                             "restricted"
                           ],
                           "type": "string"
+                        },
+                        "factObligations": {
+                          "anyOf": [
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "status": {
+                                  "const": "unassessed",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status"
+                              ],
+                              "type": "object"
+                            },
+                            {
+                              "additionalProperties": false,
+                              "properties": {
+                                "instrument": {
+                                  "~elyTyp": 7,
+                                  "nullable": true,
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
+                                },
+                                "obligations": {
+                                  "items": {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "appliesTo": {
+                                        "enum": [
+                                          "display",
+                                          "all"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "instrument": {
+                                        "type": "string"
+                                      },
+                                      "kind": {
+                                        "enum": [
+                                          "attribution",
+                                          "share_alike",
+                                          "notice_retention",
+                                          "change_indication",
+                                          "non_commercial",
+                                          "no_derivatives",
+                                          "other"
+                                        ],
+                                        "type": "string"
+                                      },
+                                      "notice": {
+                                        "~elyTyp": 7,
+                                        "nullable": true,
+                                        "type": [
+                                          "string",
+                                          "null"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "kind",
+                                      "instrument",
+                                      "appliesTo",
+                                      "notice"
+                                    ],
+                                    "type": "object"
+                                  },
+                                  "maxItems": 16,
+                                  "type": "array"
+                                },
+                                "status": {
+                                  "const": "assessed",
+                                  "type": "string"
+                                },
+                                "use": {
+                                  "const": "wiki_display",
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "status",
+                                "use",
+                                "instrument",
+                                "obligations"
+                              ],
+                              "type": "object"
+                            }
+                          ]
                         },
                         "fieldProvenance": {
                           "properties": {
@@ -758460,6 +760877,188 @@
                         "language"
                       ],
                       "type": "object"
+                    },
+                    "descriptionObligations": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "unassessed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instrument": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "obligations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "appliesTo": {
+                                    "enum": [
+                                      "display",
+                                      "all"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "instrument": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "attribution",
+                                      "share_alike",
+                                      "notice_retention",
+                                      "change_indication",
+                                      "non_commercial",
+                                      "no_derivatives",
+                                      "other"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "notice": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "instrument",
+                                  "appliesTo",
+                                  "notice"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "assessed",
+                              "type": "string"
+                            },
+                            "use": {
+                              "const": "wiki_display",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "use",
+                            "instrument",
+                            "obligations"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
+                    "factObligations": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "unassessed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instrument": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "obligations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "appliesTo": {
+                                    "enum": [
+                                      "display",
+                                      "all"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "instrument": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "attribution",
+                                      "share_alike",
+                                      "notice_retention",
+                                      "change_indication",
+                                      "non_commercial",
+                                      "no_derivatives",
+                                      "other"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "notice": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "instrument",
+                                  "appliesTo",
+                                  "notice"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "assessed",
+                              "type": "string"
+                            },
+                            "use": {
+                              "const": "wiki_display",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "use",
+                            "instrument",
+                            "obligations"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     "language": {
                       "type": "string"
@@ -896760,6 +899359,97 @@
                               }
                             ]
                           },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
                           "id": {
                             "pattern": "^https://rezics\\.com/id/[0-9a-f-]{36}$",
                             "type": "string"
@@ -900497,6 +903187,97 @@
                       ],
                       "type": "string"
                     },
+                    "factObligations": {
+                      "anyOf": [
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "status": {
+                              "const": "unassessed",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status"
+                          ],
+                          "type": "object"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "instrument": {
+                              "~elyTyp": 7,
+                              "nullable": true,
+                              "type": [
+                                "string",
+                                "null"
+                              ]
+                            },
+                            "obligations": {
+                              "items": {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "appliesTo": {
+                                    "enum": [
+                                      "display",
+                                      "all"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "instrument": {
+                                    "type": "string"
+                                  },
+                                  "kind": {
+                                    "enum": [
+                                      "attribution",
+                                      "share_alike",
+                                      "notice_retention",
+                                      "change_indication",
+                                      "non_commercial",
+                                      "no_derivatives",
+                                      "other"
+                                    ],
+                                    "type": "string"
+                                  },
+                                  "notice": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "instrument",
+                                  "appliesTo",
+                                  "notice"
+                                ],
+                                "type": "object"
+                              },
+                              "maxItems": 16,
+                              "type": "array"
+                            },
+                            "status": {
+                              "const": "assessed",
+                              "type": "string"
+                            },
+                            "use": {
+                              "const": "wiki_display",
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "status",
+                            "use",
+                            "instrument",
+                            "obligations"
+                          ],
+                          "type": "object"
+                        }
+                      ]
+                    },
                     "fieldProvenance": {
                       "properties": {
                         "admission": {
@@ -903859,6 +906640,97 @@
                                   "crop",
                                   "coverCredit",
                                   "basis"
+                                ],
+                                "type": "object"
+                              }
+                            ]
+                          },
+                          "factObligations": {
+                            "anyOf": [
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "status": {
+                                    "const": "unassessed",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status"
+                                ],
+                                "type": "object"
+                              },
+                              {
+                                "additionalProperties": false,
+                                "properties": {
+                                  "instrument": {
+                                    "~elyTyp": 7,
+                                    "nullable": true,
+                                    "type": [
+                                      "string",
+                                      "null"
+                                    ]
+                                  },
+                                  "obligations": {
+                                    "items": {
+                                      "additionalProperties": false,
+                                      "properties": {
+                                        "appliesTo": {
+                                          "enum": [
+                                            "display",
+                                            "all"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "instrument": {
+                                          "type": "string"
+                                        },
+                                        "kind": {
+                                          "enum": [
+                                            "attribution",
+                                            "share_alike",
+                                            "notice_retention",
+                                            "change_indication",
+                                            "non_commercial",
+                                            "no_derivatives",
+                                            "other"
+                                          ],
+                                          "type": "string"
+                                        },
+                                        "notice": {
+                                          "~elyTyp": 7,
+                                          "nullable": true,
+                                          "type": [
+                                            "string",
+                                            "null"
+                                          ]
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "instrument",
+                                        "appliesTo",
+                                        "notice"
+                                      ],
+                                      "type": "object"
+                                    },
+                                    "maxItems": 16,
+                                    "type": "array"
+                                  },
+                                  "status": {
+                                    "const": "assessed",
+                                    "type": "string"
+                                  },
+                                  "use": {
+                                    "const": "wiki_display",
+                                    "type": "string"
+                                  }
+                                },
+                                "required": [
+                                  "status",
+                                  "use",
+                                  "instrument",
+                                  "obligations"
                                 ],
                                 "type": "object"
                               }
@@ -978718,6 +981590,97 @@
                                           "crop",
                                           "coverCredit",
                                           "basis"
+                                        ],
+                                        "type": "object"
+                                      }
+                                    ]
+                                  },
+                                  "factObligations": {
+                                    "anyOf": [
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "status": {
+                                            "const": "unassessed",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "instrument": {
+                                            "~elyTyp": 7,
+                                            "nullable": true,
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "obligations": {
+                                            "items": {
+                                              "additionalProperties": false,
+                                              "properties": {
+                                                "appliesTo": {
+                                                  "enum": [
+                                                    "display",
+                                                    "all"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "instrument": {
+                                                  "type": "string"
+                                                },
+                                                "kind": {
+                                                  "enum": [
+                                                    "attribution",
+                                                    "share_alike",
+                                                    "notice_retention",
+                                                    "change_indication",
+                                                    "non_commercial",
+                                                    "no_derivatives",
+                                                    "other"
+                                                  ],
+                                                  "type": "string"
+                                                },
+                                                "notice": {
+                                                  "~elyTyp": 7,
+                                                  "nullable": true,
+                                                  "type": [
+                                                    "string",
+                                                    "null"
+                                                  ]
+                                                }
+                                              },
+                                              "required": [
+                                                "kind",
+                                                "instrument",
+                                                "appliesTo",
+                                                "notice"
+                                              ],
+                                              "type": "object"
+                                            },
+                                            "maxItems": 16,
+                                            "type": "array"
+                                          },
+                                          "status": {
+                                            "const": "assessed",
+                                            "type": "string"
+                                          },
+                                          "use": {
+                                            "const": "wiki_display",
+                                            "type": "string"
+                                          }
+                                        },
+                                        "required": [
+                                          "status",
+                                          "use",
+                                          "instrument",
+                                          "obligations"
                                         ],
                                         "type": "object"
                                       }

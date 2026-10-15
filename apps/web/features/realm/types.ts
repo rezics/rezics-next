@@ -40,7 +40,7 @@ export type RealmRoster = Ok<Realm['roster']['get']>;
 export type AgentRead = Ok<ReturnType<MainClient['v1']['agents']>['get']>;
 /** The Work card fields every Realm and Zone module read shares. */
 export type WorkCard = Pick<RealmWork, 'id' | 'title' | 'cover' | 'types' | 'tagline' | 'completionStatus'
-  | 'chapterCount' | 'wordCount' | 'lastUpdatedAt'>;
+  | 'chapterCount' | 'wordCount' | 'lastUpdatedAt' | 'factObligations'>;
 export type MainName = RealmHeader['name'];
 export type MainAvatar = RealmHeader['icon'];
 

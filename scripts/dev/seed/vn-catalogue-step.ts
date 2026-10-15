@@ -4,6 +4,7 @@ import { grantFixtureAuthority } from '../../../services/main/src/modules/access
 import { loadVndbSlice, metadataTag, recordedTag, seededReleasePlan, ODBL, DBCL,
   type PlannedRelease, type VndbSlice } from '../../../tests/fixtures/vndb/load.ts';
 import { catalogueWorkBody } from '../../../tests/fixtures/catalogue/intake.ts';
+import { importedRightsAssessments } from '../../../services/main/src/modules/rights/import-policy.ts';
 import { SeedApiError } from './api.ts';
 import { acceptClassifiedStatement, discloseClassificationConcept, expectedScopeDecisionHead, shareClassificationContext,
   type ClassificationResolution, type SharedClassificationContext } from './classified-statement.ts';
@@ -157,6 +158,16 @@ export async function applyVnCatalogue(port: SeedPort): Promise<VnCatalogueManif
   const showcase = made.find(work => work.vndb === slice.provenance.showcase.vn);
   if (!showcase) throw new Error('VNDB showcase visual novel was not seeded');
   const rights = await recordRights(port, showcase.iri);
+  for (const work of made) {
+    for (const [index, assessment] of importedRightsAssessments({ provider: 'vndb',
+      url: `https://vndb.org/${work.vndb}` }, work.iri).entries()) {
+      const key = seedKey('vndb-display-export-rights', `${work.vndb}:${index}`);
+      await call(port, 'POST', '/v1/rights/use-assessments', {
+        profile: 'rights-use-assessment-v1', actingSubject: port.actingSubject,
+        ...assessment, idempotencyKey: key,
+      }, key);
+    }
+  }
   const finished = [];
   for (const work of made) {
     const header = await read<{ revision: string; metadataRevision: string | null }>(port,

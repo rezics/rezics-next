@@ -35,6 +35,9 @@ export function WorkPageCover({ work, authors = [], avatarQuery }: {
   return <div className="grid w-full gap-1.5 xl:w-60">
     <CatalogueCover work={coverWork} avatarQuery={avatarQuery} loading="eager" revealable className="w-full" />
     <CatalogueCoverCredit work={coverWork} avatarQuery={avatarQuery} />
+    {work.cover.kind === 'image' ? <ReportAction target={work.id} kind="cover"
+      selection={{ component: 'cover', revision: work.cover.selection, locator: null }}
+      className="inline-flex w-fit items-center gap-1 text-muted-foreground text-xs hover:underline" /> : null}
   </div>;
 }
 

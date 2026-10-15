@@ -1,6 +1,8 @@
 import type { SafetyMessages } from '../messages.ts';
 
 export default {
+  reportText: '檢舉這段簡介',
+  reportCover: '檢舉這張封面',
   report: '檢舉',
   reportProfile: '檢舉此個人檔案',
   reportPost: '檢舉此貼文',

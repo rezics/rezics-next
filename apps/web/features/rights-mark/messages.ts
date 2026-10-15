@@ -4,6 +4,7 @@ import { defineMessages } from '../../i18n/define.ts';
 // in front of the notice's own name. Non-English copy is machine-drafted and
 // needs native review.
 const en = {
+  publicDomain: 'Public domain in the United States',
   coverCredit: 'Cover credit: ',
   source: 'Source: ',
   shareAlike: 'Adaptations stay under the same terms.',
@@ -18,6 +19,7 @@ export const messages = defineMessages({
   en,
   // Machine-drafted; needs native review.
   'zh-Hant': {
+    publicDomain: '在美國屬於公有領域',
     coverCredit: '封面署名：',
     source: '來源：',
     shareAlike: '改作須以相同條款共享。',
@@ -29,6 +31,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   'zh-Hans': {
+    publicDomain: '在美国属于公有领域',
     coverCredit: '封面署名：',
     source: '来源：',
     shareAlike: '改编须以相同条款共享。',
@@ -40,6 +43,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   ja: {
+    publicDomain: '米国でパブリックドメイン',
     coverCredit: '表紙クレジット：',
     source: '出典：',
     shareAlike: '翻案したものも、同じ条件で共有してください。',
@@ -51,6 +55,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   ko: {
+    publicDomain: '미국에서 퍼블릭 도메인',
     coverCredit: '표지 크레딧: ',
     source: '출처: ',
     shareAlike: '각색한 내용도 같은 조건으로 공유해야 합니다.',
@@ -62,6 +67,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   de: {
+    publicDomain: 'Gemeinfrei in den Vereinigten Staaten',
     coverCredit: 'Covernachweis: ',
     source: 'Quelle: ',
     shareAlike: 'Bearbeitungen bleiben unter denselben Bedingungen.',
@@ -73,6 +79,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   fr: {
+    publicDomain: 'Domaine public aux États-Unis',
     coverCredit: 'Crédit de couverture : ',
     source: 'Source : ',
     shareAlike: 'Les adaptations restent sous les mêmes conditions.',
@@ -84,6 +91,7 @@ export const messages = defineMessages({
   },
   // Machine-drafted; needs native review.
   es: {
+    publicDomain: 'Dominio público en Estados Unidos',
     coverCredit: 'Crédito de portada: ',
     source: 'Fuente: ',
     shareAlike: 'Las adaptaciones siguen bajo las mismas condiciones.',

@@ -68,6 +68,7 @@ export const scopeQuery = { scope: t.Optional(t.Union([t.Literal('global'), t.Li
 export const readScope = t.Object({ kind: t.Union([t.Literal('global'), t.Literal('realm'), t.Literal('mine')]),
   realm: t.Nullable(readId) });
 export const workCard = t.Object({ id: readId, revision: readId, mainVersion: readId,
+  factObligations: t.Optional(wikiDisplayObligations),
   verification: t.Optional(t.Union([t.Literal('unverified'), t.Literal('verified')])),
   title: readName, cover: readAvatar, types: t.Array(t.String(), { maxItems: 8 }),
   tagline: t.Nullable(readName),

@@ -1,5 +1,5 @@
 import { t } from 'elysia';
-import { nativeCreditRole, readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { nativeCreditRole, readAvatar, readId, readName, readPosition, wikiDisplayObligations, WORK_READ_COST } from '../work/read-contract.ts';
 import { serialStatus } from '../work/metadata-schema.ts';
 import { discoveryRating } from '../discovery/contract.ts';
 import { VANITY_HANDLE_PATTERN } from '../agent/vanity.ts';
@@ -34,6 +34,7 @@ export const agentProfile = t.Object({ profile: t.Literal('agent-read-v1'), id: 
     redirect: t.Boolean(), canonical: t.String() })) });
 /** A Work on a shelf or list: what its cover is drawn from, the same on every page. */
 export const shelfWork = t.Object({ id: readId, title: readName, cover: readAvatar,
+  factObligations: t.Optional(wikiDisplayObligations),
   types: t.Array(t.String(), { maxItems: 8 }) });
 export const creditedWork = t.Object({ ...shelfWork.properties, tagline: t.Nullable(readName),
   completionStatus: t.Nullable(serialStatus),

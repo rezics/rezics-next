@@ -223,6 +223,8 @@ export const isolatedIntegrationFileList = [
 
 /** Delta proofs require the product assembler, whose raw update endpoint is closed. */
 export const commandOnlyIntegrationFiles: ReadonlySet<string> = new Set([
+  // Imported licence delivery is proved through the production catalogue writer.
+  'tests/qa/integration/imported-content-rights.test.ts',
   'services/main/tests/also-enjoyed-read-cost.integration.test.ts',
   // Context vocabulary growth owns its command-built Concept population and bounded read budget.
   'tests/qa/integration/classification-context-continuation.test.ts',

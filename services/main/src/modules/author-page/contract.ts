@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import { discoveryRating } from '../discovery/contract.ts';
 import { authorFacts } from '../source/author-facts.ts';
 import { AUTHOR_WORKS_COST, authorNameProvenance } from '../source/author-name.ts';
-import { pageFields, readAvatar, readId, readName, readPosition, WORK_READ_COST } from '../work/read-contract.ts';
+import { pageFields, readAvatar, readId, readName, readPosition, wikiDisplayObligations, WORK_READ_COST } from '../work/read-contract.ts';
 import { serialStatus } from '../work/metadata-schema.ts';
 
 /**
@@ -34,6 +34,7 @@ export const authorCredit = t.Union([
     displayName: t.String({ minLength: 1, maxLength: 200 }) }),
 ]);
 export const authorWork = t.Object({ id: readId, title: readName, cover: readAvatar,
+  factObligations: t.Optional(wikiDisplayObligations),
   types: t.Array(t.String(), { maxItems: 8 }), tagline: t.Nullable(readName),
   completionStatus: t.Nullable(serialStatus),
   rating: t.Nullable(discoveryRating),

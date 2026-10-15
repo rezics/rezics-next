@@ -4,6 +4,8 @@ import { readMetadataHeader, selectedMetadata } from './metadata-read.ts';
 import { WorkReadUnavailable, readDependencyToken, type WorkReadSession } from './read-session.ts';
 import { SearchSnapshotMoved } from './search-readiness.ts';
 import { optionalPreview } from '../query/optional-preview.ts';
+import { readFactObligations } from '../rights/read-imported.ts';
+import type { WikiDisplayObligations } from '../rights/store.ts';
 
 export const EMPTY_SERIAL_SUMMARY = { tagline: null, completionStatus: null,
   chapterCount: null, wordCount: null, lastUpdatedAt: null } as const;
@@ -23,6 +25,7 @@ export async function readSerialStatistics(session: WorkReadSession, works: read
 /** Metadata is editor-owned; numeric facts are from the durable relay projection. */
 export async function readSerialSummaries(session: WorkReadSession, works: readonly string[], preview = false) {
   const result = new Map<string, { tagline: ReturnType<typeof selectedMetadata>['tagline'];
+    factObligations?: WikiDisplayObligations;
     completionStatus: SerialStatus | null;
     chapterCount: number | null; wordCount: number | null; lastUpdatedAt: string | null;
     unavailablePreviews?: ['serial'] }>();
@@ -39,6 +42,7 @@ export async function readSerialSummaries(session: WorkReadSession, works: reado
     throw new WorkReadUnavailable('Serial summary heads are ambiguous');
   }
   const stats = await readSerialStatistics(session, works, preview);
+  const factObligations = preview ? null : await readFactObligations(session, works);
   for (const row of rows) {
     const header = preview
       ? await optionalPreview(session, () => readMetadataHeader(session, row.work!.value, row.head?.value ?? null))
@@ -46,6 +50,7 @@ export async function readSerialSummaries(session: WorkReadSession, works: reado
     if (!header) continue;
     const selected = selectedMetadata(header, session.options.language);
     result.set(row.work!.value, { tagline: selected.tagline,
+      ...(factObligations ? { factObligations: factObligations.get(row.work!.value) } : {}),
       ...(preview && stats !== undefined && !stats?.has(row.work!.value) ? { unavailablePreviews: ['serial'] } : {}),
       completionStatus: header.completionStatus,
       chapterCount: stats?.get(row.work!.value)?.chapterCount ?? null,

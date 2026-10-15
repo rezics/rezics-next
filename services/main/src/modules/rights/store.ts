@@ -335,6 +335,39 @@ export class RightsStore {
   }
 
   async assess(principal: VerifiedPrincipal, input: AssessmentInput): Promise<Assessment & { replayed: boolean }> {
+    const authority = await representedGrantProof(this.access, principal, input.actingSubject, ASSESS_SCOPE, ASSESS_ACTION)
+      .catch(() => { throw new RightsUnavailable('Access is unavailable'); });
+    if (!authority) throw new RightsDenied('rights assessment authority is missing');
+    return this.writeAssessment(authority.principalId, input,
+      effect => dispatchRepresentedGrant(this.access, principal, input.actingSubject, ASSESS_SCOPE,
+        ASSESS_ACTION, authority, () => new RightsDenied('rights assessment authority ended'), effect));
+  }
+
+  /** The Source owner already admitted this exact Open Library title. Its
+   * immutable binding supplies the principal, actor and source identity;
+   * callers cannot use an arbitrary Work or claim a licence for user text. */
+  async assessOpenLibraryImport(work: string, externalId: string): Promise<void> {
+    const bindings = await this.content.query<{ id: string; principal_id: string; acting_subject: string }>(`
+      SELECT b.id, b.principal_id, i.acting_subject FROM source.native_work_binding b
+      JOIN source.native_work_adoption_intent i ON i.id = b.intent_id
+      JOIN source.native_work_proposal p ON p.id = b.proposal_id
+      JOIN source.observation o ON o.id = p.observation_id
+      JOIN source.record r ON r.id = o.record_id
+      WHERE b.work = $1 AND r.provider = 'open-library' AND r.namespace = 'work' AND r.external_id = $2
+        AND NOT EXISTS (SELECT 1 FROM source.native_work_support_withdrawal w WHERE w.binding_id = b.id)
+      LIMIT 2`, [work, externalId]);
+    const binding = bindings.rows[0];
+    if (bindings.rows.length !== 1 || !binding) throw new RightsUnavailable('Imported source binding is unavailable');
+    const { importedRightsAssessments } = await import('./import-policy.ts');
+    const assessments = importedRightsAssessments({ provider: 'open-library',
+      url: `https://openlibrary.org/works/${externalId}` }, work);
+    for (const [index, assessment] of assessments.entries()) await this.writeAssessment(binding.principal_id,
+      { ...assessment, actingSubject: binding.acting_subject,
+        idempotencyKey: `source-import:${binding.id}:${index}` });
+  }
+
+  private async writeAssessment(principalId: string, input: AssessmentInput,
+    commit?: (effect: () => Promise<void>) => Promise<void>): Promise<Assessment & { replayed: boolean }> {
     if (!agentPattern.test(input.actingSubject) || !validMaterial(input.material) || !scopePattern.test(input.useScope)
       || !keyPattern.test(input.idempotencyKey) || input.obligations.length > 16
       || !(assessmentFamilies as readonly string[]).includes(input.family)
@@ -350,10 +383,6 @@ export class RightsStore {
       || (input.expectedAssessment !== null && !/^[0-9a-f-]{36}$/.test(input.expectedAssessment))) {
       throw new RightsInvalid('rights assessment does not match its profile');
     }
-    const authority = await representedGrantProof(this.access, principal, input.actingSubject, ASSESS_SCOPE, ASSESS_ACTION)
-      .catch(() => { throw new RightsUnavailable('Access is unavailable'); });
-    if (!authority) throw new RightsDenied('rights assessment authority is missing');
-    const principalId = authority.principalId;
     const request = sha256(JSON.stringify({ ...input, idempotencyKey: undefined }));
     return this.transaction(async client => {
       const prior = (await client.query<{ id: string; request_digest: string }>(`SELECT id, request_digest
@@ -401,8 +430,7 @@ export class RightsStore {
         [material.id, input.family, input.useKind, input.useScope, id]);
       }
       return { ...await this.read(client, id), replayed: false };
-    }, effect => dispatchRepresentedGrant(this.access, principal, input.actingSubject, ASSESS_SCOPE,
-      ASSESS_ACTION, authority, () => new RightsDenied('rights assessment authority ended'), effect));
+    }, commit);
   }
 
   private async read(client: PoolClient, assessmentId: string): Promise<Assessment> {
@@ -583,8 +611,10 @@ export class RightsStore {
         )
         SELECT r.ordinal, e.decision_id FROM requested r
         LEFT JOIN LATERAL (SELECT decision_id FROM access.governance_enforcement e
-          WHERE e.owner = r.owner AND e.resource = r.resource AND e.component = r.component
-            AND e.effect = 'export' AND e.state = 'restricted'
+          WHERE e.owner = r.owner AND (e.resource = r.resource OR e.resource = right(r.resource, 36))
+            AND (e.component = r.component OR e.component IN ('record', 'publication')
+              OR r.component = 'record')
+            AND e.effect IN ('export', 'disclosure') AND e.state = 'restricted'
             AND (e.revision IS NULL OR r.revision IS NULL OR e.revision = r.revision)
           ORDER BY e.fence_epoch DESC, e.id LIMIT 1) e ON true`, [
         enforceable.map(item => item.ordinal), enforceable.map(item => item.identity.target!.owner),

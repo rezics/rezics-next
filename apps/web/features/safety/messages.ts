@@ -16,6 +16,8 @@ const en = {
   reportPost: 'Report this post',
   reportReply: 'Report this reply',
   reportWork: 'Report this work',
+  reportText: 'Report this description',
+  reportCover: 'Report this cover',
   reportPage: 'Report this page',
 
   // The report page

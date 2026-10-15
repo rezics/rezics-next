@@ -35,6 +35,7 @@ import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavail
   from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../modules/recipe/export.ts';
 import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/recipe/work-page.ts';
+import { readImportedExportBases } from '../modules/rights/read-imported.ts';
 import { workRead, WorkReadUnavailable, type WorkReadSession } from '../modules/work/read-session.ts';
 import { workReadError, workReadProblems } from './work-reads.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
@@ -107,7 +108,11 @@ function recipeExportInstruction(depth = 0): TSchema {
     itemListElement: t.Array(recipeExportInstruction(depth + 1), { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
     sourceKey: t.Optional(t.String()) }, { additionalProperties: false })]);
 }
+const exportRights = t.Array(t.Object({ basisKind: t.String(), basisRef: t.Nullable(t.String()),
+  licenseExpression: t.Nullable(t.String()), notice: t.Nullable(t.String()), obligations: t.Array(t.String()),
+  useScope: t.String(), result: t.String(), memberOrdinals: t.Array(t.Integer()) }, { additionalProperties: false }));
 const recipeExportResponse = t.Object({
+  rights: t.Optional(exportRights),
   profile: t.Literal('recipe-schema-org-export-v1'),
   structure: ref,
   revision: ref,
@@ -154,6 +159,7 @@ const instructionRead = t.Object({ occurrence: ref,
   document: t.Optional(t.Any()), text: t.Optional(t.String()), mediaUse: t.Optional(t.String()) },
 { additionalProperties: false });
 const nativeRecipeExport = t.Object({ format: t.Literal('native'), structure: ref, revision: ref,
+  rights: t.Optional(exportRights),
   occurrences: t.Array(OccurrenceRecord, { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
   measures: t.Array(RecipeMeasure, { maxItems: STRUCTURE_LIMITS.measures }),
   contents: t.Array(t.Object({ reference: t.Object({ target: t.String(), selector: ExactInstructionSelector }),
@@ -587,12 +593,15 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
         const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
           RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
-        return Response.json({ profile: 'recipe-schema-org-export-v1', structure,
+        const body = await withAuthorizedRecipeRevision(work, request, { structure,
+          actingSubject: query.actingSubject, revision: header.revision, limit: 1 }, async (_principal, _revision, session) => ({
+          profile: 'recipe-schema-org-export-v1', structure, rights: await readImportedExportBases(session, header.work, header.revision),
           revision: header.revision, ...exportRecipe(scanned.records, structure, [],
             (await readStructureMeasures(work.environment, { structure, revision: header.revision })).measures),
           sourcePosition: header.sourcePosition,
           cost: { pages: scanned.pages + 1, pagesRead: scanned.pagesRead + header.cost.pagesRead,
-            occurrences: scanned.records.length } }, { headers: { 'cache-control': 'no-store' } });
+            occurrences: scanned.records.length } }));
+        return Response.json(body, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
     .get('/v1/recipes/:id/export', { params: t.Object({ id: groupUuid }),
@@ -613,6 +622,7 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           actingSubject: query.actingSubject, revision: header.revision, limit: 1 }, async (_principal, _revision, session) => {
           const instructions = await readRecipeInstructions(session, scanned.records,
             { work: header.work, revision: header.revision, admitted: true });
+          const rights = await readImportedExportBases(session, header.work, header.revision);
           const contents = [...new Map(instructions.flatMap(item => item.document || item.text !== undefined
             ? [[JSON.stringify(item.reference), { reference: item.reference,
               ...(item.document ? { document: item.document } : { body: item.text }) }] as const] : [])).values()];
@@ -633,10 +643,10 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               derivations.push(...page.items);
             }
           const body = query.format === 'native'
-            ? { format: 'native', structure, revision: header.revision, occurrences: scanned.records,
+            ? { format: 'native', structure, revision: header.revision, rights, occurrences: scanned.records,
               measures: (await readStructureMeasures(work.environment, { structure, revision: header.revision })).measures,
               contents, derivations, instructions, losses: [] as ReturnType<typeof exportRecipe>['losses'] }
-            : { profile: 'recipe-schema-org-export-v1', structure, revision: header.revision,
+            : { profile: 'recipe-schema-org-export-v1', structure, revision: header.revision, rights,
               ...exportRecipe(scanned.records, structure, instructions,
                 (await readStructureMeasures(work.environment, { structure, revision: header.revision })).measures) };
           if (query.format !== 'native') {

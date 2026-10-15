@@ -9,6 +9,7 @@ import { RESOURCE_WORK_CARD_COST, resourceProjectedCard, type ResourceWorkCard }
 import { Value } from 'typebox/value';
 import type { Static } from 'typebox';
 import { optionalPreview } from './optional-preview.ts';
+import { readFactObligations } from '../rights/read-imported.ts';
 
 /** Work-keyed projection probes plus bounded current name batches. Optional
  * previews fail independently; membership and disclosure belong to the caller. */
@@ -17,7 +18,9 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
   if (works.length > cost.works || new Set(works).size !== works.length)
     throw new WorkReadUnavailable('Resource Work card batch exceeds its bound');
   const result = new Map<string, ResourceWorkCard>();
+  const factObligations = await readFactObligations(session, works);
   for (const work of works) result.set(work, {
+    factObligations: factObligations.get(work),
     primaryCredits: [], creditCount: { value: 0, kind: 'at-least' }, rating: null,
   });
   const projection = session.deps.discovery;
@@ -79,7 +82,7 @@ export async function resourceWorkCards(session: WorkReadSession, works: readonl
       return named ? [named] : [];
     });
     // Missing data supplies a zero lower bound, never an exact empty inventory.
-    result.set(work, { primaryCredits, creditCount: { value: preview?.length ?? 0,
+    result.set(work, { factObligations: factObligations.get(work), primaryCredits, creditCount: { value: preview?.length ?? 0,
       kind: preview && preview.length < cost.credits ? 'exact' : 'at-least' },
     rating: finalRated && !finalRated.stale ? ratings.get(work) ?? null : null });
   }

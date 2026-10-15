@@ -21,6 +21,9 @@ import { authorizedReadProblems, writeProblems } from '../api-responses.ts';
 import type { MainWorkDependencies } from './dependencies.ts';
 import { commandError, problem } from './problems.ts';
 import { groupUuid } from './shared.ts';
+import { workRead } from '../modules/work/read-session.ts';
+import { readWorkHeader } from '../modules/work/read-header.ts';
+import { wikiDisplayObligations } from '../modules/work/read-contract.ts';
 
 const translationLinkRef = t.Object({ link: t.String(), targetWork: t.String(),
   targetMainVersion: t.String(), targetMainRevision: t.String(),
@@ -351,7 +354,8 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       query: t.Object({ actingSubject: t.String({
         pattern: '^https://rezics\\.com/id/[0-9a-f-]{36}$',
       }) }, { additionalProperties: false }),
-      response: transportResponses(openApiOperations["/v1/revisions/{revision}"].get, { 200: exactWorkRevision, 400: problemResult(400),
+      response: transportResponses(openApiOperations["/v1/revisions/{revision}"].get, { 200: t.Object({ ...exactWorkRevision.properties,
+        factObligations: t.Optional(wikiDisplayObligations), descriptionObligations: t.Optional(wikiDisplayObligations) }), 400: problemResult(400),
         401: problemResult(401), 403: problemResult(403),
         404: problemResult(404), 500: problemResult(500),
         503: problemResult(503) }, 'GET'),
@@ -366,7 +370,14 @@ export function workRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
               ASK { GRAPH <urn:rezics:graph:current> { ${iri(workId)} a schema:CreativeWork } }`);
             return current.boolean === true;
           }, { resolveMerges: true });
-        return Response.json(revision, { headers: { 'cache-control': 'no-store' } });
+        const delivered = await workRead(work, request, { actingSubject: query.actingSubject }, async session => {
+          const header = await readWorkHeader(session, revision.work);
+          const synopsis = (await session.disclosure([{ owner: 'graph', resource: revision.work, component: 'synopsis' }]))[0];
+          return { ...revision, ...(synopsis === 'visible' ? {} : { description: undefined }),
+            factObligations: header.factObligations ?? { status: 'unassessed' as const },
+            descriptionObligations: header.descriptionObligations };
+        });
+        return Response.json(delivered, { headers: { 'cache-control': 'no-store' } });
       } catch (error) {
         return commandError(error);
       }

@@ -284,6 +284,7 @@ const zoneWorkKeys = [
   'decision',
   'hub',
   'showcaseArt',
+  'factObligations',
 ] as const;
 type ExactZoneWorkKeys<Keys extends readonly (keyof ZoneWork)[]> = [
   Exclude<keyof ZoneWork, Keys[number]>,
@@ -313,6 +314,7 @@ describe('Zone Work cards from Main', () => {
       decision: null,
       hub: null,
       showcaseArt: null,
+      factObligations: undefined,
     } satisfies ZoneWork;
     expect(Object.keys(work).sort()).toEqual([...zoneWorkKeys].sort());
   });

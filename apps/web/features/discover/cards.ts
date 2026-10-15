@@ -22,5 +22,5 @@ export function discoveryWork(item: DiscoveryItem, scope: BrowseScope): Catalogu
     authors,
     rating: item.rating ? { mean: item.rating.mean, count: item.rating.count, max: item.rating.scale.max,
       own: scope.kind === 'mine' } : null,
-    tagline: item.tagline, completion: item.completionStatus };
+    tagline: item.tagline, completion: item.completionStatus, factObligations: item.factObligations };
 }

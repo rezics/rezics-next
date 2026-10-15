@@ -143,6 +143,7 @@ export function withRealmCard(work: ZoneWork, known: ZoneWork | undefined): Zone
     author: work.author ?? known.author,
     authorHref: work.author ? work.authorHref : known.authorHref,
     tagline: work.tagline ?? known.tagline,
+    factObligations: work.factObligations ?? known.factObligations,
     status: work.status ?? known.status,
     chapters: work.chapters ?? known.chapters,
     cover: work.cover ?? known.cover,

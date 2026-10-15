@@ -19,6 +19,7 @@ import { restoreCatalogueBackup } from './catalogue-backup.ts';
 import { pollUntilDeadline } from '../qa/readiness.ts';
 import { workProfileCorpusApi, type CorpusApi, type CorpusBackupDriver } from './work-profile-corpus.ts';
 import type { MediaStack } from '../../tests/qa/integration/media-support.ts';
+import { importedRightsAssessments } from '../../services/main/src/modules/rights/import-policy.ts';
 import type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
 export type { LaunchBookEdition, LaunchBooksCorpus, LaunchRecipeRecord, LaunchRecipesCorpus } from './launch-corpus-types.ts';
 
@@ -65,7 +66,7 @@ export function launchBookSources() {
 /** Writes only public Main commands. Authority setup belongs to the caller's
  * existing seed helper; no catalogue data bypasses the APIs. */
 async function buildBooks(api: CorpusApi, actor: string, key: string,
-  authorize: (work: string) => Promise<void>, signal: AbortSignal) {
+  authorize: (work: string) => Promise<void>, authorizeRights: () => Promise<void>, signal: AbortSignal) {
   const sources = launchBookSources();
   const observations = new Map<string, string>();
   for (const { entry, record, bytes, externalId } of sources) {
@@ -90,6 +91,14 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
   } }], signal);
   if (!created) throw new Error('Books catalogue import returned no Work');
   await authorize(created.work);
+  await authorizeRights();
+  for (const [index, assessment] of importedRightsAssessments({ provider: 'open-library',
+    url: 'https://openlibrary.org/works/OL66554W' }, created.work).entries()) {
+    const assessmentKey = `${key}:rights:${index}`;
+    await api.command(assessmentKey, { method: 'POST', path: '/v1/rights/use-assessments',
+      body: { profile: 'rights-use-assessment-v1', actingSubject: actor, ...assessment,
+        idempotencyKey: assessmentKey } }, signal);
+  }
   await api.command(`${key}:header`, { method: 'PUT', path: `/v1/works/${short(created.work)}/metadata`, body: {
     profile: 'work-metadata-details-v1', expectedHead: null, actingSubject: actor,
     state: { kind: 'header', originalTitle: { value: source.record.title, language: 'en' },
@@ -148,10 +157,11 @@ async function buildBooks(api: CorpusApi, actor: string, key: string,
 export async function prepareLaunchBooksCorpus(input: {
   api: CorpusApi; actor: string; backups: CorpusBackupDriver; directory: string;
   authorize(work: string): Promise<void>;
+  authorizeRights(): Promise<void>;
 }): Promise<LaunchBooksCorpus> {
   const sources = launchBookSources().map(({ entry }) => ({ id: entry.id, sha256: entry.sha256, reuseBasis: entry.reuseBasis }));
   const compatibility = loadCompatibility(root);
-  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest])).digest('hex').slice(0, 20)}`;
+  const id = `launch-books-${createHash('sha256').update(JSON.stringify([recipe, sources, compatibility.digest, 'source-rights-v1'])).digest('hex').slice(0, 20)}`;
   const directory = resolve(input.directory);
   if (!relative(root, directory).startsWith('.temp/')) throw new Error('Launch corpus must stay in this checkout .temp');
   mkdirSync(directory, { recursive: true });
@@ -170,7 +180,7 @@ export async function prepareLaunchBooksCorpus(input: {
   const started = performance.now();
   const signal = AbortSignal.timeout(budgetMs);
   try {
-    const built = await buildBooks(input.api, input.actor, id, input.authorize, signal);
+    const built = await buildBooks(input.api, input.actor, id, input.authorize, input.authorizeRights, signal);
     const listed = await input.api.read<{ items: { id: string; revision: string }[]; nextCursor: string | null }>(
       `/v1/works/${short(built.work)}/releases?actingSubject=${encodeURIComponent(input.actor)}`, signal);
     if (listed.nextCursor || listed.items.length !== 6 || built.editions.some(edition =>
@@ -299,6 +309,7 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
   }, signal);
   await authorize(`publication:adopt:${space.realm}`, 'publication.adopt');
   await authorize('work:create:root', 'work.create');
+  await authorize('rights:assess', 'rights.assess');
 
   const sources = launchRecipeSources();
   const records: LaunchRecipeRecord[] = [];
@@ -320,6 +331,15 @@ async function buildRecipes(api: CorpusApi, actor: string, key: string,
       recipeInstructions: source.methods.map(text => ({ '@type': 'HowToStep', text, inLanguage: source.language })) };
     const imported = await importFile(`${key}:file:${source.pinId}:${source.recipeId}`,
       actor, composition, file, signal);
+    const credit = source.pinId === 'artusi' ? 'Pellegrino Artusi' : 'Fannie Merritt Farmer';
+    for (const [index, assessment] of importedRightsAssessments({ provider: 'project-gutenberg',
+      url: `https://www.gutenberg.org/ebooks/${source.sourceId.replace(/^pg/, '')}`, credit }, work.work, true).entries()) {
+      const assessmentKey = `${key}:rights:${source.pinId}:${source.recipeId}:${index}`;
+      await api.command(assessmentKey, { method: 'POST', path: '/v1/rights/use-assessments',
+        body: { profile: 'rights-use-assessment-v1', actingSubject: actor, ...assessment,
+          evidence: { ...assessment.evidence, sourceDigest: source.sourceSha256, recipeId: source.recipeId },
+          idempotencyKey: assessmentKey } }, signal);
+    }
 
     await authorize(`contribution:create:${work.work}`, 'contribution.create');
     const draft = await api.command<TextDraftReceipt>(`${key}:draft:${source.pinId}:${source.recipeId}`, {
@@ -386,7 +406,7 @@ const launchRecipeCounts: LaunchRecipesCorpus['counts'] = { works: 30, recipes: 
 
 function launchRecipesIdentity(sources: LaunchRecipesCorpus['sources'], compatibility: LoadCompatibility): string {
   return `launch-recipes-${createHash('sha256')
-    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest])).digest('hex').slice(0, 20)}`;
+    .update(JSON.stringify([launchRecipesRecipe, sources, compatibility.digest, 'source-rights-v1'])).digest('hex').slice(0, 20)}`;
 }
 
 function launchRecipesManifestPath(directory: string, id: string): string {
@@ -833,7 +853,8 @@ async function prepareBrowserBooks() {
     fetch: ((input, init) => stack.main.handle(new Request(input, init))) as typeof fetch,
   });
   const built = await buildBooks(api, editor.actor, `browser-books:${runId}`,
-    work => editor.grant(`work:edit:${work}`, 'work.edit').then(() => {}), signal);
+    work => editor.grant(`work:edit:${work}`, 'work.edit').then(() => {}),
+    () => editor.grant('rights:assess', 'rights.assess').then(() => {}), signal);
   const listed = await api.read<{ items: { id: string; revision: string; platform: string | null }[]; nextCursor: string | null }>(
     `/v1/works/${short(built.work)}/releases?actingSubject=${encodeURIComponent(editor.actor)}`, signal);
   if (listed.nextCursor || listed.items.length !== built.editions.length || built.editions.some(edition =>

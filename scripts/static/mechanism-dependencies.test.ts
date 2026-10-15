@@ -178,6 +178,8 @@ test("the mechanism map's import surface is its entry-point files and named adap
       'scripts/api/operation-index.ts',
     ],
     'rights-evaluation': [
+      'services/main/src/modules/rights/import-policy.ts',
+      'services/main/src/modules/rights/read-imported.ts',
       'services/main/src/modules/rights/schema.ts',
       'services/main/src/modules/rights/store.ts',
     ],

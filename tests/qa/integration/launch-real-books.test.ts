@@ -130,7 +130,8 @@ test('books / An exact pinned edition choice persists on an isolated restored co
     await initializeRelayCheckpoint(relay, Bun.env.MAIN_RELAY_CONSUMER!, source.env.lineage.dataEpoch);
     const input = { api: apiFor(source, importer.token), actor: importer.actor, backups: driver,
       directory: join(root, '.temp/launch-corpus/books/manifests'),
-      authorize: async (work: string) => { await importer.grant(`work:edit:${work}`, 'work.edit'); } };
+      authorize: async (work: string) => { await importer.grant(`work:edit:${work}`, 'work.edit'); },
+      authorizeRights: async () => { await importer.grant('rights:assess', 'rights.assess'); } };
     corpus = await prepareLaunchBooksCorpus(input);
     expect(corpus.counts).toEqual({ works: 1, realizations: 1, releases: 6, contentObservations: 7, librarySlice: 0, wikidataLabels: 0, covers: 0 });
     expect(corpus.sources.map(row => row.sha256)).toEqual(launchBookSources().map(row => row.entry.sha256));

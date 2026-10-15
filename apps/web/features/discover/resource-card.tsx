@@ -34,6 +34,7 @@ export function resourceWork(item: ResourceCard, scope: BrowseScope = { kind: 'g
   // Unnamed credits still count, but names already displayed need no redundant total.
   const remaining = Math.max(0, (details?.creditCount.value ?? 0) - authors.length);
   return { id: item.id, href: workHref(item.id, scope), title: item.name, cover: item.icon,
+    factObligations: details?.factObligations,
     kind: coverKindOf(item.types), authors,
     ...(remaining ? { creditSummary: details?.creditCount.kind === 'at-least'
       ? t.atLeastMoreCredits(remaining) : t.moreCredits(remaining) } : {}),
