@@ -258,6 +258,7 @@ export async function loadRealmView(
     main: client.main,
     personal: client.personal ?? client.main,
     actingSubject: client.actingSubject,
+    resolution: client.resolution,
   }) : null;
   const [resolved, messages, zoneMessages, jar, reader] = await Promise.all([
     played ?? (hosted ? hosted.resolveRealm(ref, locale, surface) : resolveRealm(ref, locale, surface)),

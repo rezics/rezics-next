@@ -507,10 +507,10 @@ export function RealmRulesRoute(props: RealmRouteProps) {
   ));
 }
 
-export function RealmMembersRoute(props: RealmRouteProps) {
+export function RealmMembersRoute(props: RealmRouteProps, client?: RealmReadClient) {
   return realmRoute(props, 'members', async (view, locale, search) => {
     const cursor = parseCursor(search);
-    const roster = await readRoster(view.context.realm, cursor);
+    const roster = await readRoster(view.context.realm, cursor, client?.main);
     if (!roster.ok) return failure(view, 'members', roster.failure, roster.reference);
     const people = rosterPeople(roster.data.items, view.messages.memberUnnamed, (agent) =>
       resourceHref('/a/', agent),
@@ -534,5 +534,5 @@ export function RealmMembersRoute(props: RealmRouteProps) {
         />
       </RealmAbout>
     );
-  });
+  }, false, loadRealmView, client);
 }
