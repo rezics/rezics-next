@@ -91,7 +91,7 @@ export function ImportRowItem({ row, sealed, locale, messages, onResolve, onAdop
       </p>
       {source.review ? <p className="line-clamp-2 text-muted-foreground text-xs">{source.review.text}</p> : null}
       {row.outcome ? <p
-        className={cn('text-xs', issues.length ? 'text-destructive' : 'text-muted-foreground')}>
+        className={cn('text-xs', issues.length ? 'text-destructive-foreground' : 'text-muted-foreground')}>
         {issues.length ? issues.map(issue => issueText(issue, t)).join(' ')
           : row.outcome.applied.some(step => step !== 'private-source') ? t.importRowAdded : t.importRowKeptPrivate}</p> : null}
     </div>
@@ -131,7 +131,7 @@ export function ImportRowItem({ row, sealed, locale, messages, onResolve, onAdop
       {!sealed && group !== 'private' ? <Button size="sm" variant="outline" className="justify-self-start" disabled={busy}
         onClick={() => void run(() => onResolve(row, { choice: 'private' }))}>
         {t.importKeepPrivate}<span className="sr-only"> — {title}</span></Button> : null}
-      {note ? <p role="alert" className="text-destructive text-xs">{note}</p> : null}
+      {note ? <p role="alert" className="text-destructive-foreground text-xs">{note}</p> : null}
     </div>
   </li>;
 }

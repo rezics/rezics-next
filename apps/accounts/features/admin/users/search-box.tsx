@@ -67,7 +67,7 @@ export function SearchBox({ value, onType, onComposing, onApply, exact, onOpenEx
         <input ref={inputRef} id="admin-search" type="search" role="searchbox" aria-label={t.search.label}
           aria-describedby="admin-search-help" placeholder={t.search.placeholder} value={value} autoComplete="off"
           spellCheck={false} autoCapitalize="none" enterKeyHint="search" maxLength={400}
-          className="h-10 w-full rounded-xl border border-border/80 bg-primary/5 ps-10 pe-24 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none transition-[color,box-shadow] placeholder:text-muted-foreground/64 hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 md:text-sm [&::-webkit-search-cancel-button]:hidden"
+          className="h-10 w-full rounded-xl border border-border/80 bg-primary/5 ps-10 pe-24 text-base shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none transition-[color,box-shadow] placeholder:text-muted-foreground hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 md:text-sm [&::-webkit-search-cancel-button]:hidden"
           onChange={event => onType(event.currentTarget.value)}
           onCompositionStart={() => { composing.current = true; onComposing(true); }}
           onCompositionEnd={event => { composing.current = false; onComposing(false); onType(event.currentTarget.value); }}

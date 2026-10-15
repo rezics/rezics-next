@@ -125,7 +125,7 @@ function CoveragePicker({ work, own, locale, t, load, loadWorks, chosen }: {
       <WorkPicker name="coverageWork" locale={locale} t={t} load={loadWorks} initial="" label={t.coverageMore} />
       <CoverageLoad t={t} onLoad={text => { void add(text); }} />
       {failed === 'none' ? <p role="status" className="text-muted-foreground text-sm">{t.coverageNone}</p> : null}
-      {failed === 'error' ? <p role="alert" className="text-destructive text-sm">{t.coverageFailed}</p> : null}
+      {failed === 'error' ? <p role="alert" className="text-destructive-foreground text-sm">{t.coverageFailed}</p> : null}
     </div>
   </div>;
 }

@@ -136,7 +136,7 @@ export function AddLogo({ locale, onAdd, t }: {
         <span className="font-medium">{t.logoLanguageTag}</span>
         <Input value={other} onChange={event => setOther(event.target.value)} aria-describedby={`${id}-tag`}
           aria-invalid={other.trim() !== '' && !language} autoComplete="off" spellCheck={false} />
-        <span id={`${id}-tag`} className={cn('text-xs', other.trim() && !language ? 'text-destructive' : 'text-muted-foreground')}>
+        <span id={`${id}-tag`} className={cn('text-xs', other.trim() && !language ? 'text-destructive-foreground' : 'text-muted-foreground')}>
           {other.trim() && !language ? t.logoLanguageTagInvalid : t.logoLanguageTagHelp}</span>
       </label> : null}
       <div className="grid gap-1 text-sm sm:col-span-2">
@@ -199,7 +199,7 @@ export function TrailerCard({ saved, draft, status, busy, onChange, onSave, onRe
       <Input type="url" inputMode="url" value={value} disabled={busy} autoComplete="off" spellCheck={false}
         aria-invalid={Boolean(problem)} aria-describedby={`${id}-opening`} onChange={event => onChange(event.target.value)} />
     </label>
-    <p id={`${id}-opening`} className={cn('flex items-start gap-2 text-sm', problem ? 'text-destructive' : 'text-muted-foreground')}>
+    <p id={`${id}-opening`} className={cn('flex items-start gap-2 text-sm', problem ? 'text-destructive-foreground' : 'text-muted-foreground')}>
       {problem ? { empty: t.trailerEmpty, 'not-https': t.trailerNotHttps, credentials: t.trailerCredentials, 'too-long': t.trailerTooLong }[problem]
         : opening ? <><PlayIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
           {opening.kind === 'tab' ? t.trailerOpensTab({ host: opening.host })

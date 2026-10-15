@@ -28,7 +28,7 @@ function Section({ title, help, children }: { title: string; help?: string; chil
 
 /** A Work as the slide names it: its cover and title, or why nothing can be shown. */
 export function WorkLine({ work, loading, t }: { work: ZoneWork | null | undefined; loading: boolean; t: ZoneEditorCopy }) {
-  if (!work) return <p className={cn('text-sm', loading ? 'text-muted-foreground' : 'text-destructive')} role={loading ? 'status' : undefined}>
+  if (!work) return <p className={cn('text-sm', loading ? 'text-muted-foreground' : 'text-destructive-foreground')} role={loading ? 'status' : 'alert'}>
     {loading ? t.workLoading : t.workUnavailable}</p>;
   return <div className="flex min-w-0 items-center gap-3">
     <span className="relative block aspect-[3/4] w-10 shrink-0 overflow-hidden rounded-md"><WorkCover size="fill" {...workCoverProps(work)} /></span>
@@ -66,7 +66,7 @@ export function TargetFields({ slide, work, loading, locale, pickerMessages, loa
       <span className="font-medium">{t.linkField}</span>
       <Input value={target.href} onChange={event => onTarget({ kind: 'link', href: event.target.value })} inputMode="url" autoComplete="off" spellCheck={false}
         aria-invalid={Boolean(link) || undefined} aria-describedby={`${id}-link`} dir="ltr" />
-      <span id={`${id}-link`} className={cn('text-xs', link ? 'text-destructive' : 'text-muted-foreground')}>
+      <span id={`${id}-link`} className={cn('text-xs', link ? 'text-destructive-foreground' : 'text-muted-foreground')}>
         {link?.kind === 'link' ? (link.reason === 'empty' ? t.linkEmpty : t.linkForm) : t.linkHelp}</span>
     </label>}
   </Section>;
@@ -91,7 +91,7 @@ export function WordsFields({ slide, locale, problems, onChange, t }: {
           if (!language) onChange({ [name]: text });
           else onChange(name === 'kicker' ? { kickers: { ...slide.kickers, [language]: text } } : { titles: { ...slide.titles, [language]: text } });
         }} />
-      <span id={`${key}-help`} className={cn('text-xs', invalid ? 'text-destructive' : 'text-muted-foreground')}>
+      <span id={`${key}-help`} className={cn('text-xs', invalid ? 'text-destructive-foreground' : 'text-muted-foreground')}>
         {invalid ? t.tooLong({ max: String(TEXT_LIMIT) }) : help ?? ''}</span>
     </label>;
   };
@@ -148,7 +148,7 @@ export function ScheduleFields({ slide, problems, onChange, t }: {
   };
   return <Section title={t.scheduleHeading} help={t.scheduleHelp}>
     <div className="grid max-w-md gap-4">{input('startsAt', t.startsAt)}{input('endsAt', t.endsAt)}</div>
-    <p id={`${id}-help`} className={cn('text-xs', schedule ? 'text-destructive' : 'text-muted-foreground')}>
+    <p id={`${id}-help`} className={cn('text-xs', schedule ? 'text-destructive-foreground' : 'text-muted-foreground')}>
       {schedule?.kind === 'schedule' ? (schedule.reason === 'empty' ? t.scheduleEmpty : t.scheduleInvalid) : zone ? t.scheduleZone({ zone }) : ''}</p>
   </Section>;
 }

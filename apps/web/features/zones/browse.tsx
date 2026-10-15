@@ -18,7 +18,7 @@ import type { CardRenderer } from './modules.tsx';
 // link or a GET form, so each view has its own URL and needs no script.
 
 const field = cn('h-11 w-full min-w-0 rounded-xl border border-border/80 bg-card ps-10 pe-3 text-base',
-  'text-foreground shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none placeholder:text-muted-foreground/70',
+  'text-foreground shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)] outline-none placeholder:text-muted-foreground',
   'hover:border-border focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/20 md:text-sm');
 
 /** The search form: its text goes to the browse page as `q`, keeping the Conditions given. */

@@ -49,7 +49,7 @@ export function LookMenu({ enabled, labels, save = saveDisplayPreference }: {
         <MenuRadioItem value="standard">{labels.standard}</MenuRadioItem>
       </MenuRadioGroup>
       <p className="px-3 pt-1 pb-2 text-muted-foreground text-xs">{labels.help}</p>
-      {failed ? <p className="px-3 pb-2 text-destructive text-xs">{labels.saveFailed}</p> : null}
+      {failed ? <p className="px-3 pb-2 text-destructive-foreground text-xs">{labels.saveFailed}</p> : null}
     </MenuContent>
   </Menu>{failed ? <span role="alert" className="sr-only">{labels.saveFailed}</span> : null}</>;
 }

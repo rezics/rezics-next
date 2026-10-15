@@ -15,7 +15,7 @@ export function LibraryProgress({ work, title, locale }: { work: string; title: 
   const t = copyOf(locale);
   return <details className="min-w-0 rounded-xl border border-border/60 p-3"
     onToggle={event => setOpen(event.currentTarget.open)}>
-    <summary className="cursor-pointer rounded-sm font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <summary className="min-h-6 cursor-pointer rounded-sm font-medium text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
       {t.workProgress}<span className="sr-only"> — {title}</span>
     </summary>
     {open ? <MediumProgress work={work} api={api.media} episodes={api.episodes ?? null} t={t}
