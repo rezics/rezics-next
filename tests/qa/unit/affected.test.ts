@@ -39,6 +39,7 @@ const files = new Set([...graph.map(module => module.source), 'scripts/operation
 const nativeProofs = [erasureCampaignNativeTest, nativeIntegerPreservationTest, nativeUnionTest,
   workNameScopeBasisTest, heldReplayNativeTest, nativeModuleSuiteTest,
   'infra/jena/tests/command-module-startup.test.ts',
+  'infra/jena/tests/media-summary-label-growth.test.ts',
   'infra/jena/tests/native-visit-profile.test.ts',
   'infra/jena/tests/occurrence-label-growth.test.ts',
   'infra/jena/tests/prefix-walk-native.test.ts',

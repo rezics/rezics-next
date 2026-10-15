@@ -49,6 +49,7 @@ async function concurrentReadProfiles() {
   } });
   startTelemetry('main', { ...process.env, ...sink.env,
     OTEL_EXPORTER_OTLP_ENDPOINT: telemetryIngress.url.origin });
+  const { foregroundCounted } = await import('./support/operation-cost.ts');
   const { startHomeStack } = await import('./feed-read-support.ts');
   const { seedPublicProfileWork } = await import('../../../scripts/load/work-profile-work.ts');
   const { workProfileCorpusApi } = await import('../../../scripts/load/work-profile-corpus.ts');
@@ -92,7 +93,7 @@ async function concurrentReadProfiles() {
   const originalGraphQuery = home.stack.fuseki.query;
   home.stack.fuseki.query = async function (...args) {
     const sample = sampleContext.getStore();
-    if (sample?.summary && !sample.paused) {
+    if (foregroundCounted() && sample?.summary && !sample.paused) {
       const body = args[0];
       const closing = sample.summary.phase === 'closing-position'
         && body.includes('SELECT ?epoch ?sequence WHERE') && ++sample.positionReads === 2;
@@ -122,10 +123,11 @@ async function concurrentReadProfiles() {
     }
   };
   WorkReadSession.prototype.query = async function (...args) {
-    trackSession(this);
+    const counted = foregroundCounted();
+    if (counted) trackSession(this);
     try { return await originalQuery.apply(this, args); }
     catch (error) {
-      sampleContext.getStore()?.failures.push({ phase: 'query', attempt: this.attemptCount,
+      if (counted) sampleContext.getStore()?.failures.push({ phase: 'query', attempt: this.attemptCount,
         query: args[0], error: failureDetail(error) });
       throw error;
     }

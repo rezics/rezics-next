@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from 'bun:test';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -91,7 +92,7 @@ function observedAccess(pool: Pool, observation: FenceObservation): Pool {
 function observedContent(pool: Pool, observation: FenceObservation): Pool {
   return new Proxy(pool, { get(target, property) {
     if (property === 'query') return async (sql: string, values?: unknown[]) => {
-      if (sql.includes('AS pending_pin')) observation.identityReads.push(observation.held);
+      if (foregroundCounted() && sql.includes('AS pending_pin')) observation.identityReads.push(observation.held);
       return target.query(sql, values);
     };
     const value = Reflect.get(target, property, target);

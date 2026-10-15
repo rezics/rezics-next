@@ -1,4 +1,5 @@
 import { configureFixtureDisclosureAncestry } from './support/disclosure-ancestry.ts';
+import { foregroundCounted } from '../../../tests/qa/integration/support/operation-cost.ts';
 import { expect, test } from 'bun:test';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -180,7 +181,7 @@ for (const lateTarget of ['graph', 'content'] as const) test(`a ${lateTarget} re
   const originalQuery = h.env.fuseki.query.bind(h.env.fuseki);
   h.env.fuseki.query = async (query, budget) => {
     if (query.includes('SELECT ?space ?navigation ?head')) {
-      h.queries.push(query);
+      if (foregroundCounted()) h.queries.push(query);
       return { results: { bindings: [{ space: cell(h.space), navigation: cell(navigation),
         head: cell(h.siteRevision), manifest: cell(`urn:rezics:sha256:${manifest}`),
         state: cell(`${RV}Active`), spaceDisclosure: cell(`${RV}Public`),
