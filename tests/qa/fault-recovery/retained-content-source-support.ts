@@ -88,18 +88,30 @@ function volumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<stri
     '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
     '--entrypoint', 'sh', postgresImage(), '-ec', `cd /backup
 test -z "$(find . -type l -print -quit)"
-find . -type f -exec sh -c 'for file do
-  digest=$(sha256sum "$file"); bytes=$(stat -c %s "$file")
-  printf "%s\\t%s\\t%s\\n" "${'${digest%% *}'}" "$bytes" "${'${file#./}'}"
-done' sh {} +`], docker, 60_000);
+find . -type f -exec sha256sum {} +
+printf 'retained-file-sizes\\n'
+find . -type f -printf '%s\\t%P\\n'`], docker, 60_000);
+  const sections = output.trim().split('\nretained-file-sizes\n');
+  if (sections.length !== 2) throw new Error('retained volume inventory is incomplete');
   const inventory: Record<string, RetainedFileIntegrity> = {};
-  for (const line of output.trim().split('\n').filter(Boolean)) {
-    const match = /^([a-f0-9]{64})\t([0-9]+)\t([^\t\n]+)$/.exec(line);
-    if (!match || match[3]!.split('/').some(part => part === '..' || !part))
-      throw new Error('retained volume inventory is malformed');
-    inventory[match[3]!] = { sha256: match[1]!, bytes: Number(match[2]) };
+  const safePath = (path: string) => !/[\t\r\n\\]/.test(path) &&
+    !path.split('/').some(part => part === '..' || part === '.' || !part);
+  for (const line of sections[0]!.split('\n').filter(Boolean)) {
+    const match = /^([a-f0-9]{64})  \.\/([^\t\r\n]+)$/.exec(line);
+    if (!match || !safePath(match[2]!) || Object.hasOwn(inventory, match[2]!))
+      throw new Error('retained volume hash inventory is malformed');
+    inventory[match[2]!] = { sha256: match[1]!, bytes: -1 };
   }
-  if (!Object.keys(inventory).length) throw new Error('retained volume is empty');
+  let sizes = 0;
+  for (const line of sections[1]!.split('\n').filter(Boolean)) {
+    const match = /^([0-9]+)\t([^\t\r\n]+)$/.exec(line);
+    const file = match && Object.hasOwn(inventory, match[2]!) ? inventory[match[2]!] : undefined;
+    if (!match || !safePath(match[2]!) || !file || file.bytes !== -1 || !Number.isSafeInteger(Number(match[1])))
+      throw new Error('retained volume size inventory is malformed');
+    file.bytes = Number(match[1]);
+    sizes++;
+  }
+  if (!sizes || sizes !== Object.keys(inventory).length) throw new Error('retained volume inventory is incomplete');
   return inventory;
 }
 
