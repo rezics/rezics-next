@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import { readAvatar, readId, readName, readUuid } from '../work/read-contract.ts';
 
 export const continueQuery = t.Object({ actingSubject: readId,
+  cursor: t.Optional(t.String({ minLength: 1, maxLength: 2048 })),
   limit: t.Optional(t.Integer({ minimum: 1, maximum: 6 })) }, { additionalProperties: false });
 export const continueItem = t.Object({ work: readId, title: readName, cover: readAvatar,
   types: t.Array(t.String(), { maxItems: 3 }),
@@ -13,6 +14,7 @@ export const continueItem = t.Object({ work: readId, title: readName, cover: rea
     kind: t.Union([t.Literal('exact'), t.Literal('lower-bound')]) }),
   updatedAt: t.String() });
 export const continueResult = t.Object({ profile: t.Literal('home-continue-v1'),
+  nextCursor: t.Nullable(t.String()), complete: t.Boolean(),
   items: t.Array(continueItem, { maxItems: 6 }), sourcePosition: t.Object({ dataEpoch: t.String(), sequence: t.String() }),
   scanned: t.Object({ reading: t.Integer(), followed: t.Integer(), limit: t.Integer() }) });
 export const hiddenCommand = t.Object({ actingSubject: readId, hidden: t.Boolean() },

@@ -22,7 +22,7 @@ export function continueRoutes(work: MainWorkDependencies) {
     try {
       const principal = await work.account.verify(request, ['work:read', 'follow:read']);
       const result = await workRead(work, request, { actingSubject: query.actingSubject },
-        session => readContinue(session, principal, query.actingSubject, query.limit));
+        session => readContinue(session, principal, query.actingSubject, query.limit, query.cursor));
       const body = JSON.stringify(result);
       if (Buffer.byteLength(body) > CONTINUE_COST.responseBytes) throw new WorkReadLimit('Continue response too large');
       return new Response(body, { headers: { ...homeHeaders, 'content-type': 'application/json' } });

@@ -7,6 +7,9 @@ import {
   FIRST_PUBLICATION_ANCHOR, FIRST_PUBLICATION_PREDICATE, FIRST_PUBLICATION_TYPE, invertedPublicationYear,
 } from '../../../services/main/src/modules/query/year-fact.ts';
 import { startMediaStack } from './media-support.ts';
+import type { TemplateInput } from '../../../services/main/src/modules/query/template-schema.ts';
+import { createRealmSpace, spaceCreationDigest } from '../../../services/main/src/modules/space/create.ts';
+import { realmSelectionDigest, selectRealmLocal } from '../../../services/main/src/modules/work/select-realm.ts';
 
 const QUERY = 'https://rezics.com/query/work-publication-years';
 const POPULATION = 5_000;
@@ -78,9 +81,9 @@ test('First-publication years: newest page, incremental posting, and a seek that
     expect(posted.work).toEqual([FIRST_PUBLICATION_ANCHOR]);
     expect(posted.yearKey).toEqual([invertedPublicationYear(2024)]);
     expect(posted.statement).toEqual([dated.statement]);
-    const read = async (parameters: { fromYear?: number; toYear?: number } = {}, limit = PAGE, cursor?: string) => {
+    const read = async (parameters: TemplateInput['parameters'] = {}, limit = PAGE, cursor?: string, token?: string) => {
       const response = await stack.main.handle(new Request('http://main.local/v1/query', { method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) },
         body: JSON.stringify({ profile: 'template-query-v1', query: QUERY, revision: 1, parameters, limit, ...(cursor ? { cursor } : {}) }) }));
       const value = await response.json() as { result?: { items: Array<{ id: string; year: number; statement: string }>; nextCursor: string | null; complete: boolean } };
       if (response.status !== 200) throw new Error(`${response.status}: ${JSON.stringify(value)}`);
@@ -111,6 +114,41 @@ test('First-publication years: newest page, incremental posting, and a seek that
     }
     expect(walked).toEqual([2024, 2010, 1999]);
     expect(cursor).toBeNull();
+    const realmInput = { name: 'Publication year Realm', actingSubject: member.actor };
+    const createdRealm = await createRealmSpace(stack.env, stack.admission(member.actor,
+      'space:create:root', 'space.create', spaceCreationDigest(realmInput)), realmInput);
+    if (createdRealm.outcome !== 'succeeded' || !createdRealm.realm) throw new Error('Realm creation failed');
+    const realm = createdRealm.realm;
+    // Leave the middle Work outside this Realm: a global year page cannot
+    // stand in for a Realm page, even when its first result happens to match.
+    for (const work of [published, older]) {
+      const selected = { context: { kind: 'realm-local' as const, id: realm }, work: work.work,
+        mainVersion: work.mainVersion, contribution: work.variants[0]!.contribution,
+        publicationDecision: work.variants[0]!.decision, expectedSelectionHead: null,
+        selectionBasis: 'realm-manager-review' as const, actingSubject: member.actor };
+      const result = await selectRealmLocal(stack.env, stack.admission(member.actor,
+        `publication:adopt:${realm}`, 'publication.adopt', realmSelectionDigest(selected)), selected);
+      if (result.outcome !== 'succeeded') throw new Error('Realm adoption failed');
+    }
+    const stranger = await stack.member('year-stranger');
+    const scoped = { realm, filter: { all: [{ facet: 'publicationYear', range: { min: '1990', max: '2024' } }] } };
+    for (const persona of [member, stranger]) {
+      const seen: string[] = [];
+      let next: string | undefined;
+      for (let step = 0; step < 12; step++) {
+        const page = await read(scoped, 1, next, persona.token);
+        seen.push(...page.items.map(item => item.id));
+        if (!page.nextCursor) { next = undefined; break; }
+        next = page.nextCursor;
+      }
+      expect(next).toBeUndefined();
+      expect(seen).toEqual([published.work, older.work]);
+      expect(new Set(seen).size).toBe(seen.length);
+    }
+    const scopedFirst = await read(scoped, 1);
+    expect((await stack.main.handle(new Request('http://main.local/v1/query', { method: 'POST',
+      headers: { 'content-type': 'application/json' }, body: JSON.stringify({ profile: 'template-query-v1',
+        query: QUERY, revision: 1, parameters: { realm }, limit: 1, cursor: scopedFirst.nextCursor }) }))).status).toBe(400);
     const laterYear = await publish(published.work, '2001-05-01', `${XSD}date`);
     await accept(laterYear.statement);
     expect(await yearCount()).toBe(5);
@@ -138,7 +176,7 @@ test('First-publication years: newest page, incremental posting, and a seek that
       { id: middle.work, year: 2010, statement: mid.statement },
       { id: published.work, year: 2001, statement: laterYear.statement },
     ]);
-    const measure = async () => {
+    const measure = async (parameters: TemplateInput['parameters'] = {}) => {
       let templateQuery = 0, basis = 0, sql = 0;
       const nativeQuery = stack.fuseki.templateQuery.bind(stack.fuseki);
       const nativeIndex = stack.fuseki.templateIndex.bind(stack.fuseki);
@@ -151,7 +189,7 @@ test('First-publication years: newest page, incremental posting, and a seek that
       }) as typeof stack.fuseki.templateIndex;
       stack.accessPool.query = (async (...args: Parameters<typeof nativeSql>) => { if (foregroundCounted()) sql++; return nativeSql(...args); }) as typeof stack.accessPool.query;
       try {
-        const page = await read();
+        const page = await read(parameters);
         return { templateQuery, basis, sql, checkouts: stack.accessPool.checkouts - checkouts, items: facts(page.items) };
       } finally {
         stack.fuseki.templateQuery = nativeQuery;
@@ -160,12 +198,23 @@ test('First-publication years: newest page, incremental posting, and a seek that
       }
     };
     const before = await measure();
-    await stack.accessPool.query(`INSERT INTO access.template_seek_entity(epoch,graph,id,sequence,payload)
-      SELECT $1,$2,'urn:year-population:'||n,0,'{}'::jsonb FROM generate_series(1,$3) n`,
-    [epoch, GRAPHS.current, POPULATION]);
-    await stack.accessPool.query(`INSERT INTO access.template_seek_entry(epoch,graph,predicate,anchor,type,key,id)
-      SELECT $1,$2,$3,$4,$5,'9999','urn:year-population:'||n FROM generate_series(1,$6) n`,
-    [epoch, GRAPHS.current, FIRST_PUBLICATION_PREDICATE, FIRST_PUBLICATION_ANCHOR, FIRST_PUBLICATION_TYPE, POPULATION]);
+    const growth = [];
+    for (const population of [50, 500, POPULATION]) {
+      await stack.accessPool.query(`INSERT INTO access.template_seek_entity(epoch,graph,id,sequence,payload)
+        SELECT $1,$2,'urn:year-population:'||n,0,'{}'::jsonb FROM generate_series(1,$3) n ON CONFLICT DO NOTHING`,
+      [epoch, GRAPHS.current, population]);
+      await stack.accessPool.query(`INSERT INTO access.template_seek_entry(epoch,graph,predicate,anchor,type,key,id)
+        SELECT $1,$2,$3,$4,$5,'9999','urn:year-population:'||n FROM generate_series(1,$6) n ON CONFLICT DO NOTHING`,
+      [epoch, GRAPHS.current, FIRST_PUBLICATION_PREDICATE, FIRST_PUBLICATION_ANCHOR, FIRST_PUBLICATION_TYPE, population]);
+      const measured = await measure(scoped);
+      growth.push({ population, ...measured });
+      expect(measured.items.map(item => item.id)).toEqual([published.work, published.work]);
+      expect(measured.templateQuery).toBeLessThanOrEqual(4);
+      expect(measured.basis).toBeLessThanOrEqual(4);
+      expect(measured.sql).toBeLessThanOrEqual(40);
+    }
+    expect(growth.map(row => row.sql)).toEqual(Array(3).fill(growth[0]!.sql));
+    console.log(JSON.stringify({ label: 'scoped-year-growth', growth }));
     await stack.accessPool.query('ANALYZE access.template_seek_entry');
     expect(await yearCount()).toBe(POPULATION + 4);
     const after = await measure();

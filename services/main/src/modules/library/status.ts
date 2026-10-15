@@ -381,7 +381,7 @@ export class ReaderLibraryStatusStore {
     return found.map(row => ({ ...state(row.work, row), sortValue: row.sort_value }));
   }
 
-  // Continue preview uses the same indexed added order, without a shelf cursor.
+  // Continue uses the same indexed added order and timestamp/Work seek as shelves.
   async page(agent: string, status: ReadingStatus, limit: number,
     after?: { work: string; changedAt: string }): Promise<StatusState[]> {
     return (await this.sortedPage(agent, status, limit, 'added', 'desc',

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Value } from 'typebox/value';
 import { template } from '../src/modules/query/templates/work-publication-years.schema.ts';
+import { publicationYearScope } from '../src/modules/query/year-scope.ts';
 import {
   invertedPublicationYear, keepPublicationRow, publicationCalendarYear, publicationRowKey,
   publicationYearBoundsError, publicationYearFromKey,
@@ -36,6 +37,16 @@ describe('first-publication year page', () => {
       [`${XSD}gYear`, '10000'], [`${XSD}gYear`, '1999Z'], [`${XSD}dateTime`, '1999-12-31T23:00:00-05:00Z'],
       [`${XSD}string`, '2024'],
     ] as const) expect(publicationCalendarYear(datatype, lexical)).toBeNull();
+  });
+
+  test('admits Realm Conditions through the ordinary browse compiler', () => {
+    const realm = 'https://rezics.com/id/11111111-1111-4111-8111-111111111111';
+    const filter = { all: [{ facet: 'type', any: ['https://schema.org/Book'] }] };
+    expect(Value.Check(template.request, request({ realm, filter }))).toBe(true);
+    expect(publicationYearScope({ realm, filter })?.query.type).toEqual(['https://schema.org/Book']);
+    expect(publicationYearScope({})).toBeNull();
+    expect(() => publicationYearScope({ filter })).toThrow('require a Realm');
+    expect(() => publicationYearScope({ realm, filter: { all: [{ facet: 'invented', any: ['x'] }] } })).toThrow();
   });
 
   test('orders an inverted year key before the work id, newest first', () => {

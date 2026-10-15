@@ -2,6 +2,7 @@ import { t } from 'elysia';
 import type { TSchema } from 'typebox';
 import { readId, readLanguage, pageFields } from '../work/read-contract.ts';
 import type { SeekSelector } from './seek-index.ts';
+import type { FilterDocument } from '../../../../../model/definitions/filter-document-v1.ts';
 
 export const TEMPLATE_COST = { roots:64, page:20, maxPage:64, candidates:256, hops:2, sourceCredits:128 } as const;
 export const templateParameters = { roots:t.Array(readId,{ minItems:1,maxItems:64,uniqueItems:true }),
@@ -18,7 +19,8 @@ export function templateResponse<const I extends string, S extends TSchema>(quer
     items:t.Array(item,{maxItems:64}),complete:t.Boolean(),...pageFields});
 }
 export interface TemplateInput { profile:'template-query-v1'; query:string;revision:1;
-  parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number;role?:string };
+  parameters:{ roots?:string[];contentLanguage?:string;kind?:'text-variant'|'release';fromYear?:number;toYear?:number;role?:string;
+    realm?:string;filter?:FilterDocument };
   presentation?:{language?:string;actingSubject?:string};limit?:number;cursor?:string }
 interface ClosedEnumOption { type?: string; const?: unknown; anyOf?: ClosedEnumOption[] }
 interface ClosedEnumSchema { properties?: { parameters?: { properties?: Record<string, ClosedEnumOption> } } }

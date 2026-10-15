@@ -209,7 +209,7 @@ async function readTags(session: WorkReadSession, realm: string, works: readonly
   }
 }
 
-async function readBrowseBatch(session: WorkReadSession, realm: string, ids: string[],
+export async function readBrowseBatch(session: WorkReadSession, realm: string, ids: string[],
   filter: BrowseFilter, entries?: Map<string, BrowseEntry>, publicationYear?: string) {
   if (!ids.length) return { candidates: [] as BrowseCandidate[], tags: 'unavailable' as const,
     rows: new Map<string, ReadRow>(), summaries: new Map<string, Awaited<ReturnType<WorkReadSession['summaries']>>[number]>() };

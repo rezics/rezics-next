@@ -15,6 +15,7 @@ import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { closedStringEnum, TEMPLATE_COST, type ReviewedTemplate, type TemplateInput } from './template-schema.ts';
 import { creditSeekKey, type SeekCandidate } from './seek-index.ts';
 import { FIRST_PUBLICATION_ANCHOR, keepPublicationRow, publicationRowKey, publicationYearBoundsError, publicationYearFromKey } from './year-fact.ts';
+import { publicationYearScope, scopedPublicationWorks } from './year-scope.ts';
 
 export const templateRequests=t.Union(templates.map(template=>template.request) as [typeof templates[number]['request'],...typeof templates[number]['request'][]]);
 export const templateResponses=t.Union(templates.map(template=>template.response) as [typeof templates[number]['response'],...typeof templates[number]['response'][]]);
@@ -64,6 +65,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     if (!template.serverBoundInputs.includes('_role')) throw new WorkReadInvalid('Template role parameter is not bound');
   }
   const yearPage=template.eligibility.kind==='first-publication';
+  const yearScope=yearPage ? publicationYearScope(input.parameters) : null;
   const bounds=publicationYearBoundsError(input.parameters.fromYear,input.parameters.toYear);
   if(yearPage && bounds) throw new WorkReadInvalid(bounds);
   const roots=[...(input.parameters.roots ?? [])].sort(),limit=input.limit ?? TEMPLATE_COST.page;
@@ -77,6 +79,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       contentLanguage:input.parameters.contentLanguage?.toLowerCase() ?? '',kind:input.parameters.kind ?? '',
       role:role ?? '',
       fromYear:input.parameters.fromYear ?? null,toYear:input.parameters.toYear ?? null,
+      realm:input.parameters.realm ?? null,filter:input.parameters.filter ?? null,
       languages:session.displayLanguages,actor:session.options.actingSubject ?? null,limit};
     const refs=template.sourceCredits ? await sourceCreditReferences(session,roots) : [];
     let membership:unknown, candidateRead:(after:{key:string;id:string}|null)=>Promise<SeekCandidate[]>;
@@ -129,7 +132,7 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       membership=await extraBasis();
       session.observeDependency('template-membership',membership,extraBasis);
       candidateRead=async after=> {
-        const window=await index.candidates(session.position.dataEpoch,[key],after,Math.min(TEMPLATE_COST.candidates,limit+1),
+        const window=await index.candidates(session.position.dataEpoch,[key],after,Math.min(TEMPLATE_COST.maxPage,limit+1),
           {fromYear:input.parameters.fromYear,toYear:input.parameters.toYear},TEMPLATE_COST.candidates);
         physicalMore=window.more;return window.rows;
       };
@@ -138,6 +141,13 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
     const cursor=decodeReadCursor(input.cursor,normalized,position);
     const after=cursor?{key:cursor.order,id:cursor.after}:null;
     let candidates=await candidateRead(after);
+    // Preserve the physical window for continuation even when disclosure or
+    // Conditions remove every candidate in it.
+    const examined=candidates;
+    if(yearScope) {
+      const allowed=await scopedPublicationWorks(session,yearScope,[...new Set(candidates.map(row=>row.id))]);
+      candidates=candidates.filter(row=>allowed.has(row.id));
+    }
     const confirmed=refs.length ? await deps.templateSeek!.confirmed(session.position.dataEpoch,refs.map(ref=>ref.work),refs.map(ref=>ref.key)) : new Set<string>();
     const source=refs.map(ref=>({...ref,confirmed:confirmed.has(`${ref.work}\0${ref.key}`)}));
     if(template.sourceCredits) {
@@ -233,8 +243,8 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
       }
       return [item];
     });
-    const last=page.at(-1) ?? candidates.at(-1);
-    const hasMore=selected.length>limit || physicalMore && candidates.length>0;
+    const last=page.at(-1) ?? examined.at(-1);
+    const hasMore=selected.length>limit || physicalMore && examined.length>0;
     const nextCursor=hasMore && last ? encodeReadCursor(normalized,position,last.id,last.key,
       cursor?.expiresAt ?? Date.now()+READ_BASIS_RETENTION_MS):null;
     if(!yearPage) await admit(session,template.root,roots);
@@ -251,7 +261,8 @@ export async function executeTemplate(deps:MainWorkDependencies,request:Request,
   const headers={'cache-control':'private, no-store',etag:result.etag};
   return request.headers.get('if-none-match')?.split(',').map(value=>value.trim()).some(value=>value===result.etag || value==='*')
     ? new Response(null,{status:304,headers}) : Response.json({profile:'query-v1',template:template.query,
-      selection:{context:'global',scope:{kind:'all'},filter:input.parameters,text:null,
+      selection:{context:yearScope?{realm:yearScope.realm}:'global',
+        scope:yearScope?{kind:'realm',realm:yearScope.realm}:{kind:'all'},filter:input.parameters,text:null,
         sort:template.eligibility.kind==='discovery-concept' || template.eligibility.kind==='first-publication'?'newest':'identity',pageSize:limit,facetRefs:[],semanticRevisions:[]},
       result:result.payload},{headers});
 }

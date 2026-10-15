@@ -1,27 +1,47 @@
 import type { VerifiedPrincipal } from '../access/admission.ts';
 import { readFollowTargets } from '../follows/read.ts';
-import { WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+import { decodeReadCursor, encodeReadCursor, readDependencyToken, WorkReadInvalid, WorkReadMissing, WorkReadMoved, WorkReadSession, WorkReadUnavailable } from '../work/read-session.ts';
+import { READ_BASIS_RETENTION_MS } from '../read-basis/retention.ts';
 import { GRAPHS, iri, MAX_WORK_SEMANTIC_TYPES, WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { inOrder, settle, unwrap } from '../feed/settled.ts';
 import { CONTINUE_COST } from './contract.ts';
 import { continueChapters } from './chapters.ts';
 
-/** Owner heads, public targets, compositions and progress load in bounded batches.
- * Items are sorted after, so read order never changes the result. */
+/** Reading entries in shelf order, then follows in identity order. Each page
+ * advances over examined candidates, including hidden or exhausted Books. */
 export async function readContinue(session: WorkReadSession, principal: VerifiedPrincipal,
-  agent: string, limit = 6) {
+  agent: string, limit = 6, token?: string) {
   const { follows, libraryStatus: status, homePersonal } = session.deps;
   const canRead = session.deps.access.canReadAsBaselineMember;
   if (!follows || !status || !homePersonal || !canRead) throw new WorkReadUnavailable('Continue is unavailable');
   // A denied reader reports unavailable before any private owner answers.
   const [allowed, rest] = await inOrder(canRead.call(session.deps.access, principal, agent),
     settle(inOrder(status.fence(agent), homePersonal.read(principal, agent),
-      status.page(agent, 'reading', CONTINUE_COST.candidatesPerSource),
-      follows.read(principal, agent, '', 'work', CONTINUE_COST.candidatesPerSource))));
+      follows.read(principal, agent, '', 'work', 1))));
   if (!allowed) throw new WorkReadUnavailable('Continue is unavailable');
-  const [fence, personal, reading, followed] = unwrap(rest);
-  const followedSet = new Set(followed.rows.map(row => row.target));
-  const works = [...new Set([...reading.map(row => row.work), ...followed.rows.map(row => row.target)])]
+  const [fence, personal, followFence] = unwrap(rest);
+  const binding = ['continue-v2', principal.issuer, principal.subject, agent, limit];
+  const position = { ...session.position,
+    dependencyToken: readDependencyToken([fence, personal.revision, followFence.revision]) };
+  const cursor = decodeReadCursor(token, binding, position);
+  const phase = cursor?.order === 'followed' ? 'followed' : 'reading';
+  if (cursor && !['reading', 'followed'].includes(cursor.order)) throw new WorkReadInvalid('Invalid Continue cursor');
+  let readingAfter: { work: string; changedAt: string } | undefined;
+  if (phase === 'reading' && cursor?.after) {
+    try {
+      readingAfter = JSON.parse(cursor.after);
+      if (!readingAfter || !/^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/.test(readingAfter.work)
+        || !Number.isFinite(Date.parse(readingAfter.changedAt))) throw new Error('cursor');
+    } catch { throw new WorkReadInvalid('Invalid Continue cursor'); }
+  }
+  const readingWindow = phase === 'reading' ? await status.page(agent, 'reading', limit + 1, readingAfter) : [];
+  const reading = readingWindow.slice(0, limit);
+  const followLimit = phase === 'followed' ? limit : readingWindow.length <= limit ? limit - reading.length : 0;
+  const followed = followLimit
+    ? await follows.read(principal, agent, phase === 'followed' ? cursor?.after ?? '' : '', 'work', followLimit) : followFence;
+  const followRows = followLimit ? followed.rows.slice(0, followLimit) : [];
+  const followedSet = new Set(followRows.map(row => row.target));
+  const works = [...new Set([...reading.map(row => row.work), ...followRows.map(row => row.target)])]
     .slice(0, CONTINUE_COST.maxCandidates);
   const statuses = new Map((await status.batch(agent, works)).map(row => [row.work, row]));
   const hidden = new Set(personal.exclusions.filter(rule => rule.kind === 'continue' && rule.strength === 'hide')
@@ -29,7 +49,7 @@ export async function readContinue(session: WorkReadSession, principal: Verified
   const publicSession = new WorkReadSession(session.deps, new Request(session.request.url),
     { language: session.options.language }, session.position);
   const candidates = works.filter(work => !hidden.has(work)
-    && (statuses.get(work)?.status === 'reading' || followedSet.has(work)));
+    && (reading.some(row => row.work === work) || statuses.get(work)?.status !== 'reading' && followedSet.has(work)));
   const targets = await readFollowTargets(publicSession, candidates, 'work');
   const { chapters, progress } = await continueChapters(session, agent,
     candidates.filter(work => targets.has(work)));
@@ -52,21 +72,27 @@ export async function readContinue(session: WorkReadSession, principal: Verified
     homePersonal.fence(principal, agent), follows.read(principal, agent, '', 'work', 1),
     canRead.call(session.deps.access, principal, agent));
   if (fenced !== fence || personalNow.revision !== personal.revision || followsNow.revision !== followed.revision
-    || !stillAllowed) {
+    || followed.revision !== followFence.revision || !stillAllowed) {
     throw new WorkReadMoved('Continue changed');
   }
-  read.sort((a, b) => Number(b.source === 'reading') - Number(a.source === 'reading')
-    || b.updatedAt.localeCompare(a.updatedAt) || b.work.localeCompare(a.work));
   const shown = read.slice(0, limit);
+  const expiresAt = cursor?.expiresAt ?? Date.now() + READ_BASIS_RETENTION_MS;
+  const lastReading = reading.at(-1);
+  const nextCursor = phase === 'reading' && readingWindow.length > limit && lastReading
+      ? encodeReadCursor(binding, position, JSON.stringify({ work: lastReading.work,
+        changedAt: lastReading.changedAt }), 'reading', expiresAt)
+      : !followLimit ? encodeReadCursor(binding, position, '', 'followed', expiresAt)
+      : followed.rows.length > followLimit
+        ? encodeReadCursor(binding, position, followRows.at(-1)!.target, 'followed', expiresAt) : null;
   // One type batch, so each Work keeps the cover it has on every other page.
   const typeRows = shown.length ? await publicSession.query(`SELECT ?work ?type WHERE {
     VALUES ?work { ${shown.map(item => iri(item.work)).join(' ')} }
     GRAPH ${iri(GRAPHS.current)} { ?work a ?type . VALUES ?type { ${WORK_SEMANTIC_TYPES.map(type => `<${type}>`).join(' ')} } }
   } LIMIT ${shown.length * MAX_WORK_SEMANTIC_TYPES + 1}`, shown.length * MAX_WORK_SEMANTIC_TYPES) : [];
-  return { profile: 'home-continue-v1' as const, sourcePosition: session.position,
+  return { profile: 'home-continue-v1' as const, sourcePosition: session.position, nextCursor, complete: nextCursor === null,
     items: shown.map(item => ({ ...item, types: typeRows.filter(row => row.work?.value === item.work)
       .flatMap(row => row.type ? [row.type.value] : []).sort() })),
-    scanned: { reading: reading.length, followed: followed.rows.length, limit: CONTINUE_COST.maxCandidates } };
+    scanned: { reading: reading.length, followed: followRows.length, limit: CONTINUE_COST.maxCandidates } };
 }
 
 /** A direct Work read never consults the ranked Continue preview, follows or
