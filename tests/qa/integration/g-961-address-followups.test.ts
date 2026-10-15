@@ -38,12 +38,24 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
     await objects.initialize();
     Object.assign(f.env, { structureObjects: objects });
     await f.grant('space:create:root', 'space.create');
+    const admin = new AccessRealmManagement(f.accessPool);
+    const app = createMainApp(f.env.fuseki, {
+      environment: f.env, account: f.account.verifier, access: f.access,
+      governance: { store: f.governance }, realmAdmin: admin,
+    });
+    const spaceCall = (method: string, path: string, body?: object) => app.handle(
+      new Request(`http://main.local${path}`, { method, headers: {
+        authorization: `Bearer ${f.account.tokenA}`, 'idempotency-key': randomUUID(),
+        ...(body ? { 'content-type': 'application/json' } : {}),
+      }, ...(body ? { body: JSON.stringify(body) } : {}) }));
     const createSite = async (disclosure: 'public' | 'private', name: string) => {
       const key = `site-${randomUUID().slice(0, 8)}`;
       const { space, realm } = await f.json<{ space: string; realm: string }>(
-        await f.call('POST', '/v1/spaces', {
+        await spaceCall('POST', '/v1/spaces', {
           profile: 'space-realm-v2', handle: key, name: 'A routed community',
           language: 'en', capabilities: ['realm'], actingSubject: f.actor,
+          initialSettings: { visibility: disclosure, reviewRequired: true, reviewMode: 'mandatory',
+            whoMaySubmit: 'granted', rules: [] },
         }), 201,
       );
       const zone = `https://rezics.com/id/${randomUUID()}`;
@@ -54,19 +66,16 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
       return { key, space, realm, zone };
     };
     let { key, space, realm, zone } = await createSite('public', 'A canonical Site');
-    const principal = await f.account.verifier.verify(new Request('http://main.local', {
-      headers: { authorization: `Bearer ${f.account.tokenA}` },
-    }), []);
-    const admin = new AccessRealmManagement(f.accessPool);
     const settings = async (visibility: 'public' | 'private') => {
-      await admin.initialize(principal, realm, f.actor, f.env);
-      await f.grant(`governance:realm:${realm}`, 'realm.owner');
-      const current = await admin.spaceSettings(principal, space, f.actor, f.env);
-      await admin.changeSpaceSettings(principal, space, {
+      await f.grant(`governance:realm:${realm}`, 'realm.settings.manage');
+      const path = `/v1/spaces/${space.slice(-36)}/settings`;
+      const current = await f.json<{ generation: string }>(await spaceCall('GET',
+        `${path}?actingSubject=${encodeURIComponent(f.actor)}`), 200);
+      await f.json(await spaceCall('PUT', path, {
         actingSubject: f.actor, expectedGeneration: current.generation,
         reason: 'Exercise canonical Site disclosure and listing',
         settings: { visibility, listing: 'unlisted', history: 'everything', admission: 'invitation' },
-      }, randomUUID(), f.env);
+      }), 201);
     };
     await f.grant(`zone:official:${zone}`, 'zone.official');
     await f.json(
@@ -78,11 +87,6 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
       }),
       200,
     );
-    const app = createMainApp(f.env.fuseki, {
-      environment: f.env,
-      account: f.account.verifier,
-      access: f.access,
-    });
     const publicCall = (path: string, body?: object) =>
       app.handle(
         new Request(`http://main.local${path}`, {
@@ -152,9 +156,8 @@ test('G961: registry mentions, viewer-aware private and unlisted Sites, canonica
     expect(await f.json(await publicCall('/v1/zones?official=true'), 200)).toMatchObject({
       items: expect.not.arrayContaining([expect.objectContaining({ zone })]),
     });
-    // A Zone's disclosure belongs to its immutable configuration. Create a
-    // private Zone through its owner rather than corrupting the public head;
-    // Space policy changes remain independent and use the policy owner.
+    // Zone creation must use its Space's current disclosure. Create the
+    // private Space first, then attach the private Site through its API.
     ({ key, space, realm, zone } = await createSite('private', canonical.suffixSource));
     canonical.key = key;
     await settings('private');

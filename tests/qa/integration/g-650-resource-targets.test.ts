@@ -12,12 +12,12 @@ import { RealmReplyThreadStore } from '../../../services/main/src/modules/realm-
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
 import { PersonPreferencesStore } from '../../../services/main/src/modules/preferences/store.ts';
+import { grantFixtureAuthority } from '../../../services/main/src/modules/access/fixture-authority.ts';
 import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { FeedRefreshWorker } from '../../../services/main/src/modules/feed/refresh.ts';
 import { FeedStore } from '../../../services/main/src/modules/feed/store.ts';
 import { initializeRelayCheckpoint, relayMainOutboxOnce } from '../../../services/main/src/modules/outbox/relay.ts';
 import { RelayHandoffPositions } from '../../../services/main/src/modules/outbox/relay-position.ts';
-import { workRead } from '../../../services/main/src/modules/work/read-session.ts';
 import { S3ImmutableObjects } from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
@@ -40,7 +40,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
   const consumer = `resource-targets-${randomUUID()}`;
   const feed = new FeedStore(f.accessPool);
   const deps = { environment: f.env, catalogueIntake: f.catalogueIntake, account: f.account.verifier,
-    access: f.access, content, contentAuthoring: content, realmReplies: replies, structureObjects,
+    access: f.access, governance: { store: f.governance }, content, contentAuthoring: content, realmReplies: replies, structureObjects,
     realmReplyThreads: new RealmReplyThreadStore(f.pool, f.accessPool), reviews: new ReaderReviews(f.accessPool),
     agentProvisioning: new AgentProvisioning(f.accessPool, f.env), personPreferences: new PersonPreferencesStore(f.accessPool),
     profiles: new ProfilesAccess(f.accessPool), feed, relayPosition: new RelayHandoffPositions(relayPool, consumer) };
@@ -93,26 +93,21 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     return { target: result.occurrences[0]!, revision: result.revision, structure: structure.structure };
   };
   try {
-    // Match the Realm fixture's source cut before projecting this file's commands.
+    // Feed and relay positions are Main stream sequences. Replay retained
+    // batches through the relay instead of substituting a graph sequence.
     await initializeRelayCheckpoint(relayPool, consumer, f.env.lineage.dataEpoch);
-    const position = await workRead(deps, new Request('http://main.internal/fixture-position'), {},
-      async session => session.position);
-    await relayPool.query('UPDATE relay.checkpoint SET sequence=$2 WHERE consumer=$1 AND data_epoch=$3',
-      [consumer, position.sequence, position.dataEpoch]);
-    await feed.advance(await feed.initialize(position.dataEpoch), position.sequence, [], new Map());
+    await feed.initialize(f.env.lineage.dataEpoch);
     const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
     try { await accountPool.query('UPDATE "user" SET "emailVerified" = true WHERE id = $1', [f.account.a.id]); }
     finally { await accountPool.end(); }
     f.account.tokenA = await f.account.tokenFor(f.account.a);
     const reviewer = await json<{ agent: string }>(await call('POST', '/v1/agents', {
       profile: 'agent-provision-v1', kind: 'person', displayName: 'SAO reader' }), 201);
-    const readerGrant = async (scope: string, action: string) => {
-      await f.accessPool.query('INSERT INTO access.scope_gate(id) VALUES ($1) ON CONFLICT DO NOTHING', [scope]);
-      await f.accessPool.query(`INSERT INTO access.representation(id,principal_id,subject_id,action,valid_until)
-        VALUES ($1,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), f.principalId, reviewer.agent, action]);
-      await f.accessPool.query(`INSERT INTO access.permission_grant(id,issuer_subject,recipient_subject,scope_id,action,valid_until)
-        VALUES ($1,$2,$2,$3,$4,now() + interval '1 hour')`, [randomUUID(), reviewer.agent, scope, action]);
-    };
+    const readerGrant = (scope: string, action: string) => grantFixtureAuthority(f.accessPool, {
+      scope, requireDispatch: true,
+      representations: [{ principalId: f.principalId, actor: reviewer.agent, action, lifetime: '8 hours' }],
+      grant: { actor: reviewer.agent, action, lifetime: '8 hours' },
+    });
     const sao = { web: await work('Sword Art Online'), bunko: await work('Sword Art Online'),
       unpublished: await json<Work>(await call('POST', '/v1/works', { profile: 'metadata-only-v1',
         authoring: 'own-work', title: 'Unpublished editorial notes', language: 'en',
@@ -154,11 +149,9 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       key: string; identityKey: string; revisionId: string }[] = [];
     for (const root of targets) {
       const reply = nativeId();
-      await f.grant(`content:draft:${reply}`, 'content.draft');
-      await f.grant(`reply:create:${root.target}`, 'reply.create');
       const input = { profile: 'member-reply-draft-v1', reply, variantId: `urn:rezics:variant:${randomUUID()}`,
         rootTarget: root.target, rootRevision: root.revision, language: 'en', direction: 'ltr', expectedHead: null,
-        body: `Discussion about ${root.target}`, actingSubject: f.actor };
+        body: `Discussion about ${root.target}`, actingSubject: reviewer.agent };
       const key = randomUUID();
       const draft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', input, true, key), 201);
       const identityKey = randomUUID();
@@ -166,10 +159,10 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       expect(await json(await call('POST', '/v1/member-reply-drafts', input, true, key)))
         .toMatchObject({ revisionId: draft.revisionId, replayed: true });
       await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply,
-        variantId: input.variantId, revisionId: draft.revisionId, author: f.actor, rootTarget: root.target,
+        variantId: input.variantId, revisionId: draft.revisionId, author: reviewer.agent, rootTarget: root.target,
         rootRevision: root.revision, parentReply: null, parentRevision: null, contextRevision: null }, true, identityKey), 201);
       const current = await json<{ revisionDigest: string }>(await call('GET',
-        `/v1/member-replies/${shortId(reply)}?actingSubject=${encodeURIComponent(f.actor)}`));
+        `/v1/member-replies/${shortId(reply)}?actingSubject=${encodeURIComponent(reviewer.agent)}`));
       const approved = await json<{ decisionId: string }>(await call('POST', '/v1/realm-reply-reviews', {
         profile: 'realm-reply-review-v1', realm: realm.realm, reply, revisionId: draft.revisionId,
         revisionDigest: current.revisionDigest, expectedGeneration: '0', supersedes: null,
@@ -209,7 +202,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
       expect(await json(await call('POST', '/v1/member-reply-drafts', input, true, key)))
         .toMatchObject({ revisionId, replayed: true });
       expect(await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1',
-        reply: input.reply, variantId: input.variantId, revisionId, author: f.actor,
+        reply: input.reply, variantId: input.variantId, revisionId, author: reviewer.agent,
         rootTarget: input.rootTarget, rootRevision: input.rootRevision, parentReply: null,
         parentRevision: null, contextRevision: null }, true, identityKey))).toMatchObject({ replayed: true });
     }
@@ -221,7 +214,6 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     }
     const oldCharacter = retained[1]!;
     const obsoleteReply = nativeId();
-    await f.grant(`content:draft:${obsoleteReply}`, 'content.draft');
     expect((await call('POST', '/v1/member-reply-drafts', { ...oldCharacter.input,
       reply: obsoleteReply, variantId: `urn:rezics:variant:${randomUUID()}` })).status).toBe(403);
     await json(await call('POST', '/v1/member-reply-drafts', { ...oldCharacter.input,
@@ -230,11 +222,10 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     const fullToken = f.account.tokenA;
     f.account.tokenA = await f.account.tokenFor(f.account.a, 'openid comment:create work:edit');
     const scopedReply = nativeId(), variantId = `urn:rezics:variant:${randomUUID()}`;
-    await f.grant(`content:draft:${scopedReply}`, 'content.draft');
     const scopedDraft = await json<{ revisionId: string }>(await call('POST', '/v1/member-reply-drafts', {
       ...oldCharacter.input, reply: scopedReply, variantId, rootRevision: editedCharacter.revision }), 201);
     await json(await call('POST', '/v1/realm-replies', { profile: 'realm-reply-identity-v1', reply: scopedReply,
-      variantId, revisionId: scopedDraft.revisionId, author: f.actor, rootTarget: character.component,
+      variantId, revisionId: scopedDraft.revisionId, author: reviewer.agent, rootTarget: character.component,
       rootRevision: editedCharacter.revision, parentReply: null, parentRevision: null, contextRevision: null }), 201);
     f.account.tokenA = fullToken;
     expect(await json(await discussion(sao.bunko.work, false))).toMatchObject({ items: [] });
@@ -281,7 +272,7 @@ test('G-650: API discussions keep SAO occurrence, character, release and metadat
     } }`);
     expect(await json(await discussion(chapter.target))).toMatchObject({ items: [] });
     expect((await call('GET', `/v1/member-replies/${shortId(retained[0]!.input.reply)}`
-      + `?actingSubject=${encodeURIComponent(f.actor)}`)).status).toBe(404);
+      + `?actingSubject=${encodeURIComponent(reviewer.agent)}`)).status).toBe(404);
     expect((await call('POST', '/v1/member-reply-drafts', { ...retained[0]!.input,
       expectedHead: retained[0]!.revisionId, body: 'Erased root cannot be edited' })).status).toBe(403);
     await project();
