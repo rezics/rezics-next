@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { assertSelectedQueryCost } from './support/selected-query-cost.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import { Elysia } from 'elysia';
 import { readingPositionsRoutes } from '../src/routes/reading-positions.ts';
@@ -432,8 +433,7 @@ test('G954: real chooser route searches all carried languages at bounded graph c
     expect(page.items.map((item: ReadingOccurrence) => item.occurrence)).toEqual([chapters[999]!.occurrence]);
     expect(page.items[0].labels).toEqual(chapters[999]!.labels);
     expect(page.resolved).toBe('start'); expect(page.nextCursor).toBeNull(); expect(page.complete).toBe(true);
-    const calls = f.queryCalls() - before;
-    expect(calls).toBeLessThan(10);
+    assertSelectedQueryCost(f.queries.slice(before), 9);
   }
   expect(f.historyReads()).toBe(0);
 });
@@ -524,7 +524,7 @@ test('G954: 20005 chapters list, search and resolve positions beyond the old cei
     expect(response.status).toBe(200);
     expect(await response.json()).toMatchObject({ items: [{ occurrence: inventory.at(-1)!.occurrence, ordinal: 20_005 }],
       resolved: inventory.at(-1)!.occurrence, complete: true, nextCursor: null });
-    expect(f.queryCalls() - before).toBeLessThan(12);
+    assertSelectedQueryCost(f.queries.slice(before), 11);
   }
   f.own(); f.completed.add(inventory[10_000]!.occurrence);
   const progress = await f.call({ q: '重逢' }, 'reader');

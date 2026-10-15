@@ -244,7 +244,8 @@ for (const signed of [false, true]) {
     expect(page.items.map((item) => item.work)).toEqual([id(2), id(3)]);
     expect(page.count.value).toBe(2);
     expect(page.nextCursor).toBeNull();
-    expect(f.batches).toHaveLength(1);
+    expect(f.batches.map(batch => batch.map(target => target.resource)))
+      .toEqual([[realm], [id(11), id(12), id(13)], [realm]]);
     await expect(readRealmDecision(f.session, realm, id(11))).rejects.toThrow(
       'Decision is unavailable',
     );
@@ -284,7 +285,8 @@ for (const signed of [false, true]) {
       [id(2), id(3)],
       [id(2), id(3)],
     ]);
-    expect(f.batches).toHaveLength(1);
+    expect(f.batches.map(batch => batch.map(target => target.resource)))
+      .toEqual([[id(99)], [id(1), id(2), id(3)], [id(99)]]);
   });
 
   test(`G-904: rankings fill admitted scores and use only admitted lookahead (${signed ? 'signed' : 'anonymous'})`, async () => {

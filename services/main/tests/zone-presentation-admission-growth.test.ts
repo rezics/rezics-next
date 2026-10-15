@@ -265,7 +265,7 @@ test('Zone presentation navigation batches duplicate 4/16/64 mounts in constant 
       expect(result.status, JSON.stringify(result.body)).toBe(200);
       expect(result.body.mounts).toEqual(f.records.slice(0, 50));
       expect(!!result.body.next).toBe(count > 50);
-      expect(result.batches).toEqual([f.targets]);
+      expect(result.batches).toEqual([f.targets, [...new Set(f.records.slice(0, 50).map(record => record.target!))]]);
       costs.push({ sql: result.sql, fuseki: result.fuseki });
     } finally { f.close(); }
   }
@@ -281,7 +281,7 @@ test('Zone presentation batches distinct 4/16/64 targets, retaining current per-
       const result = await f.read();
       expect(result.status, JSON.stringify(result.body)).toBe(200);
       expect(result.body.mounts).toEqual(f.records.slice(0, 50));
-      expect(result.batches).toEqual([f.targets]);
+      expect(result.batches).toEqual([f.targets, [...new Set(f.records.slice(0, 50).map(record => record.target!))]]);
       expect(result.fuseki).toBeLessThanOrEqual(20 + 5 * count);
       expect(result.sql).toBeLessThanOrEqual(45 + 16 * count);
       costs.push({ targets: count, sql: result.sql, fuseki: result.fuseki });
@@ -296,7 +296,8 @@ test('Zone presentation hides denied targets and propagates unavailable admissio
     const result = await denied.read();
     expect(result.status, JSON.stringify(result.body)).toBe(200);
     expect(result.body.mounts).toEqual(denied.records.filter((_, index) => index % 2 !== 0));
-    expect(result.batches).toEqual([denied.targets]);
+    expect(result.batches).toEqual([denied.targets,
+      denied.records.filter((_, index) => index % 2 !== 0).map(record => record.target!)]);
   } finally { denied.close(); }
   const failed = await fixture(4);
   try {

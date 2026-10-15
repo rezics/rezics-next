@@ -186,7 +186,8 @@ test('a 1,200-chapter book resumes at chapter 1,150 with that chapter\'s name', 
     displayLabel: 'Chapter 1150',
   });
   expect(answer.body.items![0]!.ordinal).toBeUndefined();
-  expect(answer.labelQueries).toHaveLength(1);
+  expect(answer.labelQueries).toHaveLength(2);
+  expect(answer.labelQueries[1]).toBe(answer.labelQueries[0]);
   expect(answer.labelQueries[0]).toContain(`BIND(<${f.chapters[1_149]!.occurrence}> AS ?occurrence)`);
   expect(answer.labelQueries[0]).toContain(`LIMIT ${READING_POSITION_COST.labels}`);
 });
@@ -228,5 +229,6 @@ test('the resume read\'s statement count does not grow with the structure\'s siz
   expect(late.statements).toBe(early.statements);
   expect(late.sql).toBe(near.sql);
   expect(late.sql).toBe(early.sql);
-  expect(late.labelQueries).toHaveLength(1);
+  expect(late.labelQueries).toHaveLength(2);
+  expect(late.labelQueries[1]).toBe(late.labelQueries[0]);
 });
