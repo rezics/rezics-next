@@ -201,10 +201,10 @@ test('First-publication years: newest page, incremental posting, and a seek that
     const growth = [];
     for (const population of [50, 500, POPULATION]) {
       await stack.accessPool.query(`INSERT INTO access.template_seek_entity(epoch,graph,id,sequence,payload)
-        SELECT $1,$2,'urn:year-population:'||n,0,'{}'::jsonb FROM generate_series(1,$3) n ON CONFLICT DO NOTHING`,
+        SELECT $1,$2,'urn:rezics:year-population:'||n,0,'{}'::jsonb FROM generate_series(1,$3) n ON CONFLICT DO NOTHING`,
       [epoch, GRAPHS.current, population]);
       await stack.accessPool.query(`INSERT INTO access.template_seek_entry(epoch,graph,predicate,anchor,type,key,id)
-        SELECT $1,$2,$3,$4,$5,'9999','urn:year-population:'||n FROM generate_series(1,$6) n ON CONFLICT DO NOTHING`,
+        SELECT $1,$2,$3,$4,$5,'9999','urn:rezics:year-population:'||n FROM generate_series(1,$6) n ON CONFLICT DO NOTHING`,
       [epoch, GRAPHS.current, FIRST_PUBLICATION_PREDICATE, FIRST_PUBLICATION_ANCHOR, FIRST_PUBLICATION_TYPE, population]);
       const measured = await measure(scoped);
       growth.push({ population, ...measured });

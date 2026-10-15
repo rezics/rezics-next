@@ -100,7 +100,7 @@ test('Continue traverses long reading and follow inventories, with private curso
     const hidden = first.items[0]!.work;
     await home.json(await home.call('PUT', `/v1/me/continue/${hidden.slice(-36)}/hidden`,
       { actingSubject: seeded.reader, hidden: true }, home.reader.token));
-    expect((await read(first.nextCursor!)).status).toBe(410);
+    expect((await read(first.nextCursor!)).status).toBe(409);
     const visible: string[] = [];
     let cursor: string | undefined;
     for (let step = 0; step < 50; step++) {
