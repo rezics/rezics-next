@@ -143,7 +143,7 @@ test('keys bind actual producer/helper/schema bytes, complete populations and na
 // Cold subprocess imports traverse Main and Account; allow host contention while retaining a bounded exit check.
 test('the explicit preparation entry imports outside the Bun test runner without starting an application', async () => {
   const child = Bun.spawn(['bun', '-e', "import('./tests/qa/support/realm-discussion-source-runtime.ts').then(m => { if (typeof m.realmSourceRuntime !== 'function') process.exit(2); })"],
-    { cwd: join(import.meta.dir, '../../..'), env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    { cwd: join(import.meta.dir, '../../..'), env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined }, stdout: 'pipe', stderr: 'pipe' });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
 }, 30_000);
@@ -158,10 +158,20 @@ test('the source cost contract imports in the QA planner without registering per
   expect(code, stderr).toBe(0);
 }, 30_000);
 
+test('importing the shared Realm fixture installs no test hooks outside the runner', async () => {
+  const child = Bun.spawn(['bun', '-e', "await import('./tests/qa/support/personas.ts'); await import('./scripts/qa/bootstrap.ts')"], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code, stderr).toBe(0);
+}, 30_000);
+
 test('the preparation entry reaches admission without awaiting its own dynamic import', async () => {
   const child = Bun.spawn(['bun', 'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare'], {
     cwd: join(import.meta.dir, '../../..'),
-    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1', REZICS_QA_RUN_ID: undefined },
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined, REZICS_QA_RUN_ID: undefined },
     stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
   });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
@@ -183,7 +193,7 @@ test('Account diagnostics omit verification credentials without changing the act
       throw new Error('Account diagnostics must contain timing and identity only');
   `;
   const child = Bun.spawn(['bun', '-e', script], { cwd: join(import.meta.dir, '../../..'),
-    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1' }, stdout: 'pipe', stderr: 'pipe' });
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: undefined }, stdout: 'pipe', stderr: 'pipe' });
   const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
   expect(code, stderr).toBe(0);
 }, 30_000);

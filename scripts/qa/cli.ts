@@ -776,8 +776,7 @@ async function runShardWork(
     const prepared = await commandAsync(root, 'bun', [
       'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare',
     ], realmSourceBuildDeadlineMs + 600_000, { ...environment, ...apps,
-      REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory,
-      REZICS_REALM_SOURCE_PREPARATION: '1' }, noteMemory, { runDeadline });
+      REZICS_QA_RUN_ID: projectRunId, REZICS_QA_ARTIFACT_DIR: directory }, noteMemory, { runDeadline });
     writeFileSync(join(logs, `${label}-realm-discussion-source.log`), prepared.output);
     if (!prepared.ok) {
       errors.push(`Realm source preparation failed before operation clock (${label})`);
