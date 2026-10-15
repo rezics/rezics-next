@@ -95,9 +95,11 @@ test('G262 admin panel: directory operators, exact jump, work queues and per-ope
     expect(supportView.recentActions).toBeNull();
     expect((await f.request('/api/account/admin/overview', undefined, li.cookie)).status).toBe(403);
 
-    // Preferences are private, reversible display state: no step-up needed.
+    // The operator factor policy also protects private display preferences.
     await age(f, support);
     expect((await act(f, pending.id, { action: 'resend-verification', reason: 'Asked for a new link' }, support.cookie)).status).toBe(403);
+    expect((await f.request('/api/account/admin/preferences', undefined, support.cookie)).status).toBe(403);
+    await enrollSecondFactor(f, support);
     expect(await json<object>(f.request('/api/account/admin/preferences', undefined, support.cookie)))
       .toEqual({ density: 'comfortable', columns: null, views: [] });
     const views = [{ id: 'suspended', name: '暂停的用户', query: 'status:suspended' }];
