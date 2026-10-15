@@ -30,7 +30,8 @@ function findMembership(node: ReactNode): ComponentProps<typeof RealmMembership>
   if (Array.isArray(node)) return node.map(findMembership).find(Boolean) ?? null;
   if (!isValidElement<{ children?: ReactNode }>(node)) return null;
   return node.type === RealmMembership
-    ? (node as ReactElement<ComponentProps<typeof RealmMembership>>).props : findMembership(node.props.children);
+    ? (node as ReactElement<ComponentProps<typeof RealmMembership>>).props
+    : Object.values(node.props).map(findMembership).find(Boolean) ?? null;
 }
 
 async function visit(persona: AnswerPersona, label: string, locale: UiLocale = 'en',
