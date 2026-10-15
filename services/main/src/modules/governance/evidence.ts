@@ -316,7 +316,7 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
   };
 }
 
-/** Current heads for staleness: graph `rv:head` of a Realm/Work/Main Version and a Content variant draft head. */
+/** Current owner heads for staleness, including exact media Uses and Asset state. */
 export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; content?: Pool }): TargetHeads {
   return {
     async realmBasis(target) {
@@ -371,6 +371,18 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
         [target.resource, target.revision && uuid.test(target.revision) ? target.revision : null,
           target.locator])).rows[0];
         return row?.draft_head ?? null;
+      }
+      if (target.owner === 'media' && owners.content && agent.test(target.resource)) {
+        if (target.component === 'media_use') {
+          if (!target.locator || !uuid.test(target.locator)) return null;
+          const row = (await owners.content.query<{ head: string }>(`SELECT asset_revision_id::text AS head
+            FROM media.use WHERE id = $1 AND target = $2`,
+          [target.locator, target.resource])).rows[0];
+          return row?.head ?? null;
+        }
+        const row = (await owners.content.query<{ head: string }>(`SELECT state_head::text AS head
+          FROM media.asset WHERE id = $1`, [target.resource.slice('https://rezics.com/id/'.length)])).rows[0];
+        return row?.head ?? null;
       }
       return null;
     },
