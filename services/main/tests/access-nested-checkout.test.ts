@@ -8,7 +8,7 @@ import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { boundedPool, NestedPoolCheckoutError, nestedPoolCheckoutMode, setNestedPoolCheckoutMode } from '../src/infrastructure/pg-pool.ts';
 import type { FusekiClient, TemplateIndexDelta, TemplateIndexKey } from '../src/infrastructure/fuseki.ts';
-import { AccessAdmissionRegistry, AdmissionUnavailable, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
+import { AccessAdmissionRegistry, AdmissionDenied, AdmissionUnavailable, type VerifiedPrincipal } from '../src/modules/access/admission.ts';
 import { GovernanceRules, realmRulesRef } from '../src/modules/governance/rules.ts';
 import { GovernanceUnavailable } from '../src/modules/governance/store.ts';
 import { AccountAssertionDenied } from '../src/modules/account/verify-assertion.ts';
@@ -141,6 +141,18 @@ test('a semantic admission graph callback joins topology reads on its one held c
         expect((await client.query("SHOW statement_timeout")).rows[0]?.statement_timeout).toBe('5s');
         calls++;
       });
+
+test('authority probes reuse the held transaction and roll back only their own work', async () => {
+  await controlTransaction(pool, async client => {
+    const before = (await client.query('SELECT txid_current()::text AS id')).rows[0]!.id;
+    const admissions = (await client.query('SELECT count(*)::text AS count FROM access.admission')).rows;
+    await admission.assertAuthority(ownerRequest);
+    await expect(admission.assertAuthority({ ...ownerRequest, principal: absent })).rejects.toBeInstanceOf(AdmissionDenied);
+    expect((await client.query('SELECT txid_current()::text AS id')).rows[0]!.id).toBe(before);
+    expect((await client.query('SELECT count(*)::text AS count FROM access.admission')).rows).toEqual(admissions);
+    expect(await admission.activePrincipalId(principal)).toBe(principalId);
+  });
+});
     }
     return { results: { bindings: [] } };
   } });

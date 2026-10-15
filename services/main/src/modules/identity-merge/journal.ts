@@ -1,4 +1,5 @@
 import type { Pool, PoolClient } from 'pg';
+import { accessClient, inExplicitTransaction, withAccessClient } from '../access/topology-control.ts';
 import { canonicalCandidate, revisionOperationKey, type Json } from '../editorial-review/contract.ts';
 import { checkedItem, checkedOutcome, checkedPlan, InvalidMerge, MERGE_COST, mergeDigest,
   itemCommandKey, MergeConflict, MergePending, MergeUnavailable, type MergeItem, type MergeTask, type RecordedItem,
@@ -88,34 +89,40 @@ function taskRow(row: TaskRow): MergeTask {
 export class AccessMergeJournal implements MergeJournal {
   constructor(private readonly pool: Pool) {}
   async locked<T>(key: string, operation: (scope: MergeJournalScope) => Promise<T>): Promise<T> {
-    const client = await this.pool.connect();
+    const borrowed = accessClient(this.pool);
+    const client = borrowed ?? await this.pool.connect();
+    const nestedTransaction = !!borrowed && await inExplicitTransaction(client);
     let locked = false, discard = false;
     try {
-      await client.query("SET statement_timeout = '5s'");
+      if (!borrowed) await client.query("SET statement_timeout = '5s'");
       const row = (await client.query<{ locked: boolean }>(
         'SELECT pg_try_advisory_lock(hashtextextended($1,0)) AS locked', [`identity-merge:${key}`])).rows[0];
       if (!row?.locked) throw new MergePending('Merge task is already running');
       locked = true;
-      return await operation(this.scope(key, client));
+      return await withAccessClient(this.pool, () => operation(this.scope(key, client, nestedTransaction)), client);
     } finally {
       try {
-        await client.query('ROLLBACK');
+        if (!borrowed) await client.query('ROLLBACK');
         if (locked) await client.query('SELECT pg_advisory_unlock(hashtextextended($1,0))', [`identity-merge:${key}`]);
-        await client.query('RESET statement_timeout');
+        if (!borrowed) await client.query('RESET statement_timeout');
       } catch { discard = true; }
-      client.release(discard);
+      if (!borrowed) client.release(discard);
     }
   }
-  private scope(key: string, client: PoolClient): MergeJournalScope {
+  private scope(key: string, client: PoolClient, borrowed = false): MergeJournalScope {
     const transaction = async <T>(work: () => Promise<T>): Promise<T> => {
       try {
-        await client.query('BEGIN');
+        await client.query(borrowed ? 'SAVEPOINT merge_journal' : 'BEGIN');
         await client.query("SET LOCAL lock_timeout = '2s'");
         if (!(await client.query('SELECT 1 FROM access.recovery_fence WHERE id AND open FOR SHARE')).rowCount) {
           throw new MergeUnavailable('Access recovery is held');
         }
-        const result = await work(); await client.query('COMMIT'); return result;
-      } catch (error) { await client.query('ROLLBACK'); throw error; }
+        const result = await work(); await client.query(borrowed ? 'RELEASE SAVEPOINT merge_journal' : 'COMMIT'); return result;
+      } catch (error) {
+        await client.query(borrowed ? 'ROLLBACK TO SAVEPOINT merge_journal' : 'ROLLBACK');
+        if (borrowed) await client.query('RELEASE SAVEPOINT merge_journal');
+        throw error;
+      }
     };
     const load = async (taskKey: string) => {
       const row = (await client.query<TaskRow>('SELECT * FROM access.identity_merge_task WHERE task_key = $1', [taskKey])).rows[0];

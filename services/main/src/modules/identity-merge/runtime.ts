@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { accessClient } from '../access/topology-control.ts';
 import type { EditorialRuntime } from '../editorial-review/runtime.ts';
 import { EditorialBlocked, EditorialInvalid } from '../editorial-review/contract.ts';
 import { workRead } from '../work/read-session.ts';
@@ -47,7 +48,7 @@ export function mergeTaskRuntime(runtime: EditorialRuntime): MergeTaskRuntime<Me
     async finish(task: MergeTask,commandKey: string) {
       const receipt = await readMergeIdentityReceipt(env,task);
       if (!receipt) throw new MergeUnavailable('Identity effect is unavailable');
-      const rows = (await dependencies.accessPool.query<{ outcome: string; count: string }>(`SELECT outcome,count(*)::text AS count
+      const rows = (await (accessClient(dependencies.accessPool) ?? dependencies.accessPool).query<{ outcome: string; count: string }>(`SELECT outcome,count(*)::text AS count
         FROM access.identity_merge_item_outcome WHERE task_key=$1 GROUP BY outcome`,[task.key])).rows;
       return { receipt,commandKey,result: { operation: task.plan.operation,source: task.plan.source.resource,
         survivor: task.plan.survivor.resource,outcomes: Object.fromEntries(rows.map(row => [row.outcome,Number(row.count)])) } };

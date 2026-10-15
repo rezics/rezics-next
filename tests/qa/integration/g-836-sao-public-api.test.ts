@@ -1,9 +1,10 @@
 import { expect, test } from 'bun:test';
+import { AsyncResource } from 'node:async_hooks';
 import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomBytes, randomUUID } from 'node:crypto';
 import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 import { POLICY_VERSIONS } from '../../../services/account/src/policy-versions.ts';
 import { createMainApp } from '../../../services/main/src/app.ts';
 import { AgentProvisioning } from '../../../services/main/src/modules/agent/provision.ts';
@@ -11,7 +12,9 @@ import { discoverEditorialAdapters } from '../../../services/main/src/modules/ed
 import { EditorialReviewStore } from '../../../services/main/src/modules/editorial-review/store.ts';
 import type { OwnerReceipt } from '../../../services/main/src/modules/editorial-review/contract.ts';
 import { ReaderLibraryStatusStore } from '../../../services/main/src/modules/library/status.ts';
+import { ReaderLibraryRatings } from '../../../services/main/src/modules/library/ratings.ts';
 import { FollowsStore } from '../../../services/main/src/modules/follows/store.ts';
+import { ProfilesAccess } from '../../../services/main/src/modules/profiles/access.ts';
 import { ReaderReviews } from '../../../services/main/src/modules/review/store.ts';
 import { StructureProgressStore } from '../../../services/main/src/modules/progress/store.ts';
 import { discoverMergeHandlers, assertMergeCoverage } from '../../../services/main/src/modules/identity-merge/handlers.ts';
@@ -25,7 +28,7 @@ import { GLOBAL_CONTEXT_SCOPE } from '../../../services/main/src/modules/rating/
 import { standingRatingSlotIri } from '../../../services/main/src/modules/rating/observation.ts';
 import { authorCreditFixture, nativeId, shortId } from '../fixtures/author-credit.ts';
 
-const scopes = 'openid work:create work:edit work:read work:correct work:review work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read address:claim agent:create space:create rating:configure rating:submit follow:write follow:read library:write';
+const scopes = 'openid work:create work:edit work:read work:correct work:review work:protect source:intake source:acquire source:convert source:propose source:adopt source:correspond source:read address:claim agent:create space:create rating:configure rating:submit rating:read follow:write follow:read library:write';
 interface Command { proposal: string; revision: number; outcome: string; receipt?: OwnerReceipt }
 
 test('G836: public SAO merge and unmerge require independent humans, survive lost acknowledgement, resolve old addresses and reconcile person state', async () => {
@@ -33,53 +36,52 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
   const directory = resolve('.temp',`g-836-sao-${randomUUID()}`), started = Date.now();
   const f = await authorCreditFixture(Bun.env as Record<string,string>,directory,scopes);
   const accountPool = new Pool({ connectionString: Bun.env.ACCOUNT_DATABASE_URL });
+  const competingRequest = new AsyncResource('independent-reader-edit');
   let loseLibraryAcknowledgement = false, libraryCommits = 0;
   const interleavedEdits = new Map<string,() => Promise<void>>();
-  const interleavedPool = (pool: Pool) => new Proxy(pool,{ get(target,property) {
-    if (property === 'connect') return async () => {
-      const client = await target.connect();
-      return new Proxy(client,{ get(native,key) {
-        if (key === 'query') return async (query: string,parameters?: unknown[]) => {
+  const interleavedPool = (pool: Pool, loseCommit = false) => {
+    const connect = pool.connect, observed = new WeakSet<PoolClient>();
+    const observe = (client: PoolClient) => {
+      if (observed.has(client)) return;
+      observed.add(client);
+      const original = client.query;
+      let effect = false;
+      client.query = (async (...args: unknown[]) => {
+          const query = typeof args[0] === 'string' ? args[0] : '';
+          const parameters = Array.isArray(args[1]) ? args[1] : undefined;
           const commandKey = parameters?.[0],edit = typeof commandKey === 'string' && query.includes('_merge_receipt')
             ? interleavedEdits.get(commandKey) : undefined;
           if (edit) {
             interleavedEdits.delete(commandKey as string);
             // The interleaved HTTP request has its own graph budget, as it
             // would when another reader edits while merge delivery is paused.
-            await fusekiReadBudget.exit(edit);
+            await competingRequest.runInAsyncScope(() => fusekiReadBudget.exit(edit));
           }
-          return native.query(query,parameters);
-        };
-        const value: unknown = Reflect.get(native,key,native);
-        return typeof value === 'function' ? value.bind(native) : value;
-      } });
-    };
-    const value: unknown = Reflect.get(target,property,target);
-    return typeof value === 'function' ? value.bind(target) : value;
-  } }) as Pool;
-  const mergeAccessPool = interleavedPool(f.accessPool);
-  // Lose acknowledgement after the native effect/receipt COMMIT, before the
-  // Access item journal can record it. Restart must find the native receipt.
-  const faultPool = new Proxy(interleavedPool(f.pool),{ get(target,property) {
-    if (property === 'connect') return async () => {
-      const client = await target.connect(); let effect = false;
-      return new Proxy(client,{ get(native,key) {
-        if (key === 'query') return async (query: string,parameters?: unknown[]) => {
-          if (foregroundCounted() && query.includes('INSERT INTO reader.library_status_merge_receipt')) effect = true;
-          const result = await native.query(query,parameters);
-          if (foregroundCounted() && query === 'COMMIT' && effect) {
+          if (loseCommit && foregroundCounted() && query.includes('INSERT INTO reader.library_status_merge_receipt')) effect = true;
+          const result = await Reflect.apply(original, client, args);
+          if (loseCommit && foregroundCounted() && query === 'COMMIT' && effect) {
             libraryCommits++; effect = false;
             if (loseLibraryAcknowledgement) { loseLibraryAcknowledgement = false; throw new Error('lost committed library acknowledgement'); }
           }
           return result;
-        };
-        const value: unknown = Reflect.get(native,key,native);
-        return typeof value === 'function' ? value.bind(native) : value;
-      } });
+      }) as PoolClient['query'];
     };
-    const value: unknown = Reflect.get(target,property,target);
-    return typeof value === 'function' ? value.bind(target) : value;
-  } }) as Pool;
+    // Preserve pool/client identity so nested owners can join the held checkout.
+    pool.connect = function (...args: unknown[]) {
+      const callback = args[0];
+      if (typeof callback === 'function') return Reflect.apply(connect, pool, [
+        (error: Error | undefined, client: PoolClient | undefined, release: unknown) => {
+          if (client) observe(client);
+          callback(error, client, release);
+        }]);
+      return (Reflect.apply(connect, pool, args) as Promise<PoolClient>).then(client => { observe(client); return client; });
+    } as Pool['connect'];
+    return pool;
+  };
+  const mergeAccessPool = interleavedPool(f.accessPool);
+  // Lose acknowledgement after the native effect/receipt COMMIT, before the
+  // Access item journal can record it. Restart must find the native receipt.
+  const faultPool = interleavedPool(f.pool, true);
   const diagnostics: string[] = [], modules = discoverEditorialAdapters().then(installed => {
     const native = installed.get('merge')!;
     installed.set('merge',{ ...native,create(runtime) {
@@ -95,7 +97,8 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     identityMerge: { accessPool: mergeAccessPool,contentPool: faultPool },
     agentProvisioning: new AgentProvisioning(f.accessPool,f.env),
     editorialReview: new EditorialReviewStore(mergeAccessPool,modules),libraryStatus: new ReaderLibraryStatusStore(f.pool),
-    follows: new FollowsStore(f.accessPool),reviews: new ReaderReviews(f.accessPool),progress: new StructureProgressStore(f.pool) };
+    follows: new FollowsStore(f.accessPool),profiles: new ProfilesAccess(f.accessPool),libraryRatings: new ReaderLibraryRatings(f.accessPool),
+    reviews: new ReaderReviews(f.accessPool),progress: new StructureProgressStore(f.pool) };
   let app = createMainApp(f.env.fuseki,deps);
   const call = (method: string,path: string,body?: object,token: string | null = f.account.tokenA,key = randomUUID()) =>
     app.handle(new Request(`http://main.local${path}`,{ method,headers: { 'idempotency-key': key,
@@ -138,7 +141,10 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
     // Reviewed merge admission probes ordinary edit authority for both owners.
     // Catalogue review eligibility alone cannot supply those owner permits.
     const editPair = async (principal: string,actor: string) => {
-      for (const work of [source.work,survivor.work]) await grant(principal,actor,`work:edit:${work}`,'work.edit');
+      for (const work of [source.work,survivor.work]) {
+        await grant(principal,actor,`work:edit:${work}`,'work.edit');
+        await grant(principal,actor,`work:read:${work}`,'work.read');
+      }
     };
     for (const [principal,actor] of [[f.principalId,actorA],[f.otherPrincipal,actorB],[principalC,actorC]]) await editPair(principal!,actor!);
     for (const work of [source.work,survivor.work]) await f.grant(`work:read:${work}`,'work.read');
@@ -386,5 +392,5 @@ test('G836: public SAO merge and unmerge require independent humans, survive los
       .toEqual([{ body: 'Interleaved survivor review' }]);
     expect((await f.pool.query('SELECT to_jsonb(p) AS row FROM structure.progress p WHERE structure=$1',[structure])).rows).toEqual(progressBefore);
     expect(Date.now()-started).toBeLessThan(600_000);
-  } finally { await accountPool.end(); await f.close(); rmSync(directory,{ recursive: true,force: true }); }
+  } finally { competingRequest.emitDestroy(); await accountPool.end(); await f.close(); rmSync(directory,{ recursive: true,force: true }); }
 },120_000);

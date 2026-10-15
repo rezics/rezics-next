@@ -1,4 +1,5 @@
 import type { PoolClient } from 'pg';
+import { accessClient } from '../access/topology-control.ts';
 import type { Json } from '../editorial-review/contract.ts';
 import type { MergeDependencies } from '../identity-merge/runtime.ts';
 import { personMergeEffect } from '../identity-merge/person-effect.ts';
@@ -27,7 +28,7 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
     // admitted Context, including when its principal is the all-zero UUID.
     const [principal,context] = after?.split('|') ?? ['00000000-0000-0000-0000-000000000000',''];
     const windows = await Promise.all([RATING_MERGE_NATIVE_INVENTORY_SQL,RATING_MERGE_SELECTION_INVENTORY_SQL]
-      .map(async sql => (await accessPool.query<{ principal: string; context: string }>(sql,
+      .map(async sql => (await (accessClient(accessPool) ?? accessPool).query<{ principal: string; context: string }>(sql,
         [task.plan.source.resource,principal,context,limit+1])).rows.map(row => `${row.principal}|${row.context}`)));
     const compare = (left: string,right: string) => Buffer.compare(Buffer.from(left),Buffer.from(right));
     const frontiers = windows.filter(rows => rows.length === limit+1).map(rows => rows.at(-1)!).sort(compare);
@@ -98,13 +99,13 @@ export function ratingMergeHandler({ accessPool,graph }: MergeDependencies): Mer
     cost: { page: MERGE_COST.page,callsPerItem: 24,bytesPerItem: MERGE_COST.itemBytes },
     async preview(plan) { const page = await inventory({ plan },null,32); return { owner,count: page.keys.length,complete: page.next === null }; },
     async plan(task,after,limit) {
-      const page = await inventory(task,after,limit), client = await accessPool.connect();
+      const page = await inventory(task,after,limit), borrowed = accessClient(accessPool), client = borrowed ?? await accessPool.connect();
       try {
         const items = [];
         for (const key of page.keys) { const context = key.split('|')[1]!;
           const before = await standing(context) ? await pair(client,task,key) : { policy: 'exact-rating-grain',context }; items.push({ key,expectedHead: mergeDigest(before),before: before as unknown as Json }); }
         return { items,next: page.next };
-      } finally { client.release(); }
+      } finally { if (!borrowed) client.release(); }
     },apply: (task,item,key) => deliver(task,item,key),compensate: (task,item,key) => deliver(task,item,key,item) };
 }
 export const mergeHandlerModule = { owner,create: ratingMergeHandler };

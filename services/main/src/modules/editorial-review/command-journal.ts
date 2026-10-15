@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { controlTransaction } from '../access/topology-control.ts';
+import { accessClient, controlTransaction } from '../access/topology-control.ts';
 import { canonicalCandidate, EditorialInvalid, type ApplyInput, type CommandOutcome,
   type OrderedCommandJournal, type OwnerCommand } from './contract.ts';
 
@@ -29,7 +29,7 @@ export class EditorialCommandJournal implements OrderedCommandJournal {
     });
   }
   async read(input: ApplyInput, position: number) {
-    const row = (await this.pool.query<{ binding: OwnerCommand | null; admission: string | null; outcome: CommandOutcome | null }>(`
+    const row = (await (accessClient(this.pool) ?? this.pool).query<{ binding: OwnerCommand | null; admission: string | null; outcome: CommandOutcome | null }>(`
       SELECT CASE WHEN b.action IS NOT NULL THEN jsonb_build_object('action',b.action,'scope',b.scope,'digest',b.request_digest) END AS binding,
         a.admission,o.outcome FROM access.editorial_application_command c
         LEFT JOIN access.editorial_command_binding b USING (application,position)
@@ -40,14 +40,14 @@ export class EditorialCommandJournal implements OrderedCommandJournal {
     return { binding: row.binding,outcome: row.outcome,...(row.admission ? { admissionId: row.admission } : {}) };
   }
   async bind(input: ApplyInput, position: number, binding: OwnerCommand) {
-    await this.pool.query(`INSERT INTO access.editorial_command_binding(application,position,action,scope,request_digest)
+    await (accessClient(this.pool) ?? this.pool).query(`INSERT INTO access.editorial_command_binding(application,position,action,scope,request_digest)
       VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`,[input.permit.proof,position,binding.action,binding.scope,binding.digest]);
     if (canonicalCandidate((await this.read(input,position)).binding).digest !== canonicalCandidate(binding).digest) {
       throw new EditorialInvalid('Ordered binding changed');
     }
   }
   async settle(input: ApplyInput, position: number, outcome: CommandOutcome) {
-    await this.pool.query(`INSERT INTO access.editorial_command_outcome(application,position,outcome)
+    await (accessClient(this.pool) ?? this.pool).query(`INSERT INTO access.editorial_command_outcome(application,position,outcome)
       VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,[input.permit.proof,position,outcome]);
     if (canonicalCandidate((await this.read(input,position)).outcome).digest !== canonicalCandidate(outcome).digest) {
       throw new EditorialInvalid('Ordered outcome changed');
