@@ -79,7 +79,22 @@ Use the main-checkout path supplied by dispatch for recorded jobs, while
 keeping the working directory in your worktree. Run any command expected to
 take over a minute through
 `bun <main-checkout>/scripts/goal/goalctl.ts job -- <command…>`, including checks, QA-stack tests and queued
-type checks. The command runs inline for up to 20 seconds. Set the tool call's
+type checks. Declare all remaining checks that need no intervention as one
+ordered sequence:
+
+```sh
+bun <main-checkout>/scripts/goal/goalctl.ts job --then 'task docs:check' --then 'task goal -- check' -- bun scripts/goal/goalctl.ts test <test-files>
+```
+
+The command after `--` runs first, followed by each quoted `--then` command in
+order in the same worktree. Each command has its own log and four-hour deadline.
+The owner stops at the first nonzero exit, signal, lost executor or timeout,
+and wakes the worker once with the failing command and bounded errors. If all
+pass, the one wake contains a result and log path for each command. A lost owner
+fails the sequence and remaining commands do not start. Plain jobs retain their
+existing behavior.
+
+The whole sequence runs inline for up to 20 seconds. Set the tool call's
 `yield_time_ms` to exactly `30000` (30 seconds), including an orchestration
 wrapper's yield when using one: one call returns the result or `PARKED`, with
 no polling. If it finishes, read its result; otherwise it prints `PARKED job:<id>; end your turn with
