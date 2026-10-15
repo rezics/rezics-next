@@ -22,6 +22,7 @@ import {
 import { spaceHref } from '../address/path.ts';
 import { realmHref } from './route.ts';
 import { RealmUnavailable } from './states.tsx';
+import type { RealmReadClient } from './read.ts';
 import { DiscussionColumns, ThreadRail } from './thread-rail.tsx';
 
 // What a Realm's Discussions tab and its thread pages share: the Realm frame
@@ -95,6 +96,7 @@ export async function DiscussionFrame({
   search,
   here,
   children,
+  client,
 }: {
   view: RealmView;
   locale: UiLocale;
@@ -103,12 +105,12 @@ export async function DiscussionFrame({
   /** This page's own address, where signing in returns. */
   here: string;
   children: ReactNode;
+  client?: RealmReadClient;
 }) {
   const t = materializeData(feed, { locale });
   const { header } = view.realm;
   const segments = view.realm.zone?.segment ? { [header.id]: view.realm.zone.segment } : {};
-  return (
-    <RealmFrame view={view} tab="discussions" locale={locale} search={search}>
+  return RealmFrame({ view, tab: 'discussions', locale, search, client, children: (
       <FeedProvider
         locale={locale}
         messages={feed}
@@ -151,6 +153,5 @@ export async function DiscussionFrame({
           {children}
         </DiscussionColumns>
       </FeedProvider>
-    </RealmFrame>
-  );
+  ) });
 }

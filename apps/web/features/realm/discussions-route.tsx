@@ -8,7 +8,7 @@ import { DiscussionFrame, discussionView, readerMain, realmPathOf, type Search }
 import { DiscussionBoards, DiscussionListContent, DiscussionListSkeleton } from './discussion-content.tsx';
 import { discussionListHref, realmDiscussionReads, type DiscussionQuery } from './discussion-read.ts';
 import type { RealmView } from './realm-page.tsx';
-import { RealmRankingContent } from './ranking-route.tsx';
+import { RealmRankingBody } from './ranking-route.tsx';
 import { parseCursor } from './route.ts';
 import type { RealmRouteProps } from './routes.tsx';
 import type { FeedMessages } from '../feed/messages.ts';
@@ -20,13 +20,7 @@ async function Threads({ view, query, feed }: { view: RealmView; query: Discussi
   // Keep ranking's production boundary for its ordinary collection. Board and
   // language selections carry their own address and native request contract.
   if (!query.concept && !query.language && !query.boardsCursor) {
-    const boards = await reads.boards();
-    return <>
-      <DiscussionBoards read={boards} path={path} query={query} messages={view.messages} />
-      <RealmRankingContent main={main} request={{ realm: view.realm.realm, sort: query.sort,
-        window: query.window, cursor: query.cursor, actingSubject: view.reader.actingSubject }}
-        path={path} locale={view.context.locale} feed={feed} />
-    </>;
+    return RealmRankingBody({ main, view, query, feed });
   }
   const [page, boards] = await Promise.all([reads.threads(query), reads.boards(query.boardsCursor)]);
   if (!page.ok && page.failure === 'missing') notFound();

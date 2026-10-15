@@ -7,6 +7,11 @@ import { seedRealmRanking as seed } from '../../../support/realm-ranking-fixture
 import { OutcomeRecorder, outcomeTest } from '../../../support/outcome-test.ts';
 import type { PersonaName, PersonaSession, PersonaSessions } from '../../../support/personas.ts';
 import { realmDiscussionSource } from '../../../support/realm-discussion-source.ts';
+import '../../../../../apps/web/tests/support/official-package-fixture.ts';
+import { BFF_PREFIX } from '../../../../../apps/web/features/api/browser.ts';
+import { mainRelationships } from '../../../../../apps/web/features/relationships/api.ts';
+import { rankingVisit, rankingVisitHost, rankingChart } from '../../../../../apps/web/features/realm/ranking-visit.tsx';
+import type { DiscussionQuery } from '../../../../../apps/web/features/realm/discussion-read.ts';
 
 type Page = {
   items: { reply: string; author: { id: string } | null; work: { id: string }; vote: { score: number } }[];
@@ -50,6 +55,27 @@ afterAll(async () => {
   finally { await restored?.dispose(); }
 });
 
+/** Capture the whole production visit, preserving the anonymous/personal split. */
+async function captureVisit(sessions: PersonaSessions, name: PersonaName, label: string,
+  query: DiscussionQuery, chart = false) {
+  let ordinal = 0;
+  const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const request = new Request(input, init), url = new URL(request.url);
+    if (!url.pathname.startsWith(`${BFF_PREFIX}/`)) throw new Error(`Unexpected visit request: ${url.pathname}`);
+    const person = request.credentials === 'omit' ? sessions.visitor : sessions[name];
+    return recording.session(name, person)(`${label}-${++ordinal}`, request.method,
+      url.pathname.slice(BFF_PREFIX.length) + url.search, undefined, undefined,
+      { headers: Object.fromEntries(request.headers.entries()), settle: false });
+  }) as typeof fetch;
+  const page = await rankingVisit({ replay: rankingVisitHost(fetcher, name !== 'visitor'),
+    ref: short(sessions.realm), locale: 'en', query, ...(chart ? { module: rankingChart } : {}) });
+  expect(page).not.toBeNull();
+  // The shared relationship control refreshes unknown follow levels on mount.
+  if (sessions[name].actingSubject) await mainRelationships(sessions[name].actingSubject!, {
+    origin: 'https://recorded.invalid', fetch: fetcher,
+  }).state(sessions.realm, 'realm');
+}
+
 async function storyRanking(sessions: PersonaSessions, name: PersonaName,
   sort: 'best' | 'top', window: 'week' | 'month' | 'all', label: string, cursor?: string,
   expectedStatus = 200) {
@@ -74,12 +100,19 @@ async function storyStates(name: PersonaName) {
     if (!empty.ok) throw new Error('Empty ranking read failed');
     expect(empty.data.items).toEqual([]);
     expect(empty.data.nextCursor).toBeNull();
+    await captureVisit(stateRealm, name, `visit-${sort}-${window}-empty`, { sort, window });
     expect(await storyRanking(absentRealm, name, sort, window, `${sort}-${window}-missing`, undefined, 404))
       .toMatchObject({ ok: false, failure: 'missing' });
+    await captureVisit(absentRealm, name, `visit-${sort}-${window}-missing`, { sort, window });
     const invalid = await storyRanking(publicRealm, name, sort, window,
       `${sort}-${window}-invalid-cursor`, 'contract:another-viewer:page-2', 400);
     expect(invalid).toMatchObject({ ok: false, failure: 'invalid' });
+    await captureVisit(publicRealm, name, `visit-${sort}-${window}-invalid-cursor`, {
+      sort, window, cursor: 'contract:another-viewer:page-2',
+    });
   }
+  await captureVisit(publicRealm, name, 'visit-ranking-module', { sort: 'best', window: 'all' }, true);
+  await captureVisit(stateRealm, name, 'visit-ranking-module-empty', { sort: 'best', window: 'all' }, true);
   for (const interval of ['day', 'week', 'month'] as const) {
     const main = recordedMainClient(recording, name, person, `ranking-module-${interval}`);
     const populated = await readRankingModuleAnswer(main, publicRealm.realm, interval, 'reads');
@@ -119,6 +152,7 @@ async function storyStates(name: PersonaName) {
   await seed({ ...moving, owner: publicRealm.stranger }, 1, 'next-ranked-cut');
   expect(await storyRanking(moving, name, 'best', 'all', 'moved', first.data.nextCursor!, 409))
     .toMatchObject({ ok: false, failure: 'moved' });
+  await captureVisit(moving, name, 'visit-moved', { sort: 'best', window: 'all', cursor: first.data.nextCursor! });
 }
 
 async function traverse(sessions: PersonaSessions, name: PersonaName, expected: string[]) {
@@ -137,6 +171,9 @@ async function traverse(sessions: PersonaSessions, name: PersonaName, expected: 
         const recorded = await storyRanking(sessions, name, sort as 'best' | 'top',
           window as 'week' | 'month' | 'all', `${prefix}${sort}-${window}${suffix}`, params.get('cursor') ?? undefined);
         expect(recorded.ok).toBe(true);
+        await captureVisit(sessions, name, `visit-${prefix}${sort}-${window}${suffix}`, {
+          sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all', cursor: params.get('cursor') ?? undefined,
+        });
         if (!recorded.ok) throw new Error('Ranked traversal read failed');
         page = recorded.data;
       } else page = await answer<Page>(person.main('GET', `${root}/threads?${params}`));
@@ -177,6 +214,9 @@ async function prove(name: PersonaName) {
       await answer(person.main('GET', `/v1/realms/${short(privateRealm.realm)}/threads?${params}`), 404);
       expect(await storyRanking(privateRealm, name, sort as 'best' | 'top', window as 'week' | 'month' | 'all',
         `private-${sort}-${window}`, undefined, 404)).toMatchObject({ ok: false, failure: 'missing' });
+      await captureVisit(privateRealm, name, `visit-private-${sort}-${window}`, {
+        sort: sort as 'best' | 'top', window: window as 'week' | 'month' | 'all',
+      });
     }
   }
   await storyStates(name);

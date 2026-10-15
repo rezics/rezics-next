@@ -1,5 +1,8 @@
 import { readShowcaseHeaders, readShowcaseImages, readShowcaseWorks, readWorkShowcase } from '../api/showcase.ts';
 import { slideImageUrls } from '../showcase/stage.ts';
+import { readRankingModuleAnswer } from './ranking-read.ts';
+import type { UiLocale } from '../../i18n/define.ts';
+import type { RealmReadClient } from './read.ts';
 import { resourceHref, spaceHref } from '../address/path.ts';
 import { loadPublishedHomeModules, type PublishedHomeContext } from '../zone-editor/home-modules.ts';
 import type { CanonicalAddress } from '@rezics/model/address';
@@ -117,10 +120,10 @@ export const replyHref = (context: AdaptContext, work: { id: string; inZone: boo
  * take the author, hook, kind and "Why here?" from here, so a Work reads the
  * same in every module. Both reads are cached for the request.
  */
-async function realmCards(context: AdaptContext): Promise<Map<string, ZoneWork>> {
+async function realmCards(context: AdaptContext, client?: RealmReadClient): Promise<Map<string, ZoneWork>> {
   const [works, adopted] = await Promise.all([
-    readRealmWorks(context.realm, context.locale),
-    readNewAdoptions(context.realm, context.locale),
+    readRealmWorks(context.realm, context.locale, undefined, client),
+    readNewAdoptions(context.realm, context.locale, client),
   ]);
   const cards = new Map(
     works.ok
@@ -337,6 +340,15 @@ export function chartMetric(metric: ChartMetric = 'reads'): ChartMetric & Rankin
 }
 
 const intervals = ['day', 'week', 'month'] as const;
+
+/** Supplied transports use the same card enrichment and chart reads as the host. */
+export function rankingModuleReads(client: RealmReadClient) {
+  return {
+    cards: (context: AdaptContext) => realmCards(context, client),
+    rankings: (realm: string, _locale: UiLocale, interval: 'day' | 'week' | 'month', metric: ChartMetric) =>
+      readRankingModuleAnswer(client.main, realm, interval, metric),
+  };
+}
 
 export async function loadRankingsModule(
   module: PresentationModule,
