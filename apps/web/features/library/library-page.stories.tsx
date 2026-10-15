@@ -417,6 +417,13 @@ export const EmptyReadingWithCustomShelves: Story = {
   },
 };
 
+export const LastWorkRemovedWithCustomShelves: Story = {
+  ...EmptyReadingWithCustomShelves,
+  args: { ...EmptyReadingWithCustomShelves.args, state: libraryState({ shelf: 'read' }),
+    view: { ok: true, data: storyView(libraryState({ shelf: 'read' }), []) } },
+  parameters: { route: { pathname: '/en/library', search: '?shelf=read' } },
+};
+
 /** An empty status shelf, with the rest of the library still there. */
 export const EmptyShelf: Story = {
   args: { state: libraryState({ shelf: 'reading' }), reading: [],

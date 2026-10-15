@@ -396,13 +396,13 @@ export function LibraryPage({ state, overview, view, reading, authors, goal, sta
           <ShelfNav state={state} overview={data} locale={locale} messages={messages} loansCurrent={loansView !== undefined} />
           <div className="grid min-w-0 content-start gap-10">
             {loansView ?? <>
-              {state.shelf.kind === 'all' && total === 0 ? <FirstUse locale={locale} messages={messages} /> : null}
+              {state.shelf.kind !== 'custom' && total === 0 ? <FirstUse locale={locale} messages={messages} /> : null}
               {state.shelf.kind === 'all' && !state.cursor && reading.length
                 ? <CurrentlyReading rows={reading} total={data.counts.reading} state={state}
                   avatarQuery={avatarQuery} locale={locale} messages={messages} /> : null}
               {authors ? <FollowedAuthorsSection authors={authors} avatarQuery={avatarQuery} locale={locale}
                 messages={messages} /> : null}
-              {state.shelf.kind === 'all' ? null : <ShelfSection state={state} view={view} overview={data} now={now}
+              {state.shelf.kind === 'all' || state.shelf.kind === 'status' && total === 0 ? null : <ShelfSection state={state} view={view} overview={data} now={now}
                 avatarQuery={avatarQuery} locale={locale} messages={messages} />}
             </>}
           </div>

@@ -160,6 +160,7 @@ test('library-import-progress-export: import, progress on two devices and the do
     await keyboardReach(a, edition, found, 'Edition');
     await a.keyboard.press('Enter');
     await expect(sheetA.getByRole('listbox', { name: 'Edition', exact: true })).toBeFocused();
+    await sheetA.getByRole('option', { name: 'Sword Art Online 1: Aincrad · paperback', exact: true }).waitFor();
     const options = sheetA.getByRole('option');
     const names = await options.allTextContents();
     const index = names.indexOf('Sword Art Online 1: Aincrad · paperback');
