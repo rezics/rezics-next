@@ -14,7 +14,8 @@ test('explicit preparation retains one API-built store across six independent po
   // existing request-profile workers. These are the existing meters.
   const sink = startWorkProfileSink({ settleMs: 25 });
   startTelemetry('main', { ...process.env, ...sink.env, OTEL_SERVICE_NAME: 'main' });
-  const { root } = await import('../../../scripts/fixture/stack.ts');
+  const { root, dockerEnvironment } = await import('../../../scripts/fixture/stack.ts');
+  const { runQaStartupChildAsync } = await import('../../../scripts/qa/stack-startup.ts');
   const { readEnv } = await import('../../../scripts/dev/config.ts');
   const { startMediaStack } = await import('../integration/media-support.ts');
   const { Pool } = await import('pg');
@@ -137,22 +138,36 @@ test('explicit preparation retains one API-built store across six independent po
       axes: { unrelatedWorks: [], unrelatedPosts: [], zoneNavigationEntries: [],
         mountedCollectionResources: [], readerShelfEntries: [], recipeOccurrences: [] } };
     const plan = seedCheckpointPlan();
+    let resumeWriter: ((signal: AbortSignal) => Promise<void>) | undefined;
     for (const [ordinal, planned] of plan.entries()) {
       stage = planned;
       scale = stage.scale;
       recipe.fixed = stage.fixed;
       measured = [];
-      if (ordinal > 0) { stageStartedAt = performance.now(); stageStartupMs = 0; }
+      let admissionWaitMs = 0;
+      if (ordinal > 0) {
+        const startupStarted = performance.now();
+        if (sourceStopped) {
+          const startup = await runQaStartupChildAsync(root, ['stack:up', '--profile', 'qa',
+            '--run-id', sourceRunId, '--persistent'], 180_000, dockerEnvironment());
+          if (!startup.ok) throw new Error(`Retained seed source startup failed: ${startup.output.slice(-2000)}`);
+          admissionWaitMs = startup.admissionWaitMs;
+          await resumeWriter!(AbortSignal.timeout(Math.max(1, 600_000 - startup.activeElapsedMs)));
+        }
+        stageStartedAt = startupStarted + admissionWaitMs;
+        stageStartupMs = performance.now() - stageStartedAt;
+      }
       const driver = createCorpusBackupDriver({ sourceRunId, directory: join(seedDirectory, sourceRunId, 'backups'),
-        resumeSource: ordinal !== plan.length - 1, onSourceStartup: ms => { stageStartupMs += ms; },
+        // The completed cut ends stopped. Restart for the next stage through
+        // ordinary admission before starting its active preparation deadline.
+        resumeSource: false,
         async quiesce(signal) {
           signal.throwIfAborted();
           await source!.stop(); sourceStopped = true;
-          return async () => {
-            const resumeStarted = performance.now();
+          resumeWriter = async resumeSignal => {
             Object.assign(Bun.env, readEnv(join(root, '.temp/stack', `rezics-qa-${sourceRunId}`, 'apps.env')));
             for (;;) {
-              signal.throwIfAborted();
+              resumeSignal.throwIfAborted();
               try { await source!.objects('media/').initialize(); break; }
               catch (error) {
                 if (!(error instanceof Error) || error.message !== 'cannot reach immutable object bucket') throw error;
@@ -162,8 +177,8 @@ test('explicit preparation retains one API-built store across six independent po
             source = await startMediaStack('seed-checkpoint-source', { library: true }); sourceStopped = false;
             member = await source.member(seedAuthorName, { stable: true, verified: true });
             currentApi = seedApi(source, member.token);
-            stageStartupMs += performance.now() - resumeStarted;
           };
+          return () => resumeWriter!(signal);
         },
         smokeRead: async () => { throw new Error('BUILD never restores'); },
       });
@@ -176,7 +191,7 @@ test('explicit preparation retains one API-built store across six independent po
         scale, directory: join(seedDirectory, sourceRunId, 'manifests'), startedAt: stageStartedAt });
       const totalMs = performance.now() - stageStartedAt;
       expect(totalMs).toBeLessThan(600_000);
-      const timing = { startupMs: stageStartupMs, buildMs: stageBuildMs,
+      const timing = { startupMs: stageStartupMs, buildMs: stageBuildMs, admissionWaitMs,
         backupMs: totalMs - stageStartupMs - stageBuildMs, totalMs };
       retained.actor = actor;
       retained.axes[stage.axis].push({ manifest, works: structuredClone(works), posts: structuredClone(posts),

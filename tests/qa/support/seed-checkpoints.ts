@@ -25,7 +25,7 @@ export interface RetainedSeedCut {
   works: SeedWork[];
   posts: SeedPost[];
   population: SeedCheckpointPopulation;
-  timing: { startupMs: number; buildMs: number; backupMs: number; totalMs: number };
+  timing: { startupMs: number; buildMs: number; backupMs: number; totalMs: number; admissionWaitMs?: number };
 }
 export interface RetainedSeed {
   format: 'seed-checkpoints-v3';
