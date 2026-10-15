@@ -252,7 +252,35 @@ bounds still apply.
 
 ## Capacity outcomes
 
-Export supports at most 4,096 occurrences and a 1 MiB serialized export result.
+Recipe file downloads use bounded continuation and have no total occurrence or
+byte ceiling. Both export routes accept `page=true`, `revision`, `parent` and
+`after`. The first page selects a revision when omitted; every subsequent call
+must retain that revision. `recipe-export-page-v1` returns up to 64 ordered
+siblings and `next` (pass it as `after`), or one sibling when the neighbourhood
+contains an adopted instruction. Visit the root's sibling pages, then each
+active group in breadth-first order, including empty groups. Each page repeats
+the exact measures, import limits and currently disclosed export rights.
+Tokens use the existing Structure cursor and never confer authority.
+
+The protocol's joiner and JSON-serializable checkpoint are exported from
+`@rezics/model/recipe-export`. Main projects each atomic part; joining remaps
+loss pointers and attaches sections without interpreting native recipe fields.
+Native contents are deduplicated by exact reference. For every distinct Content
+revision in those contents, follow
+`GET /v1/content-revisions/{revision}/derivations` through `nextCursor`, including
+empty inventories. The client retains completed pages and the last derivation
+cursor after an interrupted request. Repeating a failed read has no side effects.
+It rechecks Recipe export authority before delivering the assembled file. A
+server restart invalidates process-local cursors; restart the download in that
+case. The selected immutable revision remains independently addressable.
+
+Compact responses remain available without `page=true`, with their existing
+4,096-occurrence and 1 MiB response bounds. They are compatibility responses,
+not the file download path. Keeping continuation explicit preserves existing
+consumers' complete-response assumption ([pagination compatibility](https://google.aip.dev/158#backwards-compatibility)).
+The pure unbounded projection and the continuation joiner produce identical
+ordered file bytes for the same disclosed data.
+
 Synchronous import supports at most 128 normalized occurrences, counting all
 ingredients, sections and steps, and 256 KiB of UTF-8 input. File byte admission
 also has a 256 KiB ceiling. Export capacity does not imply synchronous import

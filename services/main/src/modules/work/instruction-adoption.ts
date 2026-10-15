@@ -34,6 +34,7 @@ export function instructionAdoptionTriples(source: string, adoptions: readonly I
 interface InstructionAdoptionSelection {
   work?: string; revision?: string; contentRevision?: string; target?: string;
   mediaRevision?: string; mediaUse?: string; mediaUses?: readonly string[];
+  occurrences?: readonly string[];
 }
 
 /** Manifest identity only. Callers must disclose the exact Use before returning any selection. */
@@ -52,6 +53,7 @@ export async function readInstructionAdoptionCandidates(env: WorkActivationEnvir
         OPTIONAL { ?adoption <https://schema.org/associatedMedia> ?use }
         ${selection.mediaUse ? `FILTER(?use = ${iri(`https://rezics.com/id/${selection.mediaUse}`)})` : ''}
         ${selection.target ? `FILTER(?target = ${iri(selection.target)})` : ''}
+        ${selection.occurrences ? `VALUES ?occurrence { ${selection.occurrences.map(iri).join(' ')} }` : ''}
         ${selection.mediaRevision ? `?adoption (<http://www.w3.org/ns/oa#hasState>|<http://www.w3.org/ns/oa#hasState>/<http://www.w3.org/ns/oa#cachedSource>) ?selectedRevision .
           VALUES ?selectedRevision { ${iri(`urn:rezics:media:revision:${selection.mediaRevision}`)} ${iri(`urn:rezics:content:revision:${selection.mediaRevision}`)} }` : ''}
         ${selection.mediaUses ? `FILTER(?use IN (${selection.mediaUses.map(use => iri(`https://rezics.com/id/${use}`)).join(',')}))` : ''}

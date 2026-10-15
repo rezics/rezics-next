@@ -4,6 +4,7 @@ import { MAX_RECIPE_SECTION_DEPTH, measureRecipeJSON, RecipeNotImportable, recip
 import { RECIPE_UNIT_DEFINITIONS, RecipeUnitNotRegistered } from './display.ts';
 import type { RecipeInstruction } from './instructions.ts';
 import type { DocumentNode } from '@rezics/document';
+import type { RecipeExportPart } from '@rezics/model/recipe-export';
 
 export interface RecipeExportLoss { occurrence: string; code: 'instruction-form-unsupported'
   | 'reference-not-representable' | 'derivation-not-representable' | 'measurement-not-representable'; pointer: string }
@@ -56,12 +57,9 @@ function projectInstruction(instruction: RecipeInstruction, pointer: string, los
 export const RECIPE_EXPORT_OCCURRENCE_LIMIT = 4096;
 export class RecipeExportLimit extends Error {}
 
-/** Build a bounded Schema.org view from one exact Structure revision. */
+/** Pure projection of an exact revision. Transport bounds belong to page reads. */
 export function exportRecipe(records: readonly OccurrenceRecord[], structure: string,
   adopted: readonly RecipeInstruction[] = [], measures: readonly RecipeMeasure[] = []) {
-  if (records.length > RECIPE_EXPORT_OCCURRENCE_LIMIT) {
-    throw new RecipeExportLimit(`Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
-  }
   const children = new Map<string, OccurrenceRecord[]>();
   const ingredients: Array<Record<string, unknown>> = [];
   const residuals: Array<{ sourceKey: string | null; text: string; parseStatus: string;
@@ -69,7 +67,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
   const sourceObservations = new Set<string>();
   const losses: RecipeExportLoss[] = [];
   let unsupportedUnit: string | undefined;
-  for (const record of records) {
+  for (const [recordIndex, record] of records.entries()) {
     if (record.state !== 'active') continue;
     const siblings = children.get(record.parent) ?? [];
     siblings.push(record);
@@ -79,7 +77,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     if (record.role !== 'ingredient' || record.qualifier?.type !== 'ingredient-line') continue;
     const line = record.qualifier;
     checkOccurrenceQualifier(line);
-    const pointer = `/occurrences/${records.indexOf(record)}/qualifier`;
+    const pointer = `/occurrences/${recordIndex}/qualifier`;
     if (line.substituteFor.length) losses.push({ occurrence: record.occurrence,
       code: 'reference-not-representable', pointer: `${pointer}/substituteFor` });
     if (line.scaling !== 'linear') losses.push({ occurrence: record.occurrence,
@@ -109,6 +107,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     && (record.role === 'instruction' || record.role === 'step')
     && record.selection?.mode === 'fixed-revision' && record.selection.selector)
     .map((record, index) => [record.occurrence, index]));
+  const recordIndices = new Map(records.map((record, index) => [record.occurrence, index]));
   const instructions = (parent: string, depth: number): Array<Record<string, unknown>> => {
     if (depth > MAX_RECIPE_SECTION_DEPTH) throw new RecipeNotImportable({ status: 'not-importable',
       code: 'recipe_not_importable', limit: 'section-depth', measured: depth, allowed: MAX_RECIPE_SECTION_DEPTH });
@@ -122,7 +121,7 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
       }
       if (record.role === 'step' && record.qualifier?.type === 'recipe-step') {
         instructionOccurrences++;
-        const pointer = `/occurrences/${records.indexOf(record)}/qualifier`;
+        const pointer = `/occurrences/${recordIndices.get(record.occurrence)}/qualifier`;
         for (const field of ['usesIngredient', 'media'] as const) {
           if (record.qualifier[field].length) losses.push({ occurrence: record.occurrence,
             code: 'reference-not-representable', pointer: `${pointer}/${field}` });
@@ -153,8 +152,24 @@ export function exportRecipe(records: readonly OccurrenceRecord[], structure: st
     ? new RecipeUnitNotRegistered(unsupportedUnit).importability
     : capacity;
   const result = { recipe, residuals, sourceObservations: [...sourceObservations], importability, losses };
-  if (Buffer.byteLength(JSON.stringify(result)) > 1_048_576) {
-    throw new RecipeExportLimit('Recipe export exceeds 1 MiB');
-  }
   return result;
+}
+
+/** Atomic projections keep server semantics in the continuation. The joiner
+ * remaps their local pointers and attaches child sections without reprojecting. */
+export function exportRecipeParts(records: readonly OccurrenceRecord[], parent: string,
+  instructions: readonly RecipeInstruction[] = []): RecipeExportPart[] {
+  return records.map(record => {
+    const projection = exportRecipe([record], parent,
+      instructions.filter(instruction => instruction.occurrence === record.occurrence));
+    const unit = 'unit' in projection.importability ? projection.importability.unit : undefined;
+    const ingredient = projection.recipe.recipeIngredient.find(item => typeof item !== 'string');
+    return { occurrence: record.occurrence, parent: record.parent,
+      group: record.state === 'active' && record.role === 'group',
+      adopted: record.state === 'active' && (record.role === 'instruction' || record.role === 'step')
+        && record.selection?.mode === 'fixed-revision' && !!record.selection.selector,
+      ...(ingredient ? { ingredient } : {}), instructions: projection.recipe.recipeInstructions,
+      residuals: projection.residuals, sourceObservations: projection.sourceObservations,
+      losses: projection.losses, ...(unit ? { unsupportedUnit: unit } : {}) };
+  });
 }

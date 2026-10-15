@@ -34,6 +34,7 @@ import { sourceFieldOccurrence } from '../modules/source/support-attach.ts';
 import { FieldWithdrawalConflict, FieldWithdrawalInvalid, FieldWithdrawalUnavailable }
   from '../modules/source/withdrawal.ts';
 import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../modules/recipe/export.ts';
+import { readRecipeExportPage, RECIPE_EXPORT_PAGE_SIZE } from '../modules/recipe/export-page.ts';
 import { readRecipeWorkPage, RECIPE_WORK_PAGE_CURSOR_MAX } from '../modules/recipe/work-page.ts';
 import { readImportedExportBases } from '../modules/rights/read-imported.ts';
 import { workRead, WorkReadUnavailable, type WorkReadSession } from '../modules/work/read-session.ts';
@@ -170,7 +171,23 @@ const nativeRecipeExport = t.Object({ format: t.Literal('native'), structure: re
   instructions: t.Array(instructionRead, { maxItems: RECIPE_EXPORT_OCCURRENCE_LIMIT }),
   losses: t.Array(t.Any(), { maxItems: 0 }),
 }, { additionalProperties: false });
-const selectedRecipeExport = t.Union([nativeRecipeExport,
+const recipeExportPageResponse = t.Object({ profile: t.Literal('recipe-export-page-v1'),
+  structure: ref, revision: ref, parent: ref, next: t.Nullable(t.String()),
+  occurrences: t.Array(OccurrenceRecord, { maxItems: RECIPE_EXPORT_PAGE_SIZE }),
+  instructions: t.Array(instructionRead, { maxItems: RECIPE_EXPORT_PAGE_SIZE }),
+  contents: t.Array(t.Object({ reference: t.Object({ target: t.String(), selector: ExactInstructionSelector }),
+    document: t.Optional(t.Any()), body: t.Optional(t.String()) }, { additionalProperties: false }), { maxItems: RECIPE_EXPORT_PAGE_SIZE }),
+  parts: t.Array(t.Object({ occurrence: ref, parent: ref, group: t.Boolean(), adopted: t.Boolean(),
+    ingredient: t.Optional(t.Record(t.String(), t.Unknown())), instructions: t.Array(t.Record(t.String(), t.Unknown())),
+    residuals: t.Array(t.Unknown()), sourceObservations: t.Array(t.String()),
+    losses: t.Array(t.Object({ occurrence: ref, code: t.String(), pointer: t.String() })),
+    unsupportedUnit: t.Optional(t.String()) }, { additionalProperties: false }), { maxItems: RECIPE_EXPORT_PAGE_SIZE }),
+  measures: t.Array(RecipeMeasure, { maxItems: STRUCTURE_LIMITS.measures }), rights: exportRights,
+  importLimits: t.Object({ bytes: t.Integer(), occurrences: t.Integer(), depth: t.Integer() }),
+  cost: t.Object({ pagesRead: t.Integer(), occurrences: t.Integer() }) }, { additionalProperties: false });
+const exportContinuationQuery = { page: t.Optional(t.Boolean()), parent: t.Optional(ref),
+  after: t.Optional(t.String({ maxLength: 2048 })) };
+const selectedRecipeExport = t.Union([recipeExportPageResponse, nativeRecipeExport,
   t.Omit(recipeExportResponse, ['sourcePosition', 'cost'])]);
 
 export const openApiOperations = {
@@ -582,15 +599,22 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
       } catch (error) { return routeError(error); }
     })
     .get('/v1/recipes/:id/exports/schema-org', { params: t.Object({ id: groupUuid }),
-      query: t.Object({ actingSubject: ref, revision: t.Optional(ref) }, { additionalProperties: false }),
-      detail: { description: `Export the selected Recipe revision as Schema.org JSON. Traversal is limited to ${RECIPE_EXPORT_OCCURRENCE_LIMIT.toLocaleString('en-US')} occurrences; larger revisions return 413 recipe_export_too_large.` },
-      response: transportResponses(openApiOperations["/v1/recipes/{id}/exports/schema-org"].get, { 200: recipeExportResponse, 413: problemResult(413), ...problems }, 'GET') },
+      query: t.Object({ actingSubject: ref, revision: t.Optional(ref), ...exportContinuationQuery }, { additionalProperties: false }),
+      detail: { description: 'Export an exact Recipe revision. Use page=true for any size: retain revision, visit the root sibling pages using next as after, then each group parent in breadth-first order. Assemble recipe-export-page-v1 parts; Content derivations continue through their existing endpoint. Compact responses support up to 4096 occurrences.' },
+      response: transportResponses(openApiOperations["/v1/recipes/{id}/exports/schema-org"].get, { 200: t.Union([recipeExportResponse, recipeExportPageResponse]), 413: problemResult(413), ...problems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
-      query: { actingSubject: string; revision?: string } }) => {
+      query: { actingSubject: string; revision?: string; page?: boolean; parent?: string; after?: string } }) => {
       try {
         const structure = `https://rezics.com/id/${params.id}`;
+        if (query.page && (query.parent || query.after) && !query.revision) return problem(400,
+          'invalid_request', 'Recipe export continuation requires the selected revision');
         const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
+        if (query.page) return Response.json(await withAuthorizedRecipeRevision(work, request,
+          { structure, actingSubject: query.actingSubject, revision: header.revision, limit: 1 },
+          (_principal, revision, session) => readRecipeExportPage(session, { structure, revision,
+            work: header.work, actingSubject: query.actingSubject, parent: query.parent, after: query.after })),
+        { headers: { 'cache-control': 'private, no-store' } });
         const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
           RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
         const body = await withAuthorizedRecipeRevision(work, request, { structure,
@@ -601,21 +625,31 @@ export function recipeRoutes(fuseki: FusekiClient, work: MainWorkDependencies) {
           sourcePosition: header.sourcePosition,
           cost: { pages: scanned.pages + 1, pagesRead: scanned.pagesRead + header.cost.pagesRead,
             occurrences: scanned.records.length } }));
+        if (Buffer.byteLength(JSON.stringify(body)) > 1_048_576) throw new RecipeExportLimit('Recipe export exceeds 1 MiB');
         return Response.json(body, { headers: { 'cache-control': 'no-store' } });
       } catch (error) { return routeError(error); }
     })
     .get('/v1/recipes/:id/export', { params: t.Object({ id: groupUuid }),
       query: t.Object({ actingSubject: t.Optional(ref), revision: t.Optional(ref),
+        ...exportContinuationQuery,
         format: t.Optional(t.Union([t.Literal('native'), t.Literal('schema-org')])) }, { additionalProperties: false }),
       response: transportResponses(openApiOperations["/v1/recipes/{id}/export"].get, { 200: selectedRecipeExport, 413: problemResult(413), ...problems }, 'GET') },
     async ({ request, params, query }: { request: Request; params: { id: string };
-      query: { actingSubject?: string; revision?: string; format?: 'native' | 'schema-org' } }) => {
+      query: { actingSubject?: string; revision?: string; format?: 'native' | 'schema-org'; page?: boolean; parent?: string; after?: string } }) => {
       try {
         await work.account.verify(request, ['work:read']);
         if (!query.actingSubject) return problem(400, 'invalid_request', 'actingSubject is required');
+        const actingSubject = query.actingSubject;
+        if (query.page && (query.parent || query.after) && !query.revision) return problem(400,
+          'invalid_request', 'Recipe export continuation requires the selected revision');
         const structure = `https://rezics.com/id/${params.id}`;
         const header = await readPage(work, request, { structure, actingSubject: query.actingSubject,
           ...(query.revision ? { revision: query.revision } : {}), limit: 1 });
+        if (query.page) return Response.json(await withAuthorizedRecipeRevision(work, request,
+          { structure, actingSubject, revision: header.revision, limit: 1 },
+          (_principal, revision, session) => readRecipeExportPage(session, { structure, revision,
+            work: header.work, actingSubject, parent: query.parent, after: query.after })),
+        { headers: { 'cache-control': 'private, no-store' } });
         const scanned = await allOccurrences(work, request, structure, query.actingSubject, header.revision,
           RecipeExportLimit, `Recipe export exceeds ${RECIPE_EXPORT_OCCURRENCE_LIMIT} occurrences`);
         const body = await withAuthorizedRecipeRevision(work, request, { structure,

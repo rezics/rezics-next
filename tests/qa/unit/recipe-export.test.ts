@@ -31,14 +31,15 @@ test('RECIPE03: exact Schema.org export preserves grouped step order and unparse
       { '@type': 'HowToStep', text: 'Serve.', inLanguage: 'en' }] }]);
   expect(result.recipe.recipeIngredient).toEqual([{ '@type': 'PropertyValue',
     text: 'a handful of herbs', amountLexical: 'a handful of herbs',
-    parseStatus: 'unparsed', inLanguage: 'en' }]);
+    parseStatus: 'unparsed', inLanguage: 'en' }, 'a handful of herbs']);
   expect(result.residuals).toEqual([{ sourceKey: ingredient.sourceKey,
     text: 'a handful of herbs', parseStatus: 'unparsed', residual: ingredient.qualifier.residual }]);
   expect(result.sourceObservations).toEqual([id(8)]);
 });
 
-test('RECIPE03: export rejects work beyond its declared occurrence bound', () => {
+test('RECIPE03: unbounded projection retains source observations past the old occurrence bound', () => {
   const record = base(6, structure, 'equipment');
-  expect(() => exportRecipe(Array.from({ length: 4097 }, () => record), structure))
-    .toThrow('4096 occurrences');
+  const records = Array.from({ length: 4097 }, (_, index) => ({ ...record, occurrence: id(index + 100),
+    sourceKey: `${id(index + 10000)}#equipment` }));
+  expect(exportRecipe(records, structure).sourceObservations).toHaveLength(records.length);
 });

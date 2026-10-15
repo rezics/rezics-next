@@ -1,5 +1,7 @@
 import { browserMainApi } from '../api/browser.ts';
 import type { MainClient } from '../studio/types.ts';
+import { assembleRecipeExport, continueRecipeExport, recipeExportCheckpoint,
+  type RecipeExportCheckpoint, type RecipeExportPage } from '@rezics/model/recipe-export';
 
 export interface RecipeExport {
   profile: 'recipe-schema-org-export-v1';
@@ -18,6 +20,8 @@ export interface RecipeExportRequest {
   structure: string;
   revision: string;
   actingSubject: string;
+  /** Retain this value to resume after interruption, including across reloads. */
+  checkpoint?: RecipeExportCheckpoint;
 }
 
 export type RecipeExportFailure = 'denied' | 'too-large' | 'unavailable';
@@ -59,34 +63,54 @@ function exportFailure(status: number, value: unknown): RecipeExportError {
 
 /** Reads exactly the selected editor revision through Main's typed Schema.org export route. */
 export function mainRecipeExportApi(main: () => MainClient = browserMainApi): RecipeExportApi {
-  return {
-    async exportNativeRevision({ structure, revision, actingSubject }) {
+  const pending = new Map<string, RecipeExportCheckpoint>();
+  async function collect(input: RecipeExportRequest, format: 'native' | 'schema-org') {
+    const { structure, revision, actingSubject } = input;
+    const key = JSON.stringify([structure, revision, actingSubject, format]);
+    const checkpoint = input.checkpoint ?? pending.get(key) ?? recipeExportCheckpoint(structure);
+    if (checkpoint.parents[0] !== structure || checkpoint.pages.some(page => page.structure !== structure || page.revision !== revision)) {
+      throw new RecipeExportError('unavailable');
+    }
+    pending.set(key, checkpoint);
+    const readPage = async (parent: string, after?: string) => {
       const answer = await main().v1.recipes({ id: idOf(structure) }).export.get({
-        query: { ...(actingSubject ? { actingSubject } : {}), revision, format: 'native' },
+        query: { actingSubject, revision, format, page: true, parent, ...(after ? { after } : {}) },
       });
       if (answer.error) throw exportFailure(answer.error.status, answer.error.value);
-      if (!answer.data || !('format' in answer.data) || answer.data.format !== 'native'
-        || answer.data.structure !== structure || answer.data.revision !== revision) throw new RecipeExportError('unavailable');
-      return answer.data as NativeRecipeExport;
-    },
-    async exportRevision({ structure, revision, actingSubject }) {
-      try {
-        const answer = await main().v1.recipes({ id: idOf(structure) }).export.get({
-          query: { ...(actingSubject ? { actingSubject } : {}), revision, format: 'schema-org' },
+      const data = answer.data;
+      if (!data || !('profile' in data) || data.profile !== 'recipe-export-page-v1'
+        || data.structure !== structure || data.revision !== revision) throw new RecipeExportError('unavailable');
+      return data as RecipeExportPage;
+    };
+    try {
+      await continueRecipeExport(checkpoint, readPage, async (contentRevision, cursor) => {
+        const answer = await main().v1['content-revisions']({ revision: contentRevision }).derivations.get({
+          query: { actingSubject, limit: 20, ...(cursor ? { cursor } : {}) },
         });
         if (answer.error) throw exportFailure(answer.error.status, answer.error.value);
-        const data: unknown = answer.data;
-        if (typeof data !== 'object' || data === null || !('profile' in data) || data.profile !== 'recipe-schema-org-export-v1'
-          || !('revision' in data) || data.revision !== revision || !('structure' in data) || data.structure !== structure
-          || !('recipe' in data)
-          || typeof data.recipe !== 'object' || data.recipe === null) {
-          throw new RecipeExportError('unavailable');
-        }
-        return data as RecipeExport;
-      } catch (error) {
-        if (error instanceof RecipeExportError) throw error;
-        throw new RecipeExportError('unavailable');
+        if (!answer.data) throw new RecipeExportError('unavailable');
+        return answer.data;
+      });
+      // A resumed download must still have current export authority at delivery.
+      const delivery = await readPage(structure);
+      checkpoint.pages[0]!.rights = delivery.rights;
+      const result = assembleRecipeExport(checkpoint.pages, checkpoint.derivations, format);
+      pending.delete(key);
+      return result;
+    } catch (error) {
+      if (error instanceof RecipeExportError) {
+        if (error.failure === 'denied') pending.delete(key);
+        throw error;
       }
+      throw new RecipeExportError('unavailable');
+    }
+  }
+  return {
+    async exportNativeRevision(input) {
+      return await collect(input, 'native') as NativeRecipeExport;
+    },
+    async exportRevision(input) {
+      return await collect(input, 'schema-org') as RecipeExport;
     },
   };
 }

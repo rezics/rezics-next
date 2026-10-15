@@ -1,16 +1,17 @@
 import { expect, test } from 'bun:test';
-import { exportRecipe, RecipeExportLimit, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../src/modules/recipe/export.ts';
+import { exportRecipe, RECIPE_EXPORT_OCCURRENCE_LIMIT } from '../src/modules/recipe/export.ts';
 import type { OccurrenceRecord } from '../src/modules/structure/format.ts';
 import { checkOccurrenceQualifier } from '../src/modules/structure/format.ts';
 import { parseRecipeFile } from '../src/modules/recipe/file-intake.ts';
 import { recipeSourceSupportCandidates } from '../src/modules/recipe/importer.ts';
 
-test('recipe export enforces its own 1 MiB ceiling independently of synchronous import capacity', () => {
+test('pure recipe projection completes above 1 MiB while reporting synchronous import capacity', () => {
   const records = Array.from({ length: 256 }, (_, index) => ({ ...ingredient(index), role: 'step' as const,
     qualifier: { type: 'recipe-step' as const, instructionText: { value: '香'.repeat(4000), language: 'zh' },
       usesIngredient: [], media: [], scaling: 'linear' as const } }));
   expect(Buffer.byteLength(JSON.stringify(records.map(record => record.qualifier)))).toBeGreaterThan(1_048_576);
-  expect(() => exportRecipe(records, structure)).toThrow(RecipeExportLimit);
+  expect(exportRecipe(records, structure).recipe.recipeInstructions).toHaveLength(records.length);
+  expect(exportRecipe(records, structure).importability).toMatchObject({ status: 'not-importable', limit: 'bytes' });
 });
 
 test('owner-admitted units export unchanged and unsupported exchange units are never capacity errors', () => {
@@ -43,10 +44,11 @@ function ingredient(index: number): IngredientRecord {
   };
 }
 
-test('recipe export includes 4,096 occurrences and rejects the next one', () => {
+test('recipe projection includes every occurrence past the old transport limit', () => {
   const records = Array.from({ length: RECIPE_EXPORT_OCCURRENCE_LIMIT }, (_, index) => ingredient(index));
   expect(exportRecipe(records, structure).recipe.recipeIngredient).toHaveLength(2 * RECIPE_EXPORT_OCCURRENCE_LIMIT);
-  expect(() => exportRecipe([...records, ingredient(records.length)], structure)).toThrow(RecipeExportLimit);
+  expect(exportRecipe([...records, ingredient(records.length)], structure).recipe.recipeIngredient)
+    .toHaveLength(2 * (records.length + 1));
 });
 
 test('recipe export keeps original text separate from exact quantity and its lexical wording', () => {

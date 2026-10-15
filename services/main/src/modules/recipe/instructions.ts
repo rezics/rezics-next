@@ -23,7 +23,8 @@ export async function readRecipeInstructions(session: WorkReadSession, records: 
   Promise<RecipeInstruction[]> {
   const adopted = records.filter(isAdoptedInstruction);
   const instructions: RecipeInstruction[] = [];
-  const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment, cut, session.viewer,
+  const readAdoptions = () => cut ? readPublicInstructionAdoptions(session.deps.environment,
+    { ...cut, occurrences: adopted.map(record => record.occurrence) }, session.viewer,
     cut.admitted ? new Set([cut.work]) : undefined) : Promise.resolve([]);
   const adoptions = adopted.some(record => record.selection?.mode === 'fixed-revision'
     && record.selection.selector?.grain === 'representation') ? await readAdoptions() : [];

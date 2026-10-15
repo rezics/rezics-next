@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./recipe-export": "./src/recipe-export.ts",
     ".": "./src/index.ts",
     "./address": "./src/address/index.ts",
     "./address/sid": "./src/address/sid.ts",
