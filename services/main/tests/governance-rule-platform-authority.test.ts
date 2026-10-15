@@ -26,7 +26,9 @@ let admin: Pool;
 let expiredController: Person;
 
 beforeAll(async () => {
-  cluster = await startPostgresCluster();
+  // Authority, locking and replay use real SQL transactions; this disposable
+  // fixture does not exercise crash durability or need per-write disk flushes.
+  cluster = await startPostgresCluster({ serverSettings: 'fsync = off\nsynchronous_commit = off' });
   admin = new Pool(cluster.connection);
   await admin.query(`CREATE DATABASE ${template}`);
   const pool = new Pool({ ...cluster.connection, database: template });
