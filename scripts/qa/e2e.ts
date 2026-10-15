@@ -446,6 +446,16 @@ async function runE2e(): Promise<void> {
     });
   }
 
+  async function registerBrowserPrincipals() {
+    const access = new Pool({ connectionString: env.ACCESS_DATABASE_URL });
+    try {
+      // Web bootstrap registered the member; its verified operator also needs an Access identity for safety delivery.
+      await access.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
+        VALUES (gen_random_uuid(), $1, $2) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
+      [env.ACCOUNT_ISSUER, people.operator.id]);
+    } finally { await access.end(); }
+  }
+
   try {
     adoptWebPort(web.port, web.holderPid);
     ownedPort = web.port;
@@ -459,6 +469,7 @@ async function runE2e(): Promise<void> {
         for (const file of apiOutcomes) if (!existsSync(join(root, file))) throw new Error(`Missing API outcome ${file}`);
         await admitIntegrationWorkScope({ root, projectRunId: appRunId, fusekiUrl: env.FUSEKI_URL!,
           maintenanceToken: env.FUSEKI_MAINTENANCE_TOKEN, environment: env });
+        await registerBrowserPrincipals();
         const outcomes = launch('api-outcomes', 'bun', ['test', ...apiOutcomes,
           '--reporter=junit', `--reporter-outfile=${join(artifactDir, 'browser-api-outcomes.xml')}`], {
           REZICS_QA_BROWSER_OUTCOMES: '1',
@@ -476,13 +487,7 @@ async function runE2e(): Promise<void> {
       finally { await relay.end(); }
       await admitIntegrationWorkScope({ root, projectRunId: appRunId, fusekiUrl: env.FUSEKI_URL!,
         maintenanceToken: env.FUSEKI_MAINTENANCE_TOKEN, environment: env });
-      const access = new Pool({ connectionString: env.ACCESS_DATABASE_URL });
-      try {
-        // Web bootstrap registered the member; its verified operator also needs an Access identity for safety delivery.
-        await access.query(`INSERT INTO access.principal (id, account_issuer, account_subject)
-          VALUES (gen_random_uuid(), $1, $2) ON CONFLICT (account_issuer, account_subject) DO NOTHING`,
-        [env.ACCOUNT_ISSUER, people.operator.id]);
-      } finally { await access.end(); }
+      await registerBrowserPrincipals();
       const account = launch('account', 'bun', ['services/account/src/index.ts']);
       await ready('Account', `http://127.0.0.1:${apps.ACCOUNT_PORT}/health/ready`, account, 30_000);
       if (!apps.ACCOUNTS_PORT) throw new Error('The e2e stack has no public Accounts origin');
