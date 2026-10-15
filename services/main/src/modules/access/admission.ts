@@ -589,10 +589,10 @@ export class AccessAdmissionRegistry {
           || error instanceof AdmissionDenied || error instanceof AdmissionConflict
           || error instanceof AdmissionUnavailable || error instanceof AdmissionExpired) throw error;
         if (error instanceof WorkReadUnavailable) {
-          throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
+          throw new AdmissionUnavailable('authenticated reply root owner is unavailable', { cause: error });
         }
         if (error && typeof error === 'object' && 'code' in error) throw error;
-        throw new AdmissionUnavailable('authenticated reply root owner is unavailable');
+        throw new AdmissionUnavailable('authenticated reply root owner is unavailable', { cause: error });
       }
     };
   }
