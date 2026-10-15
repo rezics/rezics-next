@@ -213,7 +213,7 @@ export interface WorkProfileCorpusRecipe {
   /** Read back the actual dimensions through public APIs; validate result correctness too. */
   verify(api: CorpusApi): Promise<CorpusDimensions>;
 }
-function checkpointDimensions(recipe: WorkProfileCorpusRecipe, dimension: WorkProfileDimension,
+function checkpointDimensions(recipe: Pick<WorkProfileCorpusRecipe, 'version' | 'fixed' | 'populations'>, dimension: WorkProfileDimension,
   scale: WorkProfileScale): CorpusDimensions {
   return (recipe.populations ?? []).reduce((fixed, axis) => workProfileDimensions(axis, scale, fixed),
     workProfileDimensions(dimension, scale, recipe.fixed));
@@ -236,7 +236,7 @@ export interface WorkProfileCorpusManifest {
   compatibility: LoadCompatibility;
 }
 export function workProfileCorpusId(
-  recipe: WorkProfileCorpusRecipe,
+  recipe: Pick<WorkProfileCorpusRecipe, 'version' | 'fixed' | 'populations'>,
   dimension: WorkProfileDimension,
   scale: WorkProfileScale,
   compatibility = loadCompatibility(root),

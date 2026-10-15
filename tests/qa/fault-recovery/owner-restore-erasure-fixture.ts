@@ -1,6 +1,8 @@
 import { expect } from 'bun:test';
 import { ownerErasureCleanup } from '../../../scripts/qa/owner-erasure-cleanup.ts';
-import { parseVolumeInventory, volumeInventoryScript } from '../../../scripts/qa/volume-inventory.ts';
+import { retainedVolumeInventory } from '../../../scripts/qa/retained-volume.ts';
+import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
+export { retainedVolumeInventory } from '../../../scripts/qa/retained-volume.ts';
 import { Elysia } from 'elysia';
 import { decodeJwt } from 'jose';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -1924,6 +1926,7 @@ java -Xmx512m -cp /opt/apache-jena-fuseki-6.2.0/fuseki-server.jar tdb2.tdbupdate
     };
     const retain = async (context: SourceContext) => {
       if (retained) throw new Error('a restored consumer cannot republish source custody');
+      await recordRetainedPostgresCollations(context.backup, sql => source.access.query(sql));
       await authenticated!.stop();
       const sourceVolumes = retainedSourceVolumes(context.key);
       await timing.phase('source.immutable-publication-copy', async () => {
@@ -2043,16 +2046,6 @@ function retainedSourceVolumes(key: string) {
   return { cut: `${project}_fuseki_cut`, current: `${project}_fuseki_current` };
 }
 
-/** Inventory mounted custody read-only; copyVolume remains the sole volume copier. */
-export function retainedVolumeInventory(volume: string, docker: NodeJS.ProcessEnv): Record<string, RetainedFileIntegrity> {
-  if (!volumeExists(volume, docker)) throw new Error(`retained graph volume is missing: ${volume}`);
-  const output = run('docker', ['run', '--rm', '--network', 'none', '--user', '0:0',
-    '--mount', `type=volume,source=${volume},target=/backup,readonly,volume-nocopy`,
-    '--workdir', '/backup', '--entrypoint', 'sh', postgresImage(), '-ec',
-    volumeInventoryScript], docker, 60_000);
-  return parseVolumeInventory(output);
-}
-
 /** Relative import closure binds the actual producer/helper/service bytes rather than Git HEAD. */
 export function producerModules(root: string, initial: readonly string[]): string[] {
   const paths = new Set<string>();
@@ -2104,9 +2097,9 @@ export function ownerErasureSourceSpecification(root: string, options: OwnerRest
   };
 }
 
-export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {}): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
+export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOptions = {},
+  docker = qaStack(requireFaultTier().runId).dockerEnv): RetainedSourceAdapter<RetainedOwnerState, Awaited<ReturnType<typeof runOwnerRestoreErasureFixture>>> {
   const root = resolve(import.meta.dir, '../../..');
-  const docker = qaStack(requireFaultTier().runId).dockerEnv;
   const engines = currentEngines(docker);
   const specification = ownerErasureSourceSpecification(root, options,
     JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),

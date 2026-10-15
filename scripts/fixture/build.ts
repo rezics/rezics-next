@@ -16,6 +16,8 @@ import { assertGraphReady, checkSamples } from './smoke.ts';
 import { VOLUME_KINDS, composeArgs, currentEngines, dockerEnvironment, fixtureDirectory, fixtureProject,
   freshPorts, removeVolumes, root, run, stream, volumeBytes } from './stack.ts';
 import { redactCommandOutput } from './command-output.ts';
+import { sealFixture, verifyFixtureCustody } from './custody.ts';
+import { recordRetainedPostgresCollations } from './runtime-facts.ts';
 
 const ONLINE_SERVICES = ['postgres', 'fuseki', 'rustfs'];
 
@@ -61,8 +63,11 @@ export async function buildFixtureCorpus(
   return withBuildLock(id, deadline, async () => {
     const existing = readManifest(id);
     if (existing) {
-      console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
-      return existing;
+      try {
+        verifyFixtureCustody(existing, docker);
+        console.log(`Fixture ${id} is already built; restore it with task fixture:restore -- --fixture ${id}`);
+        return existing;
+      } catch { /* Explicit BUILD replaces stale or incomplete custody. */ }
     }
     return buildLocked(docker, corpus, core, planMs, owners, budget, onAdmissionWait);
   });
@@ -202,6 +207,7 @@ async function buildLocked(
       }
       await checkSamples(apps, core, target.pools);
     });
+    await recordRetainedPostgresCollations(dir, sql => pools!.access.query(sql));
     await Promise.all([pools.access.end(), pools.content.end()]);
     pools = undefined;
     // Stopped whole volumes are the consistent cut: no live TDB2 or PostgreSQL copy.
@@ -212,6 +218,7 @@ async function buildLocked(
         elapsedMs: Date.now() - started - budget.admissionWaitMs(),
         admissionWaitMs: budget.admissionWaitMs(), phases, textIndexGeneration: index.generation, loads },
       backup: { project, volumes: bytes } };
+    manifest.custody = sealFixture(manifest, docker);
     writeFileSync(join(dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, { mode: 0o600 });
     writeFileSync(join(evidence, 'build.json'), `${JSON.stringify(manifest, null, 2)}\n`);
     console.log(`Fixture ${id} built in ${manifest.build.elapsedMs} ms; evidence ${evidence}/build.json`);

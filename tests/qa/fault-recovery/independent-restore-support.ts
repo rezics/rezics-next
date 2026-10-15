@@ -1,6 +1,7 @@
 import { execFileSync, spawn, type ChildProcess } from 'node:child_process';
 import assert from 'node:assert/strict';
 import { randomBytes, randomUUID } from 'node:crypto';
+import { recordRetainedPostgresCollations } from '../../../scripts/fixture/runtime-facts.ts';
 import {
   existsSync,
   lstatSync,
@@ -1818,6 +1819,7 @@ async function produceIndependentRestoreSource(withRecipe: boolean, context: Sou
       attachmentDigest: current.nativeAccessErasure.ciphertextDigest,
       sourceInventory: inventory, credentials: 'encrypted configuration plus independently retained keys',
     });
+    await recordRetainedPostgresCollations(context.backup, sql => pools[0]!.query(sql));
     await Promise.all(pools.map(pool => pool.end()));
     pools.length = 0;
     baseCluster.remove();

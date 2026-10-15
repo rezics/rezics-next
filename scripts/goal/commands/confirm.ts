@@ -18,7 +18,7 @@ export default async function confirm(args: string[]): Promise<number> {
     // Moving reports to a worktree does not move the host's admission configuration.
     slots: qaSlotCount(join(stateDir, 'qa-slots')),
     checkoutRoot: process.env.GOAL_REGRESS_CHECKOUT_ROOT });
-  console.log(confirmationStatus(directory, Date.now(), options.at === undefined ? undefined : manifest.runId));
+  console.log(confirmationStatus(directory, Date.now(), manifest.runId));
   console.log(`Wall time: ${Date.parse(manifest.finishedAt!) - Date.parse(manifest.startedAt)}ms`);
   console.log(`Manifest: ${resolve(directory, 'confirm', manifest.runId, 'manifest.json')}`);
   return manifest.status === 'passed' ? 0 : 1;

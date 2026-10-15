@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { createOwnerErasureCleanupClock, ownerErasureCleanupShard } from './owner-erasure-cleanup.ts';
+import { assertRetainedSources } from './retained-preflight.ts';
 import { independentRestorePreparationOptions, ownerErasurePreparationOptions } from './retained-source.ts';
 import { realmSourceBuildDeadlineMs } from '../../tests/qa/support/realm-discussion-budget.ts';
 import { appendFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs';
@@ -1198,6 +1199,10 @@ function noteIntegrationBudget(artifactDirectory: string): void {
 }
 
 try {
+  await assertRetainedSources(root, selected.flatMap(tier => {
+    if (!['integration', 'fault/recovery', 'e2e', 'load'].includes(tier)) return [];
+    return splitTestArgs(testArgs(tier, selection, chosenFor(tier))).paths.flatMap(path => expandTestPaths(root, [path]));
+  }));
   await stackPool.sweep();
   if (options.record && !sourceBefore.clean) throw new Error('--record requires a clean source tree');
   if (options.record) {

@@ -2,6 +2,9 @@ import { expect, test } from 'bun:test';
 import { join } from 'node:path';
 import { loadavg } from 'node:os';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { readRetainedPostgresCollations, type RetainedCollation } from '../../../scripts/fixture/runtime-facts.ts';
+import { seedSpecification } from '../support/seed-specification.ts';
+import { preflightSeedCheckpoints } from '../../../scripts/qa/seed-preflight.ts';
 import { profileRequest, startWorkProfileSink } from '../support/work-profile.ts';
 import { startTelemetry, flushTelemetryTraces, shutdownTelemetry }
   from '../../../packages/observability/src/runtime.ts';
@@ -55,7 +58,8 @@ test('explicit preparation retains one API-built store at three population cuts'
           && costMarkdownFiles.every(name => readFileSync(join(seedDirectory, name), 'utf8')
             .includes(`Build run ID: ${saved.sourceRunId}`));
         if (saved.cuts.every(cut => compatibleLoadStorage(cut.manifest.compatibility, loadCompatibility(root)))
-          && costEvidenceComplete) {
+          && costEvidenceComplete && saved.custody) {
+          preflightSeedCheckpoints(root);
           console.log('Reusing completed retained seed checkpoints', retainedSeedPath);
           console.log('seed command-cost report paths', JSON.stringify(commandCostReportPaths));
           return;
@@ -91,13 +95,11 @@ test('explicit preparation retains one API-built store at three population cuts'
       },
       read: (path, signal) => currentApi.read(path, signal),
     };
-    const fixed = { unrelatedWorks: 0, unrelatedPosts: 0, follows: 0, memberships: 0,
-      historyDepth: 0, realmSize: 0, conceptVocabulary: 0 };
-    const populations = ['recipeOccurrences', 'readerShelfEntries', 'mountedCollectionResources', 'zoneNavigationEntries'] as const;
+    const { fixed } = seedSpecification;
     const stageCostRows: Record<SeedCommandCostStage, SeedCommandCostRow[]> = { '4': [], '16': [], '64': [] };
     let stageBuildMs = 0;
     const recipe: Recipe = {
-      version: 'public-population-checkpoints-v2', fixed, populations,
+      ...seedSpecification,
       async initialize(client, key) {
         if (actor) return;
         actor = (await client.command<{ agent: string }>(`${key}:author`, { method: 'POST',
@@ -127,12 +129,16 @@ test('explicit preparation retains one API-built store at three population cuts'
     };
     const retained: RetainedSeed = { format: 'seed-checkpoints-v2', sourceRunId, actor, cuts: [] };
     for (scale of WORK_PROFILE_SCALES) {
+      let collations: RetainedCollation[] | undefined;
       measured = [];
       if (scale !== 'small') { stageStartedAt = performance.now(); stageStartupMs = 0; }
       const driver = createCorpusBackupDriver({ sourceRunId, directory: join(seedDirectory, sourceRunId, 'backups'),
         resumeSource: scale !== 'large', onSourceStartup: ms => { stageStartupMs += ms; },
         async quiesce(signal) {
           signal.throwIfAborted();
+          const pool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL, connectionTimeoutMillis: 2_000 });
+          try { collations = await readRetainedPostgresCollations(sql => pool.query(sql)); }
+          finally { await pool.end(); }
           await source!.stop(); sourceStopped = true;
           return async () => {
             const resumeStarted = performance.now();
@@ -160,7 +166,7 @@ test('explicit preparation retains one API-built store at three population cuts'
       const timing = { startupMs: stageStartupMs, buildMs: stageBuildMs,
         backupMs: totalMs - stageStartupMs - stageBuildMs, totalMs };
       retained.actor = actor;
-      retained.cuts.push({ manifest, works: structuredClone(works), population: structuredClone(population!), timing });
+      retained.cuts.push({ manifest, works: structuredClone(works), population: structuredClone(population!), timing, collations });
       console.log('retained seed stage seconds', scale, JSON.stringify(Object.fromEntries(
         Object.entries(timing).map(([key, value]) => [key.replace(/Ms$/, 'Seconds'), value / 1000]))));
       const stageKey = ({ small: '4', medium: '16', large: '64' } as const)[scale];
