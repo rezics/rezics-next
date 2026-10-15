@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Value } from 'typebox/value';
-import { isProblemSchema } from '../../../scripts/api/generate.ts';
+import { responseMediaSchemas } from '../../../scripts/api/generate.ts';
 import type { MainApp } from '@rezics/main/app';
 import { createMainApp, type MainWorkDependencies } from '../src/app.ts';
 import { exactMainRevision, exactWorkRevision, pendingOperation, publicPhrasePageResult, publicQueryResult,
@@ -279,7 +279,7 @@ describe('Main typed route contracts', () => {
       paths: Record<string, Record<string, { responses: Record<string,
         { content: Record<string, { schema: unknown }> }>; security?: Record<string, unknown>[];
         parameters?: { name: string; in: string; required?: boolean }[] }>>;
-      components: { securitySchemes: Record<string, unknown> };
+      components: { securitySchemes: Record<string, unknown>; schemas: Record<string, unknown> };
     };
     // New owner profiles add paths; verify the retained contract below without freezing their count.
     expect(Object.keys(spec.paths).length).toBeGreaterThanOrEqual(46);
@@ -327,7 +327,9 @@ describe('Main typed route contracts', () => {
         for (const [mediaType, body] of Object.entries(result.content)) {
           expect(body.schema).toBeDefined();
           if (Number(status) >= 400) {
-            expect(mediaType).toBe(isProblemSchema(body.schema) ? 'application/problem+json' : 'application/json');
+            const schemas = responseMediaSchemas(body.schema, spec.components.schemas);
+            expect(mediaType).toBe(schemas.problem !== undefined && schemas.json === undefined
+              ? 'application/problem+json' : 'application/json');
           } else expect(mediaType).toBe('application/json');
         }
       }
