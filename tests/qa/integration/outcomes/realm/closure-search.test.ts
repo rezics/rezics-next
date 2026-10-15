@@ -214,7 +214,19 @@ type CataloguePage = { results: { work: string }[]; next: string | null; count: 
 let continuation: string;
 async function prepareSurface() {
   const params = new URLSearchParams({ q: phrase, realm: sessions.realm, limit: '1' });
-  const page = await answer<CataloguePage>(sessions.visitor.main('GET', `/v1/search/catalogue?${params}`));
+  const path = `/v1/search/catalogue?${params}`;
+  const deadline = performance.now() + 30_000;
+  let response = await sessions.visitor.main('GET', path);
+  while (response.status === 409) {
+    // A cancelled hydration instructs a first-page restart without returning
+    // the unproved Realm context. Obtain the real pre-closure continuation.
+    const problem = await response.json() as { code: string };
+    expect(problem.code).toBe('read_basis_changed');
+    expect(JSON.stringify(problem)).not.toContain(sessions.realm);
+    expect(performance.now(), 'Pre-closure search must become ready').toBeLessThan(deadline);
+    response = await sessions.visitor.main('GET', path);
+  }
+  const page = await answer<CataloguePage>(Promise.resolve(response));
   expect(page.results).toHaveLength(1);
   expect(page.count).toEqual({ value: 1, precision: 'lower-bound' });
   expect(page.next).not.toBeNull();
