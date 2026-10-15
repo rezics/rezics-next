@@ -14,7 +14,10 @@ interface Cell {
  * Comparing their complete SQL-family maps also catches catalogue-driven work
  * that could pass both absolute caps. Preparation and child logs stay retained. */
 test('G1051: Query SQL families are identical at 1000 and 10000 Works for pages of 1, 16 and 64', async () => {
-  const deadline = String(Date.now() + 430_000);
+  // The existing large-tmpfs tier grants 600s to the file. Each independent
+  // preparation/query child keeps its 430s cap instead of borrowing only the
+  // first scale's remaining wall. Reserve time for the comparison and cleanup.
+  const deadline = Date.now() + 560_000;
   const backups = Bun.env.G1051_BACKUPS
     ? (JSON.parse(Bun.env.G1051_BACKUPS) as string[])
     : undefined;
@@ -30,7 +33,7 @@ test('G1051: Query SQL families are identical at 1000 and 10000 Works for pages 
     const directory = join(Bun.env.REZICS_QA_ARTIFACT_DIR!, `g-1051-scale-${corpus.scale}`);
     mkdirSync(directory, { recursive: true });
     await queryProfileProcess('g-1032-query-cost.test.ts', {
-      G1053_PROFILE_DEADLINE: deadline,
+      G1053_PROFILE_DEADLINE: String(Math.min(deadline, Date.now() + 430_000)),
       G1032_BACKUP: backup ? resolve(backup) : '',
       G1053_CATALOGUE_SCALE: backup ? '' : String(scale),
       G1032_BASELINE: '0',
@@ -56,4 +59,4 @@ test('G1051: Query SQL families are identical at 1000 and 10000 Works for pages 
     join(Bun.env.REZICS_QA_ARTIFACT_DIR!, 'g-1051-scale-matrix.json'),
     JSON.stringify({ scales: results.map((row) => row.catalogueScale), matrix: first }, null, 2),
   );
-}, 450_000);
+}, 580_000);

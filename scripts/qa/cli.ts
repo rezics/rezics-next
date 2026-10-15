@@ -525,6 +525,9 @@ async function runShardWork(
   const environment = qaStackEnvironment({
     ...process.env,
     ...(tier === 'fault/recovery' ? faultFixtureEnvironment : {}),
+    ...(tier === 'fault/recovery' ? {
+      REZICS_FIXTURE_ROOT: process.env.REZICS_FIXTURE_ROOT ?? join(root, '.temp', 'fixture'),
+    } : {}),
   }, resourceClass && resourceClass !== 'ordinary' ? qaResourceClasses[resourceClass].storage : undefined, resourceClass);
   const needsStack = tier !== 'fault/recovery' || !files.every(file => selfManagedFaultFiles.has(file));
   const startupProtocol = !needsStack && files.every(file => selfManagedFaultAdmission.get(file) === 'startup');

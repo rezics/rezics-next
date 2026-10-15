@@ -791,7 +791,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
       // Shared Discover previews use resourceCards' default page mode. They
       // need the same post-preview revocation fence as the enclosing Query.
       denied = new Set();
-      const { publicWorkRead, WorkReadUnavailable } =
+      const { publicWorkRead, WorkReadMoved } =
         await import('../../../services/main/src/modules/work/read-session.ts');
       const { resourceCards } =
         await import('../../../services/main/src/modules/query/resources.ts');
@@ -803,7 +803,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
           resourceCards(session, [
             { id: works[0]!.work, summary: works[0]!.work, kind: 'work', order: '' },
           ]),
-      )).rejects.toBeInstanceOf(WorkReadUnavailable);
+      )).rejects.toBeInstanceOf(WorkReadMoved);
       projection.resourceCardPayloads = payloads;
     }
     expect((await call({ ...base, cursor: beforeWrite.nextCursor! }, reader.token)).status).toBe(

@@ -45,12 +45,12 @@ test('QUERY01: Query type/language and Realm Context match admitted phrase reads
     objectDirectory: join(state, 'objects') });
   const accessPool = new Pool({ connectionString: Bun.env.ACCESS_DATABASE_URL });
   const relayPool = new Pool({ connectionString: Bun.env.ACCOUNT_RELAY_DATABASE_URL });
-  configureDisclosure(env, new DisclosureStore(accessPool));
   const zoneBrowse = new ZoneBrowseProjection(accessPool, relayPool, env);
   const app = createMainApp(fuseki, { environment: env,
     zoneBrowse,
     account: { verify: async () => { throw new Error('public Query made an authority request'); } },
     access: new AccessAdmissionRegistry(accessPool) });
+  configureDisclosure(env, new DisclosureStore(accessPool));
   const actor = ID + randomUUID();
   const admission = (scope: string, action: string, requestDigest: string): RegisteredAdmission => {
     const id = randomUUID();
