@@ -260,6 +260,10 @@ export const siteModerationPosition = access.table('site_moderation_position', {
 export const safetyDecisionOperation = access.table('safety_decision_operation', {
   decisionId: uuid('decision_id').primaryKey(),
   cancelled: boolean('cancelled').notNull(),
+  cancellationPrincipalId: uuid('cancellation_principal_id'),
+  cancellationKey: text('cancellation_key'),
+  cancellationRequestDigest: text('cancellation_request_digest'),
+  cancellationResult: jsonb('cancellation_result'),
 });
 export const safetyDecisionEffect = access.table(
   'safety_decision_effect',
