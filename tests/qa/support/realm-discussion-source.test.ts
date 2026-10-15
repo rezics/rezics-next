@@ -136,6 +136,17 @@ test('the explicit preparation entry imports outside the Bun test runner without
   expect(code, stderr).toBe(0);
 }, 30_000);
 
+test('the preparation entry reaches admission without awaiting its own dynamic import', async () => {
+  const child = Bun.spawn(['bun', 'tests/qa/support/realm-discussion-source-runtime.ts', '--prepare'], {
+    cwd: join(import.meta.dir, '../../..'),
+    env: { ...process.env, REZICS_REALM_SOURCE_PREPARATION: '1', REZICS_QA_RUN_ID: undefined },
+    stdout: 'pipe', stderr: 'pipe', signal: AbortSignal.timeout(20_000),
+  });
+  const [code, stderr] = await Promise.all([child.exited, new Response(child.stderr).text()]);
+  expect(code).not.toBe(0);
+  expect(stderr).toContain('Realm source requires an admitted integration QA environment');
+}, 30_000);
+
 test('Account diagnostics omit verification credentials without changing the actual public request', async () => {
   const script = String.raw`
     const { personaSession } = await import('./tests/qa/support/personas.ts');
