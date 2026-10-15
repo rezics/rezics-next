@@ -412,6 +412,25 @@ test('a worker that ended mid-step without any RESULT is woken by its job; a fin
   } finally { final.close(); }
 });
 
+test('a resume while the job ran hands the job to the later attempt that parked without its own job', async () => {
+  const f = fixture(); const store = completed(f);
+  try {
+    const later = join(f.cwd, 'attempt-2.last.md'); writeFileSync(later, 'RESULT: parked');
+    f.task.attempts.push({ ...f.task.attempts[0]!, n: 2, lastMessage: later, round: 'fix' });
+    await wakeJobs(store, f.options);
+    expect(f.reports).toHaveLength(0); expect(store.get('completed')!.attempt).toBe(2);
+    await wakeJobs(store, f.options);
+    expect(f.prompts).toHaveLength(1); expect(f.task.attempts[2]!.continuedFor).toBe('job');
+  } finally { store.close(); }
+  const g = fixture(); const final = completed(g);
+  try {
+    const later = join(g.cwd, 'attempt-2.last.md'); writeFileSync(later, 'RESULT: done');
+    g.task.attempts.push({ ...g.task.attempts[0]!, n: 2, lastMessage: later, round: 'fix' });
+    await wakeJobs(final, g.options);
+    expect(g.prompts).toHaveLength(0); expect(g.reports[0]).toBe('worker attempt was replaced or closed');
+  } finally { final.close(); }
+});
+
 test('missing sessions and replaced worker attempts go to the manager', async () => {
   const f = fixture(); const store = completed(f);
   try {

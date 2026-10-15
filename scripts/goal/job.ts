@@ -224,6 +224,17 @@ export async function wakeJobs(store: JobStore, options: JobPassOptions = {}, id
         store.update(job.id, current => { current.phase = 'reported'; current.reason = reason; });
       };
       if ((options.now ?? Date.now()) - job.created > JOB_WAIT_MS) { report('wait exceeded 45 minutes'); return; }
+      const later = task && lastAttempt(task).n > job.attempt && !['verified', 'cancelled', 'stopped'].includes(task.state)
+        ? lastAttempt(task) : undefined;
+      if (later) {
+        // A resume while this job ran replaced its attempt. The later attempt waits for it if still running, and
+        // adopts it once it has ended parked or mid-step without a job of its own; a final handoff goes to the manager.
+        if (running(task!)) return;
+        const final = /^RESULT:[ \t]*(\w+)/m.exec(readResult(later).text)?.[1];
+        const owned = store.all().some(other => other.id !== job.id && other.attempt === later.n
+          && ['parked', 'waking'].includes(other.phase));
+        if ((!final || final === 'parked') && !owned) { store.update(job.id, current => { current.attempt = later.n; }); return; }
+      }
       if (!task || !attempt || lastAttempt(task).n !== job.attempt || ['verified', 'cancelled', 'stopped'].includes(task.state)) {
         report('worker attempt was replaced or closed'); return;
       }
