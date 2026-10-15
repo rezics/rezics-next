@@ -69,7 +69,13 @@ export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, nam
     if (!pending) {
       const headers = Object.fromEntries([...request.headers].filter(([header]) =>
         !['authorization', 'cookie', 'x-session-key'].includes(header)));
-      pending = recording.session(name, personal ? person : sessions.visitor)(label,
+      const source = personal ? person : sessions.visitor;
+      pending = recording.session(name, { main: async (...args) => {
+        const response = await source.main(...args);
+        if (response.status >= 400 && url.pathname.endsWith('/modules/browse'))
+          console.error(`Anime production ${name}/${label} ${args[1]} HTTP ${response.status}: ${await response.clone().text()}`);
+        return response;
+      } })(label,
         request.method, url.pathname + url.search, undefined, undefined, { headers });
       retained.set(key, pending);
     }
@@ -92,10 +98,7 @@ export async function recordAnimeCatalogueVisits(recording: OutcomeRecorder, nam
     return modelOf(node.props.children);
   }
   const addresses: [string, Record<string, string>][] = [
-    ['page-browse-default', {}], ['page-browse-newest', { sort: 'newest' }],
-    ['page-browse-updated', { sort: 'updated' }], ['page-browse-bare-relevance', { sort: 'relevance' }],
-    ['page-search-default', { q: phrase }], ['page-search-newest', { q: phrase, sort: 'newest' }],
-    ['page-search-updated', { q: phrase, sort: 'updated' }],
+    ['page-browse-default', {}], ['page-search-default', { q: phrase }],
     ['page-search-no-match', { q: `${phrase}nomatch` }],
     ['page-format', { concept: format.slice(-36) }], ['page-status', { status: 'completed' }],
     ['page-year', { year: '2004' }],

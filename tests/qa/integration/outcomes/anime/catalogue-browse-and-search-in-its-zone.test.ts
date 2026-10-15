@@ -69,7 +69,6 @@ type Page = { items: { id: string }[]; nextCursor: string | null; matches: { val
 const works: Work[] = [], tvWorks: Work[] = [], dated: Work[] = [], completed: Work[] = [];
 let tv: string, movie: string, draft: Work;
 const phrase = `Lanternanime${randomUUID().replaceAll('-', '')}`;
-const credentials = new Map<PersonaSession, Headers>();
 const formatAnswers: { persona: string; request: string; status: number; answer: string }[] = [];
 let preparationPopulation = 12;
 let preparationDurationMs: number | undefined;
@@ -175,18 +174,6 @@ beforeAll(async () => {
   };
   // Keep shared vocabulary setup serial; independent Work publication uses bounded HTTP concurrency.
   for (let index = 0; index < 12; index++) await prepare(index);
-  for (const name of ['visitor', 'stranger', 'member', 'owner', 'moderator', 'operator'] as const) {
-    const person = sessions[name];
-    const original = globalThis.fetch;
-    globalThis.fetch = Object.assign(async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-      const url = new URL(input instanceof Request ? input.url : String(input));
-      if (url.origin === `http://127.0.0.1:${Bun.env.MAIN_PORT}`) credentials.set(person, new Headers(init?.headers));
-      return original(input, init);
-    }, { preconnect: original.preconnect });
-    try {
-      await answer(person.main('GET', `/v1/works/${short(works[0]!.work)}${person.actingSubject ? `?${acting(person)}` : ''}`));
-    } finally { globalThis.fetch = original; }
-  }
   // The lifecycle owns shared Discovery refresh; readers never start a competing generation.
   for (const population of [33, 65]) {
     preparationPopulation = population;
@@ -493,9 +480,7 @@ function formatPath() {
 }
 
 async function formatResponse(person: PersonaSession): Promise<Response> {
-  return fetch(`http://127.0.0.1:${Bun.env.MAIN_PORT}${formatPath()}`, {
-    headers: credentials.get(person), signal: AbortSignal.timeout(5_000),
-  });
+  return person.main('GET', formatPath());
 }
 
 
