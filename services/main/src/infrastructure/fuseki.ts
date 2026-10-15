@@ -1,4 +1,5 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
+import { fencedGraphQuery, noteGraphReadVersion } from './graph-read-fence.ts';
 
 export type FusekiReadCallFamily = 'health' | 'delta-proof' | 'query' | 'template-query';
 export type FusekiReadPhase = 'read' | 'writer-wait';
@@ -507,6 +508,12 @@ export class FusekiClient {
     }
     const signal = readSignal(this.preparationSignal);
     signal.throwIfAborted();
+    return nativePhase ? this.queryLive(sparql, maxResponseBytes, signal, nativePhase)
+      : fencedGraphQuery(this, sparql, maxResponseBytes, () => this.queryLive(sparql, maxResponseBytes, signal));
+  }
+
+  private async queryLive(sparql: string, maxResponseBytes: number | undefined, signal: AbortSignal,
+    nativePhase?: 'occurrence-discovery'): Promise<SparqlResult> {
     takeReadCall();
     const diagnostic = beginReadCall('query');
     let status: Exclude<FusekiReadCallStatus, 'active'> = 'failed';
@@ -526,6 +533,10 @@ export class FusekiClient {
       if (!response.ok) throw new FusekiHttpError(`Fuseki query returned ${response.status}`,
         response.status, response.statusText);
       const result = await boundedJson<SparqlResult>(response, maxResponseBytes, signal);
+      const graphVersion = response.headers.get('x-rezics-graph-version');
+      if (graphVersion && /^[0-9a-f-]{36}:[0-9a-f-]{36}:(0|[1-9][0-9]*)$/.test(graphVersion)) {
+        noteGraphReadVersion(result, graphVersion);
+      }
       status = 'complete';
       return result;
     } catch (error) {

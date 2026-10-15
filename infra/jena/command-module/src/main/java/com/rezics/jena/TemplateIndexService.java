@@ -284,6 +284,13 @@ final class TemplateIndexService {
         workScopeBudget(deadline);
     }
     static String workScopeStore(DatasetGraph data) { return membershipIncarnation(membershipStorage(data)); }
+    /** Physical snapshot identity, including publications that do not move the
+     * diagnostic product sequence. Only read inside the query's transaction. */
+    static String graphReadVersion(DatasetGraph data) {
+        if (!workScopeNativeStorage(data)) return null;
+        var tdb = membershipStorage(data);
+        return membershipIncarnation(tdb) + ":" + tdb.getTxnSystem().getThreadTransaction().getDataVersion();
+    }
     static boolean workScopeNativeStorage(DatasetGraph data) {
         DatasetGraph base = data;
         while (base instanceof DatasetGraphWrapper wrapper && TDBInternal.getDatasetGraphTDB(base) == null)

@@ -21,16 +21,11 @@ test('C1: a witness keeps the earliest expiry across its exact grant, representa
     representation_edge: new Date('2030-01-01T00:00:10Z'),
   };
   const client = {
-    query: async (sql: string, values: string[]) => {
-      const table = Object.keys(deadlines).find((name) => sql.includes(`FROM access.${name} `))!;
+    query: async () => {
       return {
-        rows: [
-          {
-            id: values[0],
-            generation: '7',
-            valid_until: deadlines[table as keyof typeof deadlines],
-          },
-        ],
+        rows: Object.entries(deadlines).map(([table, deadline]) => ({
+          source_table: table, source_row: { id: table, generation: '7', valid_until: deadline.toISOString() },
+        })),
       };
     },
   } as unknown as PoolClient;
@@ -116,7 +111,7 @@ test('C1: witness capture rejects an authority path beyond its source-row bound'
       })),
     ),
   ).rejects.toBeInstanceOf(AdmissionDenied);
-  expect(reads).toBe(16);
+  expect(reads).toBe(0);
 });
 
 test('C1: an unreachable Access store is unavailable at both admission boundaries', async () => {

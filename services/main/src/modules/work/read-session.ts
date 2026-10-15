@@ -2,6 +2,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { setTimeout as delay } from 'node:timers/promises';
 import { withTelemetrySpan } from '@rezics/observability/runtime';
+import { GraphReadFence, fencedGraphQuery, graphReadVersion } from '../../infrastructure/graph-read-fence.ts';
 import { fusekiReadBudget, FusekiQueryResponseTooLarge, FusekiReadBudgetExceeded,
   type SparqlResult } from '../../infrastructure/fuseki.ts';
 import type { MainWorkDependencies } from '../../routes/dependencies.ts';
@@ -277,8 +278,9 @@ export class WorkReadSession {
   async query(body: string, limit: number, fenceRows?: (rows: readonly ReadRow[]) => ReadRow[],
     maxBytes: number = WORK_READ_COST.queryBytes): Promise<ReadRow[]> {
     this.checkDeadline();
-    const rows = (await this.deps.environment.fuseki.query(`${READ_PREFIX}\n${body}`,
-      maxBytes)).results?.bindings ?? [];
+    const graph = this.deps.environment.fuseki, query = `${READ_PREFIX}\n${body}`;
+    const rows = (await fencedGraphQuery(graph, query, maxBytes,
+      () => graph.query(query, maxBytes))).results?.bindings ?? [];
     if (rows.length > limit) throw new WorkReadLimit('Read exceeds its bounded relation');
     if (this.fencesSelectedUnits && this.captureDependencies) {
       const token = readRowsToken(fenceRows ? fenceRows(rows) : rows), prior = this.queryDependencies.get(body);
@@ -405,7 +407,7 @@ export class WorkReadSession {
 }
 
 async function position(deps: MainWorkDependencies, fresh = false, restoreLineage = false): Promise<ReadPosition & {
-  priors: ReadonlyMap<string, string> | null;
+  priors: ReadonlyMap<string, string> | null; graphVersion?: string;
 }> {
   const env = deps.environment;
   const known = knownSearchPosition(env.fuseki, env.lineage);
@@ -418,16 +420,19 @@ async function position(deps: MainWorkDependencies, fresh = false, restoreLineag
   // Ordinary reads keep the historical select list. New discussion order also
   // binds the restore chain here; a second round trip would exceed that page's cap.
   if (!restoreLineage) {
-    const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
-    ${fence} } } LIMIT 2`, 8192)).results?.bindings ?? [];
+    const result = await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence WHERE {
+    ${fence} } } LIMIT 2`, 8192);
+    const rows = result.results?.bindings ?? [];
     if (rows.length !== 1 || rows[0]?.epoch?.value !== env.lineage.dataEpoch || !/^\d+$/.test(rows[0].sequence?.value ?? '')) {
       throw new WorkReadUnavailable('Graph is unavailable');
     }
-    return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value, priors: null };
+    return { dataEpoch: rows[0].epoch.value, sequence: rows[0].sequence!.value, priors: null,
+      graphVersion: graphReadVersion(result) };
   }
-  const rows = (await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence ?cutEpoch ?prior WHERE {
+  const result = await env.fuseki.query(`${READ_PREFIX} SELECT ?epoch ?sequence ?cutEpoch ?prior WHERE {
     ${fence}
-      OPTIONAL { ?cutover a rv:RestoreCutover ; rv:dataEpoch ?cutEpoch ; rv:priorDataEpoch ?prior } } } LIMIT 34`, 8192)).results?.bindings ?? [];
+      OPTIONAL { ?cutover a rv:RestoreCutover ; rv:dataEpoch ?cutEpoch ; rv:priorDataEpoch ?prior } } } LIMIT 34`, 8192);
+  const rows = result.results?.bindings ?? [];
   const epoch = rows[0]?.epoch?.value, sequence = rows[0]?.sequence?.value ?? '';
   if (!rows.length || epoch !== env.lineage.dataEpoch || !/^\d+$/.test(sequence)
     || rows.some(row => row.epoch?.value !== epoch || row.sequence?.value !== sequence)) {
@@ -443,7 +448,7 @@ async function position(deps: MainWorkDependencies, fresh = false, restoreLineag
     priors.set(cut, previous);
   }
   if (priors.size > 32) throw new WorkReadUnavailable('Restore lineage exceeds its bound');
-  return { dataEpoch: epoch, sequence, priors };
+  return { dataEpoch: epoch, sequence, priors, graphVersion: graphReadVersion(result) };
 }
 
 export function withWorkReadSession<T>(session: WorkReadSession, operation: () => Promise<T>): Promise<T> {
@@ -515,7 +520,9 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
               // Every completed attempt closes its authority check, including a
               // failed consistency fence; retries cannot defer revocation.
               try {
-                result = await operation(session);
+                const graphFence = new GraphReadFence(deps.environment.fuseki);
+                result = located.graphVersion && !options.movingGraph
+                  ? await graphFence.capture(() => operation(session)) : await operation(session);
                 const after = await position(deps, true);
                 if (after.dataEpoch !== session.position.dataEpoch
                   || options.movingGraph && after.sequence !== session.position.sequence) {
@@ -525,7 +532,21 @@ export async function workRead<T>(deps: MainWorkDependencies, request: Request, 
                     throw new WorkReadMoved('Graph changed during the read');
                   }
                 }
-                await session.fenceDependencies();
+                if (located.graphVersion && after.graphVersion === located.graphVersion && !options.movingGraph) {
+                  // The version proves every captured graph input at once.
+                  // Owner callbacks still run: Access/Content can move without
+                  // a graph commit. Never reuse their authority decisions.
+                  await graphFence.verify(() => session.fenceDependencies());
+                  if (graphFence.reused) {
+                    const closed = await position(deps, true);
+                    if (closed.dataEpoch !== after.dataEpoch || closed.graphVersion !== after.graphVersion) {
+                      // A global version is sufficient, never necessary. If an
+                      // unrelated writer moved it, retain the selected-input
+                      // fallback rather than demanding a quiet dataset.
+                      await session.fenceDependencies();
+                    }
+                  }
+                } else await session.fenceDependencies();
               } finally {
                 await session.fenceAuthority();
               }

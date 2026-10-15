@@ -13,6 +13,7 @@ import org.apache.jena.sparql.exec.QueryExecResult;
 /** Native reads use the same request-local work owner as commands. */
 final class QueryWorkService extends SPARQL_QueryDataset {
     static final String READ_CUT_HEADER = "X-Rezics-Read-Cut";
+    static final String GRAPH_VERSION_HEADER = "X-Rezics-Graph-Version";
     static final String REQUIRE_QUALIFIED_HEADER = "X-Rezics-Require-Qualified-Read";
     static final int MAX_READ_CUT_BYTES = 2048;
 
@@ -86,6 +87,8 @@ final class QueryWorkService extends SPARQL_QueryDataset {
             try (var capture = SearchDeltaJournal.captureRead(data, () -> {
                 action.beginRead(); began[0] = true;
             })) {
+                String graphVersion = TemplateIndexService.graphReadVersion(data);
+                if (graphVersion != null) action.getResponse().setHeader(GRAPH_VERSION_HEADER, graphVersion);
                 var evidence = readCutHeader(capture.evidence());
                 action.getResponse().setHeader(READ_CUT_HEADER, org.apache.jena.atlas.json.JSON.toStringFlat(evidence));
                 if (requireQualified && !evidence.get("qualified").getAsBoolean().value()) {

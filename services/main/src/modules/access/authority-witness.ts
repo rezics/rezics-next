@@ -27,13 +27,54 @@ export interface AuthorityWitness {
 }
 export interface AuthoritySource { table: AuthorityTable; id: string | null; generation?: string | null }
 
+interface SourceRow {
+  id: string; generation: string; membership_id?: string; membership_generation?: string;
+  private_membership_id?: string; private_membership_generation?: string;
+  group_id?: string; subject_id?: string; valid_until?: Date | number | string;
+}
+
+/** Each arm retains its row locks; UNION ALL batches independent exact sources
+ * without an inventory scan or a transaction-spanning authority cache. */
+async function readSources(client: PoolClient, sources: readonly AuthoritySource[], check = false): Promise<Map<string, SourceRow>> {
+  const selected = (Object.keys(tables) as AuthorityTable[]).flatMap(table => {
+    const ids = [...new Set(sources.filter(source => source.table === table && source.id !== null).map(source => source.id!))].sort();
+    return ids.length ? [{ table, ids }] : [];
+  });
+  if (!selected.length) return new Map();
+  if (check && selected.length === 1) {
+    const { table, ids } = selected[0]!, config = tables[table];
+    const rows = (await client.query<SourceRow>(`SELECT id,${config.generation}::text AS generation FROM access.${table}
+      WHERE id = ANY($1::${table === 'authority_subject' ? 'text' : 'uuid'}[]) AND ${config.predicate}
+      ORDER BY id FOR SHARE`, [ids])).rows;
+    return new Map(rows.map(row => [`${table}:${row.id}`, row]));
+  }
+  // Keep the single-source wire shape for owners that read just one witness.
+  if (selected.length === 1 && selected[0]!.ids.length === 1) {
+    const { table, ids } = selected[0]!, config = tables[table];
+    const row = (await client.query<SourceRow>(`SELECT *, ${config.generation}::text AS generation
+      FROM access.${table} WHERE id = $1 AND ${config.predicate} FOR SHARE`, [ids[0]])).rows[0];
+    return new Map(row ? [[`${table}:${row.id}`, row]] : []);
+  }
+  const sql = selected.map(({ table }, index) => {
+    const config = tables[table];
+    return `SELECT '${table}' AS source_table,
+      to_jsonb(locked) || jsonb_build_object('generation', locked.${config.generation}::text) AS source_row FROM (
+      SELECT * FROM access.${table}
+      WHERE id = ANY($${index + 1}::${table === 'authority_subject' ? 'text' : 'uuid'}[]) AND ${config.predicate}
+      ORDER BY id FOR SHARE) locked`;
+  }).join('\nUNION ALL\n');
+  const rows = (await client.query<{ source_table: AuthorityTable; source_row: SourceRow }>(sql,
+    selected.map(source => source.ids))).rows;
+  return new Map(rows.map(row => [`${row.source_table}:${row.source_row.id}`, row.source_row]));
+}
+
 /** At most one selected authority path and its bounded group ancestry. Adding
  * unrelated authority never adds work: <=16 source rows plus at most
  * groupDepth + 1 ancestor rows from the active operational profile.
  * FOR SHARE keeps every selected generation stable through the owner commit.
  * https://www.postgresql.org/docs/current/explicit-locking.html#LOCKING-ROWS */
 export const AUTHORITY_WITNESS_COST = { sourceRows: 16, ancestorRows: 'groupDepth + 1',
-  captureStatements: 18, checkStatements: 16 } as const;
+  captureStatements: 18, checkStatements: 2 } as const;
 export async function captureAuthorityWitness(client: PoolClient,
   sources: readonly AuthoritySource[]): Promise<AuthorityWitness[]> {
   try { return await captureWitness(client, sources); }
@@ -49,6 +90,11 @@ async function captureWitness(client: PoolClient,
   const bounds = queue.some(source => ['group_member', 'private_group_member'].includes(source.table))
     ? await groupBounds(client) : null;
   const rowLimit = AUTHORITY_WITNESS_COST.sourceRows + (bounds ? bounds.groupDepth + 1 : 0);
+  if (new Set(queue.map(source => `${source.table}:${source.id}`)).size > rowLimit) {
+    throw new AdmissionDenied('authority proof exceeds its bound');
+  }
+  const loaded = await readSources(client, queue);
+  const initial = new Set(queue.map(source => `${source.table}:${source.id}`));
   const witness = new Map<string, AuthorityWitness>();
   let expandedGroup = false;
   for (let at = 0; at < queue.length; at++) {
@@ -60,14 +106,13 @@ async function captureWitness(client: PoolClient,
       continue;
     }
     if (witness.size >= rowLimit) throw new AdmissionDenied('authority proof exceeds its bound');
-    const config = tables[source.table];
-    const row = (await client.query<{ id: string; generation: string; membership_id?: string;
-      membership_generation?: string; private_membership_id?: string; private_membership_generation?: string;
-      group_id?: string; subject_id?: string; valid_until?: Date | number }>(`SELECT *, ${config.generation}::text AS generation
-      FROM access.${source.table} WHERE id = $1 AND ${config.predicate} FOR SHARE`, [source.id])).rows[0];
+    const row = initial.has(key) ? loaded.get(key)
+      : (await readSources(client, [source])).get(key);
     if (!row || source.generation != null && row.generation !== source.generation) throw new AdmissionDenied('selected authority changed');
     witness.set(key, { table: source.table, id: row.id, generation: row.generation,
-      ...(row.valid_until instanceof Date ? { validUntil: row.valid_until.toISOString() } : {}) });
+      ...(row.valid_until instanceof Date ? { validUntil: row.valid_until.toISOString() }
+        : typeof row.valid_until === 'string' && row.valid_until !== 'infinity' && row.valid_until !== '-infinity'
+          ? { validUntil: new Date(row.valid_until).toISOString() } : {}) });
     if (source.table === 'representation' && row.subject_id) queue.push({ table: 'authority_subject', id: row.subject_id });
     if (row.membership_id) queue.push({ table: 'membership', id: row.membership_id, generation: row.membership_generation });
     if (row.private_membership_id) queue.push({ table: 'private_membership', id: row.private_membership_id,
@@ -109,17 +154,9 @@ async function witnessCurrent(client: PoolClient,
   const ancestors = witness.filter(row => row.table === 'recipient_group').length;
   if (!witness.length || witness.length - ancestors > AUTHORITY_WITNESS_COST.sourceRows
     || ancestors && ancestors > (await groupBounds(client)).groupDepth + 1) return false;
-  for (const table of Object.keys(tables) as AuthorityTable[]) {
-    const selected = witness.filter(row => row.table === table);
-    if (!selected.length) continue;
-    const config = tables[table];
-    const rows = (await client.query<{ id: string; generation: string }>(`
-      SELECT id,${config.generation}::text AS generation FROM access.${table}
-      WHERE id = ANY($1::${table === 'authority_subject' ? 'text' : 'uuid'}[]) AND ${config.predicate}
-      ORDER BY id FOR SHARE`, [selected.map(row => row.id)])).rows;
-    if (rows.length !== selected.length || rows.some(row => selected.find(saved => saved.id === row.id)?.generation !== row.generation)) return false;
-  }
-  return witness.every(row => Object.hasOwn(tables, row.table));
+  if (!witness.every(row => Object.hasOwn(tables, row.table))) return false;
+  const rows = await readSources(client, witness, true);
+  return rows.size === witness.length && witness.every(row => rows.get(`${row.table}:${row.id}`)?.generation === row.generation);
 }
 
 /** No extra reads: capture already locked every selected row through commit. */

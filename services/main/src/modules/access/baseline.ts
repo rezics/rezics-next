@@ -294,7 +294,9 @@ export function baselineWorkTypesAllowed(request: Pick<AdmissionRequest, 'workSe
 }
 
 export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiClient, 'query'> | undefined,
-  request: AdmissionRequest, principalId: string, replyRootDecision?: ReplyRootDecision): Promise<BaselineProof | null> {
+  request: AdmissionRequest, principalId: string, replyRootDecision?: ReplyRootDecision,
+  /** Only the caller holding this scope's SHARE gate may prove absence once. */
+  scopePolicyAbsent = false): Promise<BaselineProof | null> {
   if (request.authorityPath === 'direct-principal') return null;
   const zonePage = resolveZonePageContent(request);
   if (zonePage.kind === 'refused') return null;
@@ -303,7 +305,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     if (!baselineWorkTypesAllowed(request)) return null;
     const page = baselineTarget(request.action, request.scope);
     if (!page || (page.kind !== 'author-work' && page.kind !== 'reply-draft')) return null;
-    if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
+    if (!scopePolicyAbsent && (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
     const proof = await controllerProofFor(page)(client, principalId, request.actingSubject);
     if (!proof || !await zoneSpaceCreatorAllowed(client, graph, principalId, request.actingSubject,
       zonePage.zone)) return null;
@@ -322,7 +324,7 @@ export async function newBaselineProof(client: PoolClient, graph: Pick<FusekiCli
     || !/^[0-9a-f-]{36}$/.test(request.baselineSourceRevision))) return null;
   // An installed resource policy owns its stricter decision. Baseline never
   // overrides it, including when that resource happens to be publicly readable.
-  if ((await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
+  if (!scopePolicyAbsent && (await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) return null;
   const proof = await controllerProofFor(target, request.baselineRelatedWork ?? null)(
     client, principalId, request.actingSubject);
   if (!proof) return null;

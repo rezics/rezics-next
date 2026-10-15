@@ -2,7 +2,8 @@ import { afterAll, beforeAll, expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
+import { captureAuthorityWitness, authorityWitnessCurrent } from '../src/modules/access/authority-witness.ts';
 import { startPostgresCluster, type PostgresCluster } from '../../../tests/qa/support/postgres-cluster.ts';
 import { schemaFiles } from '../../../scripts/qa/schema-files.ts';
 import {
@@ -184,6 +185,40 @@ async function fixture(ownerPool = pool, scopeOverride?: string) {
     writes,
   };
 }
+
+test('exact authority batches retain PostgreSQL locks and generations in one statement per phase', async () => {
+  const h = await fixture();
+  const client = await pool.connect();
+  let statements = 0;
+  const observed = { query: async (sql: string, values?: unknown[]) => {
+    statements++;
+    return client.query(sql, values);
+  } } as unknown as PoolClient;
+  try {
+    await client.query('BEGIN');
+    const witness = await captureAuthorityWitness(observed, [
+      { table: 'principal', id: h.principalId },
+      { table: 'authority_subject', id: h.actor },
+      { table: 'representation', id: h.representationId },
+      { table: 'permission_grant', id: h.grantId },
+    ]);
+    expect(witness).toHaveLength(4);
+    expect(witness.find(row => row.table === 'representation')?.validUntil).toBeDefined();
+    expect(statements).toBe(1);
+    expect(await authorityWitnessCurrent(observed, witness)).toBe(true);
+    expect(statements).toBe(2);
+    expect(await authorityWitnessCurrent(observed, witness.map(row => ({ ...row, generation: '-1' })))).toBe(false);
+    const locks = (await client.query<{ name: string }>(`SELECT c.relname AS name FROM pg_locks l
+      JOIN pg_class c ON c.oid = l.relation WHERE l.pid = pg_backend_pid()
+      AND l.mode = 'RowShareLock' AND c.relnamespace = 'access'::regnamespace`)).rows;
+    expect(locks.map(row => row.name)).toEqual(expect.arrayContaining([
+      'principal', 'authority_subject', 'representation', 'permission_grant',
+    ]));
+  } finally {
+    await client.query('ROLLBACK');
+    client.release();
+  }
+});
 
 test('C1: published deny between register and claim rejects dispatch without writes; retry recovers only its receipt', async () => {
   const h = await fixture();

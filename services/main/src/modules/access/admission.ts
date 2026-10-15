@@ -1496,10 +1496,14 @@ export class AccessAdmissionRegistry {
       ];
       let publishingProof: RepresentedWorkProof | null = null;
       authoritySources.push(...participationSources);
+      // Policy writers need the exclusive scope gate. Its held SHARE lock
+      // proves absence through this transaction, including baseline and the
+      // final policy decision; three identical probes add no authority.
+      const scopePolicyAbsent = !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount;
       const administratorCandidate = !existing && zonePage.kind !== 'refused' && authorityPath === 'represented-agent'
         && !memberReply
         && platformAdministratorAction(request.action, request.scope)
-        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount
+        && scopePolicyAbsent
         ? await platformAdministratorProof(client, principalId, request.actingSubject, true,
           zonePage.kind === 'zone' ? { action: 'zone.edit', scope: zoneEditScope(zonePage.zone) } : undefined) : null;
       const administratorTarget = administratorCandidate
@@ -1513,12 +1517,13 @@ export class AccessAdmissionRegistry {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
       const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request,
-        principalId, memberReply ? this.replyRootDecision(client, request.principal, request.actingSubject) : undefined) : null;
+        principalId, memberReply ? this.replyRootDecision(client, request.principal, request.actingSubject) : undefined,
+        scopePolicyAbsent) : null;
       if (!existing && zonePage.kind === 'refused') {
         throw new AdmissionDenied('Content zone page target is unresolved');
       }
       if (!existing && zonePage.kind === 'zone' && !baseline && !administrator
-        && !(await client.query('SELECT id FROM access.policy WHERE scope_id = $1', [request.scope])).rowCount) {
+        && scopePolicyAbsent) {
         throw new AdmissionDenied('Zone edit authority is unavailable');
       }
       const rating = !existing && authorityPath === 'represented-agent' && ratingConfiguration
@@ -1671,7 +1676,7 @@ export class AccessAdmissionRegistry {
         { table: 'representation', id: baseline?.avatar_control_id ?? null, generation: baseline?.avatar_control_generation },
         { table: 'permission_grant', id: rating?.grant_id ?? null, generation: rating?.grant_generation },
       ]);
-      if (!await admissionPolicyAllowed(client, principalId, request.actingSubject,
+      if (!scopePolicyAbsent && !await admissionPolicyAllowed(client, principalId, request.actingSubject,
         request.scope, request.action, { witness, eligible: true })) {
         throw new AdmissionDenied('published policy denies admission');
       }

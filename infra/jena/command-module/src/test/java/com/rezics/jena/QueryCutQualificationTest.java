@@ -60,6 +60,31 @@ public class QueryCutQualificationTest {
     }
     private static String string(JsonObject object, String name) { return object.get(name).getAsString().value(); }
 
+    @Test(timeout = 30_000) public void physicalReadVersionMovesWithoutADiagnosticSequenceChange() throws Exception {
+        try (var fixture = new Fixture()) {
+            var server = server(fixture.data);
+            try {
+                String body = "SELECT ?sequence WHERE { GRAPH <" + CommandPolicy.CONTROL + "> { <urn:rezics:dataset:product> <" + RV + "sequence> ?sequence } }";
+                var first = query(server, body, null);
+                assertEquals(200, first.statusCode());
+                String version = first.headers().firstValue(QueryWorkService.GRAPH_VERSION_HEADER).orElseThrow();
+                assertTrue(version.matches("[0-9a-f-]{36}:[0-9a-f-]{36}:[0-9]+"));
+                assertEquals(version, query(server, body, null).headers()
+                    .firstValue(QueryWorkService.GRAPH_VERSION_HEADER).orElseThrow());
+                fixture.data.begin(org.apache.jena.query.ReadWrite.WRITE);
+                try {
+                    fixture.data.add(uri("urn:test:version"), uri("urn:test:subject"), p("label"),
+                        NodeFactory.createLiteralString("new graph input"));
+                    fixture.data.commit();
+                } finally { fixture.data.end(); }
+                var changed = query(server, body, null);
+                assertEquals(200, changed.statusCode());
+                assertEquals(first.body(), changed.body());
+                assertNotEquals(version, changed.headers().firstValue(QueryWorkService.GRAPH_VERSION_HEADER).orElseThrow());
+            } finally { server.stop(); }
+        }
+    }
+
     @Test(timeout = 30_000) public void streamedQueryKeepsQualificationAndEpochOfItsOwnCutAcrossUnrelatedCommit() throws Exception {
         try (var fixture = new Fixture(); var writer = Executors.newSingleThreadExecutor()) {
             Map<String, Object> before;
