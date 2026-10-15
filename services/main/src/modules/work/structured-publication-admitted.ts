@@ -30,7 +30,8 @@ export async function changeAdmittedWorkStructurePublication(
   const principal = await account.verify(request, ['work:edit']);
   const action = input.operation === 'publish' ? 'work.publish' : 'work.withdraw-publication';
   const registered = await access.register({ principal, actingSubject: input.actingSubject,
-    baselineRelatedWork: input.work, scope: `work:publish:${input.work}`, action,
+    baselineRelatedWork: input.work,
+    requireExplicitGrant: input.operation === 'publish' && input.rightsBasis === 'public-domain', scope: `work:publish:${input.work}`, action,
     idempotencyKey: input.idempotencyKey, requestDigest: digest });
   try {
     let terminal: WorkStructurePublicationReceipt | null =

@@ -69,6 +69,8 @@ export interface VerifiedPrincipal {
 }
 
 export interface AdmissionRequest {
+  /** Owner-only restriction, bound by requestDigest: a sourced publication cannot borrow its transcriber's creator baseline. */
+  requireExplicitGrant?: boolean;
   /** Server-issued, durable proposal/revision/owner-command permit. */
   editorialPermit?: string;
   principal: VerifiedPrincipal;
@@ -1525,7 +1527,7 @@ export class AccessAdmissionRegistry {
       if (!existing && ['media.labels.protect','media.conceal.protect'].includes(request.action) && !administrator) {
         throw new AdmissionDenied('media protection requires the platform administrator proof');
       }
-      const baseline = !existing && !administrator ? await newBaselineProof(client, this.baselineGraph, request,
+      const baseline = !existing && !administrator && !request.requireExplicitGrant ? await newBaselineProof(client, this.baselineGraph, request,
         principalId, memberReply ? this.replyRootDecision(client, request.principal, request.actingSubject) : undefined,
         scopePolicyAbsent) : null;
       if (!existing && zonePage.kind === 'refused') {

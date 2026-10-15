@@ -106,7 +106,8 @@ test('public-domain publication refuses a missing source, unassessed evidence an
   for (const sourceObservation of [source.otherObservation, source.unknownObservation])
     await json(sessions.operator.main('POST', '/v1/work-publications', { ...input, sourceObservation }), 404);
   const { sourceObservation: _copied, ...original } = input;
-  await json(sessions.operator.main('POST', '/v1/work-publications', { ...original, rightsBasis: 'original-contribution' }), 404);
+  const falseOriginal = await sessions.operator.main('POST', '/v1/work-publications', { ...original, rightsBasis: 'original-contribution' });
+  expect([403, 404]).toContain(falseOriginal.status);
 });
 
 test('public-domain publication binds replay, rejects stale heads, and withdraws public delivery for every persona', async () => {

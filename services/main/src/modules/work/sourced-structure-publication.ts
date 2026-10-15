@@ -20,15 +20,18 @@ export interface PublicationAttribution {
 export async function prepareSourcedStructurePublication(deps: MainWorkDependencies,
   input: Extract<WorkStructurePublicationInput, { operation: 'publish' }>, principal: VerifiedPrincipal)
   : Promise<PublicationAttribution> {
-  const refuse = () => new PublicationUnavailable('The exact public-domain Recipe source is unavailable');
+  const refuse = (reason = 'source-incomplete') => {
+    console.info('structured_publication_source_refused', { reason });
+    return new PublicationUnavailable('The exact public-domain Recipe source is unavailable');
+  };
   const principalId = await deps.access.activePrincipalId?.(principal);
-  if (input.rightsBasis !== 'public-domain' || !principalId || !deps.sourceIntake) throw refuse();
+  if (input.rightsBasis !== 'public-domain' || !principalId || !deps.sourceIntake) throw refuse('source-owner');
   const observation = await deps.sourceIntake.read(principalId, input.sourceObservation.slice(-36));
   if (!observation || observation.observation !== input.sourceObservation
     || observation.rightsEvidence.basis !== 'public-domain' || observation.retention !== 'retained'
     || !observation.rawBytesBase64 || !observation.coverage.complete
     || observation.coverage.scope !== 'complete-recipe' || observation.coverage.omittedFields.length
-    || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(observation.mediaType)) throw refuse();
+    || !/^application\/(?:json|ld\+json)(?:;|$)/i.test(observation.mediaType)) throw refuse('source-evidence');
   let document: { url?: unknown; author?: { name?: unknown }; license?: unknown };
   try { document = JSON.parse(Buffer.from(observation.rawBytesBase64, 'base64').toString('utf8')); }
   catch { throw refuse(); }
@@ -38,7 +41,8 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
   const parsed = importRecipe(document, observation.observation);
   const expected = new Map<string, { role: string; parent: string | null; text?: unknown; labels?: unknown }>([
     ...parsed.ingredients.map(item => [item.sourceKey, { role: 'ingredient', parent: null,
-      text: item.qualifier }] as const),
+      text: { ...item.qualifier, ...(item.qualifier.parseStatus !== 'parsed'
+        ? { residual: `sha256:${parsed.residual}` } : {}) } }] as const),
     ...parsed.steps.map(item => [item.sourceKey, { role: 'step', parent: parsed.sections[item.section]?.sourceKey ?? null,
       text: { value: item.text, language: item.language } }] as const),
     ...parsed.sections.map(item => [item.sourceKey, { role: 'group', parent: parsed.sections[item.parent]?.sourceKey ?? null,
@@ -47,7 +51,7 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
   const header = await readCompositionHeader(deps.environment, input.structure);
   if (!header || header.profile !== 'recipe-composition' || header.owner !== input.work
     || header.component !== input.expectedMainVersion || header.head !== input.expectedStructureHead
-    || header.placementCount !== expected.size || !expected.size) throw refuse();
+    || header.placementCount !== expected.size || !expected.size) throw refuse('structure-owner');
   const records: OccurrenceRecord[] = [];
   const snapshot = await readCompositionSnapshot(deps.environment, { structure: input.structure, header,
     revision: input.expectedStructureHead });
@@ -70,7 +74,7 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
     || !isDeepStrictEqual(records.filter(item => item.role === 'step').map(item => item.sourceKey),
       parsed.steps.map(item => item.sourceKey))
     || !isDeepStrictEqual(records.filter(item => item.role === 'group').map(item => item.sourceKey),
-      parsed.sections.map(item => item.sourceKey))) throw refuse();
+      parsed.sections.map(item => item.sourceKey))) throw refuse('source-order');
   const keys = new Map(records.map(record => [record.occurrence, record.sourceKey]));
   if (records.length !== expected.size || new Set(records.map(record => record.sourceKey)).size !== expected.size)
     throw refuse();
@@ -83,7 +87,13 @@ export async function prepareSourcedStructurePublication(deps: MainWorkDependenc
       || wanted.role === 'step' && (!qualifier || qualifier.type !== 'recipe-step'
         || qualifier.media.length > 0 || qualifier.usesIngredient.length > 0
         || !isDeepStrictEqual(qualifier.instructionText, wanted.text))
-      || wanted.role === 'group' && !isDeepStrictEqual(record.labels, wanted.labels)) throw refuse();
+      || wanted.role === 'group' && !isDeepStrictEqual(record.labels, wanted.labels)) {
+      console.info('structured_publication_source_binding', { role: record.role,
+        keys: Object.keys(qualifier ?? {}).sort(), expectedKeys: Object.keys(wanted?.text ?? {}).sort(),
+        parent: (record.parent === input.structure ? null : keys.get(record.parent)) === wanted?.parent,
+        sameText: isDeepStrictEqual(qualifier, wanted?.text) });
+      throw refuse('source-text');
+    }
   }
   if (!deps.rights || !(await deps.rights.store.structuredPublicationRights(input.work, observation.record)).allowed)
     throw refuse();
