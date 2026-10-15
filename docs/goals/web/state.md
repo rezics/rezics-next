@@ -1,5 +1,42 @@
 # State
 
+Checkpoint 8e295218-e93a-480d-b41f-f9da798781fd consolidates handled events
+task:G-2462:20 and mail:22a28059-1548-4018-bb9b-ec0edfaec74f. These
+decisions supersede G-2462's classification hold below; later continuation
+and result events retain their own authority.
+
+| Task | Current decision and next action |
+| --- | --- |
+| G-2462 | Task:G-2462:20 and decision `478e5aa99b` withheld acceptance after canonical gate `run-jICjwV`: contract, types, lint and AST passed, but affected tests failed after 1131.098s with 0.264s slot wait. Ten failures were confirmed on main `1f20ae1f32` and excused; the remaining reaper marker-removal test missed `rm -f marked-container` on the candidate. Guards and stories were not reached. Mail:22a28059 and decision `1e012f9522` resolve classification: Program identifies a timing-dependent harness test, its second occurrence, passing in isolation; G-2686 owns deterministic reaper tests under load. Keep acceptance and landing withheld. Program owns one complete canonical-gate continuation after G-2686 lands; web starts no duplicate resume or landing. The later Program decision `46629cc2bb` records that prerequisite on main and authorizes its continuation; its result belongs to its own event. Preserve all six personas, recording/replay, separate integration proof, the 11 entry tests/21 assertions, 19 roster tests/198 assertions and applicable 18-story phone/desktop inspection evidence. Every assertion, scope limit, existing budget and initial/retry guard timing report remains required; acceptance still needs the complete canonical gate. |
+
+G-2234's shared-path hold and G-2585's Program-owned retained-corpus hold
+remain as recorded below. G-2674's later landing/result disposition belongs
+to its own event. This checkpoint promotes no API row or persona cell.
+
+The method's measures, current status and latest efficiency report were read.
+Scope remains 67/68 API rows proved and 402 proved/6 pending persona cells.
+Web's first-attempt share is 24% overall and 6% today (5 of 87); attempts per
+landed task have median 3 and maximum 25 (G-2237). Recorded tokens are
+2053M input/13M output, with two sessions unavailable and tokens per proved
+row unavailable. Attempts count 71 first, 50 step, 220 fix and 3 capacity;
+11 fixes are inferred from unavailable handoffs. Retained refusals count
+0 outcome, 12 gate, 0 failing-test findings and 18 other. These aggregate
+readings are not costs attributed to these events. Current status already
+shows G-2462 attempt 21 exited; its result needs its own event. The latest
+efficiency report remains dated 2026-10-13 21:49 UTC and supplies no
+comparable measurement of this correction. Repeated work in these events
+comes from a timing-dependent shared reaper test under load. Program's
+G-2686 repair addresses that cause; retaining applicable surface evidence
+avoids unchanged recording and inspection work. No successful gate or
+efficiency gain is inferred before its result is decided.
+
+The supplied mail was acknowledged by its deciding turn at
+2026-10-15 23:10:28 UTC; that acknowledgement was confirmed here. The task
+event has its committed brief decision. This checkpoint changes only this
+file and starts no worker, landing, closure or watcher.
+
+## Retained checkpoint 36d38e9a
+
 Checkpoint 36d38e9a-240a-441f-8630-2013ac43a6b2 consolidates handled event
 task:G-2462:18. Its decision supersedes G-2462's earlier landing disposition;
 later Program decisions and result events retain their own authority.
