@@ -229,7 +229,8 @@ async function memberItem(reader: LibraryActingReader, member: { work: string; o
   const read = await readWork(reader, member.work, locale);
   const work: CatalogueWork = read.ok
     ? { id: member.work, href: workHref(member.work.slice(-36)), title: read.data.title, cover: read.data.cover,
-      kind: coverKindOf(read.data.types), authors: [], rating: null, completion: read.data.completionStatus }
+      kind: coverKindOf(read.data.types), authors: [], rating: null, completion: read.data.completionStatus,
+      factObligations: read.data.factObligations }
     : unnamedWork(member.work);
   return { work, types: read.ok ? read.data.types : [], status: null, version: 0, shelvedAt: null,
     startedOn: null, finishedOn: null, rating: null, lastReadAt: null, customShelves: [],

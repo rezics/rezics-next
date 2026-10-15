@@ -45,6 +45,7 @@ const response = await request('POST', '/v1/governance/rules', { profile: 'gover
   actingSubject: operator.actingSubject, expectedRevision: null,
   document: { rule: 'Restrict imported material after review of a rights holder complaint.' }, idempotencyKey: key }, key);
 if (!response.ok) throw new Error(`Rights rule: ${response.status} ${await response.text()}`);
-const rule = await response.json() as { ref: string; revision: string; digest: string };
+const createdRule = await response.json() as { ref: string; revision: string; digest: string };
+const rule = { ref: createdRule.ref, revision: createdRule.revision, digest: createdRule.digest };
 writeFileSync(resolve(directory, 'seed.json'), JSON.stringify({ ...imported, rule,
   publicConfigPath: auth.publicConfigPath, privateConfigPath: auth.privateConfigPath }));

@@ -101,6 +101,33 @@ test('redistributor: native and Schema.org Recipe files retain public-domain sou
   }
 });
 
+test('rights holder: description reports bind edited metadata and refuse an unrelated or stale synopsis revision', async () => {
+  const work = imported.works.find(item => item.provider === 'open-library')!;
+  await f.author.grant(`work:edit:${work.work}`, 'work.edit');
+  const path = `/v1/works/${short(work.work)}/metadata`;
+  const state = { kind: 'header', originalTitle: null, localized: [{ language: 'en', title: null,
+    description: 'A separately recorded editorial description.', mainVersionLabel: null }] };
+  const saved = await json<{ revision: string }>(await f.author.send('PUT', path, {
+    profile: 'work-metadata-details-v1', actingSubject: f.author.actor, expectedHead: null, state,
+  }));
+  const notice = { profile: 'public-report-v1', target: work.work, category: 'copyright', contentLanguage: 'en',
+    selection: { component: 'synopsis', revision: saved.revision, locator: null },
+    statement: 'I hold the rights to this description.', contactEmail: 'editorial-holder@example.test',
+    copyright: { signature: 'Editorial holder', claimantName: 'Editorial holder', claimantAddress: '1 Example Street',
+      claimantPhone: '+1 555 555 0100', claimedWork: 'The original description', materialLocation: work.work,
+      goodFaith: true, accurateAndAuthorizedUnderPerjury: true } };
+  const receipt = await json<Receipt>(await f.call('POST', '/v1/public-reports', notice), 201);
+  const review = await json<{ evidence: Array<{ component: string; revision: string; state: string }> }>(
+    await f.read(`/v1/reports/${receipt.reportId}`));
+  expect(review.evidence).toEqual([expect.objectContaining({ component: 'synopsis', revision: saved.revision,
+    state: 'available' })]);
+  const other = imported.works.find(item => item.provider === 'bangumi')!;
+  expect((await f.call('POST', '/v1/public-reports', { ...notice, target: other.work })).status).toBe(400);
+  await json(await f.author.send('PUT', path, { profile: 'work-metadata-details-v1', actingSubject: f.author.actor,
+    expectedHead: saved.revision, state: { ...state, localized: [{ ...state.localized[0], description: 'A later description.' }] } }));
+  expect((await f.call('POST', '/v1/public-reports', notice)).status).toBe(400);
+});
+
 test('rights holder and operator: an imported cover is credited and an asset restriction closes every served cover use', async () => {
   const work = imported.works.find(item => item.provider === 'vndb')!;
   const digest = (value: Uint8Array | string) => createHash('sha256').update(value).digest('hex');

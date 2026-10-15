@@ -75,6 +75,7 @@ function Completeness({ page, state, scopeLabel, signedIn, locale, t }: {
 export function hitWork(hit: SearchHit, state: SearchState): CatalogueWork {
   return { id: hit.work, href: workHref(hit.work, state.scope), title: hit.title, cover: hit.cover,
     kind: coverKindOf(hit.types), authors: hit.authors, rating: hit.rating, tagline: hit.tagline,
+    factObligations: hit.factObligations,
     completion: hit.completion };
 }
 

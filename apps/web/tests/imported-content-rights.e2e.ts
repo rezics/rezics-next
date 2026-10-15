@@ -12,6 +12,7 @@ import type { DecisionInput, DecisionResult } from '../../../services/main/src/m
 
 test('visitor to rights holder: source licences in every UI language, public complaint, audited removal and a fresh read', async ({ page }, info) => {
   test.setTimeout(240_000);
+  page.setDefaultTimeout(15_000);
   const fixture = JSON.parse(readFileSync(resolve('.temp/imported-content-rights-browser',
     process.env.REZICS_QA_RUN_ID!, 'seed.json'), 'utf8')) as ImportedCatalogueFixture & {
       rule: { ref: string; revision: string; digest: string }; publicConfigPath: string; privateConfigPath: string };
@@ -34,16 +35,18 @@ test('visitor to rights holder: source licences in every UI language, public com
   const copy = textFor('en');
   await page.goto(localizedPath(resourceHref('/w/', work.work), 'en'));
   await page.getByRole('link', { name: copy.reportText, exact: true }).click();
+  await expect(page.getByRole('button', { name: copy.submit, exact: true })).toBeEnabled();
   await page.locator('label[data-scope="radio-group"]').filter({
     has: page.locator('input[value="copyright"]'),
   }).click({ timeout: 15_000 });
   await expect(page.getByRole('radio', { name: /^Copyright/ })).toBeChecked();
+  await expect(page.getByRole('heading', { name: copy.copyrightHeading, exact: true })).toBeVisible();
   await page.getByLabel(copy.statementLabel).fill('I hold the rights to the imported synopsis and request removal.');
   await page.getByLabel(copy.emailLabel, { exact: true }).fill('rights-holder@example.test');
   for (const [label, value] of [[copy.claimantName, 'Rights holder'], [copy.claimantAddress, '1 Example Street'],
     [copy.claimantPhone, '+1 555 555 0100'], [copy.claimedWork, 'The original synopsis'],
     [copy.materialLocation, work.work], [copy.copyrightSignature, 'Rights holder']])
-    await page.getByLabel(label!).fill(value!);
+    await page.getByLabel(label!, { exact: true }).fill(value!);
   await page.getByText(copy.copyrightGoodFaith, { exact: true }).click();
   await page.getByText(copy.copyrightPerjury, { exact: true }).click();
   await page.getByRole('button', { name: copy.submit, exact: true }).click();

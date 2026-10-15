@@ -21,6 +21,7 @@ import { WorkReadLimit } from '../work/read-session.ts';
 import { Value } from 'typebox/value';
 import { discoveryItem } from '../discovery/contract.ts';
 import { PublicQueryBudgetExceeded, PublicQueryUnavailable } from '../work/search-budget.ts';
+import { readFactObligations } from '../rights/read-imported.ts';
 
 export const SEARCH_CARD_COST = { works: 64, creditsPerWork: 3,
   summaryBatches: 2, serialQueries: 1, creditQueries: 1, creditRows: 192,
@@ -186,6 +187,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
       throw new SearchSnapshotMoved('Search card graph position changed');
     }
     const unavailableCredits = new Set<string>();
+    const obligations = await readFactObligations(session, ids);
     const pending = [
       observeSearchPhase('card-summaries', () => session.summaries(ids, true)),
       observeSearchPhase('card-serial', () => optionalPreview(session, () => searchPageSerial(session, ids, true))),
@@ -230,6 +232,7 @@ export async function enrichSearchCardPage<T extends { resultGrain: string;
         ...(ratingUnavailable ? ['rating'] : [])];
       const current = fenced[index]!;
       return [[id, { title: summary.name, cover: current.status === 'available' ? current.avatar : summary.avatar,
+        factObligations: obligations.get(id),
         rating: ratings?.values.get(id) ?? null,
         ratingStatus: ratings?.values.has(id) || ratedMatch
           ? 'available' : ratingUnavailable ? 'unavailable' : ratings!.status === 'selected' ? 'unrated' : ratings!.status,

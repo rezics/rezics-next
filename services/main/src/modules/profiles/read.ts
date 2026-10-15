@@ -18,6 +18,7 @@ import type { shelfWork } from './read-contract.ts';
 import { isNativeCreditRole, type NativeCreditRole } from '../work/read-contract.ts';
 import { WORK_SEMANTIC_TYPES } from '../work/activate.ts';
 import { readSerialSummaries } from '../work/summary-serial.ts';
+import { readFactObligations } from '../rights/read-imported.ts';
 import { readWorkRating } from '../work/read-rating.ts';
 import { selectDisplayName, type DisplayName, type LocalizedText } from '../display-language/select.ts';
 import { agentLocalizedName } from '../agent/localized-name.ts';
@@ -342,6 +343,7 @@ export function nextPage(session: WorkReadSession, binding: unknown, ids: string
  * and one type batch, so a shelf draws each Work's cover as every page does. */
 export async function shelfWorks(session: WorkReadSession, works: string[]) {
   const ids = [...new Set(works)];
+  const obligations = await readFactObligations(session, ids);
   const summaries = await session.summaries(ids);
   const typeRows = ids.length
     ? await session.query(
@@ -371,6 +373,7 @@ export async function shelfWorks(session: WorkReadSession, works: string[]) {
       throw new WorkReadMoved('Summary changed during read');
     result.set(id, {
       id,
+      factObligations: obligations.get(id),
       title: summary.name,
       cover: summary.avatar,
       types: typeRows

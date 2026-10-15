@@ -37,7 +37,7 @@ export function assertNoImportedUserPosts(records: readonly DatasetRecord[]): vo
     : value !== null && typeof value === 'object' && Object.entries(value).some(([key, child]) =>
       userFields.has(key) || containsPost(child));
   for (const record of records) if (userKinds.has(record.kind.toLowerCase())
-    || record.provider === 'bangumi' && containsPost(record.data)) {
+    || ['bangumi', 'vndb', 'open-library', 'project-gutenberg'].includes(record.provider) && containsPost(record.data)) {
     throw new Error('Dataset contains source user posts; capture only licensed catalogue records');
   }
 }

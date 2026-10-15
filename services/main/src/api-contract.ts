@@ -2,7 +2,7 @@ import { t } from 'elysia';
 import './modules/types/registry.ts';
 import { registryWorkType } from './modules/types/contract.ts';
 import { discoveryCredit, discoveryItem, discoveryRating } from './modules/discovery/contract.ts';
-import { readAvatar, readName } from './modules/work/read-contract.ts';
+import { readAvatar, readName, wikiDisplayObligations } from './modules/work/read-contract.ts';
 import { serialStatus } from './modules/work/metadata-schema.ts';
 import { mergedIdentity } from './modules/identity-merge/resolution.ts';
 
@@ -102,6 +102,7 @@ export const phraseMatch = t.Object({
   matchedText: t.Optional(t.String()), matchedLanguage: t.Optional(t.Nullable(t.String())),
   matchedChapter: t.Optional(t.Object({ post: t.String(), book: t.String(), title: t.String() })),
   title: t.Optional(readName), cover: t.Optional(readAvatar),
+  factObligations: t.Optional(wikiDisplayObligations),
   primaryCredits: t.Optional(t.Array(discoveryCredit, { maxItems: 3 })),
   rating: t.Optional(t.Nullable(discoveryRating)), tagline: t.Optional(t.Nullable(readName)),
   ratingStatus: t.Optional(t.Union([t.Literal('available'), t.Literal('unrated'), t.Literal('no-context'),

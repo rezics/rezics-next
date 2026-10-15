@@ -7,6 +7,7 @@ import { DEFAULT_MEDIA_CONTEXT } from '../media/contract.ts';
 import { GRAPHS, RV, iri, type WorkActivationEnvironment } from '../work/activate.ts';
 import { resolveRealmProfile } from '../space/policy.ts';
 import { readExactMainRevision, readExactWorkRevision, RevisionNotFound } from '../work/history.ts';
+import { metadataComponent, METADATA_PROFILE, checkedMetadataState } from '../work/metadata-schema.ts';
 import { CompositionCorrupt, CompositionUnavailable, readCompositionHeader } from '../structure/graph.ts';
 import { readCompositionPage } from '../structure/read.ts';
 import { semanticResourceTypeRole } from '../semantic/change.ts';
@@ -17,6 +18,35 @@ import { type CapturedEvidence, type EvidenceCapture, type EvidenceTarget, Gover
 const agent = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}$/;
 const graphAnchor = /^https:\/\/rezics\.com\/id\/[0-9a-f-]{36}(?:-agent-revision)?$/;
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+/** A synopsis may be in the creation manifest or in an exact metadata revision.
+ * The component identity binds metadata to its Work, including after a later edit. */
+async function captureSynopsis(env: WorkActivationEnvironment, target: EvidenceTarget): Promise<CapturedEvidence> {
+  const component = metadataComponent(target.resource, { kind: 'header', originalTitle: null, localized: [] });
+  const rows = (await env.fuseki.query(`PREFIX rv: <${RV}> SELECT ?state WHERE { GRAPH ${iri(GRAPHS.revisions)} {
+    ${iri(target.revision!)} a rv:WorkMetadataRevision ; rv:component ${iri(component)} ;
+      rv:modelRevision ${iri(METADATA_PROFILE)} ; rv:shapeRevision ${iri(METADATA_PROFILE)} ; rv:metadataState ?state
+  } } LIMIT 2`, 131072)).results?.bindings ?? [];
+  if (rows.length > 1) throw new GovernanceUnavailable('Synopsis evidence is ambiguous');
+  if (rows[0]?.state) {
+    const state = checkedMetadataState(JSON.parse(rows[0].state.value));
+    if (state.kind !== 'header') throw new GovernanceInvalid('Synopsis evidence needs header metadata');
+    const descriptions = state.localized.filter(row => row.description || row.tagline)
+      .map(row => ({ language: row.language, description: row.description, tagline: row.tagline }));
+    return result(target, descriptions.length ? 'available' : 'unavailable', descriptions.length
+      ? sha256(JSON.stringify([target.revision, target.resource, descriptions])) : null,
+    'work-synopsis', 'graph-exact-work-revision-v1');
+  }
+  try {
+    const exact = await readExactWorkRevision(env, target.revision!, async work => work === target.resource);
+    return result(target, exact.description ? 'available' : 'unavailable',
+      exact.description ? sha256(JSON.stringify([exact.revision, exact.work, exact.description])) : null,
+      'work-synopsis', 'graph-exact-work-revision-v1');
+  } catch (error) {
+    if (error instanceof RevisionNotFound) return result(target, 'unavailable', null, null, 'graph-exact-work-revision-v1');
+    throw error;
+  }
+}
 const sourceId = (value: string): string | null => {
   const id = value.startsWith('https://rezics.com/id/') ? value.slice('https://rezics.com/id/'.length) : value;
   return uuid.test(id) ? id : null;
@@ -167,13 +197,11 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
   return {
     async admitted(target, admission) {
       if (target.owner === 'graph' && owners.graph && target.revision && graphAnchor.test(target.revision)) {
-        if (target.component === 'title' || target.component === 'synopsis') {
+        if (target.component === 'synopsis') return captureSynopsis(owners.graph.env, target);
+        if (target.component === 'title') {
           try {
             const exact = await readExactWorkRevision(owners.graph.env, target.revision,
               async work => work === target.resource);
-            if (target.component === 'synopsis') return result(target, exact.description ? 'available' : 'unavailable',
-              exact.description ? sha256(JSON.stringify([exact.revision, exact.work, exact.description])) : null,
-              'work-synopsis', 'graph-exact-work-revision-v1');
             return result(target, 'available', sha256(JSON.stringify([exact.revision, exact.work, exact.title,
               exact.language])), 'work-title-en', 'graph-exact-work-revision-v1');
           } catch (error) {
@@ -226,12 +254,10 @@ export function ownerEvidenceCapture(owners: EvidenceOwners): EvidenceCapture & 
         if (!await owners.graph.canReadWork(principal, actingSubject, target.resource)) {
           throw new GovernanceDenied('reporter cannot read the reported Work');
         }
+        if (target.component === 'synopsis') return captureSynopsis(owners.graph.env, target);
         try {
           const exact = await readExactWorkRevision(owners.graph.env, target.revision, async work =>
             work === target.resource);
-          if (target.component === 'synopsis') return result(target, exact.description ? 'available' : 'unavailable',
-            exact.description ? sha256(JSON.stringify([exact.revision, exact.work, exact.description])) : null,
-            'work-synopsis', 'graph-exact-work-revision-v1');
           return result(target, 'available', sha256(JSON.stringify([exact.revision, exact.work, exact.title,
             exact.language])), 'work-title-en', 'graph-exact-work-revision-v1');
         } catch (error) {
@@ -361,7 +387,10 @@ export function ownerTargetHeads(owners: { graph?: WorkActivationEnvironment; co
       if (target.owner === 'graph' && owners.graph && agent.test(target.resource)) {
         const result = await owners.graph.fuseki.query(`PREFIX rv: <https://rezics.com/vocab/>
           SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
-            ${iri(target.resource)} ${target.component === 'structure' ? 'rv:structureHead' : 'rv:head'} ?head
+            ${iri(target.resource)} ${target.component === 'structure' ? 'rv:structureHead' : 'rv:head'} ?workHead .
+            ${target.component === 'synopsis'
+              ? `OPTIONAL { ${iri(target.resource)} rv:descriptiveMetadataHead ?metadataHead }
+                BIND(COALESCE(?metadataHead, ?workHead) AS ?head)` : 'BIND(?workHead AS ?head)'}
           } } LIMIT 2`);
         const rows = result.results?.bindings ?? [];
         return rows.length === 1 ? rows[0]!.head!.value : null;

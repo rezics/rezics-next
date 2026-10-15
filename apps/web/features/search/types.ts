@@ -37,6 +37,7 @@ export interface MatchReasons {
 
 /** One result with the title and cover hydrated from Main's resource summaries. */
 export interface SearchHit {
+  factObligations?: import('../rights-mark/rights-mark.tsx').DisplayObligations;
   matchUnit: string;
   work: string;
   mainVersion: string;

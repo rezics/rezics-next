@@ -121,7 +121,8 @@ export function WorkAbout({ work, locale = 'en', messages }: {
       </div>
     </Expandable>
     {mark}
-    <ReportAction target={work.id} kind="text" selection={{ component: 'synopsis', revision: work.revision, locator: null }}
+    <ReportAction target={work.id} kind="text" selection={{ component: 'synopsis',
+      revision: work.metadataRevision ?? work.revision, locator: null }}
       className="inline-flex w-fit items-center gap-1 text-muted-foreground text-xs hover:underline" />
   </section>;
 }

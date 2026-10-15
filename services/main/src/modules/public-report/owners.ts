@@ -309,7 +309,12 @@ export function publicReportOwners(deps: MainWorkDependencies, contentPool: Pool
           const [target] = await resolveTargets(session, [resource], 'report', undefined, reportOwnerTargets(contentPool));
           if (!target) throw new GovernanceDenied('Target is unavailable');
           if (input.selection?.component === 'synopsis') {
-            if (target.base !== 'work' || target.resource !== resource || target.revision !== input.selection.revision)
+            const heads = await session.query(`SELECT ?head WHERE { GRAPH ${iri(GRAPHS.current)} {
+              ${iri(resource)} rv:head ?workHead . OPTIONAL { ${iri(resource)} rv:descriptiveMetadataHead ?metadataHead }
+              BIND(COALESCE(?metadataHead, ?workHead) AS ?head)
+            } } LIMIT 2`, 2);
+            if (target.base !== 'work' || target.resource !== resource || heads.length !== 1
+              || heads[0]?.head?.value !== input.selection.revision)
               throw new GovernanceInvalid('Synopsis selection must name the current Work revision');
             if ((await session.disclosure([{ owner: 'graph', resource, component: 'synopsis' }]))[0] !== 'visible')
               throw new GovernanceDenied('Synopsis is unavailable');
