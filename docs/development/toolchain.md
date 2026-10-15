@@ -115,6 +115,9 @@ Native response validators require the Problem body directly inside a typed
 status result; global rate-limit and backpressure refusals preserve their
 status, media type and retry headers through that path. The address-miss
 response mapper serializes the same refusal at the final mapping boundary.
+Closed 429 response schemas also admit the existing optional budget `family`
+field: beta.32 validates typed admission replies against those schemas, so
+omitting the field from the schema turned upload refusals into validation errors.
 
 The inference baseline was recorded again with three fresh samples after the
 compiler environment changed and wave/2 merged. Relative to main’s previous

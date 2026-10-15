@@ -84,7 +84,7 @@ export const pendingOperation = t.Object({
   result: t.Null(), retry: t.Object({ allowed: t.Literal(true), afterMs: t.Number() }),
 });
 
-export function problemResult<const Status extends number>(status: Status) {
+function baseProblemResult<const Status extends number>(status: Status) {
   return t.Object({ type: t.String(), title: t.String(), status: t.Literal(status),
     code: t.String(), currentHead: t.Optional(t.Nullable(t.String())),
     detail: t.Optional(t.String({ maxLength: 512 })),
@@ -92,6 +92,18 @@ export function problemResult<const Status extends number>(status: Status) {
       path: t.Nullable(t.String({ maxLength: 180 })),
       constraint: t.Nullable(t.String({ maxLength: 180 })),
     }, { additionalProperties: false })) }, { additionalProperties: false });
+}
+
+function capacityProblemResult() {
+  // Budget refusals carry their policy family; other 429 Problems may omit it.
+  return t.Object({ ...baseProblemResult(429).properties, family: t.Optional(t.String()) },
+    { additionalProperties: false });
+}
+
+export function problemResult(status: 429): ReturnType<typeof capacityProblemResult>;
+export function problemResult<const Status extends number>(status: Status): ReturnType<typeof baseProblemResult<Status>>;
+export function problemResult(status: number) {
+  return status === 429 ? capacityProblemResult() : baseProblemResult(status);
 }
 
 export const phraseMatch = t.Object({
