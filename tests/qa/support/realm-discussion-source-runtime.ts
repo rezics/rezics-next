@@ -13,7 +13,7 @@ import { RetainedSources, sourceFileDigests } from '../../../scripts/qa/retained
 import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { producerModules, retainedVolumeInventory } from '../fault-recovery/owner-restore-erasure-fixture.ts';
 import { personaSessions, retainPersonaRealm, restorePersonaRealms } from './personas.ts';
-import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
+import { realmDiscussionSourceAdapter, realmDiscussionSourceSpecification, realmSourceAuthorityLifetimeMs, type RealmSourceRuntime, type RealmSourceSessions } from './realm-discussion-source.ts';
 
 export const realmSourceDirectory = () => join(root, '.temp', 'realm-discussion-sources');
 const physicalNamespace = sha256(root);
@@ -54,7 +54,8 @@ export function realmSourceRuntime(): RealmSourceRuntime {
           startedAt: event.requestStartedAt, finishedAt: event.answeredAt, status: event.response.status,
           answer: service === 'Main' ? JSON.parse(event.response.body) : null });
       };
-      const options = { observeMain: observer('Main'), observeAccount: observer('Account') };
+      const options = { observeMain: observer('Main'), observeAccount: observer('Account'),
+        moderatorLifetimeMs: realmSourceAuthorityLifetimeMs };
       const rankingPublic = await personaSessions('public', options);
       try {
         return { rankingPublic, rankingPrivate: await personaSessions('private', options),

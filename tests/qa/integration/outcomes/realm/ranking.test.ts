@@ -17,7 +17,10 @@ type Page = {
 setDefaultTimeout(420_000);
 let publicRealm: PersonaSessions, privateRealm: PersonaSessions;
 const publicThreads: string[] = [], oldThreads: string[] = [], currentThreads: string[] = [];
-let restored: { dispose(): Promise<void> } | undefined;
+// Admission waits pause the runner's active-work clock, not Bun's hook timer.
+// RetainedSources already bounds active restore/readiness work at 600 seconds.
+const source = await realmDiscussionSource(undefined, 'ranking');
+const restored = await source.sources.restore(source.adapter);
 let emptyRealm: string, movedRealm: string;
 const recording = new OutcomeRecorder(ranking);
 const coordinates = [['best', 'all'], ['top', 'week'], ['top', 'month'], ['top', 'all']] as const;
@@ -99,9 +102,7 @@ async function seed(sessions: PersonaSessions, size: number, label: string) {
 }
 beforeAll(async () => {
   const started = performance.now();
-  const { sources, adapter } = await realmDiscussionSource();
-  const copy = await sources.restore(adapter);
-  restored = copy;
+  const copy = restored;
   publicRealm = copy.candidate.sessions.rankingPublic;
   privateRealm = copy.candidate.sessions.rankingPrivate;
   const inventory = copy.candidate.metadata.ranking;
