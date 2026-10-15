@@ -67,7 +67,7 @@ function result(report: ErasureReport, replayed: boolean): Response {
 
 function erasureError(error: unknown): Response {
   if (error instanceof ErasurePreflightUnsupported || error instanceof MediaErasureUnsupported) {
-    logWorkerFault('main.erasure.inventory_unsupported', error);
+    logWorkerFault('main.erasure.inventory_unsupported', error, { messages: false });
     return problem(409, 'erasure_inventory_unsupported',
       'Erasure targets cannot be completely inventoried within supported limits');
   }
@@ -94,7 +94,7 @@ function erasureError(error: unknown): Response {
   }
   if (error instanceof ErasureNotApplied) return problem(409, 'erasure_not_applied', 'Erasure was cancelled');
   if (error instanceof ErasureUnavailable || error instanceof ObjectUnavailable || error instanceof MediaUnavailable) {
-    logWorkerFault('main.erasure.incomplete', error);
+    logWorkerFault('main.erasure.incomplete', error, { messages: false });
     return problem(503, 'erasure_incomplete', 'Erasure completion could not be verified');
   }
   return commandError(error);

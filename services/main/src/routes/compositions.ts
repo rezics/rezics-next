@@ -239,7 +239,7 @@ export function compositionError(error: unknown): Response {
     || error instanceof ObjectIntegrityError) {
     // The same answer for corrupt, missing and unreadable history; the log keeps
     // which of those it was so the 503 can be routed.
-    logWorkerFault('main.route.composition_unavailable', error);
+    logWorkerFault('main.route.composition_unavailable', error, { messages: false });
     return problem(503, 'composition_unavailable', 'Composition history is unavailable');
   }
   return workReadError(error);
