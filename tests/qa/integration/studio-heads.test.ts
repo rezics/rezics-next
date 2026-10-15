@@ -12,7 +12,8 @@ import { postBooks } from '../../../services/main/src/modules/structure/post-boo
 import { WorkReadSession } from '../../../services/main/src/modules/work/read-session.ts';
 import type { MainWorkDependencies } from '../../../services/main/src/routes/dependencies.ts';
 import { readMainOutboxEnvelope } from '../../../services/main/src/modules/outbox/relay.ts';
-import { hash } from '../../../services/main/src/modules/work/activate.ts';
+import { hash, createWorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
+import { FusekiClient } from '../../../services/main/src/infrastructure/fuseki.ts';
 import { studioRoutes } from '../../../services/main/src/routes/studio.ts';
 import { contentRoutes } from '../../../services/main/src/routes/content.ts';
 import { ContentCore } from '../../../services/content/src/core.ts';
@@ -21,7 +22,7 @@ import { StructureProgressStore } from '../../../services/main/src/modules/progr
 import { S3ImmutableObjects, type ImmutableObjects }
   from '../../../services/main/src/infrastructure/immutable-objects.ts';
 import { authorCreditFixture, shortId } from '../fixtures/author-credit.ts';
-import { DISCLOSURE_COST, DisclosureStore, DisclosureUnavailable } from '../../../services/main/src/modules/disclosure/read.ts';
+import { DISCLOSURE_COST, DisclosureStore, DisclosureUnavailable, resolveDisclosureSelections } from '../../../services/main/src/modules/disclosure/read.ts';
 import { ANONYMOUS_VIEWER } from '../../../services/main/src/modules/suitability/policy.ts';
 
 test('STUDIO draft heads and Work title language survive edits and stale retries', async () => {
@@ -423,12 +424,12 @@ test('Studio chapters and variant pages ignore other Work writes but reject chan
       const before = await content.ownerPosition();
       const input = { revisionId: otherDraft.revisionId!, resourceId: otherWork, author: f.actor,
         exact: 'Concurrent manuscript', body: 'Comment on another Work' };
-      await Promise.all([progress.write({ principal: { issuer: 'https://studio-fence.test', subject: randomUUID() },
+      await progress.write({ principal: { issuer: 'https://studio-fence.test', subject: randomUUID() },
         structure: `https://rezics.com/id/${randomUUID()}`, occurrence: `https://rezics.com/id/${randomUUID()}`,
         completed: true, position: 'p1', expectedVersion: 0, idempotencyKey: randomUUID(),
-        library: { agent: f.actor, work: otherWork } }),
-      comments.create({ ...input, admissionId: randomUUID(), authorityEpoch: '1',
-        scope: `content:comment:${otherWork}`, requestDigest: contentCommentIntentDigest(input) })]);
+        library: { agent: f.actor, work: otherWork } });
+      await comments.create({ ...input, admissionId: randomUUID(), authorityEpoch: '1',
+        scope: `content:comment:${otherWork}`, requestDigest: contentCommentIntentDigest(input) });
       expect(BigInt((await content.ownerPosition()).sequence)).toBeGreaterThan(BigInt(before.sequence));
     };
     const paths = [
@@ -472,9 +473,14 @@ test('G1049 disclosure batches plan a singleton recovery fence without per-read 
     return typeof value === 'function' ? value.bind(target) : value;
   } });
   const reader = new DisclosureStore(measuredPool);
+  const env = createWorkActivationEnvironment({ referenceFencePool: pool,
+    fuseki: new FusekiClient(Bun.env.FUSEKI_URL!),
+    lineage: { dataEpoch: Bun.env.MAIN_DATA_EPOCH!, routingEpoch: Bun.env.MAIN_ROUTING_EPOCH! },
+    objectDirectory: resolve('.temp', `disclosure-plan-${randomUUID()}`) });
   const works = Array.from({ length: DISCLOSURE_COST.batch }, () => `https://rezics.com/id/${randomUUID()}`);
-  const targets = works.map(work => ({ owner: 'graph' as const, resource: work,
-    component: 'title' as const, work }));
+  const selections = await resolveDisclosureSelections(env, works.map(work => ({ owner: 'graph' as const,
+    resource: work, component: 'title' as const, work })));
+  const targets = selections.map(selection => ({ ...selection.target, ancestry: selection.ancestry }));
   type PlanNode = { 'Plan Rows': number; 'CTE Name'?: string; Plans?: PlanNode[] };
   type Plan = { Plan: PlanNode; JIT?: unknown };
   const nodes = (node: PlanNode): PlanNode[] => [node, ...(node.Plans ?? []).flatMap(nodes)];
@@ -495,7 +501,8 @@ test('G1049 disclosure batches plan a singleton recovery fence without per-read 
         expect(nodes(plan.Plan).find(node => node['CTE Name'] === 'fence')?.['Plan Rows']).toBe(1);
       }
     }
-    await expect(reader.read([...targets, targets[0]!], ANONYMOUS_VIEWER, 'summary'))
+    await expect(reader.read(Array.from({ length: DISCLOSURE_COST.submissionLimit + 1 },
+      (_, index) => targets[index % targets.length]!), ANONYMOUS_VIEWER, 'summary'))
       .rejects.toBeInstanceOf(DisclosureUnavailable);
   } finally {
     await pool.query('DELETE FROM access.scope_gate WHERE id = $1', [`work:read:${works.at(-1)}`]);

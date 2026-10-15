@@ -7,6 +7,7 @@ import { subjectStatementPage } from '../../../services/main/src/modules/entity-
 import { ensureGlobalClassificationContext } from '../../../services/main/src/modules/classification/global.ts';
 import { STATEMENT_SEEK_COST, type StatementSeekOrder } from '../../../services/main/src/modules/statement/seek.ts';
 import { GRAPHS, iri } from '../../../services/main/src/modules/work/activate.ts';
+import { WORK_READ_COST } from '../../../services/main/src/modules/work/read-contract.ts';
 
 
 /** Real framed read pagination and PostgreSQL visited-row evidence for the reference seek. */
@@ -83,9 +84,10 @@ test('a framed page of a subject with many Statements is ordered by specificity 
   const query = (cursor: string | null, frames: string[]) => `/v1/resources/${short(subject)}/statements?limit=20`
     + frames.map(frame => `&frame=${encodeURIComponent(frame)}`).join('') + (cursor ? `&cursor=${encodeURIComponent(cursor)}` : '');
   await stack.accessPool.query('DELETE FROM access.statement_seek_coverage WHERE data_epoch=$1',[stack.env.lineage.dataEpoch]);
-  expect((await owner.read(query(null,[work,canon]))).status).toBe(503);
-  // A full page of component properties still requires Statement coverage.
-  expect((await owner.read(query(null,[]))).status).toBe(503);
+  // Missing raw coverage uses the bounded subject neighbourhood. Corrupt
+  // coverage is still refused; reconstruction is not a read prerequisite.
+  expect((await owner.read(query(null,[work,canon]))).status).toBe(200);
+  expect((await owner.read(query(null,[]))).status).toBe(200);
   expect(await stack.statementSeek.projectOnce()).toBe(false);
   expect(await stack.statementSeek.coverage()).toBeNull();
   await stack.statementSeek.rebuild();
@@ -108,8 +110,9 @@ test('a framed page of a subject with many Statements is ordered by specificity 
   expect(seen.map(item => item.statement).sort()).toEqual([...covered.keys()].sort());
   expect(seen.map(item => item.score)).toEqual(seen.map(item => item.score).sort((a, b) => b - a));
   for (const item of seen) expect(item.score).toBe(covered.get(item.statement)!);
-  // The reads per page do not depend on how many Statements the subject has or which page it is.
-  expect(Math.max(...queries)).toBeLessThanOrEqual(queries[0]!);
+  // Frame specificity changes which reference batches a page hydrates. Every
+  // page still fits the same envelope, independently of subject population.
+  expect(Math.max(...queries)).toBeLessThanOrEqual(WORK_READ_COST.graphCalls);
   const sorted = [...timings].sort((a, b) => a - b);
   console.log(`framed pages of ${STATEMENTS} Statements: ${timings.length} pages, first ${timings[0]!.toFixed(0)} ms, `
     + `median ${sorted[Math.floor(sorted.length / 2)]!.toFixed(0)} ms, max ${sorted.at(-1)!.toFixed(0)} ms, `
@@ -120,7 +123,7 @@ test('a framed page of a subject with many Statements is ordered by specificity 
   const withdrawn = await json<{sourcePosition: {sequence: string}}>(await owner.send('POST',
     `/v1/statements/${short(statement)}/withdrawals`,{profile: 'statement-v1',speaker: {kind: 'personal'},
       expectedHead: current.revision,actingSubject: owner.actor}),201);
-  expect((await owner.read(query(null,[work,canon]))).status).toBe(503);
+  expect((await owner.read(query(null,[work,canon]))).status).toBe(200);
   while (await stack.statementSeek.projectOnce()) { /* advance only retained bounded batches */ }
   expect((await stack.statementSeek.coverage())?.through_sequence).toBe(withdrawn.sourcePosition.sequence);
   expect((await stack.accessPool.query('SELECT 1 FROM access.statement_seek WHERE data_epoch=$1 AND statement_id=$2',

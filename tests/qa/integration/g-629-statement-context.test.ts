@@ -19,13 +19,13 @@ test('G-629: subject inventory respects local decisions, withdrawn inheritance, 
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
     await f.grant('classification:decide:global', 'statement.decide');
     await f.grant(`classification:decide:${realm.realm}`, 'statement.decide');
+    const property = await f.property();
     const record = () =>
       f.call('POST', '/v1/statements', {
         profile: 'statement-v1',
         speaker: { kind: 'personal' },
         subject: work.work,
-        predicate: 'https://example.org/unknownProperty',
-        relationDefinition: 'https://example.org/meaning',
+        ...property,
         value: {
           kind: 'literal',
           lexical: '零',
@@ -100,7 +100,9 @@ test('G-629: subject inventory respects local decisions, withdrawn inheritance, 
     // A corrupt local head must block inheritance rather than silently becoming absent.
     await f.env.fuseki.update(`DELETE DATA { GRAPH ${iri(GRAPHS.revisions)} {
       ${iri(withdrawn.decision)} <${RV}outcome> <${RV}Withdrawn> } }`);
-    expect(await items(realm.acceptanceContext)).toEqual([]);
+    expect((await read(realm.acceptanceContext)).status).toBe(503);
+    await f.env.fuseki.update(`INSERT DATA { GRAPH ${iri(GRAPHS.revisions)} {
+      ${iri(withdrawn.decision)} <${RV}outcome> <${RV}Withdrawn> } }`);
     // The first descriptor inventory has no statement total to reveal private rows.
     const hiddenContext = nativeId(),
       hiddenRevision = nativeId();

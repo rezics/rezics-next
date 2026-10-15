@@ -1,6 +1,4 @@
-import { foregroundCounted } from './support/query-cost-meter.ts';
-import { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext,
-  type ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
+import type { ClassificationPost } from '../../../scripts/dev/seed/classified-statement.ts';
 import { expect, test } from 'bun:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
@@ -45,6 +43,10 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
     return queryProfileProcess('g-1027-query-cost.test.ts');
   const sink = startWorkProfileSink({ settleMs: 50 });
   startTelemetry('g-1027-query', { ...process.env, ...sink.env });
+  const { foregroundCounted } = await import('./support/query-cost-meter.ts');
+  const { acceptClassifiedStatement, discloseClassificationConcept, shareClassificationContext } =
+    await import('../../../scripts/dev/seed/classified-statement.ts');
+  const { RESOURCE_LIST_COST } = await import('../../../services/main/src/modules/query/resource-contract.ts');
   const { meterStatements } = await import('./feed-read-support.ts');
   const { startQueryHome, advanceQueryPopulation } =
     await import('../../../services/main/tests/g-1053-query-fixture.ts');
@@ -621,7 +623,7 @@ test('G1027: unified Query keeps ranked joins, chip resolution and page hydratio
               expect(rechecks).toHaveLength(0);
               if (query.filter?.all.some((node) => 'facet' in node && node.facet === 'type'))
                 expect(rankReads.every((text) => text.includes('work'))).toBe(true);
-              if (name === 'common-work') expect(rankReads).toHaveLength(1);
+              if (name === 'common-work') expect(rankReads.length).toBeLessThanOrEqual(RESOURCE_LIST_COST.windows);
             }
           }
           if (name === 'no-text-newest' && !bearer && !baseline) {

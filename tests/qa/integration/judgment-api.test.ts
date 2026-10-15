@@ -7,6 +7,7 @@ import { checkJudgmentProtection }
   from '../../../services/main/src/modules/judgment/protection.ts';
 import { ratingAccount } from '../support/rating-account.ts';
 import { contextFixture, nativeId, RV } from './context-fixture.ts';
+import { CLASSIFICATION_PROPOSITION_PROFILE } from '../../../services/main/src/modules/classification/proposition.ts';
 
 type Write = { receipt: string; revision: string; replayed: boolean };
 type Summary = { generation: string; fit: { sampleSize: number;
@@ -36,7 +37,8 @@ test('GOV09/GOV10: real judgment API preserves dimensions, invalidates badges an
     const concept = nativeId();
     const statementBody = { profile: 'statement-v1', speaker: { kind: 'personal' },
       subject: work.mainVersion, predicate: `${RV}classifiedAs`,
-      relationDefinition: nativeId(), value: { kind: 'resource', iri: concept },
+      relationDefinition: CLASSIFICATION_PROPOSITION_PROFILE,
+      value: { kind: 'resource', iri: concept },
       applicability: [], interpretation: { kind: 'selected' }, evidence: [], actingSubject: f.actorA };
     const recorded = await f.json<{ statement: string }>(
       await f.call('POST', '/v1/statements', statementBody), 201);

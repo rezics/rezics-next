@@ -1,5 +1,4 @@
 import { expect, test } from 'bun:test';
-import { foregroundCounted } from './support/query-cost-meter.ts';
 import { randomUUID } from 'node:crypto';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -53,6 +52,7 @@ test('G1032: dense/negated Query has fixed calls and advancing partial pages wit
   }
   const sink = startWorkProfileSink({ settleMs: 50 });
   startTelemetry('g-1032-query', { ...process.env, ...sink.env, OTEL_TRACES_SAMPLER_ARG: '0' });
+  const { foregroundCounted } = await import('./support/query-cost-meter.ts');
   // pg must load after telemetry installs its hooks. A static fixture import
   // reports a misleading zero SQL spans even while the direct meter sees work.
   const { meterStatements } = await import('./feed-read-support.ts');

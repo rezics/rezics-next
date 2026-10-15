@@ -83,6 +83,7 @@ async function publishedWiki() {
       wikiEvidence: new WikiEvidenceStore(f.contentPool),
       wikiQuotations: new WikiQuotationStore(f.contentPool),
       readingPositions: new ReadingPositionStore(f.contentPool),
+      progress: new StructureProgressStore(f.contentPool),
       agentProvisioning: new AgentProvisioning(f.accessPool, f.env),
       rights: { store: new RightsStore(f.contentPool, f.accessPool) },
       suitability: new SuitabilityStore(f.accessPool, f.access),

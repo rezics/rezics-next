@@ -15,8 +15,8 @@ test('Statement PROV export keeps speaker attribution and exact revision activit
     await f.grant(`statement:speak:${realm.realm}`, 'statement.record');
     await f.grant(`statement:speak:${f.actorA}`, 'statement.record');
     await f.grant(`statement:speak:${realm.realm}`, 'statement.withdraw', f.actorB, f.principalB);
-    const meaning = { subject: work.mainVersion, predicate: 'https://example.org/provenance-fact',
-      relationDefinition: nativeId(), value: { kind: 'literal', lexical: 'a retained assertion',
+    const meaning = { subject: work.mainVersion, ...await f.property(),
+      value: { kind: 'literal', lexical: 'a retained assertion',
         datatype: 'http://www.w3.org/2001/XMLSchema#string', language: null },
       applicability: [], interpretation: { kind: 'selected' }, evidence: [] };
     const body = { profile: 'statement-v1', speaker: { kind: 'realm', realm: realm.realm },

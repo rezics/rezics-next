@@ -12,6 +12,7 @@ import { namePreferencesProjection } from '../../../services/main/src/modules/se
 import {
   DisclosureStore,
   configureDisclosure,
+  resolveDisclosureSelections,
 } from '../../../services/main/src/modules/disclosure/read.ts';
 import { discloseSearchMatches } from '../../../services/main/src/modules/disclosure/search.ts';
 import { assembleSitemapEntries } from '../../../services/main/src/modules/disclosure/sitemap.ts';
@@ -217,7 +218,7 @@ test('Private profile names are omitted by anonymous search, export and sitemap,
     });
     expect(
       await new DisclosureStore(measuredPool).read(
-        [
+        (await resolveDisclosureSelections(s.env, [
           {
             owner: 'graph',
             resource: work.work,
@@ -225,7 +226,7 @@ test('Private profile names are omitted by anonymous search, export and sitemap,
             component: 'name',
             nameOwner: agent,
           },
-        ],
+        ])).map(selection => ({ ...selection.target, ancestry: selection.ancestry })),
         ANONYMOUS_VIEWER,
         'read',
       ),

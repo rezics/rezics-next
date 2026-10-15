@@ -22,6 +22,7 @@ import { activateMetadataWork, createWorkActivationEnvironment, ID, metadataWork
   type WorkActivationEnvironment } from '../../../services/main/src/modules/work/activate.ts';
 import type { ContextRouteDependencies } from '../../../services/main/src/routes/contexts.ts';
 import { ratingAccount } from '../support/rating-account.ts';
+import { changeSemanticComponent, semanticChangeDigest } from '../../../services/main/src/modules/semantic/change.ts';
 
 export const shortId = (uri: string) => uri.split('/').at(-1)!;
 export const nativeId = () => `${ID}${Bun.randomUUIDv7()}`;
@@ -172,6 +173,15 @@ export async function contextFixture(apps: Record<string, string>) {
       'classification.proposition.define', classificationPropositionDigest(input)), input);
     if (created.outcome !== 'succeeded') throw new Error('Global acceptance scope failed');
   };
+  const property = async () => {
+    const state = { component: 'definition' as const, kind: 'property' as const,
+      lifecycle: 'active' as const, successor: null, roles: [] };
+    const saved = await changeSemanticComponent(env, { expectedHead: null, state,
+      admission: admission('semantic:create:root', 'semantic.change', semanticChangeDigest(undefined, null, state)) });
+    await grant(`semantic:read:${saved.component}`, 'semantic.read');
+    await grant(`semantic:read:${saved.component}`, 'semantic.read', actorB, principalB);
+    return { predicate: saved.component, relationDefinition: saved.revision };
+  };
   const decideClassification = async (input: { mainVersion: string; sense: string;
     senseRevision: string; concept: string; acceptance: { kind: 'global' } | { kind: 'realm'; realm: string };
     expectedDecisionHead: string | null; outcome: 'accepted' | 'rejected' }) => {
@@ -235,7 +245,7 @@ export async function contextFixture(apps: Record<string, string>) {
   };
   return { account, access, accessPool, env, app, selections, principalA, principalB, actorA, actorB,
     admission, grant, revoke, decideClassification,
-    call, json, realm, work, globalAcceptance,
+    call, json, realm, work, globalAcceptance, property,
     queries: () => queries, resetQueries: () => { queries = 0; },
     loseNextResponse: (marker: string) => { loseResponse = marker; },
     faultNextLocalDecisionRead: (fault: 'missing-outcome' | 'failed-read') => { localDecisionReadFault = fault; },

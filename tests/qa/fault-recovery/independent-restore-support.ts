@@ -1869,7 +1869,7 @@ type IndependentCandidate = { directory: string; transferFile: string; transfer:
 export function independentRestoreSourceAdapter(withRecipe: boolean,
   compatibility: RetainedOwnerState = JSON.parse(JSON.stringify({ engines: currentEngines(dockerEnvironment()),
     modelGeneration: fixtureModel(repositoryRoot).generation,
-    postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+    postgresNative: execFileSync('postgres', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
 ): RetainedSourceAdapter<RetainedOwnerState, IndependentCandidate> {
   const modules = producerModules(repositoryRoot, [
     'tests/qa/fault-recovery/independent-restore-support.ts',

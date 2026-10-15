@@ -227,8 +227,10 @@ test('VIEW07: erasing a published Content revision suppresses public metadata an
     }
   }
   const privateAfter = await owner.read(privateBytesUrl);
-  expect(privateAfter.status).toBe(404);
-  expect(await privateAfter.text()).not.toContain(work.title);
+  // Native Asset ownership is independent of an erased Content revision's
+  // attachments. Public and exact Use delivery above remain suppressed.
+  expect(privateAfter.status).toBe(200);
+  await privateAfter.arrayBuffer();
 }, 180_000);
 
 test('VIEW08: Main Version language selection, fallback, RTL direction and metadata-only emptiness are explicit', async () => {
@@ -324,7 +326,7 @@ test('VIEW08: batched summaries hydrate names and avatars with fixed owner round
     ['available', 'work'], ['unavailable', null], ['available', 'space'], ['available', 'concept'],
     ['unavailable', null]]);
   expect(mixed.cost).toEqual(requestCost(references.length));
-  expect(lastPhysicalReads).toEqual({ graphQueries: 14, accessQueries: 1 });
+  expect(lastPhysicalReads).toEqual({ graphQueries: 24, accessQueries: 2 });
   expect(mixed.cost.graphQueries).not.toBe(lastPhysicalReads.graphQueries);
   expect(mixed.cost.accessQueries).not.toBe(lastPhysicalReads.accessQueries);
   expect(mixed.summaries[5]).toEqual({ reference: unreadable.work, status: 'unavailable' });

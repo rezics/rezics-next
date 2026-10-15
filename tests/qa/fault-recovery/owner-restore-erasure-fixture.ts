@@ -2088,7 +2088,7 @@ export function ownerErasureSourceAdapter(options: OwnerRestoreErasureFixtureOpt
       foregroundSeed: options.beforeCutSource ?? null, laterApiAdmission: options.laterApiAdmission ?? false,
     },
     compatibility: JSON.parse(JSON.stringify({ engines, selectedNativeImage: pinnedImage(),
-      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('pg_config', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
+      modelGeneration: fixtureModel(root).generation, postgresNative: execFileSync('postgres', ['--version'], { encoding: 'utf8' }).trim() })) as RetainedOwnerState,
   };
   const sourceBuild = ownerErasureSourceBuild(phase => runOwnerRestoreErasureFixture(options, undefined, phase));
   return {
