@@ -688,14 +688,15 @@ test('disclosure assembly: direct Content keeps Work and Realm ancestry without 
 
 test('disclosure assembly: direct media retains use/target ancestry and requires the configured reader', async () => {
   const f = fixture();
-  const seen = new Map<string, DisclosureTarget>();
+  const seen = new Map<string, DisclosureAncestryEvidence>();
   const makeEvidence = (input: DisclosureTarget) => {
-    seen.set(input.resource, input);
-    return evidence(input, [parent('work', input), parent('realm', input)]);
+    const row = evidence(input, [parent('work', input), parent('realm', input)]);
+    seen.set(JSON.stringify(row.relationshipBasis), row);
+    return row;
   };
   const source: DisclosureAncestrySource = {
     read: async (inputs) => inputs.map(makeEvidence),
-    reread: async (bases) => bases.map((basis) => makeEvidence(seen.get(basis.targetResource)!)),
+    reread: async (bases) => bases.map((basis) => seen.get(JSON.stringify(basis))!),
   };
   for (const owner of ['media', 'graph'] as const)
     configureDisclosureAncestrySource(f.env, owner, source);
@@ -749,20 +750,18 @@ test('disclosure assembly: direct media retains use/target ancestry and requires
 test('disclosure assembly: every media delivery refuses an owner selection moved before capture', async () => {
   for (const method of ['assetDelivery', 'avatarDelivery', 'itemDelivery', 'itemDeliveryBatch'] as const) {
     const f = fixture();
-    const seen = new Map<string, DisclosureTarget>();
+    const seen = new Map<string, DisclosureAncestryEvidence>();
     let moved = false;
     const source: DisclosureAncestrySource = {
       read: async inputs => {
         moved = true;
         return inputs.map(input => {
-          seen.set(`${input.owner}:${input.resource}`, input);
-          return evidence(input, [parent('work', input), parent('realm', input)]);
+          const row = evidence(input, [parent('work', input), parent('realm', input)]);
+          seen.set(JSON.stringify(row.relationshipBasis), row);
+          return row;
         });
       },
-      reread: async bases => bases.map(item => {
-        const input = seen.get(`${item.owner}:${item.targetResource}`)!;
-        return evidence(input, [parent('work', input), parent('realm', input)]);
-      }),
+      reread: async bases => bases.map(item => seen.get(JSON.stringify(item))!),
     };
     for (const owner of ['media', 'graph'] as const) configureDisclosureAncestrySource(f.env, owner, source);
     const use = native(71).slice(-36), asset = native(72).slice(-36);
@@ -781,16 +780,14 @@ test('disclosure assembly: every media delivery refuses an owner selection moved
 
 test('disclosure assembly: batch media preserves owner rows and order while bounding expanded ancestry across capture and fence', async () => {
   const f = fixture();
-  const seen = new Map<string, DisclosureTarget>();
+  const seen = new Map<string, DisclosureAncestryEvidence>();
   const source: DisclosureAncestrySource = {
     read: async inputs => inputs.map(input => {
-      seen.set(`${input.owner}:${input.resource}`, input);
-      return evidence(input, [parent('work', input), parent('realm', input)]);
+      const row = evidence(input, [parent('work', input), parent('realm', input)]);
+      seen.set(JSON.stringify(row.relationshipBasis), row);
+      return row;
     }),
-    reread: async bases => bases.map(basis => {
-      const input = seen.get(`${basis.owner}:${basis.targetResource}`)!;
-      return evidence(input, [parent('work', input), parent('realm', input)]);
-    }),
+    reread: async bases => bases.map(basis => seen.get(JSON.stringify(basis))!),
   };
   for (const owner of ['media', 'graph'] as const) configureDisclosureAncestrySource(f.env, owner, source);
   const rows: Awaited<ReturnType<MediaStore['itemDeliveryBatch']>> = new Map(
