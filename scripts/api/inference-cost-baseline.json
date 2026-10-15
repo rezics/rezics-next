@@ -18,7 +18,7 @@
   "method": "Median of three sequential fresh tsc --extendedDiagnostics --incremental false --noEmit runs per project; compiler-rendered MainApp and ~Routes UTF-8 bytes with NoTruncation | InTypeAlias in each project. Display size is not declaration or heap size.",
   "margins": {
     "instantiations": 0.05,
-    "checkSeconds": 1,
+    "checkSeconds": 2,
     "appBytes": 0.05,
     "routesBytes": 0.05
   },

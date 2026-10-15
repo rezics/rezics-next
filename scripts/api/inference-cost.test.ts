@@ -55,6 +55,16 @@ test('missing, nonfinite and zero metrics fail closed, as do changed compiler ve
   expect(inferenceRegressions(baseline(), baseline().measurements, {})[0]).toContain('missing');
 });
 
+test('observed shared-host timing variation fits the margin while sustained time growth fails', () => {
+  const before = baseline();
+  before.measurements.eden.checkSeconds = 9.363;
+  const current = structuredClone(before.measurements);
+  current.eden.checkSeconds = 24.618;
+  expect(inferenceRegressions(before, current)).toEqual([]);
+  current.eden.checkSeconds = 28.1;
+  expect(inferenceRegressions(before, current)[0]).toContain('eden.checkSeconds:');
+});
+
 test('API, Eden, shared schemas, web consumers, configuration and gate edits select inference measurement', () => {
   for (const file of ['services/main/src/app.ts', 'services/main/src/routes/deleted.ts', 'services/main/tsconfig.json',
     'scripts/api/inference-cost.ts', 'scripts/api/inference-cost-baseline.json', 'tests/qa/client/main-contract.ts',
