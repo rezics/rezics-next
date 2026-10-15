@@ -6,6 +6,7 @@ import anime from '../../../../tests/qa/fixtures/outcomes/anime/catalogue-browse
 import type { UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { RealmBrowseRoute } from '../realm/routes.tsx';
+import type { RealmReadClient } from '../realm/read.ts';
 import { messages as shellMessages } from '../shell/messages.ts';
 import { PageContainer } from '../shell/page.tsx';
 import { recordedFetch, type RecordedState } from '../stories/recorded-fetch.ts';
@@ -35,13 +36,14 @@ export function AnimeBrowseRecordedPage({ persona, label, state, locale = 'en' }
       catch (reason) { if (!(reason instanceof DOMException && reason.name === 'AbortError')) fail(reason); throw reason; }
     }) as typeof fetch;
     const main = mainApiWithToken(undefined, { fetcher });
+    const client: RealmReadClient & { fetch: typeof fetch } = {
+      main, personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher }),
+      signedIn: persona !== 'visitor', actingSubject: animeBrowseActor(record, persona), fetch: fetcher,
+    };
     void RealmBrowseRoute({
       params: Promise.resolve({ locale, realm: animeBrowseSiteKey(record) }),
       searchParams: Promise.resolve(animeBrowseSearch(record, persona, label)),
-    }, undefined, {
-      main, personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher }),
-      signedIn: persona !== 'visitor', actingSubject: animeBrowseActor(record, persona),
-    }).then(rendered => { if (active) setNode(rendered); }).catch(fail);
+    }, undefined, client).then(rendered => { if (active) setNode(rendered); }).catch(fail);
     return () => { active = false; replay.dispose(); };
   }, [persona, label, state, locale]);
   if (error) throw error;

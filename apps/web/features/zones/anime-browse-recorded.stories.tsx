@@ -60,7 +60,12 @@ const verify: NonNullable<Story['play']> = async ({ canvasElement, args }) => {
     await expect(sorts.getByRole('link', { name: messages.sortUpdated })).toHaveAttribute('aria-current', 'true');
   }
   // Give the header's relationship hydration time to settle; the replay also fails every missing request.
-  await expect(canvas.queryByText(relationshipMessages[locale].unavailable)).toBeNull();
+  let relationshipFailed = false;
+  try {
+    await canvas.findByText(relationshipMessages[locale].unavailable, {}, { timeout: 400 });
+    relationshipFailed = true;
+  } catch { /* The settled relationship control stayed available. */ }
+  await expect(relationshipFailed).toBe(false);
   await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(window.innerWidth);
 };
 

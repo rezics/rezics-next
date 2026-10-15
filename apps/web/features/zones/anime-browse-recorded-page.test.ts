@@ -1,11 +1,14 @@
 import { expect, test } from 'bun:test';
-import { isValidElement, type ReactNode } from 'react';
+import { isValidElement, type ComponentProps, type ReactElement, type ReactNode } from 'react';
 import { materializeData } from 'native-i18n';
 import type { AnswerPersona, AnswerRecord } from '../../../../scripts/api/answer-record.ts';
 import anime from '../../../../tests/qa/fixtures/outcomes/anime/catalogue-browse-and-search-in-its-zone.json';
 import { uiLocales, type UiLocale } from '../../i18n/define.ts';
 import { mainApiWithToken } from '../api/main.ts';
 import { RealmBrowseRoute } from '../realm/routes.tsx';
+import { RealmMembership } from '../realm/membership.tsx';
+import type { RealmReadClient } from '../realm/read.ts';
+import { mainRelationships } from '../relationships/api.ts';
 import type { FacetList, ZoneBrowsePage } from '../realm/types.ts';
 import { recordedFetch } from '../stories/recorded-fetch.ts';
 import { ZoneBrowse } from './browse.tsx';
@@ -23,6 +26,13 @@ function findBrowse(node: ReactNode): BrowseModel | null {
   return node.type === ZoneBrowse ? node.props.model ?? null : findBrowse(node.props.children);
 }
 
+function findMembership(node: ReactNode): ComponentProps<typeof RealmMembership> | null {
+  if (Array.isArray(node)) return node.map(findMembership).find(Boolean) ?? null;
+  if (!isValidElement<{ children?: ReactNode }>(node)) return null;
+  return node.type === RealmMembership
+    ? (node as ReactElement<ComponentProps<typeof RealmMembership>>).props : findMembership(node.props.children);
+}
+
 async function visit(persona: AnswerPersona, label: string, locale: UiLocale = 'en',
   search: Record<string, string | string[] | undefined> = animeBrowseSearch(record, persona, label)) {
   const replay = recordedFetch(record, persona, animeBrowseLabels(record, persona, label).map(item => ({
@@ -36,12 +46,20 @@ async function visit(persona: AnswerPersona, label: string, locale: UiLocale = '
     catch (error) { gaps.push(String(error)); throw error; }
   }) as typeof fetch;
   const main = mainApiWithToken(undefined, { fetcher });
+  const client: RealmReadClient & { fetch: typeof fetch } = {
+    main, personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher }),
+    actingSubject: animeBrowseActor(record, persona), signedIn: persona !== 'visitor', fetch: fetcher,
+  };
   try {
     const rendered = await RealmBrowseRoute({ params: Promise.resolve({ locale, realm: animeBrowseSiteKey(record) }),
-      searchParams: Promise.resolve(search) }, undefined, {
-      main, personal: persona === 'visitor' ? main : mainApiWithToken(`recorded-${persona}`, { fetcher }),
-      actingSubject: animeBrowseActor(record, persona), signedIn: persona !== 'visitor',
-    });
+      searchParams: Promise.resolve(search) }, undefined, client);
+    const membership = findMembership(rendered);
+    expect(membership?.transport?.fetch).toBe(fetcher);
+    if (membership?.signedIn && membership.actingSubject
+      && (!membership.initial || membership.initial.following === null || membership.initial.level == null)) {
+      const follow = await mainRelationships(membership.actingSubject, membership.transport).state(membership.realm);
+      expect(follow.following).not.toBeNull();
+    }
     expect(gaps).toEqual([]);
     const model = findBrowse(rendered);
     expect(model).not.toBeNull();
