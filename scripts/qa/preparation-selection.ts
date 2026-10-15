@@ -4,6 +4,15 @@ export const WORK_PROFILE_SEED_BUILD_FILE = 'tests/qa/fault-recovery/work-profil
 /** Three independently bounded 600-second stages plus harness and cleanup. */
 export const WORK_PROFILE_SEED_BUILD_WALL_MS = 1_920_000;
 
+export const RETAINED_SOURCE_BUILD_FILE = 'tests/qa/fault-recovery/retained-source-preparation.test.ts';
+/** Source production and backup are independently bounded at 600 seconds. */
+export const RETAINED_SOURCE_BUILD_WALL_MS = 1_320_000;
+
+const preparationWalls = new Map([
+  [WORK_PROFILE_SEED_BUILD_FILE, WORK_PROFILE_SEED_BUILD_WALL_MS],
+  [RETAINED_SOURCE_BUILD_FILE, RETAINED_SOURCE_BUILD_WALL_MS],
+]);
+
 /** Select consumers independently; a supplied (even invalid) source never falls back. */
 export function smallRecoveryFixtureConsumers(files: readonly string[], environment: NodeJS.ProcessEnv) {
   return {
@@ -30,16 +39,17 @@ export function restoreDrillSchedule(projects: readonly (readonly string[])[], o
 
 /** Directory, diagnostic and routine selections cannot accidentally rebuild retained data. */
 export function preparationTestFiles(files: readonly string[], explicitlySelected?: readonly string[]): string[] {
-  const requestedBuild = explicitlySelected?.includes(WORK_PROFILE_SEED_BUILD_FILE) ?? false;
+  const requestedBuild = explicitlySelected?.find(file => preparationWalls.has(file));
   if (requestedBuild && (explicitlySelected!.length !== 1 || files.length !== 1)) {
-    throw new Error(`Select ${WORK_PROFILE_SEED_BUILD_FILE} alone: retained seed preparation owns its wall.`);
+    throw new Error(`Select ${requestedBuild} alone: retained source preparation owns its wall.`);
   }
-  return files.filter(file => file !== WORK_PROFILE_SEED_BUILD_FILE || requestedBuild);
+  return files.filter(file => !preparationWalls.has(file) || file === requestedBuild);
 }
 
 export function exclusivePreparationWallMs(files: readonly string[]): number | undefined {
   if (files.length !== 1) return undefined;
-  if (files[0] === WORK_PROFILE_SEED_BUILD_FILE) return WORK_PROFILE_SEED_BUILD_WALL_MS;
+  const preparationWall = preparationWalls.get(files[0]!);
+  if (preparationWall !== undefined) return preparationWall;
   if (files[0] === 'tests/qa/fault-recovery/g-727-launch-drill.test.ts') return 1_320_000;
   return undefined;
 }
